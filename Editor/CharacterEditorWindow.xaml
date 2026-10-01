@@ -37,6 +37,18 @@
                     <CheckBox x:Name="TestPlayerCheck" Content="Use as Internal Engine test player (only one character can be this)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                     <CheckBox x:Name="InPartyCheck" Content="In active party (their own inventory/paperdoll can be opened even when not the test player)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
 
+                    <TextBlock Text="Size (Exult 3D size)" FontWeight="Bold"/>
+                    <TextBlock Text="Footprint X/Y in 8px world units, Height Z in lifts - used for collision, climbing and headroom exactly like Exult (you can't walk into or under anything lower than you are tall). Filled in automatically from the Idle sprite; adjust if needed." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBox x:Name="SizeXBox" Width="40" Margin="0,0,10,0" TextChanged="SizeBox_TextChanged"/>
+                        <TextBlock Text="Y" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBox x:Name="SizeYBox" Width="40" Margin="0,0,10,0" TextChanged="SizeBox_TextChanged"/>
+                        <TextBlock Text="Z" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                        <TextBox x:Name="SizeZBox" Width="40" Margin="0,0,10,0" TextChanged="SizeBox_TextChanged"/>
+                        <Button Content="Auto" Padding="8,1" Click="AutoSize_Click" ToolTip="Recompute from the Idle sprite"/>
+                    </StackPanel>
+
                     <TextBlock Text="Face" FontWeight="Bold"/>
                     <DockPanel Margin="0,2,0,4">
                         <CheckBox x:Name="FaceFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"

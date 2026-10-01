@@ -115,6 +115,10 @@ public partial class CharacterEditorWindow : Window
         RefreshClassChoices(character.ClassName);
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;
+        // A character that has never had a size gets one filled in automatically the first time it's looked at, so the boxes always show the real numbers the engine will use.
+        if (character.SizeX <= 0 || character.SizeY <= 0 || character.SizeZ <= 0)
+            (character.SizeX, character.SizeY, character.SizeZ) = ActorSizing.Resolve(character, _poses, _sprites);
+        ShowSize(character);
 
         _faceFilterGroup = string.IsNullOrEmpty(character.FaceSpriteGroup) ? null : character.FaceSpriteGroup;
         FaceFilterCheck.IsChecked = _faceFilterGroup is not null;
@@ -653,6 +657,31 @@ public partial class CharacterEditorWindow : Window
         int index = CharacterListBox.SelectedIndex;
         CharacterListBox.Items.Refresh();
         CharacterListBox.SelectedIndex = index;
+    }
+
+    private void ShowSize(CharacterDefinition character)
+    {
+        bool wasSuppressed = _suppress;
+        _suppress = true;
+        SizeXBox.Text = character.SizeX.ToString();
+        SizeYBox.Text = character.SizeY.ToString();
+        SizeZBox.Text = character.SizeZ.ToString();
+        _suppress = wasSuppressed;
+    }
+
+    private void SizeBox_TextChanged(object sender, TextChangedEventArgs e)
+    {
+        if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        if (int.TryParse(SizeXBox.Text, out int x) && x > 0) character.SizeX = x;
+        if (int.TryParse(SizeYBox.Text, out int y) && y > 0) character.SizeY = y;
+        if (int.TryParse(SizeZBox.Text, out int z) && z > 0) character.SizeZ = z;
+    }
+
+    private void AutoSize_Click(object sender, RoutedEventArgs e)
+    {
+        if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        (character.SizeX, character.SizeY, character.SizeZ) = ActorSizing.ComputeAutomatic(character, _poses, _sprites);
+        ShowSize(character);
     }
 
     private void PopulatePaperdollBodyChoices(string? filterGroup, string? selectedName)

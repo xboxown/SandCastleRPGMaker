@@ -34,6 +34,20 @@ public class CharacterDefinition
     /// <summary>Which character the Internal Engine test controls - only one can be true at a time, same "only one" rule as Start Position. Toggled from the PC Editor.</summary>
     public bool IsTestPlayer { get; set; }
 
+    /// <summary>
+    /// Exult-style 3D size - the same thing every shape in Exult carries
+    /// (Shape_info dims: x/y footprint in tiles, z height in lifts), and the
+    /// same SizeX/SizeY/SizeZ books, containers and objects already have.
+    /// SizeX/SizeY are the footprint in 8px world units, SizeZ the height in
+    /// lifts. The engine uses them for an actor exactly as Exult does: the
+    /// whole footprint must be free from the actor's lift up to lift + SizeZ,
+    /// so an actor never walks into or under anything lower than it is tall.
+    /// 0 means "automatic" - derived from the Idle sprite (see ActorSizing).
+    /// </summary>
+    public int SizeX { get; set; }
+    public int SizeY { get; set; }
+    public int SizeZ { get; set; }
+
     /// <summary>Whether this character is a member of the active party (distinct from IsTestPlayer, which is who you directly walk around as) - confirmed from Exult's own real model, where you can open ANY party member's own inventory/paperdoll (number keys 1-8), not just the one you're controlling.</summary>
     public bool IsInParty { get; set; }
 
