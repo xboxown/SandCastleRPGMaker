@@ -598,28 +598,22 @@ public partial class GameTestWindow
             obj = candidate as ObjectInstance;
         }
 
-        if (!TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out int newOffsetX, out int newOffsetY, out string rejection))
+        if (!TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection))
         {
             StatusText.Text = rejection;
             return false;
         }
 
-        if (origin is MapItemOrigin or MapObjectOrigin)
-        {
-            // Capture the ORIGIN cell before overwriting X/Y, so whatever is left behind there can settle - the real "support removed, things above drop" physics.
-            int originX = item?.X ?? obj!.X;
-            int originY = item?.Y ?? obj!.Y;
-            SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
-            SettleCell(originX, originY);
-        }
-        else
+        if (origin is not (MapItemOrigin or MapObjectOrigin))
         {
             RemoveFromSource(origin);
-            SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
             AddMapEntity(item, obj);
             if (item is not null) RepointContainerGumps(payloadObject, item);
         }
-        SettleCell(newCellX, newCellY);
+        SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
+        SetZ((object?)item ?? obj!, newZ);
+        // Gravity everywhere: whatever rested on it where it came from falls, and so does the player if it was under them.
+        SettleWorld();
 
         StatusText.Text = $"Moved to ({newCellX}, {newCellY}), sub-position ({newOffsetX}, {newOffsetY}).";
         var (category, itemId) = PayloadIdentity(origin);
@@ -856,12 +850,12 @@ public partial class GameTestWindow
             case MapItemOrigin m:
                 _map.Items.Remove(m.Item);
                 if (_itemVisuals.Remove(m.Item, out var itemVisual)) GameCanvas.Children.Remove(itemVisual);
-                SettleCell(m.Item.X, m.Item.Y);
+                SettleWorld(); // whatever rested on it falls
                 break;
             case MapObjectOrigin o:
                 _map.Objects.Remove(o.Obj);
                 if (_objectVisuals.Remove(o.Obj, out var objectVisual)) GameCanvas.Children.Remove(objectVisual);
-                SettleCell(o.Obj.X, o.Obj.Y);
+                SettleWorld(); // whatever rested on it falls
                 break;
             case SlotOrigin s:
                 RemoveFromCharacter(s.Character, s.Item);
@@ -993,7 +987,7 @@ public partial class GameTestWindow
         foreach (var gump in _openContainers.ToList()) RefreshContainerGump(gump);
     }
 
-    // ================= Map placement rules (moved unchanged from the old drop handler) =================
+    // ================= Map drop position =================
 
     /// <summary>Cell computed from the dragged visual's CENTER point, not a simple top-left/tileSize division - visuals are variable-sized and bottom-center anchored rather than always exactly one tile, so top-left no longer maps directly to a cell.</summary>
     private (int CellX, int CellY) ComputeDropCell(double visualLeft, double visualTop, double visualWidth, double visualHeight)
@@ -1005,44 +999,6 @@ public partial class GameTestWindow
         newCellX = Math.Clamp(newCellX, 0, _map.Width - 1);
         newCellY = Math.Clamp(newCellY, 0, _map.Height - 1);
         return (newCellX, newCellY);
-    }
-
-    /// <summary>
-    /// The map stacking/footprint acceptance rules, moved here unchanged
-    /// from the old GameCanvas_MouseLeftButtonUp_Drag (only the dragged
-    /// entity is now a parameter instead of a field). Calls the stacking
-    /// system (ResolveStackInfo, ComputeQuantizedPosition, StackEntry,
-    /// FootprintsOverlap) exactly as before; never modifies it.
-    /// </summary>
-    private bool TryResolveMapPlacement(PlacedItemInstance? item, ObjectInstance? obj, int newCellX, int newCellY, double visualLeft, double visualTop, double visualWidth, double visualHeight, out int newOffsetX, out int newOffsetY, out string rejection)
-    {
-        rejection = "";
-        // Real sub-tile offset, per spec - solved directly from ComputeQuantizedPosition's own formula, so wherever the visual was actually released maps back to the nearest real 8px world unit, not just the tile's own default centered spot. This is what lets two items sit close together within (or across) a tile instead of only ever snapping to its center.
-        var draggedInfo = ResolveStackInfo(item, obj);
-        var (defaultLeft, defaultTop) = ComputeQuantizedPosition(newCellX, newCellY, visualWidth, visualHeight);
-        newOffsetX = (int)Math.Round((visualLeft - defaultLeft) / SpriteSizing.BaseUnit);
-        newOffsetY = (int)Math.Round((visualTop - defaultTop) / SpriteSizing.BaseUnit);
-
-        // Real footprint-overlap check, per spec - NOT "shares the same tile", so two items placed close but not truly overlapping are simply two separate placements, never treated as a stacking attempt at all. Only entries whose actual footprint (given the target's own offset and size) intersects the dragged item's new footprint are considered occupants for the stacking rules below.
-        var draggedFootprint = new StackEntry(new object(), newOffsetX, newOffsetY, draggedInfo.sizeX, draggedInfo.sizeY, draggedInfo.sizeZ, draggedInfo.elevates, 0);
-        var overlappingItems = _map.Items.Where(i => i != item && i.X == newCellX && i.Y == newCellY
-            && FootprintsOverlap(draggedFootprint, new StackEntry(i, i.OffsetX, i.OffsetY, ResolveStackInfo(i, null).sizeX, ResolveStackInfo(i, null).sizeY, 0, false, 0))).ToList();
-        var overlappingObjects = _map.Objects.Where(o => o != obj && o.ContainerInstanceId < 0 && o.X == newCellX && o.Y == newCellY
-            && FootprintsOverlap(draggedFootprint, new StackEntry(o, o.OffsetX, o.OffsetY, ResolveStackInfo(null, o).sizeX, ResolveStackInfo(null, o).sizeY, 0, false, 0))).ToList();
-
-        bool cellOccupied = overlappingItems.Count > 0 || overlappingObjects.Count > 0;
-        bool occupantsBlockIt = overlappingItems.Any(i => !ResolveStackInfo(i, null).stackable) || overlappingObjects.Any(o => !ResolveStackInfo(null, o).stackable);
-        bool footprintTooLarge = overlappingItems.Any(i => draggedInfo.sizeX > ResolveStackInfo(i, null).sizeX || draggedInfo.sizeY > ResolveStackInfo(i, null).sizeY)
-            || overlappingObjects.Any(o => draggedInfo.sizeX > ResolveStackInfo(null, o).sizeX || draggedInfo.sizeY > ResolveStackInfo(null, o).sizeY);
-
-        if (cellOccupied && (!draggedInfo.stackable || occupantsBlockIt || footprintTooLarge))
-        {
-            rejection = footprintTooLarge
-                ? "Can't stack there - this object's footprint is bigger than what it would be resting on."
-                : "Can't stack there - one of the items isn't marked Is Stackable.";
-            return false;
-        }
-        return true;
     }
 
     // ================= Payload description =================

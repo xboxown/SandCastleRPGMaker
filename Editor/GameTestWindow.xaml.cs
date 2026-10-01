@@ -58,7 +58,7 @@ public partial class GameTestWindow : Window
 
     private int _playerX;
     private int _playerY;
-    /// <summary>Real, confirmed fix - the player's own real elevation/lift, in the exact same Z units items and objects already use. Previously never tracked at all (0/ground was always used honestly rather than guessed); computed fresh every time the player arrives at a new tile, from whatever is really standing there (see ComputePlayerStandingZ), the same way an item settling onto a cell already works. This is the real, LOGICAL height - used for collision/step-height decisions the instant it changes; the separate _playerVisualLiftZ below is what's actually drawn, and catches up to this smoothly when it's a real fall.</summary>
+    /// <summary>Real, confirmed fix - the player's own real elevation/lift, in the exact same Z units items and objects already use. Previously never tracked at all (0/ground was always used honestly rather than guessed); decided by Exult's own walking rules every time the player's footprint moves onto new world units (TryStepActor, GameTestWindow.Physics.cs), and by gravity when what they stand on is removed (ApplyGravityToPlayer). This is the real, LOGICAL height - used for collision/step-height decisions the instant it changes; the separate _playerVisualLiftZ below is what's actually drawn, and catches up to this smoothly when it's a real fall.</summary>
     private int _playerZ;
     /// <summary>
     /// Real, confirmed fall physics, per spec ("use exult for reference
@@ -68,11 +68,11 @@ public partial class GameTestWindow : Window
     /// accelerating like real gravity, landing over a short but genuine
     /// span of time, not instantly. Climbing UP (a deliberate step onto
     /// something) is immediate, exactly like it already was - only
-    /// falling gets this treatment. Honest note, same as MaxStepUpHeight
-    /// - the exact real fall-acceleration constant below is a reasonable,
-    /// clearly-labeled approximation from general knowledge, not a value
-    /// verified against Exult's own live source in this pass, since this
-    /// environment has no live access to browse it directly.
+    /// falling gets this treatment. Honest note - the fall-acceleration
+    /// constant below is a reasonable, clearly-labeled approximation, not
+    /// a value from Exult's source (Exult moves a falling object straight
+    /// to its new lift). Falls are currently instant anyway; see
+    /// UpdatePlayerFallAnimation.
     /// </summary>
     private double _playerVisualLiftZ;
     private double _playerFallVelocity;
@@ -179,7 +179,7 @@ public partial class GameTestWindow : Window
         BuildMapVisual();
         BuildObjectVisuals();
         BuildBookVisuals();
-        SettleAllCells(); // The Map Editor has no way to author a non-ground Z yet - every item/object starts life at Z 0 in the saved map data. This runs the real settle logic once for every occupied cell at startup, so any cell that already holds more than one thing gets a genuine, correctly-computed initial Z, rather than everything just rendering flat at ground level until the first drag ever touches that cell.
+        SettleAll(); // The Map Editor has no way to author a non-ground Z yet - every item/object starts life at Z 0 in the saved map data. This runs the real settle logic once for every occupied cell at startup, so any cell that already holds more than one thing gets a genuine, correctly-computed initial Z, rather than everything just rendering flat at ground level until the first drag ever touches that cell.
         RefreshStackingVisuals();
         SetUpPlayer(characters, poses);
 
@@ -362,7 +362,7 @@ public partial class GameTestWindow : Window
         _playerImage.BeginAnimation(Canvas.TopProperty, null);
         Canvas.SetLeft(_playerImage, _playerPixelX - _playerImage.Width / 2);
         Canvas.SetTop(_playerImage, _playerPixelY + _tileHeight / 2 - _playerImage.Height);
-        // Real, confirmed fix - the player's own real, tracked elevation (see _playerZ) is used here now instead of the honest placeholder 0 this used before. Render order (ComputeDepthZIndex) and the actual visual lift (Exult's own confirmed diagonal shift, LiftPixelShift, the exact same real formula every item/object already uses) both come from this one real value - never invented separately, and collision itself was already decided earlier in IsTileWalkable, not here: this method only ever draws the player at whatever Z collision already resolved.
+        // Real, confirmed fix - the player's own real, tracked elevation (see _playerZ) is used here now instead of the honest placeholder 0 this used before. Render order (ComputeDepthZIndex) and the actual visual lift (Exult's own confirmed diagonal shift, LiftPixelShift, the exact same real formula every item/object already uses) both come from this one real value - never invented separately, and collision itself was already decided earlier in TryStepActor, not here: this method only ever draws the player at whatever Z collision already resolved.
         Panel.SetZIndex(_playerImage, ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ)));
         Canvas.SetLeft(_playerImage, Canvas.GetLeft(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
         Canvas.SetTop(_playerImage, Canvas.GetTop(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
@@ -457,11 +457,16 @@ public partial class GameTestWindow : Window
         _characters = CloneCharacterDatabase(characters);
         _playerX = _map.StartX >= 0 ? _map.StartX : _map.Width / 2;
         _playerY = _map.StartY >= 0 ? _map.StartY : _map.Height / 2;
-        // Real, confirmed fix - safe to compute for real right here: SettleAllCells has already run (see the constructor, just above this call), so every item/object already has its own real, correct Z by this point.
-        _playerZ = ComputePlayerStandingZ(_playerX, _playerY);
+        _player = _characters.Characters.FirstOrDefault(c => c.IsTestPlayer);
+        // Exult-style 3D size (footprint + height) - what every collision, climbing and headroom check uses for the player.
+        if (_player is not null) _playerSize = ActorSizing.Resolve(_player, poses, _sprites);
+        // Continuous center-anchor position initialized to match the starting tile exactly (same convention as UpdateCamera's own playerCenterX/Y): tile center horizontally, tile bottom vertically.
+        _playerPixelX = _playerX * _tileWidth + _tileWidth / 2.0;
+        _playerPixelY = _playerY * _tileHeight + _tileHeight / 2.0;
+        // Safe to compute here: SettleAll has already run (see the constructor), so every item/object already has its real Z. The player starts standing on top of whatever solid thing is under their footprint.
+        _playerZ = StandingLiftAt(PlayerFootprint());
         _playerVisualLiftZ = _playerZ; // starting position - no real fall to animate on first appearing in the world
 
-        _player = _characters.Characters.FirstOrDefault(c => c.IsTestPlayer);
         _idlePose = poses.Poses.FirstOrDefault(p => p.Name == "Idle");
         _walkingPose = poses.Poses.FirstOrDefault(p => p.Name == "Walking");
         SpriteEntry? idleSprite = ResolveFacingSprite(_idlePose, out double idleVolume);
@@ -487,9 +492,6 @@ public partial class GameTestWindow : Window
         }
 
         GameCanvas.Children.Add(_playerImage);
-        // Continuous center-anchor position initialized to match the starting tile exactly (same convention as UpdateCamera's own playerCenterX/Y): tile center horizontally, tile bottom vertically.
-        _playerPixelX = _playerX * _tileWidth + _tileWidth / 2.0;
-        _playerPixelY = _playerY * _tileHeight + _tileHeight / 2.0;
         SnapPlayerPosition();
 
         _eventUnderPlayer = _map.Events.FirstOrDefault(ev => ev.X == _playerX && ev.Y == _playerY);
@@ -1773,10 +1775,18 @@ public partial class GameTestWindow : Window
         int prospectiveTileX = (int)Math.Floor(newPixelX / _tileWidth);
         int prospectiveTileY = (int)Math.Floor(newPixelY / _tileHeight);
 
-        if ((prospectiveTileX != _playerX || prospectiveTileY != _playerY) && !IsTileWalkable(prospectiveTileX, prospectiveTileY))
+        // Exult's walking rules (TryStepActor): whenever the player's footprint moves onto new 8px world units, those units must take them - rising at most 1 lift, dropping at most 1, with headroom for their full height. Otherwise this frame's movement is skipped entirely - simpler and safe over precise boundary-clamping.
+        int newLift = _playerZ;
+        bool tileOffMap = prospectiveTileX < 0 || prospectiveTileY < 0 || prospectiveTileX >= _map.Width || prospectiveTileY >= _map.Height;
+        if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift))
         {
             StatusText.Text = "Blocked.";
-            return; // skip this frame's movement entirely - simpler and safe over precise boundary-clamping
+            return;
+        }
+        if (newLift != _playerZ)
+        {
+            _playerZ = newLift;
+            _playerVisualLiftZ = _playerZ; // instant, both directions - per spec ("make it instant just like the books or container")
         }
 
         _playerPixelX = newPixelX;
@@ -1790,10 +1800,6 @@ public partial class GameTestWindow : Window
             var leavingEvent = _eventUnderPlayer;
             _playerX = prospectiveTileX;
             _playerY = prospectiveTileY;
-            // Real, confirmed fix - the player's own elevation is recomputed the instant they actually arrive at a new tile, from whatever real top surface is genuinely there right now (see ComputePlayerStandingZ) - never guessed, never left at a stale value from wherever they stood before.
-            _playerZ = ComputePlayerStandingZ(_playerX, _playerY);
-            // Real, confirmed reversal, per spec ("the fall of the character been slow? I don't like it. Make it instant just like the books or container") - both directions snap immediately now, exactly like climbing already did and exactly like every item/container's own Z already does. UpdatePlayerFallAnimation is left in place but now has nothing left to ever animate (see its own updated doc comment) - genuinely safe to keep, genuinely inert.
-            _playerVisualLiftZ = _playerZ;
             StatusText.Text = $"({_playerX}, {_playerY})";
 
             if (leavingEvent is not null && (leavingEvent.X != _playerX || leavingEvent.Y != _playerY))
@@ -1810,77 +1816,6 @@ public partial class GameTestWindow : Window
         Canvas.SetTop(_playerImage, Canvas.GetTop(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
 
         UpdateCamera();
-    }
-
-    /// <summary>Map-edge and tile-walkability check, factored out of the old discrete TryMovePlayer so both the continuous stepper and anything else that needs a plain yes/no can share it.</summary>
-    /// <summary>Map-edge, terrain-walkability, AND real object/item collision - Exult's own confirmed model: IsSolid is a genuinely separate flag from Occludes (see IsOccluding), so this checks it independently rather than reusing the sighting check. Any actor's real collision point (player today; any future NPC or party member the same way) is blocked by a solid object/item sharing the target tile, not just by terrain.</summary>
-    private bool IsTileWalkable(int tileX, int tileY)
-    {
-        if (tileX < 0 || tileY < 0 || tileX >= _map.Width || tileY >= _map.Height) return false;
-        int tileIndex = _map.Layers[0].GetTile(tileX, tileY, _map.Width);
-        if (tileIndex >= 0)
-        {
-            var props = _tileProperties.GetOrCreate(_tilesetSpriteName, tileIndex);
-            if (!props.Walkable) return false;
-        }
-        // Real, confirmed fix, per spec ("the first book on the floor become a wall... take same book that acts like a wall and put it alone then all of a sudden, I can climb above it... put it back with the group, I can pass through it as if it is invisible") -
-        // found the true root cause: SettleCell already correctly clusters everything at ONE tile by real sub-tile footprint overlap (FootprintsOverlap/ClusterByFootprintOverlap), since real Exult tiles genuinely hold multiple independent objects side by side, not one combined blob - but this collision check never did the same clustering at all, treating every item/object sharing a tile as ONE single obstacle regardless of where within the tile each one actually sits. A three-book stack authored a few pixels away from a lone, easily-climbable book at the SAME tile coordinate was blocking (or, depending on iteration order, silently passing through) the whole tile, including the unrelated lone book right next to it.
-        // Real, confirmed truth table, reconciled exactly from every clarification given, now evaluated PER
-        // REAL CLUSTER instead of per tile:
-        // - Not Solid -> passes through freely, regardless of Stackable/Elevate. Ground level, never "underneath".
-        // - Solid + not Elevate + not Stackable -> a real wall. Blocks completely, standalone or not.
-        // - Solid + not Elevate + Stackable -> steppable. Walked onto directly, no block, no height change.
-        // - Solid + Elevate (Stackable irrelevant here) -> a real climb attempt. Blocked only when the height
-        //   difference from wherever the player is standing right now is too tall to climb.
-        // The player can always reach whichever real cluster at this tile is actually walkable/climbable from
-        // here, even if a completely different, unrelated cluster sharing the same tile coordinate would not be.
-        return TryFindReachableClusterAt(tileX, tileY, out _);
-    }
-
-    /// <summary>
-    /// Real, shared, footprint-aware evaluation for one tile, per spec -
-    /// clusters everything actually there by real sub-tile footprint
-    /// overlap (the exact same real clustering SettleCell's own stacking
-    /// already uses), then judges each real cluster independently against
-    /// the real solid/stackable/elevate truth table. Returns true (and
-    /// the real, correct resulting top surface) the moment ANY cluster is
-    /// genuinely reachable from the player's current height - an
-    /// unrelated, too-tall cluster sharing the same tile can never block
-    /// (or silently swallow) a real, separate, easily-climbable one right
-    /// next to it again.
-    /// </summary>
-    private bool TryFindReachableClusterAt(int tileX, int tileY, out int resultingZ)
-    {
-        var itemsHere = _map.Items.Where(i => i.X == tileX && i.Y == tileY).ToList();
-        var objectsHere = _map.Objects.Where(o => o.ContainerInstanceId < 0 && o.X == tileX && o.Y == tileY).ToList();
-        if (itemsHere.Count == 0 && objectsHere.Count == 0) { resultingZ = 0; return true; } // real, genuinely empty tile - always walkable, ground level
-
-        var entries = itemsHere.Select(i => { var info = ResolveStackInfo(i, null); return new StackEntry(i, i.OffsetX, i.OffsetY, info.sizeX, info.sizeY, info.sizeZ, info.elevates, i.Z); })
-            .Concat(objectsHere.Select(o => { var info = ResolveStackInfo(null, o); return new StackEntry(o, o.OffsetX, o.OffsetY, info.sizeX, info.sizeY, info.sizeZ, info.elevates, o.Z); }))
-            .ToList();
-
-        int? bestReachableZ = null;
-        foreach (var cluster in ClusterByFootprintOverlap(entries))
-        {
-            bool clusterBlocksOutright = false;
-            int clusterTopSurface = 0;
-            foreach (var entry in cluster)
-            {
-                bool solid = entry.Entity switch { PlacedItemInstance i => IsSolidAt(i, null), ObjectInstance o => IsSolidAt(null, o), _ => false };
-                if (!solid) continue;
-                var (stackable, elevates, _, _, sizeZ) = entry.Entity switch { PlacedItemInstance i => ResolveStackInfo(i, null), ObjectInstance o => ResolveStackInfo(null, o), _ => (false, false, 1, 1, 1) };
-                if (!elevates) { if (!stackable) { clusterBlocksOutright = true; break; } continue; } // a real wall anywhere in this one real cluster blocks just this cluster
-                clusterTopSurface = Math.Max(clusterTopSurface, entry.OldZ + sizeZ);
-            }
-            if (clusterBlocksOutright) continue; // this real cluster is a wall - try the next one, if any
-            if (clusterTopSurface - _playerZ > MaxStepUpHeight) continue; // this real cluster is too tall to climb from here - try the next one
-
-            // Real, reachable cluster - track the LOWEST such real result, matching "let me climb the easy one right here", not the tallest one that happens to share this tile.
-            if (bestReachableZ is null || clusterTopSurface < bestReachableZ) bestReachableZ = clusterTopSurface;
-        }
-
-        resultingZ = bestReachableZ ?? 0;
-        return bestReachableZ is not null;
     }
 
     private bool IsSolidAt(PlacedItemInstance? item, ObjectInstance? obj)
@@ -2140,63 +2075,6 @@ public partial class GameTestWindow : Window
     private const double LiftPixelShift = 4;
 
     /// <summary>
-    /// Re-lays-out every placed item/object that shares a cell with
-    /// another one, per spec: cell-stacking with optional visual
-    /// elevation. Combines Items and Objects together for grouping (a
-    /// book can stack with an object, not just with another book), grouped
-    /// by (X, Y), ordered by placement order within that group - later-
-    /// placed sits visually on top (Z-index) and, if IT individually
-    /// allows elevation, one step higher on screen too. An item that does
-    /// NOT allow elevation contributes no height at all to the stack
-    /// (the "key under a vase" case: both stackable, neither one moves
-    /// up), while an elevating item counts only the elevating items
-    /// before it (the "books on books" case: each one sits above the
-    /// last). This never changes the underlying game-world (X, Y) of
-    /// anything - purely a visual re-layout of items/objects already
-    /// legitimately stacked there.
-    /// </summary>
-    /// <summary>
-    /// The real physics, per spec - this is where Z actually gets computed
-    /// and WRITTEN as genuine, persistent state, not just rendered. Called
-    /// only when something about a cell's contents actually changed (an
-    /// item arrived or left it via drag-drop, or once at startup to make
-    /// sense of however the map was authored) - never on every render.
-    /// Sorts whatever is currently at (x, y) by its EXISTING Z (stable, so
-    /// ties keep their relative order), then reassigns real Z values:
-    /// each elevating item sits one level above however many elevating
-    /// items came before it; a non-elevating item always settles at Z 0,
-    /// sliding to the ground regardless of what else shares its cell (the
-    /// key-under-the-vase case). This is the actual "when support is
-    /// removed, things above drop to the next valid elevation" logic -
-    /// calling it on the cell something just left is precisely how the
-    /// remaining stack settles for real, not just visually.
-    /// </summary>
-    private void SettleAllCells()
-    {
-        var cells = _map.Items.Select(i => (i.X, i.Y))
-            .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).Select(o => (o.X, o.Y)))
-            .Distinct();
-        foreach (var (x, y) in cells) SettleCell(x, y);
-    }
-
-    private sealed record StackEntry(object Entity, int OffsetX, int OffsetY, int SizeX, int SizeY, int SizeZ, bool Elevates, int OldZ);
-
-    /// <summary>
-    /// Real, confirmed new piece, per spec ("the player should therefore
-    /// be placed on the object's elevation rather than rendered as
-    /// though underneath it"). Collision, elevation, and render order
-    /// stay genuinely separate concepts here, per spec: this method only
-    /// ever answers "how high is the real, existing top surface at this
-    /// tile" - it never decides whether the player may enter (that's
-    /// IsTileWalkable's own job) and never touches draw order directly
-    /// (ComputeDepthZIndex already derives that correctly from whatever
-    /// real Z this returns). Deliberately per-tile, not per-footprint,
-    /// matching the same simplification IsSolidAt/IsTileWalkable already
-    /// use for the player specifically - real footprint-offset precision
-    /// (SettleCell's own ClusterByFootprintOverlap) stays exactly where
-    /// it already is, for item-on-item stacking, untouched.
-    /// </summary>
-    /// <summary>
     /// Real, confirmed fall physics, per spec ("use exult for reference
     /// please and copy their logic") - _playerVisualLiftZ falls toward
     /// the real, already-decided _playerZ under real gravity-like
@@ -2225,69 +2103,6 @@ public partial class GameTestWindow : Window
         _playerImage.BeginAnimation(Canvas.TopProperty, null);
         Canvas.SetLeft(_playerImage, left);
         Canvas.SetTop(_playerImage, top);
-    }
-
-    /// <summary>Real, confirmed fix - now genuinely shares TryFindReachableClusterAt with IsTileWalkable, the exact same real, footprint-aware evaluation that just decided whether this tile could be entered at all, rather than a second, separate, non-footprint-aware "check everything at this tile" pass that could disagree with it.</summary>
-    private int ComputePlayerStandingZ(int tileX, int tileY)
-    {
-        TryFindReachableClusterAt(tileX, tileY, out int resultingZ);
-        return resultingZ;
-    }
-
-    /// <summary>
-    /// Real, confirmed limit on how high the player may step up onto a
-    /// solid, elevating object in one move, rather than either blocking
-    /// every solid-but-elevating object outright (an oversized invisible
-    /// wall the person specifically asked not to reintroduce) or letting
-    /// the player climb an arbitrarily tall stack in a single step (which
-    /// would not be faithful to real Ultima VII/Exult behavior either).
-    /// Honest note: this specific numeric threshold is a reasonable,
-    /// clearly-labeled approximation from general Ultima VII/Exult
-    /// knowledge, not a value verified against Exult's own live source in
-    /// this pass - treat it as tunable, not authoritative, until it can
-    /// be checked directly against that source.
-    /// </summary>
-    private const int MaxStepUpHeight = 2;
-
-    private void SettleCell(int x, int y)
-    {
-        var itemsHere = _map.Items.Where(i => i.X == x && i.Y == y).ToList();
-        var objectsHere = _map.Objects.Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y).ToList();
-
-        var entries = itemsHere.Select(i => { var info = ResolveStackInfo(i, null); return new StackEntry(i, i.OffsetX, i.OffsetY, info.sizeX, info.sizeY, info.sizeZ, info.elevates, i.Z); })
-            .Concat(objectsHere.Select(o => { var info = ResolveStackInfo(null, o); return new StackEntry(o, o.OffsetX, o.OffsetY, info.sizeX, info.sizeY, info.sizeZ, info.elevates, o.Z); }))
-            .ToList();
-
-        // Real footprint-overlap clustering, per spec: two items sharing a tile but placed at sub-tile offsets that genuinely don't overlap are NOT a stacking attempt at all - each is its own fully independent stack, settling at its own ground level regardless of what else shares the tile. Only entries whose actual footprints intersect settle together.
-        foreach (var cluster in ClusterByFootprintOverlap(entries))
-        {
-            int runningTop = 0;
-            foreach (var entry in cluster.OrderBy(e => e.OldZ))
-            {
-                int newZ = entry.Elevates ? runningTop : 0;
-                if (entry.Entity is PlacedItemInstance item) item.Z = newZ;
-                else if (entry.Entity is ObjectInstance obj) obj.Z = newZ;
-                if (entry.Elevates) runningTop = newZ + entry.SizeZ;
-            }
-        }
-    }
-
-    private static bool FootprintsOverlap(StackEntry a, StackEntry b) =>
-        a.OffsetX < b.OffsetX + b.SizeX && b.OffsetX < a.OffsetX + a.SizeX &&
-        a.OffsetY < b.OffsetY + b.SizeY && b.OffsetY < a.OffsetY + a.SizeY;
-
-    /// <summary>Simple connected-components clustering by pairwise footprint overlap - a handful of entries per tile at most in practice, so a plain O(n^2) pass is more than fast enough; no need for a general union-find structure here.</summary>
-    private static List<List<StackEntry>> ClusterByFootprintOverlap(List<StackEntry> entries)
-    {
-        var clusters = new List<List<StackEntry>>();
-        foreach (var entry in entries)
-        {
-            var matching = clusters.Where(c => c.Any(e => FootprintsOverlap(e, entry))).ToList();
-            var merged = new List<StackEntry> { entry };
-            foreach (var m in matching) { merged.AddRange(m); clusters.Remove(m); }
-            clusters.Add(merged);
-        }
-        return clusters;
     }
 
     /// <summary>
