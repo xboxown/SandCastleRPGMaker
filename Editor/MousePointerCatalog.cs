@@ -31,6 +31,34 @@ public static class MousePointerCatalog
             ?? sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
     }
 
+    /// <summary>One line describing a sprite's own animation and sound, exactly as set in the Sprite Editor.</summary>
+    public static string Describe(SpriteEntry sprite, ResourceDatabase resources)
+    {
+        if (sprite.Frames.Count <= 1)
+        {
+            int still = sprite.Frames.Count == 1 ? sprite.Frames[0].SoundResourceId : -1;
+            return still >= 0 ? $"1 frame (still) - sound: {SoundName(resources, still)}" : "1 frame (still) - no sound";
+        }
+        var sounds = sprite.Frames.Select((f, i) => (f.SoundResourceId, Frame: i + 1)).Where(t => t.SoundResourceId >= 0)
+            .Select(t => $"frame {t.Frame}: {SoundName(resources, t.SoundResourceId)}").ToList();
+        return $"{sprite.Frames.Count} frames - {sprite.Fps} fps - {(sprite.Loop ? "looping" : "plays once")} - "
+            + (sounds.Count == 0 ? "no sound" : "sound on " + string.Join(", ", sounds));
+    }
+
+    private static string SoundName(ResourceDatabase resources, int id) => resources.Entries.FirstOrDefault(r => r.Id == id)?.Name ?? $"#{id}";
+
+    /// <summary>
+    /// Plays a sprite's first frame's own sound right now. SpriteAnimator
+    /// deliberately doesn't play frame 1's sound when an animation is first
+    /// built (only when it loops back round), so without this a one-frame
+    /// pointer with a sound on its frame would never be heard when flashed.
+    /// </summary>
+    public static void PlayFirstFrameSound(SpriteEntry sprite, ResourceDatabase resources)
+    {
+        if (sprite.Frames.Count > 0 && sprite.Frames[0].SoundResourceId >= 0)
+            SoundPlayback.TryPlay(resources, sprite.Frames[0].SoundResourceId);
+    }
+
     /// <summary>The pixel size of a sprite's first frame (or its single image, for a plain static sprite), read from the file header only.</summary>
     public static (int Width, int Height)? PixelSize(SpriteEntry sprite)
     {

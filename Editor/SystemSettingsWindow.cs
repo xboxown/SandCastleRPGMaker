@@ -19,14 +19,13 @@ public class SystemSettingsWindow : Window
     private sealed record SizeChoice(int Width, int Height, string Display);
 
     private static readonly PointerChoice NoSprite = new("", "", "(none - shows a black square)");
-    private static readonly ResourceEntry NoSound = new() { Id = -1, Name = "(no sound)" };
 
     private readonly SystemSettings _settings;
     private readonly SpriteDatabase _sprites;
     private readonly ResourceDatabase _resources;
     private readonly ComboBox _sizeCombo = new() { Width = 220, DisplayMemberPath = nameof(SizeChoice.Display) };
     private readonly Dictionary<MousePointerKind, (ComboBox Combo, Image Preview)> _rows = new();
-    private readonly Dictionary<MousePointerKind, ComboBox> _soundCombos = new();
+    private readonly Dictionary<MousePointerKind, (TextBlock Info, Button Edit)> _spriteDetails = new();
     private readonly Dictionary<MousePointerKind, SpriteAnimator> _previewAnimators = new();
     /// <summary>Every sprite with its frame size, measured once when the window opens.</summary>
     private readonly List<(string Group, SpriteEntry Sprite, int Width, int Height)> _measured = new();
@@ -88,19 +87,13 @@ public class SystemSettingsWindow : Window
             text.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.Bold });
             text.Children.Add(new TextBlock { Text = when, FontSize = 11, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
 
-            // The sound the engine plays when it flashes this pointer (Exult plays its error "ding" with the red X) - any sound from the Sound list; picking one plays it once so you can hear it.
-            var soundChoices = new List<ResourceEntry> { NoSound };
-            soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
-            var soundCombo = new ComboBox { Width = 260, DisplayMemberPath = nameof(ResourceEntry.Name), ItemsSource = soundChoices, Margin = new Thickness(0, 4, 0, 0), ToolTip = "Sound played when the game flashes this pointer" };
-            int savedSound = _settings.MousePointers.SoundResourceIds.GetValueOrDefault(kind, -1);
-            soundCombo.SelectedItem = soundChoices.FirstOrDefault(r => r.Id == savedSound) ?? NoSound;
-
+            // A pointer's animation and sound are its sprite's own - frames, speed, looping and each frame's sound, all set in the Sprite Editor. Shown here, and editable from here.
+            var info = new TextBlock { FontSize = 11, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, Width = 260, Margin = new Thickness(0, 3, 0, 0) };
+            var editFrames = new Button { Content = "Frames && Sounds...", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = "Open this sprite in the Sprite Editor: its frames, speed, looping, and a sound per frame" };
             var pickers = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
             pickers.Children.Add(combo);
-            var soundRow = new StackPanel { Orientation = Orientation.Horizontal };
-            soundRow.Children.Add(new TextBlock { Text = "🔊", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 4, 0) });
-            soundRow.Children.Add(soundCombo);
-            pickers.Children.Add(soundRow);
+            pickers.Children.Add(info);
+            pickers.Children.Add(editFrames);
 
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
             row.Children.Add(text);
@@ -110,9 +103,9 @@ public class SystemSettingsWindow : Window
 
             var thisKind = kind;
             combo.SelectionChanged += (_, _) => PointerChanged(thisKind);
-            soundCombo.SelectionChanged += (_, _) => SoundChanged(thisKind);
+            editFrames.Click += (_, _) => EditFrames(thisKind);
             _rows[kind] = (combo, preview);
-            _soundCombos[kind] = soundCombo;
+            _spriteDetails[kind] = (info, editFrames);
         }
 
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -175,30 +168,36 @@ public class SystemSettingsWindow : Window
             pointers.Sprites[kind] = new MousePointerSprite { SpriteGroup = choice.Group, SpriteName = choice.Name };
         else
             pointers.Sprites.Remove(kind);
-        ShowPreview(kind);
+        ShowPreview(kind, playFirstFrameSound: true); // the designer just picked it - let them hear it the way the game will
     }
 
-    private void SoundChanged(MousePointerKind kind)
+    /// <summary>Opens the pointer's sprite in the Sprite Editor's own frame window - where its frames and per-frame sounds live - then refreshes the preview.</summary>
+    private void EditFrames(MousePointerKind kind)
     {
-        var sounds = _settings.MousePointers.SoundResourceIds;
-        if (_soundCombos[kind].SelectedItem is ResourceEntry { Id: >= 0 } sound)
-        {
-            sounds[kind] = sound.Id;
-            SoundPlayback.TryPlay(_resources, sound.Id); // let the designer hear it
-        }
-        else
-        {
-            sounds.Remove(kind);
-        }
+        var sprite = MousePointerCatalog.Resolve(_sprites, _settings.MousePointers.Sprites.GetValueOrDefault(kind));
+        if (sprite is null) return;
+        new SpriteFrameEditorWindow(sprite, _resources) { Owner = this }.ShowDialog();
+        // Edits can change the frame size - a pointer must stay the chosen size, so re-measure and re-check every assignment.
+        _measured.Clear();
+        foreach (var group in _sprites.Groups)
+            foreach (var each in group.Sprites)
+                if (MousePointerCatalog.PixelSize(each) is { } size)
+                    _measured.Add((group.Name, each, size.Width, size.Height));
+        PointerSizeChanged();
     }
 
     /// <summary>Plays the pointer exactly as the game will - animated, with each frame's sound - or shows the black square the game shows when there's no sprite.</summary>
-    private void ShowPreview(MousePointerKind kind)
+    private void ShowPreview(MousePointerKind kind, bool playFirstFrameSound = false)
     {
         if (_previewAnimators.Remove(kind, out var old)) old.Stop();
         var preview = _rows[kind].Preview;
         preview.Source = null;
         var sprite = MousePointerCatalog.Resolve(_sprites, _settings.MousePointers.Sprites.GetValueOrDefault(kind));
-        if (sprite is not null) _previewAnimators[kind] = new SpriteAnimator(sprite, preview, _resources);
+        var (info, editFrames) = _spriteDetails[kind];
+        info.Text = sprite is null ? "No sprite: the game shows a black square." : MousePointerCatalog.Describe(sprite, _resources);
+        editFrames.IsEnabled = sprite is not null;
+        if (sprite is null) return;
+        _previewAnimators[kind] = new SpriteAnimator(sprite, preview, _resources);
+        if (playFirstFrameSound) MousePointerCatalog.PlayFirstFrameSound(sprite, _resources);
     }
 }
