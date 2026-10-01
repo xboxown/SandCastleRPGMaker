@@ -101,6 +101,13 @@ public partial class BookEditorWindow : Window
     public BookEditorWindow(BookDatabase? existing, SpriteDatabase sprites, FactionDatabase factions, ResourceDatabase resources, ObjectDatabase objects, VariableDatabase variables, StatDatabase stats, ContainerDatabase containers)
     {
         InitializeComponent();
+        SolidSize.SizeEdited += (_, _) =>
+        {
+            if (_current is null) return;
+            _current.SizeX = SolidSize.SizeX;
+            _current.SizeY = SolidSize.SizeY;
+            _current.SizeZ = SolidSize.SizeZ;
+        };
         Title += $" [{BuildInfo.CurrentBuild}]";
         if (existing is not null) Database = existing;
         _sprites = sprites;
@@ -227,9 +234,7 @@ public partial class BookEditorWindow : Window
         OccludesCheck.IsChecked = _current.Occludes;
         IsSolidCheck.IsChecked = _current.IsSolid;
         IsTwoHandedCheck.IsChecked = _current.IsTwoHanded;
-        SizeXBox.Text = _current.SizeX.ToString();
-        SizeYBox.Text = _current.SizeY.ToString();
-        SizeZBox.Text = _current.SizeZ.ToString();
+        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, _current.SpriteGroup, _current.SpriteName), _current.SizeX, _current.SizeY, _current.SizeZ, _current.IsSolid);
 
         _paperDollFilter = string.IsNullOrEmpty(_current.PaperDollSpriteGroup) ? null : _current.PaperDollSpriteGroup;
         PaperDollFilterCheck.IsChecked = _paperDollFilter is not null;
@@ -424,9 +429,7 @@ public partial class BookEditorWindow : Window
         _current.Occludes = OccludesCheck.IsChecked == true;
         _current.IsSolid = IsSolidCheck.IsChecked == true;
         _current.IsTwoHanded = IsTwoHandedCheck.IsChecked == true;
-        if (int.TryParse(SizeXBox.Text, out int sx)) _current.SizeX = Math.Max(1, sx);
-        if (int.TryParse(SizeYBox.Text, out int sy)) _current.SizeY = Math.Max(1, sy);
-        if (int.TryParse(SizeZBox.Text, out int sz)) _current.SizeZ = Math.Max(1, sz);
+        SolidSize.SetSolid(_current.IsSolid);
         // Just refresh the list's displayed text (in case Name changed) -
         // NOT ItemsSource/SelectedItem, which was the actual cause of the
         // "locks every keystroke" bug: reassigning ItemsSource briefly
@@ -440,7 +443,7 @@ public partial class BookEditorWindow : Window
     {
         if (_suppress || _current is null) return;
         if (PaperDollNameCombo.SelectedItem is SpriteChoice pd) { _current.PaperDollSpriteGroup = pd.Group; _current.PaperDollSpriteName = pd.Name; }
-        if (SpriteNameCombo.SelectedItem is SpriteChoice sp) { _current.SpriteGroup = sp.Group; _current.SpriteName = sp.Name; }
+        if (SpriteNameCombo.SelectedItem is SpriteChoice sp) { _current.SpriteGroup = sp.Group; _current.SpriteName = sp.Name; SolidSize.SetSprite(SolidSizeEditor.LoadSpriteFrame(_sprites, sp.Group, sp.Name)); }
         if (ChatteredSpriteNameCombo.SelectedItem is SpriteChoice ch) { _current.ChatteredSpriteGroup = ch.Group; _current.ChatteredSpriteName = ch.Name; }
         if (DestroyedSpriteNameCombo.SelectedItem is SpriteChoice de) { _current.DestroyedSpriteGroup = de.Group; _current.DestroyedSpriteName = de.Name; }
         _current.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;

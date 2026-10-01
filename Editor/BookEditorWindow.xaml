@@ -64,15 +64,7 @@
                                     <CheckBox x:Name="IsSolidCheck" Content="Solid" Checked="Field_Changed" Unchecked="Field_Changed" ToolTip="Blocks movement - a real, separate flag from Occludes. Off by default; most books can be walked over, but something authored to be a real obstacle could be marked solid."/>
                                     <CheckBox x:Name="IsTwoHandedCheck" Content="Two-Handed" Checked="Field_Changed" Unchecked="Field_Changed" ToolTip="Needs both hands - equipping this in the right hand makes the left hand unavailable while it's worn, matching a real two-handed weapon or a ranged weapon that needs a free hand to reload."/>
                                 </WrapPanel>
-                                <WrapPanel Margin="0,0,0,8">
-                                    <TextBlock Text="Size (world units, 8px each) - " VerticalAlignment="Center" Margin="0,0,4,0" ToolTip="The object's REAL logical footprint/height, per spec - never derived from its sprite's own pixel size. This is what it actually occupies and rests on in the world, engine-side only."/>
-                                    <TextBlock Text="X:" VerticalAlignment="Center" Margin="4,0,2,0"/>
-                                    <TextBox x:Name="SizeXBox" Width="36" TextChanged="Field_Changed"/>
-                                    <TextBlock Text="Y:" VerticalAlignment="Center" Margin="8,0,2,0"/>
-                                    <TextBox x:Name="SizeYBox" Width="36" TextChanged="Field_Changed"/>
-                                    <TextBlock Text="Z (height):" VerticalAlignment="Center" Margin="8,0,2,0"/>
-                                    <TextBox x:Name="SizeZBox" Width="36" TextChanged="Field_Changed"/>
-                                </WrapPanel>
+                                <local:SolidSizeEditor x:Name="SolidSize" HorizontalAlignment="Left" Margin="0,0,0,8"/>
                                 <StackPanel Orientation="Horizontal">
                                     <StackPanel Margin="0,0,24,0">
                                         <TextBlock Text="Belongs to" TextWrapping="Wrap"/>

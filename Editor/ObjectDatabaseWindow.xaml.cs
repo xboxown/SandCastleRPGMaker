@@ -18,6 +18,13 @@ public partial class ObjectDatabaseWindow : Window
     public ObjectDatabaseWindow()
     {
         InitializeComponent();
+        SolidSize.SizeEdited += (_, _) =>
+        {
+            if (_current is null) return;
+            _current.SizeX = SolidSize.SizeX;
+            _current.SizeY = SolidSize.SizeY;
+            _current.SizeZ = SolidSize.SizeZ;
+        };
         RefreshList();
     }
 
@@ -67,6 +74,7 @@ public partial class ObjectDatabaseWindow : Window
         InteractableCheck.IsChecked = _current.IsInteractable;
         OccludesCheck.IsChecked = _current.Occludes;
         IsSolidCheck.IsChecked = _current.IsSolid;
+        SolidSize.Load(SolidSizeEditor.LoadImageFile(_current.IconPath), _current.SizeX, _current.SizeY, _current.SizeZ, _current.IsSolid);
         IsTwoHandedCheck.IsChecked = _current.IsTwoHanded;
         NpcCheck.IsChecked = _current.IsNpc;
 
@@ -103,6 +111,7 @@ public partial class ObjectDatabaseWindow : Window
         _current.IconPath = dialog.FileName;
         IconPathBox.Text = dialog.FileName;
         LoadIconPreview(dialog.FileName);
+        SolidSize.SetSprite(SolidSizeEditor.LoadImageFile(dialog.FileName));
         RefreshList();
     }
 
@@ -120,6 +129,7 @@ public partial class ObjectDatabaseWindow : Window
         _current.IsInteractable = InteractableCheck.IsChecked == true;
         _current.Occludes = OccludesCheck.IsChecked == true;
         _current.IsSolid = IsSolidCheck.IsChecked == true;
+        SolidSize.SetSolid(_current.IsSolid);
         _current.IsTwoHanded = IsTwoHandedCheck.IsChecked == true;
         _current.IsNpc = NpcCheck.IsChecked == true;
 

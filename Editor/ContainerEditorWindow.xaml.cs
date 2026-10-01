@@ -45,6 +45,13 @@ public partial class ContainerEditorWindow : Window
     public ContainerEditorWindow(ContainerDatabase containers, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources, VariableDatabase variables, StatDatabase stats, CharacterDatabase characters)
     {
         InitializeComponent();
+        SolidSize.SizeEdited += (_, _) =>
+        {
+            if (ContainerListBox.SelectedItem is not ContainerData container) return;
+            container.SizeX = SolidSize.SizeX;
+            container.SizeY = SolidSize.SizeY;
+            container.SizeZ = SolidSize.SizeZ;
+        };
         Title += $" [{BuildInfo.CurrentBuild}]";
         Database = containers;
         _sprites = sprites;
@@ -145,6 +152,7 @@ public partial class ContainerEditorWindow : Window
         AllowElevationCheck.IsChecked = container.AllowElevation;
         OccludesCheck.IsChecked = container.Occludes;
         IsSolidCheck.IsChecked = container.IsSolid;
+        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName), container.SizeX, container.SizeY, container.SizeZ, container.IsSolid);
 
         _worldSpriteFilterGroup = string.IsNullOrEmpty(container.SpriteGroup) ? null : container.SpriteGroup;
         WorldSpriteFilterCheck.IsChecked = _worldSpriteFilterGroup is not null;
@@ -213,6 +221,7 @@ public partial class ContainerEditorWindow : Window
         container.AllowElevation = AllowElevationCheck.IsChecked == true;
         container.Occludes = OccludesCheck.IsChecked == true;
         container.IsSolid = IsSolidCheck.IsChecked == true;
+        SolidSize.SetSolid(container.IsSolid);
 
         container.OpenSoundResourceId = (OpenSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         container.CloseSoundResourceId = (CloseSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
@@ -296,6 +305,7 @@ public partial class ContainerEditorWindow : Window
         {
             container.SpriteName = sprite.Name;
             container.SpriteGroup = _worldSpriteFilterGroup ?? _sprites.Groups.FirstOrDefault(g => g.Sprites.Contains(sprite))?.Name ?? string.Empty;
+            SolidSize.SetSprite(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName));
         }
     }
 

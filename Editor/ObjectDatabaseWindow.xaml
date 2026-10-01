@@ -1,6 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.ObjectDatabaseWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SandcastleRpgMaker.Editor"
         Title="Object Database" Height="600" Width="800"
         WindowStartupLocation="CenterOwner">
     <DockPanel>
@@ -23,7 +24,8 @@
                      DisplayMemberPath="Name"
                      SelectionChanged="ObjectListBox_SelectionChanged"/>
 
-            <StackPanel Grid.Column="1" Margin="12" x:Name="EditorPanel" IsEnabled="False">
+            <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel Margin="12" x:Name="EditorPanel" IsEnabled="False">
                 <TextBlock Text="Name" FontWeight="Bold"/>
                 <TextBox x:Name="NameBox" Margin="0,2,0,10" TextChanged="Field_Changed"/>
 
@@ -53,9 +55,11 @@
                 <CheckBox x:Name="InteractableCheck" Content="Interactable (clicking triggers a reaction)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                 <CheckBox x:Name="OccludesCheck" Content="Occludes (blocks line of sight - walls, tall furniture)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                 <CheckBox x:Name="IsSolidCheck" Content="Solid (blocks movement - a real, separate flag from Occludes)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                <local:SolidSizeEditor x:Name="SolidSize" HorizontalAlignment="Left" Margin="20,4,0,8"/>
                 <CheckBox x:Name="IsTwoHandedCheck" Content="Two-Handed (needs both hands - a weapon in the right hand makes left hand unavailable while equipped)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                 <CheckBox x:Name="NpcCheck" Content="Is NPC (living, has schedule/dialogue later)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
             </StackPanel>
+            </ScrollViewer>
         </Grid>
 
     </DockPanel>
