@@ -363,7 +363,7 @@ public partial class GameTestWindow : Window
         Canvas.SetLeft(_playerImage, _playerPixelX - _playerImage.Width / 2);
         Canvas.SetTop(_playerImage, _playerPixelY + _tileHeight / 2 - _playerImage.Height);
         // Real, confirmed fix - the player's own real, tracked elevation (see _playerZ) is used here now instead of the honest placeholder 0 this used before. Render order (ComputeDepthZIndex) and the actual visual lift (Exult's own confirmed diagonal shift, LiftPixelShift, the exact same real formula every item/object already uses) both come from this one real value - never invented separately, and collision itself was already decided earlier in TryStepActor, not here: this method only ever draws the player at whatever Z collision already resolved.
-        Panel.SetZIndex(_playerImage, ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ)));
+        Panel.SetZIndex(_playerImage, PlayerZIndex());
         Canvas.SetLeft(_playerImage, Canvas.GetLeft(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
         Canvas.SetTop(_playerImage, Canvas.GetTop(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
     }
@@ -1815,7 +1815,7 @@ public partial class GameTestWindow : Window
         }
 
         // Real, confirmed fix, purely additive - same exact real Z-index and visual-lift application SnapPlayerPosition itself now does, placed here (after _playerZ is updated above, not before) so the very first rendered frame on a new tile already reflects its real elevation, not one frame behind. Nothing about the position math above is touched - this only draws whatever collision/elevation already decided.
-        Panel.SetZIndex(_playerImage, ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ)));
+        Panel.SetZIndex(_playerImage, PlayerZIndex());
         Canvas.SetLeft(_playerImage, Canvas.GetLeft(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
         Canvas.SetTop(_playerImage, Canvas.GetTop(_playerImage) - _playerVisualLiftZ * LiftPixelShift);
 
@@ -2100,7 +2100,7 @@ public partial class GameTestWindow : Window
         if (_playerVisualLiftZ <= _playerZ) _playerFallVelocity = 0; // real landing - speed resets for the next real fall, rather than carrying over
 
         // Real, confirmed fix - the fall is purely visual (collision already resolved against the real, logical _playerZ the instant the tile changed), so only the actual drawn position needs to catch up here; StepPlayerContinuous's own X/Y math is never touched.
-        Panel.SetZIndex(_playerImage, ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ)));
+        Panel.SetZIndex(_playerImage, PlayerZIndex());
         double left = _playerPixelX - _playerImage.Width / 2 - _playerVisualLiftZ * LiftPixelShift;
         double top = _playerPixelY + _tileHeight / 2 - _playerImage.Height - _playerVisualLiftZ * LiftPixelShift;
         _playerImage.BeginAnimation(Canvas.LeftProperty, null);
@@ -2129,6 +2129,7 @@ public partial class GameTestWindow : Window
             if (_objectVisuals.TryGetValue(obj, out var visual) && visual is FrameworkElement fe)
                 ApplyZToVisual(fe, obj.X, obj.Y, obj.Z, obj.OffsetX, obj.OffsetY);
         }
+        ApplyRestingDrawOrder();
     }
 
     /// <summary>

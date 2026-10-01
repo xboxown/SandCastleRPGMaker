@@ -1,4 +1,5 @@
 using System.Windows;
+using System.Windows.Controls;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
@@ -327,6 +328,58 @@ public partial class GameTestWindow
     /// <summary>Where the player stands when placed somewhere directly (startup): on top of whatever solid thing is under their footprint, or the ground.</summary>
     private int StandingLiftAt(UnitRect foot) =>
         FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot)), int.MaxValue);
+
+    // ================= Draw order (objs.cc Game_object::compare) =================
+
+    /// <summary>
+    /// Exult's paint-order rule for things that overlap on the floor (their
+    /// footprints overlap in X and Y): the one whose bottom is at or above
+    /// the other's top is "greater in Z" and painted later - so whatever
+    /// stands on something is always drawn on top of it. The position-based
+    /// order (ComputeDepthZIndex) alone can't guarantee that: something
+    /// resting on a chest but a little further back would be drawn behind
+    /// the chest and look sunk inside it. Applied lowest first, so a whole
+    /// pile orders correctly.
+    /// </summary>
+    private void ApplyRestingDrawOrder()
+    {
+        var bodies = WorldBodies().OrderBy(b => b.Z).ToList();
+        var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+        foreach (var body in bodies)
+        {
+            if (VisualOf(body.Entity) is not { } visual) continue;
+            int zIndex = Panel.GetZIndex(visual);
+            var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
+            foreach (var below in bodies)
+            {
+                if (ReferenceEquals(below.Entity, body.Entity) || below.TopLift > body.Z || !below.Overlaps(foot)) continue;
+                if (order.TryGetValue(below.Entity, out int belowIndex)) zIndex = Math.Max(zIndex, belowIndex + 1);
+            }
+            order[body.Entity] = zIndex;
+            Panel.SetZIndex(visual, zIndex);
+        }
+    }
+
+    /// <summary>The player's paint order: their usual position-based order, but always after anything they are standing on (the same Exult rule as ApplyRestingDrawOrder).</summary>
+    private int PlayerZIndex()
+    {
+        int zIndex = ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ));
+        if (_playerZ <= 0) return zIndex; // on the ground - nothing under them to be drawn after
+        var foot = PlayerFootprint();
+        foreach (var body in WorldBodies())
+        {
+            if (body.TopLift > _playerZ || !body.Overlaps(foot)) continue;
+            if (VisualOf(body.Entity) is { } visual) zIndex = Math.Max(zIndex, Panel.GetZIndex(visual) + 1);
+        }
+        return zIndex;
+    }
+
+    private UIElement? VisualOf(object entity) => entity switch
+    {
+        PlacedItemInstance item => _itemVisuals.GetValueOrDefault(item),
+        ObjectInstance obj => _objectVisuals.GetValueOrDefault(obj),
+        _ => null
+    };
 
     /// <summary>Map_chunk::gravity for the player: if what they stood on is gone, they fall onto whatever is left beneath them (any distance - this is falling, not stepping).</summary>
     private void ApplyGravityToPlayer()
