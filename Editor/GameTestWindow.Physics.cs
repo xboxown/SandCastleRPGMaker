@@ -145,9 +145,10 @@ public partial class GameTestWindow
     /// above the avatar, and a solid thing can't be dropped into the space
     /// the avatar itself occupies.
     /// </summary>
-    private bool TryResolveMapPlacement(PlacedItemInstance? item, ObjectInstance? obj, int newCellX, int newCellY, double visualLeft, double visualTop, double visualWidth, double visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection)
+    private bool TryResolveMapPlacement(PlacedItemInstance? item, ObjectInstance? obj, int newCellX, int newCellY, double visualLeft, double visualTop, double visualWidth, double visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection, out MousePointerKind rejectionPointer)
     {
         rejection = "";
+        rejectionPointer = MousePointerKind.RedX; // drop_on_map: nowhere to put it -> red X
         newZ = 0;
         // Sub-tile offset, solved from ComputeQuantizedPosition's own formula, so wherever the visual was released maps back to the nearest 8px world unit.
         var (defaultLeft, defaultTop) = ComputeQuantizedPosition(newCellX, newCellY, visualWidth, visualHeight);
@@ -170,6 +171,7 @@ public partial class GameTestWindow
         if (newZ > _playerZ + MaxDropAboveActor)
         {
             rejection = "That's too high to reach from here.";
+            rejectionPointer = MousePointerKind.Blocked; // drop_on_map: above max_lift -> "blocked"
             return false;
         }
 

@@ -41,6 +41,7 @@ public partial class MainWindow : Window
     private SpriteDatabase _spriteDatabase = new();
     private BookDatabase _bookDatabase = new();
     private ContainerDatabase _containerDatabase = new();
+    private SystemSettings _systemSettings = new();
     private VariableDatabase _variableDatabase = new();
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
@@ -765,6 +766,7 @@ public partial class MainWindow : Window
         RefreshTilesetCombo();
         _bookDatabase = new BookDatabase();
         _containerDatabase = new ContainerDatabase();
+        _systemSettings = new SystemSettings();
         _resourceDatabase = new ResourceDatabase();
         _factionDatabase = new FactionDatabase();
         _characterDatabase = new CharacterDatabase();
@@ -809,6 +811,7 @@ public partial class MainWindow : Window
             _characterDatabase = payload.Characters;
             _containerDatabase = payload.Containers;
             _containerDatabase.SyncNextIdAfterLoad();
+            _systemSettings = payload.Settings ?? new SystemSettings();
             _variableDatabase = payload.Variables;
             _statDatabase = payload.Stats;
             _poseDatabase = payload.Poses;
@@ -889,6 +892,7 @@ public partial class MainWindow : Window
                 Factions = _factionDatabase,
                 Characters = _characterDatabase,
                 Containers = _containerDatabase,
+                Settings = _systemSettings,
                 Variables = _variableDatabase,
                 Stats = _statDatabase,
                 Poses = _poseDatabase,
@@ -1100,6 +1104,12 @@ public partial class MainWindow : Window
         window.ShowDialog();
     }
 
+    private void SystemSettingsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new SystemSettingsWindow(_systemSettings, _spriteDatabase, _resourceDatabase) { Owner = this };
+        window.ShowDialog();
+    }
+
     private void TestEngineMenuItem_Click(object sender, RoutedEventArgs e) => LaunchGameTest();
 
     private void LaunchGameTest()
@@ -1117,7 +1127,7 @@ public partial class MainWindow : Window
 
         var window = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase)
+            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings)
         { Owner = this };
         window.ShowDialog();
     }

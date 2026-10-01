@@ -42,6 +42,8 @@ public class ManifestPayload
     public CharacterDatabase Characters { get; set; } = new();
     /// <summary>Same real pattern as Characters - stored directly in the .msrp file, not a separate one.</summary>
     public ContainerDatabase Containers { get; set; } = new();
+    /// <summary>Project-wide system settings (mouse pointers today). Older projects without it load with defaults.</summary>
+    public SystemSettings Settings { get; set; } = new();
 }
 
 /// <summary>

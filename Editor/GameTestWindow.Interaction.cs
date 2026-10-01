@@ -303,11 +303,11 @@ public partial class GameTestWindow
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { StatusText.Text = CantSeeMessage; return; }
+                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
                 HandleItemClick(item, isUse: false);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { StatusText.Text = CantSeeMessage; return; }
+                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
                 HandleObjectClick(obj, isUse: false);
                 break;
             case PlayerTarget:
@@ -332,11 +332,11 @@ public partial class GameTestWindow
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { StatusText.Text = CantSeeMessage; return; }
+                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
                 HandleItemClick(item, isUse: true);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { StatusText.Text = CantSeeMessage; return; }
+                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
                 HandleObjectClick(obj, isUse: true);
                 break;
             case PlayerTarget:
@@ -372,12 +372,12 @@ public partial class GameTestWindow
         switch (session.Target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { StatusText.Text = CantSeeMessage; return false; }
+                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.RedX, CantSeeMessage); return false; }
                 origin = new MapItemOrigin(item);
                 source = _itemVisuals.GetValueOrDefault(item);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { StatusText.Text = CantSeeMessage; return false; }
+                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.RedX, CantSeeMessage); return false; }
                 origin = new MapObjectOrigin(obj);
                 source = _objectVisuals.GetValueOrDefault(obj);
                 break;
@@ -564,7 +564,7 @@ public partial class GameTestWindow
         var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, ViewportBorder);
         if (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight)
         {
-            StatusText.Text = "You can't drop that there.";
+            Refuse(MousePointerKind.RedX, "You can't drop that there."); // drop_on_map: off screen -> red X
             return false;
         }
 
@@ -598,9 +598,9 @@ public partial class GameTestWindow
             obj = candidate as ObjectInstance;
         }
 
-        if (!TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection))
+        if (!TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection, out MousePointerKind rejectionPointer))
         {
-            StatusText.Text = rejection;
+            Refuse(rejectionPointer, rejection);
             return false;
         }
 
@@ -664,7 +664,7 @@ public partial class GameTestWindow
             var slotItem = character.Inventory.FirstOrDefault(i => i.InstanceId == slotInstanceId);
             if (slotItem is not { Category: ReferencedItemCategory.Container } || ReferenceEquals(slotItem, payloadObject)) continue;
             var slotContainerData = _containers.Containers.FirstOrDefault(c => c.Id == slotItem.ItemId);
-            if (slotContainerData is null || !CanContainerAccept(slotContainerData, slotItem, origin, out _)) continue;
+            if (slotContainerData is null || !CanContainerAccept(slotContainerData, slotItem, origin, out _, out _)) continue;
 
             string storedName = PayloadName(origin);
             var stored = DetachAsInventoryItem(origin, slotContainerData.GetNextContentsInstanceId);
@@ -681,7 +681,7 @@ public partial class GameTestWindow
             null;
         if (hand is null)
         {
-            StatusText.Text = "Unable to pick up - it doesn't fit in the Backpack or Pouch container, and both hands are full.";
+            Refuse(MousePointerKind.WontFit, "Unable to pick up - it doesn't fit in the Backpack or Pouch container, and both hands are full.");
             return false;
         }
         EquipInSlot(origin, character, hand.Value);
@@ -733,9 +733,9 @@ public partial class GameTestWindow
     private bool TryPutIntoContainer(DragOrigin origin, ContainerData data, IHasContainerContents container, Point? dropTopLeft, bool randomIfNoPoint)
     {
         EnsureContainerSeeded(container, data);
-        if (!CanContainerAccept(data, container, origin, out string reason))
+        if (!CanContainerAccept(data, container, origin, out string reason, out var pointer))
         {
-            StatusText.Text = reason;
+            Refuse(pointer, reason);
             return false;
         }
         string name = PayloadName(origin);
@@ -756,9 +756,11 @@ public partial class GameTestWindow
     /// (open gump, nested icon, closed chest on the map, equipped container,
     /// the pickup order's Backpack/Pouch step).
     /// </summary>
-    private bool CanContainerAccept(ContainerData data, IHasContainerContents container, DragOrigin origin, out string reason)
+    private bool CanContainerAccept(ContainerData data, IHasContainerContents container, DragOrigin origin, out string reason, out MousePointerKind pointer)
     {
         reason = "";
+        // drag.cc drop_on_gump: a container refusing the add (body, locked, no room) flashes "won't fit"; putting something into itself is always a red X.
+        pointer = MousePointerKind.WontFit;
         string name = PayloadName(origin);
         if (data.IsBodyContainer)
         {
@@ -776,6 +778,7 @@ public partial class GameTestWindow
         if (ReferenceEquals(payloadObject, container) || (payloadObject is IHasContainerContents payloadContainer && ContainsRecursively(payloadContainer, container)))
         {
             reason = $"\"{name}\" can't go inside itself.";
+            pointer = MousePointerKind.RedX;
             return false;
         }
         double volume = PayloadVolume(origin);

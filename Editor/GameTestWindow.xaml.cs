@@ -148,7 +148,7 @@ public partial class GameTestWindow : Window
     public GameTestWindow(MapData map, BitmapSource? tilesetBitmap, int tileWidth, int tileHeight, int columns, string tilesetSpriteName,
         ResourceDatabase resources, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects,
         CharacterDatabase characters, PoseDatabase poses, TilePropertiesDatabase tileProperties,
-        VariableDatabase variables, StatDatabase stats, ContainerDatabase containers)
+        VariableDatabase variables, StatDatabase stats, ContainerDatabase containers, SystemSettings systemSettings)
     {
         InitializeComponent();
         Title += $" [{BuildInfo.CurrentBuild}]";
@@ -187,6 +187,7 @@ public partial class GameTestWindow : Window
         GameCanvas.PreviewKeyDown += GameCanvas_PreviewKeyDown;
         GameCanvas.PreviewKeyUp += GameCanvas_PreviewKeyUp;
         InitializeInteraction(); // the one and only place mouse interaction is wired up - see GameTestWindow.Interaction.cs
+        InitializePointer(systemSettings); // the engine's own Exult-style mouse pointer - see GameTestWindow.Pointer.cs
 
         // Task 4 - the constants are the single source of truth for viewport size, not the XAML defaults (which exist only so the designer shows something sensible) - setting these here means changing ViewportWidth/Height alone is enough to resize the whole pipeline later.
         ViewportBorder.Width = ViewportWidth;

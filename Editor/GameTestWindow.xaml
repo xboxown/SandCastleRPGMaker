@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)" Height="700" Width="900"
         WindowStartupLocation="CenterOwner" Background="Black">
+    <Grid>
     <DockPanel>
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
@@ -120,4 +121,7 @@
             <!-- The dragged item is drawn as a purely visual, non-hit-testable "ghost" added to PaperdollGumpsCanvas above every gump (Exult paints the dragged object last, on top of everything). It carries no game data: the real item stays in its origin, only hidden, until a drop succeeds - so the old ghost approach's desync risk can't occur. The ghost carries ViewportScale itself so it matches the item's on-map size. See GameTestWindow.Interaction.cs. -->
         </Grid>
     </DockPanel>
+    <!-- The engine's own mouse pointer (GameTestWindow.Pointer.cs) - over everything, status bar included; the Windows pointer is switched off for this whole window. -->
+    <Canvas x:Name="PointerCanvas" IsHitTestVisible="False" Panel.ZIndex="1000000"/>
+    </Grid>
 </Window>
