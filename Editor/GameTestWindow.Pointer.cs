@@ -42,7 +42,8 @@ public partial class GameTestWindow
         _pointerHost.Child = _pointerImage;
         PointerCanvas.Children.Add(_pointerHost);
 
-        PreviewMouseMove += (_, e) => MovePointer(e.GetPosition(PointerCanvas));
+        // handledEventsToo: the drag pipeline marks every move during a drag as handled, which would otherwise skip this and freeze the pointer while the dragged item moves.
+        AddHandler(PreviewMouseMoveEvent, new MouseEventHandler((_, e) => MovePointer(e.GetPosition(PointerCanvas))), handledEventsToo: true);
         MouseLeave += (_, _) => _pointerHost.Visibility = Visibility.Hidden;
         MouseEnter += (_, e) =>
         {
@@ -65,6 +66,9 @@ public partial class GameTestWindow
     /// <summary>Exult Mouse::flash_shape: show this pointer for 600 ms, then return to the hand.</summary>
     private void FlashPointer(MousePointerKind kind)
     {
+        // Exult plays its error sound together with the flash (drag.cc: flash_shape(Mouse::redx); play_sound_effect(76)) - here each pointer has its own optional sound, chosen in System Settings.
+        if (_systemSettings.MousePointers.SoundResourceIds.TryGetValue(kind, out int soundId) && soundId >= 0)
+            SoundPlayback.TryPlay(_resources, soundId);
         ShowPointer(kind);
         _pointerFlashTimer?.Stop();
         _pointerFlashTimer?.Start();

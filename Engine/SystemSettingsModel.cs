@@ -26,6 +26,8 @@ public class MousePointerSettings
     public int Width { get; set; }
     public int Height { get; set; }
     public Dictionary<MousePointerKind, MousePointerSprite> Sprites { get; set; } = new();
+    /// <summary>The sound (a Sound resource Id) played when the engine flashes that pointer - like Exult's error "ding" (game sfx 76) with its red X. No entry = silent.</summary>
+    public Dictionary<MousePointerKind, int> SoundResourceIds { get; set; } = new();
 }
 
 /// <summary>Project-wide system settings, stored in the .msrp manifest alongside everything else.</summary>

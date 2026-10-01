@@ -19,12 +19,14 @@ public class SystemSettingsWindow : Window
     private sealed record SizeChoice(int Width, int Height, string Display);
 
     private static readonly PointerChoice NoSprite = new("", "", "(none - shows a black square)");
+    private static readonly ResourceEntry NoSound = new() { Id = -1, Name = "(no sound)" };
 
     private readonly SystemSettings _settings;
     private readonly SpriteDatabase _sprites;
     private readonly ResourceDatabase _resources;
     private readonly ComboBox _sizeCombo = new() { Width = 220, DisplayMemberPath = nameof(SizeChoice.Display) };
     private readonly Dictionary<MousePointerKind, (ComboBox Combo, Image Preview)> _rows = new();
+    private readonly Dictionary<MousePointerKind, ComboBox> _soundCombos = new();
     private readonly Dictionary<MousePointerKind, SpriteAnimator> _previewAnimators = new();
     /// <summary>Every sprite with its frame size, measured once when the window opens.</summary>
     private readonly List<(string Group, SpriteEntry Sprite, int Width, int Height)> _measured = new();
@@ -36,7 +38,7 @@ public class SystemSettingsWindow : Window
         _sprites = sprites;
         _resources = resources;
         Title = $"System Settings [{BuildInfo.CurrentBuild}]";
-        Width = 640;
+        Width = 700;
         Height = 720;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
 
@@ -86,15 +88,31 @@ public class SystemSettingsWindow : Window
             text.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.Bold });
             text.Children.Add(new TextBlock { Text = when, FontSize = 11, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
 
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            // The sound the engine plays when it flashes this pointer (Exult plays its error "ding" with the red X) - any sound from the Sound list; picking one plays it once so you can hear it.
+            var soundChoices = new List<ResourceEntry> { NoSound };
+            soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
+            var soundCombo = new ComboBox { Width = 260, DisplayMemberPath = nameof(ResourceEntry.Name), ItemsSource = soundChoices, Margin = new Thickness(0, 4, 0, 0), ToolTip = "Sound played when the game flashes this pointer" };
+            int savedSound = _settings.MousePointers.SoundResourceIds.GetValueOrDefault(kind, -1);
+            soundCombo.SelectedItem = soundChoices.FirstOrDefault(r => r.Id == savedSound) ?? NoSound;
+
+            var pickers = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            pickers.Children.Add(combo);
+            var soundRow = new StackPanel { Orientation = Orientation.Horizontal };
+            soundRow.Children.Add(new TextBlock { Text = "🔊", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 4, 4, 0) });
+            soundRow.Children.Add(soundCombo);
+            pickers.Children.Add(soundRow);
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
             row.Children.Add(text);
-            row.Children.Add(combo);
+            row.Children.Add(pickers);
             row.Children.Add(previewBox);
             panel.Children.Add(row);
 
             var thisKind = kind;
             combo.SelectionChanged += (_, _) => PointerChanged(thisKind);
+            soundCombo.SelectionChanged += (_, _) => SoundChanged(thisKind);
             _rows[kind] = (combo, preview);
+            _soundCombos[kind] = soundCombo;
         }
 
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -158,6 +176,20 @@ public class SystemSettingsWindow : Window
         else
             pointers.Sprites.Remove(kind);
         ShowPreview(kind);
+    }
+
+    private void SoundChanged(MousePointerKind kind)
+    {
+        var sounds = _settings.MousePointers.SoundResourceIds;
+        if (_soundCombos[kind].SelectedItem is ResourceEntry { Id: >= 0 } sound)
+        {
+            sounds[kind] = sound.Id;
+            SoundPlayback.TryPlay(_resources, sound.Id); // let the designer hear it
+        }
+        else
+        {
+            sounds.Remove(kind);
+        }
     }
 
     /// <summary>Plays the pointer exactly as the game will - animated, with each frame's sound - or shows the black square the game shows when there's no sprite.</summary>
