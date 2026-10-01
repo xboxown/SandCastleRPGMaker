@@ -117,7 +117,7 @@
             -->
             <Canvas x:Name="PaperdollGumpsCanvas" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
 
-            <!-- Real drag-visual layer removed - a ghost/clone approach was tried here to solve the Z-order request ("dragged item should render above a gump"), but it introduced real regressions (incorrect sizing during drag, risk of the real visual and its clone desyncing) worse than the cosmetic issue it fixed. Reverted to the simpler, proven approach: the one real dragged visual stays on GameCanvas throughout, which does mean it can render behind an open gump while being dragged over one - a known, accepted cosmetic limitation until a properly safe fix is found, rather than risk more data-integrity bugs. -->
+            <!-- The dragged item is drawn as a purely visual, non-hit-testable "ghost" added to PaperdollGumpsCanvas above every gump (Exult paints the dragged object last, on top of everything). It carries no game data: the real item stays in its origin, only hidden, until a drop succeeds - so the old ghost approach's desync risk can't occur. The ghost carries ViewportScale itself so it matches the item's on-map size. See GameTestWindow.Interaction.cs. -->
         </Grid>
     </DockPanel>
 </Window>

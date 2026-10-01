@@ -130,49 +130,10 @@ public partial class GameTestWindow : Window
     private double _cameraX;
     private double _cameraY;
 
-    // Issue 2 - drag and drop for every placed item/object, excluding the
-    // player (per spec). Same drag-vs-click distinction pattern as Book
-    // Preview's own BookSpriteImage drag (read there, not modified):
-    // MouseMove past a small pixel threshold marks it a real drag; a
-    // plain release without that counts as a click instead, so identify
-    // still works exactly as before for anything not actually dragged.
+    // Every placed item/object's own map visual - the map side of hit testing and drag-and-drop. All click/drag state lives in
+    // GameTestWindow.Interaction.cs (one PointerSession, one origin record); nothing about a drag is stored here.
     private readonly Dictionary<PlacedItemInstance, UIElement> _itemVisuals = new();
     private readonly Dictionary<ObjectInstance, UIElement> _objectVisuals = new();
-    private PlacedItemInstance? _dragItem;
-    /// <summary>Set only when a drag originated from a paperdoll backpack (see StartDragFromInventory) - null for an ordinary map-to-map drag. Lets the drop-commit logic revert a click-without-real-motion back into the backpack instead of leaving a temporary item sitting on the map.</summary>
-    private OpenPaperdollGump? _dragOriginGump;
-    /// <summary>Real, confirmed fix, per spec ("dragged object into container... it disappeared and left container... found there is no new book added") - found the true root cause: there was no equivalent of _dragOriginGump at all for a drag that started FROM an open container (as opposed to from a paperdoll slot or the backpack list), so a drop that failed for any reason (the destination's own real volume check rejecting it, say) had nowhere real to revert the item to - it was removed from its own source container the instant the drag left the frame, and simply never existed anywhere again if the drop didn't succeed. Set the moment such a drag starts, cleared everywhere _dragOriginGump already is, and checked at every one of those same real failure points via RevertDragToContainer below.</summary>
-    private OpenContainerGump? _dragOriginContainerGump;
-    private OpenPaperdollGump? _pendingInventoryDragGump;
-    private Point _pendingInventoryDragStart;
-    /// <summary>Same real principle as _pendingInventoryDragGump, per spec - there is no right-click-unequip at all; dragging an item OUT of its equipped slot IS the real unequip action, exactly like real Exult, and only actually starts (removing it from the slot and placing a real temporary map item) once real mouse movement past a threshold is detected, so a plain click still identifies normally.</summary>
-    private OpenPaperdollGump? _pendingSlotDragGump;
-    /// <summary>Real, confirmed extension - either a real EquipmentSlot or a real int (a custom slot's own Id) now, per TryGetEquippedInstanceId's own doc comment.</summary>
-    private object? _pendingSlotDragSlot;
-    private Point _pendingSlotDragStart;
-    /// <summary>Set only when a drag originated from an equipped slot (see StartDragFromSlot) - null otherwise. On ANY failure to actually place it (a plain click with no real motion, OR a real drag that ends on an invalid map location), the item goes back into this exact slot - never merely into the general backpack - matching Exult's own real Dragging_info.readied_index, tracked specifically so a failed drop can restore an item to the precise spot it was readied in.</summary>
-    /// <summary>Real, confirmed extension - either a real EquipmentSlot or a real int (a custom slot's own Id) now, same real reason as _pendingSlotDragSlot.</summary>
-    private object? _dragOriginSlot;
-    private ObjectInstance? _dragObject;
-    private UIElement? _dragVisual;
-    private Point _dragStartMouse;
-    private Point _dragStartElementPos;
-    /// <summary>
-    /// The dragged visual's real, logical world position (GameCanvas's
-    /// own coordinate space) - kept accurate and authoritative for every
-    /// drop-commit calculation regardless of which panel the visual is
-    /// actually parented to at that moment. Needed because, per Exult's
-    /// own real solution (paint the dragged object last, every frame, on
-    /// top of absolutely everything, gumps included - not a Z-index
-    /// system at all), the one real visual is reparented on top of the
-    /// gumps layer for the duration of a drag that's moved past a gump,
-    /// so its own Canvas.Left/Top temporarily become screen-space, not
-    /// world-space, and can no longer be read directly for tile math.
-    /// </summary>
-    private double _dragLogicalLeft;
-    private double _dragLogicalTop;
-    private bool _movedDuringDrag;
-    private const double DragThreshold = 3;
 
     private readonly Image _playerImage = new() { IsHitTestVisible = false };
     private SpriteAnimator? _playerAnimator;
@@ -225,7 +186,7 @@ public partial class GameTestWindow : Window
         GameCanvas.Focus();
         GameCanvas.PreviewKeyDown += GameCanvas_PreviewKeyDown;
         GameCanvas.PreviewKeyUp += GameCanvas_PreviewKeyUp;
-        GameCanvas.MouseLeftButtonDown += GameCanvas_MouseLeftButtonDown;
+        InitializeInteraction(); // the one and only place mouse interaction is wired up - see GameTestWindow.Interaction.cs
 
         // Task 4 - the constants are the single source of truth for viewport size, not the XAML defaults (which exist only so the designer shows something sensible) - setting these here means changing ViewportWidth/Height alone is enough to resize the whole pipeline later.
         ViewportBorder.Width = ViewportWidth;
@@ -834,59 +795,30 @@ public partial class GameTestWindow : Window
 
             // The equipped item's own real sprite/icon, drawn directly at the slot's position - this IS the paperdoll visual; there is nothing else to draw for a slot. Real, confirmed extraction - shared now (BuildEquippedItemIconVisual below) so the real custom-slot loop further down uses the exact same real rendering logic, not a second, separately-maintained copy of it.
             FrameworkElement? itemVisual = equippedItem is not null ? BuildEquippedItemIconVisual(gump, equippedItem, paperdollItemCounterScale) : null;
-                if (itemVisual is not null)
-                {
-                    Canvas.SetLeft(itemVisual, pos.X);
-                    Canvas.SetTop(itemVisual, pos.Y);
-                    Panel.SetZIndex(itemVisual, 10);
-                    itemVisual.Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand;
-                    // Real fix, matching Book Preview's own proven, working BookSpriteImage_MouseLeftButtonDown pattern exactly - interaction is wired DIRECTLY on the item's own real visual, never a separate transparent overlay that has to be kept in perfect position/size sync with it (which is exactly what kept quietly drifting out of sync across several previous fixes). IsHitTestVisible is genuinely true now - this element itself receives the real click.
-                    itemVisual.IsHitTestVisible = true;
-                    // Real unequip, per spec - there is no right-click-unequip at all; dragging an item OUT of its slot IS the real unequip action, exactly like real Exult and exactly like Book Preview's own real click-vs-drag model (BookSpriteImage_MouseLeftButtonDown). Double-click still uses immediately. A single click only starts a real drag CANDIDATE - it only actually becomes a drag (unequipping the item for real) once real mouse movement past a threshold is detected in PaperdollItemVisual_MouseMove; released without that movement, it's a plain identify instead.
-                    itemVisual.MouseLeftButtonDown += (_, e) =>
-                    {
-                        if (e.ClickCount == 2)
-                        {
-                            // Real, confirmed fix, per spec ("Backpack: this is for containers of all sorts, not just backpacks... I should single-click a container to identify it and double-click it to interact with it, the same way I do on the map side") - a real, specific container equipped here opens ITS OWN real contents view now, exactly like double-clicking it on the map would, rather than always falling back to the generic backpack list regardless of what's actually in the slot.
-                            if (equippedItem is not null && equippedItem.Category == ReferencedItemCategory.Container)
-                            {
-                                OpenEquippedContainer(equippedItem);
-                            }
-                            else if (slot == EquipmentSlot.Backpack)
-                            {
-                                // Real Exult behavior, confirmed from documented real play - double-clicking an EMPTY backpack slot opens the character's own general contents as its own separate gump, rather than using it the ordinary way.
-                                OpenBackpackContents(gump);
-                            }
-                            else PaperdollSlotClicked(gump, slot, 2);
-                            e.Handled = true;
-                            return;
-                        }
-                        _pendingSlotDragGump = gump;
-                        _pendingSlotDragSlot = slot;
-                        _pendingSlotDragStart = e.GetPosition(gump.BodyCanvas);
-                        // Real, confirmed fix for single-click-identify silently failing - matching Book Preview's own real, proven pattern (BookSpriteImage.CaptureMouse()) exactly. Without this, even a tiny bit of real mouse jitter during a plain click could move the pointer just outside the icon's own bounds by the moment of release, so MouseLeftButtonUp would never fire on this element at all - explicit capture guarantees release is always reported back here regardless.
-                        itemVisual.CaptureMouse();
-                        e.Handled = true;
-                    };
-                    itemVisual.MouseMove += (_, e) => PaperdollItemVisual_MouseMove(gump, slot, e);
-                    itemVisual.MouseLeftButtonUp += (_, e) => PaperdollItemVisual_MouseLeftButtonUp(itemVisual, gump, slot, e);
-                    gump.BodyCanvas.Children.Add(itemVisual);
-                }
-
-            // An EMPTY slot has no real visual to wire a handler onto at all, so it alone still needs a plain transparent click region - the one real remaining use for this pattern, exactly where Book Preview's own model has nothing further to say (there's no "empty" analog there). Sized to a small, reasonable default (there's no icon to match) and, per spec, never visible - only ever a hit-test area, to equip whatever's currently selected there. Marked Handled so a slot click never also triggers the body's own drag handler underneath it.
-            if (itemVisual is null)
+            // Interaction is never wired on the visual itself - it only carries a SlotTarget tag; the window's one mouse pipeline
+            // (GameTestWindow.Interaction.cs) finds it by hit testing and decides identify / use / drag from there.
+            if (itemVisual is not null)
             {
+                Canvas.SetLeft(itemVisual, pos.X);
+                Canvas.SetTop(itemVisual, pos.Y);
+                Panel.SetZIndex(itemVisual, 10);
+                itemVisual.Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand;
+                itemVisual.IsHitTestVisible = true;
+                itemVisual.Tag = new SlotTarget(gump, slot);
+                HideIfBeingDragged(itemVisual);
+                gump.BodyCanvas.Children.Add(itemVisual);
+            }
+            else
+            {
+                // An EMPTY slot has no visual of its own, so it gets a plain transparent hit region instead - never visible, only a drop/click target (a click equips whatever is selected in the backpack list; a drop readies the dragged item here).
                 var clickRegion = new Border
                 {
                     Width = 40,
                     Height = 40,
                     Background = Brushes.Transparent,
                     Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand,
-                    Tag = slot
+                    Tag = new SlotTarget(gump, slot)
                 };
-                clickRegion.MouseLeftButtonDown += (_, e) => { PaperdollSlotClicked(gump, slot, e.ClickCount); e.Handled = true; };
-                if (slot == EquipmentSlot.Backpack)
-                    clickRegion.MouseLeftButtonDown += (_, e) => { if (e.ClickCount == 2) { OpenBackpackContents(gump); e.Handled = true; } };
                 Canvas.SetLeft(clickRegion, pos.X - 4);
                 Canvas.SetTop(clickRegion, pos.Y - 4);
                 Panel.SetZIndex(clickRegion, 10);
@@ -894,7 +826,7 @@ public partial class GameTestWindow : Window
             }
         }
 
-        // Real, confirmed new feature, per spec ("the same mechanics you used in the inventory paper doll to single click to identify please apply it... apply it to custom slots too") - runtime rendering and interaction for custom slots, genuinely sharing every piece of machinery the built-in loop above already uses (BuildEquippedItemIconVisual, PaperdollSlotClicked, StartDragFromSlot, PaperdollItemVisual_MouseMove/Up, ShowPaperdollIdentifyLabel) via the same slotKey the TryGetEquippedInstanceId family of helpers understands - a custom slot has no left-hand-lock, two-handed, or Backpack-double-click concept at all, so this loop is intentionally simpler than the built-in one, not a cut-down duplicate missing real functionality.
+        // Real, confirmed new feature, per spec ("the same mechanics you used in the inventory paper doll to single click to identify please apply it... apply it to custom slots too") - runtime rendering and interaction for custom slots, genuinely sharing every piece of machinery the built-in loop above already uses (BuildEquippedItemIconVisual, the SlotTarget tag the interaction pipeline drags/identifies/uses through, PaperdollSlotClicked, ShowPaperdollIdentifyLabel) via the same slotKey the TryGetEquippedInstanceId family of helpers understands - a custom slot has no left-hand-lock, two-handed, or Backpack-double-click concept at all, so this loop is intentionally simpler than the built-in one, not a cut-down duplicate missing real functionality.
         foreach (var customSlot in character.Paperdoll.CustomSlots)
         {
             object slotKey = customSlot.Id;
@@ -909,23 +841,8 @@ public partial class GameTestWindow : Window
                 Panel.SetZIndex(customItemVisual, 10);
                 customItemVisual.Cursor = Cursors.Hand;
                 customItemVisual.IsHitTestVisible = true;
-                customItemVisual.MouseLeftButtonDown += (_, e) =>
-                {
-                    if (e.ClickCount == 2)
-                    {
-                        if (customEquippedItem is not null && customEquippedItem.Category == ReferencedItemCategory.Container) OpenEquippedContainer(customEquippedItem);
-                        else PaperdollSlotClicked(gump, slotKey, 2);
-                        e.Handled = true;
-                        return;
-                    }
-                    _pendingSlotDragGump = gump;
-                    _pendingSlotDragSlot = slotKey;
-                    _pendingSlotDragStart = e.GetPosition(gump.BodyCanvas);
-                    customItemVisual.CaptureMouse();
-                    e.Handled = true;
-                };
-                customItemVisual.MouseMove += (_, e) => PaperdollItemVisual_MouseMove(gump, slotKey, e);
-                customItemVisual.MouseLeftButtonUp += (_, e) => PaperdollItemVisual_MouseLeftButtonUp(customItemVisual, gump, slotKey, e);
+                customItemVisual.Tag = new SlotTarget(gump, slotKey);
+                HideIfBeingDragged(customItemVisual);
                 gump.BodyCanvas.Children.Add(customItemVisual);
             }
             else
@@ -936,9 +853,8 @@ public partial class GameTestWindow : Window
                     Height = 22,
                     Background = new SolidColorBrush(Color.FromArgb(80, 60, 170, 60)), // faint green, matching the editor's own custom-slot color, so an empty one is still findable on the body
                     Cursor = Cursors.Hand,
-                    Tag = slotKey
+                    Tag = new SlotTarget(gump, slotKey)
                 };
-                customClickRegion.MouseLeftButtonDown += (_, e) => { PaperdollSlotClicked(gump, slotKey, e.ClickCount); e.Handled = true; };
                 Canvas.SetLeft(customClickRegion, customSlot.X);
                 Canvas.SetTop(customClickRegion, customSlot.Y);
                 Panel.SetZIndex(customClickRegion, 10);
@@ -1041,7 +957,7 @@ public partial class GameTestWindow : Window
             return;
         }
 
-        // Real environmental interaction, per spec - an equipped item is interacted with exactly like it would be on the map: single click identifies, double click uses (firing whatever real events it has), never unequipped as a side effect of a plain click. Real unequip is dragging the item out of its slot entirely (see StartDragFromSlot) - confirmed real Exult behavior, since right-click is reserved for movement/pathfinding, not gump interaction, and there is no right-click-unequip at all.
+        // Real environmental interaction, per spec - an equipped item is interacted with exactly like it would be on the map: single click identifies, double click uses (firing whatever real events it has), never unequipped as a side effect of a plain click. Real unequip is dragging the item out of its slot entirely (see TryStartDrag in GameTestWindow.Interaction.cs) - confirmed real Exult behavior, since right-click is reserved for movement/pathfinding, not gump interaction, and there is no right-click-unequip at all.
         if (TryGetEquippedInstanceId(character, slotKey, out int equippedInstanceId))
         {
             var equippedItem = character.Inventory.FirstOrDefault(i => i.InstanceId == equippedInstanceId);
@@ -1108,24 +1024,8 @@ public partial class GameTestWindow : Window
         content.Children.Add(exitButton);
 
         backpackList.SelectionChanged += (_, _) => PaperdollBackpackList_SelectionChanged(owner, backpackList);
-        backpackList.MouseDoubleClick += (_, _) =>
-        {
-            if (backpackList.SelectedItem is PaperdollBackpackRow row) HandleInventoryItemClick(owner, row.Instance, isUse: true);
-        };
-        // Real drag-out-of-inventory, per spec - only actually starts (removing the item from the backpack and placing a real temporary map item) once real mouse movement past a threshold is detected, the standard safe WPF drag-initiation pattern. A plain click never triggers this, so the existing click-to-select-for-equipping workflow (SelectionChanged above) stays completely undisturbed.
-        backpackList.PreviewMouseLeftButtonDown += (_, e) =>
-        {
-            _pendingInventoryDragGump = owner;
-            _pendingInventoryDragStart = e.GetPosition(backpackList);
-        };
-        backpackList.PreviewMouseMove += (_, e) =>
-        {
-            if (_pendingInventoryDragGump != owner || e.LeftButton != MouseButtonState.Pressed) return;
-            var current = e.GetPosition(backpackList);
-            if (Math.Abs(current.X - _pendingInventoryDragStart.X) < DragThreshold && Math.Abs(current.Y - _pendingInventoryDragStart.Y) < DragThreshold) return;
-            _pendingInventoryDragGump = null;
-            if (backpackList.SelectedItem is PaperdollBackpackRow row) StartDragFromInventory(owner, row.Instance, e.GetPosition(GameCanvas));
-        };
+        // Tagged with its owner so the window's one mouse pipeline can resolve a row under the pointer to a BackpackRowTarget - single click / double click / drag out are all handled there, not here.
+        backpackList.Tag = owner;
 
         PaperdollGumpsCanvas.Children.Add(gumpBorder);
         RefreshBackpackGump(backpackGump);
@@ -1141,242 +1041,13 @@ public partial class GameTestWindow : Window
     private void RefreshBackpackGump(OpenBackpackGump backpackGump)
     {
         var character = backpackGump.Owner.Character;
-        var equippedIds = character.EquippedSlots.Values.ToHashSet();
+        var equippedIds = character.EquippedSlots.Values.Concat(character.CustomEquippedSlots.Values).ToHashSet(); // an item equipped in a custom slot is on the body, not loose in the backpack
         backpackGump.BackpackList.ItemsSource = character.Inventory
             .Where(i => !equippedIds.Contains(i.InstanceId))
             .Select(i => new PaperdollBackpackRow(i, _books, _objects, _containers))
             .ToList();
     }
 
-    /// <summary>
-    /// Real drop-out-of-inventory, per spec - deliberately reuses the
-    /// EXISTING, proven map-drag machinery (BeginDrag, the real settle/
-    /// collision/footprint-overlap logic) rather than building a
-    /// parallel system: the item becomes a genuine temporary
-    /// PlacedItemInstance/ObjectInstance at the player's own feet first,
-    /// THEN handed to BeginDrag exactly like any map item would be. If
-    /// the click never turns into a real drag, GameCanvas_MouseLeftButtonUp_Drag's
-    /// own revert branch (via _dragOriginGump) puts it straight back in
-    /// the backpack instead of leaving a stray item on the map.
-    /// </summary>
-    private void PaperdollItemVisual_MouseMove(OpenPaperdollGump gump, object slotKey, MouseEventArgs e)
-    {
-        if (_pendingSlotDragGump != gump || !Equals(_pendingSlotDragSlot, slotKey) || e.LeftButton != MouseButtonState.Pressed) return;
-        var current = e.GetPosition(gump.BodyCanvas);
-        if (Math.Abs(current.X - _pendingSlotDragStart.X) < DragThreshold && Math.Abs(current.Y - _pendingSlotDragStart.Y) < DragThreshold) return;
-        _pendingSlotDragGump = null;
-        StartDragFromSlot(gump, slotKey, e.GetPosition(GameCanvas));
-    }
-
-    private void PaperdollItemVisual_MouseLeftButtonUp(object visual, OpenPaperdollGump gump, object slotKey, MouseButtonEventArgs e)
-    {
-        if (_pendingSlotDragGump != gump || !Equals(_pendingSlotDragSlot, slotKey)) return;
-        // Never actually became a real drag - a plain click, so it identifies instead, exactly like Book Preview's own real model.
-        _pendingSlotDragGump = null;
-        if (visual is UIElement element) element.ReleaseMouseCapture();
-        PaperdollSlotClicked(gump, slotKey, 1);
-        e.Handled = true;
-    }
-
-    /// <summary>
-    /// Real unequip, per spec and confirmed real Exult - there is no
-    /// right-click-unequip at all; removing the item from its slot IS
-    /// the actual, real unequip action, done the instant a real drag
-    /// starts (not deferred until it lands somewhere), then handed off
-    /// to the exact same proven map-placement machinery StartDragFromInventory
-    /// already uses for a backpack-originated drag. _dragOriginSlot is
-    /// set first so any later failure (see RevertDragToInventory, and
-    /// the map drop-commit's own rejection branch) knows to restore the
-    /// item to this precise slot again, not just the general backpack.
-    /// </summary>
-    private void StartDragFromSlot(OpenPaperdollGump gump, object slotKey, Point mouseStartInGameCanvas)
-    {
-        if (!TryGetEquippedInstanceId(gump.Character, slotKey, out int instanceId)) return;
-        var item = gump.Character.Inventory.FirstOrDefault(i => i.InstanceId == instanceId);
-        if (item is null) return;
-        RemoveEquippedInstanceId(gump.Character, slotKey);
-        _dragOriginSlot = slotKey;
-        StartDragFromInventory(gump, item, mouseStartInGameCanvas);
-        RefreshPaperdollGump(gump);
-    }
-
-    private void StartDragFromInventory(OpenPaperdollGump gump, InventoryItemInstance item, Point mouseStartInGameCanvas)
-    {
-        // Real, confirmed defensive clear - mirrors StartDragItemFromContainer's own version; this is a paperdoll/backpack-originated drag, so any stale container origin from a previous, already-finished drag can never be mistaken for this one's own real origin.
-        _dragOriginContainerGump = null;
-        gump.Character.Inventory.Remove(item);
-
-        UIElement visual;
-        double quantW = _tileWidth, quantH = _tileHeight;
-        if (item.Category == ReferencedItemCategory.Book)
-        {
-            var placed = new PlacedItemInstance { X = _playerX, Y = _playerY, Category = ReferencedItemCategory.Book, ItemId = item.ItemId };
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
-            var sprite = book is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
-            if (sprite is not null && sprite.Frames.Count > 0)
-            {
-                var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
-                (int qw, int qh) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : ((int)_tileWidth, (int)_tileHeight);
-                quantW = qw; quantH = qh;
-                var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                _ = new SpriteAnimator(sprite, image, _resources);
-                visual = image;
-            }
-            else
-            {
-                visual = new Border { Width = quantW, Height = quantH, Background = Brushes.SaddleBrown, IsHitTestVisible = true, Child = new TextBlock { Text = "B", Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            }
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Items.Add(placed);
-            _itemVisuals[placed] = visual;
-            _dragItem = placed;
-        }
-        else if (item.Category == ReferencedItemCategory.Container)
-        {
-            // Real, confirmed bug fix, per spec ("When I move the container in either right or left hand, it changes to square with O in the middle") - a Container dragged out of an equipped slot was falling into the generic Object branch below, which can never find a matching entry in the object database at all (containers and objects are different databases with different ids) - hence the fallback "O" placeholder every single time. A real Container-category PlacedItemInstance is built here instead, exactly like a map-placed container, with its own real sprite resolved the same way, and critically, its own real Contents carried over from the inventory instance being dragged - so if it lands back on the map, it's a genuine, fully-intact container, not an empty shell.
-            var placed = new PlacedItemInstance { X = _playerX, Y = _playerY, Category = ReferencedItemCategory.Container, ItemId = item.ItemId, InstanceId = _nextContainerRuntimeInstanceId++, Contents = item.Contents };
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
-            var sprite = containerData is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
-            if (sprite is not null && sprite.Frames.Count > 0)
-            {
-                var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
-                (int qw, int qh) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : ((int)_tileWidth, (int)_tileHeight);
-                quantW = qw; quantH = qh;
-                var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                _ = new SpriteAnimator(sprite, image, _resources);
-                visual = image;
-            }
-            else
-            {
-                visual = new Border { Width = quantW, Height = quantH, Background = Brushes.SaddleBrown, IsHitTestVisible = true, Child = new TextBlock { Text = "C", Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            }
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Items.Add(placed);
-            _itemVisuals[placed] = visual;
-            _dragItem = placed;
-        }
-        else
-        {
-            var placed = new ObjectInstance { X = _playerX, Y = _playerY, ObjectId = item.ItemId };
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId);
-            var bmp = string.IsNullOrEmpty(worldObject?.IconPath) ? null : LoadStaticFrame(worldObject.IconPath);
-            if (bmp is not null)
-            {
-                (int qw, int qh) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-                quantW = qw; quantH = qh;
-                visual = new Image { Source = bmp, Width = quantW, Height = quantH, IsHitTestVisible = true };
-            }
-            else
-            {
-                visual = new Border { Width = quantW, Height = quantH, Background = Brushes.DarkSlateGray, IsHitTestVisible = true, Child = new TextBlock { Text = "O", Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
-            }
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Objects.Add(placed);
-            _objectVisuals[placed] = visual;
-            _dragObject = placed;
-        }
-
-        _dragOriginGump = gump;
-        RefreshPaperdollGump(gump);
-        RefreshStackingVisuals(); // repositions every map item/object from its own real stored data, including this new one (at the player's own tile) - so the mouse-centering fix below MUST run after this, never before it, or this would silently undo it
-
-        // Real, confirmed fix for the huge offset between the item and the mouse pointer - the item's real starting map data (the player's own tile) has nothing to do with where the mouse actually is when dragging out of a slot or the backpack, potentially screen-space away from the player entirely. BeginDrag's own subsequent delta math is only ever correct if the visual's STARTING screen position and the mouse's STARTING screen position genuinely agree - so the visual is re-centered directly under the real starting mouse position here, immediately before BeginDrag captures that as its reference, exactly matching how Book Preview's own drag start already works (its own dragged visual is always wherever it visually, really is, never an unrelated spawn point).
-        Canvas.SetLeft(visual, mouseStartInGameCanvas.X - quantW / 2);
-        Canvas.SetTop(visual, mouseStartInGameCanvas.Y - quantH / 2);
-
-        BeginDrag(_dragItem, _dragObject, visual, mouseStartInGameCanvas);
-    }
-
-    /// <summary>
-    /// Real revert, per spec and confirmed real Exult (Dragging_info's
-    /// own readied_index, tracked specifically so a failed drop can
-    /// restore an item to the precise spot it was readied in) - on ANY
-    /// failure to actually place a dragged item (a plain click with no
-    /// real motion, or a real drag that ends on an invalid map
-    /// location), it goes back into the exact slot it came from if it
-    /// came from one at all, never merely into the general backpack.
-    /// </summary>
-    private void RevertDragToInventory(OpenPaperdollGump gump)
-    {
-        InventoryItemInstance? restored = null;
-        if (_dragItem is { } item)
-        {
-            _map.Items.Remove(item);
-            if (_itemVisuals.Remove(item, out var visual)) GameCanvas.Children.Remove(visual);
-            restored = new InventoryItemInstance { InstanceId = gump.Character.GetNextInventoryInstanceId(), Category = item.Category, ItemId = item.ItemId, Quantity = 1 };
-        }
-        else if (_dragObject is { } obj)
-        {
-            _map.Objects.Remove(obj);
-            if (_objectVisuals.Remove(obj, out var visual)) GameCanvas.Children.Remove(visual);
-            restored = new InventoryItemInstance { InstanceId = gump.Character.GetNextInventoryInstanceId(), Category = ReferencedItemCategory.Object, ItemId = obj.ObjectId, Quantity = 1 };
-        }
-        if (restored is not null)
-        {
-            gump.Character.Inventory.Add(restored);
-            if (_dragOriginSlot is { } slot) SetEquippedInstanceId(gump.Character, slot, restored.InstanceId);
-        }
-        RefreshPaperdollGump(gump);
-    }
-
-    /// <summary>Real, confirmed fix - same exact real principle as RevertDragToInventory right above, for a drag that started FROM an open container instead of a paperdoll slot or the backpack list. Puts the item straight back into its own source container's real Contents, at the real center of its own frame (the same real fallback used everywhere a specific drop point isn't known), rather than losing it the instant a drop fails for any reason.</summary>
-    private void RevertDragToContainer(OpenContainerGump gump)
-    {
-        ReferencedItemCategory? restoredCategory = null;
-        int restoredItemId = 0;
-        if (_dragItem is { } item)
-        {
-            _map.Items.Remove(item);
-            if (_itemVisuals.Remove(item, out var visual)) GameCanvas.Children.Remove(visual);
-            restoredCategory = item.Category; restoredItemId = item.ItemId;
-        }
-        else if (_dragObject is { } obj)
-        {
-            _map.Objects.Remove(obj);
-            if (_objectVisuals.Remove(obj, out var visual)) GameCanvas.Children.Remove(visual);
-            restoredCategory = ReferencedItemCategory.Object; restoredItemId = obj.ObjectId;
-        }
-        if (restoredCategory is { } category)
-        {
-            var frameBounds = gump.Data.GetFrameBounds();
-            var restored = new InventoryItemInstance
-            {
-                InstanceId = gump.Data.GetNextContentsInstanceId(),
-                Category = category,
-                ItemId = restoredItemId,
-                Quantity = 1,
-                ContainerX = frameBounds.X + Math.Max(0, frameBounds.Width - 32) / 2,
-                ContainerY = frameBounds.Y + Math.Max(0, frameBounds.Height - 32) / 2
-            };
-            gump.PlacedItem.Contents.Add(restored);
-        }
-        RefreshContainerGump(gump);
-    }
-
-    /// <summary>
-    /// Real, confirmed fix, per spec ("dragged object into container...
-    /// it disappeared... found there is no new book added") - the one,
-    /// shared real place every drop-commit failure point below now
-    /// reverts through, so a failed drop can never again silently lose
-    /// an item that started from either a paperdoll/backpack origin OR a
-    /// container origin. Returns true the moment either kind of real
-    /// origin was actually reverted (the caller then skips its own
-    /// RefreshStackingVisuals, since the revert already did its own real
-    /// redraw); false means there was no real origin to revert to at
-    /// all (an ordinary map-to-map drag), so the caller's own fallback
-    /// still applies.
-    /// </summary>
-    private bool TryRevertDragToOrigin()
-    {
-        if (_dragOriginGump is { } paperdollOrigin) { RevertDragToInventory(paperdollOrigin); return true; }
-        if (_dragOriginContainerGump is { } containerOrigin) { RevertDragToContainer(containerOrigin); return true; }
-        return false;
-    }
-
-    /// <summary>Topmost-first hit test against every open gump's real screen rectangle (a paperdoll and, if open, its own linked backpack-contents gump), in PaperdollGumpsCanvas's own coordinate space - mirrors Exult's own real Dragging_info check ("gump = gumpman->find_gump(x, y)") before falling back to the map. A hit on a backpack-contents gump resolves to its owning paperdoll's character, since that's whose real inventory it is.</summary>
     /// <summary>Real hit test against the player's own current, actual visual bounds on GameCanvas - confirmed real Exult behavior (dropping an item onto the avatar picks it up, with or without a gump open).</summary>
     private bool IsPointOverPlayer(Point pointInGameCanvas)
     {
@@ -1400,9 +1071,6 @@ public partial class GameTestWindow : Window
     }
 
     private readonly List<OpenContainerGump> _openContainers = new();
-    private OpenContainerGump? _pendingItemDragGump;
-    private InventoryItemInstance? _pendingItemDragInstance;
-    private Point _pendingItemDragStart;
 
     /// <summary>Real lock check, per spec - a locked container needs either the real key item in the current player's own inventory, or a successful pick-lock attempt, before it opens at all. Once genuinely unlocked (by either route), PlacedItem.IsUnlockedRuntime stays true for THIS specific placed instance from then on - picking a lock once doesn't need picking again.</summary>
     private void TryOpenContainer(PlacedItemInstance placedItem, ContainerData data)
@@ -1452,11 +1120,8 @@ public partial class GameTestWindow : Window
         // Real, confirmed gap found and fixed while wiring Navigate Sound - OpenSoundResourceId/CloseSoundResourceId were added to the data model in an earlier pass but never actually played anywhere at runtime, same real pattern Book's own open/close sounds already use.
         if (data.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.OpenSoundResourceId);
 
-        if (placedItem.InstanceId == 0)
+        if (EnsureContainerSeeded(placedItem, data))
         {
-            placedItem.InstanceId = _nextContainerRuntimeInstanceId++;
-            foreach (var seed in data.StartingContents)
-                placedItem.Contents.Add(new InventoryItemInstance { InstanceId = seed.InstanceId, Category = seed.Category, ItemId = seed.ItemId, Quantity = seed.Quantity, ContainerX = seed.ContainerX, ContainerY = seed.ContainerY });
             // Real, confirmed diagnostic, per spec ("it somehow managed to put a 128 into a 64 max volume") - the Container Editor now warns the moment Max Volume itself makes existing Starting Contents invalid, but a project saved before that fix existed could still open with an already over-capacity container. This never alters the real, authored data - only makes the real problem visible immediately, in the exact moment it actually happens, instead of surfacing later as a confusing "won't fit" on some unrelated, much smaller item.
             double seededVolume = placedItem.Contents.Sum(ResolveContentsVolume);
             if (seededVolume > data.MaxVolume)
@@ -1497,7 +1162,7 @@ public partial class GameTestWindow : Window
     /// of those shared pieces (RefreshContainerGump, drag in/out, volume
     /// checks) work identically here, unchanged. No seed-once step is
     /// needed here at all - a container's own Contents are already fully
-    /// seeded the moment it's picked up (see PickUpIntoInventory), so by
+    /// seeded the moment it's picked up (see DetachAsInventoryItem), so by
     /// the time it can ever reach this method it's already live.
     /// </summary>
     private void OpenEquippedContainer(InventoryItemInstance equippedItem)
@@ -1655,163 +1320,13 @@ public partial class GameTestWindow : Window
             Canvas.SetTop(visual, item.ContainerY);
             Panel.SetZIndex(visual, z++);
             visual.Cursor = Cursors.Hand;
-            visual.MouseLeftButtonDown += (_, e) => ContainerItem_MouseLeftButtonDown(gump, item, visual, e);
-            visual.MouseMove += (_, e) => ContainerItem_MouseMove(gump, item, visual, e);
-            visual.MouseLeftButtonUp += (_, e) => ContainerItem_MouseLeftButtonUp(gump, item, visual, e);
+            // Tagged, not wired - the window's one mouse pipeline (GameTestWindow.Interaction.cs) handles identify, use, and drag for it.
+            visual.Tag = new ContainerItemTarget(gump, item);
+            HideIfBeingDragged(visual);
             gump.ItemsCanvas.Children.Add(visual);
         }
 
         // Real, confirmed removal, per spec ("GET RID OF... THE CHECK MARK ON THE TOP RIGHT CORNER... If I need to close it, press ESC to close it") - no exit button drawn here anymore; Escape (via the unified gump focus tracker above) is now the only close control, and dragging the body itself (itemsCanvas) still moves the gump exactly as before.
-    }
-
-    private void ContainerItem_MouseLeftButtonDown(OpenContainerGump gump, InventoryItemInstance item, FrameworkElement visual, MouseButtonEventArgs e)
-    {
-        if (e.ClickCount == 2) { HandleContainerItemClick(gump, item, isUse: true); e.Handled = true; return; }
-        _pendingItemDragGump = gump;
-        _pendingItemDragInstance = item;
-        _pendingItemDragStart = e.GetPosition(gump.ItemsCanvas);
-        // Real, definitive fix, matching the paperdoll's own real, proven pattern exactly (PaperdollItemVisual_MouseMove/BookSpriteImage_MouseLeftButtonDown) - capturing on the item's own visual is genuinely safe now that ContainerItem_MouseMove no longer rebuilds the gump mid-drag at all (it moves this same visual directly instead) - the earlier "capture on the stable canvas" workaround was compensating for that rebuild, which is now gone at the real source instead.
-        visual.CaptureMouse();
-        e.Handled = true;
-    }
-
-    /// <summary>
-    /// Real, definitive fix, per spec ("you need to see how did it in the
-    /// paper doll and do the same for the container paper doll") - the
-    /// real, structural reason the paperdoll's own item drag has always
-    /// worked is that it NEVER rebuilds its own gump mid-drag at all
-    /// (an equipped item is either sitting at its fixed slot position, or
-    /// it's been fully handed off to the ordinary map-drag system) -
-    /// RefreshPaperdollGump is only ever called before or after a drag,
-    /// never DURING one. This container version used to call
-    /// RefreshContainerGump on every single real pixel of movement, which
-    /// is a real, structural difference that no amount of capture-target
-    /// tuning could fully paper over. This now matches the paperdoll's
-    /// own real model exactly: the one, single, already-existing visual
-    /// is moved directly (Canvas.SetLeft/Top), nothing is rebuilt at all
-    /// until the drag genuinely ends, in ContainerItem_MouseLeftButtonUp.
-    /// </summary>
-    private void ContainerItem_MouseMove(OpenContainerGump gump, InventoryItemInstance item, FrameworkElement visual, MouseEventArgs e)
-    {
-        if (_pendingItemDragGump != gump || _pendingItemDragInstance != item || e.LeftButton != MouseButtonState.Pressed) return;
-        var current = e.GetPosition(gump.ItemsCanvas);
-
-        // Real, confirmed bug fix - a real threshold, same as everywhere else a drag-vs-click has to be told apart, so the tiniest jitter during what was meant as a plain click is never mistaken for the start of a real drag.
-        if (Math.Abs(current.X - _pendingItemDragStart.X) < DragThreshold && Math.Abs(current.Y - _pendingItemDragStart.Y) < DragThreshold) return;
-
-        // Real drag-out-to-map, per spec ("move items from inside the first container to another container... etc") - the moment the drag genuinely leaves the container's own real frame bounds, it stops being a reposition-within and becomes a real map drag instead, handed off to the exact same proven machinery a paperdoll slot's own drag-out already uses.
-        var itemBounds = gump.Data.GetFrameBounds();
-        if (current.X < -8 || current.X > itemBounds.Width + 8 || current.Y < -8 || current.Y > itemBounds.Height + 8)
-        {
-            _pendingItemDragGump = null;
-            gump.PlacedItem.Contents.Remove(item);
-            RefreshContainerGump(gump);
-            _dragOriginContainerGump = gump; // Real, confirmed fix - set right here, the real moment this item actually leaves its own source container, so a failed drop has somewhere real to revert it to.
-            StartDragItemFromContainer(item, e.GetPosition(GameCanvas));
-            return;
-        }
-
-        // Real, free repositioning within the frame - exactly like moving an item aside to see what's underneath in real Exult; no snapping, no grid. The one real existing visual moves directly; nothing is rebuilt, nothing is destroyed, so whatever holds mouse capture is never touched by this.
-        item.ContainerX = Math.Clamp(current.X - 16, 0, itemBounds.Width - 32);
-        item.ContainerY = Math.Clamp(current.Y - 16, 0, itemBounds.Height - 32);
-        Canvas.SetLeft(visual, item.ContainerX);
-        Canvas.SetTop(visual, item.ContainerY);
-    }
-
-    /// <summary>Real drag-out, per spec - reuses StartDragFromInventory's exact proven machinery (a real temporary map item at the player's own feet, handed to BeginDrag, reparented on top of gumps while moved, reverted if it never lands anywhere valid) by building a throwaway single-item OpenPaperdollGump-shaped call is not applicable here (a container item has no owning character/gump to revert into) - so failure here simply leaves it as a real, ordinary, currently-being-dragged map item, exactly like dragging anything else on the map already works, rather than needing a container-specific revert path.</summary>
-    private void StartDragItemFromContainer(InventoryItemInstance item, Point mouseStartInGameCanvas)
-    {
-        // Real, confirmed defensive clear - this is a container-originated drag, so any stale paperdoll-slot origin from a previous, already-finished drag can never be mistaken for this one's own real origin; _dragOriginContainerGump itself is set by the caller, right before this runs.
-        _dragOriginGump = null; _dragOriginSlot = null;
-        UIElement visual;
-        double quantW = _tileWidth, quantH = _tileHeight;
-        if (item.Category == ReferencedItemCategory.Book)
-        {
-            var placed = new PlacedItemInstance { X = _playerX, Y = _playerY, Category = ReferencedItemCategory.Book, ItemId = item.ItemId };
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
-            var sprite = book is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
-            if (sprite is not null && sprite.Frames.Count > 0)
-            {
-                var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
-                (int qw, int qh) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : ((int)_tileWidth, (int)_tileHeight);
-                quantW = qw; quantH = qh;
-                var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                _ = new SpriteAnimator(sprite, image, _resources);
-                visual = image;
-            }
-            else visual = new Border { Width = quantW, Height = quantH, Background = Brushes.SaddleBrown, IsHitTestVisible = true };
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Items.Add(placed);
-            _itemVisuals[placed] = visual;
-            _dragItem = placed;
-        }
-        else if (item.Category == ReferencedItemCategory.Container)
-        {
-            // Real, confirmed bug fix, same real class of bug as StartDragFromInventory's own equipped-slot version - a nested container dragged out of another open container was falling into the generic Object branch below, which can never resolve a real sprite or carry over its own real Contents. Built the same real way here: a real Container-category PlacedItemInstance, its own real sprite, and its own real Contents preserved intact.
-            var placed = new PlacedItemInstance { X = _playerX, Y = _playerY, Category = ReferencedItemCategory.Container, ItemId = item.ItemId, InstanceId = _nextContainerRuntimeInstanceId++, Contents = item.Contents };
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
-            var sprite = containerData is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
-            if (sprite is not null && sprite.Frames.Count > 0)
-            {
-                var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
-                (int qw, int qh) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : ((int)_tileWidth, (int)_tileHeight);
-                quantW = qw; quantH = qh;
-                var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                _ = new SpriteAnimator(sprite, image, _resources);
-                visual = image;
-            }
-            else visual = new Border { Width = quantW, Height = quantH, Background = Brushes.SaddleBrown, IsHitTestVisible = true };
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Items.Add(placed);
-            _itemVisuals[placed] = visual;
-            _dragItem = placed;
-        }
-        else
-        {
-            var placed = new ObjectInstance { X = _playerX, Y = _playerY, ObjectId = item.ItemId };
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId);
-            var bmp = item.Category == ReferencedItemCategory.Object && !string.IsNullOrEmpty(worldObject?.IconPath) ? LoadStaticFrame(worldObject.IconPath) : null;
-            if (bmp is not null)
-            {
-                (int qw, int qh) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-                quantW = qw; quantH = qh;
-                visual = new Image { Source = bmp, Width = quantW, Height = quantH, IsHitTestVisible = true };
-            }
-            else visual = new Border { Width = quantW, Height = quantH, Background = Brushes.DarkSlateGray, IsHitTestVisible = true };
-            GameCanvas.Children.Add(visual);
-            PositionQuantizedVisual(visual, placed.X, placed.Y, quantW, quantH);
-            _map.Objects.Add(placed);
-            _objectVisuals[placed] = visual;
-            _dragObject = placed;
-        }
-
-        RefreshStackingVisuals();
-        Canvas.SetLeft(visual, mouseStartInGameCanvas.X - quantW / 2);
-        Canvas.SetTop(visual, mouseStartInGameCanvas.Y - quantH / 2);
-        BeginDrag(_dragItem, _dragObject, visual, mouseStartInGameCanvas);
-    }
-
-    private void ContainerItem_MouseLeftButtonUp(OpenContainerGump gump, InventoryItemInstance item, FrameworkElement visual, MouseButtonEventArgs e)
-    {
-        if (_pendingItemDragGump != gump || _pendingItemDragInstance != item) return;
-        _pendingItemDragGump = null;
-        visual.ReleaseMouseCapture();
-        var current = e.GetPosition(gump.ItemsCanvas);
-        if (Math.Abs(current.X - _pendingItemDragStart.X) < DragThreshold && Math.Abs(current.Y - _pendingItemDragStart.Y) < DragThreshold)
-        {
-            // Never actually moved past the real threshold - a plain click identifies instead, same real principle as a paperdoll item.
-            HandleContainerItemClick(gump, item, isUse: false);
-        }
-        else
-        {
-            // Real Navigate Sound, per spec ("plays the sound once the player releases the object on that spot on the container") - a real move genuinely happened, the item was actually released onto wherever it now sits.
-            if (gump.Data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, gump.Data.NavigateSoundResourceId);
-            // Real, confirmed fix - the gump is only ever rebuilt HERE now, once, at the real end of a completed drag (never mid-drag), purely to keep the underlying Z-order/list-based stacking view consistent with everything else - the visual itself already sits exactly where it should from the direct move above.
-            RefreshContainerGump(gump);
-        }
-        e.Handled = true;
     }
 
     private void HandleContainerItemClick(OpenContainerGump gump, InventoryItemInstance item, bool isUse)
@@ -1842,135 +1357,6 @@ public partial class GameTestWindow : Window
             : $"a {typeName}";
     }
 
-    private bool TryFindContainerGumpAt(Point pointInGumpsCanvas, out OpenContainerGump gump)
-    {
-        for (int i = _openContainers.Count - 1; i >= 0; i--)
-        {
-            var candidate = _openContainers[i];
-            double left = Canvas.GetLeft(candidate.GumpBorder), top = Canvas.GetTop(candidate.GumpBorder);
-            if (pointInGumpsCanvas.X >= left && pointInGumpsCanvas.X <= left + candidate.GumpBorder.ActualWidth
-                && pointInGumpsCanvas.Y >= top && pointInGumpsCanvas.Y <= top + candidate.GumpBorder.ActualHeight)
-            {
-                gump = candidate;
-                return true;
-            }
-        }
-        gump = null!;
-        return false;
-    }
-
-    /// <summary>
-    /// Real drop-in, per spec - rule 1 (a body container can never have
-    /// something dropped INTO it) and the real volume system (rule 7: an
-    /// item can only fit if the container's current contents' total
-    /// volume plus this item's own real Volume would not exceed
-    /// MaxVolume) are both enforced right here, honestly, before the
-    /// item ever actually leaves the map.
-    /// </summary>
-    /// <summary>Real overload, per spec ("If Allow Elevation is not checked, dragging an item onto the container should use the default mechanics and add the item into the container itself") - the exact same real drop-in logic works identically whether an open gump exists to visually refresh afterward or not, so dropping straight onto a CLOSED container sitting on the map (no gump open at all) can use it too, not just dropping onto an already-open one.</summary>
-    private bool TryDropIntoContainer(OpenContainerGump gump, Point? dropPositionInFrame = null) => TryDropIntoContainer(gump.Data, gump.PlacedItem, gump, dropPositionInFrame);
-
-    /// <summary>
-    /// Real, confirmed fix, per spec ("when I drag and drop an item in
-    /// the container it should drop where I wanted it to drop not
-    /// randomly all over the place") - dropPositionInFrame, when given,
-    /// is exactly where the player actually released it (already
-    /// converted to this container's own real frame-local coordinates),
-    /// and always wins. Random placement is now only ever a fallback for
-    /// the cases where there genuinely is no such point at all - dropping
-    /// straight onto a CLOSED container on the map with no gump open, or
-    /// the automatic pickup cascade landing something in a Backpack/Pouch
-    /// container the player never actually saw open - not for an
-    /// ordinary, visible drop onto an open gump, which is the case this
-    /// was actually reported against.
-    /// </summary>
-    private bool TryDropIntoContainer(ContainerData data, IHasContainerContents placedContainer, OpenContainerGump? gump, Point? dropPositionInFrame = null)
-    {
-        if (data.IsBodyContainer)
-        {
-            StatusText.Text = $"You can't put things into \"{data.Name}\" - it's a body, not a real container.";
-            return false;
-        }
-
-        // Real, confirmed bug fix, per spec ("I am able to put the chest itself inside itself. That is a bug.") - this exact same physical placed chest being dragged (as itself, a real map item) onto its own contents, open gump or not. A different chest of the same template is perfectly legal to nest; only this exact same instance containing itself is not.
-        if (_dragItem == placedContainer)
-        {
-            StatusText.Text = $"\"{data.Name}\" can't hold itself.";
-            return false;
-        }
-
-        ReferencedItemCategory category; int itemId; string name; double volume; int originX, originY;
-        if (_dragItem is { } item)
-        {
-            // Real, confirmed fix, per spec ("how come I am able to put a container with volume 180 inside a chest that max allowed is 64?") - found the true root cause: this only ever resolved a Book, the exact same recurring gap found many times this session. A dragged CONTAINER's own itemId was being looked up in the BOOK database instead, which can never find a real match (different id spaces entirely), silently defaulting its own real volume to zero - so the check above could never actually block it, regardless of how large it really was. Genuinely shares ResolveContentsVolume now instead of duplicating a second, incomplete volume lookup here - the exact same real formula already used everywhere else (Book, Container, and now Object alike, per spec "use that logic"), so this can never silently drift out of sync with it again.
-            category = item.Category; itemId = item.ItemId;
-            name = category switch
-            {
-                ReferencedItemCategory.Container => _containers.Containers.FirstOrDefault(c => c.Id == itemId)?.Name ?? "container",
-                _ => EffectiveBookName(_books.Books.FirstOrDefault(b => b.Id == itemId) ?? new BookData())
-            };
-            volume = ResolveContentsVolume(new InventoryItemInstance { Category = category, ItemId = itemId, Quantity = 1 });
-            originX = item.X; originY = item.Y;
-        }
-        else if (_dragObject is { } obj)
-        {
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId);
-            category = ReferencedItemCategory.Object; itemId = obj.ObjectId; name = worldObject?.Name ?? "object";
-            volume = ResolveContentsVolume(new InventoryItemInstance { Category = category, ItemId = itemId, Quantity = 1 });
-            originX = obj.X; originY = obj.Y;
-        }
-        else return false;
-
-        double currentVolume = placedContainer.Contents.Sum(i => ResolveContentsVolume(i));
-        if (currentVolume + volume > data.MaxVolume)
-        {
-            StatusText.Text = $"\"{name}\" won't fit in \"{data.Name}\" - {currentVolume:0.##} + {volume:0.##} would exceed the max volume of {data.MaxVolume:0.##}.";
-            return false;
-        }
-
-        if (_dragItem is { } realItem)
-        {
-            _map.Items.Remove(realItem);
-            if (_itemVisuals.Remove(realItem, out var visual)) GameCanvas.Children.Remove(visual);
-        }
-        else if (_dragObject is { } realObj)
-        {
-            _map.Objects.Remove(realObj);
-            if (_objectVisuals.Remove(realObj, out var visual)) GameCanvas.Children.Remove(visual);
-        }
-        SettleCell(originX, originY);
-
-        // Real position, per spec - uses exactly where the player actually released it when that's known (see the method's own doc comment); only ever falls back to a real random spot within the frame's own bounds when there genuinely is no such point to use at all.
-        var dropBounds = data.GetFrameBounds();
-        double placedX, placedY;
-        if (dropPositionInFrame is { } realDropPoint)
-        {
-            placedX = Math.Clamp(realDropPoint.X - 16, dropBounds.X, dropBounds.X + dropBounds.Width - 32);
-            placedY = Math.Clamp(realDropPoint.Y - 16, dropBounds.Y, dropBounds.Y + dropBounds.Height - 32);
-        }
-        else
-        {
-            placedX = dropBounds.Width <= 32 ? dropBounds.X : dropBounds.X + _random.NextDouble() * (dropBounds.Width - 32);
-            placedY = dropBounds.Height <= 32 ? dropBounds.Y : dropBounds.Y + _random.NextDouble() * (dropBounds.Height - 32);
-        }
-        var newContentsItem = new InventoryItemInstance
-        {
-            InstanceId = data.GetNextContentsInstanceId(),
-            Category = category,
-            ItemId = itemId,
-            ContainerX = placedX,
-            ContainerY = placedY
-        };
-        int insertIndex = _random.Next(placedContainer.Contents.Count + 1);
-        placedContainer.Contents.Insert(insertIndex, newContentsItem);
-
-        if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);
-        StatusText.Text = $"You put \"{name}\" into \"{data.Name}\".";
-        RefreshStackingVisuals();
-        if (gump is not null) RefreshContainerGump(gump); // only a real, currently-open gump needs its own visual refreshed - dropping straight onto a closed container on the map has no gump to update
-        return true;
-    }
-
     private double ResolveContentsVolume(InventoryItemInstance item) => item.Category switch
     {
         ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == item.ItemId)?.Volume ?? 0,
@@ -1984,201 +1370,6 @@ public partial class GameTestWindow : Window
     private void GenericGumpDrag_MouseLeftButtonDown(OpenContainerGump owner, Border gumpBorder, UIElement dragSurface, MouseButtonEventArgs e) => PaperdollTitleBar_MouseLeftButtonDown(owner, gumpBorder, dragSurface, e);
     private void GenericGumpDrag_MouseMove(Border gumpBorder, MouseEventArgs e) => PaperdollTitleBar_MouseMove(gumpBorder, e);
     private void GenericGumpDrag_MouseLeftButtonUp(UIElement dragSurface) => PaperdollTitleBar_MouseLeftButtonUp(dragSurface);
-
-    private bool TryFindPaperdollGumpAt(Point pointInGumpsCanvas, out OpenPaperdollGump gump)
-    {
-        static bool Contains(Border border, Point p)
-        {
-            double left = Canvas.GetLeft(border), top = Canvas.GetTop(border);
-            return p.X >= left && p.X <= left + border.ActualWidth && p.Y >= top && p.Y <= top + border.ActualHeight;
-        }
-
-        for (int i = _openPaperdolls.Count - 1; i >= 0; i--)
-        {
-            var candidate = _openPaperdolls[i];
-            if (candidate.BackpackGump is { } backpack && Contains(backpack.GumpBorder, pointInGumpsCanvas)) { gump = candidate; return true; }
-            if (Contains(candidate.GumpBorder, pointInGumpsCanvas)) { gump = candidate; return true; }
-        }
-        gump = null!;
-        return false;
-    }
-
-    /// <summary>
-    /// Real pickup, per spec - the dragged item stops being a real map
-    /// object (removed from _map.Items/Objects, its visual removed, the
-    /// origin cell settled for real so anything that was resting on it
-    /// drops naturally) and becomes a real InventoryItemInstance for the
-    /// gump's own character instead. Category/ItemId carry over exactly,
-    /// so it's still the same real Book/Object record either way -
-    /// nothing about how it behaves changes just because it moved from
-    /// the map into a backpack.
-    /// </summary>
-    /// <summary>
-    /// Real auto-equip cascade, confirmed directly from Exult's own
-    /// actors.h (free_hand(): "!spots[rhand] ? rhand : (!spots[lhand] ?
-    /// lhand : -1)") - right hand tried first, then left hand, and a
-    /// two-handed item is never even offered the left hand at all
-    /// (matching fits_in_spot's own real rule). If neither hand is free,
-    /// the item only goes into general storage when a real backpack/
-    /// container is actually equipped in the Backpack slot - otherwise
-    /// pickup is rejected outright, exactly as described.
-    /// </summary>
-    /// <summary>Real volume-and-capacity check for a container regardless of where it currently is, per spec ("even if the container is in the arms or on the ground, any object placed into the container must check the total amount of volumes used vs the maximum volume") - the exact same real check TryDropIntoContainer already does for a map-based or gump-based drop, reused here so the SAME rule genuinely applies no matter how the item is arriving.</summary>
-    private bool ContainerHasRoomFor(ContainerData containerData, IHasContainerContents container, double newItemVolume)
-    {
-        double currentVolume = container.Contents.Sum(ResolveContentsVolume);
-        return currentVolume + newItemVolume <= containerData.MaxVolume;
-    }
-
-    /// <summary>
-    /// Real, confirmed redesign of the whole pickup cascade, per spec -
-    /// the Backpack slot's own real container (if any) is checked FIRST,
-    /// by real volume, before either hand is ever considered at all; only
-    /// once that fails (no container there, or it doesn't fit) do the
-    /// hands come into play, RightHand first, then LeftHand, in that
-    /// order - and only once every one of those genuinely fails does this
-    /// report the real "cannot fit" failure, which the caller already
-    /// reverts to the item's original place, untouched.
-    /// </summary>
-    private bool TryAutoEquipOrStore(CharacterDefinition character, ReferencedItemCategory category, int itemId, bool isTwoHanded, out string failReason, out InventoryItemInstance? createdItem)
-    {
-        failReason = "";
-        createdItem = null;
-        double newItemVolume = ResolveContentsVolume(new InventoryItemInstance { Category = category, ItemId = itemId, Quantity = 1 });
-
-        // Step 0 - a CONTAINER being picked up (not an item going INTO one) tries its own real preferred slot first, per spec (issue #3, "If I specify backbag it will go there if it is empty", and later "implement the mechanics of either arm or left arm on ANY... slots I specify... a functional mechanic for ANY custom slots specified"). Only reached for the container itself, and only when that specific slot is genuinely empty right now - a slot already holding something else falls straight through to the ordinary cascade below, same as having no preference at all. Right Hand/Left Hand are real, genuine preferred-slot choices now too, not just the automatic fallback the cascade tries later on its own - and a real custom slot is resolved by its own real NAME against whichever character is actually doing the picking up right now, since custom slots are defined per-character, not globally.
-        if (category == ReferencedItemCategory.Container)
-        {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == itemId);
-            // Real, confirmed fix - written as explicit, unambiguous steps rather than a nested ternary mixing an EquipmentSlot branch and an int? branch assigned to object?, since that risks a subtle type-inference issue this environment has no compiler available to catch.
-            object? preferredSlotKey = null;
-            if (containerData?.PreferredEquipSlot is { } builtinPreferred)
-            {
-                preferredSlotKey = builtinPreferred;
-            }
-            else if (containerData?.PreferredCustomSlotName is { } customName)
-            {
-                var matchingCustomSlot = character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == customName);
-                if (matchingCustomSlot is not null) preferredSlotKey = matchingCustomSlot.Id;
-            }
-            if (preferredSlotKey is not null && !TryGetEquippedInstanceId(character, preferredSlotKey, out _))
-            {
-                var preferredItem = new InventoryItemInstance { InstanceId = character.GetNextInventoryInstanceId(), Category = category, ItemId = itemId, Quantity = 1 };
-                character.Inventory.Add(preferredItem);
-                SetEquippedInstanceId(character, preferredSlotKey, preferredItem.InstanceId);
-                createdItem = preferredItem;
-                return true;
-            }
-        }
-
-        // Step 1 - per spec (issue #3, "Backbag, Pouch slots... If there is not enough volume or space left and there is another container under the pouch... it will go there") - Backpack is tried first, then Pouch, each checked by real volume, before either hand is ever considered.
-        foreach (var containerSlot in new[] { EquipmentSlot.Backpack, EquipmentSlot.Pouch })
-        {
-            if (!character.EquippedSlots.TryGetValue(containerSlot, out int slotInstanceId)) continue;
-            var slotItem = character.Inventory.FirstOrDefault(i => i.InstanceId == slotInstanceId);
-            if (slotItem is not { Category: ReferencedItemCategory.Container }) continue;
-            var slotContainerData = _containers.Containers.FirstOrDefault(c => c.Id == slotItem.ItemId);
-            if (slotContainerData is null || !ContainerHasRoomFor(slotContainerData, slotItem, newItemVolume)) continue;
-
-            // Real, confirmed fix, per spec ("it passed the frame restriction specified and went to the corner at 0,0 and outside the frame") - this never set a real ContainerX/ContainerY at all, so every item auto-stored this way defaulted to the real numeric default of 0,0 - outside the actual frame, exactly as reported. Positioned at the real center of this container's own real frame now, the exact same real fallback TryDropIntoContainer itself already uses when no specific drop point is known.
-            var slotFrameBounds = slotContainerData.GetFrameBounds();
-            var itemForSlot = new InventoryItemInstance
-            {
-                InstanceId = slotContainerData.GetNextContentsInstanceId(),
-                Category = category,
-                ItemId = itemId,
-                Quantity = 1,
-                ContainerX = slotFrameBounds.X + Math.Max(0, slotFrameBounds.Width - 32) / 2,
-                ContainerY = slotFrameBounds.Y + Math.Max(0, slotFrameBounds.Height - 32) / 2
-            };
-            slotItem.Contents.Add(itemForSlot);
-            createdItem = itemForSlot;
-            var openSlotGump = _openContainers.FirstOrDefault(g => g.PlacedItem == slotItem);
-            if (openSlotGump is not null) RefreshContainerGump(openSlotGump);
-            return true;
-        }
-
-        // Step 2 - RightHand, then LeftHand, exactly as before, only reached once neither container slot could take it (or there isn't one).
-        EquipmentSlot? targetSlot =
-            !character.EquippedSlots.ContainsKey(EquipmentSlot.RightHand) ? EquipmentSlot.RightHand :
-            (!isTwoHanded && !character.EquippedSlots.ContainsKey(EquipmentSlot.LeftHand)) ? EquipmentSlot.LeftHand :
-            null;
-
-        if (targetSlot is null)
-        {
-            failReason = "Unable to pick up - it doesn't fit in the Backpack or Pouch container, and both hands are full.";
-            return false;
-        }
-
-        var newItem = new InventoryItemInstance { InstanceId = character.GetNextInventoryInstanceId(), Category = category, ItemId = itemId, Quantity = 1 };
-        character.Inventory.Add(newItem);
-        character.EquippedSlots[targetSlot.Value] = newItem.InstanceId;
-        createdItem = newItem;
-        return true;
-    }
-
-    /// <summary>
-    /// Real pickup, per spec - works identically whether dropped onto an
-    /// open paperdoll gump OR directly onto the character's own map
-    /// sprite (matching Exult's own real behavior: dropping an item onto
-    /// the avatar picks it up, gump or no gump). Takes the character
-    /// directly rather than requiring an open gump; refreshes one at the
-    /// end only if that character actually happens to have one open.
-    /// </summary>
-    private bool PickUpIntoInventory(CharacterDefinition character)
-    {
-        if (_dragItem is { } item)
-        {
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
-            if (!TryAutoEquipOrStore(character, item.Category, item.ItemId, book?.IsTwoHanded ?? false, out string failReason, out var createdItem))
-            {
-                StatusText.Text = failReason; // real revert - the item's data was never removed from the map, so the caller just needs to snap the visual back
-                return false;
-            }
-
-            // Real, confirmed fix, per spec ("When I empty my container and put it in my inventory it resets and fills back the starter contents again") - found the true root cause: checking item.Contents.Count > 0 cannot actually tell "genuinely never opened yet" apart from "opened, then genuinely emptied out on purpose" - both look exactly the same (a real, empty list) to that check, so emptying a container and picking it up was silently re-seeding it every time, discarding the player's own real choice. item.InstanceId is the real, reliable signal instead - OpenContainer only ever assigns a real, non-zero one the first time a placed instance is genuinely opened (see its own seeding check), so "never opened" and "opened and emptied" are finally told apart correctly: a real 0 means truly never opened (seed from Starting Contents, exactly matching what OpenContainer would do anyway), anything else means it already has its own real, live Contents - carried over exactly as it is, empty or not.
-            if (item.Category == ReferencedItemCategory.Container && createdItem is not null)
-            {
-                var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
-                createdItem.Contents = item.InstanceId != 0
-                    ? item.Contents
-                    : containerData?.StartingContents.Select(seed => new InventoryItemInstance { InstanceId = seed.InstanceId, Category = seed.Category, ItemId = seed.ItemId, Quantity = seed.Quantity, ContainerX = seed.ContainerX, ContainerY = seed.ContainerY }).ToList() ?? new List<InventoryItemInstance>();
-            }
-
-            int originX = item.X, originY = item.Y;
-            _map.Items.Remove(item);
-            if (_itemVisuals.Remove(item, out var visual)) GameCanvas.Children.Remove(visual);
-            SettleCell(originX, originY);
-            // Real, confirmed fix - this used to always resolve a Book name (falling back to an empty/default BookData's own name) even for a picked-up Container, which is a different real item entirely with its own real Name.
-            string pickedUpName = item.Category == ReferencedItemCategory.Container
-                ? (_containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.Name ?? "container")
-                : EffectiveBookName(book ?? new BookData());
-            StatusText.Text = $"Picked up \"{pickedUpName}\".";
-        }
-        else if (_dragObject is { } obj)
-        {
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId);
-            if (!TryAutoEquipOrStore(character, ReferencedItemCategory.Object, obj.ObjectId, worldObject?.IsTwoHanded ?? false, out string failReason, out _))
-            {
-                StatusText.Text = failReason;
-                return false;
-            }
-            int originX = obj.X, originY = obj.Y;
-            _map.Objects.Remove(obj);
-            if (_objectVisuals.Remove(obj, out var visual)) GameCanvas.Children.Remove(visual);
-            SettleCell(originX, originY);
-            StatusText.Text = $"Picked up \"{worldObject?.Name ?? "object"}\".";
-        }
-        // Real Navigate Sound, per spec ("WHEN I PICKED THE BOOK AND DROPPED BACK to the slot on the hand it did not play, I want that option available FOR THE PLAYER PAPER DOLL") - this is the one real place an item genuinely lands on a character's own paperdoll, whether it's a fresh pickup from the map or an equipped item dragged out and dropped back in, so it's the correct, single place for this.
-        if (character.Paperdoll.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, character.Paperdoll.NavigateSoundResourceId);
-
-        RefreshStackingVisuals();
-        var openGump = _openPaperdolls.FirstOrDefault(g => g.Character == character);
-        if (openGump is not null) RefreshPaperdollGump(openGump);
-        // Real, confirmed fix - a real pickup just genuinely completed, so inventory possession state genuinely just changed; every map event gets its own real chance to react.
-        FireGlobalInventoryStateTrigger(BookTriggerConditionBased.ByHavingAnItem);
-        return true;
-    }
 
     /// <summary>
     /// Real environmental interaction, per spec - an item in a backpack
@@ -2257,6 +1448,7 @@ public partial class GameTestWindow : Window
             Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
             Padding = new Thickness(4, 2, 4, 2),
+            IsHitTestVisible = false,
             FontSize = 12
         };
         Canvas.SetLeft(label, pos.X);
@@ -2293,6 +1485,7 @@ public partial class GameTestWindow : Window
             Foreground = Brushes.White,
             Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
             Padding = new Thickness(4, 2, 4, 2),
+            IsHitTestVisible = false,
             FontSize = 12
         };
         Canvas.SetLeft(label, item.ContainerX);
@@ -2314,6 +1507,8 @@ public partial class GameTestWindow : Window
         if (_isReadingBook) return;
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
+        // Escape mid-drag cancels the drag (the item never left its origin, so it's simply still there) instead of closing a gump out from under it - Exult likewise refuses Escape while dragging.
+        if (e.Key == Key.Escape && _pointer is { IsDragging: true }) { CancelPointer(); e.Handled = true; return; }
         if (e.Key == Key.Escape && _gumpFocusOrder.Count > 0) { CloseTopmostPaperdoll(); e.Handled = true; return; }
         if (e.Key == Key.I)
         {
@@ -2901,119 +2096,6 @@ public partial class GameTestWindow : Window
         }
     }
 
-    private void GameCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
-    {
-        if (_isReadingBook) return;
-
-        var pos = e.GetPosition(GameCanvas);
-        int cellX = (int)(pos.X / _tileWidth);
-        int cellY = (int)(pos.Y / _tileHeight);
-        if (cellX < 0 || cellY < 0 || cellX >= _map.Width || cellY >= _map.Height) return;
-
-        bool isUse = e.ClickCount >= 2;
-
-        var (hitItem, hitObject) = HitTestStack(pos);
-
-        // Real, confirmed bug fix, per spec ("when I click any of the books under the NPC it clicks the npc and not the books underneath him") - this used to check "is the CLICKED TILE the same as the player's own tile" BEFORE ever looking for a real item there at all, so a book sharing that tile with the player was never even reached - the whole tile short-circuited straight to identifying the player, every time, regardless of what was actually clicked. HitTestStack now runs first; identifying the player is only ever the real fallback when nothing else was actually found there.
-        if (!isUse && hitItem is null && hitObject is null && cellX == _playerX && cellY == _playerY)
-        {
-            ShowIdentifyLabel(_player?.Name ?? "Yourself", _playerX, _playerY, _playerImage);
-            return;
-        }
-
-        if (hitItem is not null)
-        {
-            if (!HasLineOfSight(hitItem.X, hitItem.Y)) { StatusText.Text = "You can't see that from here - something's blocking your view."; return; }
-            if (isUse) { HandleItemClick(hitItem, isUse: true); return; }
-            // Single click on an item starts a drag CANDIDATE - whether it ends up being a real drag or a plain identify click is decided in MouseLeftButtonUp, exactly like Book Preview's own BookSpriteImage drag.
-            BeginDrag(hitItem, null, _itemVisuals.GetValueOrDefault(hitItem), pos);
-            return;
-        }
-
-        if (hitObject is not null)
-        {
-            if (!HasLineOfSight(hitObject.X, hitObject.Y)) { StatusText.Text = "You can't see that from here - something's blocking your view."; return; }
-            if (isUse) { HandleObjectClick(hitObject, isUse: true); return; }
-            BeginDrag(null, hitObject, _objectVisuals.GetValueOrDefault(hitObject), pos);
-        }
-        // Nothing here, or a bare tile - per spec, tiles themselves are never identifiable/usable.
-    }
-
-    private void BeginDrag(PlacedItemInstance? item, ObjectInstance? obj, UIElement? visual, Point mousePos)
-    {
-        if (visual is null) return;
-        // Real, confirmed fix, per spec ("chest B disappears... chest B now is inside chest A... it got replaced by chest B moving there") - found the true root cause: BeginDrag is called from three separate real places (a map item, a paperdoll slot, a container item), and always SUBSCRIBED its two handlers with += , never first unsubscribing. If any previous drag's own cleanup was ever skipped for any real reason (a double-click's own first-click BeginDrag whose matching MouseUp didn't resolve before the second click's own isUse branch ran, say), the next real BeginDrag call stacked a SECOND subscription on top of the first - so a single later MouseMove or MouseUp fired the handler twice, with _dragItem/_dragVisual already overwritten by whichever drag started most recently, silently finalizing a stale, unrelated item (chest B) instead of - or alongside - the one actually being dragged. Unconditionally unsubscribing first, before ever subscribing again, makes this structurally impossible: at most one real subscription can ever exist, however a previous drag's own cleanup happened to go. Removing a handler that was never subscribed is a safe, well-defined no-op in C#, so this never fails even when there is genuinely nothing stale to clean up.
-        GameCanvas.MouseMove -= GameCanvas_MouseMove_Drag;
-        GameCanvas.MouseLeftButtonUp -= GameCanvas_MouseLeftButtonUp_Drag;
-        // Real, confirmed safety net, same real reason as the unsubscribe fix right above it - if a previous drag's own visual is still found sitting on PaperdollGumpsCanvas (reparented there the moment real movement was ever detected, per GameCanvas_MouseMove_Drag's own real comment), it never got a real, proper resolution at all - settled back onto the real map, at its own current real position, rather than left as a genuinely orphaned, invisible-among-the-gumps stray that nothing would otherwise ever clean up again.
-        if (_dragVisual is not null && _dragVisual != visual && PaperdollGumpsCanvas.Children.Contains(_dragVisual))
-        {
-            var orphanedScreenPos = new Point(Canvas.GetLeft(_dragVisual), Canvas.GetTop(_dragVisual));
-            var orphanedWorldPos = PaperdollGumpsCanvas.TranslatePoint(orphanedScreenPos, GameCanvas);
-            PaperdollGumpsCanvas.Children.Remove(_dragVisual);
-            if (_dragVisual is FrameworkElement orphanedElement) orphanedElement.RenderTransform = null;
-            GameCanvas.Children.Add(_dragVisual);
-            Canvas.SetLeft(_dragVisual, orphanedWorldPos.X);
-            Canvas.SetTop(_dragVisual, orphanedWorldPos.Y);
-        }
-        _dragItem = item;
-        _dragObject = obj;
-        _dragVisual = visual;
-        _movedDuringDrag = false;
-        _dragStartMouse = mousePos;
-        _dragStartElementPos = new Point(Canvas.GetLeft(visual), Canvas.GetTop(visual));
-        _dragLogicalLeft = _dragStartElementPos.X;
-        _dragLogicalTop = _dragStartElementPos.Y;
-        // No longer toggling visual.IsHitTestVisible off here - GameCanvas.CaptureMouse() below already routes every subsequent mouse event to GameCanvas regardless of what's hit-testable underneath, so this was redundant. It also never got reset back to true, which would have permanently broken pixel-precise stack clicking on this exact item after its very first drag.
-        GameCanvas.CaptureMouse();
-        GameCanvas.MouseMove += GameCanvas_MouseMove_Drag;
-        GameCanvas.MouseLeftButtonUp += GameCanvas_MouseLeftButtonUp_Drag;
-    }
-
-    private void GameCanvas_MouseMove_Drag(object sender, MouseEventArgs e)
-    {
-        if (_dragVisual is null) return;
-        var current = e.GetPosition(GameCanvas);
-        double dx = current.X - _dragStartMouse.X;
-        double dy = current.Y - _dragStartMouse.Y;
-
-        if (!_movedDuringDrag && (Math.Abs(dx) > DragThreshold || Math.Abs(dy) > DragThreshold))
-        {
-            _movedDuringDrag = true;
-            TryFireDragTrigger(BookTriggerConditionBased.ByPickupItem); // the real moment of picking it up - grabbing it and actually starting to move it, not just clicking, matching Book Preview's own exact timing
-
-            // Real Exult solution, confirmed directly from how it actually works: not a Z-index system at all - the dragged object is simply painted LAST, every single frame, on top of absolutely everything, gumps included. The WPF equivalent of "paint last" is "parent last" - the one real visual (never a clone) is reparented onto PaperdollGumpsCanvas, the same layer gumps live on, added as its final child so it renders on top of every one of them. GameCanvas.Children.Remove is safe even if the visual isn't currently there (a plain map-to-map drag never left it), since the item could instead already be a fresh child added by StartDragFromInventory. An explicit, very high ZIndex is also required - existing gumps already carry their own real ZIndex values (100+ for paperdolls, 200 for a backpack gump), so merely being the LAST child isn't enough on its own to guarantee winning against those.
-            //
-            // Confirmed, real root cause of the shrinking regression: GameCanvas lives inside ViewportHost, which has ViewportScale (a real ScaleTransform, typically 2x-4x) applied to it - so the SAME element renders at Width*ScaleX pixels while inside that hierarchy, but at its raw, un-scaled Width once moved to PaperdollGumpsCanvas, a sibling of ViewportHost entirely outside that scale. TranslatePoint (used below for position) correctly accounts for this scale when converting a POINT, but does nothing for the element's own SIZE - that has to be corrected explicitly, by applying the exact same scale as a RenderTransform on the visual itself for as long as it's reparented, removing it again the instant it moves back.
-            GameCanvas.Children.Remove(_dragVisual);
-            PaperdollGumpsCanvas.Children.Add(_dragVisual);
-            Panel.SetZIndex(_dragVisual, 10000);
-            if (_dragVisual is FrameworkElement dragElement)
-                dragElement.RenderTransform = new ScaleTransform(ViewportScale.ScaleX, ViewportScale.ScaleY);
-        }
-
-        if (!_movedDuringDrag) return;
-
-        // Free pixel movement while dragging, for real visual feedback - snapping to the nearest tile happens only once, on drop. _dragLogicalLeft/Top - NOT the visual's own Canvas.Left/Top, which is now genuinely screen-space while reparented - stay the one real, authoritative world position every drop-commit calculation below reads from.
-        _dragLogicalLeft = Math.Clamp(_dragStartElementPos.X + dx, 0, GameCanvas.Width - _tileWidth);
-        _dragLogicalTop = Math.Clamp(_dragStartElementPos.Y + dy, 0, GameCanvas.Height - _tileHeight);
-
-        // The visual's own on-screen position is purely a rendering concern now - converted fresh from the real logical world position into PaperdollGumpsCanvas's own coordinate space every frame, via WPF's own real coordinate transform (TranslatePoint), which already accounts for the camera/viewport scale between the two layers automatically.
-        var screenPos = GameCanvas.TranslatePoint(new Point(_dragLogicalLeft, _dragLogicalTop), PaperdollGumpsCanvas);
-        Canvas.SetLeft(_dragVisual, screenPos.X);
-        Canvas.SetTop(_dragVisual, screenPos.Y);
-    }
-
-    /// <summary>
-    /// By Pickup/Drop Item, for real, at the exact moments Book Preview
-    /// itself fires them (drag-start past the threshold; drag-end on
-    /// release) - this was the missing wire, not a missing mechanic: the
-    /// drag itself already existed, it just never told the event system
-    /// it had happened. Only books can fire yet, since only BookData has
-    /// EventPages today - dragging a Weapon/Armor/Item/Object still can't
-    /// fire anything, the same honest gap as everywhere else in this
-    /// engine that those types have no event system of their own.
-    /// </summary>
     /// <summary>Change Book Settings, per spec - reads the books EFFECTIVE name, resolving to a runtime override if one has been set via that command, falling back to the books own real, saved Name otherwise. Every player-visible use of a books name in the real engine goes through this, not book.Name directly, so an override actually shows up wherever the name would appear.</summary>
     private string EffectiveBookName(BookData book) => _execContext.GetEffectiveBookSetting(book, "Name", book.Name);
 
@@ -3263,215 +2345,6 @@ public partial class GameTestWindow : Window
         PositionQuantizedVisual(visual, x, y, visual.Width, visual.Height, offsetX, offsetY);
         Canvas.SetLeft(visual, Canvas.GetLeft(visual) - z * LiftPixelShift);
         Canvas.SetTop(visual, Canvas.GetTop(visual) - z * LiftPixelShift);
-    }
-
-    private void TryFireDragTrigger(BookTriggerConditionBased trigger)
-    {
-        // Real, confirmed fix, per spec ("I checked the condition from close container to pick up container and the event did not fire") - this only ever handled Book, the same recurring gap found many times this session; a Container being picked up or dropped never reached TryFireEventPages at all, no matter what condition was actually set on it.
-        if (_dragItem is { Category: ReferencedItemCategory.Container } containerItem)
-        {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == containerItem.ItemId);
-            if (containerData is null) return;
-            TryFireEventPages(containerData, containerData.EventPages, trigger, containerData.Id, $"\"{containerData.Name}\" fired ({trigger}).");
-            return;
-        }
-        if (_dragItem is not { Category: ReferencedItemCategory.Book } item) return;
-        var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
-        if (book is null) return;
-        TryFireEventPages(book, book.EventPages, trigger, book.Id, $"\"{EffectiveBookName(book)}\" fired ({trigger}).");
-    }
-
-    private void GameCanvas_MouseLeftButtonUp_Drag(object sender, MouseButtonEventArgs e)
-    {
-        GameCanvas.ReleaseMouseCapture();
-        GameCanvas.MouseMove -= GameCanvas_MouseMove_Drag;
-        GameCanvas.MouseLeftButtonUp -= GameCanvas_MouseLeftButtonUp_Drag;
-
-        if (_dragVisual is null) { _dragItem = null; _dragObject = null; _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null; return; }
-
-        // Real un-reparent, per spec - moves the one real dragged visual back onto GameCanvas and restores its genuine world-space position (from _dragLogicalLeft/Top, the one authoritative value tracked throughout) BEFORE any of the drop-commit logic below runs, so every existing Canvas.GetLeft/GetTop read further down keeps working completely unchanged, in the coordinate space it's always assumed. A no-op if the visual was never actually reparented (dropped before crossing the drag threshold). The RenderTransform applied to correct for ViewportScale while reparented is cleared too - GameCanvas's own ambient scale (inherited from its real ViewportHost ancestor) takes back over automatically the moment it's a child there again, so keeping an explicit one here would double the scale.
-        if (PaperdollGumpsCanvas.Children.Contains(_dragVisual))
-        {
-            PaperdollGumpsCanvas.Children.Remove(_dragVisual);
-            GameCanvas.Children.Add(_dragVisual);
-            if (_dragVisual is FrameworkElement dragElementBack) dragElementBack.RenderTransform = null;
-        }
-        Canvas.SetLeft(_dragVisual, _dragLogicalLeft);
-        Canvas.SetTop(_dragVisual, _dragLogicalTop);
-
-        // Real drop-into-container, per spec - dropping a dragged map item onto an open container gump adds it to that container's own real Contents instead, with a real volume check and a real body-container rejection (rule 1: never dropped INTO). Checked before the paperdoll check below since a container gump could be the topmost thing at this exact point.
-        if (_movedDuringDrag && TryFindContainerGumpAt(e.GetPosition(PaperdollGumpsCanvas), out var targetContainerGump))
-        {
-            // Real, confirmed fix, per spec ("the ability to move items between these containers through the paper dolls or by dragging an item onto a container that is inside a larger container") - the drop point is checked against every REAL nested container icon's own actual stored position first; landing squarely on one redirects the drop into THAT container's own Contents instead of the outer gump's, with no need to open its own gump first at all. If it already happens to be open too, that gump is refreshed as well so both views stay honest.
-            var dropPointInGump = e.GetPosition(targetContainerGump.ItemsCanvas);
-            var nestedContainerHit = targetContainerGump.PlacedItem.Contents.FirstOrDefault(c =>
-                c.Category == ReferencedItemCategory.Container
-                && dropPointInGump.X >= c.ContainerX && dropPointInGump.X <= c.ContainerX + 32
-                && dropPointInGump.Y >= c.ContainerY && dropPointInGump.Y <= c.ContainerY + 32);
-
-            bool droppedIn;
-            if (nestedContainerHit is not null)
-            {
-                var nestedData = _containers.Containers.FirstOrDefault(c => c.Id == nestedContainerHit.ItemId);
-                if (nestedData is not null)
-                {
-                    var alreadyOpenNestedGump = _openContainers.FirstOrDefault(g => g.PlacedItem == nestedContainerHit);
-                    // Real, confirmed fix - if the nested container also happens to already be open in its own separate gump, the real drop point is recomputed relative to THAT gump's own canvas (a real, independently-positioned element on screen), not reused from the outer gump's own coordinate space.
-                    Point? nestedDropPoint = alreadyOpenNestedGump is not null ? e.GetPosition(alreadyOpenNestedGump.ItemsCanvas) : null;
-                    droppedIn = TryDropIntoContainer(nestedData, nestedContainerHit, alreadyOpenNestedGump, nestedDropPoint);
-                }
-                else droppedIn = TryDropIntoContainer(targetContainerGump, dropPointInGump); // real data missing - fall back to the outer gump rather than silently losing the item
-            }
-            else
-            {
-                // Real, confirmed fix, per spec ("it should drop where I wanted it to drop not randomly all over the place") - the real point the player actually released it at, right here, used directly instead of a random one.
-                droppedIn = TryDropIntoContainer(targetContainerGump, dropPointInGump);
-            }
-
-            _dragItem = null;
-            _dragObject = null;
-            _dragVisual = null;
-            // Real, confirmed fix - a failed drop here now genuinely reverts to wherever this item actually started (its own source container, if that's where it came from) instead of just redrawing it wherever its stale map data happens to say, which is exactly how it could vanish for good.
-            bool revertedToOriginAfterContainerDrop = !droppedIn && TryRevertDragToOrigin();
-            _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null;
-            if (!droppedIn && !revertedToOriginAfterContainerDrop) RefreshStackingVisuals();
-            else if (droppedIn) RefreshContainerGump(targetContainerGump); // the outer gump's own view needs a redraw too when something landed in a nested icon within it, even though its own Contents list didn't change
-            return;
-        }
-
-        // Real pickup-into-inventory, per spec - dropping a dragged map item onto an open paperdoll gump picks it up for that character instead of placing it back on the map, mirroring Exult's own real Dragging_info (which checks "is this drop point over a gump?" before falling back to the map). Checked in PaperdollGumpsCanvas's own coordinate space, not GameCanvas's, since gumps are real screen-space UI, not scrolled world content.
-        if (_movedDuringDrag && TryFindPaperdollGumpAt(e.GetPosition(PaperdollGumpsCanvas), out var targetGump))
-        {
-            bool picked = PickUpIntoInventory(targetGump.Character);
-            _dragItem = null;
-            _dragObject = null;
-            _dragVisual = null;
-            bool revertedToOriginAfterPaperdollDrop = !picked && TryRevertDragToOrigin();
-            _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null;
-            if (!picked && !revertedToOriginAfterPaperdollDrop) RefreshStackingVisuals(); // rejected (see TryAutoEquipOrStore) - the item's real data never changed, so this just snaps its visual back to where it genuinely still is
-            return;
-        }
-
-        // Real pickup-by-dropping-on-the-avatar, per spec and confirmed real Exult behavior - dropping an item directly onto the character's own map sprite picks it up too, with no gump needing to be open at all. Checked in GameCanvas's own coordinate space against the player's real, current visual bounds.
-        if (_movedDuringDrag && _player is not null && IsPointOverPlayer(e.GetPosition(GameCanvas)))
-        {
-            bool pickedOnAvatar = PickUpIntoInventory(_player);
-            _dragItem = null;
-            _dragObject = null;
-            _dragVisual = null;
-            bool revertedToOriginAfterAvatarDrop = !pickedOnAvatar && TryRevertDragToOrigin();
-            _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null;
-            if (!pickedOnAvatar && !revertedToOriginAfterAvatarDrop) RefreshStackingVisuals();
-            return;
-        }
-
-        // Real revert, per spec - a drag that started FROM a backpack (see StartDragFromInventory) or FROM an open container but never actually moved (a plain click, not a real drag) goes right back to wherever it actually started, rather than leaving the temporary map item sitting wherever it was placed to start the drag.
-        if (!_movedDuringDrag && TryRevertDragToOrigin())
-        {
-            _dragItem = null;
-            _dragObject = null;
-            _dragVisual = null;
-            _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null;
-            return;
-        }
-        // Real, confirmed fix - found a genuine, pre-existing bug here: this used to clear the origin fields unconditionally, even when a real drag DID happen, meaning every later check of _dragOriginGump/is-not-null further down inside the real _movedDuringDrag block below (the real "revert on an invalid map drop" check, and the real "fire ByNotHavingAnItem on a successful one") was already dead code by the time it ran - the field was already null. Only cleared here now when there was genuinely nothing left to carry forward (a plain click with no real origin at all); a real, in-progress drag keeps its own real origin until one of the blocks further down actually resolves it one way or another.
-        if (!_movedDuringDrag) { _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null; }
-
-        if (_movedDuringDrag)
-        {
-            // Cell computed from the dragged visual's CENTER point, not a simple top-left/tileSize division - now that visuals are variable-sized and bottom-center anchored rather than always exactly one tile, top-left no longer maps directly to a cell.
-            double visualWidth = _dragVisual is FrameworkElement dragFe ? dragFe.Width : _tileWidth;
-            double visualHeight = _dragVisual is FrameworkElement dragFe2 ? dragFe2.Height : _tileHeight;
-            double centerX = Canvas.GetLeft(_dragVisual) + visualWidth / 2;
-            double centerY = Canvas.GetTop(_dragVisual) + visualHeight / 2;
-            int newCellX = (int)Math.Floor(centerX / _tileWidth);
-            int newCellY = (int)Math.Floor(centerY / _tileHeight);
-            newCellX = Math.Clamp(newCellX, 0, _map.Width - 1);
-            newCellY = Math.Clamp(newCellY, 0, _map.Height - 1);
-
-            // Real redirect-into-container, per spec ("if Allow Elevation is not checked, dragging an item onto the container should use the default mechanics and add the item into the container itself... If Allow Elevation is enabled, [use] the mechanics of elevation and stacking [instead]") - a CLOSED container sitting on this exact target cell, with no gump open at all, still accepts a direct drop into its own real Contents, exactly like dropping onto its open gump already does - but only when it doesn't allow elevation. A container with Allow Elevation checked falls through to the ordinary stacking/elevation logic below instead, exactly like any other stackable object, and items only go into ITS contents by actually opening its paperdoll.
-            var targetCellContainer = _map.Items.FirstOrDefault(i => i != _dragItem && i.Category == ReferencedItemCategory.Container && i.X == newCellX && i.Y == newCellY);
-            if (targetCellContainer is not null)
-            {
-                var targetContainerData = _containers.Containers.FirstOrDefault(c => c.Id == targetCellContainer.ItemId);
-                if (targetContainerData is not null && !targetContainerData.AllowElevation)
-                {
-                    bool droppedIntoClosed = TryDropIntoContainer(targetContainerData, targetCellContainer, null);
-                    _dragItem = null;
-                    _dragObject = null;
-                    _dragVisual = null;
-                    bool revertedToOriginAfterClosedDrop = !droppedIntoClosed && TryRevertDragToOrigin();
-                    _dragOriginGump = null; _dragOriginSlot = null; _dragOriginContainerGump = null;
-                    if (!droppedIntoClosed && !revertedToOriginAfterClosedDrop) RefreshStackingVisuals();
-                    return;
-                }
-            }
-
-            // Real sub-tile offset, per spec - solved directly from ComputeQuantizedPosition's own formula, so wherever the visual was actually released maps back to the nearest real 8px world unit, not just the tile's own default centered spot. This is what lets two items sit close together within (or across) a tile instead of only ever snapping to its center.
-            var draggedInfo = ResolveStackInfo(_dragItem, _dragObject);
-            var (defaultLeft, defaultTop) = ComputeQuantizedPosition(newCellX, newCellY, visualWidth, visualHeight);
-            int newOffsetX = (int)Math.Round((Canvas.GetLeft(_dragVisual) - defaultLeft) / SpriteSizing.BaseUnit);
-            int newOffsetY = (int)Math.Round((Canvas.GetTop(_dragVisual) - defaultTop) / SpriteSizing.BaseUnit);
-
-            // Real footprint-overlap check, per spec - NOT "shares the same tile", so two items placed close but not truly overlapping are simply two separate placements, never treated as a stacking attempt at all. Only entries whose actual footprint (given the target's own offset and size) intersects the dragged item's new footprint are considered occupants for the stacking rules below.
-            var draggedFootprint = new StackEntry(new object(), newOffsetX, newOffsetY, draggedInfo.sizeX, draggedInfo.sizeY, draggedInfo.sizeZ, draggedInfo.elevates, 0);
-            var overlappingItems = _map.Items.Where(i => i != _dragItem && i.X == newCellX && i.Y == newCellY
-                && FootprintsOverlap(draggedFootprint, new StackEntry(i, i.OffsetX, i.OffsetY, ResolveStackInfo(i, null).sizeX, ResolveStackInfo(i, null).sizeY, 0, false, 0))).ToList();
-            var overlappingObjects = _map.Objects.Where(o => o != _dragObject && o.ContainerInstanceId < 0 && o.X == newCellX && o.Y == newCellY
-                && FootprintsOverlap(draggedFootprint, new StackEntry(o, o.OffsetX, o.OffsetY, ResolveStackInfo(null, o).sizeX, ResolveStackInfo(null, o).sizeY, 0, false, 0))).ToList();
-
-            bool cellOccupied = overlappingItems.Count > 0 || overlappingObjects.Count > 0;
-            bool occupantsBlockIt = overlappingItems.Any(i => !ResolveStackInfo(i, null).stackable) || overlappingObjects.Any(o => !ResolveStackInfo(null, o).stackable);
-            bool footprintTooLarge = overlappingItems.Any(i => draggedInfo.sizeX > ResolveStackInfo(i, null).sizeX || draggedInfo.sizeY > ResolveStackInfo(i, null).sizeY)
-                || overlappingObjects.Any(o => draggedInfo.sizeX > ResolveStackInfo(null, o).sizeX || draggedInfo.sizeY > ResolveStackInfo(null, o).sizeY);
-
-            if (cellOccupied && (!draggedInfo.stackable || occupantsBlockIt || footprintTooLarge))
-            {
-                StatusText.Text = footprintTooLarge
-                    ? "Can't stack there - this object's footprint is bigger than what it would be resting on."
-                    : "Can't stack there - one of the items isn't marked Is Stackable.";
-                // Real revert-to-source, per spec and confirmed real Exult - a drag that started from inventory (a slot, or the general backpack) or from an open container and ends on an invalid map location goes back to exactly where it came from - never left as a loose item wherever the drag happened to be sitting (which, for an inventory/container-originated drag, is only ever the player's own feet, the temporary spot StartDragFromSlot/StartDragFromInventory/StartDragItemFromContainer placed it at to begin with).
-                if (TryRevertDragToOrigin())
-                {
-                    _dragItem = null;
-                    _dragObject = null;
-                    _dragVisual = null;
-                    _dragOriginGump = null;
-                    _dragOriginSlot = null;
-                    _dragOriginContainerGump = null;
-                    return;
-                }
-                // Otherwise (no slot/container origin - an ordinary map-to-map drag, or one that started from the general backpack), data (X, Y, Z, Offset) is untouched, so RefreshStackingVisuals below correctly snaps the visual back to its real, still-current position on its own; no separate Canvas.SetLeft/SetTop needed here.
-            }
-            else
-            {
-                // A real, allowed drag happened. Capture the ORIGIN cell before overwriting X/Y, so whatever is left behind there can actually settle - this is the real "support removed, things above drop" physics, not a visual trick.
-                int originX = _dragItem?.X ?? _dragObject?.X ?? newCellX;
-                int originY = _dragItem?.Y ?? _dragObject?.Y ?? newCellY;
-
-                if (_dragItem is not null) { _dragItem.X = newCellX; _dragItem.Y = newCellY; _dragItem.OffsetX = newOffsetX; _dragItem.OffsetY = newOffsetY; }
-                if (_dragObject is not null) { _dragObject.X = newCellX; _dragObject.Y = newCellY; _dragObject.OffsetX = newOffsetX; _dragObject.OffsetY = newOffsetY; }
-
-                SettleCell(originX, originY); // real settle - anything left at the cell this came FROM drops to fill the gap
-                SettleCell(newCellX, newCellY); // real placement - computes this item's genuine new Z against whatever actually overlaps it at the cell it landed ON
-
-                StatusText.Text = $"Moved to ({newCellX}, {newCellY}), sub-position ({newOffsetX}, {newOffsetY}).";
-                TryFireDragTrigger(BookTriggerConditionBased.ByDropItem); // the real moment of releasing it after an actual drag, matching Book Preview's own exact timing
-                // Real, confirmed fix - only a real inventory-to-map drag (it actually came FROM a slot or the backpack, per spec) represents a genuine "no longer having it" transition; an ordinary map-to-map reposition of something already sitting on the ground was never "had" in the first place, so it stays out of this.
-                if (_dragOriginGump is not null) FireGlobalInventoryStateTrigger(BookTriggerConditionBased.ByNotHavingAnItem);
-            }
-            RefreshStackingVisuals();
-        }
-        else
-        {
-            // No real drag occurred - a plain click, so identify exactly as before, reusing the same HandleItemClick/HandleObjectClick identify logic rather than duplicating it.
-            if (_dragItem is not null) HandleItemClick(_dragItem, isUse: false);
-            else if (_dragObject is not null) HandleObjectClick(_dragObject, isUse: false);
-        }
-
-        _dragItem = null;
-        _dragObject = null;
-        _dragVisual = null;
     }
 
     /// <summary>

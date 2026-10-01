@@ -471,7 +471,7 @@ public partial class GameTestWindow
             return gump switch
             {
                 OpenContainerGump containerGump => DropOnContainerGump(origin, session, containerGump, hitTarget, screen),
-                OpenPaperdollGump paperdollGump => DropOnPaperdoll(origin, paperdollGump.Character, hitTarget),
+                OpenPaperdollGump paperdollGump => DropOnPaperdoll(origin, paperdollGump, hitTarget, screen),
                 // The backpack list is the character's own general inventory - dropping a backpack item back onto it is a no-op.
                 OpenBackpackGump backpackGump => origin is BackpackOrigin b && b.Character == backpackGump.Owner.Character
                     ? false
@@ -511,24 +511,51 @@ public partial class GameTestWindow
         return TryPutIntoContainer(origin, gump.Data, gump.PlacedItem, dropTopLeft, randomIfNoPoint: false);
     }
 
-    /// <summary>Exult Paperdoll_gump::add, in order: a container under the drop point takes it; else the empty slot under the drop point readies it; else the character's general add rules (DropOnCharacter). A failure at one step falls through to the next, as in Exult.</summary>
-    private bool DropOnPaperdoll(DragOrigin origin, CharacterDefinition character, InteractionTarget? hitTarget)
+    /// <summary>Exult Paperdoll_gump::add, in order: a container under the drop point takes it; else the closest free slot to the drop point readies it (find_closest); else the character's general add rules (DropOnCharacter). A failure at one step falls through to the next, as in Exult.</summary>
+    private bool DropOnPaperdoll(DragOrigin origin, OpenPaperdollGump gump, InteractionTarget? hitTarget, Point screen)
     {
-        if (hitTarget is SlotTarget slot)
+        var character = gump.Character;
+        if (hitTarget is SlotTarget { SlotKey: var hitSlotKey }
+            && TryGetEquippedInstanceId(character, hitSlotKey, out int occupantId)
+            && character.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { Category: ReferencedItemCategory.Container } occupant
+            && !ReferenceEquals(occupant, PayloadObject(origin))
+            && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData
+            && TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null, randomIfNoPoint: false))
+            return true;
+
+        if (FindClosestFreeSlot(gump, PaperdollGumpsCanvas.TranslatePoint(screen, gump.BodyCanvas), origin) is { } slotKey)
         {
-            var occupant = TryGetEquippedInstanceId(character, slot.SlotKey, out int occupantId)
-                ? character.Inventory.FirstOrDefault(i => i.InstanceId == occupantId)
-                : null;
-            if (occupant is not null && ReferenceEquals(occupant, PayloadObject(origin))) return false; // dropped back onto its own slot - nothing to do
-
-            if (occupant is { Category: ReferencedItemCategory.Container }
-                && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData
-                && TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null, randomIfNoPoint: false))
-                return true;
-
-            if (occupant is null && TryEquipInSlot(origin, character, slot.SlotKey)) return true;
+            // Dropped back on the slot it came from - nothing to do; it's still there.
+            if (origin is SlotOrigin from && from.Character == character && Equals(from.SlotKey, slotKey)) return false;
+            if (TryEquipInSlot(origin, character, slotKey)) return true;
         }
         return DropOnCharacter(origin, character);
+    }
+
+    /// <summary>Within this distance (paperdoll authoring units) of a slot's center, a drop counts as aimed at that slot. Exult's find_closest has no limit because its gump is all slots; here the body is also a general "give it to this character" target, so a drop well away from every slot uses the character's general add rules instead.</summary>
+    private const double SlotDropRadius = 32;
+
+    /// <summary>Exult Paperdoll_gump::find_closest(mx, my, only_empty): the free slot nearest the drop point. A slot whose item is the one being dragged counts as free - its icon is hidden, and dropping it back there must work.</summary>
+    private static object? FindClosestFreeSlot(OpenPaperdollGump gump, Point pointInBody, DragOrigin origin)
+    {
+        var character = gump.Character;
+        object? closest = null;
+        double closestDistanceSquared = SlotDropRadius * SlotDropRadius;
+        void Consider(object slotKey, double centerX, double centerY)
+        {
+            if (!IsSlotFree(character, slotKey, origin)) return;
+            double dx = pointInBody.X - centerX, dy = pointInBody.Y - centerY;
+            double distanceSquared = dx * dx + dy * dy;
+            if (distanceSquared < closestDistanceSquared) { closestDistanceSquared = distanceSquared; closest = slotKey; }
+        }
+        // Centers match the rendered hit regions: a built-in slot's 40x40 region at (X-4, Y-4), a custom slot's 60x22 region at (X, Y).
+        foreach (var slot in Enum.GetValues<EquipmentSlot>())
+        {
+            if (!character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };
+            Consider(slot, pos.X + 16, pos.Y + 16);
+        }
+        foreach (var customSlot in character.Paperdoll.CustomSlots) Consider(customSlot.Id, customSlot.X + 30, customSlot.Y + 11);
+        return closest;
     }
 
     private bool DropOnMap(DragOrigin origin, PointerSession session, Point screen)
@@ -711,6 +738,7 @@ public partial class GameTestWindow
 
     private bool TryPutIntoContainer(DragOrigin origin, ContainerData data, IHasContainerContents container, Point? dropTopLeft, bool randomIfNoPoint)
     {
+        EnsureContainerSeeded(container, data);
         if (!CanContainerAccept(data, container, origin, out string reason))
         {
             StatusText.Text = reason;
@@ -889,6 +917,23 @@ public partial class GameTestWindow
                 item.InstanceId = nextInstanceId();
                 return item;
         }
+    }
+
+    /// <summary>
+    /// Seed-once-then-live: a placed container's InstanceId 0 means it has
+    /// never been opened, so its real contents are still its authored
+    /// Starting Contents. They're materialized the first time anything
+    /// touches the contents - opening it (OpenContainer) OR putting
+    /// something into it - so an item dropped into a never-opened chest is
+    /// never wiped by a later seed, and the volume check counts what is
+    /// really inside. True if it seeded just now.
+    /// </summary>
+    private bool EnsureContainerSeeded(IHasContainerContents container, ContainerData data)
+    {
+        if (container is not PlacedItemInstance { InstanceId: 0 } placed) return false;
+        placed.InstanceId = _nextContainerRuntimeInstanceId++;
+        placed.Contents.InsertRange(0, SeedStartingContents(data.Id));
+        return true;
     }
 
     private List<InventoryItemInstance> SeedStartingContents(int containerId) =>
