@@ -107,6 +107,8 @@ public partial class BookEditorWindow : Window
             _current.SizeX = SolidSize.SizeX;
             _current.SizeY = SolidSize.SizeY;
             _current.SizeZ = SolidSize.SizeZ;
+            _current.SolidOffsetX = SolidSize.OffsetX;
+            _current.SolidOffsetY = SolidSize.OffsetY;
         };
         Title += $" [{BuildInfo.CurrentBuild}]";
         if (existing is not null) Database = existing;
@@ -234,7 +236,7 @@ public partial class BookEditorWindow : Window
         OccludesCheck.IsChecked = _current.Occludes;
         IsSolidCheck.IsChecked = _current.IsSolid;
         IsTwoHandedCheck.IsChecked = _current.IsTwoHanded;
-        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, _current.SpriteGroup, _current.SpriteName), _current.SizeX, _current.SizeY, _current.SizeZ, _current.IsSolid);
+        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, _current.SpriteGroup, _current.SpriteName), _current.SizeX, _current.SizeY, _current.SizeZ, _current.SolidOffsetX, _current.SolidOffsetY, _current.IsSolid);
 
         _paperDollFilter = string.IsNullOrEmpty(_current.PaperDollSpriteGroup) ? null : _current.PaperDollSpriteGroup;
         PaperDollFilterCheck.IsChecked = _paperDollFilter is not null;

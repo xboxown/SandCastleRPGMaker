@@ -24,6 +24,8 @@ public partial class ObjectDatabaseWindow : Window
             _current.SizeX = SolidSize.SizeX;
             _current.SizeY = SolidSize.SizeY;
             _current.SizeZ = SolidSize.SizeZ;
+            _current.SolidOffsetX = SolidSize.OffsetX;
+            _current.SolidOffsetY = SolidSize.OffsetY;
         };
         RefreshList();
     }
@@ -74,7 +76,7 @@ public partial class ObjectDatabaseWindow : Window
         InteractableCheck.IsChecked = _current.IsInteractable;
         OccludesCheck.IsChecked = _current.Occludes;
         IsSolidCheck.IsChecked = _current.IsSolid;
-        SolidSize.Load(SolidSizeEditor.LoadImageFile(_current.IconPath), _current.SizeX, _current.SizeY, _current.SizeZ, _current.IsSolid);
+        SolidSize.Load(SolidSizeEditor.LoadImageFile(_current.IconPath), _current.SizeX, _current.SizeY, _current.SizeZ, _current.SolidOffsetX, _current.SolidOffsetY, _current.IsSolid);
         IsTwoHandedCheck.IsChecked = _current.IsTwoHanded;
         NpcCheck.IsChecked = _current.IsNpc;
 

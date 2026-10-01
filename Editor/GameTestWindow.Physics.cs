@@ -71,10 +71,20 @@ public partial class GameTestWindow
     private Body BodyOf(PlacedItemInstance? item, ObjectInstance? obj)
     {
         var (stackable, elevates, sizeX, sizeY, sizeZ) = ResolveStackInfo(item, obj);
+        var (solidOffsetX, solidOffsetY) = ResolveSolidOffset(item, obj);
         int x = item?.X ?? obj!.X, y = item?.Y ?? obj!.Y;
         int offsetX = item?.OffsetX ?? obj!.OffsetX, offsetY = item?.OffsetY ?? obj!.OffsetY;
-        var foot = FootprintAt(x, y, offsetX, offsetY, sizeX, sizeY);
+        var foot = FootprintAt(x, y, offsetX + solidOffsetX, offsetY + solidOffsetY, sizeX, sizeY);
         return new Body((object?)item ?? obj!, foot.Left, foot.Top, foot.Width, foot.Depth, item?.Z ?? obj!.Z, sizeZ, IsSolidAt(item, obj), elevates, stackable);
+    }
+
+    /// <summary>Where the item's solid box sits relative to its sprite (set by moving the box in the size editor), in 8px units - added on top of where the item itself stands.</summary>
+    private (int X, int Y) ResolveSolidOffset(PlacedItemInstance? item, ObjectInstance? obj)
+    {
+        if (item is { Category: ReferencedItemCategory.Book } && _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book) return (book.SolidOffsetX, book.SolidOffsetY);
+        if (item is { Category: ReferencedItemCategory.Container } && _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId) is { } container) return (container.SolidOffsetX, container.SolidOffsetY);
+        if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject) return (worldObject.SolidOffsetX, worldObject.SolidOffsetY);
+        return (0, 0);
     }
 
     private List<Body> WorldBodies() =>
@@ -144,7 +154,8 @@ public partial class GameTestWindow
         newOffsetY = (int)Math.Round((visualTop - defaultTop) / SpriteSizing.BaseUnit);
 
         var (stackable, elevates, sizeX, sizeY, sizeZ) = ResolveStackInfo(item, obj);
-        var foot = FootprintAt(newCellX, newCellY, newOffsetX, newOffsetY, sizeX, sizeY);
+        var (solidOffsetX, solidOffsetY) = ResolveSolidOffset(item, obj);
+        var foot = FootprintAt(newCellX, newCellY, newOffsetX + solidOffsetX, newOffsetY + solidOffsetY, sizeX, sizeY);
         var self = (object?)item ?? obj;
         var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot)).ToList();
 
@@ -197,10 +208,15 @@ public partial class GameTestWindow
     /// not more than 1 down. The actor then stands at the highest of those,
     /// and must have headroom there over the whole footprint.
     /// </summary>
-    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift)
+    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason)
     {
         newLift = lift;
-        if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY) return false;
+        blockReason = "";
+        if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY)
+        {
+            blockReason = "Blocked: edge of the map.";
+            return false;
+        }
 
         var solids = WorldBodies().Where(b => b.Solid && b.Overlaps(to)).ToList();
         int highest = int.MinValue;
@@ -209,14 +225,57 @@ public partial class GameTestWindow
             for (int x = to.Left; x < to.Right; x++)
             {
                 var here = solids.Where(b => x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom).ToList();
-                if (!TryStepUnit(here, lift, height, out int unitLift)) return false;
+                if (!TryStepUnit(here, lift, height, out int unitLift))
+                {
+                    blockReason = DescribeBlock(here, lift, height);
+                    return false;
+                }
                 highest = Math.Max(highest, unitLift);
             }
         }
         newLift = highest;
+        int standLift = highest;
         // Standing on the highest support under any part of the footprint, the whole footprint must be clear for the actor's full height.
-        return IsClear(solids, newLift, height) && (newLift > 0 || TerrainWalkableUnder(to));
+        if (!IsClear(solids, standLift, height))
+        {
+            var overhead = solids.Where(b => b.Z < standLift + height && standLift < b.TopLift).OrderBy(b => b.Z).First();
+            blockReason = $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
+            return false;
+        }
+        if (newLift == 0 && !TerrainWalkableUnder(to))
+        {
+            blockReason = "Blocked: the ground there isn't walkable.";
+            return false;
+        }
+        return true;
     }
+
+    private const int LiftPixelsPerLift = 4;
+
+    /// <summary>Why one unit of a step was refused - so the player (and the designer testing it) sees the actual Exult rule that stopped them, not just "Blocked".</summary>
+    private string DescribeBlock(List<Body> here, int lift, int height)
+    {
+        int floor = FloorBelow(here, lift);
+        bool clearHere = IsClear(here, lift, height);
+        if (clearHere && lift - floor > ActorMaxDrop)
+            return $"Blocked: that's a drop of {(lift - floor) * LiftPixelsPerLift}px - you can only step down 4px (1 lift) at a time.";
+        var riser = here.Where(b => b.TopLift > lift + ActorMaxRise && b.Z <= lift + ActorMaxRise).OrderByDescending(b => b.TopLift).FirstOrDefault();
+        if (riser.Entity is not null)
+            return $"Blocked: \"{NameOfEntity(riser.Entity)}\" rises {(riser.TopLift - lift) * LiftPixelsPerLift}px above where you stand (lift {lift}) - you can only step up 4px (1 lift) at a time.";
+        var overhead = here.Where(b => b.Z < lift + ActorMaxRise + height && lift < b.TopLift).OrderBy(b => b.Z).FirstOrDefault();
+        if (overhead.Entity is not null)
+            return $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
+        return "Blocked.";
+    }
+
+    private string NameOfEntity(object entity) => entity switch
+    {
+        PlacedItemInstance { Category: ReferencedItemCategory.Book } item => _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book ? EffectiveBookName(book) : "book",
+        PlacedItemInstance { Category: ReferencedItemCategory.Container } item => _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.Name ?? "container",
+        PlacedItemInstance item => item.Category.ToString(),
+        ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Name ?? "object",
+        _ => "something"
+    };
 
     /// <summary>Chunk_cache::is_blocked for one unit, for a walker (max_rise 1, max_drop 1, not levitating). here = the solid things covering this unit.</summary>
     private static bool TryStepUnit(List<Body> here, int lift, int height, out int newLift)

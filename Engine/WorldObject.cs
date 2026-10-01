@@ -75,6 +75,10 @@ public class WorldObject
     public int SizeY { get; set; } = 1;
     public int SizeZ { get; set; } = 1;
 
+    /// <summary>Where the solid box sits relative to the sprite, in 8px world units (Exult tiles): 0,0 = centered under the sprite's bottom edge (the default anchor). Set by dragging the box in the size editor, or by Automated, so the box can line up with where the art actually stands.</summary>
+    public int SolidOffsetX { get; set; }
+    public int SolidOffsetY { get; set; }
+
     /// <summary>Real line-of-sight blocking, confirmed directly from Exult's own occlude.dat: a per-shape authored flag (walls, tall furniture, closed doors) that blocks visibility THROUGH it, independent of walkability - a locked gate can occlude sight without blocking movement, and vice versa.</summary>
     public bool Occludes { get; set; } = false;
 

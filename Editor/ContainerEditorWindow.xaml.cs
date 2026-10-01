@@ -51,6 +51,8 @@ public partial class ContainerEditorWindow : Window
             container.SizeX = SolidSize.SizeX;
             container.SizeY = SolidSize.SizeY;
             container.SizeZ = SolidSize.SizeZ;
+            container.SolidOffsetX = SolidSize.OffsetX;
+            container.SolidOffsetY = SolidSize.OffsetY;
         };
         Title += $" [{BuildInfo.CurrentBuild}]";
         Database = containers;
@@ -152,7 +154,7 @@ public partial class ContainerEditorWindow : Window
         AllowElevationCheck.IsChecked = container.AllowElevation;
         OccludesCheck.IsChecked = container.Occludes;
         IsSolidCheck.IsChecked = container.IsSolid;
-        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName), container.SizeX, container.SizeY, container.SizeZ, container.IsSolid);
+        SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName), container.SizeX, container.SizeY, container.SizeZ, container.SolidOffsetX, container.SolidOffsetY, container.IsSolid);
 
         _worldSpriteFilterGroup = string.IsNullOrEmpty(container.SpriteGroup) ? null : container.SpriteGroup;
         WorldSpriteFilterCheck.IsChecked = _worldSpriteFilterGroup is not null;

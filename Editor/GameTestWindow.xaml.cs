@@ -1777,14 +1777,18 @@ public partial class GameTestWindow : Window
 
         // Exult's walking rules (TryStepActor): whenever the player's footprint moves onto new 8px world units, those units must take them - rising at most 1 lift, dropping at most 1, with headroom for their full height. Otherwise this frame's movement is skipped entirely - simpler and safe over precise boundary-clamping.
         int newLift = _playerZ;
+        string blockReason = "";
         bool tileOffMap = prospectiveTileX < 0 || prospectiveTileY < 0 || prospectiveTileX >= _map.Width || prospectiveTileY >= _map.Height;
-        if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift))
+        if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason))
         {
-            StatusText.Text = "Blocked.";
+            StatusText.Text = tileOffMap ? "Blocked: edge of the map." : blockReason;
             return;
         }
         if (newLift != _playerZ)
         {
+            StatusText.Text = newLift > _playerZ
+                ? $"Stepped up to lift {newLift} ({newLift * 4}px)."
+                : $"Stepped down to lift {newLift} ({newLift * 4}px).";
             _playerZ = newLift;
             _playerVisualLiftZ = _playerZ; // instant, both directions - per spec ("make it instant just like the books or container")
         }
@@ -1800,7 +1804,7 @@ public partial class GameTestWindow : Window
             var leavingEvent = _eventUnderPlayer;
             _playerX = prospectiveTileX;
             _playerY = prospectiveTileY;
-            StatusText.Text = $"({_playerX}, {_playerY})";
+            StatusText.Text = $"({_playerX}, {_playerY})  lift {_playerZ} ({_playerZ * 4}px)  - your size {_playerSize.X * 8}x{_playerSize.Y * 8}px, {_playerSize.Z * 4}px tall";
 
             if (leavingEvent is not null && (leavingEvent.X != _playerX || leavingEvent.Y != _playerY))
                 TryFireEventPages(leavingEvent, leavingEvent.EventPages, BookTriggerConditionBased.ByExit, selfBookId: -1, $"\"{leavingEvent.Name}\" fired (ByExit)");
