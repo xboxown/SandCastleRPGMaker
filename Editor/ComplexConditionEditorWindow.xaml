@@ -1,0 +1,23 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ComplexConditionEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Complex Condition" Height="560" Width="620" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,8">
+            <TextBlock Text="Name:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="NameBox" Width="320" TextChanged="NameBox_TextChanged"/>
+        </StackPanel>
+
+        <Border DockPanel.Dock="Top" Background="#FFF0F4FF" BorderBrush="#FFC0D0F0" BorderThickness="1" Padding="6" Margin="0,0,0,8">
+            <TextBlock x:Name="SummaryText" TextWrapping="Wrap" FontStyle="Italic"/>
+        </Border>
+
+        <Button DockPanel.Dock="Top" x:Name="AddConditionButton" Content="Add Condition..." HorizontalAlignment="Left" Margin="0,0,0,8" Click="AddConditionButton_Click"/>
+
+        <Button DockPanel.Dock="Bottom" Content="Close" Width="80" HorizontalAlignment="Right" Margin="0,8,0,0" Click="CloseButton_Click"/>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel x:Name="SubConditionsList"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

@@ -1,0 +1,24 @@
+<Window x:Class="SandcastleRpgMaker.Editor.PoseEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Pose Editor" Height="500" Width="480" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="8">
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="Add Custom Pose..." Click="AddPose_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Rename..." Click="Rename_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Delete" Click="Delete_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+
+        <TextBlock DockPanel.Dock="Bottom" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,6,0,0"
+                   Text="Each pose here is a slot every character can link a sprite to, in the PC Editor - the sprite's own animation and per-frame sound (from the Sprite Editor) are what actually play, nothing extra is defined here. The 11 built-in poses can be renamed but not deleted; custom poses can be both."/>
+
+        <ListView x:Name="PosesListView" Margin="0,8,0,0" MouseDoubleClick="Rename_Click">
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Name" Width="240" DisplayMemberBinding="{Binding Name}"/>
+                    <GridViewColumn Header="Built-in?" Width="140" DisplayMemberBinding="{Binding IsBuiltIn}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </DockPanel>
+</Window>

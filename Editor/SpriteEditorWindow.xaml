@@ -1,0 +1,55 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SpriteEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sprite Editor" Height="600" Width="800" WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="New Group..." Click="NewGroup_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Delete Group" Click="DeleteGroup_Click" Padding="6,2" Margin="2"/>
+            <Separator/>
+            <Button Content="New Sprite..." Click="NewSprite_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Add Sprite..." Click="AddSprite_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Edit Sprite..." Click="EditSprite_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Remove Sprite" Click="RemoveSprite_Click" Padding="6,2" Margin="2"/>
+            <Separator/>
+            <Button Content="Save..." Click="Save_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Load..." Click="Load_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="220"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0">
+                <TextBlock DockPanel.Dock="Top" Text="Groups" FontWeight="Bold" Margin="6"/>
+                <!-- Value="Tileset" here must match SpriteDatabase.TilesetGroupName in code - XAML triggers can't reference a C# constant directly. -->
+                <ListBox x:Name="GroupListBox" Margin="6" DisplayMemberPath="Name"
+                         SelectionChanged="GroupListBox_SelectionChanged">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Name}" Value="Tileset">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </DockPanel>
+
+            <DockPanel Grid.Column="1">
+                <TextBlock DockPanel.Dock="Top" Text="Sprites in group" FontWeight="Bold" Margin="6"/>
+                <ListView x:Name="SpriteListView" Margin="6" MouseDoubleClick="SpriteListView_MouseDoubleClick">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="Name" Width="200" DisplayMemberBinding="{Binding Name}"/>
+                            <GridViewColumn Header="File" Width="400" DisplayMemberBinding="{Binding DisplayLocation}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

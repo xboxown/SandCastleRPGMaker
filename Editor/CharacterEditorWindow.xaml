@@ -1,0 +1,124 @@
+<Window x:Class="SandcastleRpgMaker.Editor.CharacterEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="PC Editor" Height="680" Width="960" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right">
+            <Button Content="Close" Width="80" Margin="4" Click="CloseButton_Click"/>
+        </StackPanel>
+
+        <DockPanel Grid.Column="0" Margin="0,0,10,0" Width="220" DockPanel.Dock="Left">
+            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
+                <Button Content="New" Width="60" Margin="2" Click="NewCharacter_Click"/>
+                <Button Content="Delete" Width="60" Margin="2" Click="DeleteCharacter_Click"/>
+            </StackPanel>
+            <ListBox x:Name="CharacterListBox" DisplayMemberPath="Name" SelectionChanged="CharacterListBox_SelectionChanged"/>
+        </DockPanel>
+
+        <TabControl x:Name="DetailsTabs" IsEnabled="False">
+            <TabItem Header="Details">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="DetailsPanel" Margin="10,10,0,0">
+                    <TextBlock Text="Name" FontWeight="Bold"/>
+                    <TextBox x:Name="NameBox" Margin="0,2,0,10" TextChanged="Field_Changed"/>
+
+                    <TextBlock Text="Age" FontWeight="Bold"/>
+                    <TextBox x:Name="AgeBox" Margin="0,2,0,10" Width="80" HorizontalAlignment="Left" TextChanged="Field_Changed"/>
+
+                    <TextBlock Text="Gender" FontWeight="Bold"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,10">
+                        <RadioButton x:Name="MaleRadio" Content="Male" GroupName="Gender" Margin="0,0,16,0" Checked="Field_Changed"/>
+                        <RadioButton x:Name="FemaleRadio" Content="Female" GroupName="Gender" Checked="Field_Changed"/>
+                    </StackPanel>
+
+                    <TextBlock Text="Class" FontWeight="Bold"/>
+                    <ComboBox x:Name="ClassCombo" Margin="0,2,0,10" SelectionChanged="Field_Changed"/>
+
+                    <CheckBox x:Name="TestPlayerCheck" Content="Use as Internal Engine test player (only one character can be this)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <CheckBox x:Name="InPartyCheck" Content="In active party (their own inventory/paperdoll can be opened even when not the test player)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
+
+                    <TextBlock Text="Face" FontWeight="Bold"/>
+                    <DockPanel Margin="0,2,0,4">
+                        <CheckBox x:Name="FaceFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
+                                  Checked="FaceFilterCheck_Checked" Unchecked="FaceFilterCheck_Unchecked"/>
+                        <ComboBox x:Name="FaceCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name"/>
+                    </DockPanel>
+                    <TextBlock x:Name="FaceEmptyNote" Text="No sprites available yet - add one in the Sprite Editor first." Opacity="0.7" FontSize="11" Margin="0,0,0,10" Visibility="Collapsed"/>
+
+                    <TextBlock Text="Stats" FontWeight="Bold" Margin="0,6,0,4"/>
+                    <ItemsControl x:Name="StatsItemsControl">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Grid Margin="0,0,0,4">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="160"/>
+                                        <ColumnDefinition Width="*"/>
+                                    </Grid.ColumnDefinitions>
+                                    <TextBlock Grid.Column="0" Text="{Binding Label}" VerticalAlignment="Center"/>
+                                    <TextBox Grid.Column="1" Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"/>
+                                </Grid>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+
+                    <DockPanel Margin="0,10,0,4">
+                        <Button DockPanel.Dock="Right" Content="Add Custom Pose..." Click="AddCustomPose_Click"/>
+                        <TextBlock Text="Poses" FontWeight="Bold" VerticalAlignment="Center"/>
+                    </DockPanel>
+                    <WrapPanel x:Name="PosesPanel"/>
+                </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Inventory / Paperdoll">
+                <Grid Margin="10,10,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="360"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                        <TextBlock Text="Paperdoll Body Sprite" FontWeight="Bold"/>
+                        <DockPanel Margin="0,2,0,4">
+                            <CheckBox x:Name="PaperdollFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
+                                      Checked="PaperdollFilterCheck_Checked" Unchecked="PaperdollFilterCheck_Unchecked"/>
+                            <ComboBox x:Name="PaperdollBodyCombo" SelectionChanged="PaperdollBody_Changed" DisplayMemberPath="Name"/>
+                        </DockPanel>
+                        <TextBlock Text="Exit Button Sprite (2 frames - frame 1 unpressed, frame 2 pressed)" FontWeight="Bold" Margin="0,8,0,0"/>
+                        <DockPanel Margin="0,2,0,4">
+                            <CheckBox x:Name="ExitButtonFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
+                                      Checked="ExitButtonFilterCheck_Checked" Unchecked="ExitButtonFilterCheck_Unchecked"/>
+                            <ComboBox x:Name="ExitButtonCombo" SelectionChanged="ExitButtonSprite_Changed" DisplayMemberPath="Name"/>
+                        </DockPanel>
+                        <TextBlock Text="Navigate Sound" FontWeight="Bold" Margin="0,8,0,0"/>
+                        <TextBlock Text="Plays once the player releases an item onto a real slot on this paperdoll." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                        <ComboBox x:Name="PaperdollNavigateSoundCombo" SelectionChanged="PaperdollNavigateSound_Changed" DisplayMemberPath="Name" Margin="0,0,0,4"/>
+                        <TextBlock Text="Drag any slot marker to reposition it on the body - this is exactly where that slot's icon will draw in-game and in the in-game paperdoll window. Custom slots (green) can be added below, then deleted by clicking one here and pressing Delete." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,8"/>
+                        <DockPanel Margin="0,0,0,4">
+                            <Button x:Name="AddCustomSlotButton" DockPanel.Dock="Left" Content="Add Custom Slot" Padding="8,3" Margin="0,0,8,0" Click="AddCustomSlotButton_Click"/>
+                            <TextBlock x:Name="CustomSlotNameLabel" DockPanel.Dock="Left" Text="Name:" VerticalAlignment="Center" Margin="0,0,4,0" Visibility="Collapsed"/>
+                            <TextBox x:Name="CustomSlotNameBox" Width="140" Visibility="Collapsed" TextChanged="CustomSlotNameBox_TextChanged"/>
+                        </DockPanel>
+                        <Border BorderBrush="#FF555555" BorderThickness="1">
+                            <Canvas x:Name="PaperdollCanvas" Width="320" Height="400" Background="#FF2A2A2A" ClipToBounds="True" Focusable="True"
+                                    MouseLeftButtonDown="PaperdollCanvas_MouseLeftButtonDown" MouseMove="PaperdollCanvas_MouseMove" MouseLeftButtonUp="PaperdollCanvas_MouseLeftButtonUp"
+                                    KeyDown="PaperdollCanvas_KeyDown"/>
+                        </Border>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Starting Inventory" FontWeight="Bold"/>
+                        <TextBlock Text="What this character carries at the start of a new game - equipping happens in-game (I key), not here." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                        <DockPanel Margin="0,0,0,6">
+                            <ComboBox x:Name="InventoryCategoryCombo" DockPanel.Dock="Left" Width="90" Margin="0,0,6,0"/>
+                            <ComboBox x:Name="InventoryItemCombo" DockPanel.Dock="Left" Width="180" Margin="0,0,6,0" DisplayMemberPath="Name"/>
+                            <Button Content="Add" Width="60" Click="AddInventoryItem_Click"/>
+                        </DockPanel>
+                        <ListBox x:Name="InventoryListBox" Height="300" DisplayMemberPath="DisplayText"/>
+                        <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Margin="0,6,0,0" Click="RemoveInventoryItem_Click"/>
+                    </StackPanel>
+                </Grid>
+            </TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

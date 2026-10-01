@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SandcastleRpgMaker.Editor</RootNamespace>
+    <AssemblyName>SandcastleRpgMaker.Editor</AssemblyName>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Engine\Engine.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Real audio decode/encode/playback - hand-rolling WAV and Amiga IFF/8SVX
+         ourselves is realistic, but MP3/OGG/FLAC and genuine DSP effects
+         (echo, reverb, etc.) are not something to reimplement from scratch.
+         NAudio is the standard, well-established choice for this in WPF apps. -->
+    <PackageReference Include="NAudio" Version="2.2.1" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Remove="System.Drawing" />
+    <Using Remove="System.Windows.Forms" />
+  </ItemGroup>
+
+</Project>

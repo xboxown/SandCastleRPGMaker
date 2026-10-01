@@ -1,0 +1,23 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SetSwitchCommandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Control Switches" Height="220" Width="380" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Switch (a Boolean variable):" FontWeight="Bold" Margin="0,0,0,4"/>
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <Button DockPanel.Dock="Right" Content="..." Width="32" Click="PickVariable_Click"/>
+            <TextBox x:Name="NameBox" IsReadOnly="True" Margin="0,0,4,0"/>
+        </DockPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Set it to:" FontWeight="Bold" Margin="0,0,0,4"/>
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+            <RadioButton x:Name="TrueRadio" Content="On (True)" GroupName="SwitchValue" IsChecked="True" Margin="0,0,16,0"/>
+            <RadioButton x:Name="FalseRadio" Content="Off (False)" GroupName="SwitchValue"/>
+        </StackPanel>
+    </DockPanel>
+</Window>

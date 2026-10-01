@@ -1,0 +1,56 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ConvertToFramesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Convert to Frames" Height="620" Width="900" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Left" Width="240" Margin="0,0,10,0">
+            <StackPanel x:Name="FieldsPanel"/>
+        </StackPanel>
+
+        <Button DockPanel.Dock="Bottom" x:Name="ConvertButton" Content="Convert" HorizontalAlignment="Left" Margin="0,10,0,0" Click="ConvertButton_Click"/>
+
+        <Border Background="#FF2A2A2A" BorderBrush="Gray" BorderThickness="1">
+            <Grid>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <!--
+                        HorizontalAlignment/VerticalAlignment=Left/Top on
+                        every level here is deliberate, per spec - without
+                        it, WPF centers a Grid's children (and the Grid
+                        itself within the ScrollViewer) by default, which
+                        is exactly what made the image appear centered
+                        with a mysterious gap around it instead of pinned
+                        to the top-left corner where the slicing math
+                        assumes it starts.
+
+                        Stretch="Fill" on SourceImage (changed from "None")
+                        is the other half of the real fix: with Stretch=
+                        "None", WPF renders an image at its own intrinsic
+                        size, which comes from the file's embedded DPI
+                        metadata - NOT its raw pixel dimensions. A source
+                        PNG with non-standard DPI metadata (common from
+                        various export/screenshot tools) would render
+                        visibly smaller than its explicit Width/Height,
+                        get centered within that now-too-large bounding
+                        box, and throw off the 1:1 pixel math the selector
+                        size, drag tracking, and crop coordinates all
+                        assume. Width/Height are already set explicitly to
+                        the real PixelWidth/PixelHeight * zoom in code-
+                        behind, so Stretch="Fill" simply forces the image
+                        to actually fill that exact size - no DPI-driven
+                        shrinkage, no gap, and the selector overlay's own
+                        pixel math lines up with what's actually on screen.
+                    -->
+                    <Grid x:Name="PreviewRoot" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Image x:Name="SourceImage" Stretch="Fill" HorizontalAlignment="Left" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                        <Canvas x:Name="SelectionOverlay" HorizontalAlignment="Left" VerticalAlignment="Top"/>
+                    </Grid>
+                </ScrollViewer>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="6">
+                    <Button Content="-" Width="26" Click="ZoomOut_Click"/>
+                    <TextBlock x:Name="ZoomText" Foreground="White" VerticalAlignment="Center" Margin="6,0,6,0" Text="100%"/>
+                    <Button Content="+" Width="26" Click="ZoomIn_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+    </DockPanel>
+</Window>

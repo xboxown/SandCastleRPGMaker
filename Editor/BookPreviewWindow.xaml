@@ -1,0 +1,57 @@
+<Window x:Class="SandcastleRpgMaker.Editor.BookPreviewWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Preview" Height="520" Width="700" WindowStartupLocation="CenterOwner">
+    <DockPanel Background="#FF202020">
+        <TextBlock x:Name="EventStatusText" DockPanel.Dock="Top" Background="#FF2A2A2A" Foreground="White" Padding="8,4" TextWrapping="Wrap"/>
+
+        <Grid x:Name="RootContentGrid">
+        <!-- Sprite view: drag the book, single-click shows its name briefly -->
+        <Canvas x:Name="SpriteCanvas">
+            <Image x:Name="BookSpriteImage" Width="64" Height="64" Cursor="Hand"
+                   MouseLeftButtonDown="BookSpriteImage_MouseLeftButtonDown"
+                   MouseRightButtonDown="BookSpriteImage_MouseRightButtonDown"
+                   MouseMove="BookSpriteImage_MouseMove"
+                   MouseLeftButtonUp="BookSpriteImage_MouseLeftButtonUp"/>
+            <TextBlock x:Name="NameLabel" Foreground="White" FontWeight="Bold" Visibility="Collapsed" IsHitTestVisible="False"/>
+        </Canvas>
+
+        <!-- Reading view: the actual paper doll with real rendered page content -->
+        <Grid x:Name="ReadingGrid" Visibility="Collapsed" Background="Transparent" MouseLeftButtonDown="ReadingGrid_MouseLeftButtonDown">
+            <Viewbox Stretch="Uniform">
+                <Grid Width="700" Height="400">
+                    <Image x:Name="PaperDollBackgroundImage" Width="700" Height="400" Stretch="Uniform"/>
+                    <Canvas x:Name="FrameOverlayCanvas" Width="700" Height="400"/>
+                </Grid>
+            </Viewbox>
+        </Grid>
+
+        <!--
+            Lighting overlay: a single semi-transparent Rectangle covering
+            everything in this Grid (both the world-icon view and the
+            reading view), IsHitTestVisible="False" so it never blocks
+            clicks or the book-drag interaction. Change Day/Night just
+            animates this Rectangle's Fill/Opacity - see
+            DayNightPeriodColors at the top of BookPreviewWindow.xaml.cs
+            for the actual color values, which are adjustable there.
+        -->
+        <Rectangle x:Name="LightingOverlay" IsHitTestVisible="False" Opacity="0"/>
+
+        <!--
+            Show Text overlay: a centered message box, hidden until a Show
+            Text command actually fires. IsHitTestVisible only while
+            visible, so it doesn't block clicks the rest of the time -
+            unlike the lighting overlay, this one genuinely needs to
+            capture the dismiss click.
+        -->
+        <Border x:Name="MessageOverlayBorder" Visibility="Collapsed" Background="#DD000000" BorderBrush="White" BorderThickness="2"
+                CornerRadius="6" Padding="16" MaxWidth="360" HorizontalAlignment="Center" VerticalAlignment="Center"
+                MouseLeftButtonDown="MessageOverlayBorder_MouseLeftButtonDown">
+            <StackPanel>
+                <TextBlock x:Name="MessageOverlayText" Foreground="White" TextWrapping="Wrap" FontSize="14"/>
+                <TextBlock Text="(click to dismiss)" Foreground="#AAAAAA" FontSize="10" Margin="0,10,0,0" HorizontalAlignment="Right"/>
+            </StackPanel>
+        </Border>
+        </Grid>
+    </DockPanel>
+</Window>

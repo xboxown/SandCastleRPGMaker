@@ -1,0 +1,31 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SoundListWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sound Editor" Height="500" Width="640" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="8">
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="Add Sound..." Click="AddSound_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Add Music..." Click="AddMusic_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Remove Selected" Click="RemoveSelected_Click" Padding="6,2" Margin="2"/>
+            <Separator/>
+            <Button Content="Open Sound Mixer..." Click="OpenMixer_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+
+        <TextBlock DockPanel.Dock="Bottom" Text="Double-click a sound to open it in the Sound Editor." Opacity="0.7" FontSize="11" Margin="0,6,0,0"/>
+
+        <ListView x:Name="SoundsListView" Margin="0,8,0,0" MouseDoubleClick="SoundsListView_MouseDoubleClick">
+            <ListView.ContextMenu>
+                <ContextMenu>
+                    <MenuItem Header="Open In Sound Mixer" Click="OpenInSoundMixer_Click"/>
+                </ContextMenu>
+            </ListView.ContextMenu>
+            <ListView.View>
+                <GridView>
+                    <GridViewColumn Header="Name" Width="180" DisplayMemberBinding="{Binding Name}"/>
+                    <GridViewColumn Header="Kind" Width="80" DisplayMemberBinding="{Binding Kind}"/>
+                    <GridViewColumn Header="File" Width="340" DisplayMemberBinding="{Binding DisplayLocation}"/>
+                </GridView>
+            </ListView.View>
+        </ListView>
+    </DockPanel>
+</Window>

@@ -1,0 +1,76 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ChangeBookSettingsCommandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change Book Settings" Height="560" Width="440" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,10"
+                   Text="Runtime-only: the book's own saved settings are never touched. Check a setting below to override it - only during this Game Test session, resetting the moment you press F5 again (there is no save-game feature yet). Leave a setting unchecked to keep using the book's own real value."/>
+
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock Text="Book:" FontWeight="Bold" Margin="0,0,0,4"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="..." Width="32" Click="PickBook_Click"/>
+                <TextBox x:Name="BookNameBox" IsReadOnly="True" Margin="0,0,4,0"/>
+            </DockPanel>
+        </StackPanel>
+
+        <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <TextBlock Text="Values" FontWeight="Bold" Margin="0,4,0,6"/>
+
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideNameCheck" DockPanel.Dock="Left" Width="90" Content="Name" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <TextBox x:Name="NameValueBox" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideWeightCheck" DockPanel.Dock="Left" Width="90" Content="Weight" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <TextBox x:Name="WeightValueBox" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideVolumeCheck" DockPanel.Dock="Left" Width="90" Content="Volume" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <TextBox x:Name="VolumeValueBox" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,10">
+                    <CheckBox x:Name="OverridePriceCheck" DockPanel.Dock="Left" Width="90" Content="Price" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <TextBox x:Name="PriceValueBox" IsEnabled="False"/>
+                </DockPanel>
+
+                <TextBlock Text="Checkmarks" FontWeight="Bold" Margin="0,0,0,6"/>
+
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideDestructibleCheck" DockPanel.Dock="Left" Width="140" Content="Destructible" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="DestructibleValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideCanBeSoldCheck" DockPanel.Dock="Left" Width="140" Content="Can be sold" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="CanBeSoldValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideCanBeTradedCheck" DockPanel.Dock="Left" Width="140" Content="Can be traded" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="CanBeTradedValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideCanBeDroppedCheck" DockPanel.Dock="Left" Width="140" Content="Can be dropped" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="CanBeDroppedValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideCanBePickedCheck" DockPanel.Dock="Left" Width="140" Content="Can be picked" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="CanBePickedValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideIsStackableCheck" DockPanel.Dock="Left" Width="140" Content="Is Stackable" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="IsStackableValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+                <DockPanel Margin="0,0,0,6">
+                    <CheckBox x:Name="OverrideAllowElevationCheck" DockPanel.Dock="Left" Width="140" Content="Allow Elevation" Checked="OverrideCheck_Changed" Unchecked="OverrideCheck_Changed"/>
+                    <CheckBox x:Name="AllowElevationValueCheck" Content="New value" IsEnabled="False"/>
+                </DockPanel>
+            </StackPanel>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

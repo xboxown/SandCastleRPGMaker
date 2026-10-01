@@ -1,0 +1,46 @@
+<Window x:Class="SandcastleRpgMaker.Editor.BookEventDebugWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Debug Event" Height="640" Width="1040" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="12">
+        <TextBlock DockPanel.Dock="Top" FontSize="16" FontWeight="Bold" Margin="0,0,0,4" Text="Debug Event"/>
+        <TextBlock DockPanel.Dock="Top" Margin="0,0,0,10" Opacity="0.7" TextWrapping="Wrap"
+                   Text="There's no running game yet to supply real values, so set up a simulated scenario, then Evaluate Conditions. If they pass, click a line in the script to choose where debugging starts, then Step (F5) through it one command at a time - when a switch or variable is involved, its current value shows on the right and can be edited there to see how a different value changes what happens next."/>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="230"/>
+                <ColumnDefinition Width="2*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Condition simulation setup - unchanged in spirit from the old Preview window -->
+            <DockPanel Grid.Column="0" Margin="0,0,10,0">
+                <Button DockPanel.Dock="Bottom" x:Name="EvaluateButton" Content="Evaluate Conditions" Click="EvaluateButton_Click" Padding="6,4" Margin="0,10,0,0"/>
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SetupPanel"/>
+                </ScrollViewer>
+            </DockPanel>
+
+            <!-- Script view: one line per command, click to choose the starting line, current line highlighted while stepping -->
+            <DockPanel Grid.Column="1" Margin="0,0,10,0">
+                <TextBlock DockPanel.Dock="Top" Text="Script" FontWeight="Bold" Margin="0,0,0,4"/>
+                <Border BorderBrush="Gray" BorderThickness="1">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="ScriptLinesPanel" Background="#FF1E1E1E"/>
+                    </ScrollViewer>
+                </Border>
+            </DockPanel>
+
+            <!-- Watch (live-editable) + step log -->
+            <DockPanel Grid.Column="2">
+                <Button DockPanel.Dock="Bottom" x:Name="StepButton" Content="Step (F5)" Click="StepButton_Click" Padding="6,4" Margin="0,10,0,0" IsEnabled="False"/>
+                <TextBlock DockPanel.Dock="Top" Text="Watch" FontWeight="Bold" Margin="0,0,0,4"/>
+                <StackPanel x:Name="WatchPanel" DockPanel.Dock="Top" Margin="0,0,0,10" MinHeight="80"/>
+                <TextBlock DockPanel.Dock="Top" Text="Step Log" FontWeight="Bold" Margin="0,0,0,4"/>
+                <TextBox x:Name="StepLogBox" IsReadOnly="True" FontFamily="Consolas" FontSize="11" TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto" AcceptsReturn="True" Background="#FF1E1E1E" Foreground="#FFDDDDDD"/>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

@@ -1,0 +1,11 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SoundMixerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sound Mixer" Height="600" Width="900" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+        <TextBlock DockPanel.Dock="Top" Text="Sound Mixer" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
+            <StackPanel x:Name="ColumnsPanel" Orientation="Horizontal"/>
+        </ScrollViewer>
+    </DockPanel>
+</Window>

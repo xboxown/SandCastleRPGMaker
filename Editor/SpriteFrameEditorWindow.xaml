@@ -1,0 +1,211 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SpriteFrameEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sprite" Height="700" Width="960" WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="File">
+                <MenuItem Header="Import Image(s)..." Click="AddFramesButton_Click"/>
+                <MenuItem Header="Import Strip Image..." Click="ImportStripImage_Click"/>
+            </MenuItem>
+            <MenuItem Header="Edit">
+                <MenuItem Header="Copy Frame" InputGestureText="Ctrl+C" Click="CopyFrame_Click"/>
+                <MenuItem Header="Cut Frame" InputGestureText="Ctrl+X" Click="CutFrame_Click"/>
+                <MenuItem Header="Paste Frame" InputGestureText="Ctrl+V" Click="PasteFrame_Click"/>
+                <Separator/>
+                <MenuItem Header="Undo" InputGestureText="Ctrl+Z" Click="UndoMenuItem_Click"/>
+            </MenuItem>
+        </Menu>
+
+    <DockPanel Margin="8">
+        <!-- Left: metadata panel, matching the GameMaker reference -->
+        <ScrollViewer DockPanel.Dock="Left" Width="240" Margin="0,0,10,0" VerticalScrollBarVisibility="Auto">
+        <StackPanel>
+            <TextBlock Text="Name:" FontWeight="SemiBold"/>
+            <TextBox x:Name="NameBox" Margin="0,2,0,10" TextChanged="NameBox_TextChanged"/>
+
+            <TextBlock Text="Frames:" FontWeight="SemiBold"/>
+            <TextBlock x:Name="FrameCountText" Margin="0,2,0,10"/>
+
+            <TextBlock Text="FPS:" FontWeight="SemiBold"/>
+            <TextBox x:Name="FpsBox" Width="60" HorizontalAlignment="Left" Margin="0,2,0,10" TextChanged="FpsBox_TextChanged"/>
+
+            <CheckBox x:Name="LoopCheck" Content="Loop" Margin="0,0,0,10" Checked="LoopCheck_Changed" Unchecked="LoopCheck_Changed"/>
+
+            <TextBlock Text="Origin:" FontWeight="SemiBold"/>
+            <StackPanel Orientation="Horizontal" Margin="0,2,0,6">
+                <TextBlock Text="X" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox x:Name="OriginXBox" Width="50" Margin="0,0,10,0" TextChanged="OriginBox_TextChanged"/>
+                <TextBlock Text="Y" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                <TextBox x:Name="OriginYBox" Width="50" TextChanged="OriginBox_TextChanged"/>
+            </StackPanel>
+            <ComboBox x:Name="OriginAnchorCombo" Margin="0,0,0,10" SelectionChanged="OriginAnchorCombo_SelectionChanged"/>
+
+            <Expander x:Name="CollisionMaskExpander" Header="Collision Mask" Margin="0,0,0,8" Expanded="Expander_Toggled" Collapsed="Expander_Toggled">
+                <StackPanel Margin="4,6,0,4">
+                    <CheckBox x:Name="SplitLegsBodyCheck" Content="Split Legs / Body Mask" Margin="0,0,0,8" Checked="SplitLegsBodyCheck_Changed" Unchecked="SplitLegsBodyCheck_Changed"
+                              ToolTip="Off (default): one mask used for everything, same as before. On: Body below is used only for combat/trap/damage; a separate Legs mask (movement only, blocks walls/furniture, never affects fighting) appears underneath."/>
+                    <TextBlock x:Name="BodyMaskLabel" Text="Body" FontWeight="Bold" Margin="0,0,0,4" Visibility="Collapsed"/>
+
+                    <TextBlock Text="Mode" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="CollisionModeCombo" Margin="0,2,0,8" SelectionChanged="CollisionModeCombo_SelectionChanged"/>
+
+                    <TextBlock Text="Type" FontWeight="SemiBold"/>
+                    <ComboBox x:Name="CollisionTypeCombo" Margin="0,2,0,4" SelectionChanged="CollisionTypeCombo_SelectionChanged"/>
+                    <TextBlock x:Name="CollisionTypeDescText" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
+
+                    <TextBlock Text="Tolerance" FontWeight="SemiBold"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
+                        <Slider x:Name="ToleranceSlider" Width="120" Minimum="0" Maximum="255" ValueChanged="ToleranceSlider_ValueChanged"/>
+                        <TextBlock x:Name="ToleranceValueText" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                    </StackPanel>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock Text="Left"/>
+                            <TextBox x:Name="MaskLeftBox" TextChanged="MaskBox_TextChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Right"/>
+                            <TextBox x:Name="MaskRightBox" TextChanged="MaskBox_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock Text="Top"/>
+                            <TextBox x:Name="MaskTopBox" TextChanged="MaskBox_TextChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Bottom"/>
+                            <TextBox x:Name="MaskBottomBox" TextChanged="MaskBox_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <StackPanel x:Name="LegsMaskPanel" Visibility="Collapsed" Margin="0,14,0,0">
+                        <Separator Margin="0,0,0,10"/>
+                        <TextBlock Text="Legs" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <TextBlock Text="Movement blocking only (walls/furniture/doors) - never affects combat, traps, or damage." TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Mode" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="LegsCollisionModeCombo" Margin="0,2,0,8" SelectionChanged="LegsCollisionModeCombo_SelectionChanged"/>
+
+                        <TextBlock Text="Type" FontWeight="SemiBold"/>
+                        <ComboBox x:Name="LegsCollisionTypeCombo" Margin="0,2,0,4" SelectionChanged="LegsCollisionTypeCombo_SelectionChanged"/>
+                        <TextBlock x:Name="LegsCollisionTypeDescText" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
+
+                        <TextBlock Text="Tolerance" FontWeight="SemiBold"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
+                            <Slider x:Name="LegsToleranceSlider" Width="120" Minimum="0" Maximum="255" ValueChanged="LegsToleranceSlider_ValueChanged"/>
+                            <TextBlock x:Name="LegsToleranceValueText" VerticalAlignment="Center" Margin="6,0,0,0"/>
+                        </StackPanel>
+
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="Left"/>
+                                <TextBox x:Name="LegsMaskLeftBox" TextChanged="LegsMaskBox_TextChanged"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Right"/>
+                                <TextBox x:Name="LegsMaskRightBox" TextChanged="LegsMaskBox_TextChanged"/>
+                            </StackPanel>
+                        </Grid>
+                        <Grid Margin="0,6,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                                <TextBlock Text="Top"/>
+                                <TextBox x:Name="LegsMaskTopBox" TextChanged="LegsMaskBox_TextChanged"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="1">
+                                <TextBlock Text="Bottom"/>
+                                <TextBox x:Name="LegsMaskBottomBox" TextChanged="LegsMaskBox_TextChanged"/>
+                            </StackPanel>
+                        </Grid>
+                    </StackPanel>
+                </StackPanel>
+            </Expander>
+
+            <Expander x:Name="NineSliceExpander" Header="Nine Slice" Margin="0,0,0,8" Expanded="Expander_Toggled" Collapsed="Expander_Toggled">
+                <StackPanel Margin="4,6,0,4">
+                    <CheckBox x:Name="NineSliceActiveCheck" Content="Activate Nine Slice" Margin="0,0,0,8" Checked="NineSliceActiveCheck_Changed" Unchecked="NineSliceActiveCheck_Changed"/>
+                    <TextBlock Text="Guides" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock Text="Left"/>
+                            <TextBox x:Name="SliceLeftBox" TextChanged="SliceBox_TextChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Right"/>
+                            <TextBox x:Name="SliceRightBox" TextChanged="SliceBox_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+                    <Grid Margin="0,6,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
+                            <TextBlock Text="Top"/>
+                            <TextBox x:Name="SliceTopBox" TextChanged="SliceBox_TextChanged"/>
+                        </StackPanel>
+                        <StackPanel Grid.Column="1">
+                            <TextBlock Text="Bottom"/>
+                            <TextBox x:Name="SliceBottomBox" TextChanged="SliceBox_TextChanged"/>
+                        </StackPanel>
+                    </Grid>
+                </StackPanel>
+            </Expander>
+
+            <!-- Layers now live inside the drawing window itself (double-click a frame),
+                 matching GameMaker's actual layout - not here in the properties panel. -->
+        </StackPanel>
+        </ScrollViewer>
+
+        <!-- Right: preview + playback + frame strip -->
+        <DockPanel>
+            <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
+                <TextBlock x:Name="OverlayDebugText" FontFamily="Consolas" FontSize="10" Opacity="0.6" Margin="0,0,0,4"
+                           ToolTip="Temporary diagnostic - the exact numbers used to position the collision mask overlay"/>
+                <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
+                    <Button x:Name="PrevFrameButton" Content="|&#x25C4;" Width="36" Click="PrevFrameButton_Click"/>
+                    <Button x:Name="PlayPauseButton" Content="&#x25B6;" Width="36" Margin="4,0,4,0" Click="PlayPauseButton_Click"/>
+                    <Button x:Name="NextFrameButton" Content="&#x25BA;|" Width="36" Click="NextFrameButton_Click"/>
+                    <TextBlock x:Name="FrameIndexText" VerticalAlignment="Center" Margin="12,0,0,0"/>
+                </StackPanel>
+                <TextBlock Text="Frames (click to select, double-click to draw, double-click volume icon for sound, X to delete):" Margin="0,0,0,4"/>
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled" Height="110">
+                    <StackPanel x:Name="FrameStripPanel" Orientation="Horizontal"/>
+                </ScrollViewer>
+                <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                    <Button x:Name="AddFramesButton" Content="Add Frame(s)..." Margin="0,0,6,0" Click="AddFramesButton_Click"/>
+                </StackPanel>
+            </StackPanel>
+
+            <Border Background="#FF3A3A3A" BorderBrush="Gray" BorderThickness="1">
+                <Grid x:Name="PreviewGrid">
+                    <Image x:Name="PreviewImage" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor" SizeChanged="PreviewImage_SizeChanged"/>
+                    <Canvas x:Name="OverlayCanvas"/>
+                </Grid>
+            </Border>
+        </DockPanel>
+    </DockPanel>
+    </DockPanel>
+</Window>

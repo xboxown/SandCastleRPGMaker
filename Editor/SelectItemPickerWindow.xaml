@@ -1,0 +1,19 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SelectItemPickerWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Select Item" Height="520" Width="740" WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="80" Margin="4" Click="OkButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+        <TabControl x:Name="CategoryTabs" SelectionChanged="CategoryTabs_SelectionChanged">
+            <TabItem Header="Weapons"><Grid x:Name="WeaponsTabContent"/></TabItem>
+            <TabItem Header="Armors"><Grid x:Name="ArmorsTabContent"/></TabItem>
+            <TabItem Header="Items"><Grid x:Name="ItemsTabContent"/></TabItem>
+            <TabItem Header="Books"><Grid x:Name="BooksTabContent"/></TabItem>
+            <TabItem Header="Objects"><Grid x:Name="ObjectsTabContent"/></TabItem>
+            <TabItem Header="Containers"><Grid x:Name="ContainersTabContent"/></TabItem>
+        </TabControl>
+    </DockPanel>
+</Window>

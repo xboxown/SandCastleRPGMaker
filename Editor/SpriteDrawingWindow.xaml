@@ -1,0 +1,168 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SpriteDrawingWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Edit Image" Height="760" Width="1040" WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="File">
+                <MenuItem Header="Save" Click="SaveButton_Click"/>
+                <MenuItem Header="Export As..." Click="ExportAs_Click"/>
+                <Separator/>
+                <MenuItem Header="Close" Click="CancelButton_Click"/>
+            </MenuItem>
+            <MenuItem Header="Edit">
+                <MenuItem Header="Undo" InputGestureText="Ctrl+Z" Click="Undo_Click"/>
+                <MenuItem Header="Redo" InputGestureText="Ctrl+Y" Click="Redo_Click"/>
+                <Separator/>
+                <MenuItem Header="Cut Selection" InputGestureText="Ctrl+X" Click="Cut_Click"/>
+                <MenuItem Header="Copy Selection" InputGestureText="Ctrl+C" Click="Copy_Click"/>
+                <MenuItem Header="Paste" InputGestureText="Ctrl+V" Click="Paste_Click"/>
+            </MenuItem>
+            <MenuItem Header="Image">
+                <MenuItem Header="Resize Properties..." Click="CanvasSize_Click"/>
+                <Separator/>
+                <MenuItem Header="Flip Horizontal" Click="FlipHorizontal_Click"/>
+                <MenuItem Header="Flip Vertical" Click="FlipVertical_Click"/>
+                <MenuItem Header="Rotate 90&#176; Clockwise" Click="RotateClockwise_Click"/>
+                <MenuItem Header="Rotate 90&#176; Counter-clockwise" Click="RotateCounterClockwise_Click"/>
+                <Separator/>
+                <MenuItem Header="Clear Canvas" Click="ClearCanvas_Click"/>
+            </MenuItem>
+            <MenuItem Header="View">
+                <MenuItem x:Name="ShowGridMenuItem" Header="Show Grid" IsCheckable="True" Click="ShowGrid_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <DockPanel Margin="8">
+            <!-- Left: tools + colours -->
+            <StackPanel DockPanel.Dock="Left" Width="180" Margin="0,0,10,0">
+                <TextBlock Text="Tools" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <UniformGrid Columns="4" Margin="0,0,0,6">
+                    <ToggleButton x:Name="PencilToolButton" Width="36" Height="36" Margin="2" IsChecked="True" Click="PencilToolButton_Click" ToolTip="Pencil">
+                        <Path Data="M2,22 L4,16 L16,4 L20,8 L8,20 Z M15,5 L19,9" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="EraserToolButton" Width="36" Height="36" Margin="2" Click="EraserToolButton_Click" ToolTip="Eraser">
+                        <Path Data="M3,15 L11,7 L19,15 L13,21 L7,21 Z M9,9 L17,17" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ColorRemoveToolButton" Width="36" Height="36" Margin="2" Click="ColorRemoveToolButton_Click" ToolTip="Color Remove (removes all pixels of the clicked color)">
+                        <Path Data="M4,4 L20,20 M4,20 L20,4" Stroke="Red" StrokeThickness="2" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ColorReplaceToolButton" Width="36" Height="36" Margin="2" Click="ColorReplaceToolButton_Click" ToolTip="Color Replace (replaces all pixels of the clicked color)">
+                        <Path Data="M2,12 L10,12 M6,8 L10,12 L6,16 M22,12 L14,12 M18,8 L14,12 L18,16" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="BucketToolButton" Width="36" Height="36" Margin="2" Click="BucketToolButton_Click" ToolTip="Bucket Fill">
+                        <Path Data="M2,10 L12,2 L22,10 L12,18 Z M12,18 L12,22 M6,10 L18,10" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="LineToolButton" Width="36" Height="36" Margin="2" Click="LineToolButton_Click" ToolTip="Line">
+                        <Path Data="M2,22 L22,2" Stroke="Black" StrokeThickness="2" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="RectangleToolButton" Width="36" Height="36" Margin="2" Click="RectangleToolButton_Click" ToolTip="Rectangle (outline)">
+                        <Rectangle Stroke="Black" StrokeThickness="2" Width="18" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="EllipseToolButton" Width="36" Height="36" Margin="2" Click="EllipseToolButton_Click" ToolTip="Ellipse (outline)">
+                        <Ellipse Stroke="Black" StrokeThickness="2" Width="18" Height="14"/>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="PolygonToolButton" Width="36" Height="36" Margin="2" Click="PolygonToolButton_Click" ToolTip="Polygon (click each vertex, double-click to close)">
+                        <Polygon Points="10,1 19,7 16,18 4,18 1,7" Stroke="Black" StrokeThickness="1.5" Fill="Transparent" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="ArcToolButton" Width="36" Height="36" Margin="2" Click="ArcToolButton_Click" ToolTip="Arc (drag a chord, then drag to bulge it)">
+                        <Path Data="M2,18 A16,16 0 0 1 18,2" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="TextToolButton" Width="36" Height="36" Margin="2" Click="TextToolButton_Click" ToolTip="Text (draw a box, type, Enter to rasterize)">
+                        <TextBlock Text="T" FontWeight="Bold" FontSize="16" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="EyedropperToolButton" Width="36" Height="36" Margin="2" Click="EyedropperToolButton_Click" ToolTip="Eyedropper (also: right-click canvas)">
+                        <Path Data="M18,2 L22,6 L10,18 L6,18 L6,14 Z M6,18 L2,22" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+
+                    <ToggleButton x:Name="SelectToolButton" Width="36" Height="36" Margin="2" Click="SelectToolButton_Click" ToolTip="Rectangle Select">
+                        <Rectangle Stroke="Black" StrokeThickness="1.5" StrokeDashArray="2,1" Width="18" Height="14"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="MagicWandToolButton" Width="36" Height="36" Margin="2" Click="MagicWandToolButton_Click" ToolTip="Magic Wand (selects connected pixels of the same color)">
+                        <Path Data="M4,20 L14,10 M14,10 L18,14 M2,2 L4,6 M8,2 L6,6 M2,8 L6,6" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="PanToolButton" Width="36" Height="36" Margin="2" Click="PanToolButton_Click" ToolTip="Pan (drag to scroll the view)">
+                        <Path Data="M12,2 L12,22 M2,12 L22,12" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="MirrorToggleButton" Width="36" Height="36" Margin="2" Click="MirrorToggleButton_Click" ToolTip="Mirror Brush (symmetry mode - strokes mirror across the center)">
+                        <Path Data="M12,2 L12,22 M4,6 L8,6 M16,6 L20,6 M4,18 L8,18 M16,18 L20,18" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                </UniformGrid>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="Rotate Sel." Width="86" Click="RotateSelection_Click" ToolTip="Rotates the selection 90 - or the whole canvas if nothing's selected"/>
+                    <Button Content="Flip Sel." Width="86" Margin="4,0,0,0" Click="FlipSelection_Click" ToolTip="Flips the selection horizontally - or the whole canvas if nothing's selected"/>
+                </StackPanel>
+
+                <TextBlock Text="Brush Size" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,10">
+                    <Slider x:Name="BrushSizeSlider" Width="110" Minimum="1" Maximum="16" Value="1" ValueChanged="BrushSizeSlider_ValueChanged"/>
+                    <TextBlock x:Name="BrushSizeText" VerticalAlignment="Center" Margin="6,0,0,0" Text="1"/>
+                </StackPanel>
+
+                <TextBlock Text="Colour" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                <Border x:Name="CurrentColorSwatch" Width="40" Height="24" Background="Black" BorderBrush="Gray" BorderThickness="1" HorizontalAlignment="Left" Margin="0,0,0,8"/>
+                <UniformGrid x:Name="ColorPaletteGrid" Columns="8" Margin="0,0,0,8"/>
+                <Button Content="Custom Color..." Click="CustomColor_Click" Margin="0,0,0,16"/>
+
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <Button Content="Undo" Width="55" Click="Undo_Click"/>
+                    <Button Content="Redo" Width="55" Margin="4,0,0,0" Click="Redo_Click"/>
+                </StackPanel>
+
+                <TextBlock Text="Zoom" FontWeight="SemiBold"/>
+                <StackPanel Orientation="Horizontal" Margin="0,2,0,0">
+                    <Button Content="-" Width="28" Click="ZoomOut_Click"/>
+                    <TextBlock x:Name="ZoomText" VerticalAlignment="Center" Margin="8,0,8,0" Text="800%"/>
+                    <Button Content="+" Width="28" Click="ZoomIn_Click"/>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Bottom: save/cancel -->
+            <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+                <Button Content="Save" Width="80" Margin="4" Click="SaveButton_Click" IsDefault="True"/>
+                <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+            </StackPanel>
+
+            <!-- Right: layers - lives inside the drawing window itself, matching GameMaker's actual
+                 layout, instead of the old design where the layer list sat only in the outer frame
+                 editor and each layer opened as its own blind popup window. Hidden entirely (via
+                 code-behind) when the sprite has no owning SpriteEntry, e.g. a standalone one-off edit. -->
+            <Border x:Name="LayersPanelRoot" DockPanel.Dock="Right" Width="170" Margin="10,0,0,0" BorderBrush="Gray" BorderThickness="1,0,0,0" Padding="8,0,0,0">
+                <DockPanel>
+                    <TextBlock DockPanel.Dock="Top" Text="Layers" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                    <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" Margin="0,6,0,0">
+                        <Button Content="+ Layer" Width="78" Click="AddLayer_Click"/>
+                        <Button Content="+ Group" Width="78" Margin="4,0,0,0" Click="AddLayerGroup_Click"/>
+                    </StackPanel>
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel x:Name="LayersListPanel"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </Border>
+
+            <!-- Center: canvas -->
+            <Border Background="#FF2A2A2A" BorderBrush="Gray" BorderThickness="1">
+                <ScrollViewer x:Name="CanvasScrollViewer" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                    <Border x:Name="CheckerBackground" HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <Grid x:Name="CanvasRoot">
+                            <!-- Layers below the active one - context only, not editable. -->
+                            <Image x:Name="BelowLayersImage" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False"/>
+                            <Image x:Name="CanvasImage" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor"
+                                   MouseLeftButtonDown="CanvasImage_MouseLeftButtonDown"
+                                   MouseMove="CanvasImage_MouseMove"
+                                   MouseLeftButtonUp="CanvasImage_MouseLeftButtonUp"
+                                   MouseRightButtonDown="CanvasImage_MouseRightButtonDown"/>
+                            <!-- Layers above the active one - drawn on top so what you're editing stays truthful to the final composite, but never intercepts clicks meant for the canvas beneath. -->
+                            <Image x:Name="AboveLayersImage" Stretch="Fill" RenderOptions.BitmapScalingMode="NearestNeighbor" IsHitTestVisible="False"/>
+                            <Canvas x:Name="GridOverlay" IsHitTestVisible="False"/>
+                            <Canvas x:Name="ShapeOverlay" IsHitTestVisible="False"/>
+                        </Grid>
+                    </Border>
+                </ScrollViewer>
+            </Border>
+        </DockPanel>
+    </DockPanel>
+</Window>

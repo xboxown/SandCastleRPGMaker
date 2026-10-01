@@ -1,0 +1,147 @@
+<Window x:Class="SandcastleRpgMaker.Editor.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sandcastle RPG Maker - Map Editor" Height="800" Width="1200"
+        WindowStartupLocation="CenterScreen">
+    <DockPanel>
+
+        <!-- Menu bar -->
+        <Menu DockPanel.Dock="Top">
+            <MenuItem Header="_File">
+                <MenuItem x:Name="NewProjectMenuItem" Header="New Project" Click="NewProjectMenuItem_Click"/>
+                <MenuItem x:Name="OpenProjectMenuItem" Header="Open Project..." Click="OpenProjectMenuItem_Click"/>
+                <MenuItem x:Name="SaveProjectMenuItem" Header="Save Project" Click="SaveProjectMenuItem_Click" IsEnabled="False"/>
+                <Separator/>
+                <MenuItem Header="Exit" Click="ExitMenuItem_Click"/>
+            </MenuItem>
+            <MenuItem x:Name="EditMenu" Header="_Edit" IsEnabled="False">
+                <MenuItem x:Name="UndoMenuItem" Header="Undo" Click="UndoMenuItem_Click" InputGestureText="Ctrl+Z"/>
+                <MenuItem x:Name="RedoMenuItem" Header="Redo" Click="RedoMenuItem_Click" InputGestureText="Ctrl+Y"/>
+            </MenuItem>
+            <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
+                <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>
+            </MenuItem>
+            <MenuItem x:Name="ModeMenu" Header="_Mode" IsEnabled="False">
+                <MenuItem x:Name="MapModeMenuItem" Header="Map" IsCheckable="True" IsChecked="True" Click="MapModeMenuItem_Click"/>
+                <MenuItem x:Name="EventModeMenuItem" Header="Event" IsCheckable="True" Click="EventModeMenuItem_Click"/>
+                <MenuItem x:Name="StartPositionModeMenuItem" Header="Start Position" IsCheckable="True" Click="StartPositionModeMenuItem_Click"/>
+                <MenuItem x:Name="ItemModeMenuItem" Header="Item">
+                    <MenuItem x:Name="ItemTypeWeaponMenuItem" Header="Weapons" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
+                    <MenuItem x:Name="ItemTypeArmorMenuItem" Header="Armors" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
+                    <MenuItem x:Name="ItemTypeItemMenuItem" Header="Items" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
+                    <MenuItem x:Name="ItemTypeBookMenuItem" Header="Books" IsCheckable="True" IsChecked="True" Click="ItemTypeMenuItem_Click"/>
+                    <MenuItem x:Name="ItemTypeContainerMenuItem" Header="Containers" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
+                </MenuItem>
+            </MenuItem>
+            <MenuItem x:Name="DrawMenu" Header="_Draw" IsEnabled="False">
+                <MenuItem x:Name="DrawSingleMenuItem" Header="Single Tile" IsCheckable="True" IsChecked="True" Click="DrawShapeMenuItem_Click"/>
+                <MenuItem x:Name="DrawLineMenuItem" Header="Line" IsCheckable="True" Click="DrawShapeMenuItem_Click"/>
+                <MenuItem x:Name="DrawRectangleMenuItem" Header="Rectangle" IsCheckable="True" Click="DrawShapeMenuItem_Click"/>
+                <MenuItem x:Name="DrawCircleMenuItem" Header="Circle" IsCheckable="True" Click="DrawShapeMenuItem_Click"/>
+            </MenuItem>
+            <MenuItem x:Name="ToolsMenu" Header="_Tools" IsEnabled="False">
+                <MenuItem Header="Database..." Click="ObjectDatabaseButton_Click"/>
+                <MenuItem Header="Resources..." Click="ResourcesMenuItem_Click"/>
+                <MenuItem Header="Faction Editor..." Click="FactionEditorMenuItem_Click"/>
+                <MenuItem Header="Sprite Editor..." Click="SpriteEditorMenuItem_Click"/>
+                <MenuItem Header="Book Editor..." Click="BookEditorMenuItem_Click"/>
+                <MenuItem Header="Container Editor..." Click="ContainerEditorMenuItem_Click"/>
+                <MenuItem Header="Sound Editor..." Click="SoundEditorMenuItem_Click"/>
+                <MenuItem Header="Sound Mixer..." Click="SoundMixerMenuItem_Click"/>
+                <MenuItem Header="Variable Editor..." Click="VariableEditorMenuItem_Click"/>
+                <MenuItem Header="Stat Editor..." Click="StatEditorMenuItem_Click"/>
+                <MenuItem Header="PC Editor..." Click="CharacterEditorMenuItem_Click"/>
+                <Separator/>
+                <MenuItem Header="Save Tile Properties..." Click="SaveTilePropertiesMenuItem_Click"/>
+                <MenuItem Header="Load Tile Properties..." Click="LoadTilePropertiesMenuItem_Click"/>
+            </MenuItem>
+        </Menu>
+
+        <!-- Toolbar -->
+        <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" IsEnabled="False">
+            <TextBlock Text="Tileset:" VerticalAlignment="Center" Margin="4,0,2,0"/>
+            <ComboBox x:Name="TilesetCombo" Width="160" DisplayMemberPath="Name" SelectionChanged="TilesetCombo_SelectionChanged"/>
+            <Separator/>
+            <TextBlock Text="Tile W:" VerticalAlignment="Center" Margin="4,0,2,0"/>
+            <TextBox x:Name="TileWidthBox" Text="32" Width="40" IsReadOnly="True"/>
+            <TextBlock Text="Tile H:" VerticalAlignment="Center" Margin="4,0,2,0"/>
+            <TextBox x:Name="TileHeightBox" Text="32" Width="40" IsReadOnly="True"/>
+            <Separator/>
+            <TextBlock Text="Map W (cells):" VerticalAlignment="Center" Margin="4,0,2,0"/>
+            <TextBox x:Name="MapWidthBox" Text="30" Width="40"/>
+            <TextBlock Text="Map H (cells):" VerticalAlignment="Center" Margin="4,0,2,0"/>
+            <TextBox x:Name="MapHeightBox" Text="20" Width="40"/>
+            <Button x:Name="NewMapButton" Content="New Map" Click="NewMapButton_Click" Padding="6,2" Margin="8,2,2,2"/>
+            <Separator/>
+            <Button x:Name="SaveMapButton" Content="Save Map..." Click="SaveMapButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="LoadMapButton" Content="Load Map..." Click="LoadMapButton_Click" Padding="6,2" Margin="2"/>
+            <Separator/>
+            <Button x:Name="ObjectDatabaseButton" Content="Object Database..." Click="ObjectDatabaseButton_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+
+        <!-- Status bar -->
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Select a tileset from the dropdown (built in the Sprite Editor's Tileset group), then click New Map to begin."/>
+            </StatusBarItem>
+        </StatusBar>
+
+        <Grid x:Name="MainContentGrid" IsEnabled="False">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- Tileset / Objects palette -->
+            <TabControl x:Name="PaletteTabs" Grid.Column="0">
+                <TabItem Header="Tileset">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Top" Text="Click a tile to select it" Margin="6" FontWeight="Bold"/>
+                        <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                            <Canvas x:Name="PaletteCanvas" Background="#FF2B2B2B"/>
+                        </ScrollViewer>
+                    </DockPanel>
+                </TabItem>
+                <TabItem Header="Objects">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Top" Text="Click an object to select it" Margin="6" FontWeight="Bold"/>
+                        <ListBox x:Name="ObjectsPaletteListBox" Margin="4"
+                                 SelectionChanged="ObjectsPaletteListBox_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                        <Image Source="{Binding Icon}" Width="28" Height="28" Margin="0,0,8,0"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </TabItem>
+            </TabControl>
+
+            <!-- Map canvas -->
+            <DockPanel Grid.Column="1" LastChildFill="True">
+                <TextBlock DockPanel.Dock="Top" Text="Map (left click = paint, right click = erase)" Margin="6" FontWeight="Bold"/>
+                <!--
+                    ScrollViewer background is deliberately a plain, light,
+                    obviously-not-map color - per spec, the dark background
+                    and grid should be exactly the map's own pixel size
+                    (e.g. 30x20 cells), not extend to fill the rest of the
+                    window. A dark gray here still read as "more map" at a
+                    glance; a clearly different, light color removes that
+                    ambiguity outright. The Border below gives the real
+                    bounds a crisp, dark edge that reads clearly against
+                    this light surrounding area.
+                -->
+                <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto" Background="#FFF0F0F0">
+                    <Border BorderBrush="#FF333333" BorderThickness="1" HorizontalAlignment="Left" VerticalAlignment="Top">
+                        <Canvas x:Name="MapCanvas" Background="#FF1E1E1E"/>
+                    </Border>
+                </ScrollViewer>
+            </DockPanel>
+        </Grid>
+
+    </DockPanel>
+</Window>

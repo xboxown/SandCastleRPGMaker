@@ -1,0 +1,143 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ResizePropertiesWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Resize Properties" Height="520" Width="600" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <Grid Margin="14">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock x:Name="TitleText" Grid.Row="0" Text="Resize Properties" FontSize="16" FontWeight="Bold" Margin="0,0,0,12"/>
+
+        <!-- Current / Preview -->
+        <Grid Grid.Row="1" Margin="0,0,0,16">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <TextBlock Text="Current" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="64" Height="64" BorderBrush="Gray" BorderThickness="1" Margin="0,0,10,0">
+                        <Image x:Name="CurrentThumb" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock><Run Text="Width: "/><Run x:Name="CurrentWidthText"/><Run Text=" pixels"/></TextBlock>
+                        <TextBlock><Run Text="Height: "/><Run x:Name="CurrentHeightText"/><Run Text=" pixels"/></TextBlock>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                <TextBlock Text="Preview" FontWeight="SemiBold" Margin="0,0,0,6"/>
+                <StackPanel Orientation="Horizontal">
+                    <Border Width="64" Height="64" BorderBrush="Gray" BorderThickness="1" Margin="0,0,10,0">
+                        <Image x:Name="PreviewThumb" Stretch="Uniform" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    </Border>
+                    <StackPanel VerticalAlignment="Center">
+                        <TextBlock><Run Text="Width: "/><Run x:Name="PreviewWidthText"/><Run Text=" pixels"/></TextBlock>
+                        <TextBlock><Run Text="Height: "/><Run x:Name="PreviewHeightText"/><Run Text=" pixels"/></TextBlock>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
+
+        <!-- Scale Image / Resize Canvas -->
+        <Grid Grid.Row="2">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <RadioButton x:Name="ScaleImageRadio" Content="Scale Image" FontWeight="SemiBold" GroupName="ResizeMode" Margin="0,0,0,10" Checked="ModeRadio_Checked"
+                             ToolTip="Stretches the existing artwork to the new size (resamples pixels)."/>
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="↕↔" FontSize="20" VerticalAlignment="Center" Margin="0,0,10,0" Opacity="0.6"/>
+                    <StackPanel Grid.Column="1">
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Width:" VerticalAlignment="Center" Width="50"/>
+                            <TextBox Grid.Column="1" x:Name="ScaleWidthBox" TextChanged="ScaleWidthBox_TextChanged"/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Height:" VerticalAlignment="Center" Width="50"/>
+                            <TextBox Grid.Column="1" x:Name="ScaleHeightBox" TextChanged="ScaleHeightBox_TextChanged"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+
+                <CheckBox x:Name="ScaleAspectCheck" Content="Maintain Aspect Ratio:" IsChecked="True" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Scale In:" Margin="0,0,0,2"/>
+                <ComboBox x:Name="ScaleUnitCombo" Margin="0,0,0,10" SelectionChanged="ScaleUnitCombo_SelectionChanged"/>
+
+                <TextBlock Text="Interpolation:" Margin="0,0,0,2"/>
+                <ComboBox x:Name="InterpolationCombo" SelectionChanged="AnyOption_Changed"/>
+            </StackPanel>
+
+            <StackPanel Grid.Column="1" Margin="10,0,0,0">
+                <RadioButton x:Name="ResizeCanvasRadio" Content="Resize Canvas" FontWeight="SemiBold" GroupName="ResizeMode" IsChecked="True" Margin="0,0,0,10" Checked="ModeRadio_Checked"
+                             ToolTip="Keeps existing artwork at its current pixel size and grows/crops the canvas around it - nothing is stretched."/>
+
+                <Grid Margin="0,0,0,10">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+                    <UniformGrid x:Name="AnchorGrid" Grid.Column="0" Rows="3" Columns="3" Width="72" Height="72" Margin="0,0,10,0"/>
+                    <StackPanel Grid.Column="1">
+                        <Grid Margin="0,0,0,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Width:" VerticalAlignment="Center" Width="50"/>
+                            <TextBox Grid.Column="1" x:Name="CanvasWidthBox" TextChanged="CanvasWidthBox_TextChanged"/>
+                        </Grid>
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0" Text="Height:" VerticalAlignment="Center" Width="50"/>
+                            <TextBox Grid.Column="1" x:Name="CanvasHeightBox" TextChanged="CanvasHeightBox_TextChanged"/>
+                        </Grid>
+                    </StackPanel>
+                </Grid>
+
+                <CheckBox x:Name="CanvasAspectCheck" Content="Maintain Aspect Ratio:" Margin="0,0,0,10"/>
+
+                <TextBlock Text="Resize In:" Margin="0,0,0,2"/>
+                <ComboBox x:Name="CanvasUnitCombo" Margin="0,0,0,10" SelectionChanged="CanvasUnitCombo_SelectionChanged"/>
+            </StackPanel>
+        </Grid>
+
+        <!-- Apply / Cancel -->
+        <Grid Grid.Row="3" Margin="0,16,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <Button Content="Apply" Width="90" Click="ApplyButton_Click" IsDefault="True"/>
+                <CheckBox x:Name="ApplyToOriginCheck" Content="Apply to Origin" IsChecked="True" VerticalAlignment="Center" Margin="14,0,0,0"/>
+            </StackPanel>
+            <Button Grid.Column="1" Content="Cancel" Width="90" Click="CancelButton_Click" IsCancel="True"/>
+        </Grid>
+    </Grid>
+</Window>

@@ -1,0 +1,189 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ContainerEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SandcastleRpgMaker.Editor"
+        Title="Container Editor" Height="860" Width="1150" WindowStartupLocation="CenterOwner">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button Content="New Container" Click="NewContainer_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Delete Container" Click="DeleteContainer_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="200"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <DockPanel Grid.Column="0" Margin="6">
+                <TextBlock DockPanel.Dock="Top" Text="Containers" FontWeight="Bold" Margin="0,0,0,4"/>
+                <ListBox x:Name="ContainerListBox" DisplayMemberPath="Name" SelectionChanged="ContainerListBox_SelectionChanged"/>
+            </DockPanel>
+
+            <DockPanel Grid.Column="1" x:Name="EditorPanel" IsEnabled="False" Margin="10,8,10,10">
+                <TabControl x:Name="MainTabControl" SelectionChanged="MainTabControl_SelectionChanged">
+                    <TabItem Header="Properties">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="4">
+                                <GroupBox Header="Identity" Margin="0,0,0,4" Padding="6">
+                                    <StackPanel Orientation="Horizontal">
+                                        <StackPanel Margin="0,0,24,0">
+                                            <TextBlock Text="Name"/>
+                                            <TextBox x:Name="NameBox" Width="220" HorizontalAlignment="Left" TextChanged="Field_Changed"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,0">
+                                            <TextBlock Text="Weight"/>
+                                            <TextBox x:Name="WeightBox" Width="60" TextChanged="Field_Changed" PreviewTextInput="DecimalOnly_PreviewTextInput"/>
+                                        </StackPanel>
+                                        <StackPanel Margin="0,0,16,0">
+                                            <TextBlock Text="Volume (own size, when carried)" ToolTip="How much space this container itself takes up when it's carried inside something else - separate from Max Volume below, which is how much IT can hold."/>
+                                            <TextBox x:Name="VolumeBox" Width="60" TextChanged="Field_Changed" PreviewTextInput="DecimalOnly_PreviewTextInput"/>
+                                        </StackPanel>
+                                        <StackPanel>
+                                            <TextBlock Text="Price"/>
+                                            <TextBox x:Name="PriceBox" Width="60" TextChanged="Field_Changed" PreviewTextInput="IntegerOnly_PreviewTextInput"/>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </GroupBox>
+
+                                <GroupBox Header="Container Settings" Margin="0,0,0,4" Padding="6">
+                                    <StackPanel>
+                                        <CheckBox x:Name="IsBodyContainerCheck" Content="Body Container" Checked="Field_Changed" Unchecked="Field_Changed" Margin="0,0,0,8"
+                                                  ToolTip="A body container (a corpse, an Avatar's own body) lets you take, use, and identify what's inside, but never lets you drop something INTO it. Leave unchecked for a normal container (chest, bag, drawer), which allows both directions."/>
+                                        <TextBlock Text="Location" FontWeight="Bold" Margin="0,0,0,2"/>
+                                        <TextBlock Text="Which slot this container prefers to go into the moment it's picked up, before falling back to Right Hand then Left Hand. Custom slots aren't built yet, so only the two real container-holding slots are offered here." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                                        <ComboBox x:Name="LocationCombo" SelectionChanged="Field_Changed" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,8">
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Max Volume (capacity)" ToolTip="The total volume this container can hold. An item can only be dropped in while its current contents' total volume plus the new item's own Volume would not exceed this."/>
+                                                <TextBox x:Name="MaxVolumeBox" Width="80" TextChanged="Field_Changed" PreviewTextInput="DecimalOnly_PreviewTextInput"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock x:Name="CurrentVolumeText" Text="Current volume: 0 / 0" Opacity="0.7" VerticalAlignment="Bottom"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <CheckBox x:Name="IsLockedCheck" Content="Locked" Checked="Field_Changed" Unchecked="Field_Changed" Margin="0,0,0,4"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Required Key Category"/>
+                                                <ComboBox x:Name="RequiredKeyCategoryCombo" Width="120" SelectionChanged="RequiredKeyCategory_Changed"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Required Key Item"/>
+                                                <ComboBox x:Name="RequiredKeyItemCombo" Width="200" DisplayMemberPath="Name" SelectionChanged="Field_Changed"/>
+                                            </StackPanel>
+                                            <StackPanel>
+                                                <TextBlock Text="Pick-Lock Difficulty" ToolTip="How hard THIS container is to pick, compared against the picking character's own real stat at attempt time. Higher = needs a higher stat for a real chance."/>
+                                                <TextBox x:Name="PickLockDifficultyBox" Width="80" TextChanged="Field_Changed" PreviewTextInput="IntegerOnly_PreviewTextInput"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                        <TextBlock Text="No dedicated Item editor exists yet, so a key is picked from Books or Objects for now - honest placeholder until one does." Opacity="0.6" FontSize="11" TextWrapping="Wrap"/>
+                                    </StackPanel>
+                                </GroupBox>
+
+                                <GroupBox Header="Behavior" Margin="0,0,0,4" Padding="6">
+                                    <StackPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <CheckBox x:Name="DestructibleCheck" Content="Destructible" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="CanBeSoldCheck" Content="Can be sold" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="CanBeTradedCheck" Content="Can be traded" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="CanBeDroppedCheck" Content="Can be dropped" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="IsStackableCheck" Content="Is Stackable" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="AllowElevationCheck" Content="Allow Elevation" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="OccludesCheck" Content="Occludes" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="IsSolidCheck" Content="Solid" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                        </WrapPanel>
+                                    </StackPanel>
+                                </GroupBox>
+
+                                <GroupBox Header="Sprites and Sound" Margin="0,0,0,4" Padding="6">
+                                    <StackPanel>
+                                        <TextBlock Text="World Sprite (how it looks on the map)" FontWeight="Bold" Margin="0,0,0,2"/>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <CheckBox x:Name="WorldSpriteFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0" Checked="WorldSpriteFilterCheck_Checked" Unchecked="WorldSpriteFilterCheck_Unchecked"/>
+                                            <ComboBox x:Name="WorldSpriteCombo" SelectionChanged="WorldSprite_Changed" DisplayMemberPath="Name"/>
+                                        </DockPanel>
+                                        <TextBlock Text="Open-View Background (behind items when opened)" FontWeight="Bold" Margin="0,0,0,2"/>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <CheckBox x:Name="PaperDollFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0" Checked="PaperDollFilterCheck_Checked" Unchecked="PaperDollFilterCheck_Unchecked"/>
+                                            <ComboBox x:Name="PaperDollCombo" SelectionChanged="PaperDollSprite_Changed" DisplayMemberPath="Name"/>
+                                        </DockPanel>
+                                        <TextBlock Text="Open Sound" FontWeight="Bold" Margin="0,0,0,2"/>
+                                        <ComboBox x:Name="OpenSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+                                        <TextBlock Text="Close Sound" FontWeight="Bold" Margin="0,0,0,2"/>
+                                        <ComboBox x:Name="CloseSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+
+                                        <TextBlock Text="Item Frame - the boundary where items may appear inside the open view. Rectangle/Ellipse: drag corner to corner. Pencil: draw freehand - it closes automatically once your line comes back around to meet its own starting point. Drag the shape's body to move it once drawn, or its bottom-right handle to resize it." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                                        <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                            <ToggleButton x:Name="RectToolButton" Content="Rectangle" Width="80" Margin="0,0,4,0" IsChecked="True" Click="FrameTool_Click"/>
+                                            <ToggleButton x:Name="EllipseToolButton" Content="Ellipse" Width="80" Margin="0,0,4,0" Click="FrameTool_Click"/>
+                                            <ToggleButton x:Name="PencilToolButton" Content="Pencil" Width="80" Margin="0,0,4,0" Click="FrameTool_Click"/>
+                                        </StackPanel>
+                                        <Border BorderBrush="#FF888888" BorderThickness="1" Width="320" Height="240" HorizontalAlignment="Left">
+                                            <Canvas x:Name="FramePreviewCanvas" Width="320" Height="240" Background="#FF222222" ClipToBounds="True"/>
+                                        </Border>
+                                    </StackPanel>
+                                </GroupBox>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+
+                    <TabItem Header="Event">
+                        <DockPanel>
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                                <Button x:Name="EventDebugButton" Content="Debug" Padding="10,4" Click="EventDebugButton_Click"/>
+                                <TextBlock Text="Evaluates this page's conditions against a simulated scenario, then (if they pass) lets you step through its commands one at a time - a real command executes for real when you step onto it."
+                                           VerticalAlignment="Center" Margin="10,0,0,0" Opacity="0.7" FontSize="11"/>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="260"/>
+                                    <ColumnDefinition Width="*"/>
+                                </Grid.ColumnDefinitions>
+                                <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="0,0,1,0">
+                                    <local:BookEventConditionsControl x:Name="ContainerConditionsControl"/>
+                                </Border>
+                                <ContentControl x:Name="EventEnginePlaceholder" Grid.Column="1"/>
+                            </Grid>
+                        </DockPanel>
+                    </TabItem>
+
+                    <TabItem Header="Starting Contents">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel Margin="10">
+                                <TextBlock Text="Items placed here appear inside every new placement of this container at runtime, exactly like a character's own Starting Inventory." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                                <DockPanel Margin="0,0,0,8">
+                                    <ComboBox x:Name="ContentsCategoryCombo" DockPanel.Dock="Left" Width="90" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="ContentsItemCombo" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0" DisplayMemberPath="Name"/>
+                                    <Button Content="Add" Width="60" Click="AddContents_Click"/>
+                                </DockPanel>
+
+                                <TextBlock Text="Navigate Sound" FontWeight="Bold" Margin="0,0,0,2"/>
+                                <TextBlock Text="Plays once the player releases an item onto a real spot inside this container - not when it opens or closes." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
+                                <ComboBox x:Name="NavigateSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+
+                                <TextBlock Text="Live Preview - this is the real, played-in-engine look, not the frame-drawing editor mode. Select an item below, then drag it here to place it, following the frame's own real boundary. The first item in the list sits at the bottom of the stack; each one after it stacks above the last - use Up/Down to reorder." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
+                                <Border BorderBrush="#FF888888" BorderThickness="1" Width="320" Height="240" HorizontalAlignment="Left">
+                                    <Canvas x:Name="ContentsPreviewCanvas" Width="320" Height="240" Background="#FF222222" ClipToBounds="True"/>
+                                </Border>
+
+                                <Grid Margin="0,8,0,0">
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="60"/>
+                                    </Grid.ColumnDefinitions>
+                                    <ListBox x:Name="ContentsListBox" Grid.Column="0" Height="220" DisplayMemberPath="DisplayText" SelectionChanged="ContentsListBox_SelectionChanged"/>
+                                    <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                                        <Button Content="Up" Margin="0,0,0,4" Click="MoveContentsUp_Click"/>
+                                        <Button Content="Down" Click="MoveContentsDown_Click"/>
+                                    </StackPanel>
+                                </Grid>
+                                <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Margin="0,8,0,0" Click="RemoveContents_Click"/>
+                            </StackPanel>
+                        </ScrollViewer>
+                    </TabItem>
+                </TabControl>
+            </DockPanel>
+        </Grid>
+    </DockPanel>
+</Window>

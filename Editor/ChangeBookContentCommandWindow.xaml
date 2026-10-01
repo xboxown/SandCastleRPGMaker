@@ -1,0 +1,36 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ChangeBookContentCommandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change Book Content" Height="420" Width="440" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,10"
+                   Text="Runtime-only: the book's own authored content is never touched. This replacement only ever applies during real gameplay, through this command - Preview here always shows the book's real, unmodified content."/>
+
+        <StackPanel x:Name="BookPickerPanel" DockPanel.Dock="Top" Margin="0,0,0,10" Visibility="Collapsed">
+            <TextBlock Text="Book:" FontWeight="Bold" Margin="0,0,0,4"/>
+            <DockPanel>
+                <Button DockPanel.Dock="Right" Content="..." Width="32" Click="PickBook_Click"/>
+                <TextBox x:Name="BookNameBox" IsReadOnly="True" Margin="0,0,4,0"/>
+            </DockPanel>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Page:" FontWeight="Bold" Margin="0,0,0,4"/>
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <Button DockPanel.Dock="Left" Content="◀" Width="32" Click="PrevPage_Click"/>
+            <Button DockPanel.Dock="Right" Content="▶" Width="32" Click="NextPage_Click"/>
+            <TextBlock x:Name="PageLabel" Text="Page 1 of 1" HorizontalAlignment="Center" VerticalAlignment="Center"/>
+        </DockPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Frame on this page:" FontWeight="Bold" Margin="0,0,0,4"/>
+        <ComboBox x:Name="FrameCombo" DockPanel.Dock="Top" Margin="0,0,0,4" SelectionChanged="FrameCombo_SelectionChanged"/>
+        <TextBlock x:Name="EmptyFrameNote" DockPanel.Dock="Top" Text="This page has no frames with content yet." Opacity="0.7" FontSize="11" Margin="0,0,0,10" Visibility="Collapsed"/>
+
+        <Button DockPanel.Dock="Top" x:Name="EditContentButton" Content="Edit Replacement Content..." Margin="0,4,0,4" Click="EditContent_Click"/>
+        <TextBlock x:Name="ReplacementStatusLabel" DockPanel.Dock="Top" Text="Replacement content: not set yet" FontStyle="Italic" Opacity="0.8"/>
+    </DockPanel>
+</Window>

@@ -1,0 +1,130 @@
+<Window x:Class="SandcastleRpgMaker.Editor.SoundEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sound Editor" Height="620" Width="460" WindowStartupLocation="CenterOwner">
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+    <StackPanel Margin="14">
+        <TextBlock x:Name="TitleText" Text="Sound" FontSize="16" FontWeight="Bold" Margin="0,0,0,14"/>
+
+        <TextBlock Text="Name:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBox Grid.Column="0" x:Name="NameBox" Margin="0,0,6,0" TextChanged="NameBox_TextChanged"/>
+            <Button Grid.Column="1" Content="..." Width="30" Click="BrowseSourceButton_Click" ToolTip="Replace the source audio file"/>
+        </Grid>
+
+        <TextBlock Text="Volume:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <Grid Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="50"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="&#128266;" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Slider Grid.Column="1" x:Name="VolumeSlider" Minimum="0" Maximum="1" VerticalAlignment="Center" Margin="0,0,6,0" ValueChanged="VolumeSlider_ValueChanged"/>
+            <TextBox Grid.Column="2" x:Name="VolumeBox" Margin="0,0,6,0" TextChanged="VolumeBox_TextChanged"/>
+            <Button Grid.Column="3" x:Name="PlayButton" Content="&#9654;" Width="28" Margin="0,0,2,0" Click="PlayButton_Click" ToolTip="Play/Pause"/>
+            <ToggleButton Grid.Column="4" x:Name="LoopToggle" Content="&#8635;" Width="28" Margin="0,0,2,0" ToolTip="Loop"/>
+            <Button Grid.Column="5" Content="&#9198;" Width="28" Margin="0,0,2,0" Click="RewindButton_Click" ToolTip="Rewind to start"/>
+            <Button Grid.Column="6" Content="&#9707;" Width="28" Click="OpenMixerButton_Click" ToolTip="Open in Sound Mixer"/>
+        </Grid>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <TextBlock Grid.Column="0" Text="&#128337;" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <Slider Grid.Column="1" x:Name="PositionSlider" Minimum="0" Maximum="1" VerticalAlignment="Center"
+                    PreviewMouseDown="PositionSlider_PreviewMouseDown" PreviewMouseUp="PositionSlider_PreviewMouseUp" ValueChanged="PositionSlider_ValueChanged"/>
+        </Grid>
+        <TextBlock x:Name="DurationText" Text="0.00 / 0.00s" Opacity="0.7" FontSize="11" Margin="0,-10,0,14" HorizontalAlignment="Right"/>
+
+        <TextBlock Text="Conversion (for OGG only):" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <ComboBox x:Name="ConversionCombo" Margin="0,0,0,14"/>
+
+        <TextBlock Text="Attributes:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <StackPanel Margin="0,0,0,14">
+            <RadioButton x:Name="AttrUncompressedNotStreamed" Content="Uncompressed - Not Streamed" GroupName="Attr" Margin="0,0,0,4" Checked="AttributeRadio_Checked"/>
+            <RadioButton x:Name="AttrCompressedNotStreamed" Content="Compressed - Not Streamed" GroupName="Attr" Margin="0,0,0,4" Checked="AttributeRadio_Checked"/>
+            <RadioButton x:Name="AttrUncompressOnLoad" Content="Uncompress on Load - Not Streamed" GroupName="Attr" Margin="0,0,0,4" Checked="AttributeRadio_Checked"/>
+            <RadioButton x:Name="AttrCompressedStreamed" Content="Compressed - Streamed" GroupName="Attr" Checked="AttributeRadio_Checked"/>
+        </StackPanel>
+
+        <TextBlock Text="Target Options:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <Grid Margin="0,0,0,4">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                <TextBlock Text="Channel Format:"/>
+                <ComboBox x:Name="ChannelFormatCombo" Margin="0,2,0,0" SelectionChanged="ChannelFormatCombo_SelectionChanged"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                <TextBlock Text="Sample Rate:"/>
+                <ComboBox x:Name="SampleRateCombo" Margin="0,2,0,0" SelectionChanged="SampleRateCombo_SelectionChanged"/>
+            </StackPanel>
+        </Grid>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                <TextBlock Text="Bit Depth:"/>
+                <ComboBox x:Name="BitDepthCombo" Margin="0,2,0,0" SelectionChanged="BitDepthCombo_SelectionChanged"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                <TextBlock Text="Compression Quality:"/>
+                <ComboBox x:Name="CompressionQualityCombo" Margin="0,2,0,0" SelectionChanged="CompressionQualityCombo_SelectionChanged"/>
+            </StackPanel>
+        </Grid>
+
+        <TextBlock Text="Convert / Export:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="Auto"/>
+            </Grid.ColumnDefinitions>
+            <ComboBox Grid.Column="0" x:Name="TargetFormatCombo" Margin="0,0,6,0"/>
+            <Button Grid.Column="1" Content="Export..." Width="80" Click="ExportButton_Click"/>
+        </Grid>
+
+        <Grid Margin="0,0,0,14">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,6,0">
+                <TextBlock Text="Audio Group:" FontWeight="SemiBold"/>
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <ComboBox Grid.Column="0" x:Name="AudioGroupCombo" Margin="0,0,4,0" SelectionChanged="AudioGroupCombo_SelectionChanged"/>
+                    <Button Grid.Column="1" Content="+" Width="26" Click="AddAudioGroupButton_Click" ToolTip="New Audio Group"/>
+                </Grid>
+            </StackPanel>
+            <StackPanel Grid.Column="1" Margin="6,0,0,0">
+                <TextBlock Text="Export Directory:" FontWeight="SemiBold"/>
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0" x:Name="ExportDirectoryBox" Margin="0,0,4,0" TextChanged="ExportDirectoryBox_TextChanged"/>
+                    <Button Grid.Column="1" Content="..." Width="26" Click="BrowseExportDirectoryButton_Click"/>
+                </Grid>
+            </StackPanel>
+        </Grid>
+    </StackPanel>
+    </ScrollViewer>
+</Window>

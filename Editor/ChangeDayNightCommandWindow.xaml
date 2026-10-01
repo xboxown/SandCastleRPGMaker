@@ -1,0 +1,21 @@
+<Window x:Class="SandcastleRpgMaker.Editor.ChangeDayNightCommandWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Change Day/Night" Height="220" Width="380" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+    <DockPanel Margin="12">
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
+            <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
+        </StackPanel>
+
+        <TextBlock DockPanel.Dock="Top" Text="Lighting period:" FontWeight="Bold" Margin="0,0,0,4"/>
+        <ComboBox x:Name="PeriodCombo" DockPanel.Dock="Top" Margin="0,0,0,10">
+            <ComboBoxItem Content="Morning (bright daylight)"/>
+            <ComboBoxItem Content="Afternoon (dusk / torch-lit)"/>
+            <ComboBoxItem Content="Evening (dark night)"/>
+        </ComboBox>
+
+        <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.7" FontSize="11"
+                   Text="This is a lighting palette switch, not a real clock - it just picks which of the three Ultima 7-style lighting states is active. This is a global command, shared by every editor's event system, not specific to books - it applies the same real, live lighting tint wherever it fires: the real game world during actual play, and the Book Preview's own reading view."/>
+    </DockPanel>
+</Window>

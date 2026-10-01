@@ -1,0 +1,85 @@
+<UserControl x:Class="SandcastleRpgMaker.Editor.BookEventConditionsControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+        <StackPanel Margin="8">
+            <TextBlock Text="Conditions" FontWeight="Bold" Margin="0,0,0,6"/>
+
+            <TextBlock Text="Trigger Conditions Based" FontWeight="SemiBold"/>
+            <ComboBox x:Name="TriggerConditionBasedCombo" Margin="0,2,0,4" SelectionChanged="TriggerConditionBasedCombo_SelectionChanged"/>
+            <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                <TextBlock x:Name="SelectedItemLabel" Text="Select Item: (none)" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button x:Name="SelectItemButton" Content="..." Width="30" Click="SelectItemButton_Click"/>
+            </StackPanel>
+
+            <TextBlock Text="Condition Trigger Type (any combination)" FontWeight="SemiBold" Margin="0,0,0,4"/>
+
+            <CheckBox x:Name="InACondCheck" Content="In A Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"/>
+            <StackPanel x:Name="InACondPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <StackPanel x:Name="VariableConditionsList"/>
+                <Button x:Name="AddVariableConditionButton" Content="Add Condition" HorizontalAlignment="Left" Margin="0,4,0,0" Click="AddVariableConditionButton_Click"/>
+            </StackPanel>
+
+            <CheckBox x:Name="EventCompletedCheck" Content="Event Trigger Completed" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"/>
+            <StackPanel x:Name="EventCompletedPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <TextBlock Text="Event:"/>
+                <ComboBox x:Name="EventCompletedEventCombo" Margin="0,2,0,6" SelectionChanged="EventCompletedEventCombo_SelectionChanged"/>
+                <TextBlock Text="Expected state:"/>
+                <ComboBox x:Name="EventCompletedStateCombo" Margin="0,2,0,0" SelectionChanged="EventCompletedStateCombo_SelectionChanged"/>
+            </StackPanel>
+
+            <CheckBox x:Name="StatCheck" Content="Stat Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"/>
+            <StackPanel x:Name="StatPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <StackPanel x:Name="StatRowsList"/>
+            </StackPanel>
+
+            <CheckBox x:Name="CombineItemCheck" Content="Combine Item Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"/>
+            <StackPanel x:Name="CombineItemPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <StackPanel x:Name="CombineItemSlot1Row" Orientation="Horizontal" Margin="0,0,0,6"/>
+                <StackPanel x:Name="CombineItemSlot2Row" Orientation="Horizontal"/>
+            </StackPanel>
+
+            <CheckBox x:Name="DropToSelfCheck" Content="Drop To Self Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"
+                      ToolTip="Fires when the specific item selected below is dropped on top of this book."/>
+            <StackPanel x:Name="DropToSelfPanel" Orientation="Horizontal" Margin="18,0,0,10" Visibility="Collapsed">
+                <TextBlock x:Name="DropToSelfItemLabel" Text="Selected Item: (none)" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <Button x:Name="DropToSelfItemButton" Content="..." Width="30" Click="DropToSelfItemButton_Click"/>
+            </StackPanel>
+
+            <CheckBox x:Name="JoinedPartyCheck" Content="Joined Party Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"
+                      ToolTip="Despite the name, this is a proximity trigger - fires when the player and this book are physically close, not literal party membership."/>
+            <StackPanel x:Name="JoinedPartyPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <TextBlock Text="NPC:"/>
+                <ComboBox x:Name="JoinedPartyNpcCombo" Margin="0,2,0,0" SelectionChanged="JoinedPartyNpcCombo_SelectionChanged"/>
+            </StackPanel>
+
+            <CheckBox x:Name="DistanceCheck" Content="Distance Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"
+                      ToolTip="Fires when the player's distance to this book is within the value below. Slider is quick/approximate; type an exact value in the box for precision."/>
+            <StackPanel x:Name="DistancePanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <TextBlock Text="Distance:"/>
+                <Grid Margin="0,2,0,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <Slider Grid.Column="0" x:Name="DistanceSlider" Minimum="0" Maximum="4000000000" VerticalAlignment="Center" Margin="0,0,8,0" ValueChanged="DistanceSlider_ValueChanged"/>
+                    <TextBox Grid.Column="1" x:Name="DistanceValueBox" Width="90" TextChanged="DistanceValueBox_TextChanged"/>
+                </Grid>
+                <TextBlock Text="0.00 to 4,000,000,000 - the slider covers the full range so it's only precise for round numbers; type an exact value in the box for anything specific." TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,2,0,0"/>
+            </StackPanel>
+
+            <CheckBox x:Name="ComplexCheck" Content="Complex Condition" Margin="0,0,0,2" Checked="ConditionCheck_Changed" Unchecked="ConditionCheck_Changed"/>
+            <StackPanel x:Name="ComplexPanel" Margin="18,0,0,10" Visibility="Collapsed">
+                <StackPanel x:Name="ComplexGroupsList"/>
+                <Button x:Name="AddComplexConditionButton" Content="Add Complex Condition" HorizontalAlignment="Left" Margin="0,4,0,0" Click="AddComplexConditionButton_Click"/>
+            </StackPanel>
+
+            <TextBlock Text="Cycle Condition" FontWeight="SemiBold"/>
+            <ComboBox x:Name="CycleConditionCombo" Margin="0,2,0,4" SelectionChanged="CycleConditionCombo_SelectionChanged"/>
+            <StackPanel x:Name="CycleTimesPanel" Orientation="Horizontal" Visibility="Collapsed">
+                <TextBlock Text="Number of times:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <TextBox x:Name="CycleTimesBox" Width="60" TextChanged="CycleTimesBox_TextChanged"/>
+            </StackPanel>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

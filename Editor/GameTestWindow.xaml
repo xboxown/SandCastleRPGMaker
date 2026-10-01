@@ -1,0 +1,123 @@
+<Window x:Class="SandcastleRpgMaker.Editor.GameTestWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)" Height="700" Width="900"
+        WindowStartupLocation="CenterOwner" Background="Black">
+    <DockPanel>
+        <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem>
+                <TextBlock x:Name="StatusText" Text="Arrow keys to move."/>
+            </StatusBarItem>
+        </StatusBar>
+        <Grid>
+            <!--
+                The real 320x200 virtual camera pipeline, per spec:
+                WORLD -> 320x200 VIRTUAL CAMERA -> UPSCALE -> DISPLAY.
+                ViewportHost is the actual window area; ViewportBorder is
+                the fixed 320x200 "camera" window into the world, clipped
+                so only that much of GameCanvas is ever visible.
+                GameCanvas itself is NOT resized or rescaled - tiles and
+                sprites keep their real, intended pixel sizes; only WHICH
+                320x200 slice of it is visible changes, via CameraTransform.
+                ViewportScale (a LayoutTransform, so normal alignment/
+                centering works against the SCALED size) enlarges that
+                320x200 window to an integer multiple of the real window
+                size, recomputed in code-behind on resize, with nearest-
+                neighbor scaling so the pixel-art look is preserved rather
+                than blurred.
+            -->
+            <Grid x:Name="ViewportHost" Background="Black" ClipToBounds="True">
+                <Border x:Name="ViewportBorder" Width="320" Height="200" ClipToBounds="True" Background="Black"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                    <Border.LayoutTransform>
+                        <ScaleTransform x:Name="ViewportScale" ScaleX="1" ScaleY="1"/>
+                    </Border.LayoutTransform>
+                    <!--
+                        Real, confirmed bug fix (XLS0501/XDG0040/MC3089) - a Border can only ever
+                        have ONE child; GameCanvas and LightingOverlay were both declared as direct
+                        children of ViewportBorder, which is invalid XAML. A Grid here holds both,
+                        letting them stack by declaration order (LightingOverlay on top, since it's
+                        declared second) without changing anything else about how either behaves.
+                    -->
+                    <Grid>
+                        <Canvas x:Name="GameCanvas" Background="Black" Focusable="True" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                            <Canvas.RenderTransform>
+                                <TranslateTransform x:Name="CameraTransform" X="0" Y="0"/>
+                            </Canvas.RenderTransform>
+                            <!--
+                                Same identify mechanic as Book Preview's own NameLabel,
+                                per spec - single-click shows an object's name here for
+                                a couple seconds then it disappears, applying uniformly
+                                to every object in the world, not just books.
+                            -->
+                            <TextBlock x:Name="IdentifyLabel" Foreground="White" FontWeight="Bold" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"/>
+                        </Canvas>
+                        <!--
+                            Real, live lighting overlay, per spec ("Make sure all the commands are LIVE world wide") -
+                            the exact same real mechanism (and the exact same real, palette-derived colors) as Book
+                            Preview's own LightingOverlay, just covering the real game world here instead of an
+                            isolated preview. A sibling of GameCanvas within this same scaled/clipped ViewportBorder,
+                            so it tints the real visible world, scales and clips together with it, and never
+                            touches gumps or UI drawn outside this Border. IsHitTestVisible=False so it never
+                            blocks clicks.
+                        -->
+                        <Rectangle x:Name="LightingOverlay" Width="320" Height="200" IsHitTestVisible="False" Opacity="0" Panel.ZIndex="25"/>
+                    </Grid>
+                </Border>
+            </Grid>
+
+            <!--
+                A used book renders here - a real overlay within this same
+                window, not a separate popup Window with its own frame/
+                title bar/chrome. Per spec: "it is an actual sprite, not a
+                window or inside a window frame." Sits on top of the
+                camera viewport (later Grid children render above earlier
+                ones), centered over the visible play area.
+            -->
+            <!-- Panel.ZIndex set explicitly and high, per spec ("the book paper doll is behind the inventory paper doll") - BookOverlayBorder and PaperdollGumpsCanvas are both direct children of this SAME outer Grid, so a real ZIndex comparison genuinely applies here (unlike GameCanvas vs PaperdollGumpsCanvas, which are different panels a ZIndex can't compare at all) - this guarantees reading a book always renders on top of any open paperdoll gump, never behind it. -->
+            <Border x:Name="BookOverlayBorder" Panel.ZIndex="1000" Visibility="Collapsed" Background="Black" HorizontalAlignment="Center" VerticalAlignment="Center">
+                <Canvas x:Name="BookOverlayCanvas" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+            </Border>
+
+            <!--
+                Real paperdoll overlay, same principle as the book above:
+                an actual sprite composite rendered in-world, never a
+                separate desktop Window. Per spec, the slots themselves
+                are invisible at runtime - PaperdollOverlayCanvas holds
+                only the body image and whichever equipped items' own
+                real sprites, plus fully transparent (but still
+                hit-testable) click regions at each slot's position; there
+                is no visible box, border, or label drawn for a slot,
+                empty or occupied. PaperdollBackpackPanel is the one
+                genuinely separate visible UI element - a plain list of
+                carried items next to the paperdoll, matching how a real
+                inventory gump shows the backpack contents alongside it.
+            -->
+            <!--
+                Real multi-gump paperdoll system, confirmed from actual
+                documented Exult play: several paperdolls can be open at
+                once (yours and a party member's, say), each its own real
+                sprite composite, draggable by pressing the body itself,
+                never a single shared overlay that just swaps character.
+                Every gump Border is built and positioned in code, added
+                to this one plain container Canvas.
+
+                Deliberately NO Background here (not even "Transparent")
+                and no IsHitTestVisible override - this is the actual fix
+                for a real regression: a Background of "Transparent" is
+                still a real brush as far as WPF hit-testing is concerned,
+                so it silently intercepted every mouse event across the
+                WHOLE viewport, on top of GameCanvas, even with zero gumps
+                open - exactly why map interaction (identify/use/drag)
+                stopped working entirely. With no Background at all, this
+                empty Canvas itself is never hit-tested, while any gump
+                Border actually added as a child (which has its own real
+                Background) stays fully clickable/draggable exactly as
+                before - no dynamic toggling needed at all.
+            -->
+            <Canvas x:Name="PaperdollGumpsCanvas" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+
+            <!-- Real drag-visual layer removed - a ghost/clone approach was tried here to solve the Z-order request ("dragged item should render above a gump"), but it introduced real regressions (incorrect sizing during drag, risk of the real visual and its clone desyncing) worse than the cosmetic issue it fixed. Reverted to the simpler, proven approach: the one real dragged visual stays on GameCanvas throughout, which does mean it can render behind an open gump while being dragged over one - a known, accepted cosmetic limitation until a properly safe fix is found, rather than risk more data-integrity bugs. -->
+        </Grid>
+    </DockPanel>
+</Window>

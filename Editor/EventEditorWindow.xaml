@@ -1,0 +1,36 @@
+<Window x:Class="SandcastleRpgMaker.Editor.EventEditorWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SandcastleRpgMaker.Editor"
+        Title="Map Event" Height="700" Width="1050"
+        WindowStartupLocation="CenterOwner">
+    <DockPanel Margin="10">
+
+        <StackPanel DockPanel.Dock="Top" Margin="0,0,0,10">
+            <TextBlock Text="Event name" FontWeight="Bold"/>
+            <TextBox x:Name="NameBox" Margin="0,2,0,0" Width="300" HorizontalAlignment="Left"/>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click"/>
+            <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click"/>
+        </StackPanel>
+
+        <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+            <Button x:Name="EventDebugButton" Content="Debug" Padding="10,4" Click="EventDebugButton_Click"/>
+            <TextBlock Text="Evaluates this page's conditions against a simulated scenario, then (if they pass) lets you step through its commands one at a time - a real command executes for real when you step onto it."
+                       VerticalAlignment="Center" Margin="10,0,0,0" Opacity="0.7" FontSize="11"/>
+        </StackPanel>
+
+        <Grid>
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="260"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="0,0,1,0">
+                <local:BookEventConditionsControl x:Name="ConditionsControl"/>
+            </Border>
+            <ContentControl x:Name="EventEnginePlaceholder" Grid.Column="1"/>
+        </Grid>
+    </DockPanel>
+</Window>

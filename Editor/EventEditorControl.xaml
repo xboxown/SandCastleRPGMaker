@@ -1,0 +1,33 @@
+<UserControl x:Class="SandcastleRpgMaker.Editor.EventEditorControl"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <DockPanel>
+        <ToolBar DockPanel.Dock="Top">
+            <Button x:Name="NewPageButton" Content="New Event Page" Click="NewPageButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="CopyPageButton" Content="Copy Event Page" Click="CopyPageButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="PastePageButton" Content="Paste Event Page" Click="PastePageButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="DeletePageButton" Content="Delete Event Page" Click="DeletePageButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="ClearPageButton" Content="Clear Event Page" Click="ClearPageButton_Click" Padding="6,2" Margin="2"/>
+        </ToolBar>
+
+        <TabControl x:Name="PageTabs" DockPanel.Dock="Top" Height="26" SelectionChanged="PageTabs_SelectionChanged"/>
+
+        <ToolBar DockPanel.Dock="Top">
+            <Button x:Name="AddCommandButton" Content="Add Command..." Click="AddCommandButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="DeleteCommandButton" Content="Delete Command" Click="DeleteCommandButton_Click" Padding="6,2" Margin="2"/>
+            <Separator/>
+            <ToggleButton x:Name="EditAsTextToggle" Content="Edit As Text" Click="EditAsTextToggle_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="CompileButton" Content="Compile / Validate" Click="CompileButton_Click" Padding="6,2" Margin="2" IsEnabled="False"/>
+        </ToolBar>
+
+        <TextBlock DockPanel.Dock="Top" Text="Contents" FontWeight="Bold" Margin="4,4,4,2"/>
+
+        <Grid>
+            <ListBox x:Name="ContentsListBox" x:FieldModifier="private" FontFamily="Consolas"
+                     MouseDoubleClick="ContentsListBox_MouseDoubleClick"/>
+            <RichTextBox x:Name="ScriptTextBox" x:FieldModifier="private" FontFamily="Consolas" AcceptsReturn="True"
+                     AcceptsTab="True" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto"
+                     Visibility="Collapsed" TextChanged="ScriptTextBox_TextChanged"/>
+        </Grid>
+    </DockPanel>
+</UserControl>
