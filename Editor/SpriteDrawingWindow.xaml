@@ -44,15 +44,18 @@
                     <ToggleButton x:Name="EraserToolButton" Width="36" Height="36" Margin="2" Click="EraserToolButton_Click" ToolTip="Eraser">
                         <Path Data="M3,15 L11,7 L19,15 L13,21 L7,21 Z M9,9 L17,17" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
                     </ToggleButton>
-                    <ToggleButton x:Name="ColorRemoveToolButton" Width="36" Height="36" Margin="2" Click="ColorRemoveToolButton_Click" ToolTip="Color Remove (removes all pixels of the clicked color)">
+                    <ToggleButton x:Name="ColorRemoveToolButton" Width="36" Height="36" Margin="2" Click="ColorRemoveToolButton_Click" ToolTip="Magic Transparency (click a pixel: every pixel of that exact color, anywhere in the image, becomes transparent)">
                         <Path Data="M4,4 L20,20 M4,20 L20,4" Stroke="Red" StrokeThickness="2" Width="20" Height="20" Stretch="Uniform"/>
                     </ToggleButton>
                     <ToggleButton x:Name="ColorReplaceToolButton" Width="36" Height="36" Margin="2" Click="ColorReplaceToolButton_Click" ToolTip="Color Replace (replaces all pixels of the clicked color)">
                         <Path Data="M2,12 L10,12 M6,8 L10,12 L6,16 M22,12 L14,12 M18,8 L14,12 L18,16" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
                     </ToggleButton>
 
-                    <ToggleButton x:Name="BucketToolButton" Width="36" Height="36" Margin="2" Click="BucketToolButton_Click" ToolTip="Bucket Fill">
+                    <ToggleButton x:Name="BucketToolButton" Width="36" Height="36" Margin="2" Click="BucketToolButton_Click" ToolTip="Color Fill (bucket: fills the connected area you click with the current color)">
                         <Path Data="M2,10 L12,2 L22,10 L12,18 Z M12,18 L12,22 M6,10 L18,10" Stroke="Black" StrokeThickness="1.5" Width="20" Height="20" Stretch="Uniform"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="TransparencyFillToolButton" Width="36" Height="36" Margin="2" Click="TransparencyFillToolButton_Click" ToolTip="Transparency Fill (bucket: makes the connected area you click transparent)">
+                        <Path Data="M2,10 L12,2 L22,10 L12,18 Z M12,18 L12,22 M6,10 L18,10" Stroke="Gray" StrokeThickness="1.5" StrokeDashArray="1.5,1" Width="20" Height="20" Stretch="Uniform"/>
                     </ToggleButton>
                     <ToggleButton x:Name="LineToolButton" Width="36" Height="36" Margin="2" Click="LineToolButton_Click" ToolTip="Line">
                         <Path Data="M2,22 L22,2" Stroke="Black" StrokeThickness="2" Width="20" Height="20" Stretch="Uniform"/>

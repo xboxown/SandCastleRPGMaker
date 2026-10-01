@@ -23,7 +23,7 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 public partial class SpriteDrawingWindow : Window
 {
-    private enum Tool { Pencil, Eraser, Eyedropper, Bucket, Line, Rectangle, Ellipse, Select, ColorRemove, ColorReplace, Polygon, Arc, Text, MagicWand, Pan }
+    private enum Tool { Pencil, Eraser, Eyedropper, Bucket, TransparencyFill, Line, Rectangle, Ellipse, Select, ColorRemove, ColorReplace, Polygon, Arc, Text, MagicWand, Pan }
 
     private readonly SpriteEntry? _sprite;
     private readonly SpriteFrame _frame;
@@ -376,6 +376,7 @@ public partial class SpriteDrawingWindow : Window
         PencilToolButton.IsChecked = tool == Tool.Pencil;
         EraserToolButton.IsChecked = tool == Tool.Eraser;
         BucketToolButton.IsChecked = tool == Tool.Bucket;
+        TransparencyFillToolButton.IsChecked = tool == Tool.TransparencyFill;
         LineToolButton.IsChecked = tool == Tool.Line;
         RectangleToolButton.IsChecked = tool == Tool.Rectangle;
         EllipseToolButton.IsChecked = tool == Tool.Ellipse;
@@ -397,6 +398,7 @@ public partial class SpriteDrawingWindow : Window
     private void EraserToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Eraser);
     private void EyedropperToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Eyedropper);
     private void BucketToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Bucket);
+    private void TransparencyFillToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.TransparencyFill);
     private void LineToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Line);
     private void RectangleToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Rectangle);
     private void EllipseToolButton_Click(object sender, RoutedEventArgs e) => SetTool(Tool.Ellipse);
@@ -442,6 +444,12 @@ public partial class SpriteDrawingWindow : Window
             case Tool.Bucket:
                 PushUndoState();
                 FloodFill(px, py, _currentColor);
+                return;
+
+            case Tool.TransparencyFill:
+                // Same connected flood fill as the bucket, filling with fully transparent pixels (0,0,0,0 - the same "transparent" Magic Transparency and the Eraser leave behind).
+                PushUndoState();
+                FloodFill(px, py, Color.FromArgb(0, 0, 0, 0));
                 return;
 
             case Tool.Line:
@@ -813,7 +821,7 @@ public partial class SpriteDrawingWindow : Window
         return Color.FromArgb(pixels[3], pixels[2], pixels[1], pixels[0]);
     }
 
-    /// <summary>Turns every pixel matching the given color transparent, anywhere in the image - distinct from the Eraser, which only affects pixels under the cursor.</summary>
+    /// <summary>Magic Transparency: turns every pixel matching the given color transparent, anywhere in the image - distinct from the Eraser, which only affects pixels under the cursor, and from Transparency Fill, which only affects the connected area clicked.</summary>
     private void RemoveAllOfColor(Color target)
     {
         var pixels = ReadAllPixels(out int stride);
