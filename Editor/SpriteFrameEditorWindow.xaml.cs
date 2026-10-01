@@ -49,13 +49,6 @@ public partial class SpriteFrameEditorWindow : Window
         OriginYBox.Text = _sprite.OriginY.ToString();
         OriginAnchorCombo.SelectedItem = AnchorOptions.Contains(_sprite.OriginAnchor) ? _sprite.OriginAnchor : "Custom";
 
-        InitMaskUi(_sprite.CollisionMask, CollisionModeCombo, CollisionTypeCombo, CollisionTypeDescText, ToleranceSlider, ToleranceValueText, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        InitMaskUi(_sprite.LegsMask, LegsCollisionModeCombo, LegsCollisionTypeCombo, LegsCollisionTypeDescText, LegsToleranceSlider, LegsToleranceValueText, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        SplitLegsBodyCheck.IsChecked = _sprite.SplitLegsBodyMask;
-        UpdateSplitLegsBodyVisibility();
-        UpdateCollisionBoxEnabledState();
-        UpdateLegsCollisionBoxEnabledState();
-
         NineSliceActiveCheck.IsChecked = _sprite.NineSlice.Enabled;
         SliceLeftBox.Text = _sprite.NineSlice.Left.ToString();
         SliceRightBox.Text = _sprite.NineSlice.Right.ToString();
@@ -69,15 +62,6 @@ public partial class SpriteFrameEditorWindow : Window
 
         RebuildFrameStrip();
         UpdatePreview();
-
-        // A freshly-created sprite (or one whose art changed since it was
-        // last saved) shouldn't sit with a degenerate zero-size Automatic
-        // box until the user happens to touch a combo - recompute once up
-        // front, same as any other Automatic-mode refresh.
-        if (_sprite.CollisionMask.Mode == CollisionMaskMode.Automatic && _sprite.CollisionMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.CollisionMask, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        if (_sprite.SplitLegsBodyMask && _sprite.LegsMask.Mode == CollisionMaskMode.Automatic && _sprite.LegsMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
 
         // Layers panel now lives inside SpriteDrawingWindow itself (opened when
         // a frame is double-clicked) rather than here in the frame editor.
@@ -95,22 +79,6 @@ public partial class SpriteFrameEditorWindow : Window
         };
 
         Closing += (_, _) => _playbackTimer.Stop();
-    }
-
-    private static void InitMaskUi(CollisionMaskSettings mask, ComboBox modeCombo, ComboBox typeCombo, TextBlock descText,
-        Slider toleranceSlider, TextBlock toleranceText, TextBox leftBox, TextBox rightBox, TextBox topBox, TextBox bottomBox)
-    {
-        modeCombo.ItemsSource = Enum.GetValues<CollisionMaskMode>();
-        typeCombo.ItemsSource = Enum.GetValues<CollisionMaskType>();
-        modeCombo.SelectedItem = mask.Mode;
-        typeCombo.SelectedItem = mask.Type;
-        descText.Text = GetCollisionTypeDescription(mask.Type);
-        toleranceSlider.Value = mask.Tolerance;
-        toleranceText.Text = mask.Tolerance.ToString();
-        leftBox.Text = mask.Left.ToString();
-        rightBox.Text = mask.Right.ToString();
-        topBox.Text = mask.Top.ToString();
-        bottomBox.Text = mask.Bottom.ToString();
     }
 
     private static BitmapImage? LoadBitmap(string path) => LoadBitmap(path, out _);
@@ -300,7 +268,7 @@ public partial class SpriteFrameEditorWindow : Window
     /// OverlayCanvas is supposed to be exactly the same size as PreviewImage
     /// (they're siblings in the same Grid cell, both defaulting to Stretch)
     /// - but rather than trust that implicit layout agreement to always hold,
-    /// force it explicitly here. Every mask/origin/nine-slice coordinate is
+    /// force it explicitly here. Every origin/nine-slice coordinate is
     /// computed relative to PreviewImage's own ActualWidth/ActualHeight; if
     /// OverlayCanvas ever ends up a different actual size than that, every
     /// one of those coordinates is drawn in the wrong place relative to what
@@ -450,16 +418,14 @@ public partial class SpriteFrameEditorWindow : Window
     }
 
     /// <summary>
-    /// An anchored Origin (everything except "Custom") and an Automatic
-    /// collision mask are both computed FROM the frame's pixel size at the
-    /// moment you set them - not kept as a live formula. If the art later
-    /// changes shape (canvas resized, a bigger layer added, redrawn taller,
-    /// etc.) those stored values go stale: Top Right origin stays wherever
-    /// the old width put it, and an Automatic mask stays sized to the old
-    /// bounds, leaving part of the new art uncovered. Re-derive both here,
-    /// right after any edit that could have changed the current frame's
-    /// size, so they track the art instead of freezing at whatever it
-    /// looked like when they were last touched.
+    /// An anchored Origin (everything except "Custom") is computed FROM
+    /// the frame's pixel size at the moment you set it - not kept as a
+    /// live formula. If the art later changes shape (canvas resized, a
+    /// bigger layer added, redrawn taller, etc.) the stored value goes
+    /// stale: Top Right origin stays wherever the old width put it.
+    /// Re-derive it here, right after any edit that could have changed
+    /// the current frame's size, so it tracks the art instead of
+    /// freezing at whatever it looked like when it was last touched.
     /// </summary>
     private void RefreshDerivedGeometryForCurrentFrame()
     {
@@ -475,11 +441,6 @@ public partial class SpriteFrameEditorWindow : Window
             OriginYBox.Text = origin.Y.ToString();
             _suppress = false;
         }
-
-        if (_sprite.CollisionMask.Mode == CollisionMaskMode.Automatic && _sprite.CollisionMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.CollisionMask, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        if (_sprite.SplitLegsBodyMask && _sprite.LegsMask.Mode == CollisionMaskMode.Automatic && _sprite.LegsMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
 
         RedrawOverlay();
     }
@@ -899,16 +860,8 @@ public partial class SpriteFrameEditorWindow : Window
     private void RedrawOverlay()
     {
         OverlayCanvas.Children.Clear();
-        if (PreviewImage.Source is not BitmapSource bmp)
-        {
-            OverlayDebugText.Text = "[diag] PreviewImage.Source is null - nothing to overlay";
-            return;
-        }
+        if (PreviewImage.Source is not BitmapSource bmp) return;
         var rendered = GetRenderedImageRect();
-        OverlayDebugText.Text = $"[diag] container={PreviewImage.ActualWidth:0.#}x{PreviewImage.ActualHeight:0.#} " +
-            $"img={bmp.PixelWidth}x{bmp.PixelHeight} " +
-            $"rendered=X:{rendered.X:0.#} Y:{rendered.Y:0.#} W:{rendered.Width:0.#} H:{rendered.Height:0.#} " +
-            $"mask={_sprite.CollisionMask.Left}/{_sprite.CollisionMask.Right}/{_sprite.CollisionMask.Top}/{_sprite.CollisionMask.Bottom}";
         if (rendered.IsEmpty) return;
 
         // Origin marker - a small diamond, matching the GameMaker reference.
@@ -967,456 +920,11 @@ public partial class SpriteFrameEditorWindow : Window
             AddOverlayLine(PixelToDisplay(rendered, bmp, 0, slice.Top), PixelToDisplay(rendered, bmp, bmp.PixelWidth, slice.Top), Brushes.Magenta);
             AddOverlayLine(PixelToDisplay(rendered, bmp, 0, bmp.PixelHeight - slice.Bottom), PixelToDisplay(rendered, bmp, bmp.PixelWidth, bmp.PixelHeight - slice.Bottom), Brushes.Magenta);
         }
-
-        // Collision mask(s) - darkened excluded area (matching the GameMaker reference).
-        // The shape drawn/darkened now actually follows Type (Rectangle/Ellipse/
-        // Diamond/Precise) instead of always being a rectangle - that mismatch,
-        // plus CollisionTypeCombo never triggering a redraw at all, was the bug.
-        // Body always draws; Legs only draws when the sprite has Split enabled -
-        // same drawing code, different tint so the two are easy to tell apart.
-        DrawMaskOverlay(_sprite.CollisionMask, rendered, bmp, Color.FromArgb(120, 0, 0, 0), Brushes.LimeGreen,
-            MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-
-        if (_sprite.SplitLegsBodyMask)
-        {
-            DrawMaskOverlay(_sprite.LegsMask, rendered, bmp, Color.FromArgb(90, 0, 60, 160), Brushes.Cyan,
-                LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        }
-    }
-
-    /// <summary>
-    /// Draws one collision mask (Body or Legs - whichever is passed in) onto
-    /// the overlay: the darkened excluded area, the dashed outline, and (in
-    /// Manual mode) the four draggable corner handles that resize it. Both
-    /// masks share this exact code path - only the mask instance, dim/outline
-    /// colors, and which set of textboxes to sync are different.
-    /// </summary>
-    private void DrawMaskOverlay(CollisionMaskSettings mask, Rect rendered, BitmapSource bmp, Color dimColor, Brush outlineBrush,
-        TextBox leftBox, TextBox rightBox, TextBox topBox, TextBox bottomBox)
-    {
-        var dim = new SolidColorBrush(dimColor);
-
-        if (mask.Type == CollisionMaskType.Precise)
-        {
-            // No box, no handles - the mask is every non-transparent pixel,
-            // rebuilt pixel-for-pixel from the sprite's own alpha channel.
-            var preciseOverlay = BuildPreciseMaskOverlay(bmp, mask.Tolerance, dimColor);
-            if (preciseOverlay is not null)
-            {
-                var img = new System.Windows.Controls.Image
-                {
-                    Source = preciseOverlay,
-                    Width = rendered.Width,
-                    Height = rendered.Height,
-                    Stretch = Stretch.Fill,
-                    IsHitTestVisible = false
-                };
-                Canvas.SetLeft(img, rendered.X);
-                Canvas.SetTop(img, rendered.Y);
-                OverlayCanvas.Children.Add(img);
-            }
-            return;
-        }
-
-        var topLeft = PixelToDisplay(rendered, bmp, mask.Left, mask.Top);
-        var bottomRight = PixelToDisplay(rendered, bmp, mask.Right, mask.Bottom);
-        double boxLeft = topLeft.X, boxTop = topLeft.Y;
-        double boxWidth = Math.Max(0, bottomRight.X - topLeft.X), boxHeight = Math.Max(0, bottomRight.Y - topLeft.Y);
-        var box = new Rect(boxLeft, boxTop, boxWidth, boxHeight);
-
-        var shapeGeometry = BuildMaskShapeGeometry(mask.Type, box);
-        var darkenPath = new System.Windows.Shapes.Path
-        {
-            Data = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(rendered), shapeGeometry),
-            Fill = dim
-        };
-        OverlayCanvas.Children.Add(darkenPath);
-
-        var outlinePath = new System.Windows.Shapes.Path
-        {
-            Data = shapeGeometry,
-            Stroke = outlineBrush,
-            StrokeThickness = 1,
-            StrokeDashArray = new DoubleCollection { 3, 2 }
-        };
-        OverlayCanvas.Children.Add(outlinePath);
-
-        if (mask.Mode == CollisionMaskMode.Manual)
-        {
-            void OnBoxChanged(Rect newBox)
-            {
-                var newShape = BuildMaskShapeGeometry(mask.Type, newBox);
-                outlinePath.Data = newShape;
-                darkenPath.Data = new CombinedGeometry(GeometryCombineMode.Exclude, new RectangleGeometry(rendered), newShape);
-            }
-
-            AddCollisionHandle(mask, box, isLeft: true, isTop: true, OnBoxChanged, leftBox, rightBox, topBox, bottomBox);
-            AddCollisionHandle(mask, box, isLeft: false, isTop: true, OnBoxChanged, leftBox, rightBox, topBox, bottomBox);
-            AddCollisionHandle(mask, box, isLeft: true, isTop: false, OnBoxChanged, leftBox, rightBox, topBox, bottomBox);
-            AddCollisionHandle(mask, box, isLeft: false, isTop: false, OnBoxChanged, leftBox, rightBox, topBox, bottomBox);
-        }
-    }
-
-    /// <summary>Vector outline for the box-based mask types - used both as the visible dashed outline and (via CombinedGeometry.Exclude against the full image rect) as the darkened "outside the mask" area.</summary>
-    private static Geometry BuildMaskShapeGeometry(CollisionMaskType type, Rect box)
-    {
-        switch (type)
-        {
-            case CollisionMaskType.Ellipse:
-                return new EllipseGeometry(new Point(box.Left + box.Width / 2, box.Top + box.Height / 2), box.Width / 2, box.Height / 2);
-
-            case CollisionMaskType.Diamond:
-                var figure = new PathFigure { StartPoint = new Point(box.Left + box.Width / 2, box.Top), IsClosed = true };
-                figure.Segments.Add(new LineSegment(new Point(box.Right, box.Top + box.Height / 2), true));
-                figure.Segments.Add(new LineSegment(new Point(box.Left + box.Width / 2, box.Bottom), true));
-                figure.Segments.Add(new LineSegment(new Point(box.Left, box.Top + box.Height / 2), true));
-                var geometry = new PathGeometry();
-                geometry.Figures.Add(figure);
-                return geometry;
-
-            default: // Rectangle
-                return new RectangleGeometry(box);
-        }
-    }
-
-    /// <summary>Builds a same-size overlay bitmap for Type=Precise: every pixel at or below the alpha tolerance is painted with the dim color, every pixel above it is left fully transparent - so what's left uncovered is exactly the sprite's own non-transparent silhouette. More CPU than the box-based types since it walks every pixel on every redraw, which is exactly the trade-off the "Precise (more CPU)" label warns about.</summary>
-    private static BitmapSource? BuildPreciseMaskOverlay(BitmapSource bmp, int tolerance, Color dimColor)
-    {
-        var converted = new FormatConvertedBitmap(bmp, PixelFormats.Bgra32, null, 0);
-        int width = converted.PixelWidth, height = converted.PixelHeight;
-        if (width == 0 || height == 0) return null;
-        int stride = width * 4;
-        byte[] src = new byte[height * stride];
-        converted.CopyPixels(src, stride, 0);
-
-        byte[] outPixels = new byte[height * stride];
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                int i = y * stride + x * 4;
-                if (src[i + 3] <= tolerance)
-                {
-                    outPixels[i + 0] = dimColor.B;
-                    outPixels[i + 1] = dimColor.G;
-                    outPixels[i + 2] = dimColor.R;
-                    outPixels[i + 3] = dimColor.A;
-                }
-            }
-        }
-
-        var wb = new WriteableBitmap(width, height, bmp.DpiX > 0 ? bmp.DpiX : 96, bmp.DpiY > 0 ? bmp.DpiY : 96, PixelFormats.Bgra32, null);
-        wb.WritePixels(new Int32Rect(0, 0, width, height), outPixels, stride, 0);
-        wb.Freeze();
-        return wb;
-    }
-
-    private bool _draggingCollisionHandle;
-
-    /// <summary>
-    /// One draggable corner handle for the Manual collision box - shared by
-    /// all box-based mask types (Rectangle/Ellipse/Diamond all resize the
-    /// same underlying Left/Right/Top/Bottom box; only how that box is
-    /// drawn differs, via onBoxChanged). During the drag this only
-    /// repositions the handle itself and calls onBoxChanged to update the
-    /// existing outline/darken shapes in place - calling the full
-    /// RedrawOverlay() mid-drag would rebuild every overlay element
-    /// (including this handle) as brand-new objects and break the active
-    /// mouse capture, exactly like the origin marker bug fixed earlier. A
-    /// full redraw (updating the dark strips and the other three handles
-    /// too) happens once on release.
-    /// </summary>
-    private void AddCollisionHandle(CollisionMaskSettings mask, Rect initialBox, bool isLeft, bool isTop, Action<Rect> onBoxChanged,
-        TextBox leftBox, TextBox rightBox, TextBox topBox, TextBox bottomBox)
-    {
-        const double size = 8;
-        double displayX = isLeft ? initialBox.Left : initialBox.Right;
-        double displayY = isTop ? initialBox.Top : initialBox.Bottom;
-
-        var handle = new System.Windows.Shapes.Rectangle
-        {
-            Width = size,
-            Height = size,
-            Fill = Brushes.LimeGreen,
-            Stroke = Brushes.Black,
-            StrokeThickness = 1,
-            Cursor = Cursors.SizeNWSE
-        };
-        Canvas.SetLeft(handle, displayX - size / 2);
-        Canvas.SetTop(handle, displayY - size / 2);
-
-        handle.MouseLeftButtonDown += (_, args) =>
-        {
-            _draggingCollisionHandle = true;
-            handle.CaptureMouse();
-            args.Handled = true;
-        };
-        handle.MouseMove += (_, args) =>
-        {
-            if (!_draggingCollisionHandle || PreviewImage.Source is not BitmapSource currentBmp) return;
-            var rendered = GetRenderedImageRect();
-            if (rendered.IsEmpty) return;
-
-            var pos = args.GetPosition(OverlayCanvas);
-            var pixelPos = DisplayToPixel(rendered, currentBmp, pos.X, pos.Y);
-            int px = (int)Math.Round(Math.Clamp(pixelPos.X, 0, currentBmp.PixelWidth));
-            int py = (int)Math.Round(Math.Clamp(pixelPos.Y, 0, currentBmp.PixelHeight));
-
-            if (isLeft) mask.Left = Math.Min(px, mask.Right);
-            else mask.Right = Math.Max(px, mask.Left);
-            if (isTop) mask.Top = Math.Min(py, mask.Bottom);
-            else mask.Bottom = Math.Max(py, mask.Top);
-
-            _suppress = true;
-            leftBox.Text = mask.Left.ToString();
-            rightBox.Text = mask.Right.ToString();
-            topBox.Text = mask.Top.ToString();
-            bottomBox.Text = mask.Bottom.ToString();
-            _suppress = false;
-
-            // In-place update only - the new corner position, the shared shape (rectangle/ellipse/diamond outline + darken fill), and this handle.
-            var newTopLeft = PixelToDisplay(rendered, currentBmp, mask.Left, mask.Top);
-            var newBottomRight = PixelToDisplay(rendered, currentBmp, mask.Right, mask.Bottom);
-            var newBox = new Rect(newTopLeft, newBottomRight);
-            onBoxChanged(newBox);
-            Canvas.SetLeft(handle, (isLeft ? newTopLeft.X : newBottomRight.X) - size / 2);
-            Canvas.SetTop(handle, (isTop ? newTopLeft.Y : newBottomRight.Y) - size / 2);
-        };
-        handle.MouseLeftButtonUp += (_, _) =>
-        {
-            _draggingCollisionHandle = false;
-            handle.ReleaseMouseCapture();
-            RedrawOverlay(); // now safe - full rebuild once the drag has ended
-        };
-
-        OverlayCanvas.Children.Add(handle);
     }
 
     private void AddOverlayLine(Point a, Point b, Brush brush)
     {
         OverlayCanvas.Children.Add(new Line { X1 = a.X, Y1 = a.Y, X2 = b.X, Y2 = b.Y, Stroke = brush, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 4, 2 } });
-    }
-
-    // ---------- Collision Mask ----------
-
-    private static void UpdateMaskBoxEnabledState(CollisionMaskSettings mask, ComboBox modeCombo, TextBox leftBox, TextBox rightBox, TextBox topBox, TextBox bottomBox)
-    {
-        // Precise has no Left/Right/Top/Bottom box at all, and Mode
-        // (Automatic vs Manual) doesn't apply to it either - it's derived
-        // fresh from the sprite's own alpha channel every redraw, always.
-        // Leaving Mode selectable while Precise is picked was the bug:
-        // it looked like switching to Manual should let you drag
-        // something, but there was never anything for it to control.
-        bool isPrecise = mask.Type == CollisionMaskType.Precise;
-        modeCombo.IsEnabled = !isPrecise;
-        bool manual = mask.Mode == CollisionMaskMode.Manual && !isPrecise;
-        leftBox.IsEnabled = manual;
-        rightBox.IsEnabled = manual;
-        topBox.IsEnabled = manual;
-        bottomBox.IsEnabled = manual;
-    }
-
-    private void UpdateCollisionBoxEnabledState() =>
-        UpdateMaskBoxEnabledState(_sprite.CollisionMask, CollisionModeCombo, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-
-    private void UpdateLegsCollisionBoxEnabledState() =>
-        UpdateMaskBoxEnabledState(_sprite.LegsMask, LegsCollisionModeCombo, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-
-    private static string GetCollisionTypeDescription(CollisionMaskType type) => type switch
-    {
-        CollisionMaskType.Rectangle => "An axis-aligned box - cheapest, good default for most sprites.",
-        CollisionMaskType.Ellipse => "An oval inscribed in the box - fits round objects more tightly.",
-        CollisionMaskType.Diamond => "A rotated square inscribed in the box - fits top-down diagonal shapes.",
-        CollisionMaskType.Precise => "Precise (more CPU): covers all the non-transparent part of the sprite. Mode and the box below don't apply - there's nothing to drag, it's always exactly the sprite's own pixels.",
-        _ => string.Empty
-    };
-
-
-    // ---- Body mask (the original single mask - always present) ----
-
-    private void CollisionModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppress || CollisionModeCombo.SelectedItem is not CollisionMaskMode mode) return;
-        _sprite.CollisionMask.Mode = mode;
-        UpdateCollisionBoxEnabledState();
-
-        if (mode == CollisionMaskMode.Automatic && _sprite.CollisionMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.CollisionMask, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void CollisionTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppress || CollisionTypeCombo.SelectedItem is not CollisionMaskType type) return;
-        _sprite.CollisionMask.Type = type;
-        CollisionTypeDescText.Text = GetCollisionTypeDescription(type);
-        UpdateCollisionBoxEnabledState();
-
-        // This call was missing entirely before - selecting a new Type
-        // updated the stored value but the preview never redrew, so the
-        // mask always kept rendering as whatever shape happened to be on
-        // screen already (always a plain rectangle, since that was the
-        // only shape RedrawOverlay knew how to draw).
-        if (type != CollisionMaskType.Precise && _sprite.CollisionMask.Mode == CollisionMaskMode.Automatic)
-            RecomputeAutomaticBounds(_sprite.CollisionMask, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void ToleranceSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_suppress) return;
-        _sprite.CollisionMask.Tolerance = (int)ToleranceSlider.Value;
-        ToleranceValueText.Text = _sprite.CollisionMask.Tolerance.ToString();
-        if (_sprite.CollisionMask.Mode == CollisionMaskMode.Automatic && _sprite.CollisionMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.CollisionMask, MaskLeftBox, MaskRightBox, MaskTopBox, MaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void MaskBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_suppress) return;
-        if (int.TryParse(MaskLeftBox.Text, out int l)) _sprite.CollisionMask.Left = l;
-        if (int.TryParse(MaskRightBox.Text, out int r)) _sprite.CollisionMask.Right = r;
-        if (int.TryParse(MaskTopBox.Text, out int t)) _sprite.CollisionMask.Top = t;
-        if (int.TryParse(MaskBottomBox.Text, out int b)) _sprite.CollisionMask.Bottom = b;
-        RedrawOverlay();
-    }
-
-    // ---- Legs mask (movement-only blocking; only visible/used when SplitLegsBodyMask is on) ----
-
-    private void LegsCollisionModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppress || LegsCollisionModeCombo.SelectedItem is not CollisionMaskMode mode) return;
-        _sprite.LegsMask.Mode = mode;
-        UpdateLegsCollisionBoxEnabledState();
-
-        if (mode == CollisionMaskMode.Automatic && _sprite.LegsMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void LegsCollisionTypeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (_suppress || LegsCollisionTypeCombo.SelectedItem is not CollisionMaskType type) return;
-        _sprite.LegsMask.Type = type;
-        LegsCollisionTypeDescText.Text = GetCollisionTypeDescription(type);
-        UpdateLegsCollisionBoxEnabledState();
-
-        if (type != CollisionMaskType.Precise && _sprite.LegsMask.Mode == CollisionMaskMode.Automatic)
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void LegsToleranceSlider_ValueChanged(object sender, RoutedPropertyChangedEventArgs<double> e)
-    {
-        if (_suppress) return;
-        _sprite.LegsMask.Tolerance = (int)LegsToleranceSlider.Value;
-        LegsToleranceValueText.Text = _sprite.LegsMask.Tolerance.ToString();
-        if (_sprite.LegsMask.Mode == CollisionMaskMode.Automatic && _sprite.LegsMask.Type != CollisionMaskType.Precise)
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        RedrawOverlay();
-    }
-
-    private void LegsMaskBox_TextChanged(object sender, TextChangedEventArgs e)
-    {
-        if (_suppress) return;
-        if (int.TryParse(LegsMaskLeftBox.Text, out int l)) _sprite.LegsMask.Left = l;
-        if (int.TryParse(LegsMaskRightBox.Text, out int r)) _sprite.LegsMask.Right = r;
-        if (int.TryParse(LegsMaskTopBox.Text, out int t)) _sprite.LegsMask.Top = t;
-        if (int.TryParse(LegsMaskBottomBox.Text, out int b)) _sprite.LegsMask.Bottom = b;
-        RedrawOverlay();
-    }
-
-    // ---- Split toggle ----
-
-    private void SplitLegsBodyCheck_Changed(object sender, RoutedEventArgs e)
-    {
-        if (_suppress) return;
-        _sprite.SplitLegsBodyMask = SplitLegsBodyCheck.IsChecked == true;
-
-        if (_sprite.SplitLegsBodyMask && _sprite.LegsMask.Right == 0 && _sprite.LegsMask.Bottom == 0)
-        {
-            // First time Split is turned on for this sprite - the Legs mask
-            // has never been touched, so seed it the same way Body starts
-            // out (Automatic, full canvas) rather than showing a zero-size
-            // box. The user then shrinks it down to the feet region.
-            RecomputeAutomaticBounds(_sprite.LegsMask, LegsMaskLeftBox, LegsMaskRightBox, LegsMaskTopBox, LegsMaskBottomBox);
-        }
-
-        UpdateSplitLegsBodyVisibility();
-        RedrawOverlay();
-    }
-
-    private void UpdateSplitLegsBodyVisibility()
-    {
-        bool split = _sprite.SplitLegsBodyMask;
-        LegsMaskPanel.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
-        BodyMaskLabel.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
-    }
-
-    /// <summary>
-    /// Left/Right/Top/Bottom here are the ABSOLUTE pixel coordinates where the
-    /// collision box starts/ends - distinct from Nine Slice below, whose
-    /// same-named fields are margin DISTANCES inward from each edge.
-    /// Computed from the tightest box around non-transparent pixels, since
-    /// that's what "Automatic" means in GameMaker - but falls back to the
-    /// full canvas when the frame has no non-transparent pixels at all (a
-    /// brand-new, not-yet-drawn sprite), instead of leaving the box
-    /// collapsed at its zero-size default. Shared by both Body and Legs.
-    /// </summary>
-    private void RecomputeAutomaticBounds(CollisionMaskSettings mask, TextBox leftBox, TextBox rightBox, TextBox topBox, TextBox bottomBox)
-    {
-        if (PreviewImage.Source is not BitmapSource bmp) return;
-        var bounds = ComputeAlphaBoundingBox(bmp, mask.Tolerance);
-        var (left, right, top, bottom) = bounds ?? (0, bmp.PixelWidth, 0, bmp.PixelHeight);
-
-        mask.Left = left;
-        mask.Right = right;
-        mask.Top = top;
-        mask.Bottom = bottom;
-
-        _suppress = true;
-        leftBox.Text = left.ToString();
-        rightBox.Text = right.ToString();
-        topBox.Text = top.ToString();
-        bottomBox.Text = bottom.ToString();
-        _suppress = false;
-    }
-
-    private static (int Left, int Right, int Top, int Bottom)? ComputeAlphaBoundingBox(BitmapSource bmp, int tolerance)
-    {
-        var converted = new FormatConvertedBitmap(bmp, PixelFormats.Bgra32, null, 0);
-        int width = converted.PixelWidth, height = converted.PixelHeight;
-        if (width == 0 || height == 0) return null;
-        int stride = width * 4;
-        byte[] pixels = new byte[height * stride];
-        converted.CopyPixels(pixels, stride, 0);
-
-        int minX = width, maxX = -1, minY = height, maxY = -1;
-        for (int y = 0; y < height; y++)
-        {
-            for (int x = 0; x < width; x++)
-            {
-                byte alpha = pixels[y * stride + x * 4 + 3];
-                if (alpha > tolerance)
-                {
-                    if (x < minX) minX = x;
-                    if (x > maxX) maxX = x;
-                    if (y < minY) minY = y;
-                    if (y > maxY) maxY = y;
-                }
-            }
-        }
-        // maxX/maxY above are the last INCLUSIVE pixel with content, but
-        // Right/Bottom are used everywhere else in this file as EXCLUSIVE
-        // bounds - width = Right - Left, and dragging a handle lets Right
-        // go all the way up to PixelWidth itself (the canvas's true edge),
-        // not "the last pixel index". Returning maxX/maxY directly made the
-        // computed box exactly one pixel short on the right and bottom
-        // every time, letting the true last row/column of art poke out
-        // past the mask. +1 converts to the same exclusive convention the
-        // rest of the box already uses.
-        return maxX < 0 ? null : (minX, maxX + 1, minY, maxY + 1);
     }
 
     // ---------- Nine Slice ----------

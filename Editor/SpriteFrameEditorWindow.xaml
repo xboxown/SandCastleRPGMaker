@@ -41,104 +41,6 @@
             </StackPanel>
             <ComboBox x:Name="OriginAnchorCombo" Margin="0,0,0,10" SelectionChanged="OriginAnchorCombo_SelectionChanged"/>
 
-            <Expander x:Name="CollisionMaskExpander" Header="Collision Mask" Margin="0,0,0,8" Expanded="Expander_Toggled" Collapsed="Expander_Toggled">
-                <StackPanel Margin="4,6,0,4">
-                    <CheckBox x:Name="SplitLegsBodyCheck" Content="Split Legs / Body Mask" Margin="0,0,0,8" Checked="SplitLegsBodyCheck_Changed" Unchecked="SplitLegsBodyCheck_Changed"
-                              ToolTip="Off (default): one mask used for everything, same as before. On: Body below is used only for combat/trap/damage; a separate Legs mask (movement only, blocks walls/furniture, never affects fighting) appears underneath."/>
-                    <TextBlock x:Name="BodyMaskLabel" Text="Body" FontWeight="Bold" Margin="0,0,0,4" Visibility="Collapsed"/>
-
-                    <TextBlock Text="Mode" FontWeight="SemiBold"/>
-                    <ComboBox x:Name="CollisionModeCombo" Margin="0,2,0,8" SelectionChanged="CollisionModeCombo_SelectionChanged"/>
-
-                    <TextBlock Text="Type" FontWeight="SemiBold"/>
-                    <ComboBox x:Name="CollisionTypeCombo" Margin="0,2,0,4" SelectionChanged="CollisionTypeCombo_SelectionChanged"/>
-                    <TextBlock x:Name="CollisionTypeDescText" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
-
-                    <TextBlock Text="Tolerance" FontWeight="SemiBold"/>
-                    <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
-                        <Slider x:Name="ToleranceSlider" Width="120" Minimum="0" Maximum="255" ValueChanged="ToleranceSlider_ValueChanged"/>
-                        <TextBlock x:Name="ToleranceValueText" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                    </StackPanel>
-
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                            <TextBlock Text="Left"/>
-                            <TextBox x:Name="MaskLeftBox" TextChanged="MaskBox_TextChanged"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Right"/>
-                            <TextBox x:Name="MaskRightBox" TextChanged="MaskBox_TextChanged"/>
-                        </StackPanel>
-                    </Grid>
-                    <Grid Margin="0,6,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="*"/>
-                        </Grid.ColumnDefinitions>
-                        <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                            <TextBlock Text="Top"/>
-                            <TextBox x:Name="MaskTopBox" TextChanged="MaskBox_TextChanged"/>
-                        </StackPanel>
-                        <StackPanel Grid.Column="1">
-                            <TextBlock Text="Bottom"/>
-                            <TextBox x:Name="MaskBottomBox" TextChanged="MaskBox_TextChanged"/>
-                        </StackPanel>
-                    </Grid>
-
-                    <StackPanel x:Name="LegsMaskPanel" Visibility="Collapsed" Margin="0,14,0,0">
-                        <Separator Margin="0,0,0,10"/>
-                        <TextBlock Text="Legs" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <TextBlock Text="Movement blocking only (walls/furniture/doors) - never affects combat, traps, or damage." TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
-
-                        <TextBlock Text="Mode" FontWeight="SemiBold"/>
-                        <ComboBox x:Name="LegsCollisionModeCombo" Margin="0,2,0,8" SelectionChanged="LegsCollisionModeCombo_SelectionChanged"/>
-
-                        <TextBlock Text="Type" FontWeight="SemiBold"/>
-                        <ComboBox x:Name="LegsCollisionTypeCombo" Margin="0,2,0,4" SelectionChanged="LegsCollisionTypeCombo_SelectionChanged"/>
-                        <TextBlock x:Name="LegsCollisionTypeDescText" TextWrapping="Wrap" Opacity="0.7" FontSize="11" Margin="0,0,0,8"/>
-
-                        <TextBlock Text="Tolerance" FontWeight="SemiBold"/>
-                        <StackPanel Orientation="Horizontal" Margin="0,2,0,8">
-                            <Slider x:Name="LegsToleranceSlider" Width="120" Minimum="0" Maximum="255" ValueChanged="LegsToleranceSlider_ValueChanged"/>
-                            <TextBlock x:Name="LegsToleranceValueText" VerticalAlignment="Center" Margin="6,0,0,0"/>
-                        </StackPanel>
-
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                                <TextBlock Text="Left"/>
-                                <TextBox x:Name="LegsMaskLeftBox" TextChanged="LegsMaskBox_TextChanged"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="Right"/>
-                                <TextBox x:Name="LegsMaskRightBox" TextChanged="LegsMaskBox_TextChanged"/>
-                            </StackPanel>
-                        </Grid>
-                        <Grid Margin="0,6,0,0">
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Margin="0,0,4,0">
-                                <TextBlock Text="Top"/>
-                                <TextBox x:Name="LegsMaskTopBox" TextChanged="LegsMaskBox_TextChanged"/>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1">
-                                <TextBlock Text="Bottom"/>
-                                <TextBox x:Name="LegsMaskBottomBox" TextChanged="LegsMaskBox_TextChanged"/>
-                            </StackPanel>
-                        </Grid>
-                    </StackPanel>
-                </StackPanel>
-            </Expander>
-
             <Expander x:Name="NineSliceExpander" Header="Nine Slice" Margin="0,0,0,8" Expanded="Expander_Toggled" Collapsed="Expander_Toggled">
                 <StackPanel Margin="4,6,0,4">
                     <CheckBox x:Name="NineSliceActiveCheck" Content="Activate Nine Slice" Margin="0,0,0,8" Checked="NineSliceActiveCheck_Changed" Unchecked="NineSliceActiveCheck_Changed"/>
@@ -182,8 +84,6 @@
         <!-- Right: preview + playback + frame strip -->
         <DockPanel>
             <StackPanel DockPanel.Dock="Bottom" Margin="0,10,0,0">
-                <TextBlock x:Name="OverlayDebugText" FontFamily="Consolas" FontSize="10" Opacity="0.6" Margin="0,0,0,4"
-                           ToolTip="Temporary diagnostic - the exact numbers used to position the collision mask overlay"/>
                 <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Margin="0,0,0,8">
                     <Button x:Name="PrevFrameButton" Content="|&#x25C4;" Width="36" Click="PrevFrameButton_Click"/>
                     <Button x:Name="PlayPauseButton" Content="&#x25B6;" Width="36" Margin="4,0,4,0" Click="PlayPauseButton_Click"/>

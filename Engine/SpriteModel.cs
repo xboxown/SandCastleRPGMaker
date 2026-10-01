@@ -34,37 +34,11 @@ public class SpriteLayer
     public int ParentGroupId { get; set; } = -1;
 }
 
-public enum CollisionMaskMode { Automatic, Manual }
-public enum CollisionMaskType { Rectangle, Ellipse, Diamond, Precise }
-
-/// <summary>
-/// Defines the pixel boundaries GameMaker registers for physical collision -
-/// NOT the same thing as Nine Slice below, despite both having Left/Right/
-/// Top/Bottom fields. In Automatic mode these are computed from the
-/// sprite's own transparency (the tightest box around non-transparent
-/// pixels), falling back to the full canvas if the frame is entirely
-/// transparent (e.g. a brand-new, not-yet-drawn sprite) rather than
-/// collapsing to a degenerate zero-size box; in Manual mode they're
-/// user-entered pixel offsets that shrink or grow the hitbox relative to
-/// the artwork.
-/// </summary>
-public class CollisionMaskSettings
-{
-    public CollisionMaskMode Mode { get; set; } = CollisionMaskMode.Automatic;
-    public CollisionMaskType Type { get; set; } = CollisionMaskType.Rectangle;
-    public int Tolerance { get; set; }
-    public int Left { get; set; }
-    public int Right { get; set; }
-    public int Top { get; set; }
-    public int Bottom { get; set; }
-}
-
 /// <summary>
 /// 9-slice scaling guides - how many pixels in from each outer edge the
 /// image gets cut into a 3x3 grid, so corners stay crisp/unscaled while
 /// edges and the center stretch or tile when the sprite is resized (used
-/// for UI panels, dialog boxes, buttons). Distinct from Collision Mask
-/// above even though the field names are the same shape.
+/// for UI panels, dialog boxes, buttons).
 /// </summary>
 public class NineSliceSettings
 {
@@ -106,23 +80,7 @@ public class SpriteEntry
     public int OriginY { get; set; }
     public string OriginAnchor { get; set; } = "Top Left";
 
-    public CollisionMaskSettings CollisionMask { get; set; } = new();
     public NineSliceSettings NineSlice { get; set; } = new();
-
-    /// <summary>
-    /// Off by default - every existing sprite keeps today's single-mask
-    /// behavior untouched. When turned on, CollisionMask above becomes
-    /// specifically the "Body" mask (combat/trap/explosion/damage hit
-    /// detection) and LegsMask becomes a second, independent mask used
-    /// ONLY by the movement/pathing system to block walking into static
-    /// world geometry (walls, furniture, doors) - it has no bearing on
-    /// getting hit by a monster or a trap. This split is a hardcoded
-    /// engine mechanic, not something event/damage code opts into per
-    /// object: the engine always reads Body for damage and Legs (or
-    /// CollisionMask itself, when not split) for movement blocking.
-    /// </summary>
-    public bool SplitLegsBodyMask { get; set; } = false;
-    public CollisionMaskSettings LegsMask { get; set; } = new();
 
     /// <summary>Empty means this sprite has no layers yet - it behaves exactly as before (a single flat image per frame). Once populated, FilePath per frame becomes the composited result of all visible layers.</summary>
     public List<SpriteLayer> Layers { get; set; } = new();
