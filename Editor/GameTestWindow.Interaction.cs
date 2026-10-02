@@ -235,6 +235,21 @@ public partial class GameTestWindow
             }
             current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
         }
+        // A press on a paperdoll's visible body art over an EMPTY built-in slot (its 40x40 area) is that slot - empty slots have no hit squares of their own, so nothing invisible is ever clickable.
+        if (target is null && gump is OpenPaperdollGump paperdoll)
+        {
+            var inBody = PaperdollGumpsCanvas.TranslatePoint(screen, paperdoll.BodyCanvas);
+            foreach (var slot in Enum.GetValues<EquipmentSlot>())
+            {
+                if (TryGetEquippedInstanceId(paperdoll.Character, slot, out _)) continue;
+                if (!paperdoll.Character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };
+                if (inBody.X >= pos.X - 4 && inBody.X < pos.X + 36 && inBody.Y >= pos.Y - 4 && inBody.Y < pos.Y + 36)
+                {
+                    target = new SlotTarget(paperdoll, slot);
+                    break;
+                }
+            }
+        }
         return true;
     }
 

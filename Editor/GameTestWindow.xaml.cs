@@ -630,7 +630,7 @@ public partial class GameTestWindow : Window
     /// <summary>Builds the one real exit-button Image used on both a paperdoll and its linked backpack gump - frame 1 while idle, frame 2 while actually held down, back to frame 1 on release, THEN the gump closes, per spec.</summary>
     private Image BuildExitButton(CharacterDefinition character, Action onClosed)
     {
-        var image = new Image { Width = 24, Height = 24, Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Source = LoadExitButtonFrame(character, pressed: false) };
+        var image = new AlphaHitImage { Width = 24, Height = 24, Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Source = LoadExitButtonFrame(character, pressed: false) };
         image.MouseLeftButtonDown += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: true); e.Handled = true; };
         image.MouseLeftButtonUp += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: false); onClosed(); e.Handled = true; };
         return image;
@@ -650,8 +650,9 @@ public partial class GameTestWindow : Window
 
         // Real, clean paperdoll - per spec, just the body and its (invisible) slots, no title bar and no side panel; the body itself is the real drag handle, and a real 2-frame sprite (not a text glyph) is the exit button.
         // Real, confirmed fix, per spec ("the paperdoll looks tiny and the object sprites inside of it ARE HUGE... because the paperdoll sprites themselves did not update with the rest of the group") - the whole gump now scales together as one real, uniform unit via LayoutTransform, the same real principle ViewportScale itself already applies to the main game view, instead of leaving the body fixed while only its own item icons scaled independently (the actual mismatch that made a bigger window look wrong). Re-applied fresh with the current real scale every time this gump refreshes (RefreshPaperdollGump, called on every real viewport resize already), so it always tracks live.
-        var bodyCanvas = new Canvas { Width = 320, Height = 400, Background = Brushes.Transparent };
-        var gumpBorder = new Border { Background = new SolidColorBrush(Color.FromArgb(238, 26, 26, 26)), BorderBrush = Brushes.Black, BorderThickness = new Thickness(1), Padding = new Thickness(4) };
+        // No background at all: only the body art and the items drawn on it are part of the paperdoll (pixel-precise, like Exult's Gump::has_point) - transparent areas let clicks through to whatever is behind.
+        var bodyCanvas = new Canvas { Width = 320, Height = 400 };
+        var gumpBorder = new Border();
         gumpBorder.Child = bodyCanvas;
 
         var gump = new OpenPaperdollGump { Character = character, GumpBorder = gumpBorder, BodyCanvas = bodyCanvas };
@@ -782,10 +783,16 @@ public partial class GameTestWindow : Window
             ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == character.Paperdoll.BodySpriteName);
         if (bodySprite is not null && bodySprite.Frames.Count > 0)
         {
-            var bodyImage = new Image { Width = 320, Height = 400, Stretch = Stretch.Uniform };
+            var bodyImage = new AlphaHitImage { Width = 320, Height = 400, Stretch = Stretch.Uniform };
             gump.ItemAnimators.Add(new SpriteAnimator(bodySprite, bodyImage, _resources));
             Panel.SetZIndex(bodyImage, 0);
             gump.BodyCanvas.Children.Add(bodyImage);
+            gump.BodyCanvas.Background = null;
+        }
+        else
+        {
+            // No body sprite chosen yet: show a plain dark panel so there's still something visible to grab and drop onto.
+            gump.BodyCanvas.Background = new SolidColorBrush(Color.FromArgb(238, 26, 26, 26));
         }
 
         foreach (var slot in Enum.GetValues<EquipmentSlot>())
@@ -813,19 +820,7 @@ public partial class GameTestWindow : Window
             }
             else
             {
-                // An EMPTY slot has no visual of its own, so it gets a plain transparent hit region instead - never visible, only a drop/click target (a click equips whatever is selected in the backpack list; a drop readies the dragged item here).
-                var clickRegion = new Border
-                {
-                    Width = 40,
-                    Height = 40,
-                    Background = Brushes.Transparent,
-                    Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand,
-                    Tag = new SlotTarget(gump, slot)
-                };
-                Canvas.SetLeft(clickRegion, pos.X - 4);
-                Canvas.SetTop(clickRegion, pos.Y - 4);
-                Panel.SetZIndex(clickRegion, 10);
-                gump.BodyCanvas.Children.Add(clickRegion);
+                // An EMPTY slot draws nothing and has no invisible hit square: pressing the body art over it (its 40x40 area around the slot position) is resolved to this slot by position in HitTestGumpLayer, so only visible pixels are ever clickable.
             }
         }
 
@@ -923,7 +918,7 @@ public partial class GameTestWindow : Window
             if (itemSprite is null || itemSprite.Frames.Count == 0) return null;
             var frameBitmap = LoadStaticFrame(itemSprite.Frames[0].FilePath);
             (int iw, int ih) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : (32, 32);
-            var img = new Image { Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
+            var img = new AlphaHitImage { Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
             gump.ItemAnimators.Add(new SpriteAnimator(itemSprite, img, _resources));
             return img;
         }
@@ -933,7 +928,7 @@ public partial class GameTestWindow : Window
             var bmp = string.IsNullOrEmpty(obj?.IconPath) ? null : LoadStaticFrame(obj.IconPath);
             if (bmp is null) return null;
             (int iw, int ih) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-            return new Image { Source = bmp, Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
+            return new AlphaHitImage { Source = bmp, Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
         }
         if (equippedItem.Category == ReferencedItemCategory.Container)
         {
@@ -942,7 +937,7 @@ public partial class GameTestWindow : Window
             if (itemSprite is null || itemSprite.Frames.Count == 0) return null;
             var frameBitmap = LoadStaticFrame(itemSprite.Frames[0].FilePath);
             (int iw, int ih) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : (32, 32);
-            var img = new Image { Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
+            var img = new AlphaHitImage { Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
             gump.ItemAnimators.Add(new SpriteAnimator(itemSprite, img, _resources));
             return img;
         }
@@ -1133,8 +1128,8 @@ public partial class GameTestWindow : Window
 
         // Real size, per the container's own drawn Frame bounds - set here at creation and kept in sync by every RefreshContainerGump call afterward (immediately below, and on every later refresh).
         // Real, confirmed fix, per spec ("I SHOULD ONLY SEE THE CONTAINER PAPER DOLL ITSELF") - no background, no border, no padding at all; this is purely a transparent wrapper now, so only the container's own real body art (and its items) are ever visible, never a surrounding dark box.
-        var itemsCanvas = new Canvas { Background = Brushes.Transparent };
-        var gumpBorder = new Border { Background = Brushes.Transparent };
+        var itemsCanvas = new Canvas(); // no background: only the container art and its items are part of it (pixel-precise)
+        var gumpBorder = new Border();
         gumpBorder.Child = itemsCanvas;
 
         var gump = new OpenContainerGump { PlacedItem = placedItem, Data = data, GumpBorder = gumpBorder, ItemsCanvas = itemsCanvas };
@@ -1145,7 +1140,7 @@ public partial class GameTestWindow : Window
         Canvas.SetTop(gumpBorder, baseY);
 
         // Real drag-by-body, same principle as a paperdoll's own body - dragging happens on the item canvas's own background, never triggering when an actual item underneath the cursor already claimed the click (see item wiring below, which always marks itself Handled first).
-        itemsCanvas.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource == itemsCanvas) GenericGumpDrag_MouseLeftButtonDown(gump, gumpBorder, itemsCanvas, e); };
+        itemsCanvas.MouseLeftButtonDown += (_, e) => GenericGumpDrag_MouseLeftButtonDown(gump, gumpBorder, itemsCanvas, e); // item presses are claimed (handled) by the interaction pipeline first, so only the art itself starts a gump drag
         itemsCanvas.MouseMove += (_, e) => GenericGumpDrag_MouseMove(gumpBorder, e);
         itemsCanvas.MouseLeftButtonUp += (_, _) => GenericGumpDrag_MouseLeftButtonUp(itemsCanvas);
 
@@ -1181,8 +1176,8 @@ public partial class GameTestWindow : Window
 
         if (data.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.OpenSoundResourceId);
 
-        var itemsCanvas = new Canvas { Background = Brushes.Transparent };
-        var gumpBorder = new Border { Background = Brushes.Transparent };
+        var itemsCanvas = new Canvas(); // no background: only the container art and its items are part of it (pixel-precise)
+        var gumpBorder = new Border();
         gumpBorder.Child = itemsCanvas;
 
         var gump = new OpenContainerGump { PlacedItem = equippedItem, Data = data, GumpBorder = gumpBorder, ItemsCanvas = itemsCanvas };
@@ -1192,7 +1187,7 @@ public partial class GameTestWindow : Window
         Canvas.SetLeft(gumpBorder, baseX);
         Canvas.SetTop(gumpBorder, baseY);
 
-        itemsCanvas.MouseLeftButtonDown += (_, e) => { if (e.OriginalSource == itemsCanvas) GenericGumpDrag_MouseLeftButtonDown(gump, gumpBorder, itemsCanvas, e); };
+        itemsCanvas.MouseLeftButtonDown += (_, e) => GenericGumpDrag_MouseLeftButtonDown(gump, gumpBorder, itemsCanvas, e); // item presses are claimed (handled) by the interaction pipeline first, so only the art itself starts a gump drag
         itemsCanvas.MouseMove += (_, e) => GenericGumpDrag_MouseMove(gumpBorder, e);
         itemsCanvas.MouseLeftButtonUp += (_, _) => GenericGumpDrag_MouseLeftButtonUp(itemsCanvas);
 
@@ -1271,7 +1266,7 @@ public partial class GameTestWindow : Window
         if (bodySprite is not null && bodySprite.Frames.Count > 0)
         {
             // Real, confirmed bug fix - this body image, as a real child of itemsCanvas covering most/all of its visible area, was silently intercepting every click meant for the gump's own "click the background to drag it" check (which specifically looks for e.OriginalSource == itemsCanvas itself) - clicking the visible art landed on THIS Image instead, so the drag never started. IsHitTestVisible false lets every such click pass straight through to itemsCanvas underneath, exactly like the paperdoll's own body drag-handle already does.
-            var bg = new Image { Width = ContainerBodyWidth, Height = ContainerBodyHeight, Stretch = Stretch.Uniform, IsHitTestVisible = false };
+            var bg = new AlphaHitImage { Width = ContainerBodyWidth, Height = ContainerBodyHeight, Stretch = Stretch.Uniform };
             gump.ItemAnimators.Add(new SpriteAnimator(bodySprite, bg, _resources));
             Panel.SetZIndex(bg, 0);
             gump.ItemsCanvas.Children.Add(bg);
@@ -1290,7 +1285,7 @@ public partial class GameTestWindow : Window
                 {
                     var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
                     (int iw, int ih) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : (32, 32);
-                    var img = new Image { Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
+                    var img = new AlphaHitImage { Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
                     gump.ItemAnimators.Add(new SpriteAnimator(sprite, img, _resources));
                     visual = img; size = img.Width;
                 }
@@ -1302,7 +1297,7 @@ public partial class GameTestWindow : Window
                 if (bmp is not null)
                 {
                     (int iw, int ih) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-                    visual = new Image { Source = bmp, Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
+                    visual = new AlphaHitImage { Source = bmp, Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
                     size = visual.Width;
                 }
             }
@@ -1312,7 +1307,7 @@ public partial class GameTestWindow : Window
                 var sprite = _sprites.Groups.FirstOrDefault(g => g.Name == inner?.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == inner?.SpriteName);
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
-                    var img = new Image { Width = 32 * containerItemCounterScale, Height = 32 * containerItemCounterScale, Stretch = Stretch.Uniform };
+                    var img = new AlphaHitImage { Width = 32 * containerItemCounterScale, Height = 32 * containerItemCounterScale, Stretch = Stretch.Uniform };
                     gump.ItemAnimators.Add(new SpriteAnimator(sprite, img, _resources));
                     visual = img;
                 }
