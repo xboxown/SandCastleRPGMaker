@@ -1278,6 +1278,7 @@ public partial class GameTestWindow : Window
         }
 
         int z = 5;
+        var built = new List<(InventoryItemInstance Item, FrameworkElement Visual)>();
         foreach (var item in gump.PlacedItem.Contents)
         {
             FrameworkElement? visual = null;
@@ -1318,7 +1319,15 @@ public partial class GameTestWindow : Window
                 }
             }
             visual ??= new Border { Width = 32, Height = 32, Background = Brushes.Gray };
+            built.Add((item, visual));
+        }
 
+        // Exult Gump::paint: anything put in here without a spot (dropped on the container itself, auto-stored, or a fresh container) is laid out now, in a row from the top-left, the way Exult does it.
+        var sizes = built.ToDictionary(b => b.Item, b => (b.Visual.Width, b.Visual.Height), ReferenceEqualityComparer.Instance);
+        LayOutUnplacedContents(gump.PlacedItem, data, item => sizes.TryGetValue(item, out var size) ? ((double, double))size : (32, 32));
+
+        foreach (var (item, visual) in built)
+        {
             Canvas.SetLeft(visual, item.ContainerX);
             Canvas.SetTop(visual, item.ContainerY);
             Panel.SetZIndex(visual, z++);

@@ -513,15 +513,13 @@ public partial class GameTestWindow
             && !ReferenceEquals(nested, PayloadObject(origin))
             && _containers.Containers.FirstOrDefault(c => c.Id == nested.ItemId) is { } nestedData)
         {
-            var nestedGump = _openContainers.FirstOrDefault(g => g.PlacedItem == nested);
-            Point? nestedPoint = nestedGump is null ? null : PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), nestedGump.ItemsCanvas);
-            return TryPutIntoContainer(origin, nestedData, nested, nestedPoint, randomIfNoPoint: false);
+            return TryPutIntoContainer(origin, nestedData, nested, dropTopLeft: null); // dropped ON the container, not into its window: no spot yet (Exult 255,255)
         }
 
         if (origin is ContainerOrigin sameContainer && ReferenceEquals(sameContainer.Container, gump.PlacedItem))
         {
             // Moving within the same gump: Exult removes the item and adds it back at the new spot, so it ends up on top of the pile.
-            PlaceWithinFrame(sameContainer.Item, gump.Data, dropTopLeft, randomIfNoPoint: false);
+            PlaceWithinFrame(sameContainer.Item, gump.Data, dropTopLeft);
             gump.PlacedItem.Contents.Remove(sameContainer.Item);
             gump.PlacedItem.Contents.Add(sameContainer.Item);
             if (gump.Data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, gump.Data.NavigateSoundResourceId);
@@ -529,7 +527,7 @@ public partial class GameTestWindow
             return true;
         }
 
-        return TryPutIntoContainer(origin, gump.Data, gump.PlacedItem, dropTopLeft, randomIfNoPoint: false);
+        return TryPutIntoContainer(origin, gump.Data, gump.PlacedItem, dropTopLeft);
     }
 
     /// <summary>Exult Paperdoll_gump::add, in order: a container under the drop point takes it; else the closest free slot to the drop point readies it (find_closest); else the character's general add rules (DropOnCharacter). A failure at one step falls through to the next, as in Exult.</summary>
@@ -541,7 +539,7 @@ public partial class GameTestWindow
             && character.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { Category: ReferencedItemCategory.Container } occupant
             && !ReferenceEquals(occupant, PayloadObject(origin))
             && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData
-            && TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null, randomIfNoPoint: false))
+            && TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null))
             return true;
 
         if (FindClosestFreeSlot(gump, PaperdollGumpsCanvas.TranslatePoint(screen, gump.BodyCanvas), origin) is { } slotKey)
@@ -606,7 +604,7 @@ public partial class GameTestWindow
         if (targetCellContainer is not null
             && _containers.Containers.FirstOrDefault(c => c.Id == targetCellContainer.ItemId) is { AllowElevation: false } targetContainerData)
         {
-            return TryPutIntoContainer(origin, targetContainerData, targetCellContainer, dropTopLeft: null, randomIfNoPoint: true);
+            return TryPutIntoContainer(origin, targetContainerData, targetCellContainer, dropTopLeft: null);
         }
 
         // The entity that will stand on the map: the dragged map entity itself, or a not-yet-placed candidate built from the inventory/container item.
@@ -692,7 +690,7 @@ public partial class GameTestWindow
 
             string storedName = PayloadName(origin);
             var stored = DetachAsInventoryItem(origin, slotContainerData.GetNextContentsInstanceId);
-            PlaceWithinFrame(stored, slotContainerData, topLeft: null, randomIfNoPoint: false);
+            PlaceWithinFrame(stored, slotContainerData, topLeft: null);
             slotItem.Contents.Add(stored);
             FinishCharacterReceive(character, storedName);
             return true;
@@ -760,7 +758,7 @@ public partial class GameTestWindow
         FireGlobalInventoryStateTrigger(BookTriggerConditionBased.ByHavingAnItem);
     }
 
-    private bool TryPutIntoContainer(DragOrigin origin, ContainerData data, IHasContainerContents container, Point? dropTopLeft, bool randomIfNoPoint)
+    private bool TryPutIntoContainer(DragOrigin origin, ContainerData data, IHasContainerContents container, Point? dropTopLeft)
     {
         EnsureContainerSeeded(container, data);
         if (!CanContainerAccept(data, container, origin, out string reason, out var pointer))
@@ -770,7 +768,7 @@ public partial class GameTestWindow
         }
         string name = PayloadName(origin);
         var item = DetachAsInventoryItem(origin, data.GetNextContentsInstanceId);
-        PlaceWithinFrame(item, data, dropTopLeft, randomIfNoPoint);
+        PlaceWithinFrame(item, data, dropTopLeft);
         container.Contents.Add(item); // appended = on top of the pile, as Exult's add() appends to the chain
         if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);
         StatusText.Text = $"You put \"{name}\" into \"{data.Name}\".";
@@ -839,26 +837,70 @@ public partial class GameTestWindow
     private bool ContainerHasRoomFor(ContainerData containerData, IHasContainerContents container, double newItemVolume, InventoryItemInstance? excluding = null) =>
         UsedVolume(container, excluding) + newItemVolume <= containerData.MaxVolume;
 
-    /// <summary>Where an item sits inside a container's frame: at the drop point when there is one (clamped into the frame), otherwise the frame's center, or a random spot in it for a blind drop onto a closed chest.</summary>
-    private void PlaceWithinFrame(InventoryItemInstance item, ContainerData data, Point? topLeft, bool randomIfNoPoint)
+    /// <summary>
+    /// Exult Gump::add: dropped into the open container window, an item goes
+    /// exactly where it was released, shifted to stay inside the area. Put
+    /// into the container any other way (dropped on the container itself,
+    /// on its icon, or stored automatically) it gets no spot yet - Exult's
+    /// set_shape_pos(255, 255) - and is laid out the next time the window is
+    /// drawn (LayOutUnplacedContents).
+    /// </summary>
+    private static void PlaceWithinFrame(InventoryItemInstance item, ContainerData data, Point? topLeft)
     {
+        if (topLeft is not { } point)
+        {
+            item.ContainerX = UnplacedSpot;
+            item.ContainerY = UnplacedSpot;
+            return;
+        }
         var bounds = data.GetFrameBounds();
         double maxX = bounds.X + Math.Max(0, bounds.Width - 32);
         double maxY = bounds.Y + Math.Max(0, bounds.Height - 32);
-        if (topLeft is { } point)
+        item.ContainerX = Math.Clamp(point.X, bounds.X, maxX);
+        item.ContainerY = Math.Clamp(point.Y, bounds.Y, maxY);
+    }
+
+    /// <summary>"No spot yet" - Exult's (255, 255) shape position. Runtime only: never part of authored data.</summary>
+    private const double UnplacedSpot = -100000;
+
+    private static bool IsUnplaced(InventoryItemInstance item) => item.ContainerX <= UnplacedSpot || item.ContainerY <= UnplacedSpot;
+
+    /// <summary>
+    /// Exult Gump::paint, for a container being drawn: first check_elem_positions -
+    /// if more than one item and they all share one spot (a fresh container),
+    /// all become unplaced - then every unplaced item, in order, is laid out
+    /// from the top-left of the item area: its bottom-right at (cursor +
+    /// its size, clamped to the area), the cursor moving right by its width
+    /// less one ("mostly avoid overlap"); past the right edge the row moves
+    /// 8 down and back to the left; past the bottom it starts over 2 lower
+    /// each time round. Items that already have a spot keep it.
+    /// sizeOf gives each item's drawn size in this window.
+    /// </summary>
+    private static void LayOutUnplacedContents(IHasContainerContents container, ContainerData data, Func<InventoryItemInstance, (double Width, double Height)> sizeOf)
+    {
+        var contents = container.Contents;
+        if (contents.Count > 1 && contents.All(c => c.ContainerX == contents[0].ContainerX && c.ContainerY == contents[0].ContainerY))
+            foreach (var item in contents) { item.ContainerX = UnplacedSpot; item.ContainerY = UnplacedSpot; }
+
+        var area = data.GetFrameBounds();
+        double endX = area.Width, endY = area.Height;
+        double curX = 0, curY = 0;
+        int loop = 0;
+        foreach (var item in contents)
         {
-            item.ContainerX = Math.Clamp(point.X, bounds.X, maxX);
-            item.ContainerY = Math.Clamp(point.Y, bounds.Y, maxY);
-        }
-        else if (randomIfNoPoint)
-        {
-            item.ContainerX = bounds.X + _random.NextDouble() * (maxX - bounds.X);
-            item.ContainerY = bounds.Y + _random.NextDouble() * (maxY - bounds.Y);
-        }
-        else
-        {
-            item.ContainerX = (bounds.X + maxX) / 2;
-            item.ContainerY = (bounds.Y + maxY) / 2;
+            if (!IsUnplaced(item)) continue;
+            var (width, height) = sizeOf(item);
+            double px = Math.Min(curX + width, endX);
+            double py = Math.Min(curY + height, endY);
+            item.ContainerX = area.X + px - width;
+            item.ContainerY = area.Y + py - height;
+            curX += width - 1;
+            if (curX >= endX)
+            {
+                curY += 8;
+                curX = 0;
+                if (curY >= endY) curY = 2 * (++loop);
+            }
         }
     }
 
