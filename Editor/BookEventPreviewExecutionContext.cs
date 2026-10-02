@@ -30,6 +30,10 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
     public Action<string>? OnChangeDayNight { get; set; }
     public Action<string, double>? OnApplyPaletteColor { get; set; }
     public Action<string>? OnShowText { get; set; }
+    /// <summary>Change Faction Relationship: (viewer faction, target faction, "Set"/"Add"/"Subtract", amount, both ways). Only a running game has factions to change.</summary>
+    public Action<int, int, string, int, bool>? OnChangeFactionRelationship { get; set; }
+    /// <summary>Change Faction: (character id or "Player", new faction id or -1) - false when there's no such character.</summary>
+    public Func<string, int, bool>? OnChangeFaction { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -134,6 +138,21 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
                 if (string.IsNullOrEmpty(replacement)) return false;
                 _contentOverrides[(bookId, pageIndex, frameId)] = replacement;
                 return true;
+            }
+            case EventCommandType.ChangeFactionRelationship:
+            {
+                if (OnChangeFactionRelationship is null) return false;
+                if (!int.TryParse(command.Get("ViewerFactionId"), out int viewer) || !int.TryParse(command.Get("TargetFactionId"), out int target)) return false;
+                if (!int.TryParse(command.Get("Value"), out int amount)) return false;
+                OnChangeFactionRelationship(viewer, target, command.Get("Operation"), amount, command.Get("BothWays") == "True");
+                return true;
+            }
+            case EventCommandType.ChangeFaction:
+            {
+                if (OnChangeFaction is null) return false;
+                if (!int.TryParse(command.Get("FactionId"), out int factionId)) return false;
+                string who = command.Get("CharacterId");
+                return !string.IsNullOrEmpty(who) && OnChangeFaction(who, factionId);
             }
             case EventCommandType.ChangeBookSettings:
             {

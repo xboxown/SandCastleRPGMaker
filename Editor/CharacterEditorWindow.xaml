@@ -34,6 +34,10 @@
                     <TextBlock Text="Class" FontWeight="Bold"/>
                     <ComboBox x:Name="ClassCombo" Margin="0,2,0,10" SelectionChanged="Field_Changed"/>
 
+                    <TextBlock Text="Faction" FontWeight="Bold"/>
+                    <ComboBox x:Name="FactionCombo" Margin="0,2,0,10" DisplayMemberPath="Name" SelectionChanged="Field_Changed"
+                              ToolTip="Who this character sides with - how it treats everyone else and how they treat it (Tools &gt; Faction Editor)"/>
+
                     <CheckBox x:Name="TestPlayerCheck" Content="Use as Internal Engine test player (only one character can be this)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                     <CheckBox x:Name="InPartyCheck" Content="In active party (their own inventory/paperdoll can be opened even when not the test player)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
 

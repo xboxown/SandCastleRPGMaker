@@ -64,7 +64,11 @@
                         <TextBlock Text="Screen &amp; Atmosphere" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Shake Screen..." Margin="0,0,0,4" Click="ShakeScreen_Click"/>
                         <Button Content="Change Day/Night..." Margin="0,0,0,4" Click="ChangeDayNight_Click"/>
-                        <Button Content="Apply Palette Color..." Margin="0,0,0,4" Click="ApplyPaletteColor_Click"/>
+                        <Button Content="Apply Palette Color..." Margin="0,0,0,12" Click="ApplyPaletteColor_Click"/>
+
+                        <TextBlock Text="Factions" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <Button Content="Change Faction Relationship..." Margin="0,0,0,4" Click="ChangeFactionRelationship_Click"/>
+                        <Button Content="Change Faction..." Margin="0,0,0,4" Click="ChangeFaction_Click"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1">

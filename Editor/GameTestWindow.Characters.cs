@@ -118,5 +118,7 @@ public partial class GameTestWindow
         var mapCharacter = _mapCharacters.FirstOrDefault(mc => mc.Placement == placement);
         if (mapCharacter?.Visual is null) return;
         ShowIdentifyLabel(mapCharacter.Character.Name, placement.X, placement.Y, mapCharacter.Visual);
+        // Exult's label is the name alone; the faction standing goes to the status line so it can be checked while testing.
+        StatusText.Text = $"{mapCharacter.Character.Name}: {DescribeFactionStanding(mapCharacter.Character)}";
     }
 }

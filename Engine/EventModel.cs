@@ -31,6 +31,8 @@ public enum EventCommandType
     ChangeSelfBookContent,
     ChangeExternalBookContent,
     ChangeBookSettings,
+    ChangeFactionRelationship,
+    ChangeFaction,
     End
 }
 

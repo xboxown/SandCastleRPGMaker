@@ -63,6 +63,28 @@ public partial class CharacterEditorWindow : Window
         _books = books;
         _objects = objects;
         RefreshCharacterList();
+        Loaded += (_, _) =>
+        {
+            if (InitialCharacterId is int id && _database.Characters.FirstOrDefault(c => c.Id == id) is { } initial)
+            {
+                CharacterListBox.SelectedItem = initial;
+                CharacterListBox.ScrollIntoView(initial);
+                FactionCombo.Focus();
+            }
+        };
+    }
+
+    /// <summary>Set before showing to open the editor on that character (the Faction Editor's "give these a new faction" list uses it).</summary>
+    public int? InitialCharacterId { get; set; }
+
+    private static readonly Faction NoFaction = new() { Id = -1, Name = "(None)" };
+
+    private void RefreshFactionChoices(int factionId)
+    {
+        var choices = new List<Faction> { NoFaction };
+        choices.AddRange(ProjectSession.Factions.Factions);
+        FactionCombo.ItemsSource = choices;
+        FactionCombo.SelectedItem = choices.FirstOrDefault(f => f.Id == factionId) ?? NoFaction;
     }
 
     private void RefreshCharacterList()
@@ -113,6 +135,7 @@ public partial class CharacterEditorWindow : Window
         FemaleRadio.IsChecked = character.Gender == CharacterGender.Female;
 
         RefreshClassChoices(character.ClassName);
+        RefreshFactionChoices(character.FactionId);
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;
         // A character that has never had a size gets one filled in automatically the first time it's looked at, so the boxes always show the real numbers the engine will use.
@@ -641,6 +664,7 @@ public partial class CharacterEditorWindow : Window
         character.Age = age;
         character.Gender = MaleRadio.IsChecked == true ? CharacterGender.Male : CharacterGender.Female;
         character.ClassName = ClassCombo.SelectedItem as string ?? "(None)";
+        if (FactionCombo.SelectedItem is Faction faction) character.FactionId = faction.Id;
 
         bool wantsTestPlayer = TestPlayerCheck.IsChecked == true;
         if (wantsTestPlayer && !character.IsTestPlayer)

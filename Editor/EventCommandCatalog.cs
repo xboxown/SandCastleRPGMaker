@@ -127,6 +127,19 @@ internal static class EventCommandCatalog
         {
             new FieldSpec("TargetBookId", "Which book's settings to change (runtime-only)")
         },
+        [EventCommandType.ChangeFactionRelationship] = new[]
+        {
+            new FieldSpec("ViewerFactionId", "Faction whose view changes (id)"),
+            new FieldSpec("TargetFactionId", "Faction it sees (id)"),
+            new FieldSpec("Operation", "Operation (Set/Add/Subtract)"),
+            new FieldSpec("Value", "Value (0-100)"),
+            new FieldSpec("BothWays", "Both ways (True/False)")
+        },
+        [EventCommandType.ChangeFaction] = new[]
+        {
+            new FieldSpec("CharacterId", "Character id (Player = main player)"),
+            new FieldSpec("FactionId", "New faction id (-1 = none)")
+        },
         [EventCommandType.End] = Array.Empty<FieldSpec>()
     };
 

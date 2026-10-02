@@ -1,28 +1,37 @@
 <Window x:Class="SandcastleRpgMaker.Editor.FactionEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Faction Editor" Height="500" Width="600" WindowStartupLocation="CenterOwner">
+        Title="Faction Editor" Height="680" Width="1060" WindowStartupLocation="CenterOwner" Closing="Window_Closing">
     <DockPanel>
         <ToolBar DockPanel.Dock="Top">
-            <Button Content="New Faction" Click="NewFaction_Click" Padding="6,2" Margin="2"/>
-            <Button Content="Delete Selected" Click="DeleteFaction_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Add Faction" Click="NewFaction_Click" Padding="6,2" Margin="2" FontWeight="Bold"/>
             <Separator/>
-            <Button Content="Save..." Click="Save_Click" Padding="6,2" Margin="2"/>
-            <Button Content="Load..." Click="Load_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Save..." Click="Save_Click" Padding="6,2" Margin="2" ToolTip="Export the factions and bands to a file"/>
+            <Button Content="Load..." Click="Load_Click" Padding="6,2" Margin="2" ToolTip="Import factions and bands from a file (replaces these)"/>
         </ToolBar>
-        <Grid>
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="200"/>
-                <ColumnDefinition Width="*"/>
-            </Grid.ColumnDefinitions>
-            <ListBox x:Name="FactionListBox" Grid.Column="0" Margin="6" DisplayMemberPath="Name"
-                     SelectionChanged="FactionListBox_SelectionChanged"/>
-            <StackPanel Grid.Column="1" Margin="12" x:Name="EditorPanel" IsEnabled="False">
-                <TextBlock Text="Name" FontWeight="Bold"/>
-                <TextBox x:Name="NameBox" Margin="0,2,0,10" TextChanged="Field_Changed"/>
-                <TextBlock Text="Notes" FontWeight="Bold"/>
-                <TextBox x:Name="NotesBox" Height="100" AcceptsReturn="True" TextWrapping="Wrap" TextChanged="Field_Changed"/>
-            </StackPanel>
-        </Grid>
+        <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="6">
+            <Button Content="Close" Width="80" Click="Close_Click"/>
+        </StackPanel>
+        <TabControl x:Name="Tabs" Margin="4">
+            <TabItem Header="Relationships">
+                <DockPanel>
+                    <Border DockPanel.Dock="Right" Width="270" BorderBrush="#FFCCCCCC" BorderThickness="1,0,0,0" Padding="10,4,4,4">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto">
+                            <StackPanel x:Name="DetailsPanel"/>
+                        </ScrollViewer>
+                    </Border>
+                    <TextBlock DockPanel.Dock="Top" Margin="4,2,4,6" TextWrapping="Wrap" Opacity="0.75"
+                               Text="Each ROW is how that faction sees each COLUMN (one-way). 0% is the worst, 100% the best; the band the value falls in decides what its members do. Click a faction's face or name to edit it; x deletes it."/>
+                    <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
+                        <Grid x:Name="RelationGrid" HorizontalAlignment="Left" VerticalAlignment="Top" Margin="4"/>
+                    </ScrollViewer>
+                </DockPanel>
+            </TabItem>
+            <TabItem x:Name="BandsTab" Header="Behaviour Bands">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="BandsPanel" Margin="8"/>
+                </ScrollViewer>
+            </TabItem>
+        </TabControl>
     </DockPanel>
 </Window>

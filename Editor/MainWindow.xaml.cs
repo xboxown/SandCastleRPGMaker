@@ -94,6 +94,14 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title += $" [{BuildInfo.CurrentBuild}]";
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        ProjectSession.Bind(() => _factionDatabase, () => _characterDatabase, () => _spriteDatabase, (owner, characterId) =>
+        {
+            var editor = new CharacterEditorWindow(_characterDatabase, _statDatabase, _poseDatabase, _spriteDatabase, _bookDatabase, _objectDatabase, _resourceDatabase)
+            { Owner = owner, InitialCharacterId = characterId };
+            editor.ShowDialog();
+            RefreshCharactersPalette();
+            PlaceAllCharacterVisualsIfMapShown();
+        });
     }
 
     /// <summary>Lightweight row for the Objects palette ListBox (name + pre-loaded icon).</summary>
@@ -1231,7 +1239,7 @@ public partial class MainWindow : Window
         }
         var game = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings)
+            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         {
             Title = _currentProjectName is { Length: > 0 } name ? name : "Game",
             WindowStartupLocation = WindowStartupLocation.CenterScreen
@@ -1257,7 +1265,7 @@ public partial class MainWindow : Window
 
         var window = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings)
+            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         { Owner = this };
         window.ShowDialog();
     }

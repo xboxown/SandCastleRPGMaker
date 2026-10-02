@@ -253,6 +253,14 @@ public partial class EventEditorControl : UserControl
             string bookLabel = targetBook?.Name ?? $"book #{command.Get("TargetBookId")}";
             block.Inlines.Add(new Run($" : {bookLabel}, page {pageIdx + 1}, frame id {command.Get("FrameId")}"));
         }
+        else if (command.Type == EventCommandType.ChangeFactionRelationship)
+        {
+            block.Inlines.Add(new Run($" : {ChangeFactionRelationshipCommandWindow.Describe(command)}"));
+        }
+        else if (command.Type == EventCommandType.ChangeFaction)
+        {
+            block.Inlines.Add(new Run($" : {ChangeFactionCommandWindow.Describe(command)}"));
+        }
         else if (command.Parameters.Count > 0)
         {
             string paramSummary = string.Join(", ", command.Parameters.Select(kv => Truncate(kv.Value, 30)));
@@ -416,6 +424,18 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
+        else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction)
+        {
+            FactionCommandWindowBase dialog = type == EventCommandType.ChangeFaction ? new ChangeFactionCommandWindow() : new ChangeFactionRelationshipCommandWindow();
+            dialog.Owner = Window.GetWindow(this);
+            if (dialog.ShowDialog() == true)
+            {
+                dialog.Result.IndentLevel = indentLevel;
+                CurrentPage.Commands.Insert(insertAt, dialog.Result);
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
         else if (type == EventCommandType.ChangeBookSettings)
         {
             if (Books is null || Objects is null || Sprites is null)
@@ -567,6 +587,18 @@ public partial class EventEditorControl : UserControl
             }
             bool isExternal = command.Type == EventCommandType.ChangeExternalBookContent;
             var dialog = new ChangeBookContentCommandWindow(isExternal, CurrentBook, Books, Objects, Containers, Sprites, ResourceDatabase, command) { Owner = Window.GetWindow(this) };
+            if (dialog.ShowDialog() == true)
+            {
+                dialog.Result.IndentLevel = command.IndentLevel;
+                CurrentPage.Commands[index] = dialog.Result;
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction)
+        {
+            FactionCommandWindowBase dialog = command.Type == EventCommandType.ChangeFaction ? new ChangeFactionCommandWindow(command) : new ChangeFactionRelationshipCommandWindow(command);
+            dialog.Owner = Window.GetWindow(this);
             if (dialog.ShowDialog() == true)
             {
                 dialog.Result.IndentLevel = command.IndentLevel;

@@ -84,6 +84,18 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void ChangeFactionRelationship_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ChangeFactionRelationship;
+        DialogResult = true;
+    }
+
+    private void ChangeFaction_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ChangeFaction;
+        DialogResult = true;
+    }
+
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

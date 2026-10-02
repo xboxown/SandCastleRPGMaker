@@ -148,7 +148,7 @@ public partial class GameTestWindow : Window
     public GameTestWindow(MapData map, BitmapSource? tilesetBitmap, int tileWidth, int tileHeight, int columns, string tilesetSpriteName,
         ResourceDatabase resources, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects,
         CharacterDatabase characters, PoseDatabase poses, TilePropertiesDatabase tileProperties,
-        VariableDatabase variables, StatDatabase stats, ContainerDatabase containers, SystemSettings systemSettings)
+        VariableDatabase variables, StatDatabase stats, ContainerDatabase containers, SystemSettings systemSettings, FactionDatabase factions)
     {
         InitializeComponent();
         Title += $" [{BuildInfo.CurrentBuild}]";
@@ -175,6 +175,7 @@ public partial class GameTestWindow : Window
         _execContext.OnShowText = text => StatusText.Text = text;
         _execContext.OnChangeDayNight = ApplyRealDayNightPeriod;
         _execContext.OnApplyPaletteColor = ApplyRealPaletteColorEffect;
+        InitializeFactions(factions);
 
         BuildMapVisual();
         BuildObjectVisuals();

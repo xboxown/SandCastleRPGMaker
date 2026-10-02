@@ -21,6 +21,9 @@ public class CharacterDefinition
     /// <summary>Free string, not a real Class database reference - no Class system exists yet. "(None)" means unset.</summary>
     public string ClassName { get; set; } = "(None)";
 
+    /// <summary>Which faction this character belongs to (FactionDatabase id), -1 = none. Decides how it treats everyone else and how they treat it.</summary>
+    public int FactionId { get; set; } = -1;
+
     /// <summary>Which sprite group the Face sprite was picked from - empty means "search every group" (Filter unchecked).</summary>
     public string FaceSpriteGroup { get; set; } = string.Empty;
     public string FaceSpriteName { get; set; } = string.Empty;
