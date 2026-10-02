@@ -139,9 +139,11 @@ public partial class CharacterEditorWindow : Window
         var navigateSoundChoices = new List<ResourceEntry> { NoneSound };
         navigateSoundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
         PaperdollNavigateSoundCombo.ItemsSource = navigateSoundChoices;
-        PaperdollOpenSoundCombo.ItemsSource = navigateSoundChoices;
-        PaperdollOpenSoundCombo.SelectedItem = navigateSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.OpenSoundResourceId) ?? NoneSound;
         PaperdollNavigateSoundCombo.SelectedItem = navigateSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.NavigateSoundResourceId) ?? NoneSound;
+        // Its own list - two ComboBoxes given the SAME list share one current-item view in WPF and silently change each other's selection (which reset this to "(None)" and overwrote the saved sound).
+        var openSoundChoices = new List<ResourceEntry>(navigateSoundChoices);
+        PaperdollOpenSoundCombo.ItemsSource = openSoundChoices;
+        PaperdollOpenSoundCombo.SelectedItem = openSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.OpenSoundResourceId) ?? NoneSound;
 
         // Real, confirmed reset - a custom-slot selection belongs to whichever character it was made on; switching characters clears it rather than carrying a stale selection (or its rename box) over to a different character's own paperdoll.
         _selectedCustomSlot = null;

@@ -167,9 +167,9 @@ public partial class ContainerEditorWindow : Window
         // Real sound pickers, per spec - a flat list, same honest pattern Book's own sound pickers already use (ResourceDatabase.Entries has no real group concept at all, unlike sprites, so there is genuinely nothing to filter by here).
         var soundChoices = new List<ResourceEntry> { NoneSound };
         soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
-        OpenSoundCombo.ItemsSource = soundChoices;
-        CloseSoundCombo.ItemsSource = soundChoices;
-        NavigateSoundCombo.ItemsSource = soundChoices;
+        OpenSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
+        CloseSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
+        NavigateSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         OpenSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.OpenSoundResourceId) ?? NoneSound;
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.CloseSoundResourceId) ?? NoneSound;
         NavigateSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.NavigateSoundResourceId) ?? NoneSound;

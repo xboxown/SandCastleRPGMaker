@@ -267,10 +267,10 @@ public partial class BookEditorWindow : Window
 
         var soundChoices = new List<ResourceEntry> { NoneSound };
         soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
-        OpenSoundCombo.ItemsSource = soundChoices;
-        CloseSoundCombo.ItemsSource = soundChoices;
-        FlipSoundCombo.ItemsSource = soundChoices;
-        DestructibleSoundCombo.ItemsSource = soundChoices;
+        OpenSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
+        CloseSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
+        FlipSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
+        DestructibleSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         OpenSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.OpenSoundResourceId) ?? NoneSound;
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.CloseSoundResourceId) ?? NoneSound;
         FlipSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.PageFlipSoundResourceId) ?? NoneSound;
