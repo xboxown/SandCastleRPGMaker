@@ -76,7 +76,7 @@
                 ones), centered over the visible play area.
             -->
             <!-- Panel.ZIndex set explicitly and high, per spec ("the book paper doll is behind the inventory paper doll") - BookOverlayBorder and PaperdollGumpsCanvas are both direct children of this SAME outer Grid, so a real ZIndex comparison genuinely applies here (unlike GameCanvas vs PaperdollGumpsCanvas, which are different panels a ZIndex can't compare at all) - this guarantees reading a book always renders on top of any open paperdoll gump, never behind it. -->
-            <Border x:Name="BookOverlayBorder" Panel.ZIndex="1000" Visibility="Collapsed" Background="Black" HorizontalAlignment="Center" VerticalAlignment="Center">
+            <Border x:Name="BookOverlayBorder" Panel.ZIndex="1000" Visibility="Collapsed" HorizontalAlignment="Center" VerticalAlignment="Center">
                 <Canvas x:Name="BookOverlayCanvas" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
             </Border>
 

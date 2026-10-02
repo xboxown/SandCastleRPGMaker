@@ -648,6 +648,9 @@ public partial class GameTestWindow : Window
             return;
         }
 
+        // The character's own Open Sound (PC Editor) - only when it actually opens, not when an already-open one is brought to the front.
+        if (character.Paperdoll.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, character.Paperdoll.OpenSoundResourceId);
+
         // Real, clean paperdoll - per spec, just the body and its (invisible) slots, no title bar and no side panel; the body itself is the real drag handle, and a real 2-frame sprite (not a text glyph) is the exit button.
         // Real, confirmed fix, per spec ("the paperdoll looks tiny and the object sprites inside of it ARE HUGE... because the paperdoll sprites themselves did not update with the rest of the group") - the whole gump now scales together as one real, uniform unit via LayoutTransform, the same real principle ViewportScale itself already applies to the main game view, instead of leaving the body fixed while only its own item icons scaled independently (the actual mismatch that made a bigger window look wrong). Re-applied fresh with the current real scale every time this gump refreshes (RefreshPaperdollGump, called on every real viewport resize already), so it always tracks live.
         // No background at all: only the body art and the items drawn on it are part of the paperdoll (pixel-precise, like Exult's Gump::has_point) - transparent areas let clicks through to whatever is behind.
@@ -1516,6 +1519,7 @@ public partial class GameTestWindow : Window
 
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
         if (_isReadingBook) return;
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
@@ -2336,20 +2340,26 @@ public partial class GameTestWindow : Window
             foreach (var animator in pageOverlayAnimators) animator.Stop();
             pageOverlayAnimators.Clear();
             BookOverlayBorder.Visibility = Visibility.Collapsed;
-            BookOverlayBorder.MouseLeftButtonDown -= overlayClickHandler;
+            _bookNextPage = null;
+            _bookClose = null;
             _isReadingBook = false;
             GameCanvas.Focus();
         }
 
-        void overlayClickHandler(object sender, MouseButtonEventArgs e)
+        void FinishReading()
+        {
+            if (book.CloseSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, book.CloseSoundResourceId);
+            CloseOverlay();
+            // Finishing the book fires By After Read Item for real, through the same shared engine every other trigger goes through - not a simulated stand-in.
+            TryFireEventPages(book, book.EventPages, BookTriggerConditionBased.ByAfterReadItem, book.Id, $"You finish reading \"{EffectiveBookName(book)}\".");
+        }
+
+        void NextPage()
         {
             pageIndex++;
             if (pageIndex >= book.Pages.Count)
             {
-                if (book.CloseSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, book.CloseSoundResourceId);
-                CloseOverlay();
-                // Finishing the book fires By After Read Item for real, through the same shared engine every other trigger goes through - not a simulated stand-in.
-                TryFireEventPages(book, book.EventPages, BookTriggerConditionBased.ByAfterReadItem, book.Id, $"You finish reading \"{EffectiveBookName(book)}\".");
+                FinishReading();
                 return;
             }
             if (book.PageFlipSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, book.PageFlipSoundResourceId);
@@ -2359,10 +2369,16 @@ public partial class GameTestWindow : Window
         RenderPage();
         _isReadingBook = true;
         BookOverlayBorder.Visibility = Visibility.Visible;
-        BookOverlayBorder.MouseLeftButtonDown += overlayClickHandler;
+        // Exult shows a book modally (Usecode_internal::show_pending_text: "while (book->show_next_page() && Get_click(...))"): a click ANYWHERE turns the page, Escape ends it, and nothing else in the game can be used meanwhile.
+        _bookNextPage = NextPage;
+        _bookClose = FinishReading;
 
         if (book.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, book.OpenSoundResourceId);
     }
+
+    /// <summary>While a book is open: what a click anywhere does (next page, or finish on the last), and what Escape does (finish now) - Exult's modal Get_click loop.</summary>
+    private Action? _bookNextPage;
+    private Action? _bookClose;
 
     private void HandleObjectClick(ObjectInstance instance, bool isUse)
     {

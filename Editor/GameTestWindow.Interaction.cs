@@ -130,7 +130,13 @@ public partial class GameTestWindow
 
     private void Interaction_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
-        if (_isReadingBook) return;
+        if (_isReadingBook)
+        {
+            // Exult reads a book modally: any click, anywhere, is "next page" - nothing else can be clicked.
+            _bookNextPage?.Invoke();
+            e.Handled = true;
+            return;
+        }
         if (_pointer is { IsDragging: true }) { e.Handled = true; return; }
         _pointer = null;
 

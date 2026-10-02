@@ -105,6 +105,9 @@ public class PaperdollDefinition
     /// <summary>Real, per spec - plays once the player releases an item onto a real slot on this character's own paperdoll (dropping it back into a hand, say), same real principle as a container's own Navigate Sound.</summary>
     public int NavigateSoundResourceId { get; set; } = -1;
 
+    /// <summary>Plays when this character's paperdoll is opened in the game (a Sound resource Id; -1 = none).</summary>
+    public int OpenSoundResourceId { get; set; } = -1;
+
     public Dictionary<EquipmentSlot, PaperdollSlotPosition> SlotPositions { get; set; } = DefaultLayout();
 
     /// <summary>Real, confirmed new feature, per spec ("Add a feature for custom slots and the ability to delete custom slots by selecting one and pressing Delete... Custom slots are colored green") - designer-defined slots beyond the fixed built-in list, each with its own real name and its own real, draggable position, exactly like a built-in slot.</summary>

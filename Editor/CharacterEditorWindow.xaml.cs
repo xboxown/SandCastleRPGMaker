@@ -139,6 +139,8 @@ public partial class CharacterEditorWindow : Window
         var navigateSoundChoices = new List<ResourceEntry> { NoneSound };
         navigateSoundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
         PaperdollNavigateSoundCombo.ItemsSource = navigateSoundChoices;
+        PaperdollOpenSoundCombo.ItemsSource = navigateSoundChoices;
+        PaperdollOpenSoundCombo.SelectedItem = navigateSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.OpenSoundResourceId) ?? NoneSound;
         PaperdollNavigateSoundCombo.SelectedItem = navigateSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.NavigateSoundResourceId) ?? NoneSound;
 
         // Real, confirmed reset - a custom-slot selection belongs to whichever character it was made on; switching characters clears it rather than carrying a stale selection (or its rename box) over to a different character's own paperdoll.
@@ -784,6 +786,12 @@ public partial class CharacterEditorWindow : Window
     }
 
     private static readonly ResourceEntry NoneSound = new() { Id = -1, Name = "(None)" };
+
+    private void PaperdollOpenSound_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        character.Paperdoll.OpenSoundResourceId = (PaperdollOpenSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+    }
 
     private void PaperdollNavigateSound_Changed(object sender, SelectionChangedEventArgs e)
     {
