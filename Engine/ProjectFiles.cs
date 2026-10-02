@@ -98,6 +98,33 @@ public static class ProjectFiles
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
+    /// <summary>
+    /// The name an embedded file is unpacked under: a fresh "NNNN_" number in
+    /// front of its own name, with any earlier "NNNN_" numbers removed first.
+    /// The saved key is the previous unpacked path, so without the stripping
+    /// every load added one more "0000_" and the name grew by 5 characters
+    /// per load/save cycle - until it passed Windows' path limits and every
+    /// sound (and soon every sprite) failed to open.
+    /// </summary>
+    private static string ExtractedFileName(int counter, string originalPath)
+    {
+        string name = Path.GetFileName(originalPath);
+        while (name.Length > 5 && char.IsDigit(name[0]) && char.IsDigit(name[1]) && char.IsDigit(name[2]) && char.IsDigit(name[3]) && name[4] == '_')
+            name = name[5..];
+        return $"{counter:0000}_{name}";
+    }
+
+    /// <summary>The unpack folder is only a cache of what's embedded in the project file - old copies from earlier loads are removed so they don't pile up. A file still in use is simply left alone.</summary>
+    private static void ClearExtractFolder(string extractFolder)
+    {
+        foreach (var file in Directory.EnumerateFiles(extractFolder))
+        {
+            try { File.Delete(file); }
+            catch (IOException) { }
+            catch (UnauthorizedAccessException) { }
+        }
+    }
+
     public static void SaveManifest(string path, ManifestPayload payload)
     {
         string json = JsonSerializer.Serialize(payload, JsonOptions);
@@ -155,11 +182,12 @@ public static class ProjectFiles
                       ?? throw new ProjectFileException($"\"{Path.GetFileName(path)}\" could not be read as a sprite database.");
 
         Directory.CreateDirectory(extractFolder);
+        ClearExtractFolder(extractFolder);
         var remap = new Dictionary<string, string>();
         int counter = 0;
         foreach (var (originalPath, bytes) in payload.EmbeddedFiles)
         {
-            string extractedPath = Path.Combine(extractFolder, $"{counter:0000}_{Path.GetFileName(originalPath)}");
+            string extractedPath = Path.Combine(extractFolder, ExtractedFileName(counter, originalPath));
             File.WriteAllBytes(extractedPath, bytes);
             remap[originalPath] = extractedPath;
             counter++;
@@ -210,11 +238,12 @@ public static class ProjectFiles
                       ?? throw new ProjectFileException($"\"{Path.GetFileName(path)}\" could not be read as an audio database.");
 
         Directory.CreateDirectory(extractFolder);
+        ClearExtractFolder(extractFolder);
         var remap = new Dictionary<string, string>();
         int counter = 0;
         foreach (var (originalPath, bytes) in payload.EmbeddedFiles)
         {
-            string extractedPath = Path.Combine(extractFolder, $"{counter:0000}_{Path.GetFileName(originalPath)}");
+            string extractedPath = Path.Combine(extractFolder, ExtractedFileName(counter, originalPath));
             File.WriteAllBytes(extractedPath, bytes);
             remap[originalPath] = extractedPath;
             counter++;
