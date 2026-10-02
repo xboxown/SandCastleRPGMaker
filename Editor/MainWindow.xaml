@@ -26,6 +26,7 @@
                 <MenuItem x:Name="MapModeMenuItem" Header="Map" IsCheckable="True" IsChecked="True" Click="MapModeMenuItem_Click"/>
                 <MenuItem x:Name="EventModeMenuItem" Header="Event" IsCheckable="True" Click="EventModeMenuItem_Click"/>
                 <MenuItem x:Name="StartPositionModeMenuItem" Header="Start Position" IsCheckable="True" Click="StartPositionModeMenuItem_Click"/>
+                <MenuItem x:Name="CharacterModeMenuItem" Header="Characters" IsCheckable="True" Click="CharacterModeMenuItem_Click"/>
                 <MenuItem x:Name="ItemModeMenuItem" Header="Item">
                     <MenuItem x:Name="ItemTypeWeaponMenuItem" Header="Weapons" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
                     <MenuItem x:Name="ItemTypeArmorMenuItem" Header="Armors" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
@@ -109,6 +110,22 @@
                         <TextBlock DockPanel.Dock="Top" Text="Click an object to select it" Margin="6" FontWeight="Bold"/>
                         <ListBox x:Name="ObjectsPaletteListBox" Margin="4"
                                  SelectionChanged="ObjectsPaletteListBox_SelectionChanged">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <StackPanel Orientation="Horizontal" Margin="2">
+                                        <Image Source="{Binding Icon}" Width="28" Height="28" Margin="0,0,8,0"
+                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </DockPanel>
+                </TabItem>
+                <TabItem x:Name="CharactersPaletteTab" Header="Characters">
+                    <DockPanel LastChildFill="True">
+                        <TextBlock DockPanel.Dock="Top" Text="Mode &gt; Characters, pick one, click the map" Margin="6" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <ListBox x:Name="CharactersPaletteListBox" Margin="4">
                             <ListBox.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel Orientation="Horizontal" Margin="2">

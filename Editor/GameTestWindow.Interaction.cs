@@ -270,6 +270,9 @@ public partial class GameTestWindow
         int cellY = (int)Math.Floor(world.Y / _tileHeight);
         if (cellX < 0 || cellY < 0 || cellX >= _map.Width || cellY >= _map.Height) return null;
 
+        // A character standing on the map, if it's the topmost thing under the pointer.
+        if (HitTestCharacter(world) is { } character) return new MapEntityTarget(character);
+
         var (hitItem, hitObject) = HitTestStack(world);
         if (hitItem is not null) return new MapEntityTarget(hitItem);
         if (hitObject is not null) return new MapEntityTarget(hitObject);
@@ -331,6 +334,9 @@ public partial class GameTestWindow
             case PlayerTarget:
                 ShowIdentifyLabel(_player?.Name ?? "Yourself", _playerX, _playerY, _playerImage);
                 break;
+            case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
+                IdentifyCharacter(placedCharacter);
+                break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):
                 // Occupied: identifies it. Empty: equips the item selected in the backpack list, if any.
                 PaperdollSlotClicked(slot.Gump, slot.SlotKey, 1);
@@ -360,6 +366,9 @@ public partial class GameTestWindow
             case PlayerTarget:
                 // Exult: double-clicking the avatar opens their inventory (paperdoll).
                 OpenPaperdoll(_player);
+                break;
+            case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
+                StatusText.Text = $"{NameOfEntity(placedCharacter)} - talking to characters comes with the NPC system.";
                 break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):
                 var character = slot.Gump.Character;

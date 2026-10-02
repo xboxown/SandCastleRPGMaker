@@ -91,6 +91,7 @@ public partial class GameTestWindow
     private List<Body> WorldBodies() =>
         _map.Items.Select(i => BodyOf(i, null))
             .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).Select(o => BodyOf(null, o)))
+            .Concat(CharacterBodies()) // placed characters: solid, like Exult's actors
             .ToList();
 
     // ================= Item stacking and gravity =================
@@ -106,7 +107,7 @@ public partial class GameTestWindow
     /// </summary>
     private void SettleAll()
     {
-        var bodies = WorldBodies();
+        var bodies = WorldBodies().Where(b => b.Entity is not PlacedCharacter).ToList(); // gravity here is for items and objects - characters stand where they stand
         // Stable by current Z, then list order - so ties (e.g. a freshly loaded map, everything at Z 0) stack in placement order.
         var order = bodies.Select((b, index) => (b, index)).OrderBy(t => t.b.Z).ThenBy(t => t.index).Select(t => t.b).ToList();
         var settled = new List<Body>(order.Count);
@@ -285,6 +286,7 @@ public partial class GameTestWindow
         PlacedItemInstance { Category: ReferencedItemCategory.Container } item => _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.Name ?? "container",
         PlacedItemInstance item => item.Category.ToString(),
         ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Name ?? "object",
+        PlacedCharacter placed => _mapCharacters.FirstOrDefault(mc => mc.Placement == placed)?.Character.Name ?? "someone",
         _ => "something"
     };
 
@@ -388,6 +390,7 @@ public partial class GameTestWindow
     {
         PlacedItemInstance item => _itemVisuals.GetValueOrDefault(item),
         ObjectInstance obj => _objectVisuals.GetValueOrDefault(obj),
+        PlacedCharacter placed => _mapCharacters.FirstOrDefault(mc => mc.Placement == placed)?.Visual,
         _ => null
     };
 

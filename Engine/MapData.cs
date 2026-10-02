@@ -86,6 +86,12 @@ public class MapData
     /// <summary>Weapons/Armors/Items/Books placed as physical, interactable objects on the map - one generic mechanism instead of a separate one per item category, since they all come from the same Select Item picker. Objects keep their own separate, established placement system (the Objects palette tab) rather than duplicating through here too.</summary>
     public List<PlacedItemInstance> Items { get; set; } = new();
 
+    /// <summary>Characters (from the Character Editor) standing on this map - each with the pose and facing it starts in. The main player is not placed here; it starts at the Start Position.</summary>
+    public List<PlacedCharacter> Characters { get; set; } = new();
+
+    public int GetNextCharacterPlacementId()
+        => Characters.Count == 0 ? 1 : Characters.Max(c => c.Id) + 1;
+
     public int GetNextInstanceId()
         => Objects.Count == 0 ? 1 : Objects.Max(o => o.InstanceId) + 1;
 
@@ -153,4 +159,15 @@ public class PlacedItemInstance : IHasContainerContents
     /// </summary>
     public int OffsetX { get; set; } = 0;
     public int OffsetY { get; set; } = 0;
+}
+
+/// <summary>One character placed on a map: which character, which cell, and the pose and facing it starts in (PoseId -1 = Idle).</summary>
+public class PlacedCharacter
+{
+    public int Id { get; set; }
+    public int CharacterId { get; set; }
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int PoseId { get; set; } = -1;
+    public SpriteDirection Facing { get; set; } = SpriteDirection.South;
 }

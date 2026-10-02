@@ -181,7 +181,10 @@ public partial class GameTestWindow : Window
         BuildBookVisuals();
         SettleAll(); // The Map Editor has no way to author a non-ground Z yet - every item/object starts life at Z 0 in the saved map data. This runs the real settle logic once for every occupied cell at startup, so any cell that already holds more than one thing gets a genuine, correctly-computed initial Z, rather than everything just rendering flat at ground level until the first drag ever touches that cell.
         RefreshStackingVisuals();
+        _poseDatabase = poses;
         SetUpPlayer(characters, poses);
+        BuildCharacterVisuals(); // characters placed in the Map Editor (Mode > Characters)
+        RefreshStackingVisuals();
 
         GameCanvas.Focus();
         GameCanvas.PreviewKeyDown += GameCanvas_PreviewKeyDown;

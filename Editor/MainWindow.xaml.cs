@@ -46,7 +46,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item }
+    private enum EditMode { Map, Event, StartPosition, Item, Character }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -944,6 +944,7 @@ public partial class MainWindow : Window
         EditMenu.IsEnabled = true;
         ModeMenu.IsEnabled = true;
         GameMenu.IsEnabled = true;
+        RefreshCharactersPalette();
         DrawMenu.IsEnabled = true;
         ToolsMenu.IsEnabled = true;
         MainToolBar.IsEnabled = true;
@@ -970,6 +971,7 @@ public partial class MainWindow : Window
         MapModeMenuItem.IsChecked = false;
         EventModeMenuItem.IsChecked = false;
         StartPositionModeMenuItem.IsChecked = false;
+        CharacterModeMenuItem.IsChecked = false;
         ItemTypeWeaponMenuItem.IsChecked = false;
         ItemTypeArmorMenuItem.IsChecked = false;
         ItemTypeItemMenuItem.IsChecked = false;
@@ -1114,6 +1116,18 @@ public partial class MainWindow : Window
     {
         var window = new CharacterEditorWindow(_characterDatabase, _statDatabase, _poseDatabase, _spriteDatabase, _bookDatabase, _objectDatabase, _resourceDatabase) { Owner = this };
         window.ShowDialog();
+        // Names, poses and sprites may have changed - the palette and every placed character show them as they are now.
+        RefreshCharactersPalette();
+        PlaceAllCharacterVisualsIfMapShown();
+    }
+
+    private void PlaceAllCharacterVisualsIfMapShown()
+    {
+        if (_map is null || _tileset is null) return;
+        foreach (var visual in _mapCharacterVisuals.Values) MapCanvas.Children.Remove(visual);
+        if (_characterSelectionVisual is not null) MapCanvas.Children.Remove(_characterSelectionVisual);
+        PlaceAllCharacterVisuals();
+        UpdateCharacterSelectionVisual();
     }
 
     private void SystemSettingsMenuItem_Click(object sender, RoutedEventArgs e)
@@ -1408,6 +1422,9 @@ public partial class MainWindow : Window
         foreach (var itemInstance in _map.Items)
             PlaceItemVisual(itemInstance);
 
+        // Characters standing on this map, in their poses.
+        PlaceAllCharacterVisuals();
+
         // -= before += for the same reason as the palette's own handlers -
         // BuildMapCanvas() can genuinely run more than once in a session
         // (New Map, Load Map, Open Project), and Children.Clear() only
@@ -1440,6 +1457,12 @@ public partial class MainWindow : Window
         if (!IsInsideMap(x, y)) return;
 
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+
+        if (_editMode == EditMode.Character)
+        {
+            CharacterMode_MouseLeftButtonDown(x, y);
+            return;
+        }
 
         if (_editMode == EditMode.Item)
         {
@@ -1578,6 +1601,7 @@ public partial class MainWindow : Window
         var rawPoint = e.GetPosition(MapCanvas);
         var (hoverX, hoverY) = CellFromPoint(rawPoint);
         bool inBounds = IsInsideMap(hoverX, hoverY);
+        _lastHoverCell = (hoverX, hoverY);
 
         // Live diagnostic for Issue #2/#3: the exact raw pixel position AND the cell it resolves to, in or out of bounds - hover to the spot where the cursor disappears and this shows precisely what's being computed there.
         StatusText.Text = inBounds
@@ -1632,6 +1656,8 @@ public partial class MainWindow : Window
         _isFreehandPainting = false;
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
+
+        if (CharacterMode_MouseLeftButtonUp(x, y)) return;
 
         if (_draggingInstance is not null)
         {
@@ -1697,6 +1723,12 @@ public partial class MainWindow : Window
             var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
             if (existing is not null) _selectedMapEvent = existing;
             ShowMapEventContextMenu(existing, x, y);
+            return;
+        }
+
+        if (_editMode == EditMode.Character)
+        {
+            CharacterMode_MouseRightButtonDown(x, y);
             return;
         }
 
@@ -1885,6 +1917,12 @@ public partial class MainWindow : Window
         {
             LaunchGameTest();
             e.Handled = true;
+            return;
+        }
+
+        if (_editMode == EditMode.Character && _map is not null)
+        {
+            if (CharacterMode_KeyDown(e)) e.Handled = true;
             return;
         }
 
