@@ -782,12 +782,17 @@ public partial class MainWindow : Window
     {
         var pick = new OpenFileDialog { Filter = "Sandcastle Project (*.msrp)|*.msrp" };
         if (pick.ShowDialog() != true) return;
+        LoadProjectFromPath(pick.FileName);
+    }
 
+    /// <summary>Loads a project from its .msrp (and the .sdbx files beside it) - used by File > Open and by a built standalone game. False if it couldn't be opened (the reason was already shown).</summary>
+    private bool LoadProjectFromPath(string msrpPath)
+    {
         try
         {
-            var payload = ProjectFiles.LoadManifest(pick.FileName);
+            var payload = ProjectFiles.LoadManifest(msrpPath);
             var manifest = payload.Manifest;
-            string folder = System.IO.Path.GetDirectoryName(pick.FileName) ?? string.Empty;
+            string folder = System.IO.Path.GetDirectoryName(msrpPath) ?? string.Empty;
             string shapePath = System.IO.Path.Combine(folder, "shapes.sdbx");
             string objectsPath = System.IO.Path.Combine(folder, "objects.sdbx");
             string audiosPath = System.IO.Path.Combine(folder, "audios.sdbx");
@@ -851,7 +856,8 @@ public partial class MainWindow : Window
                 MapWidthBox.Text = _map.Width.ToString();
                 MapHeightBox.Text = _map.Height.ToString();
             }
-            SetActiveProject(pick.FileName, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
+            SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
+            return true;
         }
         catch (ProjectFileException ex)
         {
@@ -861,11 +867,15 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"This project could not be opened: {ex.Message}", "Open Project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        return false;
     }
 
-    private void SaveProjectMenuItem_Click(object sender, RoutedEventArgs e)
+    private void SaveProjectMenuItem_Click(object sender, RoutedEventArgs e) => SaveProject();
+
+    /// <summary>Saves the open project (.msrp and its .sdbx files). False if there is none or saving failed (the reason was already shown).</summary>
+    private bool SaveProject()
     {
-        if (_currentProjectFilePath is null || _currentProjectId is null || _currentProjectFolder is null) return;
+        if (_currentProjectFilePath is null || _currentProjectId is null || _currentProjectFolder is null) return false;
 
         try
         {
@@ -905,6 +915,7 @@ public partial class MainWindow : Window
             MarkAudiosIntegrated();
 
             StatusText.Text = $"Project saved to {_currentProjectFolder}";
+            return true;
         }
         catch (ProjectFileException ex)
         {
@@ -914,6 +925,7 @@ public partial class MainWindow : Window
         {
             MessageBox.Show($"Could not save the project: {ex.Message}", "Save Project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
+        return false;
     }
 
     /// <summary>Common finish line for both New and Open: record which project is active and unlock everything except Save was previously locked behind.</summary>
@@ -1111,6 +1123,110 @@ public partial class MainWindow : Window
     }
 
     private void TestEngineMenuItem_Click(object sender, RoutedEventArgs e) => LaunchGameTest();
+
+    /// <summary>
+    /// Game > Build...: makes a standalone game - the engine's program files
+    /// copied to a folder of your choice, with this project's .msrp and .sdbx
+    /// files merged into the game's .exe (GameBundle). The project is saved
+    /// first, so the game is exactly what you see. It can never be built into
+    /// the project's own folder or the editor's folder.
+    /// </summary>
+    private void BuildGameMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        if (_currentProjectFilePath is null || _currentProjectFolder is null)
+        {
+            MessageBox.Show("Open or create a project first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (_map is null || _tileset is null || _tilesetBitmap is null)
+        {
+            MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
+        if (!SaveProject()) return;
+
+        string gameName = string.Concat((_currentProjectName is { Length: > 0 } n ? n : "Game").Select(c => System.IO.Path.GetInvalidFileNameChars().Contains(c) ? '_' : c));
+        var pick = new SaveFileDialog
+        {
+            Title = "Where should the game be built?",
+            Filter = "Game (*.exe)|*.exe",
+            FileName = gameName + ".exe",
+            OverwritePrompt = true
+        };
+        if (pick.ShowDialog(this) != true) return;
+
+        string targetFolder = System.IO.Path.GetFullPath(System.IO.Path.GetDirectoryName(pick.FileName)!);
+        string projectFolder = System.IO.Path.GetFullPath(_currentProjectFolder);
+        string engineFolder = System.IO.Path.GetFullPath(AppContext.BaseDirectory);
+        if (IsSameOrInside(targetFolder, projectFolder))
+        {
+            MessageBox.Show("The game can't be built into the project's own folder (or a folder inside it) - that's where its source lives. Choose a different folder.", "Build", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+        if (IsSameOrInside(targetFolder, engineFolder) || IsSameOrInside(engineFolder, targetFolder))
+        {
+            MessageBox.Show("The game can't be built into the editor's own folder. Choose a different folder.", "Build", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        string? engineExe = Environment.ProcessPath;
+        if (engineExe is null || !System.IO.File.Exists(engineExe))
+        {
+            MessageBox.Show("Couldn't find the engine's own program file to build from.", "Build", MessageBoxButton.OK, MessageBoxImage.Error);
+            return;
+        }
+
+        try
+        {
+            Mouse.OverrideCursor = Cursors.Wait;
+            GameBundle.Build(engineFolder, engineExe, pick.FileName, projectFolder, System.IO.Path.GetFileName(_currentProjectFilePath));
+            StatusText.Text = $"Game built: {pick.FileName}";
+            MessageBox.Show($"Your game was built:\n{pick.FileName}\n\nRun that .exe to play it. Keep it together with the other files in that folder - they're the engine it runs on. The player's PC needs the free Microsoft .NET 8 Desktop Runtime.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"The game could not be built: {ex.Message}", "Build", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        finally
+        {
+            Mouse.OverrideCursor = null;
+        }
+    }
+
+    private static bool IsSameOrInside(string folder, string parent)
+    {
+        string a = System.IO.Path.TrimEndingDirectorySeparator(folder) + System.IO.Path.DirectorySeparatorChar;
+        string b = System.IO.Path.TrimEndingDirectorySeparator(parent) + System.IO.Path.DirectorySeparatorChar;
+        return a.StartsWith(b, StringComparison.OrdinalIgnoreCase);
+    }
+
+    /// <summary>
+    /// A built game starting up: this window stays hidden; the embedded
+    /// project is loaded exactly as File > Open would, and the game runs in
+    /// its own window titled with the project's name. Closing it ends the
+    /// program. False if the project couldn't be loaded or has no map.
+    /// </summary>
+    public bool RunStandaloneGame(string msrpPath)
+    {
+        if (!LoadProjectFromPath(msrpPath)) return false;
+        if (_map is null || _tileset is null || _tilesetBitmap is null)
+        {
+            MessageBox.Show("This game has no map to play.", _currentProjectName ?? "Game", MessageBoxButton.OK, MessageBoxImage.Error);
+            return false;
+        }
+        var game = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
+            _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
+            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings)
+        {
+            Title = _currentProjectName is { Length: > 0 } name ? name : "Game",
+            WindowStartupLocation = WindowStartupLocation.CenterScreen
+        };
+        game.Closed += (_, _) => Application.Current.Shutdown();
+        Application.Current.MainWindow = game;
+        game.Show();
+        return true;
+    }
 
     private void LaunchGameTest()
     {

@@ -20,6 +20,7 @@
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>
+                <MenuItem x:Name="BuildGameMenuItem" Header="Build..." Click="BuildGameMenuItem_Click" ToolTip="Build a standalone game: choose where, and the project is merged into the game's .exe"/>
             </MenuItem>
             <MenuItem x:Name="ModeMenu" Header="_Mode" IsEnabled="False">
                 <MenuItem x:Name="MapModeMenuItem" Header="Map" IsCheckable="True" IsChecked="True" Click="MapModeMenuItem_Click"/>
