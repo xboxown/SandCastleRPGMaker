@@ -649,7 +649,7 @@ public partial class GameTestWindow : Window
         }
 
         // The character's own Open Sound (PC Editor) - only when it actually opens, not when an already-open one is brought to the front.
-        if (character.Paperdoll.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, character.Paperdoll.OpenSoundResourceId);
+        PlayOpenSound(character.Paperdoll.OpenSoundResourceId, $"{character.Name}'s paperdoll");
 
         // Real, clean paperdoll - per spec, just the body and its (invisible) slots, no title bar and no side panel; the body itself is the real drag handle, and a real 2-frame sprite (not a text glyph) is the exit button.
         // Real, confirmed fix, per spec ("the paperdoll looks tiny and the object sprites inside of it ARE HUGE... because the paperdoll sprites themselves did not update with the rest of the group") - the whole gump now scales together as one real, uniform unit via LayoutTransform, the same real principle ViewportScale itself already applies to the main game view, instead of leaving the body fixed while only its own item icons scaled independently (the actual mismatch that made a bigger window look wrong). Re-applied fresh with the current real scale every time this gump refreshes (RefreshPaperdollGump, called on every real viewport resize already), so it always tracks live.
@@ -1124,7 +1124,7 @@ public partial class GameTestWindow : Window
         if (fired) return;
 
         // Real, confirmed gap found and fixed while wiring Navigate Sound - OpenSoundResourceId/CloseSoundResourceId were added to the data model in an earlier pass but never actually played anywhere at runtime, same real pattern Book's own open/close sounds already use.
-        if (data.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.OpenSoundResourceId);
+        PlayOpenSound(data.OpenSoundResourceId, $"\"{data.Name}\"");
 
         if (EnsureContainerSeeded(placedItem, data))
         {
@@ -1182,7 +1182,7 @@ public partial class GameTestWindow : Window
         bool fired = TryFireEventPages(data, data.EventPages, BookTriggerConditionBased.ByUseItem, data.Id, $"You open \"{data.Name}\" - real event fired.");
         if (fired) return;
 
-        if (data.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.OpenSoundResourceId);
+        PlayOpenSound(data.OpenSoundResourceId, $"\"{data.Name}\"");
 
         var itemsCanvas = new Canvas(); // no background: only the container art and its items are part of it (pixel-precise)
         var gumpBorder = new Border();
@@ -2373,7 +2373,30 @@ public partial class GameTestWindow : Window
         _bookNextPage = NextPage;
         _bookClose = FinishReading;
 
-        if (book.OpenSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, book.OpenSoundResourceId);
+        PlayOpenSound(book.OpenSoundResourceId, $"\"{EffectiveBookName(book)}\"");
+    }
+
+    /// <summary>
+    /// Plays a paperdoll/container/book Open Sound and says in the status bar
+    /// exactly what happened - the sound played, none is set, or why it
+    /// couldn't play - so a missing sound is never a silent mystery.
+    /// </summary>
+    private void PlayOpenSound(int soundId, string what)
+    {
+        if (soundId < 0)
+        {
+            StatusText.Text = $"Opened {what} - no Open Sound is set for it.";
+            return;
+        }
+        var entry = _resources.Entries.FirstOrDefault(r => r.Id == soundId);
+        if (entry is null)
+            StatusText.Text = $"Opened {what} - its Open Sound (#{soundId}) no longer exists in the Sound list.";
+        else if (!System.IO.File.Exists(entry.FilePath))
+            StatusText.Text = $"Opened {what} - Open Sound \"{entry.Name}\" can't play: its file is missing ({entry.FilePath}).";
+        else if (!SoundPlayback.TryPlay(_resources, soundId))
+            StatusText.Text = $"Opened {what} - Open Sound \"{entry.Name}\" failed to play.";
+        else
+            StatusText.Text = $"Opened {what} - playing Open Sound \"{entry.Name}\".";
     }
 
     /// <summary>While a book is open: what a click anywhere does (next page, or finish on the last), and what Escape does (finish now) - Exult's modal Get_click loop.</summary>
