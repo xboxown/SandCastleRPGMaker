@@ -17,6 +17,14 @@ public partial class SpriteFrameEditorWindow : Window
     private readonly ResourceDatabase _resources;
     /// <summary>True when this sprite belongs to SpriteDatabase.TilesetGroupName - the sound icon is hidden for tileset sprites specifically, since a tileset's Frames are individual tile cells, not an animation with per-frame audio cues.</summary>
     private readonly bool _isTilesetGroup;
+    /// <summary>
+    /// True for the two locked font sprites (Fonts > InGameFont / DialogFont):
+    /// their frames are glyphs, never played - so no per-frame sound, no
+    /// playback, no FPS/Loop, the name can't change, and the floating Font
+    /// Guide shows which character each frame position is.
+    /// </summary>
+    private readonly bool _isFontSprite;
+    private FontGuideWindow? _fontGuide;
     private bool _suppress;
 
     private int _currentFrameIndex;
@@ -31,12 +39,13 @@ public partial class SpriteFrameEditorWindow : Window
         "Custom"
     };
 
-    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false)
+    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false)
     {
         InitializeComponent();
         _sprite = sprite;
         _resources = resources;
         _isTilesetGroup = isTilesetGroup;
+        _isFontSprite = isFontSprite;
         PreviewKeyDown += SpriteFrameEditorWindow_PreviewKeyDown;
 
         OriginAnchorCombo.ItemsSource = AnchorOptions;
@@ -79,6 +88,52 @@ public partial class SpriteFrameEditorWindow : Window
         };
 
         Closing += (_, _) => _playbackTimer.Stop();
+
+        if (_isFontSprite) SetUpFontMode();
+    }
+
+    /// <summary>A font sprite: glyph frames only - nothing that animates or makes sound, a fixed name, and the Font Guide alongside.</summary>
+    private void SetUpFontMode()
+    {
+        foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1; // never played, so never heard
+        _sprite.Loop = false;
+        NameBox.IsReadOnly = true;
+        NameBox.ToolTip = "The game's fonts have fixed names";
+        foreach (UIElement control in new UIElement[] { FpsBox, LoopCheck, PlayPauseButton })
+        {
+            control.IsEnabled = false;
+            ((FrameworkElement)control).ToolTip = "Fonts don't animate - each frame is one letter";
+        }
+        Title = $"Font: {_sprite.Name}";
+
+        var guideButton = new Button { Content = "Font Guide...", Margin = new Thickness(0, 0, 6, 0), ToolTip = "Show which character each frame position is" };
+        guideButton.Click += (_, _) => ShowFontGuide();
+        if (AddFramesButton.Parent is Panel panel) panel.Children.Add(guideButton);
+
+        Loaded += (_, _) => ShowFontGuide();
+    }
+
+    private void ShowFontGuide()
+    {
+        if (_fontGuide is { IsLoaded: true })
+        {
+            _fontGuide.Activate();
+            return;
+        }
+        _fontGuide = new FontGuideWindow(_sprite) { Owner = this };
+        _fontGuide.FrameChosen += index =>
+        {
+            if (index < 0 || index >= _sprite.Frames.Count) return;
+            _currentFrameIndex = index;
+            UpdatePreview();
+            HighlightSelectedThumbnail();
+        };
+        _fontGuide.Closed += (_, _) => _fontGuide = null;
+        // Beside this window rather than over it, so both stay usable.
+        _fontGuide.Left = Math.Max(0, Left + ActualWidth - 40);
+        _fontGuide.Top = Math.Max(0, Top + 40);
+        _fontGuide.Show();
+        _fontGuide.Refresh(_currentFrameIndex);
     }
 
     private static BitmapImage? LoadBitmap(string path) => LoadBitmap(path, out _);
@@ -209,6 +264,7 @@ public partial class SpriteFrameEditorWindow : Window
 
     private void PlayPauseButton_Click(object sender, RoutedEventArgs e)
     {
+        if (_isFontSprite) return;
         _isPlaying = !_isPlaying;
         PlayPauseButton.Content = _isPlaying ? "\u275A\u275A" : "\u25B6";
         if (_isPlaying) RestartPlaybackTimer(); else _playbackTimer.Stop();
@@ -216,7 +272,7 @@ public partial class SpriteFrameEditorWindow : Window
 
     private void AdvanceFrame()
     {
-        if (_sprite.Frames.Count == 0) return;
+        if (_sprite.Frames.Count == 0 || _isFontSprite) return;
         _currentFrameIndex++;
         if (_currentFrameIndex >= _sprite.Frames.Count)
         {
@@ -321,7 +377,7 @@ public partial class SpriteFrameEditorWindow : Window
         // Hidden entirely for the Tileset group - each frame there is a
         // distinct tile cell, not an animation frame, so per-frame sound
         // doesn't apply to it the way it does everywhere else.
-        if (!_isTilesetGroup)
+        if (!_isTilesetGroup && !_isFontSprite)
         {
             var volumeIcon = new TextBlock
             {
@@ -342,7 +398,7 @@ public partial class SpriteFrameEditorWindow : Window
 
         var indexLabel = new TextBlock
         {
-            Text = (index + 1).ToString(),
+            Text = (index + 1).ToString() + (_isFontSprite ? FontCharLabel(index) : ""),
             Foreground = Brushes.White,
             FontWeight = FontWeights.Bold,
             Margin = new Thickness(2),
@@ -501,7 +557,16 @@ public partial class SpriteFrameEditorWindow : Window
     {
         for (int i = 0; i < _thumbnailBorders.Count; i++)
             _thumbnailBorders[i].BorderBrush = i == _currentFrameIndex ? Brushes.OrangeRed : Brushes.Transparent;
+        _fontGuide?.Refresh(_currentFrameIndex);
     }
+
+    /// <summary>The character a font frame draws, for its thumbnail label.</summary>
+    private static string FontCharLabel(int index) => SpriteDatabase.FontCharForFrame(index) switch
+    {
+        ' ' => "  spc",
+        char ch => $"  {ch}",
+        null => "  (unused)"
+    };
 
     /// <summary>
     /// Click the volume icon -> a small popup right at the icon (not a
@@ -745,7 +810,7 @@ public partial class SpriteFrameEditorWindow : Window
             }
         }
 
-        var pasted = new SpriteFrame { FilePath = internalNewPath, DurationMs = _frameClipboard.DurationMs, SoundResourceId = _frameClipboard.SoundResourceId };
+        var pasted = new SpriteFrame { FilePath = internalNewPath, DurationMs = _frameClipboard.DurationMs, SoundResourceId = _isFontSprite ? -1 : _frameClipboard.SoundResourceId };
         int insertAt = Math.Min(_currentFrameIndex + 1, _sprite.Frames.Count);
         _sprite.Frames.Insert(insertAt, pasted);
 
@@ -761,7 +826,9 @@ public partial class SpriteFrameEditorWindow : Window
         var openDialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp" };
         if (openDialog.ShowDialog() != true) return;
 
-        var converter = new ConvertToFramesWindow(openDialog.FileName) { Owner = this };
+        // A font sheet: 95 characters, 18 to a row, from the space - the cell size follows from the image.
+        var converter = new ConvertToFramesWindow(openDialog.FileName,
+            _isFontSprite ? (SpriteDatabase.FontGlyphCount, SpriteDatabase.FontSheetColumns) : null) { Owner = this };
         if (converter.ShowDialog() != true || converter.Result.Count == 0) return;
 
         int defaultDuration = (int)(1000.0 / Math.Max(1, _sprite.Fps));

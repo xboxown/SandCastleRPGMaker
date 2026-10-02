@@ -33,6 +33,11 @@
                                     <Setter Property="Foreground" Value="Red"/>
                                     <Setter Property="FontWeight" Value="Bold"/>
                                 </DataTrigger>
+                                <!-- Value="Fonts" must match SpriteDatabase.FontsGroupName. -->
+                                <DataTrigger Binding="{Binding Name}" Value="Fonts">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </ListBox.ItemContainerStyle>
@@ -42,6 +47,21 @@
             <DockPanel Grid.Column="1">
                 <TextBlock DockPanel.Dock="Top" Text="Sprites in group" FontWeight="Bold" Margin="6"/>
                 <ListView x:Name="SpriteListView" Margin="6" MouseDoubleClick="SpriteListView_MouseDoubleClick">
+                    <!-- The two locked font sprites (SpriteDatabase.InGameFontName / DialogFontName) show red like their group. -->
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Name}" Value="InGameFont">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Name}" Value="DialogFont">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="Name" Width="200" DisplayMemberBinding="{Binding Name}"/>

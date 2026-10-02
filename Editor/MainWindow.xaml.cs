@@ -770,7 +770,7 @@ public partial class MainWindow : Window
         // Factions/Variables/TileProperties too, now that they live in .msrp
         // alongside everything else instead of surviving only in memory.
         _spriteDatabase = new SpriteDatabase();
-        _spriteDatabase.EnsureTilesetGroup();
+        _spriteDatabase.EnsureBuiltInGroups();
         RefreshTilesetCombo();
         _bookDatabase = new BookDatabase();
         _containerDatabase = new ContainerDatabase();
@@ -816,7 +816,7 @@ public partial class MainWindow : Window
             var resources = ProjectFiles.LoadAudiosSdbx(audiosPath, manifest.ProjectId, System.IO.Path.Combine(extractRoot, "audio"));
 
             _spriteDatabase = sprites;
-            _spriteDatabase.EnsureTilesetGroup(); // older projects, saved before today, won't have this group in their file yet
+            _spriteDatabase.EnsureBuiltInGroups(); // older projects, saved before today, won't have this group in their file yet
             RefreshTilesetCombo();
             _bookDatabase = books;
             _resourceDatabase = resources;

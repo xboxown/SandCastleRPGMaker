@@ -577,8 +577,10 @@ internal static class BookPaginationEngine
 
     private static double MeasureRangeHeight(TextRange range, double width)
     {
-        var probe = CreateMeasureProbe(width);
         string xaml = SaveRange(range);
+        // With the game's graphical font in use, pages are drawn with it - so they're measured with it too.
+        if (FormattedContentRenderer.MeasureWithInGameFont(xaml, width) is double fontHeight) return fontHeight;
+        var probe = CreateMeasureProbe(width);
         RichTextXamlHelper.Load(probe, xaml);
         probe.Measure(new Size(width, double.PositiveInfinity));
         return probe.DesiredSize.Height;

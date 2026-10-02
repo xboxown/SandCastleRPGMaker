@@ -166,7 +166,7 @@ public partial class NewProjectWindow : Window
             };
             ProjectFiles.SaveManifest(msrpPath, payload);
             var freshSprites = new SpriteDatabase();
-            freshSprites.EnsureTilesetGroup();
+            freshSprites.EnsureBuiltInGroups();
             ProjectFiles.SaveShapeSdbx(shapePath, id, freshSprites);
             ProjectFiles.SaveObjectsSdbx(objectsPath, id, new BookDatabase());
             ProjectFiles.SaveAudiosSdbx(audiosPath, id, new ResourceDatabase());

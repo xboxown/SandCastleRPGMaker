@@ -133,6 +133,42 @@ public class SpriteDatabase
     /// <summary>Call once after construction/load so the Tileset group always exists, without needing every caller to remember to create it.</summary>
     public SpriteGroup EnsureTilesetGroup() => GetOrCreateGroup(TilesetGroupName);
 
+    /// <summary>
+    /// Reserved group for the game's graphical fonts - always present, red,
+    /// can't be deleted or renamed, and holds exactly the two locked font
+    /// sprites below. A font sprite's Frames are glyphs, not an animation:
+    /// frame N is the character (char)(FontFirstChar + N), laid out like a
+    /// font sheet of FontSheetColumns columns (space ! " # ... ~).
+    /// </summary>
+    public const string FontsGroupName = "Fonts";
+    /// <summary>The main in-game font: identify labels, gumps, books - all in-game text.</summary>
+    public const string InGameFontName = "InGameFont";
+    /// <summary>The font conversations/dialog boxes are written in.</summary>
+    public const string DialogFontName = "DialogFont";
+    public const int FontFirstChar = 32;
+    public const int FontGlyphCount = 95; // ' ' (32) through '~' (126)
+    public const int FontSheetColumns = 18;
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName;
+    public static bool IsFontSprite(string groupName, string spriteName) =>
+        groupName == FontsGroupName && (spriteName == InGameFontName || spriteName == DialogFontName);
+
+    /// <summary>Which character a font frame draws, or null past the end of the sheet.</summary>
+    public static char? FontCharForFrame(int frameIndex) =>
+        frameIndex >= 0 && frameIndex < FontGlyphCount ? (char)(FontFirstChar + frameIndex) : null;
+
+    /// <summary>Call once after construction/load: the Tileset group, and the Fonts group with its two font sprites, always exist.</summary>
+    public void EnsureBuiltInGroups()
+    {
+        EnsureTilesetGroup();
+        var fonts = GetOrCreateGroup(FontsGroupName);
+        foreach (string name in new[] { InGameFontName, DialogFontName })
+            if (fonts.Sprites.All(s => s.Name != name)) fonts.Sprites.Add(new SpriteEntry { Name = name, Loop = false });
+    }
+
+    public SpriteEntry? FindFont(string fontName) =>
+        Groups.FirstOrDefault(g => g.Name == FontsGroupName)?.Sprites.FirstOrDefault(s => s.Name == fontName);
+
     public SpriteGroup GetOrCreateGroup(string name)
     {
         var existing = Groups.FirstOrDefault(g => g.Name == name);

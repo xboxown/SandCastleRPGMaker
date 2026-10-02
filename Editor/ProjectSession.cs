@@ -52,6 +52,7 @@ internal static class ProjectSession
             var bmp = new System.Windows.Media.Imaging.BitmapImage();
             bmp.BeginInit();
             bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
+            bmp.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache; // a frame redrawn in place must show its new pixels
             bmp.UriSource = new Uri(path);
             bmp.EndInit();
             return bmp;

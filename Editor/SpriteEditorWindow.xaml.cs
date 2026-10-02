@@ -18,7 +18,7 @@ public partial class SpriteEditorWindow : Window
         Title += $" [{BuildInfo.CurrentBuild}]";
         if (existing is not null) Database = existing;
         _resources = resources ?? new ResourceDatabase();
-        Database.EnsureTilesetGroup();
+        Database.EnsureBuiltInGroups();
         RefreshGroups();
     }
 
@@ -54,6 +54,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Tileset group is hardcoded and can't be deleted - it's how the Map Editor finds every tileset.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.FontsGroupName)
+        {
+            MessageBox.Show("The Fonts group is hardcoded and can't be deleted - the game writes all its text with the fonts in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         Database.Groups.Remove(_currentGroup);
         _currentGroup = null;
         RefreshGroups();
@@ -74,6 +79,7 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
+        if (RefuseInFontsGroup()) return;
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 
@@ -91,6 +97,7 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
+        if (RefuseInFontsGroup()) return;
         var dialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp", Multiselect = true };
         if (dialog.ShowDialog() != true) return;
 
@@ -109,6 +116,11 @@ public partial class SpriteEditorWindow : Window
     private void RemoveSprite_Click(object sender, RoutedEventArgs e)
     {
         if (_currentGroup is null || SpriteListView.SelectedItem is not SpriteEntry entry) return;
+        if (SpriteDatabase.IsFontSprite(_currentGroup.Name, entry.Name))
+        {
+            MessageBox.Show($"\"{entry.Name}\" is one of the game's two fonts and can't be removed or renamed - edit it to draw or import its letters.", "Protected Sprite", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         _currentGroup.Sprites.Remove(entry);
         RefreshSprites();
     }
@@ -131,9 +143,18 @@ public partial class SpriteEditorWindow : Window
             return;
         }
         bool isTilesetGroup = _currentGroup?.Name == SpriteDatabase.TilesetGroupName;
-        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup) { Owner = this };
+        bool isFont = _currentGroup is not null && SpriteDatabase.IsFontSprite(_currentGroup.Name, entry.Name);
+        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
+    }
+
+    /// <summary>The Fonts group holds exactly the game's two fonts - nothing else is ever read from it.</summary>
+    private bool RefuseInFontsGroup()
+    {
+        if (_currentGroup?.Name != SpriteDatabase.FontsGroupName) return false;
+        MessageBox.Show("The Fonts group only holds the game's two fonts, InGameFont and DialogFont. Edit one of them to add its letters.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+        return true;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)
@@ -148,6 +169,7 @@ public partial class SpriteEditorWindow : Window
         var dialog = new OpenFileDialog { Filter = "Sprite DB JSON (*.spritedb.json)|*.spritedb.json|All files (*.*)|*.*" };
         if (dialog.ShowDialog() != true) return;
         Database = SpriteDatabaseSerializer.Load(dialog.FileName);
+        Database.EnsureBuiltInGroups();
         _currentGroup = null;
         RefreshGroups();
         RefreshSprites();

@@ -59,9 +59,10 @@ internal static class FormattedContentRenderer
 
         double cursorY = 0;
         var visual = new DrawingVisual();
+        var font = SpriteFont.For(sprites, SpriteDatabase.InGameFontName);
         using (var dc = visual.RenderOpen())
         {
-            LayoutBlocks(scratch.Document.Blocks, dc, ref cursorY, width, sprites, spriteBoxes);
+            LayoutBlocks(scratch.Document.Blocks, dc, ref cursorY, width, sprites, spriteBoxes, font);
         }
 
         var rtb = new RenderTargetBitmap((int)Math.Ceiling(width), (int)Math.Ceiling(height), 96, 96, PixelFormats.Pbgra32);
@@ -71,13 +72,31 @@ internal static class FormattedContentRenderer
         return new RenderResult { TextBitmap = rtb, Sprites = spriteBoxes, TotalHeight = cursorY };
     }
 
-    private static void LayoutBlocks(IEnumerable<Block> blocks, DrawingContext dc, ref double cursorY, double width, SpriteDatabase sprites, List<SpriteBox> spriteBoxes)
+    /// <summary>
+    /// The height book content takes when drawn with the project's InGameFont
+    /// at this width - what pagination measures with whenever that font has
+    /// glyphs, so pages break exactly where the drawn text runs out of room.
+    /// Null when there is no font (pagination then measures as before).
+    /// </summary>
+    public static double? MeasureWithInGameFont(string xaml, double width)
+    {
+        var sprites = ProjectSession.Sprites;
+        var font = SpriteFont.For(sprites, SpriteDatabase.InGameFontName);
+        if (font is null) return null;
+        var scratch = new RichTextBox { FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Foreground = Brushes.Black };
+        RichTextXamlHelper.Load(scratch, xaml);
+        double cursorY = 0;
+        LayoutBlocks(scratch.Document.Blocks, null, ref cursorY, width, sprites, new List<SpriteBox>(), font);
+        return Math.Max(0, cursorY - ParagraphSpacing); // no spacing is needed after the last paragraph
+    }
+
+    private static void LayoutBlocks(IEnumerable<Block> blocks, DrawingContext? dc, ref double cursorY, double width, SpriteDatabase sprites, List<SpriteBox> spriteBoxes, SpriteFont? font)
     {
         foreach (var block in blocks)
         {
             if (block is Section section)
             {
-                LayoutBlocks(section.Blocks, dc, ref cursorY, width, sprites, spriteBoxes);
+                LayoutBlocks(section.Blocks, dc, ref cursorY, width, sprites, spriteBoxes, font);
                 continue;
             }
 
@@ -92,10 +111,21 @@ internal static class FormattedContentRenderer
                 continue;
             }
 
+            if (font is not null)
+            {
+                // The game's own graphical font: each run keeps its colour and size (12 = the font's own pixels, 24 = twice that...).
+                var chars = new List<SpriteFont.StyledChar>();
+                CollectStyledChars(para.Inlines, chars);
+                if (chars.Count == 0 || chars.All(c => char.IsWhiteSpace(c.Ch))) { cursorY += ParagraphSpacing; continue; }
+                double height = dc is null ? font.Measure(chars, width) : font.Draw(dc, chars, new Point(0, cursorY), width, para.TextAlignment);
+                cursorY += height + ParagraphSpacing;
+                continue;
+            }
+
             var ft = BuildFormattedText(para, width);
             if (ft is not null)
             {
-                dc.DrawText(ft, new Point(0, cursorY));
+                dc?.DrawText(ft, new Point(0, cursorY));
                 cursorY += ft.Height + ParagraphSpacing;
             }
             else
@@ -175,6 +205,29 @@ internal static class FormattedContentRenderer
 
                 bool found = LiveSpriteEmbedding.TryResolveSprite(floater, sprites, out var resolvedSprite, out _);
                 sb.AppendLine(found ? $"  -> TryResolveSprite: FOUND sprite \"{resolvedSprite!.Name}\"" : "  -> TryResolveSprite: NOT FOUND (no sprite's first-frame pixel content matches this Image's displayed pixels)");
+            }
+        }
+    }
+
+    /// <summary>Every character of a paragraph with the size, colour and weight it was written in - Runs, line breaks, and Bold/Italic/Underline spans alike.</summary>
+    private static void CollectStyledChars(InlineCollection inlines, List<SpriteFont.StyledChar> chars)
+    {
+        foreach (var inline in inlines)
+        {
+            switch (inline)
+            {
+                case Run run:
+                    int scale = Math.Max(1, (int)Math.Round((run.FontSize > 0 ? run.FontSize : 12) / 12.0));
+                    bool bold = run.FontWeight.ToOpenTypeWeight() >= FontWeights.Bold.ToOpenTypeWeight();
+                    foreach (char ch in run.Text.Replace("\r\n", "\n"))
+                        chars.Add(new SpriteFont.StyledChar(ch, scale, run.Foreground ?? Brushes.Black, bold));
+                    break;
+                case LineBreak:
+                    chars.Add(new SpriteFont.StyledChar('\n', 1, null, false));
+                    break;
+                case Span span:
+                    CollectStyledChars(span.Inlines, chars);
+                    break;
             }
         }
     }

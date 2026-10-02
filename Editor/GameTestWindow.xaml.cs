@@ -1461,15 +1461,7 @@ public partial class GameTestWindow : Window
         }
         else return;
         var pos = new Point(posX, posY);
-        var label = new TextBlock
-        {
-            Text = name,
-            Foreground = Brushes.White,
-            Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
-            Padding = new Thickness(4, 2, 4, 2),
-            IsHitTestVisible = false,
-            FontSize = 12
-        };
+        var label = GameTextLabel(name);
         Canvas.SetLeft(label, pos.X);
         Canvas.SetTop(label, pos.Y - 22);
         Panel.SetZIndex(label, 50);
@@ -1498,15 +1490,7 @@ public partial class GameTestWindow : Window
     /// </summary>
     private void ShowContainerIdentifyLabel(OpenContainerGump gump, InventoryItemInstance item, string name)
     {
-        var label = new TextBlock
-        {
-            Text = name,
-            Foreground = Brushes.White,
-            Background = new SolidColorBrush(Color.FromArgb(200, 0, 0, 0)),
-            Padding = new Thickness(4, 2, 4, 2),
-            IsHitTestVisible = false,
-            FontSize = 12
-        };
+        var label = GameTextLabel(name);
         Canvas.SetLeft(label, item.ContainerX);
         Canvas.SetTop(label, item.ContainerY - 22);
         Panel.SetZIndex(label, 50);
@@ -2153,11 +2137,11 @@ public partial class GameTestWindow : Window
     /// </summary>
     private void ShowIdentifyLabel(string name, int cellX, int cellY, FrameworkElement? visual = null)
     {
-        IdentifyLabel.Text = name;
-        Canvas.SetLeft(IdentifyLabel, cellX * _tileWidth);
+        var shown = SetIdentifyText(name);
+        Canvas.SetLeft(shown, cellX * _tileWidth);
         double topAnchor = visual is not null ? Canvas.GetTop(visual) : cellY * _tileHeight;
-        Canvas.SetTop(IdentifyLabel, topAnchor - 20);
-        IdentifyLabel.Visibility = Visibility.Visible;
+        Canvas.SetTop(shown, topAnchor - (shown == IdentifyFontImage ? shown.Height + 4 : 20));
+        shown.Visibility = Visibility.Visible;
 
         _identifyTimer?.Stop();
         _identifyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -2165,6 +2149,7 @@ public partial class GameTestWindow : Window
         {
             _identifyTimer!.Stop();
             IdentifyLabel.Visibility = Visibility.Collapsed;
+            IdentifyFontImage.Visibility = Visibility.Collapsed;
         };
         _identifyTimer.Start();
     }

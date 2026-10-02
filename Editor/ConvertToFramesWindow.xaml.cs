@@ -39,7 +39,8 @@ public partial class ConvertToFramesWindow : Window
     /// <summary>The frames created by Convert - empty until the user clicks it.</summary>
     public List<SpriteFrame> Result { get; } = new();
 
-    public ConvertToFramesWindow(string sourceImagePath)
+    /// <param name="sheetLayout">For a known sheet layout (a font sheet): how many frames and how many per row - the cell size is then worked out from the image.</param>
+    public ConvertToFramesWindow(string sourceImagePath, (int Frames, int PerRow)? sheetLayout = null)
     {
         InitializeComponent();
         _sourcePath = sourceImagePath;
@@ -53,6 +54,15 @@ public partial class ConvertToFramesWindow : Window
 
         SourceImage.Source = _sourceImage;
         ApplyZoom();
+
+        if (sheetLayout is { } layout)
+        {
+            _numberOfFrames = layout.Frames;
+            _framesPerRow = layout.PerRow;
+            int rows = (layout.Frames + layout.PerRow - 1) / layout.PerRow;
+            _frameWidth = Math.Max(1, _sourceImage.PixelWidth / layout.PerRow);
+            _frameHeight = Math.Max(1, _sourceImage.PixelHeight / rows);
+        }
 
         BuildFields();
         RedrawSelectionOverlay();

@@ -52,6 +52,8 @@
                                 to every object in the world, not just books.
                             -->
                             <TextBlock x:Name="IdentifyLabel" Foreground="White" FontWeight="Bold" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"/>
+                            <!-- The same label drawn in the game's own font (Fonts > InGameFont) once that font has glyphs. -->
+                            <Image x:Name="IdentifyFontImage" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                         </Canvas>
                         <!--
                             Real, live lighting overlay, per spec ("Make sure all the commands are LIVE world wide") -
