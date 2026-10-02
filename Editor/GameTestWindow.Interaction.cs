@@ -845,7 +845,7 @@ public partial class GameTestWindow
     /// set_shape_pos(255, 255) - and is laid out the next time the window is
     /// drawn (LayOutUnplacedContents).
     /// </summary>
-    private static void PlaceWithinFrame(InventoryItemInstance item, ContainerData data, Point? topLeft)
+    private void PlaceWithinFrame(InventoryItemInstance item, ContainerData data, Point? topLeft)
     {
         if (topLeft is not { } point)
         {
@@ -853,6 +853,7 @@ public partial class GameTestWindow
             item.ContainerY = UnplacedSpot;
             return;
         }
+        _autoPlaced.Remove(item); // placed by hand - it keeps this spot and leaves the automatic row
         var bounds = data.GetFrameBounds();
         double maxX = bounds.X + Math.Max(0, bounds.Width - 32);
         double maxY = bounds.Y + Math.Max(0, bounds.Height - 32);
@@ -865,6 +866,9 @@ public partial class GameTestWindow
 
     private static bool IsUnplaced(InventoryItemInstance item) => item.ContainerX <= UnplacedSpot || item.ContainerY <= UnplacedSpot;
 
+    /// <summary>Items the engine placed automatically (laid out in the row), as opposed to dropped at a chosen spot - runtime only.</summary>
+    private readonly HashSet<InventoryItemInstance> _autoPlaced = new(ReferenceEqualityComparer.Instance);
+
     /// <summary>
     /// Exult Gump::paint, for a container being drawn: first check_elem_positions -
     /// if more than one item and they all share one spot (a fresh container),
@@ -874,9 +878,16 @@ public partial class GameTestWindow
     /// less one ("mostly avoid overlap"); past the right edge the row moves
     /// 8 down and back to the left; past the bottom it starts over 2 lower
     /// each time round. Items that already have a spot keep it.
+    ///
+    /// One deliberate difference, at the designer's request: Exult restarts
+    /// this row at the top-left on every redraw, so items added one at a
+    /// time all land on the same top-left spot, on top of each other. Here
+    /// the row carries on after the items it already placed automatically,
+    /// wrapping to the next row as Exult does within one pass. Items placed
+    /// by hand keep their spot and take no part in the row.
     /// sizeOf gives each item's drawn size in this window.
     /// </summary>
-    private static void LayOutUnplacedContents(IHasContainerContents container, ContainerData data, Func<InventoryItemInstance, (double Width, double Height)> sizeOf)
+    private void LayOutUnplacedContents(IHasContainerContents container, ContainerData data, Func<InventoryItemInstance, (double Width, double Height)> sizeOf)
     {
         var contents = container.Contents;
         if (contents.Count > 1 && contents.All(c => c.ContainerX == contents[0].ContainerX && c.ContainerY == contents[0].ContainerY))
@@ -888,12 +899,18 @@ public partial class GameTestWindow
         int loop = 0;
         foreach (var item in contents)
         {
-            if (!IsUnplaced(item)) continue;
+            bool unplaced = IsUnplaced(item);
+            if (!unplaced && !_autoPlaced.Contains(item)) continue; // placed by hand: keeps its spot, not part of the row
             var (width, height) = sizeOf(item);
-            double px = Math.Min(curX + width, endX);
-            double py = Math.Min(curY + height, endY);
-            item.ContainerX = area.X + px - width;
-            item.ContainerY = area.Y + py - height;
+            if (unplaced)
+            {
+                double px = Math.Min(curX + width, endX);
+                double py = Math.Min(curY + height, endY);
+                item.ContainerX = area.X + px - width;
+                item.ContainerY = area.Y + py - height;
+                _autoPlaced.Add(item);
+            }
+            // Already-placed row items keep their spot but still move the cursor on, so the next new item continues the row instead of restarting at the top-left.
             curX += width - 1;
             if (curX >= endX)
             {
