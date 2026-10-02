@@ -388,7 +388,7 @@ public partial class GameTestWindow : Window
                     quantW = qw; quantH = qh;
 
                     var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                    _ = new SpriteAnimator(sprite, image, _resources);
+                    RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources));
                     visual = image;
                 }
                 else
@@ -415,7 +415,7 @@ public partial class GameTestWindow : Window
                     quantW = qw; quantH = qh;
 
                     var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true };
-                    _ = new SpriteAnimator(sprite, image, _resources);
+                    RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources));
                     visual = image;
                 }
                 else
@@ -1535,7 +1535,7 @@ public partial class GameTestWindow : Window
             return;
         }
 
-        if (_openPaperdolls.Count > 0) return; // movement stays blocked while any gump is open, matching real Exult's "gumps pause games"
+        if (IsGamePaused) return; // movement stays blocked while any gump is open (Exult: start_actor refuses in gump mode - paperdolls, containers and books alike), matching real Exult's "gumps pause games"
 
         var (dx, dy) = DirectionFor(e.Key);
         if (dx == 0 && dy == 0) return;
@@ -1711,7 +1711,8 @@ public partial class GameTestWindow : Window
         double deltaSeconds = _lastRenderTime == TimeSpan.Zero ? 0 : Math.Min(0.05, (now - _lastRenderTime).TotalSeconds);
         _lastRenderTime = now;
 
-        if (_isReadingBook) return;
+        UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
+        if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);

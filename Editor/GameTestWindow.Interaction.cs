@@ -858,12 +858,12 @@ public partial class GameTestWindow
         {
             case MapItemOrigin m:
                 _map.Items.Remove(m.Item);
-                if (_itemVisuals.Remove(m.Item, out var itemVisual)) GameCanvas.Children.Remove(itemVisual);
+                if (_itemVisuals.Remove(m.Item, out var itemVisual)) { GameCanvas.Children.Remove(itemVisual); UnregisterWorldAnimator(itemVisual); }
                 SettleWorld(); // whatever rested on it falls
                 break;
             case MapObjectOrigin o:
                 _map.Objects.Remove(o.Obj);
-                if (_objectVisuals.Remove(o.Obj, out var objectVisual)) GameCanvas.Children.Remove(objectVisual);
+                if (_objectVisuals.Remove(o.Obj, out var objectVisual)) { GameCanvas.Children.Remove(objectVisual); UnregisterWorldAnimator(objectVisual); }
                 SettleWorld(); // whatever rested on it falls
                 break;
             case SlotOrigin s:
@@ -968,14 +968,16 @@ public partial class GameTestWindow
     {
         if (item is not null)
         {
-            var visual = BuildItemIcon(item.Category, item.ItemId, animators: null);
+            var animators = new List<SpriteAnimator>();
+            var visual = BuildItemIcon(item.Category, item.ItemId, animators);
+            foreach (var animator in animators) RegisterWorldAnimator(visual, animator);
             GameCanvas.Children.Add(visual);
             _map.Items.Add(item);
             _itemVisuals[item] = visual;
         }
         else if (obj is not null)
         {
-            var visual = BuildItemIcon(ReferencedItemCategory.Object, obj.ObjectId, animators: null);
+            var visual = BuildItemIcon(ReferencedItemCategory.Object, obj.ObjectId, animators: new List<SpriteAnimator>());
             GameCanvas.Children.Add(visual);
             _map.Objects.Add(obj);
             _objectVisuals[obj] = visual;
@@ -1078,9 +1080,9 @@ public partial class GameTestWindow
     /// a Book/Container, an Object's icon, or the same honest lettered
     /// marker the map already uses when there's no art. Used for the drag
     /// ghost and for anything newly placed on the map. animators collects
-    /// any SpriteAnimator started, so the caller can stop it later (the
-    /// ghost); null for map visuals, which animate for the session exactly
-    /// like the ones BuildBookVisuals creates.
+    /// any SpriteAnimator started, so the caller can stop it (the ghost) or
+    /// register it as part of the game world, frozen while the game is
+    /// paused (map visuals - see GameTestWindow.Pause.cs).
     /// </summary>
     private FrameworkElement BuildItemIcon(ReferencedItemCategory category, int itemId, List<SpriteAnimator>? animators)
     {

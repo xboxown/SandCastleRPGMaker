@@ -79,7 +79,24 @@ internal sealed class SpriteAnimator
         Ticked?.Invoke(_tickCount);
     }
 
-    public void Stop() => _timer.Stop();
+    public void Stop() { _timer.Stop(); _pausedWhileRunning = false; }
+
+    private bool _pausedWhileRunning;
+
+    /// <summary>Freezes the animation on its current frame (Exult's time queue pause) - Resume carries on from that frame. Safe to call repeatedly.</summary>
+    public void Pause()
+    {
+        if (!_timer.IsEnabled) return;
+        _timer.Stop();
+        _pausedWhileRunning = true;
+    }
+
+    public void Resume()
+    {
+        if (!_pausedWhileRunning) return;
+        _pausedWhileRunning = false;
+        _timer.Start();
+    }
 
     private static BitmapImage? LoadBitmap(string path)
     {
