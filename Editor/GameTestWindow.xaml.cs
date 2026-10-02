@@ -211,7 +211,7 @@ public partial class GameTestWindow : Window
         };
         _stayTimer.Start();
 
-        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; };
+        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); };
     }
 
     /// <summary>
@@ -2277,7 +2277,7 @@ public partial class GameTestWindow : Window
         BookOverlayBorder.Cursor = Cursors.Hand;
 
         var paperDollImage = new Image { Width = dollWidth, Height = BookDollHeight, Stretch = Stretch.Uniform };
-        _ = new SpriteAnimator(paperDollSprite, paperDollImage, _resources);
+        var paperDollAnimator = new SpriteAnimator(paperDollSprite, paperDollImage, _resources);
         BookOverlayCanvas.Children.Add(paperDollImage);
 
         var overlayCanvas = new Canvas { Width = dollWidth, Height = BookDollHeight, IsHitTestVisible = false };
@@ -2337,6 +2337,7 @@ public partial class GameTestWindow : Window
 
         void CloseOverlay()
         {
+            paperDollAnimator.Stop(); // the book's own background animation - left running before, piling up one more invisible animation per book read
             foreach (var animator in pageOverlayAnimators) animator.Stop();
             pageOverlayAnimators.Clear();
             BookOverlayBorder.Visibility = Visibility.Collapsed;
@@ -2394,7 +2395,7 @@ public partial class GameTestWindow : Window
         else if (!System.IO.File.Exists(entry.FilePath))
             StatusText.Text = $"Opened {what} - Open Sound \"{entry.Name}\" can't play: its file is missing ({entry.FilePath}).";
         else if (!SoundPlayback.TryPlay(_resources, soundId))
-            StatusText.Text = $"Opened {what} - Open Sound \"{entry.Name}\" failed to play.";
+            StatusText.Text = $"Opened {what} - Open Sound \"{entry.Name}\" failed to play: {SoundPlayback.LastError}";
         else
             StatusText.Text = $"Opened {what} - playing Open Sound \"{entry.Name}\".";
     }

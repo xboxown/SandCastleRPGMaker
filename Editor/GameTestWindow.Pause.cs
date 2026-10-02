@@ -63,6 +63,24 @@ public partial class GameTestWindow
         }
     }
 
+    /// <summary>
+    /// Game Test closing: every animation it started stops for good - the
+    /// map's, the player's, and every open gump's. Left running, their timers
+    /// kept ticking invisibly for as long as the editor stayed open (and kept
+    /// playing any per-frame sounds), one more set after every Game Test -
+    /// until Windows ran out of sound channels and every sound failed.
+    /// </summary>
+    private void StopAllAnimators()
+    {
+        foreach (var animator in _worldAnimators.Values) animator.Stop();
+        _worldAnimators.Clear();
+        _playerAnimator?.Stop();
+        foreach (var gump in _openPaperdolls) foreach (var animator in gump.ItemAnimators) animator.Stop();
+        foreach (var gump in _openContainers) foreach (var animator in gump.ItemAnimators) animator.Stop();
+        _bookClose = null;
+        _bookNextPage = null;
+    }
+
     /// <summary>A map visual's animator is now part of the game world - frozen while paused like everything else.</summary>
     private void RegisterWorldAnimator(UIElement visual, SpriteAnimator animator)
     {

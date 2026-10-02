@@ -16,10 +16,14 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 internal static class SoundPlayback
 {
+    /// <summary>Why the most recent TryPlay failed (the real exception message), so a failure can be reported instead of silently swallowed.</summary>
+    public static string? LastError { get; private set; }
+
     public static bool TryPlay(ResourceDatabase resources, int resourceId, double? volumeOverride = null)
     {
         var entry = resources.Entries.FirstOrDefault(e => e.Id == resourceId);
-        if (entry is null || !File.Exists(entry.FilePath)) return false;
+        if (entry is null) { LastError = $"sound #{resourceId} is not in the Sound list"; return false; }
+        if (!File.Exists(entry.FilePath)) { LastError = $"file not found: {entry.FilePath}"; return false; }
         return TryPlay(entry, volumeOverride ?? entry.Volume);
     }
 
@@ -46,8 +50,9 @@ internal static class SoundPlayback
             waveOut.Play();
             return true;
         }
-        catch
+        catch (Exception ex)
         {
+            LastError = $"{ex.GetType().Name}: {ex.Message}";
             return false;
         }
     }
