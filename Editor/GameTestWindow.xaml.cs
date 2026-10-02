@@ -1986,56 +1986,6 @@ public partial class GameTestWindow : Window
         return (null, null);
     }
 
-    /// <summary>
-    /// Real sighting/line-of-sight, confirmed directly from Exult's own
-    /// occlude.dat: an object or item authored as Occludes blocks
-    /// interaction with whatever sits behind it from the player's
-    /// current position, even if that target would otherwise be
-    /// reachable. Traces a straight grid line (Bresenham) from the
-    /// player's own tile to the target's tile - an occluding object on
-    /// an INTERMEDIATE tile blocks it, but the player's own tile and the
-    /// target's own tile are never blocking (you can always interact
-    /// with whatever shares your square, and clicking the occluder
-    /// itself always works even though it blocks what's behind it).
-    /// </summary>
-    private bool HasLineOfSight(int toX, int toY)
-    {
-        if (_playerX == toX && _playerY == toY) return true;
-        foreach (var (x, y) in TraceGridLine(_playerX, _playerY, toX, toY))
-        {
-            if ((x, y) == (_playerX, _playerY) || (x, y) == (toX, toY)) continue;
-            if (_map.Objects.Any(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y && IsOccluding(null, o))) return false;
-            if (_map.Items.Any(i => i.X == x && i.Y == y && IsOccluding(i, null))) return false;
-        }
-        return true;
-    }
-
-    private bool IsOccluding(PlacedItemInstance? item, ObjectInstance? obj)
-    {
-        if (item is not null && item.Category == ReferencedItemCategory.Book)
-            return _books.Books.FirstOrDefault(b => b.Id == item.ItemId)?.Occludes ?? false;
-        if (obj is not null)
-            return _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Occludes ?? false;
-        return false;
-    }
-
-    /// <summary>Standard integer Bresenham line, tile by tile, from (x0,y0) to (x1,y1) inclusive of both endpoints - the real grid trace HasLineOfSight walks to find an occluder in between.</summary>
-    private static IEnumerable<(int x, int y)> TraceGridLine(int x0, int y0, int x1, int y1)
-    {
-        int dx = Math.Abs(x1 - x0), sx = x0 < x1 ? 1 : -1;
-        int dy = -Math.Abs(y1 - y0), sy = y0 < y1 ? 1 : -1;
-        int err = dx + dy;
-        int x = x0, y = y0;
-        while (true)
-        {
-            yield return (x, y);
-            if (x == x1 && y == y1) break;
-            int e2 = 2 * err;
-            if (e2 >= dy) { err += dy; x += sx; }
-            if (e2 <= dx) { err += dx; y += sy; }
-        }
-    }
-
     /// <summary>Change Book Settings, per spec - reads the books EFFECTIVE name, resolving to a runtime override if one has been set via that command, falling back to the books own real, saved Name otherwise. Every player-visible use of a books name in the real engine goes through this, not book.Name directly, so an override actually shows up wherever the name would appear.</summary>
     private string EffectiveBookName(BookData book) => _execContext.GetEffectiveBookSetting(book, "Name", book.Name);
 

@@ -49,7 +49,6 @@ public partial class GameTestWindow
     private const int DoubleClickMilliseconds = 500;
     /// <summary>drag.cc Dragging_info::start: "if (deltax &lt;= 2 &amp;&amp; deltay &lt;= 2) return false; // Wait for greater motion." - in game pixels, so it scales with the viewport.</summary>
     private const double DragSlopGamePixels = 2;
-    private const string CantSeeMessage = "You can't see that from here - something's blocking your view.";
 
     // ================= What the mouse is on =================
 
@@ -303,11 +302,9 @@ public partial class GameTestWindow
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
-                HandleItemClick(item, isUse: false);
+                HandleItemClick(item, isUse: false); // Exult identifies anything you can see - no reach check (show_items)
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
                 HandleObjectClick(obj, isUse: false);
                 break;
             case PlayerTarget:
@@ -332,11 +329,11 @@ public partial class GameTestWindow
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
+                if (!IsReachable(item)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return; } // Game_window::double_clicked: !is_grabable -> flash "blocked"
                 HandleItemClick(item, isUse: true);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.OutOfRange, CantSeeMessage); return; }
+                if (!IsReachable(obj)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return; }
                 HandleObjectClick(obj, isUse: true);
                 break;
             case PlayerTarget:
@@ -372,12 +369,13 @@ public partial class GameTestWindow
         switch (session.Target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
-                if (!HasLineOfSight(item.X, item.Y)) { Refuse(MousePointerKind.RedX, CantSeeMessage); return false; }
+                if (!IsReachable(item)) { Refuse(MousePointerKind.RedX, CantReachMessage); return false; } // Dragging_info::start: !is_grabable -> red X
                 origin = new MapItemOrigin(item);
                 source = _itemVisuals.GetValueOrDefault(item);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
-                if (!HasLineOfSight(obj.X, obj.Y)) { Refuse(MousePointerKind.RedX, CantSeeMessage); return false; }
+                if (!IsMovable(obj)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to move."); return false; } // Dragging_info::start: "Don't want to move walls" - !is_dragable -> "too heavy"
+                if (!IsReachable(obj)) { Refuse(MousePointerKind.RedX, CantReachMessage); return false; }
                 origin = new MapObjectOrigin(obj);
                 source = _objectVisuals.GetValueOrDefault(obj);
                 break;
@@ -393,6 +391,8 @@ public partial class GameTestWindow
                 origin = new BackpackOrigin(row.Gump.Character, row.Item);
                 break;
             case ContainerItemTarget ci when ci.Gump.PlacedItem.Contents.Contains(ci.Item):
+                // Dragging_info::start: the gump's outermost owner must be in reach - a chest across the room can't be emptied from here ("out of range").
+                if (!IsContainerOwnerReachable(ci.Gump.PlacedItem)) { Refuse(MousePointerKind.OutOfRange, "That's out of reach."); return false; }
                 origin = new ContainerOrigin(ci.Gump.PlacedItem, ci.Gump.Data, ci.Item);
                 source = FindTaggedVisual(ci.Gump.ItemsCanvas, ci);
                 break;
@@ -484,6 +484,12 @@ public partial class GameTestWindow
 
     private bool DropOnContainerGump(DragOrigin origin, PointerSession session, OpenContainerGump gump, InteractionTarget? hitTarget, Point screen)
     {
+        // drag.cc drop_on_gump: "Check the range" - the gump's outermost owner must be within reach.
+        if (!IsContainerOwnerReachable(gump.PlacedItem))
+        {
+            Refuse(MousePointerKind.OutOfRange, "That's out of reach.");
+            return false;
+        }
         // Where the ghost was showing, in this gump's own frame coordinates - Exult adds at the painted position (paintx/painty), not the raw mouse point.
         var dropTopLeft = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), gump.ItemsCanvas);
 

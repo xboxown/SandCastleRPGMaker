@@ -180,6 +180,14 @@ public partial class GameTestWindow
             rejection = "Something is in the way - you're standing there.";
             return false;
         }
+
+        // drag.cc drop_at_lift: "Needs to be reachable, except when it is just lower, so the object can fall down." The spot is the dropped thing's own tile (lower-right of its footprint) at the lift it lands on.
+        int spotX = foot.Right - 1, spotY = foot.Bottom - 1;
+        if (!IsSpotReachable(spotX, spotY, newZ) && !(_playerZ > newZ && IsSpotReachable(spotX, spotY, _playerZ)))
+        {
+            rejection = "You can't reach there from here.";
+            return false; // red X
+        }
         return true;
     }
 
