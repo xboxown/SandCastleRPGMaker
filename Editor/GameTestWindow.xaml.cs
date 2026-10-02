@@ -972,6 +972,11 @@ public partial class GameTestWindow : Window
                 StatusText.Text = "This needs both hands - unequip the left hand first.";
                 return;
             }
+            if (selectedItem.Category == ReferencedItemCategory.Container && !IsContainerSlotAllowed(selectedItem.ItemId, character, slotKey))
+            {
+                Refuse(MousePointerKind.WontFit, "A container only fits in its own slot or a hand.");
+                return;
+            }
             SetEquippedInstanceId(character, slotKey, id);
             gump.SelectedInstanceId = null;
             RefreshPaperdollGump(gump);

@@ -661,22 +661,25 @@ public partial class GameTestWindow
 
         if (category == ReferencedItemCategory.Container)
         {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == itemId);
-            object? preferredSlotKey = null;
-            if (containerData?.PreferredEquipSlot is { } builtinPreferred)
-            {
-                preferredSlotKey = builtinPreferred;
-            }
-            else if (containerData?.PreferredCustomSlotName is { } customName)
-            {
-                var matchingCustomSlot = character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == customName);
-                if (matchingCustomSlot is not null) preferredSlotKey = matchingCustomSlot.Id;
-            }
+            // A container only ever goes in its own Location slot (Container Editor), or a hand: Location first, then the right hand, then the left hand - otherwise it can't be picked up. It never goes into another slot, and never into a bag.
+            var preferredSlotKey = ContainerLocationSlot(itemId, character);
             if (preferredSlotKey is not null && IsSlotFree(character, preferredSlotKey, origin))
             {
                 EquipInSlot(origin, character, preferredSlotKey);
                 return true;
             }
+            if (IsSlotFree(character, EquipmentSlot.RightHand, origin))
+            {
+                EquipInSlot(origin, character, EquipmentSlot.RightHand);
+                return true;
+            }
+            if (IsSlotFree(character, EquipmentSlot.LeftHand, origin) && !IsLeftHandLockedIgnoring(character, origin))
+            {
+                EquipInSlot(origin, character, EquipmentSlot.LeftHand);
+                return true;
+            }
+            Refuse(MousePointerKind.WontFit, "Unable to pick it up - its own slot and both hands are full.");
+            return false;
         }
 
         foreach (var containerSlot in new[] { EquipmentSlot.Backpack, EquipmentSlot.Pouch })
@@ -712,6 +715,12 @@ public partial class GameTestWindow
     /// <summary>Paperdoll_gump::add step 2 (add_readied at the spot under the drop point), with this project's own hand rules: the left hand is unavailable while the right holds a two-handed item, and a two-handed item goes in the right hand with the left hand empty.</summary>
     private bool TryEquipInSlot(DragOrigin origin, CharacterDefinition character, object slotKey)
     {
+        var (category, itemId) = PayloadIdentity(origin);
+        if (category == ReferencedItemCategory.Container && !IsContainerSlotAllowed(itemId, character, slotKey))
+        {
+            StatusText.Text = "A container only fits in its own slot or a hand.";
+            return false;
+        }
         bool isTwoHanded = PayloadIsTwoHanded(origin);
         if (slotKey is EquipmentSlot.LeftHand && IsLeftHandLockedIgnoring(character, origin))
         {
@@ -854,6 +863,21 @@ public partial class GameTestWindow
     }
 
     // ================= Character slot helpers =================
+
+    /// <summary>The slot a container's Location (Container Editor) names for this character - a built-in slot, or the character's custom slot of that name - or null for "No preference" / a custom slot this character doesn't have.</summary>
+    private object? ContainerLocationSlot(int containerId, CharacterDefinition character)
+    {
+        var containerData = _containers.Containers.FirstOrDefault(c => c.Id == containerId);
+        if (containerData?.PreferredEquipSlot is { } builtin) return builtin;
+        if (containerData?.PreferredCustomSlotName is { } customName)
+            return character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == customName)?.Id;
+        return null;
+    }
+
+    /// <summary>A container may only be equipped in its own Location slot or in either hand.</summary>
+    private bool IsContainerSlotAllowed(int containerId, CharacterDefinition character, object slotKey) =>
+        slotKey is EquipmentSlot.RightHand or EquipmentSlot.LeftHand
+        || (ContainerLocationSlot(containerId, character) is { } location && Equals(location, slotKey));
 
     /// <summary>A slot counts as free if it's empty, or if what's in it is the very item being dragged out of it.</summary>
     private static bool IsSlotFree(CharacterDefinition character, object slotKey, DragOrigin origin) =>
