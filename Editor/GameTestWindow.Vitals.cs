@@ -58,6 +58,7 @@ public partial class GameTestWindow
         _lastClockMinute = TotalMinutes();
         _execContext.OnChangeFood = ChangeFoodCommand;
         _execContext.OnModifyAilment = ModifyAilmentCommand;
+        _execContext.OnAttack = AttackCommand;
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)

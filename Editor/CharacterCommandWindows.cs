@@ -233,3 +233,46 @@ public class ModifyAilmentsCommandWindow : FactionCommandWindowBase
     public static string Describe(EventCommand command) =>
         $"{command.Get("Action")} {command.Get("Ailment")} on {WhoChoice.Describe(command.Get("Who"))}";
 }
+
+/// <summary>Attack: one character (or the player) starts fighting another - Exult's set_target plus the Combat schedule.</summary>
+public class AttackCommandWindow : FactionCommandWindowBase
+{
+    private readonly ComboBox _attacker, _target;
+
+    public AttackCommandWindow(EventCommand? existing = null) : base("Attack")
+    {
+        AddLabel("Attacker");
+        _attacker = new ComboBox();
+        var attackers = WhoChoice.Build(includePlayer: true);
+        _attacker.ItemsSource = attackers;
+        _attacker.SelectedItem = attackers.FirstOrDefault(c => c.Key == existing?.Get("Attacker")) ?? attackers[0];
+        Rows.Children.Add(_attacker);
+
+        AddLabel("Attacks");
+        _target = new ComboBox();
+        var targets = WhoChoice.Build(includePlayer: true);
+        _target.ItemsSource = targets;
+        _target.SelectedItem = targets.FirstOrDefault(c => c.Key == existing?.Get("Target")) ?? targets.FirstOrDefault(c => c.Key == WhoChoice.Player) ?? targets[0];
+        Rows.Children.Add(_target);
+        AddLabel("The attacker fights until the target dies, gets away, or it gives up (Exult combat). As in Exult, whoever is hit fights back. The player attacking turns on combat mode and strikes whenever the target is in reach.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        string attacker = (_attacker.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Activator;
+        string target = (_target.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Player;
+        if (attacker == target)
+        {
+            MessageBox.Show(this, "Someone can't attack themselves - choose two different characters.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        var command = new EventCommand { Type = EventCommandType.Attack };
+        command.Parameters["Attacker"] = attacker;
+        command.Parameters["Target"] = target;
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command) =>
+        $"{WhoChoice.Describe(command.Get("Attacker"))} attacks {WhoChoice.Describe(command.Get("Target"))}";
+}

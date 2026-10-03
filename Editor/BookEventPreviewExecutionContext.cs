@@ -44,6 +44,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
     public Func<string, string, int, bool>? OnChangeFood { get; set; }
     /// <summary>Modify Ailments: (who, ailment name, true = inflict / false = cure).</summary>
     public Func<string, string, bool, bool>? OnModifyAilment { get; set; }
+    /// <summary>Attack: (attacker, target) - each "Activator", "Player" or a character id.</summary>
+    public Func<string, string, bool>? OnAttack { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -138,6 +140,12 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
                 if (OnModifyAilment is null) return false;
                 string who = command.Get("Who");
                 return OnModifyAilment(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Ailment"), command.Get("Action") != "Cure");
+            }
+            case EventCommandType.Attack:
+            {
+                if (OnAttack is null) return false;
+                string attacker = command.Get("Attacker"), target = command.Get("Target");
+                return OnAttack(string.IsNullOrEmpty(attacker) ? "Activator" : attacker, string.IsNullOrEmpty(target) ? "Player" : target);
             }
             case EventCommandType.ShowText:
             {

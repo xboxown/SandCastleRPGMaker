@@ -36,6 +36,7 @@ public enum EventCommandType
     ChangeBehavior,
     ChangeFoodLevel,
     ModifyAilments,
+    Attack,
     End
 }
 

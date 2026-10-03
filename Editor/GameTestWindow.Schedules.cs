@@ -44,6 +44,11 @@ public partial class GameTestWindow
         public bool WasBlocked;
         /// <summary>The map event under it, for By Enter / By Exit / By Stay like the player's.</summary>
         public GameEvent? EventUnder;
+
+        // Combat (GameTestWindow.Combat.cs): Exult's Combat_schedule state.
+        public bool InCombat, Fleeing, Hounding;
+        public CharacterDefinition? Target, FleeFrom, Oppressor;
+        public int DexPoints, Failures, FleeCount;
     }
 
     private GameClock _clock = new();
@@ -57,6 +62,7 @@ public partial class GameTestWindow
         int hourChanges = _clock.Advance(elapsedMs);
         if (hourChanges > 0) ScheduleNpcs(_clock.Hour);
         UpdateVitals(elapsedMs, hourChanges); // hunger, healing, poison, ailments, tile effects - everyone
+        UpdateCombat(elapsedMs); // the player's blows; who sees whom (enemies on sight, fear, allies under attack)
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
@@ -80,6 +86,7 @@ public partial class GameTestWindow
         foreach (var mapCharacter in _mapCharacters)
         {
             if (mapCharacter.Npc.Activity == ScheduleType.Wait) continue;
+            if (mapCharacter.Npc.InCombat && mapCharacter.Npc.Target is not null) continue; // Exult: not while fighting someone
             UpdateSchedule(mapCharacter, hour / 3, hour % 3 == 0 ? -1 : 0);
         }
     }
@@ -97,7 +104,7 @@ public partial class GameTestWindow
     }
 
     /// <summary>The clock, and the player's own health and food, in the status bar.</summary>
-    private void ShowClock() => ClockText.Text = _player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}";
+    private void ShowClock() => ClockText.Text = (_player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}") + (_combatMode ? "   |   COMBAT" : "");
 
     private (int X, int Y) SpotOf(MapCharacter mapCharacter, ScheduleEntry entry) =>
         entry.X >= 0 && entry.Y >= 0 ? (Math.Clamp(entry.X, 0, _map.Width - 1), Math.Clamp(entry.Y, 0, _map.Height - 1)) : mapCharacter.Npc.Home;
@@ -127,6 +134,7 @@ public partial class GameTestWindow
         // Already on the way there, or doing the same thing close by: don't interrupt.
         if (npc.Entry == entry && (npc.WalkingToSchedule || (npc.Activity == entry.Type && TileDistance(mapCharacter, spot) <= 16))) return;
         StopWalking(mapCharacter);
+        npc.Hounding = false;
         npc.Entry = entry;
         npc.Dest = spot;
         npc.Activity = null;
@@ -161,6 +169,8 @@ public partial class GameTestWindow
     private void NowWhat(MapCharacter mapCharacter)
     {
         var npc = mapCharacter.Npc;
+        if (npc.InCombat) { CombatNowWhat(mapCharacter); return; }
+        if (npc.Hounding) { HoundNowWhat(mapCharacter); return; }
         if (npc.WalkingToSchedule) { WalkToScheduleNowWhat(mapCharacter); return; }
         switch (npc.Activity)
         {

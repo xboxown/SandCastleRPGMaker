@@ -51,7 +51,13 @@ public partial class GameTestWindow
         var mapCharacter = _mapCharacters.FirstOrDefault(mc => mc.Placement == placement);
         if (mapCharacter is null) return;
         var character = mapCharacter.Character;
-        if (IsDead(character)) return; // Exult: Npc_actor::activate does nothing for the dead
+        if (IsDead(character))
+        {
+            // The body: its belongings can be taken (Exult's dead body container).
+            OpenPaperdoll(character);
+            StatusText.Text = $"The body of {character.Name}.";
+            return;
+        }
         if (IsIncapacitated(character))
         {
             StatusText.Text = $"{character.Name} can't answer right now ({DescribeVitals(character)}).";

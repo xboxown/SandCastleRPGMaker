@@ -254,8 +254,12 @@ public partial class BookEditorWindow : Window
         DestroyedFilterCheck.IsChecked = _destroyedFilter is not null;
         PopulateSpriteChoices(DestroyedSpriteNameCombo, _destroyedFilter, _current.DestroyedSpriteGroup, _current.DestroyedSpriteName);
 
-        BelongToCombo.ItemsSource = new List<string> { "(None)" };
-        BelongToCombo.SelectedIndex = 0;
+        // Belong To: whose it is - taking it while someone sympathetic is watching is theft (Exult).
+        var owners = new List<CharacterDefinition> { NoOwner };
+        owners.AddRange(ProjectSession.Characters.Characters);
+        BelongToCombo.DisplayMemberPath = nameof(CharacterDefinition.Name);
+        BelongToCombo.ItemsSource = owners;
+        BelongToCombo.SelectedItem = owners.FirstOrDefault(c => c.Id == _current.BelongToId) ?? NoOwner;
 
         // (None) is prepended so there's an explicit, clickable way to clear
         // a Faction/sound back to "none" - without it, once you'd picked
@@ -448,6 +452,7 @@ public partial class BookEditorWindow : Window
     }
 
     private const string DefaultTextFont = "(Default - system font)";
+    private static readonly CharacterDefinition NoOwner = new() { Id = -1, Name = "(None)" };
 
     private void Field_Changed_Combo(object sender, SelectionChangedEventArgs? e)
     {
@@ -467,7 +472,7 @@ public partial class BookEditorWindow : Window
         _current.CloseSoundResourceId = (CloseSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         _current.PageFlipSoundResourceId = (FlipSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         _current.DestructibleSoundResourceId = (DestructibleSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
-        _current.BelongToId = -1; // no NPC Editor yet
+        _current.BelongToId = (BelongToCombo.SelectedItem as CharacterDefinition)?.Id ?? -1;
     }
 
     // ---------- Tools ----------

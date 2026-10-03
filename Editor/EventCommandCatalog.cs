@@ -159,6 +159,11 @@ internal static class EventCommandCatalog
             new FieldSpec("Ailment", "Ailment (Poisoned/Asleep/Paralyzed/Charmed/Cursed)"),
             new FieldSpec("Action", "Action (Inflict/Cure)")
         },
+        [EventCommandType.Attack] = new[]
+        {
+            new FieldSpec("Attacker", "Attacker (Activator, Player, or character id)"),
+            new FieldSpec("Target", "Target (Activator, Player, or character id)")
+        },
         [EventCommandType.End] = Array.Empty<FieldSpec>()
     };
 

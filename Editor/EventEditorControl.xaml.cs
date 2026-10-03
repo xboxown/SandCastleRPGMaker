@@ -277,6 +277,10 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : {ModifyAilmentsCommandWindow.Describe(command)}"));
         }
+        else if (command.Type == EventCommandType.Attack)
+        {
+            block.Inlines.Add(new Run($" : {AttackCommandWindow.Describe(command)}"));
+        }
         else if (command.Type == EventCommandType.ShowText)
         {
             string speaker = ShowTextSpeakerLabel(command.Get("SpeakerId"));
@@ -454,10 +458,11 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack)
         {
             FactionCommandWindowBase dialog = type switch
             {
+                EventCommandType.Attack => new AttackCommandWindow(),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(),
@@ -634,10 +639,11 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack)
         {
             FactionCommandWindowBase dialog = command.Type switch
             {
+                EventCommandType.Attack => new AttackCommandWindow(command),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(command),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(command),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(command),

@@ -120,6 +120,12 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void Attack_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.Attack;
+        DialogResult = true;
+    }
+
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

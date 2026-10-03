@@ -374,7 +374,9 @@ public partial class GameTestWindow
                 OpenPaperdoll(_player);
                 break;
             case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
-                TalkTo(placedCharacter); // Exult: double-clicking an NPC talks to it
+                // Exult: in combat mode, double-clicking someone attacks them; otherwise it talks to them (or, dead, opens the body).
+                if (_combatMode && _mapCharacters.FirstOrDefault(mc => mc.Placement == placedCharacter) is { } foe && !IsDead(foe.Character)) SetPlayerTarget(foe.Character);
+                else TalkTo(placedCharacter);
                 break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):
                 var character = slot.Gump.Character;
@@ -495,8 +497,10 @@ public partial class GameTestWindow
 
     private void CompleteDrop(PointerSession session, Point screen)
     {
-        try { TryDrop(session.Origin!, session, screen); }
+        bool dropped = false;
+        try { dropped = TryDrop(session.Origin!, session, screen); }
         finally { EndDragVisuals(session); }
+        if (dropped) CheckTheft(session.Origin!); // drag.cc drop: "Check for theft"
     }
 
     /// <summary>Exult Dragging_info::drop: a gump under the pointer gets the drop (drop_on_gump); otherwise the map does (drop_on_map). False = rejected; nothing has changed anywhere, so the item is simply still at its origin.</summary>
