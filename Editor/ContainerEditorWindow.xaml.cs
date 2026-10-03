@@ -146,7 +146,17 @@ public partial class ContainerEditorWindow : Window
             _ => null
         };
 
-        DestructibleCheck.IsChecked = container.Destructible;
+        DestructibleCheck.IsChecked = !container.Destructible; // shown as "Cannot be destroyed"
+        HitPointsBox.Text = container.HitPoints.ToString();
+        DefenseBox.Text = container.Defense.ToString();
+        var factionChoices = new List<Faction> { new() { Id = -1, Name = "(None)" } };
+        factionChoices.AddRange(ProjectSession.Factions.Factions);
+        FactionCombo.ItemsSource = factionChoices;
+        FactionCombo.SelectedItem = factionChoices.FirstOrDefault(f => f.Id == container.FactionId) ?? factionChoices[0];
+        var ownerChoices = new List<CharacterDefinition> { new() { Id = -1, Name = "(None)" } };
+        ownerChoices.AddRange(ProjectSession.Characters.Characters);
+        BelongToCombo.ItemsSource = ownerChoices;
+        BelongToCombo.SelectedItem = ownerChoices.FirstOrDefault(c => c.Id == container.BelongToId) ?? ownerChoices[0];
         CanBeSoldCheck.IsChecked = container.CanBeSold;
         CanBeTradedCheck.IsChecked = container.CanBeTraded;
         CanBeDroppedCheck.IsChecked = container.CanBeDropped;
@@ -173,6 +183,8 @@ public partial class ContainerEditorWindow : Window
         OpenSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.OpenSoundResourceId) ?? NoneSound;
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.CloseSoundResourceId) ?? NoneSound;
         NavigateSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.NavigateSoundResourceId) ?? NoneSound;
+        DestroyedSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
+        DestroyedSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.DestructibleSoundResourceId) ?? NoneSound;
 
         BuildFramePreview(container);
         RefreshContentsList(container);
@@ -215,7 +227,12 @@ public partial class ContainerEditorWindow : Window
             _ => -1
         };
 
-        container.Destructible = DestructibleCheck.IsChecked == true;
+        container.Destructible = DestructibleCheck.IsChecked != true; // the box reads "Cannot be destroyed"
+        if (int.TryParse(HitPointsBox.Text, out int hp)) container.HitPoints = Math.Max(1, hp);
+        if (int.TryParse(DefenseBox.Text, out int defense)) container.Defense = Math.Max(0, defense);
+        container.DestructibleSoundResourceId = (DestroyedSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;
+        container.BelongToId = (BelongToCombo.SelectedItem as CharacterDefinition)?.Id ?? -1;
         container.CanBeSold = CanBeSoldCheck.IsChecked == true;
         container.CanBeTraded = CanBeTradedCheck.IsChecked == true;
         container.CanBeDropped = CanBeDroppedCheck.IsChecked == true;

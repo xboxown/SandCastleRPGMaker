@@ -84,7 +84,8 @@
                                 <GroupBox Header="Behavior" Margin="0,0,0,4" Padding="6">
                                     <StackPanel>
                                         <WrapPanel Margin="0,0,0,8">
-                                            <CheckBox x:Name="DestructibleCheck" Content="Destructible" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="DestructibleCheck" Content="Cannot be destroyed" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"
+                                                      ToolTip="Ticked: attacks in combat mode do nothing to it. Unticked: it loses Hit Points when struck, and at 0 it breaks and spills what it holds."/>
                                             <CheckBox x:Name="CanBeSoldCheck" Content="Can be sold" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="CanBeTradedCheck" Content="Can be traded" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="CanBeDroppedCheck" Content="Can be dropped" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
@@ -92,6 +93,30 @@
                                             <CheckBox x:Name="AllowElevationCheck" Content="Allow Elevation" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="OccludesCheck" Content="Occludes" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="IsSolidCheck" Content="Solid" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                        </WrapPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Hit Points" ToolTip="How much damage it takes to destroy it (Exult: an object's hit points)."/>
+                                                <TextBox x:Name="HitPointsBox" Width="70" TextChanged="Field_Changed" PreviewTextInput="IntegerOnly_PreviewTextInput"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Defense" ToolTip="Each blow is reduced by 1 to this much (0 = none). Exult objects have no defense - this is extra."/>
+                                                <TextBox x:Name="DefenseBox" Width="70" TextChanged="Field_Changed" PreviewTextInput="IntegerOnly_PreviewTextInput"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Destroyed sound"/>
+                                                <ComboBox x:Name="DestroyedSoundCombo" Width="150" SelectionChanged="Field_Changed" DisplayMemberPath="Name"/>
+                                            </StackPanel>
+                                        </WrapPanel>
+                                        <WrapPanel Margin="0,0,0,8">
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Faction" ToolTip="Whose it is: taking from it, or attacking it, while one of them (or an ally) is watching is a crime against this faction."/>
+                                                <ComboBox x:Name="FactionCombo" Width="150" SelectionChanged="Field_Changed" DisplayMemberPath="Name"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,0">
+                                                <TextBlock Text="Belong To" ToolTip="The character it belongs to - they (and their faction) react to theft or damage."/>
+                                                <ComboBox x:Name="BelongToCombo" Width="150" SelectionChanged="Field_Changed" DisplayMemberPath="Name"/>
+                                            </StackPanel>
                                         </WrapPanel>
                                         <local:SolidSizeEditor x:Name="SolidSize" HorizontalAlignment="Left" Margin="0,0,0,4"/>
                                     </StackPanel>

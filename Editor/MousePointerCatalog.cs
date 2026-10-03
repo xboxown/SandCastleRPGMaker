@@ -19,6 +19,7 @@ public static class MousePointerCatalog
         (MousePointerKind.WontFit, "Won't Fit", "Flashed when something won't fit (a full or locked container, full hands)."),
         (MousePointerKind.GreenSquare, "Green Square", "The green square marker."),
         (MousePointerKind.Blocked, "Blocked", "Flashed when a drop is blocked (too high to reach from where you stand)."),
+        (MousePointerKind.Attack, "Attack", "Shown instead of the hand while in combat mode (C), so you know a double-click attacks (Exult shows its red combat arrows)."),
     };
 
     /// <summary>Exult (mouse.cc Mouse::flash_shape): a flashed pointer shows for 600 ms, then the previous pointer returns.</summary>

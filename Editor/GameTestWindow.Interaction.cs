@@ -363,10 +363,12 @@ public partial class GameTestWindow
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
                 if (!IsReachable(item)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return; } // Game_window::double_clicked: !is_grabable -> flash "blocked"
+                if (TryAttackInCombatMode(item)) return; // combat mode: attack it (unless it's an unlocked container or a body)
                 HandleItemClick(item, isUse: true);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
                 if (!IsReachable(obj)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return; }
+                if (TryAttackInCombatMode(obj)) return;
                 HandleObjectClick(obj, isUse: true);
                 break;
             case PlayerTarget:
@@ -375,7 +377,7 @@ public partial class GameTestWindow
                 break;
             case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
                 // Exult: in combat mode, double-clicking someone attacks them; otherwise it talks to them (or, dead, opens the body).
-                if (_combatMode && _mapCharacters.FirstOrDefault(mc => mc.Placement == placedCharacter) is { } foe && !IsDead(foe.Character)) SetPlayerTarget(foe.Character);
+                if (_combatMode && _mapCharacters.FirstOrDefault(mc => mc.Placement == placedCharacter) is { } foe && !IsDead(foe.Character) && !foe.Character.IsInParty) SetPlayerTarget(foe.Character); // never a party member
                 else TalkTo(placedCharacter);
                 break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):

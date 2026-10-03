@@ -25,7 +25,6 @@ public partial class GameTestWindow
     private readonly Image _pointerImage = new() { IsHitTestVisible = false, Stretch = Stretch.Fill };
     private SpriteAnimator? _pointerAnimator;
     private MousePointerKind? _shownPointer;
-    private readonly MousePointerKind _restingPointer = MousePointerKind.Hand;
     private DispatcherTimer? _pointerFlashTimer;
     /// <summary>The hot spot - the exact pixel that "points" - in unscaled sprite pixels.</summary>
     private Point _pointerHotspot;
@@ -55,12 +54,12 @@ public partial class GameTestWindow
         _pointerFlashTimer.Tick += (_, _) =>
         {
             _pointerFlashTimer.Stop();
-            ShowPointer(_restingPointer);
+            ShowPointer(RestingPointer);
         };
         Closed += (_, _) => { _pointerFlashTimer.Stop(); _pointerAnimator?.Stop(); };
 
         _pointerHost.Visibility = IsMouseOver ? Visibility.Visible : Visibility.Hidden;
-        ShowPointer(_restingPointer);
+        ShowPointer(RestingPointer);
     }
 
     /// <summary>Exult Mouse::flash_shape: show this pointer for 600 ms, then return to the hand.</summary>

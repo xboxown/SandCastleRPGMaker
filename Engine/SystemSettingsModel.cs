@@ -6,7 +6,7 @@ namespace SandcastleRpgMaker.Engine;
 /// greenselect = 2, tooheavy = 3, outofrange = 4, outofammo = 5,
 /// wontfit = 6, greensquare = 23, blocked = 49.
 /// </summary>
-public enum MousePointerKind { Hand, RedX, GreenSelect, TooHeavy, OutOfRange, OutOfAmmo, WontFit, GreenSquare, Blocked }
+public enum MousePointerKind { Hand, RedX, GreenSelect, TooHeavy, OutOfRange, OutOfAmmo, WontFit, GreenSquare, Blocked, Attack }
 
 /// <summary>Which Sprite Editor sprite draws one pointer - same group + name link every other sprite reference in the project uses.</summary>
 public class MousePointerSprite

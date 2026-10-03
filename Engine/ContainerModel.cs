@@ -16,6 +16,17 @@ public class ContainerData : PlaceableItemBase
     /// <summary>Real Exult distinction, per spec (rule 1 vs rule 2) - a body container (a corpse, an Avatar's own body) lets you take, use, and identify what's inside, but never lets you drop something INTO it. A normal container (chest, bag, drawer) allows both directions freely.</summary>
     public bool IsBodyContainer { get; set; } = false;
 
+    /// <summary>
+    /// Exult objects have hit points (Shape_info obj_hp): attacked in combat
+    /// mode they lose them, and at 0 the container is destroyed and what it
+    /// held falls out where it stood (Container_game_object::remove_this ->
+    /// extract_contents). Only when it can be destroyed (Destructible, shown
+    /// in the editor as the opposite: "Cannot be destroyed").
+    /// </summary>
+    public int HitPoints { get; set; } = 20;
+    /// <summary>Not in Exult (objects there have only hit points): each blow is reduced by 1..Defense, the way armour reduces blows to characters.</summary>
+    public int Defense { get; set; }
+
     /// <summary>Real Exult volume/capacity system, per spec - the total volume this container can hold, separate from its OWN Volume (inherited from PlaceableItemBase, which is how much space IT takes up when carried inside something else). An item can only be dropped in while CurrentVolume() + that item's own real Volume would not exceed this.</summary>
     public double MaxVolume { get; set; } = 20;
 

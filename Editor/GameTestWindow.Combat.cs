@@ -298,7 +298,8 @@ public partial class GameTestWindow
     private void ToggleCombatMode()
     {
         _combatMode = !_combatMode;
-        if (!_combatMode) _playerTarget = null;
+        if (!_combatMode) { _playerTarget = null; _playerTargetThing = null; }
+        ShowPointer(RestingPointer); // the attack pointer while in combat mode
         StatusText.Text = _combatMode
             ? "Combat mode: double-click someone to attack them; you strike whenever they're in reach. C to stop."
             : "Combat mode off.";
@@ -309,6 +310,7 @@ public partial class GameTestWindow
     {
         if (IsDead(target)) return;
         _playerTarget = target;
+        _playerTargetThing = null;
         StatusText.Text = $"Attacking {target.Name}.";
     }
 
@@ -316,8 +318,9 @@ public partial class GameTestWindow
     private void UpdatePlayerAttack(double elapsedMs)
     {
         if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0) ApplyPoseSprite(_idlePose);
-        if (!_combatMode || _playerTarget is null || _player is null) return;
-        if (IsDead(_playerTarget)) { _playerTarget = null; return; }
+        if (!_combatMode || _player is null || (_playerTarget is null && _playerTargetThing is null)) return;
+        if (_playerTarget is not null && IsDead(_playerTarget)) { _playerTarget = null; return; }
+        if (_playerTargetThing is not null && !ThingStillThere(_playerTargetThing)) { _playerTargetThing = null; return; }
         if (IsIncapacitated(_player)) return;
         _playerStrikeMs -= elapsedMs;
         if (_playerStrikeMs > 0) return;
@@ -327,7 +330,18 @@ public partial class GameTestWindow
             _playerDexPoints += Math.Max(1, Stat(_player, BuiltInStatKind.Dexterity, 10));
             return;
         }
-        if (!InReach(_player, _playerTarget)) return;
+        if (_playerTargetThing is { } thing)
+        {
+            // A thing: a chest, a locked door, a book... (GameTestWindow.ObjectCombat.cs)
+            if (!ThingInReach(thing) || VisualOf(thing) is not FrameworkElement thingVisual) return;
+            _playerDexPoints -= DexToAttack;
+            _playerFacing = FacingTowards(_playerPixelX, _playerPixelY, Canvas.GetLeft(thingVisual) + thingVisual.Width / 2, Canvas.GetTop(thingVisual) + thingVisual.Height);
+            ApplyPoseSprite(PoseByName("Attacking Melee") ?? _idlePose);
+            _playerPoseResetMs = 2 * StdDelay;
+            StrikeThing(thing);
+            return;
+        }
+        if (_playerTarget is null || !InReach(_player, _playerTarget)) return;
         _playerDexPoints -= DexToAttack;
         var (tx, ty) = PixelOf(_playerTarget);
         _playerFacing = FacingTowards(_playerPixelX, _playerPixelY, tx, ty);
@@ -544,7 +558,7 @@ public partial class GameTestWindow
         if (attacker is null || target is null || attacker == target || IsDead(attacker) || IsDead(target)) return false;
         if (attacker == _player)
         {
-            _combatMode = true;
+            if (!_combatMode) ToggleCombatMode();
             SetPlayerTarget(target);
             ShowClock();
             return true;
