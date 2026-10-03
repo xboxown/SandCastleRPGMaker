@@ -68,6 +68,8 @@
                             blocks clicks.
                         -->
                         <Rectangle x:Name="LightingOverlay" Width="320" Height="200" IsHitTestVisible="False" Opacity="0" Panel.ZIndex="25"/>
+                        <!-- Show Text dialog boxes (speaker face + DialogFont text), in the same 320x200 space as the world. -->
+                        <Canvas x:Name="MessageLayer" Width="320" Height="200" Panel.ZIndex="40" Visibility="Collapsed" Background="Transparent" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Grid>
                 </Border>
             </Grid>

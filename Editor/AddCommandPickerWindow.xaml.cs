@@ -96,6 +96,18 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void Teleport_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.Teleport;
+        DialogResult = true;
+    }
+
+    private void ChangeBehavior_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ChangeBehavior;
+        DialogResult = true;
+    }
+
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

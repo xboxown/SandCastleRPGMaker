@@ -33,6 +33,7 @@ public enum EventCommandType
     ChangeBookSettings,
     ChangeFactionRelationship,
     ChangeFaction,
+    ChangeBehavior,
     End
 }
 

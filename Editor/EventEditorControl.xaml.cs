@@ -261,6 +261,19 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : {ChangeFactionCommandWindow.Describe(command)}"));
         }
+        else if (command.Type == EventCommandType.Teleport)
+        {
+            block.Inlines.Add(new Run($" : {TeleportCommandWindow.Describe(command)}"));
+        }
+        else if (command.Type == EventCommandType.ChangeBehavior)
+        {
+            block.Inlines.Add(new Run($" : {ChangeBehaviorCommandWindow.Describe(command)}"));
+        }
+        else if (command.Type == EventCommandType.ShowText)
+        {
+            string speaker = ShowTextSpeakerLabel(command.Get("SpeakerId"));
+            block.Inlines.Add(new Run($" : {(speaker.Length > 0 ? speaker + ": " : "")}{Truncate(command.Get("Text"), 50)}"));
+        }
         else if (command.Parameters.Count > 0)
         {
             string paramSummary = string.Join(", ", command.Parameters.Select(kv => Truncate(kv.Value, 30)));
@@ -268,6 +281,14 @@ public partial class EventEditorControl : UserControl
         }
         return block;
     }
+
+    private static string ShowTextSpeakerLabel(string key) => key switch
+    {
+        "" => "",
+        "Self" => "Self",
+        "Player" => "Main Player",
+        _ => ProjectSession.Characters.Characters.FirstOrDefault(c => c.Id.ToString() == key)?.Name ?? $"character #{key}"
+    };
 
     private static string Truncate(string s, int max) => s.Length > max ? s[..max] + "..." : s;
 
@@ -424,9 +445,15 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction)
+        else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior)
         {
-            FactionCommandWindowBase dialog = type == EventCommandType.ChangeFaction ? new ChangeFactionCommandWindow() : new ChangeFactionRelationshipCommandWindow();
+            FactionCommandWindowBase dialog = type switch
+            {
+                EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(),
+                EventCommandType.Teleport => new TeleportCommandWindow(),
+                EventCommandType.ChangeBehavior => new ChangeBehaviorCommandWindow(),
+                _ => new ChangeFactionRelationshipCommandWindow()
+            };
             dialog.Owner = Window.GetWindow(this);
             if (dialog.ShowDialog() == true)
             {
@@ -595,9 +622,15 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction)
+        else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior)
         {
-            FactionCommandWindowBase dialog = command.Type == EventCommandType.ChangeFaction ? new ChangeFactionCommandWindow(command) : new ChangeFactionRelationshipCommandWindow(command);
+            FactionCommandWindowBase dialog = command.Type switch
+            {
+                EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(command),
+                EventCommandType.Teleport => new TeleportCommandWindow(command),
+                EventCommandType.ChangeBehavior => new ChangeBehaviorCommandWindow(command),
+                _ => new ChangeFactionRelationshipCommandWindow(command)
+            };
             dialog.Owner = Window.GetWindow(this);
             if (dialog.ShowDialog() == true)
             {

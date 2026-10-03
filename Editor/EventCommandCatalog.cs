@@ -20,7 +20,9 @@ internal static class EventCommandCatalog
         [EventCommandType.ShowText] = new[]
         {
             new FieldSpec("Speaker", "Speaker (optional)"),
-            new FieldSpec("Text", "Text")
+            new FieldSpec("Text", "Text"),
+            new FieldSpec("SpeakerId", "Speaker (\"\" none, Self, Player, or character id)"),
+            new FieldSpec("FaceSide", "Face (Left/Right)")
         },
         [EventCommandType.SetSwitch] = new[]
         {
@@ -48,7 +50,7 @@ internal static class EventCommandCatalog
         [EventCommandType.EndBranch] = Array.Empty<FieldSpec>(),
         [EventCommandType.Teleport] = new[]
         {
-            new FieldSpec("MapPath", "Target map file"),
+            new FieldSpec("Who", "Who (Activator, Player, or character id)"),
             new FieldSpec("X", "X"),
             new FieldSpec("Y", "Y")
         },
@@ -139,6 +141,11 @@ internal static class EventCommandCatalog
         {
             new FieldSpec("CharacterId", "Character id (Player = main player)"),
             new FieldSpec("FactionId", "New faction id (-1 = none)")
+        },
+        [EventCommandType.ChangeBehavior] = new[]
+        {
+            new FieldSpec("CharacterId", "Character (Activator or character id)"),
+            new FieldSpec("Behavior", "Behavior (a schedule activity, or Resume)")
         },
         [EventCommandType.End] = Array.Empty<FieldSpec>()
     };

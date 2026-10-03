@@ -150,6 +150,8 @@ public static class EventCommandInterpreter
         EventCommandType.ChangeExternalBookContent => $"Change External Book Content: book #{cmd.Get("TargetBookId")}, page {cmd.Get("PageIndex")}, frame {cmd.Get("FrameId")}",
         EventCommandType.ChangeBookSettings => $"Change Book Settings (runtime-only): book #{cmd.Get("TargetBookId")}",
         EventCommandType.ChangeFactionRelationship => $"Change Faction Relationship: faction #{cmd.Get("ViewerFactionId")} sees #{cmd.Get("TargetFactionId")} {cmd.Get("Operation")} {cmd.Get("Value")}%{(cmd.Get("BothWays") == "True" ? " (both ways)" : "")}",
+        EventCommandType.Teleport => $"Teleport: {cmd.Get("Who")} to ({cmd.Get("X")}, {cmd.Get("Y")})",
+        EventCommandType.ChangeBehavior => $"Change Behavior: {cmd.Get("CharacterId")} -> {cmd.Get("Behavior")}",
         EventCommandType.ChangeFaction => $"Change Faction: character {cmd.Get("CharacterId")} joins faction #{cmd.Get("FactionId")}",
         _ => cmd.Type.ToString()
     };

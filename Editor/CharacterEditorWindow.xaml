@@ -141,6 +141,14 @@
                 </Grid>
             </TabItem>
 
+            <TabItem x:Name="TalkTab" Header="Talk" ToolTip="What happens when the player double-clicks this character (not for the main player)">
+                <DockPanel Margin="10">
+                    <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,8"
+                               Text="Runs when the player double-clicks this character (Exult: talking to an NPC). Use Show Text with Speaker = Self for the character's lines - its face shows in the box. A party member's inventory opens instead while a gump is open, as in Exult."/>
+                    <ContentControl x:Name="TalkEditorHost"/>
+                </DockPanel>
+            </TabItem>
+
             <TabItem x:Name="ScheduleTab" Header="Schedule" ToolTip="Where this character goes and what it does through the day (not for the main player)">
                 <ScrollViewer VerticalScrollBarVisibility="Auto">
                     <StackPanel x:Name="SchedulePanel" Margin="10"/>

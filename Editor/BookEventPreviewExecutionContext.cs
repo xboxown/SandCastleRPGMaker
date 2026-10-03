@@ -34,6 +34,12 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
     public Action<int, int, string, int, bool>? OnChangeFactionRelationship { get; set; }
     /// <summary>Change Faction: (character id or "Player", new faction id or -1) - false when there's no such character.</summary>
     public Func<string, int, bool>? OnChangeFaction { get; set; }
+    /// <summary>Show Text as a real dialog box (speaker's face, position, background) - when set, used instead of OnShowText. False when it couldn't be shown (speaker out of sight).</summary>
+    public Func<EventCommand, bool>? OnShowMessage { get; set; }
+    /// <summary>Teleport: (who - "Activator", "Player" or a character id, cell x, cell y).</summary>
+    public Func<string, int, int, bool>? OnTeleport { get; set; }
+    /// <summary>Change Behavior: (character - "Activator" or an id, a schedule activity name or "Resume").</summary>
+    public Func<string, string, bool>? OnChangeBehavior { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -101,6 +107,21 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
                 bool affectsCharacters = command.Get("AffectsCharacters") == "True";
                 OnShakeScreen(intensity, duration, affectsCharacters);
                 return true;
+            }
+            case EventCommandType.ShowText when OnShowMessage is not null:
+                return OnShowMessage(command);
+            case EventCommandType.Teleport:
+            {
+                if (OnTeleport is null) return false;
+                if (!int.TryParse(command.Get("X"), out int x) || !int.TryParse(command.Get("Y"), out int y)) return false;
+                string who = command.Get("Who");
+                return OnTeleport(string.IsNullOrEmpty(who) ? "Activator" : who, x, y);
+            }
+            case EventCommandType.ChangeBehavior:
+            {
+                if (OnChangeBehavior is null) return false;
+                string who = command.Get("CharacterId"), behavior = command.Get("Behavior");
+                return !string.IsNullOrEmpty(behavior) && OnChangeBehavior(string.IsNullOrEmpty(who) ? "Activator" : who, behavior);
             }
             case EventCommandType.ShowText:
             {

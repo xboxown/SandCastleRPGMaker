@@ -130,6 +130,12 @@ public partial class GameTestWindow
 
     private void Interaction_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_currentMessage is not null)
+        {
+            AdvanceMessage(); // a dialog box is up: a click anywhere goes on
+            e.Handled = true;
+            return;
+        }
         if (_isReadingBook)
         {
             // Exult reads a book modally: any click, anywhere, is "next page" - nothing else can be clicked.
@@ -368,7 +374,7 @@ public partial class GameTestWindow
                 OpenPaperdoll(_player);
                 break;
             case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
-                StatusText.Text = $"{NameOfEntity(placedCharacter)} - talking to characters comes with the NPC system.";
+                TalkTo(placedCharacter); // Exult: double-clicking an NPC talks to it
                 break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):
                 var character = slot.Gump.Character;

@@ -22,6 +22,7 @@ public partial class CharacterEditorWindow
     {
         SchedulePanel.Children.Clear();
         ScheduleTab.IsEnabled = !character.IsTestPlayer;
+        TalkTab.IsEnabled = !character.IsTestPlayer;
         MainPlayerNote.Visibility = character.IsTestPlayer ? Visibility.Visible : Visibility.Collapsed;
         if (character.IsTestPlayer) return;
 
@@ -132,6 +133,26 @@ public partial class CharacterEditorWindow
         row.Children.Add(customName);
         RefreshButtons();
         return row;
+    }
+
+    /// <summary>The Talk tab: the shared event command editor on this character's talk commands.</summary>
+    private void BuildTalkEditor(CharacterDefinition character)
+    {
+        TalkTab.IsEnabled = !character.IsTestPlayer;
+        var page = new EventCommandPage { Label = "1", Commands = character.TalkCommands };
+        var editor = new EventEditorControl
+        {
+            ResourceDatabase = _resources,
+            Variables = ProjectSession.VariablesProvider?.Invoke(),
+            CurrentBookLocalVariables = new List<VariableDefinition>(),
+            Books = _books,
+            Objects = _objects,
+            Containers = ProjectSession.ContainersProvider?.Invoke(),
+            Sprites = _sprites
+        };
+        editor.Pages = new System.Collections.ObjectModel.ObservableCollection<EventCommandPage> { page };
+        editor.ContentChanged += () => character.TalkCommands = page.Commands; // the command list may be replaced wholesale (typed in and compiled)
+        TalkEditorHost.Content = editor;
     }
 
     /// <summary>

@@ -176,6 +176,7 @@ public partial class GameTestWindow : Window
         _execContext.OnChangeDayNight = ApplyRealDayNightPeriod;
         _execContext.OnApplyPaletteColor = ApplyRealPaletteColorEffect;
         InitializeFactions(factions);
+        InitializeTalk();
         _clock = new GameClock(systemSettings.Clock.StartHour, systemSettings.Clock.TimeRate);
 
         BuildMapVisual();
@@ -213,6 +214,7 @@ public partial class GameTestWindow : Window
         _stayTimer.Tick += (_, _) =>
         {
             if (_eventUnderPlayer is not null) TryFireEventPages(_eventUnderPlayer, _eventUnderPlayer.EventPages, BookTriggerConditionBased.ByStay, selfBookId: -1, $"\"{_eventUnderPlayer.Name}\" fired (ByStay)");
+            FireCharacterStayEvents(); // characters standing on events, like the player
         };
         _stayTimer.Start();
 
@@ -1508,6 +1510,12 @@ public partial class GameTestWindow : Window
 
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (_currentMessage is not null)
+        {
+            if (e.Key is Key.Enter or Key.Space or Key.Escape) AdvanceMessage(); // a dialog box is up: these go on, nothing else happens
+            e.Handled = true;
+            return;
+        }
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
         if (_isReadingBook) return;
         if (e.Key == Key.F6) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules

@@ -42,6 +42,8 @@ public partial class GameTestWindow
         public List<(int X, int Y)>? Path;
         public int PathIndex;
         public bool WasBlocked;
+        /// <summary>The map event under it, for By Enter / By Exit / By Stay like the player's.</summary>
+        public GameEvent? EventUnder;
     }
 
     private GameClock _clock = new();
@@ -55,7 +57,11 @@ public partial class GameTestWindow
         int hourChanges = _clock.Advance(elapsedMs);
         if (hourChanges > 0) ScheduleNpcs(_clock.Hour);
         ClockText.Text = _clock.ToString();
-        foreach (var mapCharacter in _mapCharacters) UpdateNpc(mapCharacter, elapsedMs);
+        foreach (var mapCharacter in _mapCharacters.ToList())
+        {
+            if (IsShowingMessage) break; // a dialog box just went up: everything stops right here
+            UpdateNpc(mapCharacter, elapsedMs);
+        }
     }
 
     /// <summary>Exult's fake_next_period (F6): straight to the start of the next 3-hour period, everyone re-scheduled.</summary>
@@ -83,6 +89,7 @@ public partial class GameTestWindow
         foreach (var mapCharacter in _mapCharacters)
         {
             mapCharacter.Npc.Home = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
+            mapCharacter.Npc.EventUnder = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y); // standing there from the start doesn't set it off
             UpdateSchedule(mapCharacter, _clock.Period, -1);
         }
         ClockText.Text = _clock.ToString();
@@ -386,9 +393,15 @@ public partial class GameTestWindow
         }
         mapCharacter.PixelX = newX;
         mapCharacter.PixelY = newY;
+        var oldCell = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
         mapCharacter.Placement.X = (int)Math.Floor(newX / _tileWidth);
         mapCharacter.Placement.Y = (int)Math.Floor(newY / _tileHeight);
         PositionCharacterVisual(mapCharacter);
+        if (oldCell != (mapCharacter.Placement.X, mapCharacter.Placement.Y))
+        {
+            CharacterChangedCell(mapCharacter); // map events set off by characters, like the player
+            if (npc.Path is null) return; // an event moved it (teleporter) or changed what it's doing
+        }
 
         if (Math.Abs(targetX - newX) < 0.01 && Math.Abs(targetY - newY) < 0.01)
         {

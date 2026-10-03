@@ -1,12 +1,30 @@
 <Window x:Class="SandcastleRpgMaker.Editor.ShowTextCommandWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Show Text" Height="320" Width="480" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="Show Text" Height="400" Width="480" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
             <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
         </StackPanel>
+
+        <Grid DockPanel.Dock="Bottom" Margin="0,8,0,0">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+            <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                <TextBlock Text="Speaker" ToolTip="Who is talking: their face shows in the box. A character must be in sight (on screen) for their line to show."/>
+                <ComboBox x:Name="SpeakerCombo"/>
+            </StackPanel>
+            <StackPanel Grid.Column="1">
+                <TextBlock Text="Face"/>
+                <ComboBox x:Name="FaceSideCombo" SelectedIndex="0">
+                    <ComboBoxItem Content="Left"/>
+                    <ComboBoxItem Content="Right"/>
+                </ComboBox>
+            </StackPanel>
+        </Grid>
 
         <Grid DockPanel.Dock="Bottom" Margin="0,10,0,0">
             <Grid.ColumnDefinitions>
