@@ -84,10 +84,12 @@ public class ContainerData : PlaceableItemBase
     /// </summary>
     public string? PreferredCustomSlotName { get; set; }
 
-    /// <summary>Real Exult lock mechanics, per spec - a locked container needs either the exact key item (RequiredKeyItemId, from the Item editor once one exists - Book/Object for now, honestly, since no dedicated Item editor exists yet) or a successful pick-lock attempt.</summary>
+    /// <summary>Exult lock mechanics (keyring.uc KeyInternal / UseKeyOnChest): whether it starts locked. In play it's locked or unlocked by using its key on it (an Object marked Use As: Key), or unlocked with a lockpick.</summary>
     public bool IsLocked { get; set; } = false;
     public ReferencedItemCategory RequiredKeyCategory { get; set; } = ReferencedItemCategory.Object;
     public int RequiredKeyItemId { get; set; } = -1;
+    /// <summary>Exult's SOUND_KEY: plays when a key turns in this container's lock or a lockpick opens it.</summary>
+    public int LockSoundResourceId { get; set; } = -1;
 
     /// <summary>Real pick-lock difficulty, per spec - a real, tunable parameter for how hard THIS container is to pick, compared against the picking character's own real stat at attempt time. Higher = a harder lock, needing a higher stat to have a real chance.</summary>
     public int PickLockDifficulty { get; set; } = 10;

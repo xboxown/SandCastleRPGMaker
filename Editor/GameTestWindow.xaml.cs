@@ -163,7 +163,7 @@ public partial class GameTestWindow : Window
         _sprites = sprites;
         _books = books;
         _objects = objects;
-        // Same real principle, and same real reason, as CloneCharacterDatabase - a container's own runtime contents (and its per-instance IsUnlockedRuntime state) get mutated live during play, exactly like a character's inventory, so Game Test needs its own fully disposable copy, never the live editor reference.
+        // Same real principle, and same real reason, as CloneCharacterDatabase - a container's own runtime contents (and its per-instance IsLockedRuntime state) get mutated live during play, exactly like a character's inventory, so Game Test needs its own fully disposable copy, never the live editor reference.
         _containers = CloneContainerDatabase(containers);
         _tileProperties = tileProperties;
         _variables = variables;
@@ -1088,40 +1088,12 @@ public partial class GameTestWindow : Window
 
     private readonly List<OpenContainerGump> _openContainers = new();
 
-    /// <summary>Real lock check, per spec - a locked container needs either the real key item in the current player's own inventory, or a successful pick-lock attempt, before it opens at all. Once genuinely unlocked (by either route), PlacedItem.IsUnlockedRuntime stays true for THIS specific placed instance from then on - picking a lock once doesn't need picking again.</summary>
+    /// <summary>Exult: double-clicking a locked chest doesn't open it - it says "Locked" (Ultima VII's chest usecode). Keys and lockpicks are used on it instead (GameTestWindow.Locks.cs).</summary>
     private void TryOpenContainer(PlacedItemInstance placedItem, ContainerData data)
     {
-        if (!data.IsLocked || placedItem.IsUnlockedRuntime) { OpenContainer(placedItem, data); return; }
-
-        if (_player is not null && data.RequiredKeyItemId >= 0 &&
-            _player.Inventory.Any(i => i.Category == data.RequiredKeyCategory && i.ItemId == data.RequiredKeyItemId))
-        {
-            placedItem.IsUnlockedRuntime = true;
-            StatusText.Text = $"You unlock \"{data.Name}\" with the key.";
-            OpenContainer(placedItem, data);
-            return;
-        }
-
-        // Real pick-lock attempt - confirmed real Exult mechanic (a real chance based on the picking character's own stat versus the container's own real difficulty), but the exact original formula's numbers could not be verified from source this pass, so this is a clearly-labeled, reasonable approximation rather than invented "exact" Exult numbers: Dexterity vs PickLockDifficulty, +-5% per point of difference around a 50% baseline, clamped so it's never guaranteed or impossible either way.
-        int dexterity = 0;
-        if (_player is not null && _stats is not null)
-        {
-            var dexStat = _stats.Stats.FirstOrDefault(s => s.Kind == BuiltInStatKind.Dexterity);
-            if (dexStat is not null && _player.StatValues.TryGetValue(dexStat.Id, out string? dexText) && int.TryParse(dexText, out int dexValue)) dexterity = dexValue;
-        }
-        int chance = Math.Clamp((dexterity - data.PickLockDifficulty) * 5 + 50, 5, 95);
-        bool success = _random.Next(100) < chance;
-        if (success)
-        {
-            placedItem.IsUnlockedRuntime = true;
-            StatusText.Text = $"You pick the lock on \"{data.Name}\"! ({chance}% chance)";
-            OpenContainer(placedItem, data);
-        }
-        else
-        {
-            StatusText.Text = $"You fail to pick the lock on \"{data.Name}\". ({chance}% chance)";
-            ShowFloatingTextOver(VisualOf(placedItem), "Locked"); // Ultima VII's usecode says "Locked" over a locked chest or door that stays shut
-        }
+        if (!IsLockedNow(placedItem, data)) { OpenContainer(placedItem, data); return; }
+        ShowFloatingTextOver(VisualOf(placedItem), "Locked");
+        StatusText.Text = $"\"{data.Name}\" is locked.";
     }
 
     /// <summary>Real seed-once-then-live pattern, per spec, same principle as a character's own Starting Inventory - StartingContents is the authored template; PlacedItem.Contents is the real, live, mutable copy, seeded from the template only the very first time THIS specific placed instance is opened (InstanceId still 0), never re-seeded on later opens.</summary>
@@ -1376,6 +1348,8 @@ public partial class GameTestWindow : Window
             OpenEquippedContainer(item);
             return;
         }
+        if (isUse && item.Category == ReferencedItemCategory.Object
+            && TryUseLockTool(_objects.Objects.FirstOrDefault(o => o.Id == item.ItemId), new ContainerOrigin(gump.PlacedItem, gump.Data, item))) return;
         string typeName = item.Category.ToString();
         if (!isUse) ShowContainerIdentifyLabel(gump, item, $"a {typeName}");
         StatusText.Text = isUse
@@ -1443,6 +1417,9 @@ public partial class GameTestWindow : Window
             return;
         }
 
+        if (isUse && item.Category == ReferencedItemCategory.Object
+            && TryUseLockTool(_objects.Objects.FirstOrDefault(o => o.Id == item.ItemId),
+                slotKey is not null ? new SlotOrigin(gump.Character, slotKey, item) : new BackpackOrigin(gump.Character, item))) return;
         string typeName = item.Category.ToString();
         if (!isUse && slotKey is not null) ShowPaperdollIdentifyLabel(gump, slotKey, $"a {typeName}");
         StatusText.Text = isUse
@@ -1521,6 +1498,8 @@ public partial class GameTestWindow : Window
             return;
         }
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
+        if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
+        if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens
         if (_isReadingBook) return;
         if (e.Key == Key.F6) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
         if (e.Key == Key.C) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
@@ -2421,7 +2400,7 @@ public partial class GameTestWindow : Window
         {
             ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);
         }
-        else
+        else if (!TryUseLockTool(worldObject, new MapObjectOrigin(instance)))
         {
             StatusText.Text = $"\"{name}\" has no events authored yet, so nothing happens when you use it - the click system itself is already ready for when it does.";
         }

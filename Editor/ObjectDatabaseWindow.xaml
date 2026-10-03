@@ -58,6 +58,11 @@
                 <local:SolidSizeEditor x:Name="SolidSize" HorizontalAlignment="Left" Margin="20,4,0,8"/>
                 <CheckBox x:Name="IsTwoHandedCheck" Content="Two-Handed (needs both hands - a weapon in the right hand makes left hand unavailable while equipped)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
                 <CheckBox x:Name="NpcCheck" Content="Is NPC (living, has schedule/dialogue later)" Margin="0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                <DockPanel Margin="0,8,0,2">
+                    <TextBlock Text="Use As:" FontWeight="Bold" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <ComboBox x:Name="UseAsCombo" Width="140" HorizontalAlignment="Left" SelectionChanged="UseAsCombo_SelectionChanged"/>
+                </DockPanel>
+                <TextBlock Text="Key: double-click it in play, then click a container to lock or unlock it (it must be that container's Required Key). Lockpick: double-click, then click a locked container to try to pick it; a failed try breaks the pick." Opacity="0.7" FontSize="11" TextWrapping="Wrap"/>
             </StackPanel>
             </ScrollViewer>
         </Grid>

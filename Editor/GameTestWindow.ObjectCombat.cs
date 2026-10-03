@@ -30,8 +30,8 @@ public partial class GameTestWindow
     private readonly Dictionary<PlacedItemInstance, int> _containerHp = new(ReferenceEqualityComparer.Instance);
     private readonly HashSet<PlacedItemInstance> _struckOwnedContainers = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>The pointer at rest: the attack pointer in combat mode, the hand otherwise.</summary>
-    private MousePointerKind RestingPointer => _combatMode ? MousePointerKind.Attack : MousePointerKind.Hand;
+    /// <summary>The pointer at rest: Green Select while choosing a target, the attack pointer in combat mode, the hand otherwise.</summary>
+    private MousePointerKind RestingPointer => IsChoosingTarget ? MousePointerKind.GreenSelect : _combatMode ? MousePointerKind.Attack : MousePointerKind.Hand;
 
     /// <summary>Game_window::double_clicked in combat mode, for things on the map. True = attacked (handled); false = use it as normal.</summary>
     private bool TryAttackInCombatMode(object entity)
@@ -39,7 +39,7 @@ public partial class GameTestWindow
         if (!_combatMode) return false;
         if (entity is PlacedItemInstance { Category: ReferencedItemCategory.Container } container
             && _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is { } data
-            && (data.IsBodyContainer || !data.IsLocked || container.IsUnlockedRuntime))
+            && (data.IsBodyContainer || !IsLockedNow(container, data)))
             return false; // bodies and unlocked containers open, combat or not
         _playerTarget = null;
         _playerTargetThing = entity;

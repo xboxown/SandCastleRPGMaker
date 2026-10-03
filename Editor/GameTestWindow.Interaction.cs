@@ -143,6 +143,7 @@ public partial class GameTestWindow
             e.Handled = true;
             return;
         }
+        if (TryChooseTarget(e)) return; // a key or lockpick is waiting for its target (Get_click)
         if (_pointer is { IsDragging: true }) { e.Handled = true; return; }
         _pointer = null;
 
@@ -826,7 +827,7 @@ public partial class GameTestWindow
             return false;
         }
         // contain.cc: a locked container refuses. Only a container standing on the map carries live lock state.
-        if (data.IsLocked && container is PlacedItemInstance { IsUnlockedRuntime: false })
+        if (container is PlacedItemInstance placed && IsLockedNow(placed, data))
         {
             reason = $"\"{data.Name}\" is locked.";
             return false;

@@ -136,7 +136,8 @@ public partial class ContainerEditorWindow : Window
         MaxVolumeBox.Text = container.MaxVolume.ToString();
         IsLockedCheck.IsChecked = container.IsLocked;
         PickLockDifficultyBox.Text = container.PickLockDifficulty.ToString();
-        RequiredKeyCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Book, ReferencedItemCategory.Object };
+        if (container.RequiredKeyCategory != ReferencedItemCategory.Object) (container.RequiredKeyCategory, container.RequiredKeyItemId) = (ReferencedItemCategory.Object, -1); // an older book key can't work as one
+        RequiredKeyCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Object }; // Exult keys are objects (shape 641) - a book can't be one
         RequiredKeyCategoryCombo.SelectedItem = container.RequiredKeyCategory;
         PopulateRequiredKeyItemChoices(container);
         RequiredKeyItemCombo.SelectedItem = container.RequiredKeyCategory switch
@@ -185,6 +186,8 @@ public partial class ContainerEditorWindow : Window
         NavigateSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.NavigateSoundResourceId) ?? NoneSound;
         DestroyedSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
         DestroyedSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.DestructibleSoundResourceId) ?? NoneSound;
+        LockSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
+        LockSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.LockSoundResourceId) ?? NoneSound;
 
         BuildFramePreview(container);
         RefreshContentsList(container);
@@ -231,6 +234,7 @@ public partial class ContainerEditorWindow : Window
         if (int.TryParse(HitPointsBox.Text, out int hp)) container.HitPoints = Math.Max(1, hp);
         if (int.TryParse(DefenseBox.Text, out int defense)) container.Defense = Math.Max(0, defense);
         container.DestructibleSoundResourceId = (DestroyedSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.LockSoundResourceId = (LockSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         container.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;
         container.BelongToId = (BelongToCombo.SelectedItem as CharacterDefinition)?.Id ?? -1;
         container.CanBeSold = CanBeSoldCheck.IsChecked == true;
@@ -264,7 +268,7 @@ public partial class ContainerEditorWindow : Window
         RequiredKeyItemCombo.ItemsSource = container.RequiredKeyCategory switch
         {
             ReferencedItemCategory.Book => _books.Books.Cast<object>().ToList(),
-            ReferencedItemCategory.Object => _objects.Objects.Cast<object>().ToList(),
+            ReferencedItemCategory.Object => _objects.Objects.Where(o => o.UseAs == ObjectUse.Key).Cast<object>().ToList(),
             _ => new List<object>()
         };
     }

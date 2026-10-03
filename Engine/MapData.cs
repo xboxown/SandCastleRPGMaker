@@ -133,8 +133,8 @@ public class PlacedItemInstance : IHasContainerContents
     /// <summary>Real, live runtime contents - only meaningful for a Container. Seeded once from ContainerData.StartingContents the first time this specific placed instance is opened, then mutated freely from there; never the container's own authored template directly, so opening the SAME chest twice never re-seeds it.</summary>
     public List<InventoryItemInstance> Contents { get; set; } = new();
 
-    /// <summary>Real per-instance lock state - only meaningful for a Container. True once THIS specific chest has been unlocked (by key or a successful pick), independent of the container's own authored IsLocked template, so a picked lock stays picked for this one instance rather than needing to be picked again every time it's opened.</summary>
-    public bool IsUnlockedRuntime { get; set; } = false;
+    /// <summary>Per-instance lock state in play - only meaningful for a Container. Null until a key or lockpick changes it (it's then as the container's IsLocked says); afterwards whether THIS chest is locked, since a key can lock it again (Exult's UseKeyOnChest).</summary>
+    public bool? IsLockedRuntime { get; set; }
 
     /// <summary>
     /// Real, logical elevation/lift level - Ultima 7-style, per spec: NOT

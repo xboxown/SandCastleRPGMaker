@@ -18,6 +18,7 @@ public partial class ObjectDatabaseWindow : Window
     public ObjectDatabaseWindow()
     {
         InitializeComponent();
+        UseAsCombo.ItemsSource = Enum.GetValues<ObjectUse>();
         SolidSize.SizeEdited += (_, _) =>
         {
             if (_current is null) return;
@@ -79,6 +80,7 @@ public partial class ObjectDatabaseWindow : Window
         SolidSize.Load(SolidSizeEditor.LoadImageFile(_current.IconPath), _current.SizeX, _current.SizeY, _current.SizeZ, _current.SolidOffsetX, _current.SolidOffsetY, _current.IsSolid);
         IsTwoHandedCheck.IsChecked = _current.IsTwoHanded;
         NpcCheck.IsChecked = _current.IsNpc;
+        UseAsCombo.SelectedItem = _current.UseAs;
 
         _suppressFieldEvents = false;
         EditorPanel.IsEnabled = true;
@@ -142,6 +144,12 @@ public partial class ObjectDatabaseWindow : Window
 
         RefreshList();
         ObjectListBox.SelectedItem = _current;
+    }
+
+    private void UseAsCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppressFieldEvents || _current is null || UseAsCombo.SelectedItem is not ObjectUse use) return;
+        _current.UseAs = use;
     }
 
     private void SaveDbButton_Click(object sender, RoutedEventArgs e)
