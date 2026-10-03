@@ -113,17 +113,24 @@ public partial class GameTestWindow
         if (vitals.Dead) return;
         vitals.Dead = true;
         vitals.Ailments = Ailment.None;
-        FireCharacterEvent(character, BookTriggerConditionBased.ByDeath); // its own By Death events, while it's still where it fell
         if (character == _player)
         {
+            // The main character: no built-in message - its own By Death events decide what happens (a Show Text, music, ...).
+            // From then on the player can do nothing at all (no moving, dragging, using, talking, opening or identifying);
+            // only a dialog box raised by those events can still be clicked through. Loading a saved game will come later.
             ApplyPoseSprite(PoseByName("Body") ?? _idlePose);
             _heldDirectionKeys.Clear();
-            _messages.Enqueue(new GameMessage($"You have died ({cause}).", null, "Middle", "Window", false));
-            if (_currentMessage is null) ShowNextMessage();
+            CancelPointer();
+            _choosingTarget = null;
+            _playerTarget = null;
+            _playerTargetThing = null;
             _gameOver = true;
-            StatusText.Text = $"You have died ({cause}). The game is over - close this window to return.";
+            ShowPointer(RestingPointer);
+            StatusText.Text = $"You have died ({cause}).";
+            FireCharacterEvent(character, BookTriggerConditionBased.ByDeath);
             return;
         }
+        FireCharacterEvent(character, BookTriggerConditionBased.ByDeath); // its own By Death events, while it's still where it fell
         var mapCharacter = _mapCharacters.FirstOrDefault(mc => mc.Character == character);
         if (mapCharacter is null) return;
         StopWalking(mapCharacter);

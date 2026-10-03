@@ -143,6 +143,7 @@ public partial class GameTestWindow
             e.Handled = true;
             return;
         }
+        if (_gameOver) { e.Handled = true; return; } // the main character is dead: nothing can be clicked (only a dialog box, above)
         if (TryChooseTarget(e)) return; // a key or lockpick is waiting for its target (Get_click)
         if (_pointer is { IsDragging: true }) { e.Handled = true; return; }
         _pointer = null;

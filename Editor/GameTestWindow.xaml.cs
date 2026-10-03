@@ -1444,18 +1444,31 @@ public partial class GameTestWindow : Window
             posX = customSlot.X; posY = customSlot.Y;
         }
         else return;
-        var pos = new Point(posX, posY);
+        ShowGumpLabel(gump.BodyCanvas, name, posX, posY, 400.0 / 200.0); // the body is drawn at half scale; the text isn't
+    }
+
+    /// <summary>
+    /// An identify label inside a gump, the same size as the map's: Exult
+    /// draws gump text in the same font at the same screen scale as the
+    /// world (one framebuffer, scaled as a whole). A gump body here is
+    /// drawn shrunk from its authoring size, so the label gets the inverse
+    /// scale, exactly like the item icons in it.
+    /// </summary>
+    private void ShowGumpLabel(Canvas canvas, string name, double x, double y, double counterScale)
+    {
         var label = GameTextLabel(name);
-        Canvas.SetLeft(label, pos.X);
-        Canvas.SetTop(label, pos.Y - 22);
+        label.LayoutTransform = new ScaleTransform(counterScale, counterScale);
+        label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        Canvas.SetLeft(label, x);
+        Canvas.SetTop(label, y - label.DesiredSize.Height - 2);
         Panel.SetZIndex(label, 50);
-        gump.BodyCanvas.Children.Add(label);
+        canvas.Children.Add(label);
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
-            gump.BodyCanvas.Children.Remove(label);
+            canvas.Children.Remove(label);
         };
         timer.Start();
     }
@@ -1472,22 +1485,8 @@ public partial class GameTestWindow : Window
     /// apply here at all, since a container's own items are placed
     /// anywhere, not at fixed slots.
     /// </summary>
-    private void ShowContainerIdentifyLabel(OpenContainerGump gump, InventoryItemInstance item, string name)
-    {
-        var label = GameTextLabel(name);
-        Canvas.SetLeft(label, item.ContainerX);
-        Canvas.SetTop(label, item.ContainerY - 22);
-        Panel.SetZIndex(label, 50);
-        gump.ItemsCanvas.Children.Add(label);
-
-        var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            gump.ItemsCanvas.Children.Remove(label);
-        };
-        timer.Start();
-    }
+    private void ShowContainerIdentifyLabel(OpenContainerGump gump, InventoryItemInstance item, string name) =>
+        ShowGumpLabel(gump.ItemsCanvas, name, item.ContainerX, item.ContainerY, ContainerBodyHeight / 200.0); // the body is drawn shrunk to 200 game pixels tall
 
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -1497,6 +1496,7 @@ public partial class GameTestWindow : Window
             e.Handled = true;
             return;
         }
+        if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
         if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
         if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens
