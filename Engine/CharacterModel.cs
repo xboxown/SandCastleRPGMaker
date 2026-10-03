@@ -38,6 +38,14 @@ public class CharacterDefinition
     public bool IsTestPlayer { get; set; }
 
     /// <summary>
+    /// Exult-style daily schedule (Schedule_change list): at the start of each
+    /// 3-hour period with an entry, the character goes to that entry's spot
+    /// and does its activity. Always empty for the main player, who is
+    /// controlled by the person playing, not by AI.
+    /// </summary>
+    public List<ScheduleEntry> Schedules { get; set; } = new();
+
+    /// <summary>
     /// Exult-style 3D size - the same thing every shape in Exult carries
     /// (Shape_info dims: x/y footprint in tiles, z height in lifts), and the
     /// same SizeX/SizeY/SizeZ books, containers and objects already have.

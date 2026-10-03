@@ -48,6 +48,7 @@ public class SystemSettingsWindow : Window
 
         var tabs = new TabControl();
         tabs.Items.Add(new TabItem { Header = "Mouse Pointers", Content = BuildMousePointersTab() });
+        tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
 
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();
@@ -59,6 +60,41 @@ public class SystemSettingsWindow : Window
 
         Closed += (_, _) => { foreach (var animator in _previewAnimators.Values) animator.Stop(); };
         LoadSizes();
+    }
+
+    /// <summary>Exult's game clock: when a new game starts, and how fast time runs (Exult's time rate).</summary>
+    private UIElement BuildClockTab()
+    {
+        var clock = _settings.Clock;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "The game clock works as Exult's: a game minute passes every 5 real seconds (25 ticks of 200 ms), so an hour takes 5 minutes " +
+                   "and a whole day 2 hours. Time stands still while a paperdoll, container or book is open. Characters change what they're doing " +
+                   "at the start of each 3-hour period (Character Editor > Schedule).",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12)
+        });
+
+        var startRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        startRow.Children.Add(new TextBlock { Text = "A new game starts at:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        var start = new ComboBox { Width = 110 };
+        for (int h = 0; h < 24; h++) start.Items.Add($"{(h % 12 == 0 ? 12 : h % 12)}:00 {(h < 12 ? "AM" : "PM")}");
+        start.SelectedIndex = Math.Clamp(clock.StartHour, 0, 23);
+        start.SelectionChanged += (_, _) => clock.StartHour = Math.Max(0, start.SelectedIndex);
+        startRow.Children.Add(start);
+        startRow.Children.Add(new TextBlock { Text = "  (Exult: 6:00 AM)", Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(startRow);
+
+        var rateRow = new StackPanel { Orientation = Orientation.Horizontal };
+        rateRow.Children.Add(new TextBlock { Text = "Time rate:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        var rate = new ComboBox { Width = 110 };
+        foreach (int r in new[] { 1, 2, 3, 4, 5, 10, 25 }) rate.Items.Add(r);
+        rate.SelectedItem = rate.Items.Cast<int>().Contains(clock.TimeRate) ? clock.TimeRate : 1;
+        rate.SelectionChanged += (_, _) => clock.TimeRate = rate.SelectedItem is int r ? r : 1;
+        rateRow.Children.Add(rate);
+        rateRow.Children.Add(new TextBlock { Text = "  x (1 = Exult's normal speed; 25 = a game minute every 200 ms)", Opacity = 0.6, VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(rateRow);
+        return panel;
     }
 
     private UIElement BuildMousePointersTab()

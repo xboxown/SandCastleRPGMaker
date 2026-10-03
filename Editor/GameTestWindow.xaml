@@ -6,6 +6,9 @@
     <Grid>
     <DockPanel>
         <StatusBar DockPanel.Dock="Bottom">
+            <StatusBarItem DockPanel.Dock="Right">
+                <TextBlock x:Name="ClockText" ToolTip="The game clock (Exult: a game minute every 5 seconds). F6 skips to the next 3-hour period." Margin="8,0,4,0"/>
+            </StatusBarItem>
             <StatusBarItem>
                 <TextBlock x:Name="StatusText" Text="Arrow keys to move."/>
             </StatusBarItem>

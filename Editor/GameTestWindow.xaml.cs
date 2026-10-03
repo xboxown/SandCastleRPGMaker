@@ -176,6 +176,7 @@ public partial class GameTestWindow : Window
         _execContext.OnChangeDayNight = ApplyRealDayNightPeriod;
         _execContext.OnApplyPaletteColor = ApplyRealPaletteColorEffect;
         InitializeFactions(factions);
+        _clock = new GameClock(systemSettings.Clock.StartHour, systemSettings.Clock.TimeRate);
 
         BuildMapVisual();
         BuildObjectVisuals();
@@ -1509,6 +1510,7 @@ public partial class GameTestWindow : Window
     {
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
         if (_isReadingBook) return;
+        if (e.Key == Key.F6) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
         // Escape mid-drag cancels the drag (the item never left its origin, so it's simply still there) instead of closing a gump out from under it - Exult likewise refuses Escape while dragging.
@@ -1714,6 +1716,8 @@ public partial class GameTestWindow : Window
 
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
+
+        UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
 
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);

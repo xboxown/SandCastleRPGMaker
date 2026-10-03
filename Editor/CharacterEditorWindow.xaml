@@ -1,7 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.CharacterEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="PC Editor" Height="680" Width="960" WindowStartupLocation="CenterOwner">
+        Title="Character Editor" Height="680" Width="960" WindowStartupLocation="CenterOwner">
     <DockPanel Margin="10">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Close" Width="80" Margin="4" Click="CloseButton_Click"/>
@@ -38,7 +38,9 @@
                     <ComboBox x:Name="FactionCombo" Margin="0,2,0,10" DisplayMemberPath="Name" SelectionChanged="Field_Changed"
                               ToolTip="Who this character sides with - how it treats everyone else and how they treat it (Tools &gt; Faction Editor)"/>
 
-                    <CheckBox x:Name="TestPlayerCheck" Content="Use as Internal Engine test player (only one character can be this)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <CheckBox x:Name="TestPlayerCheck" Content="Is Main Player" Margin="0,0,0,2" Checked="Field_Changed" Unchecked="Field_Changed"
+                              ToolTip="The character the person playing controls (only one character can be the main player). Every other character is run by AI and follows its schedule."/>
+                    <TextBlock x:Name="MainPlayerNote" Text="Controlled by the person playing: no AI, no schedule." Opacity="0.7" FontSize="11" Margin="20,0,0,4" Visibility="Collapsed"/>
                     <CheckBox x:Name="InPartyCheck" Content="In active party (their own inventory/paperdoll can be opened even when not the test player)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
 
                     <TextBlock Text="Size (Exult 3D size)" FontWeight="Bold"/>
@@ -137,6 +139,12 @@
                         <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Margin="0,6,0,0" Click="RemoveInventoryItem_Click"/>
                     </StackPanel>
                 </Grid>
+            </TabItem>
+
+            <TabItem x:Name="ScheduleTab" Header="Schedule" ToolTip="Where this character goes and what it does through the day (not for the main player)">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="SchedulePanel" Margin="10"/>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>

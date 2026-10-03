@@ -26,6 +26,18 @@ internal static class ProjectSession
         _openCharacterEditor = openCharacterEditor;
     }
 
+    /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
+    public static Func<ResourceDatabase>? ResourcesProvider;
+    public static Func<VariableDatabase>? VariablesProvider;
+    public static Func<BookDatabase>? BooksProvider;
+    public static Func<ObjectDatabase>? ObjectsProvider;
+    public static Func<ContainerDatabase>? ContainersProvider;
+    public static Func<StatDatabase>? StatsProvider;
+    /// <summary>A picture of the map open in the Map Editor and its cell size, or null when no map is open.</summary>
+    public static Func<(System.Windows.Media.Imaging.BitmapSource Picture, int TileWidth, int TileHeight, int Columns, int Rows)?>? MapSnapshotProvider;
+    /// <summary>Where a character (by id) is placed on the open map, or null.</summary>
+    public static Func<int, (int X, int Y)?>? PlacedSpotProvider;
+
     public static FactionDatabase Factions => _factions?.Invoke() ?? new FactionDatabase();
     public static CharacterDatabase Characters => _characters?.Invoke() ?? new CharacterDatabase();
     public static SpriteDatabase Sprites => _sprites?.Invoke() ?? new SpriteDatabase();

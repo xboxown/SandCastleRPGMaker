@@ -220,7 +220,8 @@ public partial class GameTestWindow
     /// not more than 1 down. The actor then stands at the highest of those,
     /// and must have headroom there over the whole footprint.
     /// </summary>
-    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason)
+    /// <param name="mover">The character taking the step (a PlacedCharacter), or null for the player: the mover never blocks itself, and for a character the player is in the way like any other actor.</param>
+    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason, object? mover = null, List<Body>? world = null)
     {
         newLift = lift;
         blockReason = "";
@@ -230,7 +231,8 @@ public partial class GameTestWindow
             return false;
         }
 
-        var solids = WorldBodies().Where(b => b.Solid && b.Overlaps(to)).ToList();
+        var solids = (world ?? WorldBodies()).Where(b => b.Solid && b.Overlaps(to) && !ReferenceEquals(b.Entity, mover)).ToList();
+        if (mover is not null && _player is not null && PlayerBody() is { } playerBody && playerBody.Overlaps(to)) solids.Add(playerBody);
         int highest = int.MinValue;
         for (int y = to.Top; y < to.Bottom; y++)
         {
@@ -287,6 +289,7 @@ public partial class GameTestWindow
         PlacedItemInstance item => item.Category.ToString(),
         ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Name ?? "object",
         PlacedCharacter placed => _mapCharacters.FirstOrDefault(mc => mc.Placement == placed)?.Character.Name ?? "someone",
+        CharacterDefinition character => character.Name,
         _ => "something"
     };
 

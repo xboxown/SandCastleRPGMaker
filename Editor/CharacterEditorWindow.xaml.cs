@@ -108,7 +108,7 @@ public partial class CharacterEditorWindow : Window
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition selected)
         {
-            MessageBox.Show("Select a character first.", "PC Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Select a character first.", "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         var result = MessageBox.Show($"Delete \"{selected.Name}\"? This cannot be undone.", "Delete Character", MessageBoxButton.YesNo, MessageBoxImage.Warning);
@@ -136,6 +136,7 @@ public partial class CharacterEditorWindow : Window
 
         RefreshClassChoices(character.ClassName);
         RefreshFactionChoices(character.FactionId);
+        BuildSchedulePanel(character);
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;
         // A character that has never had a size gets one filled in automatically the first time it's looked at, so the boxes always show the real numbers the engine will use.
@@ -667,12 +668,21 @@ public partial class CharacterEditorWindow : Window
         if (FactionCombo.SelectedItem is Faction faction) character.FactionId = faction.Id;
 
         bool wantsTestPlayer = TestPlayerCheck.IsChecked == true;
+        if (wantsTestPlayer && !character.IsTestPlayer && !ConfirmBecomingMainPlayer(character))
+        {
+            _suppress = true;
+            TestPlayerCheck.IsChecked = false;
+            _suppress = false;
+            wantsTestPlayer = false;
+        }
+        bool mainPlayerChanged = wantsTestPlayer != character.IsTestPlayer;
         if (wantsTestPlayer && !character.IsTestPlayer)
         {
             // Only one character can be the test player - claiming it here releases it from whoever had it.
             foreach (var other in _database.Characters) other.IsTestPlayer = false;
         }
         character.IsTestPlayer = wantsTestPlayer;
+        if (mainPlayerChanged) BuildSchedulePanel(character); // the main player's schedule tab is disabled and empty
         character.IsInParty = InPartyCheck.IsChecked == true;
 
         if (FaceCombo.SelectedItem is SpriteEntry faceSprite)
@@ -1083,7 +1093,7 @@ public partial class CharacterEditorWindow : Window
         };
         if (itemId < 0)
         {
-            MessageBox.Show("Pick an item first.", "PC Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show("Pick an item first.", "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
         character.Inventory.Add(new InventoryItemInstance { InstanceId = character.GetNextInventoryInstanceId(), Category = category, ItemId = itemId });

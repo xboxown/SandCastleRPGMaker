@@ -102,6 +102,38 @@ public partial class MainWindow : Window
             RefreshCharactersPalette();
             PlaceAllCharacterVisualsIfMapShown();
         });
+        ProjectSession.ResourcesProvider = () => _resourceDatabase;
+        ProjectSession.VariablesProvider = () => _variableDatabase;
+        ProjectSession.BooksProvider = () => _bookDatabase;
+        ProjectSession.ObjectsProvider = () => _objectDatabase;
+        ProjectSession.ContainersProvider = () => _containerDatabase;
+        ProjectSession.StatsProvider = () => _statDatabase;
+        ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
+        ProjectSession.PlacedSpotProvider = characterId =>
+            _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
+    }
+
+    /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>
+    private (System.Windows.Media.Imaging.BitmapSource, int, int, int, int)? SnapshotOpenMap()
+    {
+        if (_map is null || _tileset is null) return null;
+        int width = _map.Width * _tileset.TileWidth, height = _map.Height * _tileset.TileHeight;
+        if (width <= 0 || height <= 0) return null;
+        // Through a VisualBrush, so the canvas's own position inside the window doesn't shift the picture.
+        var drawing = new System.Windows.Media.DrawingVisual();
+        using (var dc = drawing.RenderOpen())
+        {
+            var brush = new System.Windows.Media.VisualBrush(MapCanvas)
+            {
+                Viewbox = new Rect(0, 0, width, height), ViewboxUnits = System.Windows.Media.BrushMappingMode.Absolute, Stretch = System.Windows.Media.Stretch.None,
+                AlignmentX = System.Windows.Media.AlignmentX.Left, AlignmentY = System.Windows.Media.AlignmentY.Top
+            };
+            dc.DrawRectangle(brush, null, new Rect(0, 0, width, height));
+        }
+        var picture = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
+        picture.Render(drawing);
+        picture.Freeze();
+        return (picture, _tileset.TileWidth, _tileset.TileHeight, _map.Width, _map.Height);
     }
 
     /// <summary>Lightweight row for the Objects palette ListBox (name + pre-loaded icon).</summary>

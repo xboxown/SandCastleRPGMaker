@@ -52,7 +52,7 @@
                 <MenuItem Header="Sound Mixer..." Click="SoundMixerMenuItem_Click"/>
                 <MenuItem Header="Variable Editor..." Click="VariableEditorMenuItem_Click"/>
                 <MenuItem Header="Stat Editor..." Click="StatEditorMenuItem_Click"/>
-                <MenuItem Header="PC Editor..." Click="CharacterEditorMenuItem_Click"/>
+                <MenuItem Header="Character Editor..." Click="CharacterEditorMenuItem_Click"/>
                 <MenuItem Header="System Settings..." Click="SystemSettingsMenuItem_Click"/>
                 <Separator/>
                 <MenuItem Header="Save Tile Properties..." Click="SaveTilePropertiesMenuItem_Click"/>

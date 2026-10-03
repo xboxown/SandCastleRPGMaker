@@ -32,4 +32,5 @@ public class MousePointerSettings
 public class SystemSettings
 {
     public MousePointerSettings MousePointers { get; set; } = new();
+    public GameClockSettings Clock { get; set; } = new();
 }
