@@ -53,6 +53,26 @@ public class StatDatabase
         _nextId = Stats.Count == 0 ? 1 : Stats.Max(s => s.Id) + 1;
     }
 
+    /// <summary>The lowest value a built-in Integer stat can hold in the editor; blank or anything lower becomes this.</summary>
+    public const int BuiltInMinimum = 1;
+
+    /// <summary>True for the built-in Integer stats, which can never be blank or below <see cref="BuiltInMinimum"/>.</summary>
+    public static bool HasMinimum(StatDefinition stat) => stat.IsBuiltIn && stat.Type == VariableValueType.Integer;
+
+    /// <summary>A built-in Integer stat's value, made valid: blank, non-numeric or below the minimum gives the minimum.</summary>
+    public static string ClampBuiltIn(string? text) =>
+        int.TryParse(text?.Trim(), out int value) && value >= BuiltInMinimum ? value.ToString() : BuiltInMinimum.ToString();
+
+    /// <summary>Fills in or fixes every built-in Integer stat on the character (blank or below 1 becomes 1).</summary>
+    public void EnsureBuiltInMinimums(CharacterDefinition character)
+    {
+        foreach (var stat in Stats.Where(HasMinimum))
+        {
+            character.StatValues.TryGetValue(stat.Id, out var text);
+            character.StatValues[stat.Id] = ClampBuiltIn(text);
+        }
+    }
+
     public static StatDatabase CreateDefault()
     {
         var db = new StatDatabase();

@@ -464,6 +464,7 @@ public partial class GameTestWindow : Window
     private void SetUpPlayer(CharacterDatabase characters, PoseDatabase poses)
     {
         _characters = CloneCharacterDatabase(characters);
+        foreach (var character in _characters.Characters) _stats.EnsureBuiltInMinimums(character); // never opened in the Character Editor? blank built-in stats play as 1
         _playerX = _map.StartX >= 0 ? _map.StartX : _map.Width / 2;
         _playerY = _map.StartY >= 0 ? _map.StartY : _map.Height / 2;
         _player = _characters.Characters.FirstOrDefault(c => c.IsTestPlayer);
@@ -1119,6 +1120,7 @@ public partial class GameTestWindow : Window
         else
         {
             StatusText.Text = $"You fail to pick the lock on \"{data.Name}\". ({chance}% chance)";
+            ShowFloatingTextOver(VisualOf(placedItem), "Locked"); // Ultima VII's usecode says "Locked" over a locked chest or door that stays shut
         }
     }
 

@@ -13,21 +13,30 @@ namespace SandcastleRpgMaker.Editor;
 public partial class CharacterEditorWindow : Window
 {
     /// <summary>One row of the Stats list - reads/writes directly into the selected character's StatValues on Value change, keyed by stat Id (not name), matching the model's own reasoning for that choice.</summary>
-    private class StatRow
+    private class StatRow : System.ComponentModel.INotifyPropertyChanged
     {
         private readonly CharacterDefinition _character;
         private readonly int _statId;
+        private readonly bool _hasMinimum;
         public string Label { get; }
         public string Value
         {
             get => _character.StatValues.TryGetValue(_statId, out var v) ? v : string.Empty;
-            set => _character.StatValues[_statId] = value;
+            set
+            {
+                // Built-in Integer stats are never blank or below 1; the box shows the corrected value right away.
+                _character.StatValues[_statId] = _hasMinimum ? StatDatabase.ClampBuiltIn(value) : value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+            }
         }
+
+        public event System.ComponentModel.PropertyChangedEventHandler? PropertyChanged;
 
         public StatRow(CharacterDefinition character, StatDefinition stat)
         {
             _character = character;
             _statId = stat.Id;
+            _hasMinimum = StatDatabase.HasMinimum(stat);
             Label = $"{stat.Name} ({stat.Type})";
         }
     }
@@ -151,6 +160,7 @@ public partial class CharacterEditorWindow : Window
         FaceFilterCheck.IsChecked = _faceFilterGroup is not null;
         PopulateFaceChoices(character.FaceSpriteGroup, character.FaceSpriteName);
 
+        _stats.EnsureBuiltInMinimums(character); // blank built-in stats start at 1
         StatsItemsControl.ItemsSource = _stats.Stats.Select(s => new StatRow(character, s)).ToList();
         BuildPosesPanel(character);
 
@@ -1115,4 +1125,11 @@ public partial class CharacterEditorWindow : Window
     }
 
     private void CloseButton_Click(object sender, RoutedEventArgs e) => Close();
+
+    /// <summary>Stat boxes save when they lose focus; closing with one still focused saves it too.</summary>
+    protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
+    {
+        if (Keyboard.FocusedElement is TextBox box) box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
+        base.OnClosing(e);
+    }
 }
