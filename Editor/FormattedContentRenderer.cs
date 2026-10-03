@@ -49,7 +49,8 @@ internal static class FormattedContentRenderer
     /// <summary>Fixed, explicit spacing WE control between paragraphs - no ambiguous WPF Margin property to misread, unlike everything the pagination-measurement saga fought with.</summary>
     private const double ParagraphSpacing = 10;
 
-    public static RenderResult Render(string xaml, double width, double height, SpriteDatabase sprites)
+    /// <param name="fontSpriteName">A font from the Sprite Editor's Fonts group to draw the text with (the book's Text Font setting); empty or null keeps the ordinary system font.</param>
+    public static RenderResult Render(string xaml, double width, double height, SpriteDatabase sprites, string? fontSpriteName = null)
     {
         var spriteBoxes = new List<SpriteBox>();
         if (width < 1 || height < 1) return new RenderResult { TextBitmap = null, Sprites = spriteBoxes, TotalHeight = 0 };
@@ -59,7 +60,7 @@ internal static class FormattedContentRenderer
 
         double cursorY = 0;
         var visual = new DrawingVisual();
-        var font = SpriteFont.For(sprites, SpriteDatabase.InGameFontName);
+        var font = string.IsNullOrEmpty(fontSpriteName) ? null : SpriteFont.For(sprites, fontSpriteName);
         using (var dc = visual.RenderOpen())
         {
             LayoutBlocks(scratch.Document.Blocks, dc, ref cursorY, width, sprites, spriteBoxes, font);
@@ -73,15 +74,15 @@ internal static class FormattedContentRenderer
     }
 
     /// <summary>
-    /// The height book content takes when drawn with the project's InGameFont
-    /// at this width - what pagination measures with whenever that font has
-    /// glyphs, so pages break exactly where the drawn text runs out of room.
-    /// Null when there is no font (pagination then measures as before).
+    /// The height book content takes when drawn with a sprite font at this
+    /// width - what pagination measures with for a book that uses one, so its
+    /// pages break exactly where the drawn text runs out of room. Null when
+    /// that font has no glyphs (pagination then measures as it always has).
     /// </summary>
-    public static double? MeasureWithInGameFont(string xaml, double width)
+    public static double? MeasureWithSpriteFont(string xaml, double width, string fontSpriteName)
     {
         var sprites = ProjectSession.Sprites;
-        var font = SpriteFont.For(sprites, SpriteDatabase.InGameFontName);
+        var font = SpriteFont.For(sprites, fontSpriteName);
         if (font is null) return null;
         var scratch = new RichTextBox { FontFamily = new FontFamily("Segoe UI"), FontSize = 12, Foreground = Brushes.Black };
         RichTextXamlHelper.Load(scratch, xaml);
@@ -90,7 +91,7 @@ internal static class FormattedContentRenderer
         return Math.Max(0, cursorY - ParagraphSpacing); // no spacing is needed after the last paragraph
     }
 
-    private static void LayoutBlocks(IEnumerable<Block> blocks, DrawingContext? dc, ref double cursorY, double width, SpriteDatabase sprites, List<SpriteBox> spriteBoxes, SpriteFont? font)
+    private static void LayoutBlocks(IEnumerable<Block> blocks, DrawingContext? dc, ref double cursorY, double width, SpriteDatabase sprites, List<SpriteBox> spriteBoxes, SpriteFont? font = null)
     {
         foreach (var block in blocks)
         {
@@ -113,7 +114,7 @@ internal static class FormattedContentRenderer
 
             if (font is not null)
             {
-                // The game's own graphical font: each run keeps its colour and size (12 = the font's own pixels, 24 = twice that...).
+                // The book's chosen sprite font: each run keeps its colour and size (12 = the font's own pixels, 24 = twice that...).
                 var chars = new List<SpriteFont.StyledChar>();
                 CollectStyledChars(para.Inlines, chars);
                 if (chars.Count == 0 || chars.All(c => char.IsWhiteSpace(c.Ch))) { cursorY += ParagraphSpacing; continue; }

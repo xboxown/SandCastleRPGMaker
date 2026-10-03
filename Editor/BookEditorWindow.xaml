@@ -112,6 +112,10 @@
                                     <TextBlock Text="Faction"/>
                                     <ComboBox x:Name="FactionCombo" Width="120" HorizontalAlignment="Left" SelectionChanged="Field_Changed_Combo" DisplayMemberPath="Name"/>
                                 </StackPanel>
+                                <StackPanel HorizontalAlignment="Left" Margin="0,6,0,0">
+                                    <TextBlock Text="Text Font" ToolTip="What this book's pages are written in: the ordinary system font (as before), or a graphical font from the Sprite Editor's Fonts group. Text size 12 is the font's own pixel size, 24 is double."/>
+                                    <ComboBox x:Name="TextFontCombo" Width="190" HorizontalAlignment="Left" SelectionChanged="Field_Changed_Combo"/>
+                                </StackPanel>
                             </StackPanel>
                         </GroupBox>
 

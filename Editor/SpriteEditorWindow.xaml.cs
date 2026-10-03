@@ -79,11 +79,16 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
-        if (RefuseInFontsGroup()) return;
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 
-        var entry = new SpriteEntry { Name = name.Trim() };
+        if (_currentGroup.Name == SpriteDatabase.FontsGroupName && _currentGroup.Sprites.Any(s => s.Name == name.Trim()))
+        {
+            MessageBox.Show($"There's already a font called \"{name.Trim()}\".", "New Font", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        // In the Fonts group a new sprite is an extra font - offered only in the Book Editor's Text Font list.
+        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name != SpriteDatabase.FontsGroupName };
         _currentGroup.Sprites.Add(entry);
         RefreshSprites();
         SpriteListView.SelectedItem = entry;
@@ -97,7 +102,6 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
-        if (RefuseInFontsGroup()) return;
         var dialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp", Multiselect = true };
         if (dialog.ShowDialog() != true) return;
 
@@ -143,18 +147,10 @@ public partial class SpriteEditorWindow : Window
             return;
         }
         bool isTilesetGroup = _currentGroup?.Name == SpriteDatabase.TilesetGroupName;
-        bool isFont = _currentGroup is not null && SpriteDatabase.IsFontSprite(_currentGroup.Name, entry.Name);
+        bool isFont = _currentGroup?.Name == SpriteDatabase.FontsGroupName; // every sprite in Fonts is a font: glyph frames, no sound or animation
         var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
-    }
-
-    /// <summary>The Fonts group holds exactly the game's two fonts - nothing else is ever read from it.</summary>
-    private bool RefuseInFontsGroup()
-    {
-        if (_currentGroup?.Name != SpriteDatabase.FontsGroupName) return false;
-        MessageBox.Show("The Fonts group only holds the game's two fonts, InGameFont and DialogFont. Edit one of them to add its letters.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
-        return true;
     }
 
     private void Save_Click(object sender, RoutedEventArgs e)

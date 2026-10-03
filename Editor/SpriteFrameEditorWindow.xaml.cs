@@ -97,8 +97,11 @@ public partial class SpriteFrameEditorWindow : Window
     {
         foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1; // never played, so never heard
         _sprite.Loop = false;
-        NameBox.IsReadOnly = true;
-        NameBox.ToolTip = "The game's fonts have fixed names";
+        if (SpriteDatabase.IsFontSprite(SpriteDatabase.FontsGroupName, _sprite.Name))
+        {
+            NameBox.IsReadOnly = true;
+            NameBox.ToolTip = "The game's two fonts have fixed names";
+        }
         foreach (UIElement control in new UIElement[] { FpsBox, LoopCheck, PlayPauseButton })
         {
             control.IsEnabled = false;

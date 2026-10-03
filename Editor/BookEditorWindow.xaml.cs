@@ -265,6 +265,12 @@ public partial class BookEditorWindow : Window
         FactionCombo.ItemsSource = factionChoices;
         FactionCombo.SelectedItem = factionChoices.FirstOrDefault(f => f.Id == _current.FactionId) ?? NoneFaction;
 
+        // Text Font: the system font as before, or any font from the Sprite Editor's Fonts group.
+        var fontChoices = new List<string> { DefaultTextFont };
+        fontChoices.AddRange(_sprites.FontNames());
+        TextFontCombo.ItemsSource = fontChoices;
+        TextFontCombo.SelectedItem = fontChoices.Contains(_current.TextFontSpriteName) ? _current.TextFontSpriteName : DefaultTextFont;
+
         var soundChoices = new List<ResourceEntry> { NoneSound };
         soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
         OpenSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
@@ -441,6 +447,8 @@ public partial class BookEditorWindow : Window
         BookListBox.Items.Refresh();
     }
 
+    private const string DefaultTextFont = "(Default - system font)";
+
     private void Field_Changed_Combo(object sender, SelectionChangedEventArgs? e)
     {
         if (_suppress || _current is null) return;
@@ -449,6 +457,12 @@ public partial class BookEditorWindow : Window
         if (ChatteredSpriteNameCombo.SelectedItem is SpriteChoice ch) { _current.ChatteredSpriteGroup = ch.Group; _current.ChatteredSpriteName = ch.Name; }
         if (DestroyedSpriteNameCombo.SelectedItem is SpriteChoice de) { _current.DestroyedSpriteGroup = de.Group; _current.DestroyedSpriteName = de.Name; }
         _current.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;
+        string chosenFont = TextFontCombo.SelectedItem is string font && font != DefaultTextFont ? font : string.Empty;
+        if (chosenFont != _current.TextFontSpriteName)
+        {
+            _current.TextFontSpriteName = chosenFont;
+            RebuildFrameLayout(); // a different font takes different room: re-flow the pages and redraw them
+        }
         _current.OpenSoundResourceId = (OpenSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         _current.CloseSoundResourceId = (CloseSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         _current.PageFlipSoundResourceId = (FlipSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
@@ -553,7 +567,7 @@ public partial class BookEditorWindow : Window
         {
             visuals.Overlay.Children.Clear();
             string xaml = page.FrameTexts.TryGetValue(frame.Id, out var t) ? t : string.Empty;
-            var result = FormattedContentRenderer.Render(xaml, visuals.Overlay.Width, visuals.Overlay.Height, _sprites);
+            var result = FormattedContentRenderer.Render(xaml, visuals.Overlay.Width, visuals.Overlay.Height, _sprites, _current.TextFontSpriteName);
 
             if (result.TextBitmap is not null)
             {

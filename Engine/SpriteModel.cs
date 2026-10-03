@@ -166,6 +166,10 @@ public class SpriteDatabase
             if (fonts.Sprites.All(s => s.Name != name)) fonts.Sprites.Add(new SpriteEntry { Name = name, Loop = false });
     }
 
+    /// <summary>Every font in the Fonts group - the two game fonts plus any extra ones added for books.</summary>
+    public List<string> FontNames() =>
+        Groups.FirstOrDefault(g => g.Name == FontsGroupName)?.Sprites.Select(s => s.Name).ToList() ?? new List<string>();
+
     public SpriteEntry? FindFont(string fontName) =>
         Groups.FirstOrDefault(g => g.Name == FontsGroupName)?.Sprites.FirstOrDefault(s => s.Name == fontName);
 

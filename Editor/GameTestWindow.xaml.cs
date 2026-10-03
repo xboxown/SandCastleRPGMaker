@@ -2289,7 +2289,7 @@ public partial class GameTestWindow : Window
                 string xaml = _execContext.GetContentOverride(book.Id, pageIndex, frame.Id)
                     ?? (page.FrameTexts.TryGetValue(frame.Id, out var t) ? t : string.Empty);
 
-                var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites);
+                var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites, book.TextFontSpriteName);
 
                 var container = new Canvas
                 {

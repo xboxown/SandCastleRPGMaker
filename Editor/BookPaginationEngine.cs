@@ -47,7 +47,18 @@ internal static class BookPaginationEngine
         public int EndOffset { get; init; }
     }
 
+    /// <summary>The Text Font of the book being paginated right now (empty = system font) - pages are measured with the font they're drawn with.</summary>
+    [ThreadStatic] private static string? _measureFontName;
+
     public static Dictionary<(int PageIndex, int FrameId), SliceLocation> Repaginate(BookData book)
+    {
+        string? previous = _measureFontName;
+        _measureFontName = book.TextFontSpriteName;
+        try { return RepaginateCore(book); }
+        finally { _measureFontName = previous; }
+    }
+
+    private static Dictionary<(int PageIndex, int FrameId), SliceLocation> RepaginateCore(BookData book)
     {
         var map = new Dictionary<(int, int), SliceLocation>();
         var newPages = new List<BookPage>();
@@ -578,8 +589,8 @@ internal static class BookPaginationEngine
     private static double MeasureRangeHeight(TextRange range, double width)
     {
         string xaml = SaveRange(range);
-        // With the game's graphical font in use, pages are drawn with it - so they're measured with it too.
-        if (FormattedContentRenderer.MeasureWithInGameFont(xaml, width) is double fontHeight) return fontHeight;
+        // A book written in a sprite font is drawn with it - so it's measured with it too.
+        if (!string.IsNullOrEmpty(_measureFontName) && FormattedContentRenderer.MeasureWithSpriteFont(xaml, width, _measureFontName) is double fontHeight) return fontHeight;
         var probe = CreateMeasureProbe(width);
         RichTextXamlHelper.Load(probe, xaml);
         probe.Measure(new Size(width, double.PositiveInfinity));

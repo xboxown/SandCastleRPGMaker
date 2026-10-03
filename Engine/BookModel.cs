@@ -85,6 +85,13 @@ public class BookData : PlaceableItemBase
     public string PaperDollSpriteGroup { get; set; } = string.Empty;
     public string PaperDollSpriteName { get; set; } = string.Empty;
 
+    /// <summary>
+    /// The font this book's pages are written in: the name of a sprite in the
+    /// Sprite Editor's Fonts group, or empty for the default (the ordinary
+    /// system font, exactly as books have always looked).
+    /// </summary>
+    public string TextFontSpriteName { get; set; } = string.Empty;
+
     /// <summary>The shared text-frame layout, drawn once, reused on every page.</summary>
     public List<BookTextFrame> Frames { get; set; } = new();
 

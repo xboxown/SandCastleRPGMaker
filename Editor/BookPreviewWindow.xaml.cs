@@ -415,10 +415,24 @@ public partial class BookPreviewWindow : Window
 
     private void ShowNameBriefly()
     {
-        NameLabel.Text = _book.Name;
-        Canvas.SetLeft(NameLabel, Canvas.GetLeft(BookSpriteImage));
-        Canvas.SetTop(NameLabel, Canvas.GetTop(BookSpriteImage) - 20);
-        NameLabel.Visibility = Visibility.Visible;
+        // The name is written in the game's own font (Fonts > InGameFont), the same as identifying it in the game - the system font until that font has glyphs.
+        FrameworkElement shown = NameLabel;
+        if (SpriteFont.For(_sprites, SpriteDatabase.InGameFontName)?.RenderText(_book.Name) is { } nameBitmap)
+        {
+            NameFontImage.Source = nameBitmap;
+            NameFontImage.Width = nameBitmap.PixelWidth;
+            NameFontImage.Height = nameBitmap.PixelHeight;
+            shown = NameFontImage;
+            NameLabel.Visibility = Visibility.Collapsed;
+        }
+        else
+        {
+            NameLabel.Text = _book.Name;
+            NameFontImage.Visibility = Visibility.Collapsed;
+        }
+        Canvas.SetLeft(shown, Canvas.GetLeft(BookSpriteImage));
+        Canvas.SetTop(shown, Canvas.GetTop(BookSpriteImage) - (shown == NameFontImage ? shown.Height + 4 : 20));
+        shown.Visibility = Visibility.Visible;
 
         _nameTimer?.Stop();
         _nameTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -426,6 +440,7 @@ public partial class BookPreviewWindow : Window
         {
             _nameTimer!.Stop();
             NameLabel.Visibility = Visibility.Collapsed;
+            NameFontImage.Visibility = Visibility.Collapsed;
         };
         _nameTimer.Start();
     }
@@ -472,7 +487,7 @@ public partial class BookPreviewWindow : Window
             string xaml = _execContext.GetContentOverride(_book.Id, _pageIndex, frame.Id)
                 ?? (page.FrameTexts.TryGetValue(frame.Id, out var t) ? t : string.Empty);
 
-            var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites);
+            var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites, _book.TextFontSpriteName);
 
             // A single container so the whole frame's content (text bitmap +
             // any embedded sprites) can be positioned and clipped together,

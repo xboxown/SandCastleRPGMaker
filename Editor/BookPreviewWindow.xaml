@@ -14,6 +14,7 @@
                    MouseMove="BookSpriteImage_MouseMove"
                    MouseLeftButtonUp="BookSpriteImage_MouseLeftButtonUp"/>
             <TextBlock x:Name="NameLabel" Foreground="White" FontWeight="Bold" Visibility="Collapsed" IsHitTestVisible="False"/>
+            <Image x:Name="NameFontImage" Visibility="Collapsed" IsHitTestVisible="False" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
         </Canvas>
 
         <!-- Reading view: the actual paper doll with real rendered page content -->
