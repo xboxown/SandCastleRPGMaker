@@ -139,6 +139,7 @@ public partial class CharacterEditorWindow : Window
         BuildSchedulePanel(character);
         BuildTalkEditor(character);
         BuildHealthPanel(character);
+        BuildEventTab(character);
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;
         // A character that has never had a size gets one filled in automatically the first time it's looked at, so the boxes always show the real numbers the engine will use.

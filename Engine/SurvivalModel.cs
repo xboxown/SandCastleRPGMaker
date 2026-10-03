@@ -42,6 +42,21 @@ public static class Ailments
 }
 
 /// <summary>
+/// The body a character leaves when it dies - as in Exult, an object in the
+/// world that holds everything the character carried, has its own weight
+/// and volume, and can be picked up and carried - unless it's too heavy.
+/// It looks like the character's Body pose; when opened it uses the Body
+/// Container from System Settings.
+/// </summary>
+public class BodySettings
+{
+    public float Weight { get; set; } = 50;
+    public float Volume { get; set; } = 20;
+    /// <summary>Can't be picked up or moved at all - only opened and looted where it lies.</summary>
+    public bool TooHeavy { get; set; }
+}
+
+/// <summary>
 /// A character's needs and frailties: Exult's food level (0-31, hungry at 9
 /// or below, 0-3 used each game hour, starving at 0 loses health), poison,
 /// and the ailments it can never catch. Unlike Exult, starvation and poison

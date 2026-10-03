@@ -178,6 +178,7 @@ public partial class GameTestWindow : Window
         InitializeFactions(factions);
         InitializeTalk();
         _clock = new GameClock(systemSettings.Clock.StartHour, systemSettings.Clock.TimeRate);
+        _bodyContainerTemplate = systemSettings.BodyContainer ?? _bodyContainerTemplate; // how every dead body opens
 
         BuildMapVisual();
         BuildObjectVisuals();
@@ -898,10 +899,11 @@ public partial class GameTestWindow : Window
         return false;
     }
 
-    private static void SetEquippedInstanceId(CharacterDefinition character, object slotKey, int instanceId)
+    private void SetEquippedInstanceId(CharacterDefinition character, object slotKey, int instanceId)
     {
         if (slotKey is EquipmentSlot builtin) character.EquippedSlots[builtin] = instanceId;
         else if (slotKey is int customId) character.CustomEquippedSlots[customId] = instanceId;
+        FireCharacterEvent(character, BookTriggerConditionBased.ByEquip);
     }
 
     private static void RemoveEquippedInstanceId(CharacterDefinition character, object slotKey)

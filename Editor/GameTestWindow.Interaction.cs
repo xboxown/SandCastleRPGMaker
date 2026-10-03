@@ -407,6 +407,7 @@ public partial class GameTestWindow
         switch (session.Target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
+                if (IsTooHeavyToLift(item)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to lift."); return false; } // a body marked Too Heavy
                 if (!IsReachable(item)) { Refuse(MousePointerKind.RedX, CantReachMessage); return false; } // Dragging_info::start: !is_grabable -> red X
                 origin = new MapItemOrigin(item);
                 source = _itemVisuals.GetValueOrDefault(item);
@@ -543,6 +544,8 @@ public partial class GameTestWindow
 
         if (origin is ContainerOrigin sameContainer && ReferenceEquals(sameContainer.Container, gump.PlacedItem))
         {
+            // A body: Exult takes the item out and offers it back, which the body refuses - so it stays where it was.
+            if (gump.Data.IsBodyContainer) { Refuse(MousePointerKind.WontFit, "Things can be taken out of a body, but not put back in."); return false; }
             // Moving within the same gump: Exult removes the item and adds it back at the new spot, so it ends up on top of the pile.
             PlaceWithinFrame(sameContainer.Item, gump.Data, dropTopLeft);
             gump.PlacedItem.Contents.Remove(sameContainer.Item);
@@ -1004,8 +1007,10 @@ public partial class GameTestWindow
     private void RemoveFromCharacter(CharacterDefinition character, InventoryItemInstance item)
     {
         character.Inventory.Remove(item);
-        foreach (var slot in character.EquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) character.EquippedSlots.Remove(slot);
-        foreach (var slot in character.CustomEquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) character.CustomEquippedSlots.Remove(slot);
+        bool wasEquipped = false;
+        foreach (var slot in character.EquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) { character.EquippedSlots.Remove(slot); wasEquipped = true; }
+        foreach (var slot in character.CustomEquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) { character.CustomEquippedSlots.Remove(slot); wasEquipped = true; }
+        if (wasEquipped) FireCharacterEvent(character, BookTriggerConditionBased.ByUnEquip);
         foreach (var gump in _openPaperdolls.Where(g => g.Character == character && g.SelectedInstanceId == item.InstanceId)) gump.SelectedInstanceId = null;
     }
 

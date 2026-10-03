@@ -13,7 +13,7 @@ namespace SandcastleRpgMaker.Editor;
 /// Each pointer has a small black preview that plays the sprite exactly as
 /// the game will: animated, with any per-frame sound.
 /// </summary>
-public class SystemSettingsWindow : Window
+public partial class SystemSettingsWindow : Window
 {
     private sealed record PointerChoice(string Group, string Name, string Display);
     private sealed record SizeChoice(int Width, int Height, string Display);
@@ -49,6 +49,7 @@ public class SystemSettingsWindow : Window
         var tabs = new TabControl();
         tabs.Items.Add(new TabItem { Header = "Mouse Pointers", Content = BuildMousePointersTab() });
         tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
+        tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
 
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();

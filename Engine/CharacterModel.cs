@@ -51,6 +51,12 @@ public class CharacterDefinition
     /// <summary>Food, poison and ailment immunities (Character Editor > Health).</summary>
     public SurvivalSettings Survival { get; set; } = new();
 
+    /// <summary>The body left behind on death (Character Editor > Health): a container holding everything it carried.</summary>
+    public BodySettings Body { get; set; } = new();
+
+    /// <summary>This character's own events (Character Editor > Event): By Equip, By UnEquip, By Hit, By Ailment Effect, By Death.</summary>
+    public List<BookEventPage> EventPages { get; set; } = new();
+
     /// <summary>
     /// Exult-style 3D size - the same thing every shape in Exult carries
     /// (Shape_info dims: x/y footprint in tiles, z height in lifts), and the

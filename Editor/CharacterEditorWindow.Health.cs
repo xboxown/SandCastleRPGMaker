@@ -66,6 +66,22 @@ public partial class CharacterEditorWindow
         HealthPanel.Children.Add(cureBox);
         HealthPanel.Children.Add(NumberRow("Poison damage:", () => s.PoisonDamageMax, v => s.PoisonDamageMax = Math.Max(0, v), "0 up to this HP every 10-20 s (Exult: 2)"));
 
+        // ---------- Body ----------
+        HealthPanel.Children.Add(Heading("Body (after death)"));
+        HealthPanel.Children.Add(new TextBlock
+        {
+            Text = "When this character dies it leaves a body (its Body pose) holding everything it carried - opened as the Body Container from System Settings. " +
+                   "As in Exult, a body can be picked up and carried like any object, and things can be taken out of it but not put back in.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 4)
+        });
+        var body = character.Body;
+        HealthPanel.Children.Add(NumberRow("Body weight:", () => (int)body.Weight, v => body.Weight = Math.Max(0, v), ""));
+        HealthPanel.Children.Add(NumberRow("Body volume:", () => (int)body.Volume, v => body.Volume = Math.Max(0, v), "space it takes when carried"));
+        var tooHeavy = new CheckBox { Content = "Too Heavy (can't be picked up or moved - only opened where it lies)", IsChecked = body.TooHeavy, Margin = new Thickness(0, 2, 0, 0) };
+        tooHeavy.Checked += (_, _) => body.TooHeavy = true;
+        tooHeavy.Unchecked += (_, _) => body.TooHeavy = false;
+        HealthPanel.Children.Add(tooHeavy);
+
         // ---------- Immunities ----------
         HealthPanel.Children.Add(Heading("Immune to"));
         var immunities = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };

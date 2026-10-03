@@ -113,6 +113,7 @@ public partial class GameTestWindow
         if (vitals.Dead) return;
         vitals.Dead = true;
         vitals.Ailments = Ailment.None;
+        FireCharacterEvent(character, BookTriggerConditionBased.ByDeath); // its own By Death events, while it's still where it fell
         if (character == _player)
         {
             ApplyPoseSprite(PoseByName("Body") ?? _idlePose);
@@ -128,7 +129,8 @@ public partial class GameTestWindow
         StopWalking(mapCharacter);
         mapCharacter.Npc.WalkingToSchedule = false;
         mapCharacter.Npc.Activity = null;
-        SetCharacterPose(mapCharacter, "Body", mapCharacter.Facing); // the body left behind (Character Editor > Poses > Body)
+        mapCharacter.Npc.InCombat = false;
+        LeaveBody(mapCharacter); // Exult: out of the world, a body (its Body pose) holding all it carried where it fell
         StatusText.Text = $"{character.Name} has died ({cause}).";
     }
 
@@ -241,6 +243,7 @@ public partial class GameTestWindow
         }
         if (ailment is Ailment.Asleep or Ailment.Paralyzed) StopActing(character, ailment == Ailment.Asleep);
         if (character == _player) StatusText.Text = $"You are {Ailments.Describe(ailment).ToLowerInvariant()}.";
+        FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
         return true;
     }
 

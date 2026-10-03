@@ -91,7 +91,7 @@ public partial class BookEventConditionsControl : UserControl
     public BookEventConditionsControl()
     {
         InitializeComponent();
-        TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix);
+        TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix).Where(c => !CharacterTriggers.IsCharacterTrigger(c.Value)).ToList();
         CycleConditionCombo.ItemsSource = BuildChoices<CycleConditionType>();
         EventCompletedStateCombo.ItemsSource = new[] { "True", "False" };
     }
@@ -107,7 +107,7 @@ public partial class BookEventConditionsControl : UserControl
     {
         var current = Conditions?.TriggerConditionBased;
         TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix)
-            .Where(c => !excluded.Contains(c.Value))
+            .Where(c => !excluded.Contains(c.Value) && !CharacterTriggers.IsCharacterTrigger(c.Value))
             .ToList();
         if (current.HasValue)
         {
@@ -137,8 +137,33 @@ public partial class BookEventConditionsControl : UserControl
             [BookTriggerConditionBased.ByExit] = "By Failed Picklock Container"
         };
         TriggerConditionBasedCombo.ItemsSource = Enum.GetValues<BookTriggerConditionBased>()
+            .Where(v => !CharacterTriggers.IsCharacterTrigger(v))
             .Select(v => relabels.TryGetValue(v, out string? label) ? EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, label) : new EnumChoice<BookTriggerConditionBased>(v, TriggerInProgressSuffix(v)))
             .ToList();
+        if (current.HasValue)
+        {
+            foreach (EnumChoice<BookTriggerConditionBased> item in TriggerConditionBasedCombo.Items)
+                if (item.Value.Equals(current.Value)) { TriggerConditionBasedCombo.SelectedItem = item; break; }
+        }
+    }
+
+    /// <summary>
+    /// The Character Editor's own trigger list, and nothing else: By Equip,
+    /// By UnEquip, By Hit, By Ailment Effect, By Death. Book, container, map
+    /// and tile events never call this, so their lists are unchanged.
+    /// </summary>
+    public void ApplyCharacterTriggerChoices()
+    {
+        var current = Conditions?.TriggerConditionBased;
+        var labels = new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByEquip] = "By Equip",
+            [BookTriggerConditionBased.ByUnEquip] = "By UnEquip",
+            [BookTriggerConditionBased.ByHit] = "By Hit",
+            [BookTriggerConditionBased.ByAilmentEffect] = "By Ailment Effect",
+            [BookTriggerConditionBased.ByDeath] = "By Death"
+        };
+        TriggerConditionBasedCombo.ItemsSource = CharacterTriggers.All.Select(v => EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, labels[v])).ToList();
         if (current.HasValue)
         {
             foreach (EnumChoice<BookTriggerConditionBased> item in TriggerConditionBasedCombo.Items)

@@ -1,6 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.CharacterEditorWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:local="clr-namespace:SandcastleRpgMaker.Editor"
         Title="Character Editor" Height="680" Width="960" WindowStartupLocation="CenterOwner">
     <DockPanel Margin="10">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right">
@@ -152,6 +153,26 @@
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,8"
                                Text="Runs when the player double-clicks this character (Exult: talking to an NPC). Use Show Text with Speaker = Self for the character's lines - its face shows in the box. A party member's inventory opens instead while a gump is open, as in Exult."/>
                     <ContentControl x:Name="TalkEditorHost"/>
+                </DockPanel>
+            </TabItem>
+
+            <TabItem x:Name="EventTab" Header="Event" ToolTip="This character's own events: By Equip, By UnEquip, By Hit, By Ailment Effect, By Death">
+                <DockPanel Margin="6">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,6">
+                        <Button Content="Debug" Padding="10,4" Click="CharacterEventDebugButton_Click"/>
+                        <TextBlock Text="Fires for this character - the main player included. In the commands, Self is this character."
+                                   VerticalAlignment="Center" Margin="10,0,0,0" Opacity="0.7" FontSize="11"/>
+                    </StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="260"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <Border Grid.Column="0" BorderBrush="Gray" BorderThickness="0,0,1,0">
+                            <local:BookEventConditionsControl x:Name="CharacterConditionsControl"/>
+                        </Border>
+                        <ContentControl x:Name="CharacterEventEnginePlaceholder" Grid.Column="1"/>
+                    </Grid>
                 </DockPanel>
             </TabItem>
 

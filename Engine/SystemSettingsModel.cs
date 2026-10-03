@@ -33,4 +33,12 @@ public class SystemSettings
 {
     public MousePointerSettings MousePointers { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
+    /// <summary>
+    /// The Body Container (System Settings > Body Container): how every dead
+    /// body looks when opened - its paperdoll picture and the frame its
+    /// belongings lie within. It has no world sprite of its own: in the world
+    /// a body is the dead character's Body pose. As in Exult, things can be
+    /// taken out of a body but never put back in.
+    /// </summary>
+    public ContainerData BodyContainer { get; set; } = new() { Name = "Body", IsBodyContainer = true, MaxVolume = 9999 };
 }

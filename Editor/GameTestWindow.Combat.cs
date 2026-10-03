@@ -357,6 +357,7 @@ public partial class GameTestWindow
         if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
         Damage(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
         if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
+        if (!IsDead(defender)) FireCharacterEvent(defender, BookTriggerConditionBased.ByHit); // a blow that landed (a killing blow sets off By Death instead)
     }
 
     /// <summary>Actor::roll_to_win: a 30-sided die; 0 always loses, 29 always wins, otherwise roll + attacker - defender must reach 14.</summary>

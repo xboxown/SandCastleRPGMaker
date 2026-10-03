@@ -17,7 +17,31 @@ public enum BookTriggerConditionBased
     /// <summary>Fires repeatedly while the player remains on the cell - same "OnStay" concept as CustomTileEffect's own trigger, now available as a full scripted event condition too, not just a damage-tick rule.</summary>
     ByStay,
     /// <summary>Player steps off the cell.</summary>
-    ByExit
+    ByExit,
+
+    // ---- Character events only (Character Editor > Event) ----
+    /// <summary>Something was equipped in one of this character's slots.</summary>
+    ByEquip,
+    /// <summary>Something left one of this character's slots.</summary>
+    ByUnEquip,
+    /// <summary>This character was hit in combat (a blow that landed).</summary>
+    ByHit,
+    /// <summary>This character caught an ailment (poisoned, asleep, paralyzed, charmed, cursed).</summary>
+    ByAilmentEffect,
+    /// <summary>This character died.</summary>
+    ByDeath
+}
+
+public static class CharacterTriggers
+{
+    /// <summary>The triggers a character's own events use - and only a character's.</summary>
+    public static readonly BookTriggerConditionBased[] All =
+    {
+        BookTriggerConditionBased.ByEquip, BookTriggerConditionBased.ByUnEquip, BookTriggerConditionBased.ByHit,
+        BookTriggerConditionBased.ByAilmentEffect, BookTriggerConditionBased.ByDeath
+    };
+
+    public static bool IsCharacterTrigger(BookTriggerConditionBased trigger) => All.Contains(trigger);
 }
 
 public enum ConditionComparisonOperator { Equal, NotEqual, GreaterThan, GreaterOrEqual, LessThan, LessOrEqual }
