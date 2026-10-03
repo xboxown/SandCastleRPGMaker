@@ -56,7 +56,8 @@ public partial class GameTestWindow
     {
         int hourChanges = _clock.Advance(elapsedMs);
         if (hourChanges > 0) ScheduleNpcs(_clock.Hour);
-        ClockText.Text = _clock.ToString();
+        UpdateVitals(elapsedMs, hourChanges); // hunger, healing, poison, ailments, tile effects - everyone
+        ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
             if (IsShowingMessage) break; // a dialog box just went up: everything stops right here
@@ -68,7 +69,7 @@ public partial class GameTestWindow
     private void SkipToNextPeriod()
     {
         _clock.SkipToNextPeriod();
-        ClockText.Text = _clock.ToString();
+        ShowClock();
         ScheduleNpcs(_clock.Hour);
         StatusText.Text = $"Skipped to {_clock} ({Schedules.PeriodNames[_clock.Period]} period).";
     }
@@ -92,8 +93,11 @@ public partial class GameTestWindow
             mapCharacter.Npc.EventUnder = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y); // standing there from the start doesn't set it off
             UpdateSchedule(mapCharacter, _clock.Period, -1);
         }
-        ClockText.Text = _clock.ToString();
+        ShowClock();
     }
+
+    /// <summary>The clock, and the player's own health and food, in the status bar.</summary>
+    private void ShowClock() => ClockText.Text = _player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}";
 
     private (int X, int Y) SpotOf(MapCharacter mapCharacter, ScheduleEntry entry) =>
         entry.X >= 0 && entry.Y >= 0 ? (Math.Clamp(entry.X, 0, _map.Width - 1), Math.Clamp(entry.Y, 0, _map.Height - 1)) : mapCharacter.Npc.Home;
@@ -102,7 +106,7 @@ public partial class GameTestWindow
     private void UpdateSchedule(MapCharacter mapCharacter, int period, int delayMs)
     {
         var schedules = mapCharacter.Character.Schedules;
-        if (mapCharacter.Character.IsInParty || mapCharacter.Character.IsTestPlayer || schedules.Count == 0) return;
+        if (mapCharacter.Character.IsInParty || mapCharacter.Character.IsTestPlayer || schedules.Count == 0 || IsDead(mapCharacter.Character)) return;
         var npc = mapCharacter.Npc;
         var entry = schedules.FirstOrDefault(s => s.Period == period);
         if (entry is null)
@@ -145,6 +149,7 @@ public partial class GameTestWindow
     private void UpdateNpc(MapCharacter mapCharacter, double elapsedMs)
     {
         var npc = mapCharacter.Npc;
+        if (IsIncapacitated(mapCharacter.Character)) return; // dead, asleep or paralyzed: does nothing at all
         if (npc.Path is not null) { MoveAlongPath(mapCharacter, elapsedMs); return; }
         if (npc.WaitMs < 0) return;
         npc.WaitMs -= elapsedMs;

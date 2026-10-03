@@ -51,6 +51,12 @@ public partial class GameTestWindow
         var mapCharacter = _mapCharacters.FirstOrDefault(mc => mc.Placement == placement);
         if (mapCharacter is null) return;
         var character = mapCharacter.Character;
+        if (IsDead(character)) return; // Exult: Npc_actor::activate does nothing for the dead
+        if (IsIncapacitated(character))
+        {
+            StatusText.Text = $"{character.Name} can't answer right now ({DescribeVitals(character)}).";
+            return;
+        }
         if (character.IsInParty && IsGamePaused)
         {
             OpenPaperdoll(character); // Exult: with gumps showing, a party member's inventory opens instead

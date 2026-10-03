@@ -40,6 +40,10 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
     public Func<string, int, int, bool>? OnTeleport { get; set; }
     /// <summary>Change Behavior: (character - "Activator" or an id, a schedule activity name or "Resume").</summary>
     public Func<string, string, bool>? OnChangeBehavior { get; set; }
+    /// <summary>Food Level: (who, "Set"/"Add"/"Subtract", amount).</summary>
+    public Func<string, string, int, bool>? OnChangeFood { get; set; }
+    /// <summary>Modify Ailments: (who, ailment name, true = inflict / false = cure).</summary>
+    public Func<string, string, bool, bool>? OnModifyAilment { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -122,6 +126,18 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
                 if (OnChangeBehavior is null) return false;
                 string who = command.Get("CharacterId"), behavior = command.Get("Behavior");
                 return !string.IsNullOrEmpty(behavior) && OnChangeBehavior(string.IsNullOrEmpty(who) ? "Activator" : who, behavior);
+            }
+            case EventCommandType.ChangeFoodLevel:
+            {
+                if (OnChangeFood is null || !int.TryParse(command.Get("Value"), out int amount)) return false;
+                string who = command.Get("Who");
+                return OnChangeFood(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Operation"), amount);
+            }
+            case EventCommandType.ModifyAilments:
+            {
+                if (OnModifyAilment is null) return false;
+                string who = command.Get("Who");
+                return OnModifyAilment(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Ailment"), command.Get("Action") != "Cure");
             }
             case EventCommandType.ShowText:
             {

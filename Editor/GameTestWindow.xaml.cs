@@ -1730,6 +1730,7 @@ public partial class GameTestWindow : Window
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);
 
+        if (IsIncapacitated(_player)) { _heldDirectionKeys.Clear(); _wasMovingLastFrame = false; } // asleep, paralyzed or dead: can't walk
         if (TryGetActiveHeldDirection(out int dx, out int dy))
         {
             StepPlayerContinuous(dx, dy, deltaSeconds);

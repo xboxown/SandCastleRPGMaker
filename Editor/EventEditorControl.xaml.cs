@@ -269,6 +269,14 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : {ChangeBehaviorCommandWindow.Describe(command)}"));
         }
+        else if (command.Type == EventCommandType.ChangeFoodLevel)
+        {
+            block.Inlines.Add(new Run($" : {FoodLevelCommandWindow.Describe(command)}"));
+        }
+        else if (command.Type == EventCommandType.ModifyAilments)
+        {
+            block.Inlines.Add(new Run($" : {ModifyAilmentsCommandWindow.Describe(command)}"));
+        }
         else if (command.Type == EventCommandType.ShowText)
         {
             string speaker = ShowTextSpeakerLabel(command.Get("SpeakerId"));
@@ -445,10 +453,13 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior)
+        else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments)
         {
             FactionCommandWindowBase dialog = type switch
             {
+                EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(),
+                EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(),
                 EventCommandType.Teleport => new TeleportCommandWindow(),
                 EventCommandType.ChangeBehavior => new ChangeBehaviorCommandWindow(),
@@ -622,10 +633,13 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior)
+        else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments)
         {
             FactionCommandWindowBase dialog = command.Type switch
             {
+                EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(command),
+                EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(command),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(command),
                 EventCommandType.Teleport => new TeleportCommandWindow(command),
                 EventCommandType.ChangeBehavior => new ChangeBehaviorCommandWindow(command),

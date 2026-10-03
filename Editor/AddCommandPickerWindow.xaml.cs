@@ -108,6 +108,18 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void ChangeFoodLevel_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ChangeFoodLevel;
+        DialogResult = true;
+    }
+
+    private void ModifyAilments_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ModifyAilments;
+        DialogResult = true;
+    }
+
     private void CancelButton_Click(object sender, RoutedEventArgs e)
     {
         DialogResult = false;

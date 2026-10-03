@@ -147,6 +147,18 @@ internal static class EventCommandCatalog
             new FieldSpec("CharacterId", "Character (Activator or character id)"),
             new FieldSpec("Behavior", "Behavior (a schedule activity, or Resume)")
         },
+        [EventCommandType.ChangeFoodLevel] = new[]
+        {
+            new FieldSpec("Who", "Who (Activator, Player, or character id)"),
+            new FieldSpec("Operation", "Operation (Set/Add/Subtract)"),
+            new FieldSpec("Value", "Value (food level 0-31)")
+        },
+        [EventCommandType.ModifyAilments] = new[]
+        {
+            new FieldSpec("Who", "Who (Activator, Player, or character id)"),
+            new FieldSpec("Ailment", "Ailment (Poisoned/Asleep/Paralyzed/Charmed/Cursed)"),
+            new FieldSpec("Action", "Action (Inflict/Cure)")
+        },
         [EventCommandType.End] = Array.Empty<FieldSpec>()
     };
 

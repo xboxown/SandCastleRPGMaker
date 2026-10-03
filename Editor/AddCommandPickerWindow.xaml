@@ -41,6 +41,8 @@
 
                         <TextBlock Text="Actor" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Change HP..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Food Level..." Margin="0,0,0,4" Click="ChangeFoodLevel_Click"/>
+                        <Button Content="Modify Ailments..." Margin="0,0,0,4" Click="ModifyAilments_Click"/>
                         <Button Content="Change State..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Change Behavior..." Margin="0,0,0,12" Click="ChangeBehavior_Click"/>
 

@@ -34,6 +34,8 @@ public enum EventCommandType
     ChangeFactionRelationship,
     ChangeFaction,
     ChangeBehavior,
+    ChangeFoodLevel,
+    ModifyAilments,
     End
 }
 

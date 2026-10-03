@@ -58,6 +58,7 @@ public partial class GameTestWindow
             GameCanvas.Children.Add(mapCharacter.Visual);
             PositionCharacterVisual(mapCharacter);
         }
+        InitializeVitals(); // health, food, ailments for the player and every character
         StartSchedules(); // Exult: every NPC takes up the schedule for the time of day
     }
 
@@ -139,7 +140,7 @@ public partial class GameTestWindow
     private UnitRect CharacterFootprint(MapCharacter mapCharacter) => ActorFootprintAt(mapCharacter.PixelX, mapCharacter.PixelY, mapCharacter.Size);
 
     /// <summary>Every placed character as a physics body: solid (Exult actors block), never holding things up, never stacked on.</summary>
-    private IEnumerable<Body> CharacterBodies() => _mapCharacters.Select(mc =>
+    private IEnumerable<Body> CharacterBodies() => _mapCharacters.Where(mc => !IsDead(mc.Character)).Select(mc => // a body on the ground isn't in anyone's way
     {
         var foot = CharacterFootprint(mc);
         return new Body(mc.Placement, foot.Left, foot.Top, foot.Width, foot.Depth, mc.Lift, mc.Size.Z, Solid: true, Elevates: false, Stackable: false);
@@ -171,6 +172,6 @@ public partial class GameTestWindow
         if (mapCharacter?.Visual is null) return;
         ShowIdentifyLabel(mapCharacter.Character.Name, placement.X, placement.Y, mapCharacter.Visual);
         // Exult's label is the name alone; faction standing and current activity go to the status line so they can be checked while testing.
-        StatusText.Text = $"{mapCharacter.Character.Name}: {DescribeFactionStanding(mapCharacter.Character)}; {DescribeActivity(mapCharacter)}";
+        StatusText.Text = $"{mapCharacter.Character.Name}: {DescribeFactionStanding(mapCharacter.Character)}; {DescribeActivity(mapCharacter)}; {DescribeVitals(mapCharacter.Character)}";
     }
 }

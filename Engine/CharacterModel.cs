@@ -48,6 +48,9 @@ public class CharacterDefinition
     /// <summary>What happens when the player double-clicks this character (Exult: Actor::activate runs its conversation) - event commands, usually Show Text lines spoken by Self.</summary>
     public List<EventCommand> TalkCommands { get; set; } = new();
 
+    /// <summary>Food, poison and ailment immunities (Character Editor > Health).</summary>
+    public SurvivalSettings Survival { get; set; } = new();
+
     /// <summary>
     /// Exult-style 3D size - the same thing every shape in Exult carries
     /// (Shape_info dims: x/y footprint in tiles, z height in lifts), and the

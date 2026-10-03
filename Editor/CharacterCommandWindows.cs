@@ -140,3 +140,96 @@ public class ChangeBehaviorCommandWindow : FactionCommandWindowBase
         return $"{WhoChoice.Describe(command.Get("CharacterId"))}: {what}";
     }
 }
+
+/// <summary>Food Level: set, raise or lower someone's food level (Exult: 0-31, hungry at 9 or below) - eating, a feast, a famine.</summary>
+public class FoodLevelCommandWindow : FactionCommandWindowBase
+{
+    private readonly ComboBox _who, _operation;
+    private readonly TextBox _value;
+
+    public FoodLevelCommandWindow(EventCommand? existing = null) : base("Food Level")
+    {
+        AddLabel("Who");
+        _who = new ComboBox();
+        var who = WhoChoice.Build(includePlayer: true);
+        _who.ItemsSource = who;
+        _who.SelectedItem = who.FirstOrDefault(c => c.Key == existing?.Get("Who")) ?? who[0];
+        Rows.Children.Add(_who);
+
+        AddLabel("Food level");
+        var line = new StackPanel { Orientation = Orientation.Horizontal };
+        _operation = new ComboBox { Width = 110, Margin = new Thickness(0, 0, 8, 0) };
+        foreach (var op in new[] { "Set to", "Increase by", "Decrease by" }) _operation.Items.Add(op);
+        _operation.SelectedIndex = existing?.Get("Operation") switch { "Set" => 0, "Subtract" => 2, _ => 1 };
+        _value = new TextBox { Width = 50, Text = existing?.Get("Value") is { Length: > 0 } v ? v : "10", TextAlignment = TextAlignment.Right };
+        line.Children.Add(_operation);
+        line.Children.Add(_value);
+        line.Children.Add(new TextBlock { Text = "  (kept within 0-31)", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 });
+        Rows.Children.Add(line);
+        AddLabel("Exult's food level: 31 is full, 9 or below is hungry, 0 is starving (losing health). Characters that never get hungry aren't affected.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        if (!int.TryParse(_value.Text.Trim(), out int amount) || amount < 0 || amount > SurvivalSettings.MaxFood)
+        {
+            MessageBox.Show(this, "The amount must be a whole number from 0 to 31.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        var command = new EventCommand { Type = EventCommandType.ChangeFoodLevel };
+        command.Parameters["Who"] = (_who.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Activator;
+        command.Parameters["Operation"] = _operation.SelectedIndex switch { 0 => "Set", 2 => "Subtract", _ => "Add" };
+        command.Parameters["Value"] = amount.ToString();
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command)
+    {
+        string op = command.Get("Operation") switch { "Set" => "= ", "Subtract" => "-", _ => "+" };
+        return $"{WhoChoice.Describe(command.Get("Who"))} food {op}{command.Get("Value")}";
+    }
+}
+
+/// <summary>Modify Ailments: poison, put to sleep, paralyze, charm or curse someone - or cure it. Immunities (Character Editor > Health) are respected.</summary>
+public class ModifyAilmentsCommandWindow : FactionCommandWindowBase
+{
+    private readonly ComboBox _who, _ailment, _action;
+
+    public ModifyAilmentsCommandWindow(EventCommand? existing = null) : base("Modify Ailments")
+    {
+        AddLabel("Who");
+        _who = new ComboBox();
+        var who = WhoChoice.Build(includePlayer: true);
+        _who.ItemsSource = who;
+        _who.SelectedItem = who.FirstOrDefault(c => c.Key == existing?.Get("Who")) ?? who[0];
+        Rows.Children.Add(_who);
+
+        AddLabel("Ailment");
+        _ailment = new ComboBox();
+        foreach (var ailment in Ailments.All) _ailment.Items.Add(new ComboBoxItem { Content = Ailments.Describe(ailment), Tag = ailment, ToolTip = Ailments.Explain(ailment) });
+        _ailment.SelectedItem = _ailment.Items.Cast<ComboBoxItem>().FirstOrDefault(i => i.Tag.ToString() == existing?.Get("Ailment")) ?? _ailment.Items[0];
+        Rows.Children.Add(_ailment);
+
+        AddLabel("Action");
+        _action = new ComboBox();
+        _action.Items.Add("Inflict");
+        _action.Items.Add("Cure");
+        _action.SelectedIndex = existing?.Get("Action") == "Cure" ? 1 : 0;
+        Rows.Children.Add(_action);
+        AddLabel("A character immune to the ailment isn't affected by Inflict.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        var command = new EventCommand { Type = EventCommandType.ModifyAilments };
+        command.Parameters["Who"] = (_who.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Activator;
+        command.Parameters["Ailment"] = ((_ailment.SelectedItem as ComboBoxItem)?.Tag as Ailment? ?? Ailment.Poisoned).ToString();
+        command.Parameters["Action"] = _action.SelectedIndex == 1 ? "Cure" : "Inflict";
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command) =>
+        $"{command.Get("Action")} {command.Get("Ailment")} on {WhoChoice.Describe(command.Get("Who"))}";
+}
