@@ -1444,31 +1444,31 @@ public partial class GameTestWindow : Window
             posX = customSlot.X; posY = customSlot.Y;
         }
         else return;
-        ShowGumpLabel(gump.BodyCanvas, name, posX, posY, 400.0 / 200.0); // the body is drawn at half scale; the text isn't
+        ShowGumpLabel(gump.BodyCanvas, name, posX, posY);
     }
 
     /// <summary>
-    /// An identify label inside a gump, the same size as the map's: Exult
-    /// draws gump text in the same font at the same screen scale as the
-    /// world (one framebuffer, scaled as a whole). A gump body here is
-    /// drawn shrunk from its authoring size, so the label gets the inverse
-    /// scale, exactly like the item icons in it.
+    /// An identify label for something in a gump (point x, y in that gump's
+    /// own canvas). Drawn on the top of the gump layer, over every gump, so
+    /// nothing covers it, and at the map's scale: Exult draws gump text in
+    /// the same font at the same screen scale as the world.
     /// </summary>
-    private void ShowGumpLabel(Canvas canvas, string name, double x, double y, double counterScale)
+    private void ShowGumpLabel(Canvas canvas, string name, double x, double y)
     {
+        var at = canvas.TranslatePoint(new Point(x, y), PaperdollGumpsCanvas);
         var label = GameTextLabel(name);
-        label.LayoutTransform = new ScaleTransform(counterScale, counterScale);
+        label.LayoutTransform = new ScaleTransform(ViewportScale.ScaleX, ViewportScale.ScaleY);
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
-        Canvas.SetLeft(label, x);
-        Canvas.SetTop(label, y - label.DesiredSize.Height - 2);
-        Panel.SetZIndex(label, 50);
-        canvas.Children.Add(label);
+        Canvas.SetLeft(label, at.X);
+        Canvas.SetTop(label, at.Y - label.DesiredSize.Height - 2);
+        Panel.SetZIndex(label, 1_000_000);
+        PaperdollGumpsCanvas.Children.Add(label);
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
         timer.Tick += (_, _) =>
         {
             timer.Stop();
-            canvas.Children.Remove(label);
+            PaperdollGumpsCanvas.Children.Remove(label);
         };
         timer.Start();
     }
@@ -1486,7 +1486,7 @@ public partial class GameTestWindow : Window
     /// anywhere, not at fixed slots.
     /// </summary>
     private void ShowContainerIdentifyLabel(OpenContainerGump gump, InventoryItemInstance item, string name) =>
-        ShowGumpLabel(gump.ItemsCanvas, name, item.ContainerX, item.ContainerY, ContainerBodyHeight / 200.0); // the body is drawn shrunk to 200 game pixels tall
+        ShowGumpLabel(gump.ItemsCanvas, name, item.ContainerX, item.ContainerY);
 
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
@@ -2135,6 +2135,7 @@ public partial class GameTestWindow : Window
     private void ShowIdentifyLabel(string name, int cellX, int cellY, FrameworkElement? visual = null)
     {
         var shown = SetIdentifyText(name);
+        Panel.SetZIndex(shown, 1_000_000); // above everything on the map, so nothing covers the name
         Canvas.SetLeft(shown, cellX * _tileWidth);
         double topAnchor = visual is not null ? Canvas.GetTop(visual) : cellY * _tileHeight;
         Canvas.SetTop(shown, topAnchor - (shown == IdentifyFontImage ? shown.Height + 4 : 20));
