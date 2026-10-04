@@ -40,10 +40,14 @@ public partial class GameTestWindow
     private void BuildCharacterVisuals()
     {
         if (_characters is null) return;
+        var placed = new HashSet<CharacterDefinition>(ReferenceEqualityComparer.Instance);
         foreach (var placement in _map.Characters)
         {
             var character = _characters.Characters.FirstOrDefault(c => c.Id == placement.CharacterId);
             if (character is null || character.IsTestPlayer) continue; // the main player is the one you control, not a placed character
+            // The same character placed more than once: every copy after the first is its own instance of it (a prefab),
+            // with its own health, inventory, ailments and fights - killing one never kills the others.
+            if (!placed.Add(character)) character = CopyOfCharacter(character);
             var mapCharacter = new MapCharacter
             {
                 Placement = placement, Character = character, Size = ActorSizing.Resolve(character, _poseDatabase, _sprites),
@@ -60,6 +64,17 @@ public partial class GameTestWindow
         }
         InitializeVitals(); // health, food, ailments for the player and every character
         StartSchedules(); // Exult: every NPC takes up the schedule for the time of day
+    }
+
+    /// <summary>A separate copy of a character for another placement of it - a deep copy, so nothing it does in play touches the others.</summary>
+    private CharacterDefinition CopyOfCharacter(CharacterDefinition source)
+    {
+        var copy = System.Text.Json.JsonSerializer.Deserialize<CharacterDefinition>(System.Text.Json.JsonSerializer.Serialize(source))
+            ?? throw new InvalidOperationException($"Couldn't copy \"{source.Name}\" for another placement.");
+        copy.SyncNextInventoryInstanceIdAfterLoad();
+        copy.Paperdoll.SyncNextCustomSlotIdAfterLoad();
+        _characters!.Characters.Add(copy); // the game's own list (never the project's): same Id, so lookups by Id still find the first
+        return copy;
     }
 
     private PoseDefinition? PoseById(int poseId) => _poseDatabase.Poses.FirstOrDefault(p => p.Id == poseId);
