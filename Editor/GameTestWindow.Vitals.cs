@@ -101,6 +101,7 @@ public partial class GameTestWindow
     private void Damage(CharacterDefinition character, int amount, string cause)
     {
         if (amount <= 0 || IsDead(character) || GetHp(character) is not int hp) return;
+        FlashHit(character, amount, hp); // Exult's red outline (or, badly hurt, the red screen)
         hp -= amount;
         SetHp(character, hp);
         if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {Math.Max(0, hp)} left.";

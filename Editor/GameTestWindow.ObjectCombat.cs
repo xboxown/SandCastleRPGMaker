@@ -91,7 +91,7 @@ public partial class GameTestWindow
         if (!_containerHp.TryGetValue(container, out int hp)) hp = Math.Max(1, data.HitPoints);
         hp -= damage;
         _containerHp[container] = hp;
-        ShowFloatingTextOver(visual, $"-{damage}");
+        if (ShowHitNumbers) ShowFloatingTextOver(visual, $"-{damage}"); // "no effect" always shows; the numbers only with Show hit numbers
 
         // Someone's property: a crime if anyone sympathetic is watching (once per container, and again when it breaks).
         var owner = OwnerOf(ReferencedItemCategory.Container, container.ItemId);

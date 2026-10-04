@@ -50,6 +50,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Mouse Pointers", Content = BuildMousePointersTab() });
         tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
+        tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
 
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();
@@ -61,6 +62,24 @@ public partial class SystemSettingsWindow : Window
 
         Closed += (_, _) => { foreach (var animator in _previewAnimators.Values) animator.Stop(); };
         LoadSizes();
+    }
+
+    /// <summary>How combat shows: Exult's "show hits" option.</summary>
+    private UIElement BuildCombatTab()
+    {
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var showHits = new CheckBox { Content = "Show hit numbers", IsChecked = _settings.Combat.ShowHitNumbers, Margin = new Thickness(0, 0, 0, 6) };
+        showHits.Checked += (_, _) => _settings.Combat.ShowHitNumbers = true;
+        showHits.Unchecked += (_, _) => _settings.Combat.ShowHitNumbers = false;
+        panel.Children.Add(showHits);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Checked: the damage and misses show over whoever is hit (\"-4\", \"miss\") - Exult's \"show hits\" option.\n" +
+                   "Unchecked (Exult's default): no numbers. Either way, as in Exult, whoever is hit flashes a red outline for a moment, " +
+                   "and a big hit on the main character (a third of its health or more, or while below a quarter) flashes the whole screen red instead.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+        return panel;
     }
 
     /// <summary>Exult's game clock: when a new game starts, and how fast time runs (Exult's time rate).</summary>

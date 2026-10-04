@@ -29,10 +29,18 @@ public class MousePointerSettings
 }
 
 /// <summary>Project-wide system settings, stored in the .msrp manifest alongside everything else.</summary>
+/// <summary>How combat shows on screen.</summary>
+public class CombatSettings
+{
+    /// <summary>Exult's "show hits" option (Combat::show_hits, off by default): the numbers over whoever is hit ("-4", "miss"). Hits always flash a red outline, as in Exult; this only adds the numbers.</summary>
+    public bool ShowHitNumbers { get; set; }
+}
+
 public class SystemSettings
 {
     public MousePointerSettings MousePointers { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
+    public CombatSettings Combat { get; set; } = new();
     /// <summary>
     /// The Body Container (System Settings > Body Container): how every dead
     /// body looks when opened - its paperdoll picture and the frame its

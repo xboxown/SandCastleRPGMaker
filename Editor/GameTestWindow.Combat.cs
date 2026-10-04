@@ -361,11 +361,11 @@ public partial class GameTestWindow
         FightBack(defender, attacker);
         if (!hit)
         {
-            ShowFloatingText(defender, "miss");
+            if (ShowHitNumbers) ShowFloatingText(defender, "miss");
             return;
         }
         int damage = ApplyDamage(attacker, defender);
-        ShowFloatingText(defender, $"-{damage}");
+        if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
         if (damage <= 0) return;
         bool willDie = (GetHp(defender) ?? 99) - damage <= 0;
         if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);

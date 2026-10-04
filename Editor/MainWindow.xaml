@@ -17,6 +17,8 @@
             <MenuItem x:Name="EditMenu" Header="_Edit" IsEnabled="False">
                 <MenuItem x:Name="UndoMenuItem" Header="Undo" Click="UndoMenuItem_Click" InputGestureText="Ctrl+Z"/>
                 <MenuItem x:Name="RedoMenuItem" Header="Redo" Click="RedoMenuItem_Click" InputGestureText="Ctrl+Y"/>
+                <Separator/>
+                <MenuItem Header="System Settings..." Click="SystemSettingsMenuItem_Click"/>
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>
@@ -53,7 +55,6 @@
                 <MenuItem Header="Variable Editor..." Click="VariableEditorMenuItem_Click"/>
                 <MenuItem Header="Stat Editor..." Click="StatEditorMenuItem_Click"/>
                 <MenuItem Header="Character Editor..." Click="CharacterEditorMenuItem_Click"/>
-                <MenuItem Header="System Settings..." Click="SystemSettingsMenuItem_Click"/>
                 <Separator/>
                 <MenuItem Header="Save Tile Properties..." Click="SaveTilePropertiesMenuItem_Click"/>
                 <MenuItem Header="Load Tile Properties..." Click="LoadTilePropertiesMenuItem_Click"/>
