@@ -25,6 +25,9 @@ public partial class SpriteFrameEditorWindow : Window
     /// </summary>
     private readonly bool _isFontSprite;
     private FontGuideWindow? _fontGuide;
+    /// <summary>A blood type (a sprite in the Blood group): frames are puddle sizes, small to large, at most SpriteDatabase.BloodSizes - no sound, no animation - with the Blood Guide alongside.</summary>
+    private readonly bool _isBloodSprite;
+    private BloodGuideWindow? _bloodGuide;
     private bool _suppress;
 
     private int _currentFrameIndex;
@@ -39,13 +42,14 @@ public partial class SpriteFrameEditorWindow : Window
         "Custom"
     };
 
-    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false)
+    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false)
     {
         InitializeComponent();
         _sprite = sprite;
         _resources = resources;
         _isTilesetGroup = isTilesetGroup;
         _isFontSprite = isFontSprite;
+        _isBloodSprite = isBloodSprite;
         PreviewKeyDown += SpriteFrameEditorWindow_PreviewKeyDown;
 
         OriginAnchorCombo.ItemsSource = AnchorOptions;
@@ -90,6 +94,61 @@ public partial class SpriteFrameEditorWindow : Window
         Closing += (_, _) => _playbackTimer.Stop();
 
         if (_isFontSprite) SetUpFontMode();
+        if (_isBloodSprite) SetUpBloodMode();
+    }
+
+    /// <summary>A blood type: puddle-size frames only - nothing that animates or makes sound - and the Blood Guide alongside.</summary>
+    private void SetUpBloodMode()
+    {
+        foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1; // never played, so never heard
+        _sprite.Loop = false;
+        foreach (UIElement control in new UIElement[] { FpsBox, LoopCheck, PlayPauseButton })
+        {
+            control.IsEnabled = false;
+            ((FrameworkElement)control).ToolTip = "Blood doesn't animate - each frame is one puddle size";
+        }
+        Title = $"Blood: {_sprite.Name}";
+        TrimBloodFrames();
+
+        var guideButton = new Button { Content = "Blood Guide...", Margin = new Thickness(0, 0, 6, 0), ToolTip = "What each frame is, and how bleeding works" };
+        guideButton.Click += (_, _) => ShowBloodGuide();
+        if (AddFramesButton.Parent is Panel panel) panel.Children.Add(guideButton);
+
+        Loaded += (_, _) => ShowBloodGuide();
+    }
+
+    /// <summary>Exult's blood has four sizes: frames past the last size are removed (with a word why).</summary>
+    private void TrimBloodFrames()
+    {
+        if (!_isBloodSprite || _sprite.Frames.Count <= SpriteDatabase.BloodSizes) return;
+        int extra = _sprite.Frames.Count - SpriteDatabase.BloodSizes;
+        _sprite.Frames.RemoveRange(SpriteDatabase.BloodSizes, extra);
+        foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1;
+        if (_currentFrameIndex >= _sprite.Frames.Count) _currentFrameIndex = _sprite.Frames.Count - 1;
+        MessageBox.Show($"Blood has {SpriteDatabase.BloodSizes} sizes (frames 1-{SpriteDatabase.BloodSizes}, small to large), as in Exult - the {extra} extra frame{(extra == 1 ? " was" : "s were")} removed.",
+            "Blood", MessageBoxButton.OK, MessageBoxImage.Information);
+    }
+
+    private void ShowBloodGuide()
+    {
+        if (_bloodGuide is { IsLoaded: true })
+        {
+            _bloodGuide.Activate();
+            return;
+        }
+        _bloodGuide = new BloodGuideWindow(_sprite) { Owner = this };
+        _bloodGuide.FrameChosen += index =>
+        {
+            if (index < 0 || index >= _sprite.Frames.Count) return;
+            _currentFrameIndex = index;
+            UpdatePreview();
+            HighlightSelectedThumbnail();
+        };
+        _bloodGuide.Closed += (_, _) => _bloodGuide = null;
+        _bloodGuide.Left = Math.Max(0, Left + ActualWidth - 40);
+        _bloodGuide.Top = Math.Max(0, Top + 40);
+        _bloodGuide.Show();
+        _bloodGuide.Refresh(_currentFrameIndex);
     }
 
     /// <summary>A font sprite: glyph frames only - nothing that animates or makes sound, a fixed name, and the Font Guide alongside.</summary>
@@ -347,6 +406,7 @@ public partial class SpriteFrameEditorWindow : Window
 
     private void RebuildFrameStrip()
     {
+        TrimBloodFrames(); // every way of adding frames ends here
         FrameStripPanel.Children.Clear();
         _thumbnailBorders.Clear();
 
@@ -561,6 +621,7 @@ public partial class SpriteFrameEditorWindow : Window
         for (int i = 0; i < _thumbnailBorders.Count; i++)
             _thumbnailBorders[i].BorderBrush = i == _currentFrameIndex ? Brushes.OrangeRed : Brushes.Transparent;
         _fontGuide?.Refresh(_currentFrameIndex);
+        _bloodGuide?.Refresh(_currentFrameIndex);
     }
 
     /// <summary>The character a font frame draws, for its thumbnail label.</summary>

@@ -149,7 +149,18 @@ public class SpriteDatabase
     public const int FontGlyphCount = 95; // ' ' (32) through '~' (126)
     public const int FontSheetColumns = 18;
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName;
+    /// <summary>
+    /// Reserved group for blood - always present, red, can't be deleted. Each
+    /// sprite in it is one blood type (red, green, purple...), chosen per
+    /// character in the Character Editor. As Exult's blood shape (912), its
+    /// frames are puddle sizes, not an animation: frame 1 the smallest, each
+    /// next one bigger, up to BloodSizes. No sound, no animation.
+    /// </summary>
+    public const string BloodGroupName = "Blood";
+    /// <summary>Exult's blood frames 0-3: four sizes, small to large.</summary>
+    public const int BloodSizes = 4;
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName;
     public static bool IsFontSprite(string groupName, string spriteName) =>
         groupName == FontsGroupName && (spriteName == InGameFontName || spriteName == DialogFontName);
 
@@ -164,7 +175,12 @@ public class SpriteDatabase
         var fonts = GetOrCreateGroup(FontsGroupName);
         foreach (string name in new[] { InGameFontName, DialogFontName })
             if (fonts.Sprites.All(s => s.Name != name)) fonts.Sprites.Add(new SpriteEntry { Name = name, Loop = false });
+        GetOrCreateGroup(BloodGroupName);
     }
+
+    /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>
+    public SpriteEntry? FindBlood(string bloodName) =>
+        string.IsNullOrEmpty(bloodName) ? null : Groups.FirstOrDefault(g => g.Name == BloodGroupName)?.Sprites.FirstOrDefault(s => s.Name == bloodName);
 
     /// <summary>Every font in the Fonts group - the two game fonts plus any extra ones added for books.</summary>
     public List<string> FontNames() =>

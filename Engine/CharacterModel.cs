@@ -50,6 +50,8 @@ public class CharacterDefinition
 
     /// <summary>Food, poison and ailment immunities (Character Editor > Health).</summary>
     public SurvivalSettings Survival { get; set; } = new();
+    /// <summary>Its blood type: a sprite in the Sprite Editor's Blood group, or empty for none (it never bleeds - Exult's cant_bleed).</summary>
+    public string BloodSpriteName { get; set; } = string.Empty;
 
     /// <summary>The body left behind on death (Character Editor > Health): a container holding everything it carried.</summary>
     public BodySettings Body { get; set; } = new();

@@ -369,6 +369,7 @@ public partial class GameTestWindow
         if (damage <= 0) return;
         bool willDie = (GetHp(defender) ?? 99) - damage <= 0;
         if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
+        MaybeStartBleeding(defender, damage); // reduce_health: normal damage may start it bleeding (death stops it again)
         Damage(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
         if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
         if (!IsDead(defender)) FireCharacterEvent(defender, BookTriggerConditionBased.ByHit); // a blow that landed (a killing blow sets off By Death instead)

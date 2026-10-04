@@ -66,6 +66,21 @@ public partial class CharacterEditorWindow
         HealthPanel.Children.Add(cureBox);
         HealthPanel.Children.Add(NumberRow("Poison damage:", () => s.PoisonDamageMax, v => s.PoisonDamageMax = Math.Max(0, v), "0 up to this HP every 10-20 s (Exult: 2)"));
 
+        // ---------- Blood ----------
+        HealthPanel.Children.Add(Heading("Blood"));
+        var bloodChoices = new List<string> { "(None - never bleeds)" };
+        bloodChoices.AddRange(_sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.BloodGroupName)?.Sprites.Select(b => b.Name) ?? Enumerable.Empty<string>());
+        var bloodCombo = new ComboBox { ItemsSource = bloodChoices, Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2) };
+        bloodCombo.SelectedIndex = Math.Max(0, bloodChoices.IndexOf(character.BloodSpriteName));
+        bloodCombo.SelectionChanged += (_, _) => character.BloodSpriteName = bloodCombo.SelectedIndex <= 0 ? string.Empty : (string)bloodCombo.SelectedItem;
+        HealthPanel.Children.Add(bloodCombo);
+        HealthPanel.Children.Add(new TextBlock
+        {
+            Text = "Its blood type - a sprite in the Sprite Editor's Blood group (red, green, purple...). As in Exult, a blow that lands may start it bleeding, " +
+                   "leaving a trail of puddles that grow where it keeps bleeding. None: it never bleeds (a robot, a ghost).",
+            TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8)
+        });
+
         // ---------- Body ----------
         HealthPanel.Children.Add(Heading("Body (after death)"));
         HealthPanel.Children.Add(new TextBlock

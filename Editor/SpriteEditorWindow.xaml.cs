@@ -59,6 +59,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Fonts group is hardcoded and can't be deleted - the game writes all its text with the fonts in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.BloodGroupName)
+        {
+            MessageBox.Show("The Blood group is hardcoded and can't be deleted - every blood type characters bleed is a sprite in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         Database.Groups.Remove(_currentGroup);
         _currentGroup = null;
         RefreshGroups();
@@ -88,7 +93,8 @@ public partial class SpriteEditorWindow : Window
             return;
         }
         // In the Fonts group a new sprite is an extra font - offered only in the Book Editor's Text Font list.
-        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name != SpriteDatabase.FontsGroupName };
+        // In the Blood group a new sprite is a blood type: puddle sizes, never animated.
+        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name != SpriteDatabase.FontsGroupName && _currentGroup.Name != SpriteDatabase.BloodGroupName };
         _currentGroup.Sprites.Add(entry);
         RefreshSprites();
         SpriteListView.SelectedItem = entry;
@@ -148,7 +154,8 @@ public partial class SpriteEditorWindow : Window
         }
         bool isTilesetGroup = _currentGroup?.Name == SpriteDatabase.TilesetGroupName;
         bool isFont = _currentGroup?.Name == SpriteDatabase.FontsGroupName; // every sprite in Fonts is a font: glyph frames, no sound or animation
-        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont) { Owner = this };
+        bool isBlood = _currentGroup?.Name == SpriteDatabase.BloodGroupName; // every sprite in Blood is a blood type: size frames, no sound or animation
+        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
     }
