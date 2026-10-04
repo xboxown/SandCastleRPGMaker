@@ -104,7 +104,8 @@ public class PoseDatabase
         foreach (string name in new[]
         {
             "Idle", "Walking", "Attacking Melee", "Shooting", "Unconscious",
-            "Body", "Fall", "Stand up", "Picking", "Dancing", "Sleeping"
+            "Body", "Fall", "Stand up", "Picking", "Dancing", "Sleeping",
+            "Sit" // Exult's sit frame: chairs, benches, and the Sit schedule
         })
         {
             if (!Poses.Any(p => p.IsBuiltIn && p.Name == name))

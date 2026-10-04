@@ -26,7 +26,8 @@ public partial class SystemSettingsWindow : Window
     private readonly ComboBox _sizeCombo = new() { Width = 220, DisplayMemberPath = nameof(SizeChoice.Display) };
     private readonly Dictionary<MousePointerKind, (ComboBox Combo, Image Preview)> _rows = new();
     private readonly Dictionary<MousePointerKind, (TextBlock Info, Button Edit)> _spriteDetails = new();
-    private readonly Dictionary<MousePointerKind, SpriteAnimator> _previewAnimators = new();
+    /// <summary>Where each pointer's play/stop button goes, under its preview.</summary>
+    private readonly Dictionary<MousePointerKind, ContentControl> _playHolders = new();
     /// <summary>Every sprite with its frame size, measured once when the window opens.</summary>
     private readonly List<(string Group, SpriteEntry Sprite, int Width, int Height)> _measured = new();
     private bool _suppress;
@@ -60,7 +61,7 @@ public partial class SystemSettingsWindow : Window
         root.Children.Add(tabs);
         Content = root;
 
-        Closed += (_, _) => { foreach (var animator in _previewAnimators.Values) animator.Stop(); };
+        Closed += (_, _) => AnimationPreviewButton.StopAll();
         LoadSizes();
     }
 
@@ -151,16 +152,22 @@ public partial class SystemSettingsWindow : Window
             pickers.Children.Add(info);
             pickers.Children.Add(editFrames);
 
+            var playHolder = new ContentControl { Margin = new Thickness(10, 4, 0, 0), HorizontalAlignment = HorizontalAlignment.Center };
+            var previewColumn = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+            previewColumn.Children.Add(previewBox);
+            previewColumn.Children.Add(playHolder);
+
             var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
             row.Children.Add(text);
             row.Children.Add(pickers);
-            row.Children.Add(previewBox);
+            row.Children.Add(previewColumn);
             panel.Children.Add(row);
 
             var thisKind = kind;
             combo.SelectionChanged += (_, _) => PointerChanged(thisKind);
             editFrames.Click += (_, _) => EditFrames(thisKind);
             _rows[kind] = (combo, preview);
+            _playHolders[kind] = playHolder;
             _spriteDetails[kind] = (info, editFrames);
         }
 
@@ -242,10 +249,11 @@ public partial class SystemSettingsWindow : Window
         PointerSizeChanged();
     }
 
-    /// <summary>Plays the pointer exactly as the game will - animated, with each frame's sound - or shows the black square the game shows when there's no sprite.</summary>
+    /// <summary>The pointer's first frame, still and silent, with a play button that runs it exactly as the game will (animated, each frame's sound) - or the black square the game shows when there's no sprite.</summary>
     private void ShowPreview(MousePointerKind kind, bool playFirstFrameSound = false)
     {
-        if (_previewAnimators.Remove(kind, out var old)) old.Stop();
+        if (_playHolders[kind].Content is AnimationPreviewButton oldButton) oldButton.StopPlaying();
+        _playHolders[kind].Content = null;
         var preview = _rows[kind].Preview;
         preview.Source = null;
         var sprite = MousePointerCatalog.Resolve(_sprites, _settings.MousePointers.Sprites.GetValueOrDefault(kind));
@@ -253,7 +261,7 @@ public partial class SystemSettingsWindow : Window
         info.Text = sprite is null ? "No sprite: the game shows a black square." : MousePointerCatalog.Describe(sprite, _resources);
         editFrames.IsEnabled = sprite is not null;
         if (sprite is null) return;
-        _previewAnimators[kind] = new SpriteAnimator(sprite, preview, _resources);
-        if (playFirstFrameSound) MousePointerCatalog.PlayFirstFrameSound(sprite, _resources);
+        _playHolders[kind].Content = new AnimationPreviewButton(sprite, preview, _resources); // stopped until played
+        if (playFirstFrameSound) MousePointerCatalog.PlayFirstFrameSound(sprite, _resources); // the designer just picked it
     }
 }

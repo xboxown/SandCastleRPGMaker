@@ -26,6 +26,9 @@ public partial class GameTestWindow
 
     private bool ShowHitNumbers => _systemSettings.Combat.ShowHitNumbers;
 
+    /// <summary>Outlines showing right now, each with the character picture it belongs to - moved with it every frame, so it never trails behind someone walking.</summary>
+    private readonly List<(Image Outline, Image Visual, double Scale)> _hitOutlines = new();
+
     /// <summary>reduce_health's flash for <paramref name="amount"/> damage to a character that had <paramref name="oldHp"/>.</summary>
     private void FlashHit(CharacterDefinition character, int amount, int oldHp)
     {
@@ -47,13 +50,24 @@ public partial class GameTestWindow
             Stretch = Stretch.Fill, IsHitTestVisible = false
         };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-        Canvas.SetLeft(image, Canvas.GetLeft(visual) - scale);
-        Canvas.SetTop(image, Canvas.GetTop(visual) - scale);
-        Panel.SetZIndex(image, Panel.GetZIndex(visual) + 1);
+        var entry = (image, visual, scale);
+        _hitOutlines.Add(entry);
         GameCanvas.Children.Add(image);
+        FollowHitOutlines();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HitOutlineMs) };
-        timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(image); };
+        timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(image); _hitOutlines.Remove(entry); };
         timer.Start();
+    }
+
+    /// <summary>Every frame: each outline sits exactly round its character, wherever it has walked to.</summary>
+    private void FollowHitOutlines()
+    {
+        foreach (var (outline, visual, scale) in _hitOutlines)
+        {
+            Canvas.SetLeft(outline, Canvas.GetLeft(visual) - scale);
+            Canvas.SetTop(outline, Canvas.GetTop(visual) - scale);
+            Panel.SetZIndex(outline, Panel.GetZIndex(visual) + 1);
+        }
     }
 
     /// <summary>The 1-pixel outline of a frame's shape: every see-through pixel touching a solid one, in the hit colour, one pixel bigger all round.</summary>

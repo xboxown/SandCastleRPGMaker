@@ -239,6 +239,7 @@ public partial class CharacterEditorWindow : Window
     /// </summary>
     private void BuildPosesPanel(CharacterDefinition character)
     {
+        AnimationPreviewButton.StopAll(); // a rebuild never leaves a preview playing behind it
         PosesPanel.Children.Clear();
 
         foreach (var pose in _poses.Poses)
@@ -498,9 +499,13 @@ public partial class CharacterEditorWindow : Window
             HorizontalAlignment = HorizontalAlignment.Center
         };
 
+        AnimationPreviewButton? playButton = null;
         if (sprite is not null && sprite.Frames.Count > 0 && File.Exists(sprite.Frames[0].FilePath))
         {
-            square.Child = new Image { Source = LoadStaticFrame(sprite.Frames[0].FilePath), Stretch = Stretch.Uniform };
+            var picture = new Image { Stretch = Stretch.Uniform };
+            square.Child = picture;
+            // Still and silent until played: the pose's own mute and volume apply when it does.
+            playButton = new AnimationPreviewButton(sprite, picture, _resources, assignment.Muted ? 0 : assignment.Volume / 100.0) { Margin = new Thickness(0, 4, 0, 0) };
         }
         else
         {
@@ -524,7 +529,11 @@ public partial class CharacterEditorWindow : Window
             BuildPosesPanel(character);
         };
 
-        return square;
+        if (playButton is null) return square;
+        var withButton = new StackPanel();
+        withButton.Children.Add(square);
+        withButton.Children.Add(playButton);
+        return withButton;
     }
 
     /// <summary>Same Filter By Group + sprite combo mechanism Face already uses, scoped to one direction of one pose.</summary>
@@ -1136,6 +1145,7 @@ public partial class CharacterEditorWindow : Window
     /// <summary>Stat boxes save when they lose focus; closing with one still focused saves it too.</summary>
     protected override void OnClosing(System.ComponentModel.CancelEventArgs e)
     {
+        AnimationPreviewButton.StopAll();
         if (Keyboard.FocusedElement is TextBox box) box.GetBindingExpression(TextBox.TextProperty)?.UpdateSource();
         base.OnClosing(e);
     }

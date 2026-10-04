@@ -1709,6 +1709,7 @@ public partial class GameTestWindow : Window
         double deltaSeconds = _lastRenderTime == TimeSpan.Zero ? 0 : Math.Min(0.05, (now - _lastRenderTime).TotalSeconds);
         _lastRenderTime = now;
 
+        FollowHitOutlines(); // the red hit outline stays round its character as it moves
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 
