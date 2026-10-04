@@ -95,8 +95,16 @@ public class ContainerData : PlaceableItemBase
     /// <summary>Exult's extradimensional storage (a bag of holding): it weighs only itself, whatever is inside it.</summary>
     public bool ExtradimensionalStorage { get; set; } = false;
 
-    /// <summary>Exult's SOUND_KEY: plays when a key turns in this container's lock or a lockpick opens it.</summary>
+    /// <summary>Exult's SOUND_KEY, when a key locks it. Empty: the Unlock Sound plays instead (Exult has one key sound for both).</summary>
     public int LockSoundResourceId { get; set; } = -1;
+    /// <summary>When a key or lockpick unlocks it. Empty: the Lock Sound plays instead.</summary>
+    public int UnlockSoundResourceId { get; set; } = -1;
+    /// <summary>When a key that doesn't fit is tried on it. Empty: the Blocked pointer's own sound (Exult's flashBlocked).</summary>
+    public int WrongKeySoundResourceId { get; set; } = -1;
+    /// <summary>When a lockpick breaks trying it.</summary>
+    public int LockpickBrokeSoundResourceId { get; set; } = -1;
+    /// <summary>When it's double-clicked while locked (the "Locked" rattle).</summary>
+    public int LockedRattleSoundResourceId { get; set; } = -1;
 
     /// <summary>Real pick-lock difficulty, per spec - a real, tunable parameter for how hard THIS container is to pick, compared against the picking character's own real stat at attempt time. Higher = a harder lock, needing a higher stat to have a real chance.</summary>
     public int PickLockDifficulty { get; set; } = 10;

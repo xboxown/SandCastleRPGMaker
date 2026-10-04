@@ -79,10 +79,28 @@
                                                 <TextBox x:Name="PickLockDifficultyBox" Width="80" TextChanged="Field_Changed" PreviewTextInput="IntegerOnly_PreviewTextInput"/>
                                             </StackPanel>
                                         </StackPanel>
-                                        <StackPanel Margin="0,0,0,4">
-                                            <TextBlock Text="Lock Sound" ToolTip="Plays when a key turns in this lock or a lockpick opens it (Exult's key sound)."/>
-                                            <ComboBox x:Name="LockSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220"/>
-                                        </StackPanel>
+                                        <WrapPanel Margin="0,0,0,4">
+                                            <StackPanel Margin="0,0,16,4">
+                                                <TextBlock Text="Unlock Sound" ToolTip="A key or lockpick unlocks it. Empty: the Lock Sound plays (Exult has one key sound for both)."/>
+                                                <ComboBox x:Name="UnlockSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,4">
+                                                <TextBlock Text="Lock Sound" ToolTip="A key locks it (Exult's key sound). Empty: the Unlock Sound plays."/>
+                                                <ComboBox x:Name="LockSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,4">
+                                                <TextBlock Text="Wrong Key Sound" ToolTip="A key that doesn't fit is tried. Empty: the Blocked pointer's own sound plays (Exult's flashBlocked)."/>
+                                                <ComboBox x:Name="WrongKeySoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,4">
+                                                <TextBlock Text="Lockpick Broke Sound" ToolTip="A lockpick breaks trying to pick it."/>
+                                                <ComboBox x:Name="LockpickBrokeSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
+                                            </StackPanel>
+                                            <StackPanel Margin="0,0,16,4">
+                                                <TextBlock Text="Locked Rattle" ToolTip="It's double-clicked while locked - with &quot;Locked&quot; over it."/>
+                                                <ComboBox x:Name="LockedRattleSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
+                                            </StackPanel>
+                                        </WrapPanel>
                                         <TextBlock Text="As in Exult: in play, double-click the key and click this container to lock or unlock it, or double-click a lockpick and click it to try to pick the lock. Only Objects marked Use As: Key (Object Database) are listed as keys. Double-clicking it while locked just says &quot;Locked&quot;." Opacity="0.6" FontSize="11" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </GroupBox>

@@ -170,14 +170,17 @@ public partial class GameTestWindow
         bool fits = data.RequiredKeyCategory == ReferencedItemCategory.Object && data.RequiredKeyItemId == key.Id;
         if (!fits)
         {
-            Refuse(MousePointerKind.Blocked, $"\"{key.Name}\" doesn't fit \"{data.Name}\"."); // flashBlocked
+            // flashBlocked: the blocked pointer and its sound - or the container's own Wrong Key Sound instead.
+            StatusText.Text = $"\"{key.Name}\" doesn't fit \"{data.Name}\".";
+            FlashPointer(MousePointerKind.Blocked, playSound: data.WrongKeySoundResourceId < 0);
+            PlaySound(data.WrongKeySoundResourceId);
             PartyBark(KeyDoesntFitBarks[Rng.Next(KeyDoesntFitBarks.Length)]);
             return;
         }
 
-        PlayLockSound(data);
         if (IsLockedNow(container, data))
         {
+            PlaySound(UnlockSound(data));
             SetLocked(container, false);
             SayOverContainer(container, "Unlocked");
             StatusText.Text = $"You unlock \"{data.Name}\".";
@@ -193,6 +196,7 @@ public partial class GameTestWindow
         // Its gumps close, and those of every container inside it.
         foreach (var gump in _openContainers.Where(g => ReferenceEquals(g.PlacedItem, container) || ItemWeights.Holds(container.Contents, g.PlacedItem)).ToList())
             CloseContainerGump(gump);
+        PlaySound(LockSound(data));
         SetLocked(container, true);
         SayOverContainer(container, "Locked");
         StatusText.Text = $"You lock \"{data.Name}\".";
@@ -212,13 +216,14 @@ public partial class GameTestWindow
         if (Rng.Next(100) < chance)
         {
             SetLocked(container, false);
-            PlayLockSound(data);
+            PlaySound(UnlockSound(data));
             SayOverContainer(container, "Unlocked");
             StatusText.Text = $"You pick the lock on \"{data.Name}\". ({chance}% chance)";
             return;
         }
 
         UseUpOne(source);
+        PlaySound(data.LockpickBrokeSoundResourceId);
         if (_player is not null) ShowFloatingText(_player, "The lockpick broke!", 2000);
         StatusText.Text = $"You fail to pick the lock on \"{data.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
     }
@@ -229,6 +234,7 @@ public partial class GameTestWindow
     private bool RefuseIfLocked(InventoryItemInstance carried, ContainerData data)
     {
         if (!IsLockedNow(carried, data)) return false;
+        PlaySound(data.LockedRattleSoundResourceId);
         SayOverContainer(carried, "Locked");
         StatusText.Text = $"\"{data.Name}\" is locked.";
         return true;
@@ -268,10 +274,15 @@ public partial class GameTestWindow
 
     // ---------- Helpers ----------
 
-    private void PlayLockSound(ContainerData data)
+    private void PlaySound(int resourceId)
     {
-        if (data.LockSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.LockSoundResourceId);
+        if (resourceId >= 0) SoundPlayback.TryPlay(_resources, resourceId);
     }
+
+    /// <summary>Unlocking: the Unlock Sound, or the Lock Sound if there's none (Exult's one key sound).</summary>
+    private static int UnlockSound(ContainerData data) => data.UnlockSoundResourceId >= 0 ? data.UnlockSoundResourceId : data.LockSoundResourceId;
+    /// <summary>Locking: the Lock Sound, or the Unlock Sound if there's none.</summary>
+    private static int LockSound(ContainerData data) => data.LockSoundResourceId >= 0 ? data.LockSoundResourceId : data.UnlockSoundResourceId;
 
     /// <summary>Exult's randomPartyBark: a random member of the party (the player included) says it.</summary>
     private void PartyBark(string text)

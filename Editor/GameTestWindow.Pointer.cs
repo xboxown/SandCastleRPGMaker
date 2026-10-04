@@ -63,9 +63,10 @@ public partial class GameTestWindow
     }
 
     /// <summary>Exult Mouse::flash_shape: show this pointer for 600 ms, then return to the hand.</summary>
-    private void FlashPointer(MousePointerKind kind)
+    private void FlashPointer(MousePointerKind kind, bool playSound = true)
     {
         ShowPointer(kind);
+        if (!playSound) { _pointerFlashTimer?.Stop(); _pointerFlashTimer?.Start(); return; } // something else makes the sound
         // Exult plays a sound together with the flash (drag.cc: flash_shape(Mouse::redx); play_sound_effect(76)) - here that sound is the pointer sprite's own, set per frame in the Sprite Editor: its first frame's sound plays the moment it flashes, the rest as the animation reaches them.
         if (MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.Sprites.GetValueOrDefault(kind)) is { } sprite)
             MousePointerCatalog.PlayFirstFrameSound(sprite, _resources);

@@ -192,8 +192,16 @@ public partial class ContainerEditorWindow : Window
         NavigateSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.NavigateSoundResourceId) ?? NoneSound;
         DestroyedSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
         DestroyedSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.DestructibleSoundResourceId) ?? NoneSound;
-        LockSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
-        LockSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.LockSoundResourceId) ?? NoneSound;
+        foreach (var (combo, id) in new[]
+        {
+            (LockSoundCombo, container.LockSoundResourceId), (UnlockSoundCombo, container.UnlockSoundResourceId),
+            (WrongKeySoundCombo, container.WrongKeySoundResourceId), (LockpickBrokeSoundCombo, container.LockpickBrokeSoundResourceId),
+            (LockedRattleSoundCombo, container.LockedRattleSoundResourceId)
+        })
+        {
+            combo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others
+            combo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == id) ?? NoneSound;
+        }
 
         BuildFramePreview(container);
         RefreshContentsList(container);
@@ -242,6 +250,10 @@ public partial class ContainerEditorWindow : Window
         if (int.TryParse(DefenseBox.Text, out int defense)) container.Defense = Math.Max(0, defense);
         container.DestructibleSoundResourceId = (DestroyedSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         container.LockSoundResourceId = (LockSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.UnlockSoundResourceId = (UnlockSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.WrongKeySoundResourceId = (WrongKeySoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.LockpickBrokeSoundResourceId = (LockpickBrokeSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        container.LockedRattleSoundResourceId = (LockedRattleSoundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
         container.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;
         container.BelongToId = (BelongToCombo.SelectedItem as CharacterDefinition)?.Id ?? -1;
         container.CanBeSold = CanBeSoldCheck.IsChecked == true;

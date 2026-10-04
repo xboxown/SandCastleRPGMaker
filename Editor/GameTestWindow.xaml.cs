@@ -1092,6 +1092,7 @@ public partial class GameTestWindow : Window
     private void TryOpenContainer(PlacedItemInstance placedItem, ContainerData data)
     {
         if (!IsLockedNow(placedItem, data)) { OpenContainer(placedItem, data); return; }
+        PlaySound(data.LockedRattleSoundResourceId);
         ShowFloatingTextOver(VisualOf(placedItem), "Locked");
         StatusText.Text = $"\"{data.Name}\" is locked.";
     }
