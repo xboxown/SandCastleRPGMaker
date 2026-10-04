@@ -1,7 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.AddCommandPickerWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Event Commands" Height="480" Width="560" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="Event Commands" Height="640" Width="600" MinHeight="300" MinWidth="420" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <DockPanel Margin="12">
         <TextBlock DockPanel.Dock="Top" Text="Show Text, Control Switches/Variables, Conditional Branch, Play Sound/Music, Shake Screen, Change Day/Night, Apply Palette Color, and both Change Book Content commands are built so far - everything else is shown to prove the category structure, and will light up as each is built."
                    TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
@@ -11,7 +11,8 @@
 
         <TabControl>
             <TabItem Header="Page 1">
-                <Grid Margin="0,10,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="0,10,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
@@ -55,10 +56,12 @@
                         <Button Content="Wait..." Margin="0,0,0,4" IsEnabled="False"/>
                     </StackPanel>
                 </Grid>
+                </ScrollViewer>
             </TabItem>
 
             <TabItem Header="Page 2">
-                <Grid Margin="0,10,0,0">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="0,10,8,0">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="*"/>
@@ -82,6 +85,7 @@
                         <Button Content="Change Book Settings..." Margin="0,0,0,4" Click="ChangeBookSettings_Click"/>
                     </StackPanel>
                 </Grid>
+                </ScrollViewer>
             </TabItem>
         </TabControl>
     </DockPanel>
