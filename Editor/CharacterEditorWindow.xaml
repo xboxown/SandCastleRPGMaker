@@ -130,7 +130,7 @@
 
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Starting Inventory" FontWeight="Bold"/>
-                        <TextBlock Text="What this character carries at the start of a new game - equipping happens in-game (I key), not here." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,8"/>
+                        <TextBlock Text="What this character carries at the start of a new game, placed by the same rules as picking it up in play: a container goes in its own slot (Location), else a hand; anything else goes into the Backpack container, then the Pouch container while there is room, else a hand. When everything is full, nothing more can be added." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,8"/>
                         <DockPanel Margin="0,0,0,6">
                             <ComboBox x:Name="InventoryCategoryCombo" DockPanel.Dock="Left" Width="90" Margin="0,0,6,0"/>
                             <ComboBox x:Name="InventoryItemCombo" DockPanel.Dock="Left" Width="180" Margin="0,0,6,0" DisplayMemberPath="Name"/>

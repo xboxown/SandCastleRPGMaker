@@ -1042,42 +1042,32 @@ public partial class CharacterEditorWindow : Window
         BuildPaperdollCanvas(character);
     }
 
-    /// <summary>Display row for the Starting Inventory list - resolves the real item name live from whichever database it references (Book or Object today; Weapon/Armor/Item have no real database of their own yet, same honest limitation ResolveStackInfo already documents elsewhere), rather than caching a name that could go stale.</summary>
-    private class InventoryRow
-    {
-        public InventoryItemInstance Instance { get; }
-        private readonly BookDatabase _books;
-        private readonly ObjectDatabase _objects;
-        public InventoryRow(InventoryItemInstance instance, BookDatabase books, ObjectDatabase objects)
-        {
-            Instance = instance;
-            _books = books;
-            _objects = objects;
-        }
-        public string DisplayText
-        {
-            get
-            {
-                string name = Instance.Category switch
-                {
-                    ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == Instance.ItemId)?.Name ?? "(missing book)",
-                    ReferencedItemCategory.Object => _objects.Objects.FirstOrDefault(o => o.Id == Instance.ItemId)?.Name ?? "(missing object)",
-                    _ => $"(no {Instance.Category} database yet)"
-                };
-                return Instance.Quantity > 1 ? $"{name} x{Instance.Quantity}" : name;
-            }
-        }
-    }
+    /// <summary>One line of the Starting Inventory list: an item, where it is (a slot, or inside a container), and what holds it.</summary>
+    private sealed record InventoryRow(InventoryItemInstance Instance, IHasContainerContents? HeldIn, string DisplayText);
+
+    private ContainerDatabase Containers => ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase();
 
     private void RefreshInventoryList(CharacterDefinition character)
     {
-        InventoryListBox.ItemsSource = character.Inventory.Select(i => new InventoryRow(i, _books, _objects)).ToList();
+        var containers = Containers;
+        string Name(InventoryItemInstance i)
+        {
+            string name = StartingInventoryRules.NameOf(i.Category, i.ItemId, containers, _books, _objects);
+            return i.Quantity > 1 ? $"{name} x{i.Quantity}" : name;
+        }
+        var rows = new List<InventoryRow>();
+        foreach (var item in character.Inventory)
+        {
+            string where = StartingInventoryRules.SlotNameOf(character, item) is { } slot ? $"[{slot}]" : "[not in a slot]";
+            rows.Add(new InventoryRow(item, null, $"{where} {Name(item)}"));
+            foreach (var inside in item.Contents) rows.Add(new InventoryRow(inside, item, $"        in {Name(item)}: {Name(inside)}"));
+        }
+        InventoryListBox.ItemsSource = rows;
     }
 
-    /// <summary>Only Book and Object are offered - the honest, current state of the project: Weapon/Armor/Item have no real database of their own yet, matching ResolveStackInfo's own documented limitation elsewhere in the engine.</summary>
     private void PopulateInventoryCategoryChoices()
     {
-        InventoryCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Book, ReferencedItemCategory.Object };
+        InventoryCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Book, ReferencedItemCategory.Object, ReferencedItemCategory.Container };
         InventoryCategoryCombo.SelectionChanged -= InventoryCategoryCombo_SelectionChanged;
         InventoryCategoryCombo.SelectionChanged += InventoryCategoryCombo_SelectionChanged;
         InventoryCategoryCombo.SelectedIndex = 0;
@@ -1090,10 +1080,12 @@ public partial class CharacterEditorWindow : Window
         {
             ReferencedItemCategory.Book => _books.Books.Cast<object>().ToList(),
             ReferencedItemCategory.Object => _objects.Objects.Cast<object>().ToList(),
+            ReferencedItemCategory.Container => Containers.Containers.Where(c => !c.IsBodyContainer).Cast<object>().ToList(), // a body isn't something you carry
             _ => new List<object>()
         };
     }
 
+    /// <summary>Added by the same rules as picking it up in play (StartingInventoryRules): containers to their slot or a hand, everything else into the Backpack, then Pouch container while there's room, then the hands - or refused.</summary>
     private void AddInventoryItem_Click(object sender, RoutedEventArgs e)
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
@@ -1102,6 +1094,7 @@ public partial class CharacterEditorWindow : Window
         {
             BookData book => book.Id,
             WorldObject obj => obj.Id,
+            ContainerData container => container.Id,
             _ => -1
         };
         if (itemId < 0)
@@ -1109,7 +1102,11 @@ public partial class CharacterEditorWindow : Window
             MessageBox.Show("Pick an item first.", "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        character.Inventory.Add(new InventoryItemInstance { InstanceId = character.GetNextInventoryInstanceId(), Category = category, ItemId = itemId });
+        if (StartingInventoryRules.TryAdd(character, category, itemId, Containers, _books, _objects) is { } refusal)
+        {
+            MessageBox.Show(refusal, "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         RefreshInventoryList(character);
     }
 
@@ -1117,10 +1114,7 @@ public partial class CharacterEditorWindow : Window
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         if (InventoryListBox.SelectedItem is not InventoryRow row) return;
-        character.Inventory.Remove(row.Instance);
-        // An item can be removed while equipped - clear its slot too, rather than leaving a dangling EquippedSlots reference to an instance that no longer exists. Explicit Where+Select+FirstOrDefault on a nullable, not a bare dictionary FirstOrDefault - that returns a default KeyValuePair (key = EquipmentSlot.Head, the enum's own zero value) when nothing matches, which would falsely look like a real Head-slot match and wrongly clear an unrelated equipped item.
-        var slotToClear = character.EquippedSlots.Where(kv => kv.Value == row.Instance.InstanceId).Select(kv => (EquipmentSlot?)kv.Key).FirstOrDefault();
-        if (slotToClear is { } clearSlot) character.EquippedSlots.Remove(clearSlot);
+        StartingInventoryRules.Remove(character, row.Instance, row.HeldIn); // a container goes with everything in it
         RefreshInventoryList(character);
     }
 
