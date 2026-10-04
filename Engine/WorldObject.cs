@@ -88,6 +88,9 @@ public class WorldObject
     /// <summary>Real two-handed requirement, confirmed directly from Exult's own real ChangeLog ("make sure non-party members equip a shield if they have one and aren't using a two handed weapon") plus forum-documented ranged-weapon behavior (a sling needs a free hand to reload, so it's two-handed too, even though it isn't melee). When equipped in RightHand, this makes LeftHand unavailable while it's worn - see PaperdollWindow, not a separate "both hands" slot pretending to be two slots.</summary>
     public bool IsTwoHanded { get; set; } = false;
 
+    /// <summary>How heavy one of it is (Exult stones). Counts toward what a party member can carry: 2 x Strength.</summary>
+    public double Weight { get; set; } = 0;
+
     /// <summary>What double-clicking it does (Exult's key / lockpick usecode): a Key or Lockpick asks for a target, then works on the container clicked.</summary>
     public ObjectUse UseAs { get; set; } = ObjectUse.Nothing;
 }

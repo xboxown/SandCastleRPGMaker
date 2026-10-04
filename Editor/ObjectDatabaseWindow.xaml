@@ -48,6 +48,10 @@
                     <TextBox x:Name="MaxStackBox" Width="60" TextChanged="Field_Changed"/>
                 </DockPanel>
                 <DockPanel Margin="0,4,0,4">
+                    <TextBlock Text="Weight (counts toward what a party member can carry: 2 x Strength):" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBox x:Name="WeightBox" Width="60" TextChanged="Field_Changed"/>
+                </DockPanel>
+                <DockPanel Margin="0,4,0,4">
                     <TextBlock Text="Volume (how much space this takes up in a container):" VerticalAlignment="Center" Margin="0,0,6,0"/>
                     <TextBox x:Name="VolumeBox" Width="60" TextChanged="Field_Changed"/>
                 </DockPanel>

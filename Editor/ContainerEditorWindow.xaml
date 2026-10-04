@@ -62,6 +62,8 @@
                                                 <TextBlock x:Name="CurrentVolumeText" Text="Current volume: 0 / 0" Opacity="0.7" VerticalAlignment="Bottom"/>
                                             </StackPanel>
                                         </StackPanel>
+                                        <CheckBox x:Name="ExtradimensionalCheck" Content="Bag of holding (extradimensional storage): weighs only itself, whatever is inside" Checked="Field_Changed" Unchecked="Field_Changed" Margin="0,0,0,6"
+                                                  ToolTip="Exult's extradimensional storage: what's inside adds nothing to this container's weight. Normally a container weighs itself plus everything in it."/>
                                         <CheckBox x:Name="IsLockedCheck" Content="Locked" Checked="Field_Changed" Unchecked="Field_Changed" Margin="0,0,0,4"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
                                             <StackPanel Margin="0,0,16,0">

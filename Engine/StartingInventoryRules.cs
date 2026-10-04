@@ -19,11 +19,23 @@ public static class StartingInventoryRules
     public const double UnplacedSpot = -100000;
 
     /// <summary>Adds one of the item to the character. Null on success, otherwise why it couldn't be added.</summary>
+    /// <remarks><paramref name="maxCarry"/>: the carry limit (2 x Strength) for a party member or the main character, or null for anyone else - Exult only weighs the party.</remarks>
     public static string? TryAdd(CharacterDefinition character, ReferencedItemCategory category, int itemId,
-        ContainerDatabase containers, BookDatabase books, ObjectDatabase objects)
+        ContainerDatabase containers, BookDatabase books, ObjectDatabase objects, double? maxCarry = null)
     {
         var item = new InventoryItemInstance { Category = category, ItemId = itemId };
         string name = NameOf(category, itemId, containers, books, objects);
+
+        if (maxCarry is { } max)
+        {
+            double carried = ItemWeights.Carried(character, containers, books, objects);
+            double adding = ItemWeights.OwnWeight(category, itemId, containers, books, objects);
+            if (category == ReferencedItemCategory.Container && !ItemWeights.WeighsOnlyItself(category, itemId, containers))
+                adding += containers.Containers.FirstOrDefault(c => c.Id == itemId)?.StartingContents
+                    .Sum(seed => ItemWeights.WeightOf(seed, containers, books, objects)) ?? 0;
+            if (carried + adding > max)
+                return $"Too heavy: \"{name}\" weighs {adding:0.##}, and {character.Name} already carries {carried:0.##} of the {max:0.##} they can (2 x Strength).";
+        }
 
         if (category == ReferencedItemCategory.Container)
         {

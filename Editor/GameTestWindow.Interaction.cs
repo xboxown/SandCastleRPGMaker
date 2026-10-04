@@ -685,6 +685,7 @@ public partial class GameTestWindow
     /// </summary>
     private bool DropOnCharacter(DragOrigin origin, CharacterDefinition character)
     {
+        if (!CheckWeight(origin, character)) return false; // drag.cc Check_weight
         var (category, itemId) = PayloadIdentity(origin);
         var payloadObject = PayloadObject(origin);
         bool isTwoHanded = PayloadIsTwoHanded(origin);
@@ -745,6 +746,7 @@ public partial class GameTestWindow
     /// <summary>Paperdoll_gump::add step 2 (add_readied at the spot under the drop point), with this project's own hand rules: the left hand is unavailable while the right holds a two-handed item, and a two-handed item goes in the right hand with the left hand empty.</summary>
     private bool TryEquipInSlot(DragOrigin origin, CharacterDefinition character, object slotKey)
     {
+        if (!CheckWeight(origin, character)) return false; // drag.cc Check_weight
         var (category, itemId) = PayloadIdentity(origin);
         if (category == ReferencedItemCategory.Container && !IsContainerSlotAllowed(itemId, character, slotKey))
         {
@@ -792,6 +794,7 @@ public partial class GameTestWindow
 
     private bool TryPutIntoContainer(DragOrigin origin, ContainerData data, IHasContainerContents container, Point? dropTopLeft)
     {
+        if (!CheckWeight(origin, CarrierOf(container))) return false; // drag.cc Check_weight: whoever carries the container (at any depth)
         EnsureContainerSeeded(container, data);
         if (!CanContainerAccept(data, container, origin, out string reason, out var pointer))
         {

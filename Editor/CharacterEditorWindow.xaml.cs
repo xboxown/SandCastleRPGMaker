@@ -1047,6 +1047,15 @@ public partial class CharacterEditorWindow : Window
 
     private ContainerDatabase Containers => ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase();
 
+    /// <summary>Exult only weighs the party: 2 x Strength for the main character or a party member, no limit for anyone else.</summary>
+    private double? MaxCarryOf(CharacterDefinition character)
+    {
+        if (!character.IsTestPlayer && !character.IsInParty) return null;
+        var strength = _stats.Stats.FirstOrDefault(s => s.Kind == BuiltInStatKind.Strength);
+        int str = strength is not null && character.StatValues.TryGetValue(strength.Id, out var text) && int.TryParse(text, out int v) ? v : 10;
+        return ItemWeights.MaxCarry(str);
+    }
+
     private void RefreshInventoryList(CharacterDefinition character)
     {
         var containers = Containers;
@@ -1063,6 +1072,10 @@ public partial class CharacterEditorWindow : Window
             foreach (var inside in item.Contents) rows.Add(new InventoryRow(inside, item, $"        in {Name(item)}: {Name(inside)}"));
         }
         InventoryListBox.ItemsSource = rows;
+        double carried = ItemWeights.Carried(character, containers, _books, _objects);
+        InventoryWeightText.Text = MaxCarryOf(character) is { } max
+            ? $"Carrying {carried:0.##} of {max:0.##} (2 x Strength)."
+            : $"Carrying {carried:0.##} (only the main character and party members have a carry limit, as in Exult).";
     }
 
     private void PopulateInventoryCategoryChoices()
@@ -1102,7 +1115,7 @@ public partial class CharacterEditorWindow : Window
             MessageBox.Show("Pick an item first.", "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        if (StartingInventoryRules.TryAdd(character, category, itemId, Containers, _books, _objects) is { } refusal)
+        if (StartingInventoryRules.TryAdd(character, category, itemId, Containers, _books, _objects, MaxCarryOf(character)) is { } refusal)
         {
             MessageBox.Show(refusal, "Character Editor", MessageBoxButton.OK, MessageBoxImage.Information);
             return;

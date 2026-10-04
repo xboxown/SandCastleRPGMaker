@@ -137,6 +137,7 @@
                             <Button Content="Add" Width="60" Click="AddInventoryItem_Click"/>
                         </DockPanel>
                         <ListBox x:Name="InventoryListBox" Height="300" DisplayMemberPath="DisplayText"/>
+                        <TextBlock x:Name="InventoryWeightText" Opacity="0.75" FontSize="11" Margin="0,4,0,0" TextWrapping="Wrap"/>
                         <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Margin="0,6,0,0" Click="RemoveInventoryItem_Click"/>
                     </StackPanel>
                 </Grid>

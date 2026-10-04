@@ -73,6 +73,7 @@ public partial class ObjectDatabaseWindow : Window
         StackableCheck.IsChecked = _current.IsStackable;
         MaxStackBox.Text = _current.MaxStackSize.ToString();
         VolumeBox.Text = _current.Volume.ToString();
+        WeightBox.Text = _current.Weight.ToString();
         ContainerCheck.IsChecked = _current.IsContainer;
         InteractableCheck.IsChecked = _current.IsInteractable;
         OccludesCheck.IsChecked = _current.Occludes;
@@ -141,6 +142,8 @@ public partial class ObjectDatabaseWindow : Window
             _current.MaxStackSize = maxStack;
         if (double.TryParse(VolumeBox.Text, out double volume))
             _current.Volume = volume;
+        if (double.TryParse(WeightBox.Text, out double weight))
+            _current.Weight = Math.Max(0, weight);
 
         RefreshList();
         ObjectListBox.SelectedItem = _current;

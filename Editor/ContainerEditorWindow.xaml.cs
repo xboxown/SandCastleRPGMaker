@@ -135,6 +135,7 @@ public partial class ContainerEditorWindow : Window
             ?? locationChoices[0];
         MaxVolumeBox.Text = container.MaxVolume.ToString();
         IsLockedCheck.IsChecked = container.IsLocked;
+        ExtradimensionalCheck.IsChecked = container.ExtradimensionalStorage;
         PickLockDifficultyBox.Text = container.PickLockDifficulty.ToString();
         if (container.RequiredKeyCategory != ReferencedItemCategory.Object) (container.RequiredKeyCategory, container.RequiredKeyItemId) = (ReferencedItemCategory.Object, -1); // an older book key can't work as one
         RequiredKeyCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Object }; // Exult keys are objects (shape 641) - a book can't be one
@@ -222,6 +223,7 @@ public partial class ContainerEditorWindow : Window
             RefreshCurrentVolumeDisplay(container);
         }
         container.IsLocked = IsLockedCheck.IsChecked == true;
+        container.ExtradimensionalStorage = ExtradimensionalCheck.IsChecked == true;
         if (int.TryParse(PickLockDifficultyBox.Text, out int diff)) container.PickLockDifficulty = diff;
         container.RequiredKeyItemId = RequiredKeyItemCombo.SelectedItem switch
         {

@@ -88,6 +88,9 @@ public class ContainerData : PlaceableItemBase
     public bool IsLocked { get; set; } = false;
     public ReferencedItemCategory RequiredKeyCategory { get; set; } = ReferencedItemCategory.Object;
     public int RequiredKeyItemId { get; set; } = -1;
+    /// <summary>Exult's extradimensional storage (a bag of holding): it weighs only itself, whatever is inside it.</summary>
+    public bool ExtradimensionalStorage { get; set; } = false;
+
     /// <summary>Exult's SOUND_KEY: plays when a key turns in this container's lock or a lockpick opens it.</summary>
     public int LockSoundResourceId { get; set; } = -1;
 
