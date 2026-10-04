@@ -830,8 +830,8 @@ public partial class GameTestWindow
             reason = $"You can't put things into \"{data.Name}\" - it's a body, not a real container.";
             return false;
         }
-        // contain.cc: a locked container refuses. Only a container standing on the map carries live lock state.
-        if (container is PlacedItemInstance placed && IsLockedNow(placed, data))
+        // contain.cc add: a locked container refuses - on the map or carried, at any depth.
+        if (IsLockedNow(container, data))
         {
             reason = $"\"{data.Name}\" is locked.";
             return false;
@@ -1041,6 +1041,7 @@ public partial class GameTestWindow
                     Category = m.Item.Category,
                     ItemId = m.Item.ItemId,
                     Quantity = 1,
+                    IsLockedRuntime = m.Item.IsLockedRuntime, // its lock goes with it
                     // InstanceId 0 = this placed container was never opened, so it still holds its authored Starting Contents; anything else already has live Contents, carried over exactly as they are, empty or not.
                     Contents = m.Item.Category != ReferencedItemCategory.Container ? new List<InventoryItemInstance>()
                         : m.Item.InstanceId != 0 ? m.Item.Contents
@@ -1089,6 +1090,7 @@ public partial class GameTestWindow
         {
             placed.InstanceId = _nextContainerRuntimeInstanceId++;
             placed.Contents = item.Contents;
+            placed.IsLockedRuntime = item.IsLockedRuntime; // its lock goes with it
         }
         return placed;
     }

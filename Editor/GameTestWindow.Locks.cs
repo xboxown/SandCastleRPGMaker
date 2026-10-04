@@ -1,14 +1,25 @@
+using System.Windows;
+using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
 
 /// <summary>
 /// Locks, keys and lockpicks, ported from Exult:
+///  - A container's lock belongs to the container itself (in Exult a locked
+///    chest is its own shape), so it stays locked wherever it goes: on the
+///    map, in a hand or paperdoll slot, in the backpack list, or inside
+///    another container, at any depth. Picking it up or putting it down
+///    keeps its state.
+///  - A locked container takes nothing in (contain.cc add:
+///    is_container_locked), and double-clicking it doesn't open it: it says
+///    "Locked" (Ultima VII's chest usecode).
 ///  - Choosing a target (exult.cc Get_click, via UI_click_on_item): the
 ///    pointer changes to Green Select, the game pauses (the time queue is
-///    paused), the next left click picks whatever is under it, and Escape
-///    cancels.
+///    paused), the next left click picks whatever is under it - on the map
+///    or in an open gump - and Escape cancels.
 ///  - Keys (content/bgkeyring/src/items/key.uc and keyring.uc KeyInternal /
 ///    UseKeyOnChest): double-click a key, click a container. Not a lockable
 ///    container: nothing happens. The key fits (it's the container's Required
@@ -21,12 +32,9 @@ namespace SandcastleRpgMaker.Editor;
 ///  - Lockpicks: the original's lockpick usecode isn't in Exult's source,
 ///    so its exact chance and messages couldn't be verified. Known from
 ///    play: you use the pick on a locked chest or door, and a failed try
-///    breaks the pick. The chance here is the same labelled approximation
-///    as before: Dexterity vs the container's Pick-Lock Difficulty, 50% at
-///    equal, +-5% a point, 5%..95%.
-///  - Double-clicking a container that's locked doesn't open it: "Locked"
-///    over it (Ultima VII's chest usecode).
-/// Only containers standing on the map carry lock state in play.
+///    breaks the pick. The chance here is a labelled approximation:
+///    Dexterity vs the container's Pick-Lock Difficulty, 50% at equal,
+///    +-5% a point, 5%..95%.
 /// </summary>
 public partial class GameTestWindow
 {
@@ -37,8 +45,19 @@ public partial class GameTestWindow
 
     private static readonly string[] KeyDoesntFitBarks = { "The key doesn't fit.", "Maybe it is another key." };
 
-    /// <summary>Whether this container on the map is locked right now.</summary>
-    private static bool IsLockedNow(PlacedItemInstance container, ContainerData data) => container.IsLockedRuntime ?? data.IsLocked;
+    /// <summary>Whether this container is locked right now, wherever it is - its own state once a key or lockpick changed it, otherwise as its Container Editor entry starts.</summary>
+    private static bool IsLockedNow(IHasContainerContents container, ContainerData data) => container switch
+    {
+        PlacedItemInstance placed => placed.IsLockedRuntime ?? data.IsLocked,
+        InventoryItemInstance carried => carried.IsLockedRuntime ?? data.IsLocked,
+        _ => data.IsLocked
+    };
+
+    private static void SetLocked(IHasContainerContents container, bool locked)
+    {
+        if (container is PlacedItemInstance placed) placed.IsLockedRuntime = locked;
+        else if (container is InventoryItemInstance carried) carried.IsLockedRuntime = locked;
+    }
 
     // ---------- Choosing a target (Get_click) ----------
 
@@ -72,6 +91,23 @@ public partial class GameTestWindow
         return true;
     }
 
+    /// <summary>The container a click picked - on the map, in an open container, in a paperdoll slot or the backpack list - or null if it isn't one (bodies don't count).</summary>
+    private (IHasContainerContents Container, ContainerData Data)? ContainerTargeted(InteractionTarget? target)
+    {
+        IHasContainerContents? container = target switch
+        {
+            MapEntityTarget { Entity: PlacedItemInstance { Category: ReferencedItemCategory.Container } placed } when _map.Items.Contains(placed) => placed,
+            ContainerItemTarget { Item: { Category: ReferencedItemCategory.Container } inside } => inside,
+            BackpackRowTarget { Item: { Category: ReferencedItemCategory.Container } row } => row,
+            SlotTarget slot when TryGetEquippedInstanceId(slot.Gump.Character, slot.SlotKey, out int id)
+                && slot.Gump.Character.Inventory.FirstOrDefault(i => i.InstanceId == id) is { Category: ReferencedItemCategory.Container } equipped => equipped,
+            _ => null
+        };
+        int? itemId = container switch { PlacedItemInstance p => p.ItemId, InventoryItemInstance i => i.ItemId, _ => null };
+        if (container is null || itemId is null || _containers.Containers.FirstOrDefault(c => c.Id == itemId) is not { IsBodyContainer: false } data) return null;
+        return (container, data);
+    }
+
     // ---------- Using a key or lockpick ----------
 
     /// <summary>Double-clicking an object: a key or lockpick asks for a target. True = handled.</summary>
@@ -83,13 +119,12 @@ public partial class GameTestWindow
             {
                 // The tool may have gone while the player chose (it can't, the game is paused - but stay safe).
                 if (!ToolStillThere(source)) return;
-                if (target is not MapEntityTarget { Entity: PlacedItemInstance { Category: ReferencedItemCategory.Container } container }
-                    || !_map.Items.Contains(container)
-                    || _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is not { IsBodyContainer: false } data)
+                if (ContainerTargeted(target) is not { } hit)
                 {
                     StatusText.Text = string.Empty; // KeyInternal: "The target cannot be unlocked" - nothing happens
                     return;
                 }
+                var (container, data) = hit;
                 if (tool.UseAs == ObjectUse.Key) UseKeyOn(tool, source, container, data);
                 else UseLockpickOn(tool, source, container, data);
             });
@@ -97,7 +132,7 @@ public partial class GameTestWindow
     }
 
     /// <summary>keyring.uc KeyInternal + UseKeyOnChest.</summary>
-    private void UseKeyOn(WorldObject key, DragOrigin source, PlacedItemInstance container, ContainerData data)
+    private void UseKeyOn(WorldObject key, DragOrigin source, IHasContainerContents container, ContainerData data)
     {
         bool fits = data.RequiredKeyCategory == ReferencedItemCategory.Object && data.RequiredKeyItemId == key.Id;
         if (!fits)
@@ -108,32 +143,30 @@ public partial class GameTestWindow
         }
 
         PlayLockSound(data);
-        var visual = VisualOf(container);
         if (IsLockedNow(container, data))
         {
-            container.IsLockedRuntime = false;
-            ShowFloatingTextOver(visual, "Unlocked");
+            SetLocked(container, false);
+            SayOverContainer(container, "Unlocked");
             StatusText.Text = $"You unlock \"{data.Name}\".";
             return;
         }
 
-        if (source is ContainerOrigin { Item: var keyItem } && IsInside(container.Contents, keyItem))
+        if (ItemWeights.Holds(container.Contents, PayloadObject(source)))
         {
             if (_player is not null) ShowFloatingText(_player, $"The key is inside the {data.Name}!", 3000);
             return;
         }
 
         // Its gumps close, and those of every container inside it.
-        foreach (var gump in _openContainers.Where(g => ReferenceEquals(g.PlacedItem, container)
-                     || (g.PlacedItem is InventoryItemInstance inner && IsInside(container.Contents, inner))).ToList())
+        foreach (var gump in _openContainers.Where(g => ReferenceEquals(g.PlacedItem, container) || ItemWeights.Holds(container.Contents, g.PlacedItem)).ToList())
             CloseContainerGump(gump);
-        container.IsLockedRuntime = true;
-        ShowFloatingTextOver(visual, "Locked");
+        SetLocked(container, true);
+        SayOverContainer(container, "Locked");
         StatusText.Text = $"You lock \"{data.Name}\".";
     }
 
     /// <summary>A lockpick on a locked container: Dexterity vs Pick-Lock Difficulty (approximation, see the class summary); a failure breaks the pick.</summary>
-    private void UseLockpickOn(WorldObject lockpick, DragOrigin source, PlacedItemInstance container, ContainerData data)
+    private void UseLockpickOn(WorldObject lockpick, DragOrigin source, IHasContainerContents container, ContainerData data)
     {
         if (!IsLockedNow(container, data))
         {
@@ -145,9 +178,9 @@ public partial class GameTestWindow
         int chance = Math.Clamp((dexterity - data.PickLockDifficulty) * 5 + 50, 5, 95);
         if (Rng.Next(100) < chance)
         {
-            container.IsLockedRuntime = false;
+            SetLocked(container, false);
             PlayLockSound(data);
-            ShowFloatingTextOver(VisualOf(container), "Unlocked");
+            SayOverContainer(container, "Unlocked");
             StatusText.Text = $"You pick the lock on \"{data.Name}\". ({chance}% chance)";
             return;
         }
@@ -155,6 +188,49 @@ public partial class GameTestWindow
         UseUpOne(source);
         if (_player is not null) ShowFloatingText(_player, "The lockpick broke!", 2000);
         StatusText.Text = $"You fail to pick the lock on \"{data.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
+    }
+
+    // ---------- Locked when opened ----------
+
+    /// <summary>Double-clicking a carried container (slot, backpack list, inside another container): a locked one says "Locked" instead of opening. True = it was locked.</summary>
+    private bool RefuseIfLocked(InventoryItemInstance carried, ContainerData data)
+    {
+        if (!IsLockedNow(carried, data)) return false;
+        SayOverContainer(carried, "Locked");
+        StatusText.Text = $"\"{data.Name}\" is locked.";
+        return true;
+    }
+
+    /// <summary>item_say: words over the container - on the map, or over its picture in whichever open gump shows it.</summary>
+    private void SayOverContainer(IHasContainerContents container, string text)
+    {
+        if (container is PlacedItemInstance placed) { ShowFloatingTextOver(VisualOf(placed), text); return; }
+        if (container is InventoryItemInstance carried && GumpVisualOf(carried) is { Parent: Canvas canvas } visual)
+            ShowGumpLabel(canvas, text, Canvas.GetLeft(visual), Canvas.GetTop(visual));
+    }
+
+    /// <summary>The picture of a carried item in an open gump (a paperdoll slot or a container window), or null if none shows it.</summary>
+    private FrameworkElement? GumpVisualOf(InventoryItemInstance item)
+    {
+        FrameworkElement? found = null;
+        void Walk(DependencyObject node)
+        {
+            if (found is not null) return;
+            if (node is FrameworkElement { Tag: InteractionTarget tag } element && element.Parent is Canvas)
+            {
+                bool match = tag switch
+                {
+                    ContainerItemTarget ci => ReferenceEquals(ci.Item, item),
+                    SlotTarget slot => TryGetEquippedInstanceId(slot.Gump.Character, slot.SlotKey, out int id) && id == item.InstanceId
+                                       && slot.Gump.Character.Inventory.Contains(item),
+                    _ => false
+                };
+                if (match) { found = element; return; }
+            }
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(node); i++) Walk(VisualTreeHelper.GetChild(node, i));
+        }
+        Walk(PaperdollGumpsCanvas);
+        return found;
     }
 
     // ---------- Helpers ----------
@@ -172,10 +248,6 @@ public partial class GameTestWindow
         party.AddRange(_mapCharacters.Select(mc => mc.Character).Where(c => c.IsInParty && c != _player && !IsDead(c)));
         if (party.Count > 0) ShowFloatingText(party[Rng.Next(party.Count)], text, 3000);
     }
-
-    /// <summary>Whether the item is in these contents, at any depth.</summary>
-    private static bool IsInside(List<InventoryItemInstance> contents, InventoryItemInstance item) =>
-        contents.Any(c => ReferenceEquals(c, item) || IsInside(c.Contents, item));
 
     private bool ToolStillThere(DragOrigin source) => source switch
     {

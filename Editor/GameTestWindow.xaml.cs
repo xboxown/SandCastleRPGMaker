@@ -1161,6 +1161,7 @@ public partial class GameTestWindow : Window
 
         var data = _containers.Containers.FirstOrDefault(c => c.Id == equippedItem.ItemId);
         if (data is null) return;
+        if (RefuseIfLocked(equippedItem, data)) return; // carried or not, a locked chest says "Locked"
 
         bool fired = TryFireEventPages(data, data.EventPages, BookTriggerConditionBased.ByUseItem, data.Id, $"You open \"{data.Name}\" - real event fired.");
         if (fired) return;
