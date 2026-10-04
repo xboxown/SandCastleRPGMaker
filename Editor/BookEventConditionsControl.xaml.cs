@@ -126,6 +126,21 @@ public partial class BookEventConditionsControl : UserControl
     /// completely unchanged - only how it reads here. Book/Map/Tile
     /// events never call this, so their own dropdowns are untouched.
     /// </summary>
+    /// <summary>An object type's own names for some triggers (Object Editor > Event): e.g. a tile's By Enter is "By Step On". Character-only triggers are left out, as for books and containers.</summary>
+    public void ApplyTriggerLabels(IReadOnlyDictionary<BookTriggerConditionBased, string> relabels)
+    {
+        var current = Conditions?.TriggerConditionBased;
+        TriggerConditionBasedCombo.ItemsSource = Enum.GetValues<BookTriggerConditionBased>()
+            .Where(v => !CharacterTriggers.IsCharacterTrigger(v))
+            .Select(v => relabels.TryGetValue(v, out string? label) ? EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, label) : new EnumChoice<BookTriggerConditionBased>(v, TriggerInProgressSuffix(v)))
+            .ToList();
+        if (current.HasValue)
+        {
+            foreach (EnumChoice<BookTriggerConditionBased> item in TriggerConditionBasedCombo.Items)
+                if (item.Value.Equals(current.Value)) { TriggerConditionBasedCombo.SelectedItem = item; break; }
+        }
+    }
+
     public void ApplyContainerTriggerLabels()
     {
         var current = Conditions?.TriggerConditionBased;

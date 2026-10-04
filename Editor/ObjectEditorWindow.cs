@@ -1,0 +1,781 @@
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Shapes;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// The Object Editor: every object in the world that isn't a book, a
+/// container or a character - walls, doors, lights, chairs, money, junk... -
+/// each a "master" whose every placement on the map is its own copy.
+/// Like the Book and Container editors: name, weight, volume, price, Too
+/// Heavy, a sprite, Belong To / Faction, and an Event tab. A new object
+/// starts with a Type to choose; once chosen the Type is fixed (shown as a
+/// label) and the type's own settings appear. To change a type, delete the
+/// object and make a new one.
+/// </summary>
+public partial class ObjectEditorWindow : Window
+{
+    private readonly ObjectDatabase _db;
+    private readonly SpriteDatabase _sprites;
+    private readonly ResourceDatabase _resources;
+    private readonly BookDatabase _books;
+    private readonly ContainerDatabase _containers;
+    private readonly VariableDatabase _variables;
+    private readonly StatDatabase _stats;
+
+    private readonly ListBox _list = new() { Margin = new Thickness(6) };
+    private readonly ComboBox _filter = new() { Width = 140, Margin = new Thickness(4, 0, 0, 0) };
+    private readonly StackPanel _props = new() { Margin = new Thickness(8) };
+    private readonly TabControl _tabs = new() { Margin = new Thickness(6) };
+    private readonly TabItem _eventTab = new() { Header = "Event" };
+    private readonly ContentControl _eventHost = new();
+    private WorldObject? _current;
+    private EventEditorControl? _eventEditor;
+    private BookEventConditionsControl? _conditions;
+
+    private static readonly ResourceEntry NoSound = new() { Id = -1, Name = "(None)" };
+    private sealed record SpriteChoice(string Group, string Name, string Display);
+    private static readonly SpriteChoice NoSprite = new("", "", "(none)");
+    private sealed record ListEntry(WorldObject Obj)
+    {
+        public override string ToString() => Obj.TypeChosen ? $"{Obj.Name}   ({ObjectTypes.Name(Obj.Type)})" : $"{Obj.Name}   (choose a type)";
+    }
+
+    public ObjectEditorWindow(ObjectDatabase objects, SpriteDatabase sprites, ResourceDatabase resources, BookDatabase books,
+        ContainerDatabase containers, VariableDatabase variables, StatDatabase stats)
+    {
+        _db = objects;
+        _sprites = sprites;
+        _resources = resources;
+        _books = books;
+        _containers = containers;
+        _variables = variables;
+        _stats = stats;
+        Title = $"Object Editor [{BuildInfo.CurrentBuild}]";
+        Width = 1180;
+        Height = 860;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+        var toolbar = new ToolBar();
+        var newButton = new Button { Content = "New Object", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(2) };
+        newButton.Click += (_, _) => NewObject();
+        var deleteButton = new Button { Content = "Delete Object", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(2) };
+        deleteButton.Click += (_, _) => DeleteObject();
+        var currencyButton = new Button { Content = "Currency Editor...", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(2) };
+        currencyButton.Click += (_, _) => { new CurrencyEditorWindow(ProjectSession.Currencies) { Owner = this }.ShowDialog(); ShowCurrent(); };
+        toolbar.Items.Add(newButton);
+        toolbar.Items.Add(deleteButton);
+        toolbar.Items.Add(new Separator());
+        toolbar.Items.Add(new TextBlock { Text = "Show:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) });
+        toolbar.Items.Add(_filter);
+        toolbar.Items.Add(new Separator());
+        toolbar.Items.Add(currencyButton);
+
+        var filterChoices = new List<string> { "All types" };
+        filterChoices.AddRange(ObjectTypes.All.Select(ObjectTypes.Name));
+        _filter.ItemsSource = filterChoices;
+        _filter.SelectedIndex = 0;
+        _filter.SelectionChanged += (_, _) => RefreshList();
+
+        _list.SelectionChanged += (_, _) => { _current = (_list.SelectedItem as ListEntry)?.Obj; ShowCurrent(); };
+
+        _tabs.Items.Add(new TabItem { Header = "Properties", Content = new ScrollViewer { Content = _props, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } });
+        _eventTab.Content = _eventHost;
+        _tabs.Items.Add(_eventTab);
+        _tabs.SelectionChanged += (_, e) => { if (e.Source == _tabs && _tabs.SelectedItem == _eventTab) AttachEvents(); };
+
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(250) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        var left = new DockPanel();
+        var listTitle = new TextBlock { Text = "Objects", FontWeight = FontWeights.Bold, Margin = new Thickness(6, 6, 6, 0) };
+        DockPanel.SetDock(listTitle, Dock.Top);
+        left.Children.Add(listTitle);
+        left.Children.Add(_list);
+        grid.Children.Add(left);
+        Grid.SetColumn(_tabs, 1);
+        grid.Children.Add(_tabs);
+
+        var root = new DockPanel();
+        DockPanel.SetDock(toolbar, Dock.Top);
+        root.Children.Add(toolbar);
+        root.Children.Add(grid);
+        Content = root;
+
+        Closed += (_, _) => AnimationPreviewButton.StopAll();
+        RefreshList();
+        ShowCurrent();
+    }
+
+    // ================= The list =================
+
+    private void RefreshList(WorldObject? select = null)
+    {
+        select ??= _current;
+        int filter = _filter.SelectedIndex;
+        var entries = _db.Objects
+            .Where(o => filter <= 0 || (o.TypeChosen && o.Type == ObjectTypes.All[filter - 1]))
+            .Select(o => new ListEntry(o)).ToList();
+        _list.ItemsSource = entries;
+        _list.SelectedItem = entries.FirstOrDefault(e => e.Obj == select);
+    }
+
+    private void NewObject()
+    {
+        var obj = _db.CreateNew();
+        obj.TypeChosen = false; // a type to choose first
+        _filter.SelectedIndex = 0;
+        _current = obj;
+        RefreshList(obj);
+        ShowCurrent();
+    }
+
+    private void DeleteObject()
+    {
+        if (_current is not { } obj) return;
+        if (MessageBox.Show($"Delete \"{obj.Name}\"? Any placed on the map stay there but show as missing.", "Object Editor", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+        _db.Objects.Remove(obj);
+        _current = null;
+        RefreshList();
+        ShowCurrent();
+    }
+
+    // ================= Properties =================
+
+    private void ShowCurrent()
+    {
+        AnimationPreviewButton.StopAll();
+        _props.Children.Clear();
+        _eventEditor = null;
+        _conditions = null;
+        _eventHost.Content = null;
+        if (_current is not { } obj)
+        {
+            _props.Children.Add(new TextBlock { Text = "Select an object, or click New Object.", Opacity = 0.7 });
+            _eventTab.IsEnabled = false;
+            return;
+        }
+
+        if (!obj.TypeChosen)
+        {
+            BuildTypeChooser(obj);
+            _eventTab.IsEnabled = false;
+            return;
+        }
+        _eventTab.IsEnabled = true;
+        if (_tabs.SelectedItem == _eventTab) AttachEvents();
+
+        _props.Children.Add(new TextBlock { Text = $"Object Type: {ObjectTypes.Name(obj.Type)}", FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(0, 0, 0, 2) });
+        _props.Children.Add(Note(TypeDescription(obj.Type)));
+
+        BuildIdentity(obj);
+        BuildLook(obj);
+        switch (obj.Type)
+        {
+            case ObjectType.Door: BuildDoor(obj); break;
+            case ObjectType.LightSource: BuildLight(obj); break;
+            case ObjectType.Ammo: BuildBundles(obj, SpriteDatabase.AmmoGroupName); BuildAmmo(obj); break;
+            case ObjectType.Money: BuildBundles(obj, SpriteDatabase.MoneyGroupName); BuildMoney(obj); break;
+            case ObjectType.Chair: BuildFurniture(obj, bed: false); break;
+            case ObjectType.Bed: BuildFurniture(obj, bed: true); break;
+            case ObjectType.Trap: BuildTrap(obj); break;
+        }
+        if (obj.Type is ObjectType.Door or ObjectType.Junk or ObjectType.Chair or ObjectType.Bed or ObjectType.LightSource or ObjectType.Trap)
+            BuildDurability(obj);
+        BuildOwnership(obj);
+        BuildBody(obj);
+    }
+
+    private void BuildTypeChooser(WorldObject obj)
+    {
+        _props.Children.Add(new TextBlock { Text = "Choose this object's type", FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(0, 0, 0, 6) });
+        _props.Children.Add(Note("The type decides what the object is and what double-clicking it does, and which settings it has. Once chosen it can't be changed - to change it, delete the object and make a new one."));
+        var combo = new ComboBox { Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 6) };
+        combo.ItemsSource = ObjectTypes.All.Select(ObjectTypes.Name).ToList();
+        combo.SelectedIndex = 0;
+        var description = Note(TypeDescription(ObjectTypes.All[0]));
+        combo.SelectionChanged += (_, _) => description.Text = TypeDescription(ObjectTypes.All[Math.Max(0, combo.SelectedIndex)]);
+        var choose = new Button { Content = "Choose this type", Padding = new Thickness(10, 3, 10, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 0) };
+        choose.Click += (_, _) =>
+        {
+            obj.Type = ObjectTypes.All[Math.Max(0, combo.SelectedIndex)];
+            obj.TypeChosen = true;
+            if (obj.Name.StartsWith("Object ")) obj.Name = $"New {ObjectTypes.Name(obj.Type)}";
+            ObjectTypes.ApplyDefaults(obj);
+            RefreshList(obj);
+            ShowCurrent();
+        };
+        _props.Children.Add(combo);
+        _props.Children.Add(description);
+        _props.Children.Add(choose);
+    }
+
+    private static string TypeDescription(ObjectType type) => type switch
+    {
+        ObjectType.Junk => "Can be picked up, carried and identified. Double-clicking it does nothing unless its Event tab says so - which is how one-off items (a quest artifact, a talking skull) are made.",
+        ObjectType.Tile => "Flat and on the floor, with no collision at all. Its events fire when someone steps on it, stands on it or steps off, uses it, or drops something on it - for floor puzzles, board games, pressure plates.",
+        ObjectType.Wall => "Always solid and never moved. Drawn in front of or behind whoever walks by it exactly as Exult decides (Game_object::compare), so nobody ever looks as if they were underneath it.",
+        ObjectType.Door => "Double-click to open and close. Can be locked: its key (or a lockpick) opens it. NPCs open unlocked doors in their way and close them behind them (Exult). Breakable only without a key - as Exult's doors.",
+        ObjectType.LightSource => "Double-click to light it and put it out. Lights up the night as Exult does (brightness falls off with distance). Can burn out - it's then \"Spent ...\" and can't be lit again.",
+        ObjectType.Ammo => "Arrows, bolts...: stacks of up to 100, drawn with eight bundle pictures by how many there are (Exult's quantity frames). Goes in its own paperdoll slot.",
+        ObjectType.Money => "Coins, gems...: stacks of up to 100, drawn with eight bundle pictures by how many there are. Worth its currency's value (Currency Editor). Weight is per coin.",
+        ObjectType.Chair => "Somewhere to sit, with a look for each facing and as many seats as you like (a sofa can seat three). Double-click to sit; NPCs on the Sit schedule find a free chair (Exult's Sit_schedule).",
+        ObjectType.Bed => "Somewhere to sleep, with a look for each facing, sleeping places, and a cover (a Junk object) turned down over the sleeper. NPCs on the Sleep schedule find a free bed (Exult's Sleep_schedule).",
+        ObjectType.Trap => "Hurts whoever steps on it, and can poison, sleep or paralyze. Can be hidden until it goes off, and can go off once or again and again.",
+        ObjectType.Key => "Double-click it, then click a container or door it's the key of, to lock or unlock it (Exult's key).",
+        ObjectType.Lockpick => "Double-click it, then click a locked container or door to try to pick the lock - it breaks when it fails.",
+        _ => ""
+    };
+
+    private void BuildIdentity(WorldObject obj)
+    {
+        var body = Group("Identity");
+        var row = new WrapPanel();
+        row.Children.Add(TextField("Name", 220, () => obj.Name, v => { obj.Name = v.Length > 0 ? v : obj.Name; RefreshListLabels(); }));
+        row.Children.Add(NumberField(obj.Type == ObjectType.Money ? "Weight (per coin)" : obj.Type == ObjectType.Ammo ? "Weight (each)" : "Weight", () => obj.Weight, v => obj.Weight = Math.Max(0, v)));
+        row.Children.Add(NumberField(ObjectTypes.IsBundle(obj.Type) ? "Volume (each)" : "Volume", () => obj.Volume, v => obj.Volume = Math.Max(0, v)));
+        row.Children.Add(NumberField("Price", () => obj.Price, v => obj.Price = (int)Math.Max(0, v)));
+        body.Children.Add(row);
+        body.Children.Add(TextField("Description", 520, () => obj.Description, v => obj.Description = v));
+        if (obj.Type != ObjectType.Wall)
+            body.Children.Add(Check("Too heavy (can't be picked up or moved)", () => !obj.IsPortable, v => obj.IsPortable = !v,
+                "Ticked: it stays where it is - a wall torch, a street lamp, a heavy bed. Unticked: it can be picked up and carried."));
+        if (obj.Type == ObjectType.Junk)
+        {
+            body.Children.Add(Check("Stackable", () => obj.IsStackable, v => obj.IsStackable = v));
+            body.Children.Add(Check("Its frames are states, not an animation (a bed cover: frame 1 made, frame 2 turned down)", () => obj.FramesAreStates, v => obj.FramesAreStates = v));
+        }
+    }
+
+    private void RefreshListLabels()
+    {
+        var selected = _current;
+        RefreshList(selected);
+    }
+
+    private void BuildLook(WorldObject obj)
+    {
+        if (obj.Type is ObjectType.Chair or ObjectType.Bed) return; // their looks are per facing, below
+        string label = obj.Type switch
+        {
+            ObjectType.Door => "Closed sprite",
+            ObjectType.LightSource => "Unlit sprite",
+            ObjectType.Ammo or ObjectType.Money => "Icon (shown in lists; the bundle pictures below are used in play)",
+            _ => "Sprite"
+        };
+        var body = Group("Look");
+        body.Children.Add(SpritePicker(label, () => (obj.SpriteGroup, obj.SpriteName), (g, n) => { obj.SpriteGroup = g; obj.SpriteName = n; }));
+    }
+
+    private void BuildDoor(WorldObject obj)
+    {
+        var d = obj.Door;
+        var body = Group("Door");
+        body.Children.Add(SpritePicker("Open sprite", () => (d.OpenSprite.SpriteGroup, d.OpenSprite.SpriteName), (g, n) => { d.OpenSprite.SpriteGroup = g; d.OpenSprite.SpriteName = n; }));
+        body.Children.Add(SpritePicker("Locked sprite (optional - how it looks closed and locked)", () => (d.LockedSprite.SpriteGroup, d.LockedSprite.SpriteName), (g, n) => { d.LockedSprite.SpriteGroup = g; d.LockedSprite.SpriteName = n; }));
+        var states = new WrapPanel();
+        states.Children.Add(Check("Starts open", () => d.StartsOpen, v => d.StartsOpen = v));
+        states.Children.Add(Check("Starts locked", () => d.StartsLocked, v => d.StartsLocked = v));
+        states.Children.Add(Check("Magically locked (no key or lockpick opens it; can't be broken)", () => d.MagicallyLocked, v => d.MagicallyLocked = v));
+        body.Children.Add(states);
+        var keyRow = new WrapPanel();
+        var keys = new List<object> { "(No key - a lockpick or force opens it)" };
+        keys.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Key));
+        var keyCombo = new ComboBox { Width = 260, ItemsSource = keys, DisplayMemberPath = "Name" };
+        keyCombo.SelectedItem = keys.OfType<WorldObject>().FirstOrDefault(k => k.Id == d.RequiredKeyItemId) ?? keys[0];
+        keyCombo.SelectionChanged += (_, _) => d.RequiredKeyItemId = keyCombo.SelectedItem is WorldObject key ? key.Id : -1;
+        keyRow.Children.Add(Labeled("Required key (Key objects)", keyCombo));
+        keyRow.Children.Add(NumberField("Pick-lock difficulty", () => d.PickLockDifficulty, v => d.PickLockDifficulty = (int)v));
+        body.Children.Add(keyRow);
+        body.Children.Add(Note("As in Exult: a door that has a key can't be broken - only one without a key (and not magically locked) loses Hit Points when struck. NPCs open closed, unlocked doors in their way and close them behind them; a locked door stops them."));
+        var sounds = new WrapPanel();
+        sounds.Children.Add(SoundPicker("Open sound", () => d.OpenSoundResourceId, v => d.OpenSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Close sound", () => d.CloseSoundResourceId, v => d.CloseSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Unlock sound", () => d.UnlockSoundResourceId, v => d.UnlockSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Lock sound", () => d.LockSoundResourceId, v => d.LockSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Wrong key sound", () => d.WrongKeySoundResourceId, v => d.WrongKeySoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Lockpick broke sound", () => d.LockpickBrokeSoundResourceId, v => d.LockpickBrokeSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Locked rattle", () => d.LockedRattleSoundResourceId, v => d.LockedRattleSoundResourceId = v));
+        body.Children.Add(sounds);
+    }
+
+    private void BuildLight(WorldObject obj)
+    {
+        var l = obj.Light;
+        var body = Group("Light Source");
+        body.Children.Add(SpritePicker("Lit sprite (usually an animation)", () => (l.LitSprite.SpriteGroup, l.LitSprite.SpriteName), (g, n) => { l.LitSprite.SpriteGroup = g; l.LitSprite.SpriteName = n; }));
+        body.Children.Add(SpritePicker("Spent sprite (burnt out; optional)", () => (l.SpentSprite.SpriteGroup, l.SpentSprite.SpriteName), (g, n) => { l.SpentSprite.SpriteGroup = g; l.SpentSprite.SpriteName = n; }));
+        var row = new WrapPanel();
+        row.Children.Add(Check("Starts lit", () => l.StartsLit, v => l.StartsLit = v));
+        row.Children.Add(NumberField("Brightness", () => l.Brightness, v => l.Brightness = (int)Math.Max(0, v), "Exult light_data: a candle is 1, a sconce 5, a lamp 7."));
+        row.Children.Add(NumberField("Burns (game minutes, 0 = forever)", () => l.BurnMinutes, v => l.BurnMinutes = (int)Math.Max(0, v)));
+        body.Children.Add(row);
+        var sounds = new WrapPanel();
+        sounds.Children.Add(SoundPicker("Lit sound", () => l.LitSoundResourceId, v => l.LitSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Put out sound", () => l.OffSoundResourceId, v => l.OffSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Spent sound", () => l.SpentSoundResourceId, v => l.SpentSoundResourceId = v));
+        body.Children.Add(sounds);
+        body.Children.Add(Note($"Double-click to light it or put it out. Once it has burnt for its minutes it's spent: it shows the spent sprite, is called \"{obj.DisplayName(spent: true)}\", and can't be lit again. " +
+                               "At night, lit lights on screen and those the party carries brighten the darkness as Exult's do: each adds Brightness x (75 - 2 x tiles across - 3 x tiles down) from the main character."));
+    }
+
+    private void BuildBundles(WorldObject obj, string group)
+    {
+        var body = Group("Bundle pictures (Exult's quantity frames)");
+        var guide = new Button { Content = $"How bundles work...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 6) };
+        guide.Click += (_, _) => new BundleGuideWindow(group) { Owner = this }.ShowDialog();
+        body.Children.Add(guide);
+        body.Children.Add(Note($"One picture per stack size, from the Sprite Editor's {group} group. An empty one uses the nearest smaller one that's set. A stack holds up to {ObjectTypes.MaxQuantity}."));
+        while (obj.Bundle.Levels.Count < 8) obj.Bundle.Levels.Add(new SpriteLink());
+        var wrap = new WrapPanel();
+        for (int i = 0; i < 8; i++)
+        {
+            var link = obj.Bundle.Levels[i];
+            wrap.Children.Add(SpritePicker($"{ObjectTypes.BundleLevelNames[i]}", () => (link.SpriteGroup, link.SpriteName), (g, n) => { link.SpriteGroup = g; link.SpriteName = n; }, onlyGroup: group, compact: true));
+        }
+        body.Children.Add(wrap);
+    }
+
+    private void BuildAmmo(WorldObject obj)
+    {
+        var a = obj.Ammo;
+        var body = Group("Ammo");
+        var slots = new List<(string Label, EquipmentSlot? Slot, string? Custom)> { ("(Backpack / Pouch, then hands)", null, null) };
+        slots.AddRange(Enum.GetValues<EquipmentSlot>().Select(s => (s.ToString(), (EquipmentSlot?)s, (string?)null)));
+        slots.AddRange(ProjectSession.Characters.Characters.SelectMany(c => c.Paperdoll.CustomSlots).Select(s => s.Name).Distinct()
+            .Select(n => ($"{n} (custom)", (EquipmentSlot?)null, (string?)n)));
+        var slotCombo = new ComboBox { Width = 220, ItemsSource = slots.Select(s => s.Label).ToList() };
+        slotCombo.SelectedIndex = Math.Max(0, slots.FindIndex(s => s.Slot == a.PreferredEquipSlot && s.Custom == a.PreferredCustomSlotName));
+        slotCombo.SelectionChanged += (_, _) => { var s = slots[Math.Max(0, slotCombo.SelectedIndex)]; a.PreferredEquipSlot = s.Slot; a.PreferredCustomSlotName = s.Custom; };
+        var row = new WrapPanel();
+        row.Children.Add(Labeled("Goes in paperdoll slot", slotCombo));
+        row.Children.Add(TextField("Family (weapons that fire it)", 160, () => a.Family, v => a.Family = v));
+        row.Children.Add(NumberField("Damage bonus", () => a.DamageBonus, v => a.DamageBonus = (int)v));
+        body.Children.Add(row);
+        var flags = new WrapPanel();
+        flags.Children.Add(Check("Poisons", () => a.Poisons, v => a.Poisons = v));
+        flags.Children.Add(Check("Explodes", () => a.Explodes, v => a.Explodes = v));
+        flags.Children.Add(SoundPicker("Hit sound", () => a.HitSoundResourceId, v => a.HitSoundResourceId = v));
+        body.Children.Add(flags);
+        body.Children.Add(Note("Ranged weapons aren't built yet, so ammo is carried, stacked and equipped for now; firing it comes with the weapons."));
+    }
+
+    private void BuildMoney(WorldObject obj)
+    {
+        var body = Group("Money");
+        var currencies = ProjectSession.Currencies.Currencies;
+        var choices = new List<object> { "(no currency yet)" };
+        choices.AddRange(currencies);
+        var combo = new ComboBox { Width = 200, ItemsSource = choices, DisplayMemberPath = "Name" };
+        combo.SelectedItem = currencies.FirstOrDefault(c => c.Id == obj.Money.CurrencyId) ?? choices[0];
+        combo.SelectionChanged += (_, _) => obj.Money.CurrencyId = combo.SelectedItem is Currency c ? c.Id : -1;
+        body.Children.Add(Labeled("Currency", combo));
+        body.Children.Add(Note("Each coin is worth its currency's value (Currency Editor, on the toolbar above). A stack of up to 100 weighs this object's Weight times how many."));
+    }
+
+    private void BuildTrap(WorldObject obj)
+    {
+        var t = obj.Trap;
+        var body = Group("Trap");
+        var row = new WrapPanel();
+        row.Children.Add(NumberField("Damage from", () => t.DamageMin, v => t.DamageMin = (int)Math.Max(0, v)));
+        row.Children.Add(NumberField("to", () => t.DamageMax, v => t.DamageMax = (int)Math.Max(0, v)));
+        var ailment = new ComboBox { Width = 120, ItemsSource = Enum.GetValues<TrapAilment>(), SelectedItem = t.Ailment };
+        ailment.SelectionChanged += (_, _) => t.Ailment = (TrapAilment)ailment.SelectedItem;
+        row.Children.Add(Labeled("Also makes them", ailment));
+        body.Children.Add(row);
+        var flags = new WrapPanel();
+        flags.Children.Add(Check("Hidden until it goes off", () => t.Hidden, v => t.Hidden = v));
+        flags.Children.Add(Check("Goes off only once", () => t.OneShot, v => t.OneShot = v));
+        flags.Children.Add(NumberField("Re-arms after (seconds)", () => t.RearmSeconds, v => t.RearmSeconds = Math.Max(0, v)));
+        flags.Children.Add(SoundPicker("Trigger sound", () => t.TriggerSoundResourceId, v => t.TriggerSoundResourceId = v));
+        body.Children.Add(flags);
+        body.Children.Add(Note("It goes off when a character steps onto it (its Event tab's By Step On fires too). A trap's trigger animation comes later."));
+    }
+
+    private void BuildDurability(WorldObject obj)
+    {
+        var body = Group("Durability (combat)");
+        var row = new WrapPanel();
+        row.Children.Add(Check("Cannot be destroyed", () => obj.CannotBeDestroyed, v => obj.CannotBeDestroyed = v, "A steel door, an iron grate: blows never hurt it."));
+        row.Children.Add(NumberField("Hit points (0 = indestructible)", () => obj.HitPoints, v => obj.HitPoints = (int)Math.Max(0, v)));
+        row.Children.Add(NumberField("Defense", () => obj.Defense, v => obj.Defense = (int)Math.Max(0, v), "Each blow is reduced by 1 to this much (not in Exult)."));
+        row.Children.Add(SoundPicker("Destroyed sound", () => obj.DestroyedSoundResourceId, v => obj.DestroyedSoundResourceId = v));
+        body.Children.Add(row);
+    }
+
+    private void BuildOwnership(WorldObject obj)
+    {
+        var body = Group("Ownership");
+        var row = new WrapPanel();
+        var factions = new List<Faction> { new() { Id = -1, Name = "(None)" } };
+        factions.AddRange(ProjectSession.Factions.Factions);
+        var factionCombo = new ComboBox { Width = 160, ItemsSource = factions, DisplayMemberPath = "Name", SelectedItem = factions.FirstOrDefault(f => f.Id == obj.FactionId) ?? factions[0] };
+        factionCombo.SelectionChanged += (_, _) => obj.FactionId = (factionCombo.SelectedItem as Faction)?.Id ?? -1;
+        var owners = new List<CharacterDefinition> { new() { Id = -1, Name = "(None)" } };
+        owners.AddRange(ProjectSession.Characters.Characters);
+        var ownerCombo = new ComboBox { Width = 160, ItemsSource = owners, DisplayMemberPath = "Name", SelectedItem = owners.FirstOrDefault(c => c.Id == obj.BelongToId) ?? owners[0] };
+        ownerCombo.SelectionChanged += (_, _) => obj.BelongToId = (ownerCombo.SelectedItem as CharacterDefinition)?.Id ?? -1;
+        row.Children.Add(Labeled("Faction", factionCombo));
+        row.Children.Add(Labeled("Belong To", ownerCombo));
+        body.Children.Add(row);
+        body.Children.Add(Note("Whose it is: taking it, breaking it or (a door) breaking it down while its owner or someone of their faction is watching is a crime - they warn you, then come after you."));
+    }
+
+    private void BuildBody(WorldObject obj)
+    {
+        var body = Group("Size and collision");
+        var flags = new WrapPanel();
+        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Trap or ObjectType.Door))
+            flags.Children.Add(Check("Solid (blocks walking)", () => obj.IsSolid, v => obj.IsSolid = v));
+        flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
+        if (obj.Type is ObjectType.Junk or ObjectType.Ammo or ObjectType.LightSource)
+            flags.Children.Add(Check("Two-handed", () => obj.IsTwoHanded, v => obj.IsTwoHanded = v));
+        body.Children.Add(flags);
+        if (obj.Type == ObjectType.Tile) body.Children.Add(Note("A tile is flat (0 lifts high) and never blocks anyone."));
+        if (obj.Type == ObjectType.Wall) body.Children.Add(Note("A wall is always solid. Its footprint is what Exult compares to decide who is drawn in front: make a long wall's footprint as long as the wall."));
+        if (obj.Type == ObjectType.Door) body.Children.Add(Note("A door is solid while closed and walked through while open."));
+        var size = new SolidSizeEditor { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
+        size.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, obj.SpriteGroup, MainSpriteName(obj)), obj.SizeX, obj.SizeY, obj.SizeZ, obj.SolidOffsetX, obj.SolidOffsetY,
+            obj.IsSolid || obj.Type is ObjectType.Wall or ObjectType.Door);
+        size.SizeEdited += (_, _) =>
+        {
+            obj.SizeX = size.SizeX;
+            obj.SizeY = size.SizeY;
+            obj.SizeZ = obj.Type is ObjectType.Tile or ObjectType.Trap ? 0 : size.SizeZ;
+            obj.SolidOffsetX = size.OffsetX;
+            obj.SolidOffsetY = size.OffsetY;
+        };
+        body.Children.Add(size);
+    }
+
+    /// <summary>The sprite the size editor measures: the object's own, or (chairs, beds) its south-facing one.</summary>
+    private static string MainSpriteName(WorldObject obj) =>
+        obj.Type is ObjectType.Chair or ObjectType.Bed ? obj.Furniture.Resolve(SpriteDirection.South)?.Sprite.SpriteName ?? "" : obj.SpriteName;
+
+    // ================= Chairs and beds =================
+
+    private SpriteDirection _furnitureFacing = SpriteDirection.South;
+
+    private void BuildFurniture(WorldObject obj, bool bed)
+    {
+        var f = obj.Furniture;
+        var body = Group(bed ? "Bed: looks and sleeping places" : "Chair: looks and seats");
+        body.Children.Add(Note(bed
+            ? "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a sleeping place (where the sleeper lies), drag one to move it, right-click to remove it. A double bed has two. In the Map Editor you choose which way each placed bed faces."
+            : "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a seat (where the sitter's feet go), drag a seat to move it, right-click to remove it. A sofa can have three. The sitter faces the chair's direction (Exult). In the Map Editor you choose which way each placed chair faces."));
+
+        var dial = new UniformGrid { Columns = 8, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 6) };
+        var detail = new StackPanel();
+        void ShowFacing()
+        {
+            detail.Children.Clear();
+            if (!f.Facings.TryGetValue(_furnitureFacing, out var facing)) f.Facings[_furnitureFacing] = facing = new FurnitureFacing();
+            detail.Children.Add(SpritePicker($"{_furnitureFacing} sprite", () => (facing.Sprite.SpriteGroup, facing.Sprite.SpriteName),
+                (g, n) => { facing.Sprite.SpriteGroup = g; facing.Sprite.SpriteName = n; ShowFacing(); }));
+            detail.Children.Add(BuildSpotEditor(facing, bed));
+        }
+        foreach (var direction in Enum.GetValues<SpriteDirection>())
+        {
+            var d = direction;
+            bool hasSprite = f.Facings.TryGetValue(d, out var fd) && fd.Sprite.IsSet;
+            var button = new ToggleButton
+            {
+                Content = Abbreviation(d), Width = 40, Margin = new Thickness(1), IsChecked = d == _furnitureFacing,
+                FontWeight = hasSprite ? FontWeights.Bold : FontWeights.Normal, ToolTip = hasSprite ? $"{d} (has a sprite)" : $"{d} (no sprite yet)"
+            };
+            button.Click += (_, _) =>
+            {
+                _furnitureFacing = d;
+                foreach (ToggleButton other in dial.Children) other.IsChecked = other == button;
+                ShowFacing();
+            };
+            dial.Children.Add(button);
+        }
+        body.Children.Add(dial);
+        body.Children.Add(detail);
+        ShowFacing();
+
+        if (bed)
+        {
+            var covers = new List<object> { "(No cover)" };
+            covers.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Junk && o.FramesAreStates));
+            var coverCombo = new ComboBox { Width = 240, ItemsSource = covers, DisplayMemberPath = "Name" };
+            coverCombo.SelectedItem = covers.OfType<WorldObject>().FirstOrDefault(o => o.Id == f.CoverObjectId) ?? covers[0];
+            coverCombo.SelectionChanged += (_, _) => f.CoverObjectId = coverCombo.SelectedItem is WorldObject c ? c.Id : -1;
+            body.Children.Add(Labeled("Cover (a Junk object whose frames are states: frame 1 made, frame 2 turned down)", coverCombo));
+            body.Children.Add(Note("In play the cover lies on the bed as its own object: a sleeper gets frame 2 drawn over them, and getting up makes the bed again (frame 1) - as Exult's Sleep_schedule turns the bedspread down and makes the bed. The cover can be taken off the bed like any object; with none, the bed has no cover."));
+        }
+        body.Children.Add(SoundPicker(bed ? "Lie down sound" : "Sit sound", () => f.SitSoundResourceId, v => f.SitSoundResourceId = v));
+    }
+
+    private static string Abbreviation(SpriteDirection d) => d switch
+    {
+        SpriteDirection.North => "N", SpriteDirection.NorthEast => "NE", SpriteDirection.East => "E", SpriteDirection.SouthEast => "SE",
+        SpriteDirection.South => "S", SpriteDirection.SouthWest => "SW", SpriteDirection.West => "W", _ => "NW"
+    };
+
+    /// <summary>The facing's sprite, three times its size, with its seats or sleeping places as numbered dots: click to add, drag to move, right-click to remove.</summary>
+    private FrameworkElement BuildSpotEditor(FurnitureFacing facing, bool bed)
+    {
+        const double zoom = 3;
+        var canvas = new Canvas { Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)), ClipToBounds = true };
+        var frame = SolidSizeEditor.LoadSpriteFrame(_sprites, facing.Sprite.SpriteGroup, facing.Sprite.SpriteName);
+        double w = frame?.PixelWidth ?? 32, h = frame?.PixelHeight ?? 32;
+        canvas.Width = w * zoom;
+        canvas.Height = h * zoom;
+        if (frame is not null)
+        {
+            var picture = new Image { Source = frame, Width = w * zoom, Height = h * zoom, IsHitTestVisible = false };
+            RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+            canvas.Children.Add(picture);
+        }
+        int dragging = -1;
+        void Redraw()
+        {
+            foreach (var old in canvas.Children.OfType<FrameworkElement>().Where(c => c.Tag is int).ToList()) canvas.Children.Remove(old);
+            for (int i = 0; i < facing.Spots.Count; i++)
+            {
+                var spot = facing.Spots[i];
+                var dot = new Grid { Width = 18, Height = 18, Tag = i, Cursor = Cursors.SizeAll, ToolTip = $"{(bed ? "Sleeping place" : "Seat")} {i + 1} - drag to move, right-click to remove" };
+                dot.Children.Add(new Ellipse { Fill = bed ? Brushes.MediumPurple : Brushes.Orange, Stroke = Brushes.Black, StrokeThickness = 1 });
+                dot.Children.Add(new TextBlock { Text = (i + 1).ToString(), FontSize = 10, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
+                Canvas.SetLeft(dot, spot.X * zoom - 9);
+                Canvas.SetTop(dot, spot.Y * zoom - 9);
+                int index = i;
+                dot.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
+                dot.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
+                canvas.Children.Add(dot);
+            }
+        }
+        canvas.MouseLeftButtonDown += (_, e) =>
+        {
+            if (frame is null) return;
+            var p = e.GetPosition(canvas);
+            facing.Spots.Add(new SeatSpot { X = Math.Round(p.X / zoom), Y = Math.Round(p.Y / zoom) });
+            Redraw();
+        };
+        canvas.MouseMove += (_, e) =>
+        {
+            if (dragging < 0 || dragging >= facing.Spots.Count) return;
+            var p = e.GetPosition(canvas);
+            facing.Spots[dragging].X = Math.Clamp(Math.Round(p.X / zoom), 0, w);
+            facing.Spots[dragging].Y = Math.Clamp(Math.Round(p.Y / zoom), 0, h);
+            Redraw();
+        };
+        canvas.MouseLeftButtonUp += (_, _) => { dragging = -1; canvas.ReleaseMouseCapture(); };
+        Redraw();
+        var border = new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = canvas, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 6) };
+        var panel = new StackPanel();
+        panel.Children.Add(border);
+        panel.Children.Add(Note(frame is null ? "Give this facing a sprite first." : $"{facing.Spots.Count} {(bed ? "sleeping place" : "seat")}{(facing.Spots.Count == 1 ? "" : "s")}. Click the picture to add one."));
+        return panel;
+    }
+
+    // ================= Event tab =================
+
+    private void AttachEvents()
+    {
+        if (_current is not { TypeChosen: true } obj || _eventEditor is not null) return;
+        if (obj.EventPages.Count == 0) obj.EventPages.Add(new BookEventPage()); // never headless, as books and containers
+
+        var pages = new System.Collections.ObjectModel.ObservableCollection<EventCommandPage>(
+            obj.EventPages.Select((p, i) => new EventCommandPage { Label = (i + 1).ToString(), Commands = p.Commands }));
+        _conditions = new BookEventConditionsControl();
+        _eventEditor = new EventEditorControl
+        {
+            ResourceDatabase = _resources,
+            Variables = _variables,
+            CurrentBookLocalVariables = obj.LocalVariables,
+            Books = _books,
+            Objects = _db,
+            Containers = _containers,
+            Sprites = _sprites,
+            CurrentBook = null
+        };
+        _eventEditor.PageSelected += index => { if (_conditions is not null) _conditions.Conditions = index >= 0 && index < obj.EventPages.Count ? obj.EventPages[index].Conditions : null; };
+        _eventEditor.PageInserted += index => { if (index >= 0 && index <= obj.EventPages.Count) obj.EventPages.Insert(index, new BookEventPage()); };
+        _eventEditor.PageRemoved += index => { if (index >= 0 && index < obj.EventPages.Count) obj.EventPages.RemoveAt(index); };
+        _eventEditor.ContentChanged += () =>
+        {
+            if (_eventEditor is null) return;
+            for (int i = 0; i < _eventEditor.Pages.Count && i < obj.EventPages.Count; i++) obj.EventPages[i].Commands = _eventEditor.Pages[i].Commands;
+        };
+        _eventEditor.Pages = pages;
+
+        _conditions.CurrentBookId = obj.Id;
+        _conditions.CurrentBookLocalVariables = obj.LocalVariables;
+        _conditions.SetDatabases(_books, _db, _containers, _sprites, _variables, _stats);
+        _conditions.ApplyTriggerLabels(TriggerLabels(obj.Type));
+        _conditions.Conditions = obj.EventPages[0].Conditions;
+
+        var debug = new Button { Content = "Debug", Padding = new Thickness(10, 4, 10, 4) };
+        debug.Click += (_, _) =>
+        {
+            if (_conditions?.Conditions is not { } conditions) { MessageBox.Show("Select an event page first.", "Debug Event", MessageBoxButton.OK, MessageBoxImage.Information); return; }
+            var commands = _eventEditor?.CurrentEditingPage?.Commands ?? new List<EventCommand>();
+            new BookEventDebugWindow(conditions, commands, _resources, _stats, obj.Id) { Owner = this }.Show();
+        };
+        var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        top.Children.Add(debug);
+        top.Children.Add(new TextBlock { Text = TriggerHelp(obj.Type), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), Opacity = 0.7, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 760 });
+        var grid = new Grid();
+        grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
+        grid.ColumnDefinitions.Add(new ColumnDefinition());
+        var left = new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(0, 0, 1, 0), Child = _conditions };
+        grid.Children.Add(left);
+        Grid.SetColumn(_eventEditor, 1);
+        grid.Children.Add(_eventEditor);
+        var dock = new DockPanel();
+        DockPanel.SetDock(top, Dock.Top);
+        dock.Children.Add(top);
+        dock.Children.Add(grid);
+        _eventHost.Content = dock;
+    }
+
+    /// <summary>Each type's own names for the triggers its object fires in play.</summary>
+    private static IReadOnlyDictionary<BookTriggerConditionBased, string> TriggerLabels(ObjectType type) => type switch
+    {
+        ObjectType.Tile => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByEnter] = "By Step On", [BookTriggerConditionBased.ByStay] = "By Stand On",
+            [BookTriggerConditionBased.ByExit] = "By Step Off", [BookTriggerConditionBased.ByDropItem] = "By Item Dropped On It",
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)"
+        },
+        ObjectType.Trap => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByEnter] = "By Trap Triggered", [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)"
+        },
+        ObjectType.Door => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Open / Close", [BookTriggerConditionBased.ByAfterReadItem] = "By After Open Door",
+            [BookTriggerConditionBased.ByEnter] = "By After Close Door", [BookTriggerConditionBased.ByStay] = "By After Unlock Door",
+            [BookTriggerConditionBased.ByExit] = "By Failed Picklock Door", [BookTriggerConditionBased.ByDestroyItem] = "By Door Broken"
+        },
+        ObjectType.LightSource => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Light / Put Out", [BookTriggerConditionBased.ByAfterReadItem] = "By After Lit",
+            [BookTriggerConditionBased.ByEnter] = "By After Put Out", [BookTriggerConditionBased.ByStay] = "By Burnt Out"
+        },
+        ObjectType.Chair => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByEnter] = "By Sit Down", [BookTriggerConditionBased.ByExit] = "By Get Up"
+        },
+        ObjectType.Bed => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByEnter] = "By Lie Down", [BookTriggerConditionBased.ByExit] = "By Get Up"
+        },
+        _ => new Dictionary<BookTriggerConditionBased, string> { [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)" }
+    };
+
+    private static string TriggerHelp(ObjectType type) => type switch
+    {
+        ObjectType.Tile => "By Step On / Stand On / Step Off fire for whoever walks on this tile (player or NPC); By Item Dropped On It fires when something is put down on it.",
+        ObjectType.Door => "By Open / Close fires before the door moves - a page with commands takes over (a talking door, a riddle). The After... triggers fire once it has happened.",
+        ObjectType.LightSource => "By Light / Put Out fires on the double-click; a page with commands takes over (batteries, a puzzle lamp).",
+        ObjectType.Junk => "By Use fires on the double-click - this is how one-off items get their behaviour.",
+        _ => "Evaluates this page's conditions against a simulated scenario, then lets you step through its commands."
+    };
+
+    // ================= Building blocks =================
+
+    private StackPanel Group(string header)
+    {
+        var body = new StackPanel();
+        _props.Children.Add(new GroupBox { Header = header, Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 2), Content = body });
+        return body;
+    }
+
+    private static TextBlock Note(string text) =>
+        new() { Text = text, TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 2, 0, 4), MaxWidth = 820, HorizontalAlignment = HorizontalAlignment.Left };
+
+    private static FrameworkElement Labeled(string label, FrameworkElement control)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 16, 6) };
+        panel.Children.Add(new TextBlock { Text = label });
+        panel.Children.Add(control);
+        return panel;
+    }
+
+    private static FrameworkElement TextField(string label, double width, Func<string> get, Action<string> set)
+    {
+        var box = new TextBox { Width = width, Text = get(), HorizontalAlignment = HorizontalAlignment.Left };
+        box.LostFocus += (_, _) => set(box.Text.Trim());
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) set(box.Text.Trim()); };
+        return Labeled(label, box);
+    }
+
+    private static FrameworkElement NumberField(string label, Func<double> get, Action<double> set, string? tip = null)
+    {
+        var box = new TextBox { Width = 70, Text = get().ToString("0.##"), HorizontalAlignment = HorizontalAlignment.Left, ToolTip = tip };
+        void Commit()
+        {
+            if (double.TryParse(box.Text.Trim(), out double v)) set(v);
+            box.Text = get().ToString("0.##");
+        }
+        box.LostFocus += (_, _) => Commit();
+        box.KeyDown += (_, e) => { if (e.Key == Key.Enter) Commit(); };
+        var labeled = Labeled(label, box);
+        if (tip is not null) ((FrameworkElement)labeled).ToolTip = tip;
+        return labeled;
+    }
+
+    private static CheckBox Check(string label, Func<bool> get, Action<bool> set, string? tip = null)
+    {
+        var check = new CheckBox { Content = label, IsChecked = get(), Margin = new Thickness(0, 4, 18, 4), ToolTip = tip, VerticalAlignment = VerticalAlignment.Center };
+        check.Checked += (_, _) => set(true);
+        check.Unchecked += (_, _) => set(false);
+        return check;
+    }
+
+    private FrameworkElement SoundPicker(string label, Func<int> get, Action<int> set)
+    {
+        var sounds = new List<ResourceEntry> { NoSound };
+        sounds.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
+        var combo = new ComboBox { Width = 180, ItemsSource = sounds, DisplayMemberPath = "Name" };
+        combo.SelectedItem = sounds.FirstOrDefault(s => s.Id == get()) ?? NoSound;
+        combo.SelectionChanged += (_, _) => set((combo.SelectedItem as ResourceEntry)?.Id ?? -1);
+        return Labeled(label, combo);
+    }
+
+    /// <summary>A sprite from the Sprite Editor (optionally only from one group), with a still preview and a play button.</summary>
+    private FrameworkElement SpritePicker(string label, Func<(string Group, string Name)> get, Action<string, string> set, string? onlyGroup = null, bool compact = false)
+    {
+        var choices = new List<SpriteChoice> { NoSprite };
+        foreach (var group in _sprites.Groups.Where(g => onlyGroup is null ? g.Name != SpriteDatabase.TilesetGroupName && g.Name != SpriteDatabase.FontsGroupName : g.Name == onlyGroup))
+            choices.AddRange(group.Sprites.Select(s => new SpriteChoice(group.Name, s.Name, onlyGroup is null ? $"{s.Name}   ({group.Name})" : s.Name)));
+        var (curGroup, curName) = get();
+        var combo = new ComboBox { Width = compact ? 150 : 300, ItemsSource = choices, DisplayMemberPath = nameof(SpriteChoice.Display) };
+        combo.SelectedItem = choices.FirstOrDefault(c => c.Name == curName && (c.Group == curGroup || string.IsNullOrEmpty(curGroup))) ?? NoSprite;
+        var picture = new Image { Width = compact ? 40 : 56, Height = compact ? 40 : 56, Stretch = Stretch.Uniform };
+        RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+        var playHolder = new ContentControl { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) };
+        void ShowPreview()
+        {
+            if (playHolder.Content is AnimationPreviewButton old) old.StopPlaying();
+            playHolder.Content = null;
+            picture.Source = null;
+            if (combo.SelectedItem is SpriteChoice { Name.Length: > 0 } choice
+                && _sprites.Groups.FirstOrDefault(g => g.Name == choice.Group)?.Sprites.FirstOrDefault(s => s.Name == choice.Name) is { } sprite)
+                playHolder.Content = new AnimationPreviewButton(sprite, picture, _resources);
+        }
+        combo.SelectionChanged += (_, _) =>
+        {
+            var choice = combo.SelectedItem as SpriteChoice ?? NoSprite;
+            set(choice.Group, choice.Name);
+            ShowPreview();
+        };
+        ShowPreview();
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(combo);
+        row.Children.Add(new Border { Background = Brushes.Black, Child = picture, Margin = new Thickness(6, 0, 0, 0), BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) });
+        row.Children.Add(playHolder);
+        return Labeled(label, row);
+    }
+}

@@ -32,6 +32,8 @@ internal static class ProjectSession
     public static Func<BookDatabase>? BooksProvider;
     public static Func<ObjectDatabase>? ObjectsProvider;
     public static Func<ContainerDatabase>? ContainersProvider;
+    public static Func<CurrencyDatabase>? CurrenciesProvider;
+    public static CurrencyDatabase Currencies => CurrenciesProvider?.Invoke() ?? new CurrencyDatabase();
     public static Func<StatDatabase>? StatsProvider;
     /// <summary>A picture of the map open in the Map Editor and its cell size, or null when no map is open.</summary>
     public static Func<(System.Windows.Media.Imaging.BitmapSource Picture, int TileWidth, int TileHeight, int Columns, int Rows)?>? MapSnapshotProvider;

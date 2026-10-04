@@ -30,6 +30,7 @@ public partial class MainWindow : Window
 
     private MapData? _map;
     private ObjectDatabase _objectDatabase = new();
+    private CurrencyDatabase _currencyDatabase = new();
     private string? _objectDatabasePath;
 
     private TilePropertiesDatabase _tilePropertiesDatabase = new();
@@ -46,7 +47,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -77,7 +78,6 @@ public partial class MainWindow : Window
     private bool _isFreehandPainting; // click-and-drag with Draw=Single paints continuously, like a normal pencil tool - no modifier key needed
 
     // Ctrl+drag "pick up and move" state, for object instances or events.
-    private ObjectInstance? _draggingInstance;
     private GameEvent? _draggingEvent;
     private Border? _startPositionVisual;
     private Rectangle? _hoverCursorVisual;
@@ -106,6 +106,7 @@ public partial class MainWindow : Window
         ProjectSession.VariablesProvider = () => _variableDatabase;
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
+        ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
         ProjectSession.StatsProvider = () => _statDatabase;
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
@@ -134,14 +135,6 @@ public partial class MainWindow : Window
         picture.Render(drawing);
         picture.Freeze();
         return (picture, _tileset.TileWidth, _tileset.TileHeight, _map.Width, _map.Height);
-    }
-
-    /// <summary>Lightweight row for the Objects palette ListBox (name + pre-loaded icon).</summary>
-    private class ObjectPaletteEntry
-    {
-        public required WorldObject WorldObject { get; init; }
-        public string Name => WorldObject.Name;
-        public BitmapImage? Icon { get; init; }
     }
 
     // ---------- Tileset loading ----------
@@ -736,44 +729,6 @@ public partial class MainWindow : Window
 
     // ---------- Objects palette ----------
 
-    private void RefreshObjectPalette()
-    {
-        var entries = new List<ObjectPaletteEntry>();
-
-        foreach (var obj in _objectDatabase.Objects)
-        {
-            BitmapImage? icon = null;
-            if (!string.IsNullOrWhiteSpace(obj.IconPath) && File.Exists(obj.IconPath))
-            {
-                try
-                {
-                    icon = new BitmapImage();
-                    icon.BeginInit();
-                    icon.CacheOption = BitmapCacheOption.OnLoad;
-                    icon.UriSource = new Uri(obj.IconPath, UriKind.Absolute);
-                    icon.EndInit();
-                }
-                catch
-                {
-                    icon = null; // Missing/unreadable icon - fall back to no image rather than crashing the palette.
-                }
-            }
-            entries.Add(new ObjectPaletteEntry { WorldObject = obj, Icon = icon });
-        }
-
-        ObjectsPaletteListBox.ItemsSource = entries;
-        _selectedObjectId = -1;
-    }
-
-    private void ObjectsPaletteListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
-    {
-        if (ObjectsPaletteListBox.SelectedItem is ObjectPaletteEntry entry)
-        {
-            _selectedObjectId = entry.WorldObject.Id;
-            StatusText.Text = $"Selected object: {entry.Name}";
-        }
-    }
-
     // ---------- Menu: File / Edit ----------
 
     /// <summary>Flips every sprite's display flag so the Sprite Editor shows "Integrated Into System" instead of a real path - called after every point where shapes.sdbx is guaranteed to be in sync with _spriteDatabase (New, Open, and Save Project).</summary>
@@ -862,6 +817,13 @@ public partial class MainWindow : Window
             _poseDatabase = payload.Poses;
             _poseDatabase.EnsureBuiltInPoses(); // repairs a project saved by an earlier build whose PoseDatabase predates the full 11-pose set
             _tilePropertiesDatabase = payload.TileProperties;
+            _currencyDatabase = payload.Currencies;
+            _objectDatabase = payload.Objects;
+            // A project saved before objects lived in it: its map may still point at an .objdb.json - bring those in once (the next Save keeps them in the project).
+            if (_objectDatabase.Objects.Count == 0 && payload.Map is { ObjectDatabasePath.Length: > 0 } oldMap && File.Exists(oldMap.ObjectDatabasePath))
+            {
+                try { _objectDatabase = ObjectDatabaseSerializer.Load(oldMap.ObjectDatabasePath); } catch { /* unreadable: start with none */ }
+            }
             _map = payload.Map;
             if (_map is not null)
             {
@@ -942,6 +904,8 @@ public partial class MainWindow : Window
                 Factions = _factionDatabase,
                 Characters = _characterDatabase,
                 Containers = _containerDatabase,
+                Objects = _objectDatabase,
+                Currencies = _currencyDatabase,
                 Settings = _systemSettings,
                 Variables = _variableDatabase,
                 Stats = _statDatabase,
@@ -985,6 +949,7 @@ public partial class MainWindow : Window
         ModeMenu.IsEnabled = true;
         GameMenu.IsEnabled = true;
         RefreshCharactersPalette();
+        RefreshObjectPalette();
         DrawMenu.IsEnabled = true;
         ToolsMenu.IsEnabled = true;
         MainToolBar.IsEnabled = true;
@@ -1012,6 +977,7 @@ public partial class MainWindow : Window
         EventModeMenuItem.IsChecked = false;
         StartPositionModeMenuItem.IsChecked = false;
         CharacterModeMenuItem.IsChecked = false;
+        ObjectModeMenuItem.IsChecked = false;
         ItemTypeWeaponMenuItem.IsChecked = false;
         ItemTypeArmorMenuItem.IsChecked = false;
         ItemTypeItemMenuItem.IsChecked = false;
@@ -1504,6 +1470,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_editMode == EditMode.Object)
+        {
+            ObjectMode_MouseLeftButtonDown(x, y);
+            return;
+        }
+
         if (_editMode == EditMode.Item)
         {
             if (_mapItemVisuals.ContainsKey((x, y)))
@@ -1571,48 +1543,6 @@ public partial class MainWindow : Window
         }
 
         // --- Map mode ---
-        bool objectsMode = PaletteTabs.SelectedIndex == 1;
-
-        if (ctrl && objectsMode)
-        {
-            // Pick up the object instance at this cell so it can be dropped elsewhere on mouse-up.
-            var instance = _map.Objects
-                .Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y)
-                .LastOrDefault();
-            if (instance is null) return;
-
-            _draggingInstance = instance;
-            _map.Objects.Remove(instance);
-            if (_mapObjectVisuals.TryGetValue(instance.InstanceId, out var img))
-            {
-                MapCanvas.Children.Remove(img);
-                _mapObjectVisuals.Remove(instance.InstanceId);
-            }
-            return;
-        }
-
-        if (objectsMode)
-        {
-            if (_selectedObjectId < 0)
-            {
-                StatusText.Text = "Select an object from the Objects tab first.";
-                return;
-            }
-
-            var instance = new ObjectInstance
-            {
-                ObjectId = _selectedObjectId,
-                X = x,
-                Y = y,
-                Quantity = 1,
-                ContainerInstanceId = -1,
-                InstanceId = _map.GetNextInstanceId()
-            };
-            _map.Objects.Add(instance);
-            PlaceObjectVisual(instance);
-            return;
-        }
-
         // Tileset painting.
         if (_selectedTileIndex < 0)
         {
@@ -1669,6 +1599,8 @@ public partial class MainWindow : Window
             UpdateShapePreview(start.x, start.y, hoverX, hoverY);
         }
 
+        if (_editMode == EditMode.Object) { ObjectMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
+
         if (!_isFreehandPainting) return;
         if (e.LeftButton != MouseButtonState.Pressed)
         {
@@ -1698,25 +1630,7 @@ public partial class MainWindow : Window
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
 
         if (CharacterMode_MouseLeftButtonUp(x, y)) return;
-
-        if (_draggingInstance is not null)
-        {
-            if (IsInsideMap(x, y))
-            {
-                _draggingInstance.X = x;
-                _draggingInstance.Y = y;
-                _map.Objects.Add(_draggingInstance);
-                PlaceObjectVisual(_draggingInstance);
-            }
-            else
-            {
-                // Dropped outside the map - put it back where it was rather than losing it.
-                _map.Objects.Add(_draggingInstance);
-                PlaceObjectVisual(_draggingInstance);
-            }
-            _draggingInstance = null;
-            return;
-        }
+        if (ObjectMode_MouseLeftButtonUp(x, y)) return;
 
         if (_draggingEvent is not null)
         {
@@ -1772,6 +1686,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_editMode == EditMode.Object)
+        {
+            ObjectMode_MouseRightButtonDown(x, y);
+            return;
+        }
+
         if (_editMode == EditMode.Item)
         {
             var itemInstance = _map.Items.FirstOrDefault(i => i.X == x && i.Y == y);
@@ -1787,24 +1707,6 @@ public partial class MainWindow : Window
             return;
         }
 
-        bool objectsMode = PaletteTabs.SelectedIndex == 1;
-
-        if (objectsMode)
-        {
-            // Remove the topmost object instance sitting on this cell.
-            var instance = _map.Objects
-                .Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y)
-                .LastOrDefault();
-            if (instance is null) return;
-
-            _map.Objects.Remove(instance);
-            if (_mapObjectVisuals.TryGetValue(instance.InstanceId, out var img))
-            {
-                MapCanvas.Children.Remove(img);
-                _mapObjectVisuals.Remove(instance.InstanceId);
-            }
-        }
-        else
         {
             _map.Layers[0].SetTile(x, y, _map.Width, -1);
 
@@ -1966,6 +1868,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_editMode == EditMode.Object && _map is not null)
+        {
+            if (ObjectMode_KeyDown(e)) e.Handled = true;
+            return;
+        }
+
         if (_editMode != EditMode.Event || _map is null) return;
 
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
@@ -2074,49 +1982,6 @@ public partial class MainWindow : Window
         double top = (cellY + 1) * _tileset.TileHeight - quantizedHeight;
         Canvas.SetLeft(visual, left);
         Canvas.SetTop(visual, top);
-    }
-
-    private void PlaceObjectVisual(ObjectInstance instance)
-    {
-        if (_tileset is null) return;
-
-        var worldObject = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-
-        BitmapImage? source = null;
-        if (worldObject is not null && !string.IsNullOrWhiteSpace(worldObject.IconPath) && File.Exists(worldObject.IconPath))
-        {
-            try
-            {
-                var bmp = new BitmapImage();
-                bmp.BeginInit();
-                bmp.CacheOption = BitmapCacheOption.OnLoad;
-                bmp.UriSource = new Uri(worldObject.IconPath, UriKind.Absolute);
-                bmp.EndInit();
-                source = bmp;
-            }
-            catch
-            {
-                source = null;
-            }
-        }
-
-        (int quantW, int quantH) = source is not null ? SpriteSizing.Quantize(source.PixelWidth, source.PixelHeight) : (_tileset.TileWidth, _tileset.TileHeight);
-
-        var image = new Image
-        {
-            Source = source,
-            Width = quantW,
-            Height = quantH,
-            IsHitTestVisible = false,
-            ToolTip = worldObject?.Name ?? $"Object #{instance.ObjectId}",
-            Stretch = Stretch.Uniform
-        };
-        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-        PositionQuantizedVisual(image, instance.X, instance.Y, quantW, quantH);
-        Panel.SetZIndex(image, 10); // Always draw above tile visuals.
-
-        MapCanvas.Children.Add(image);
-        _mapObjectVisuals[instance.InstanceId] = image;
     }
 
     private void OpenOrCreateEvent(int x, int y)
@@ -2520,18 +2385,14 @@ public partial class MainWindow : Window
 
     private void ObjectDatabaseButton_Click(object sender, RoutedEventArgs e)
     {
-        var window = new ObjectDatabaseWindow { Owner = this };
-        window.Database.Objects.AddRange(_objectDatabase.Objects);
-        window.Database.SyncNextIdAfterLoad();
-
-        window.ShowDialog();
-
-        // Bring whatever the window ended up with (edits, or a freshly
-        // loaded file) back into the main editor's session state.
-        _objectDatabase = window.Database;
-        _objectDatabasePath = window.DatabasePath ?? _objectDatabasePath;
+        // The Object Editor edits the project's own objects in place - saved with the project.
+        new ObjectEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase) { Owner = this }.ShowDialog();
         RefreshObjectPalette();
+        RefreshAllObjectVisuals();
     }
+
+    private void CurrencyEditorMenuItem_Click(object sender, RoutedEventArgs e) =>
+        new CurrencyEditorWindow(_currencyDatabase) { Owner = this }.ShowDialog();
 
     // ---------- Save / Load ----------
 

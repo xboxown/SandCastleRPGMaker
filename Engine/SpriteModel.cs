@@ -160,7 +160,13 @@ public class SpriteDatabase
     /// <summary>Exult's blood frames 0-3: four sizes, small to large.</summary>
     public const int BloodSizes = 4;
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName;
+    /// <summary>Reserved groups for the bundle pictures of Ammo and Money objects (Exult's quantity frames): one sprite per picture, each free to animate.</summary>
+    public const string AmmoGroupName = "Ammo";
+    public const string MoneyGroupName = "Money";
+
+    public static bool IsBundleGroup(string name) => name == AmmoGroupName || name == MoneyGroupName;
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || IsBundleGroup(name);
     public static bool IsFontSprite(string groupName, string spriteName) =>
         groupName == FontsGroupName && (spriteName == InGameFontName || spriteName == DialogFontName);
 
@@ -176,6 +182,8 @@ public class SpriteDatabase
         foreach (string name in new[] { InGameFontName, DialogFontName })
             if (fonts.Sprites.All(s => s.Name != name)) fonts.Sprites.Add(new SpriteEntry { Name = name, Loop = false });
         GetOrCreateGroup(BloodGroupName);
+        GetOrCreateGroup(AmmoGroupName);
+        GetOrCreateGroup(MoneyGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

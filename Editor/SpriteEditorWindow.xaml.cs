@@ -59,6 +59,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Fonts group is hardcoded and can't be deleted - the game writes all its text with the fonts in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (SpriteDatabase.IsBundleGroup(_currentGroup.Name))
+        {
+            MessageBox.Show($"The {_currentGroup.Name} group is hardcoded and can't be deleted - {_currentGroup.Name} objects take their bundle pictures from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_currentGroup.Name == SpriteDatabase.BloodGroupName)
         {
             MessageBox.Show("The Blood group is hardcoded and can't be deleted - every blood type characters bleed is a sprite in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -84,6 +89,8 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
+        // Ammo / Money: how bundle pictures work, before the first one is made.
+        if (SpriteDatabase.IsBundleGroup(_currentGroup.Name)) new BundleGuideWindow(_currentGroup.Name) { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 

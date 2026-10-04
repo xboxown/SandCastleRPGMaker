@@ -287,7 +287,7 @@ public partial class ContainerEditorWindow : Window
         RequiredKeyItemCombo.ItemsSource = container.RequiredKeyCategory switch
         {
             ReferencedItemCategory.Book => _books.Books.Cast<object>().ToList(),
-            ReferencedItemCategory.Object => _objects.Objects.Where(o => o.UseAs == ObjectUse.Key).Cast<object>().ToList(),
+            ReferencedItemCategory.Object => _objects.Objects.Where(o => o.Type == ObjectType.Key).Cast<object>().ToList(),
             _ => new List<object>()
         };
     }

@@ -91,8 +91,53 @@ public class WorldObject
     /// <summary>How heavy one of it is (Exult stones). Counts toward what a party member can carry: 2 x Strength.</summary>
     public double Weight { get; set; } = 0;
 
-    /// <summary>What double-clicking it does (Exult's key / lockpick usecode): a Key or Lockpick asks for a target, then works on the container clicked.</summary>
+    /// <summary>Older projects' Key/Lockpick setting - now part of Type (kept so they load; see ObjectDatabase.Upgrade).</summary>
     public ObjectUse UseAs { get; set; } = ObjectUse.Nothing;
+
+    // ---------- Object Editor ----------
+
+    /// <summary>What it is - chosen once in the Object Editor, then fixed (ObjectTypes.cs).</summary>
+    public ObjectType Type { get; set; } = ObjectType.Junk;
+    /// <summary>False only for a brand-new object whose type hasn't been picked yet.</summary>
+    public bool TypeChosen { get; set; } = true;
+
+    /// <summary>Its look, from the Sprite Editor (for a door: closed; for a light: unlit; for ammo/money: a single one). Older objects without one show IconPath.</summary>
+    public string SpriteGroup { get; set; } = string.Empty;
+    public string SpriteName { get; set; } = string.Empty;
+
+    public int Price { get; set; }
+    /// <summary>The character it belongs to (-1 = nobody): they and their faction react to its theft or destruction.</summary>
+    public int BelongToId { get; set; } = -1;
+    public int FactionId { get; set; } = -1;
+
+    /// <summary>Exult object hit points (0 = can't be destroyed, like most of Exult's objects).</summary>
+    public int HitPoints { get; set; }
+    /// <summary>Each blow is reduced by 1 to this much (not in Exult).</summary>
+    public int Defense { get; set; }
+    /// <summary>A steel door, an iron grate...: blows never hurt it, whatever its hit points.</summary>
+    public bool CannotBeDestroyed { get; set; }
+    public int DestroyedSoundResourceId { get; set; } = -1;
+
+    /// <summary>Junk only: its frames are states, not an animation (a bed cover: frame 1 made, frame 2 turned down).</summary>
+    public bool FramesAreStates { get; set; }
+
+    public DoorSettings Door { get; set; } = new();
+    public LightSettings Light { get; set; } = new();
+    public BundleSettings Bundle { get; set; } = new();
+    public AmmoSettings Ammo { get; set; } = new();
+    public MoneySettings Money { get; set; } = new();
+    public FurnitureSettings Furniture { get; set; } = new();
+    public TrapSettings Trap { get; set; } = new();
+
+    /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
+    public List<BookEventPage> EventPages { get; set; } = new();
+    public List<VariableDefinition> LocalVariables { get; set; } = new();
+    private int _nextLocalVariableId = 1;
+    public int GetNextLocalVariableId() => _nextLocalVariableId++;
+    public void SyncLocalVariableIdAfterLoad() => _nextLocalVariableId = LocalVariables.Count == 0 ? 1 : LocalVariables.Max(v => v.Id) + 1;
+
+    /// <summary>The name it goes by in play: a burnt-out light is "Spent ..." (as Ultima VII's "spent torch").</summary>
+    public string DisplayName(bool spent = false) => spent && Type == ObjectType.LightSource ? $"Spent {Name.ToLowerInvariant()}" : Name;
 }
 
 /// <summary>What double-clicking an object does in play.</summary>
@@ -141,6 +186,28 @@ public class ObjectInstance
     /// <summary>Sub-tile placement, in 8px world units, purely additive on top of X/Y - see PlacedItemInstance's own OffsetX/Y for the full rationale (never a reinterpretation of X/Y, so existing saved maps are unaffected).</summary>
     public int OffsetX { get; set; } = 0;
     public int OffsetY { get; set; } = 0;
+
+    /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
+    public SpriteDirection Facing { get; set; } = SpriteDirection.South;
+
+    /// <summary>Map Editor overrides of the object's starting state (null = as the Object Editor says).</summary>
+    public bool? StartsOpen { get; set; }
+    public bool? StartsLocked { get; set; }
+    public bool? StartsLit { get; set; }
+
+    // ---------- Live state in play (the game's own copy of the map; null/0 until something changes it) ----------
+    public bool? IsOpenRuntime { get; set; }
+    public bool? IsLockedRuntime { get; set; }
+    public bool? IsLitRuntime { get; set; }
+    /// <summary>Game minutes of burning left (light sources), -1 = not started counting.</summary>
+    public double BurnLeftRuntime { get; set; } = -1;
+    public bool IsSpentRuntime { get; set; }
+    /// <summary>Hit points left once struck (-1 = untouched).</summary>
+    public int HitPointsRuntime { get; set; } = -1;
+    /// <summary>Frame shown, for objects whose frames are states (a bed cover).</summary>
+    public int FrameRuntime { get; set; }
+    /// <summary>A trap that has gone off (one-shot), or is revealed.</summary>
+    public bool TrapSprungRuntime { get; set; }
 }
 
 /// <summary>
@@ -164,5 +231,19 @@ public class ObjectDatabase
     public void SyncNextIdAfterLoad()
     {
         _nextId = Objects.Count == 0 ? 1 : Objects.Max(o => o.Id) + 1;
+        Upgrade();
+    }
+
+    /// <summary>Objects saved before types existed: a Key or Lockpick (Use As) becomes that type; everything else is Junk. Local variable counters are re-synced.</summary>
+    public void Upgrade()
+    {
+        foreach (var obj in Objects)
+        {
+            if (obj.UseAs == ObjectUse.Key) obj.Type = ObjectType.Key;
+            else if (obj.UseAs == ObjectUse.Lockpick) obj.Type = ObjectType.Lockpick;
+            obj.UseAs = ObjectUse.Nothing; // Type says it now
+            obj.SyncLocalVariableIdAfterLoad();
+            while (obj.Bundle.Levels.Count < 8) obj.Bundle.Levels.Add(new SpriteLink());
+        }
     }
 }

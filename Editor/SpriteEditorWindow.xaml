@@ -38,6 +38,15 @@
                                     <Setter Property="Foreground" Value="Red"/>
                                     <Setter Property="FontWeight" Value="Bold"/>
                                 </DataTrigger>
+                                <!-- Value="Ammo" / "Money" must match SpriteDatabase.AmmoGroupName / MoneyGroupName. -->
+                                <DataTrigger Binding="{Binding Name}" Value="Ammo">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Name}" Value="Money">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
                                 <!-- Value="Blood" must match SpriteDatabase.BloodGroupName. -->
                                 <DataTrigger Binding="{Binding Name}" Value="Blood">
                                     <Setter Property="Foreground" Value="Red"/>

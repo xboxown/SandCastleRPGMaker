@@ -101,7 +101,7 @@
                                                 <ComboBox x:Name="LockedRattleSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Width="200"/>
                                             </StackPanel>
                                         </WrapPanel>
-                                        <TextBlock Text="As in Exult: in play, double-click the key and click this container to lock or unlock it, or double-click a lockpick and click it to try to pick the lock. Only Objects marked Use As: Key (Object Database) are listed as keys. Double-clicking it while locked just says &quot;Locked&quot;." Opacity="0.6" FontSize="11" TextWrapping="Wrap"/>
+                                        <TextBlock Text="As in Exult: in play, double-click the key and click this container to lock or unlock it, or double-click a lockpick and click it to try to pick the lock. Only Key objects (Object Editor, Type: Key) are listed as keys. Double-clicking it while locked just says &quot;Locked&quot;." Opacity="0.6" FontSize="11" TextWrapping="Wrap"/>
                                     </StackPanel>
                                 </GroupBox>
 

@@ -29,6 +29,7 @@
                 <MenuItem x:Name="EventModeMenuItem" Header="Event" IsCheckable="True" Click="EventModeMenuItem_Click"/>
                 <MenuItem x:Name="StartPositionModeMenuItem" Header="Start Position" IsCheckable="True" Click="StartPositionModeMenuItem_Click"/>
                 <MenuItem x:Name="CharacterModeMenuItem" Header="Characters" IsCheckable="True" Click="CharacterModeMenuItem_Click"/>
+                <MenuItem x:Name="ObjectModeMenuItem" Header="Objects" IsCheckable="True" Click="ObjectModeMenuItem_Click"/>
                 <MenuItem x:Name="ItemModeMenuItem" Header="Item">
                     <MenuItem x:Name="ItemTypeWeaponMenuItem" Header="Weapons" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
                     <MenuItem x:Name="ItemTypeArmorMenuItem" Header="Armors" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>
@@ -44,7 +45,8 @@
                 <MenuItem x:Name="DrawCircleMenuItem" Header="Circle" IsCheckable="True" Click="DrawShapeMenuItem_Click"/>
             </MenuItem>
             <MenuItem x:Name="ToolsMenu" Header="_Tools" IsEnabled="False">
-                <MenuItem Header="Database..." Click="ObjectDatabaseButton_Click"/>
+                <MenuItem Header="Object Editor..." Click="ObjectDatabaseButton_Click"/>
+                <MenuItem Header="Currency Editor..." Click="CurrencyEditorMenuItem_Click"/>
                 <MenuItem Header="Resources..." Click="ResourcesMenuItem_Click"/>
                 <MenuItem Header="Faction Editor..." Click="FactionEditorMenuItem_Click"/>
                 <MenuItem Header="Sprite Editor..." Click="SpriteEditorMenuItem_Click"/>
@@ -80,7 +82,7 @@
             <Button x:Name="SaveMapButton" Content="Save Map..." Click="SaveMapButton_Click" Padding="6,2" Margin="2"/>
             <Button x:Name="LoadMapButton" Content="Load Map..." Click="LoadMapButton_Click" Padding="6,2" Margin="2"/>
             <Separator/>
-            <Button x:Name="ObjectDatabaseButton" Content="Object Database..." Click="ObjectDatabaseButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="ObjectDatabaseButton" Content="Object Editor..." Click="ObjectDatabaseButton_Click" Padding="6,2" Margin="2"/>
         </ToolBar>
 
         <!-- Status bar -->
@@ -106,21 +108,10 @@
                         </ScrollViewer>
                     </DockPanel>
                 </TabItem>
-                <TabItem Header="Objects">
+                <TabItem x:Name="ObjectsPaletteTab" Header="Objects">
                     <DockPanel LastChildFill="True">
-                        <TextBlock DockPanel.Dock="Top" Text="Click an object to select it" Margin="6" FontWeight="Bold"/>
-                        <ListBox x:Name="ObjectsPaletteListBox" Margin="4"
-                                 SelectionChanged="ObjectsPaletteListBox_SelectionChanged">
-                            <ListBox.ItemTemplate>
-                                <DataTemplate>
-                                    <StackPanel Orientation="Horizontal" Margin="2">
-                                        <Image Source="{Binding Icon}" Width="28" Height="28" Margin="0,0,8,0"
-                                               RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                                        <TextBlock Text="{Binding Name}" VerticalAlignment="Center"/>
-                                    </StackPanel>
-                                </DataTemplate>
-                            </ListBox.ItemTemplate>
-                        </ListBox>
+                        <TextBlock DockPanel.Dock="Top" Text="Mode &gt; Objects: pick an object, click the map (hold to place several). Right-click a placed one for more." Margin="6" FontWeight="Bold" TextWrapping="Wrap"/>
+                        <TabControl x:Name="ObjectTypeTabs" Margin="2" TabStripPlacement="Top"/>
                     </DockPanel>
                 </TabItem>
                 <TabItem x:Name="CharactersPaletteTab" Header="Characters">

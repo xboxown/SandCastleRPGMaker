@@ -146,8 +146,8 @@ public partial class GameTestWindow
     /// <summary>Double-clicking an object: a key or lockpick asks for a target. True = handled.</summary>
     private bool TryUseLockTool(WorldObject? tool, DragOrigin source)
     {
-        if (tool is null || tool.UseAs == ObjectUse.Nothing) return false;
-        BeginChoosingTarget(tool.UseAs == ObjectUse.Key ? $"Use \"{tool.Name}\" on what?" : $"Pick which lock with \"{tool.Name}\"?",
+        if (tool is null || tool.Type is not (ObjectType.Key or ObjectType.Lockpick)) return false;
+        BeginChoosingTarget(tool.Type == ObjectType.Key ? $"Use \"{tool.Name}\" on what?" : $"Pick which lock with \"{tool.Name}\"?",
             target =>
             {
                 // The tool may have gone while the player chose (it can't, the game is paused - but stay safe).
@@ -158,7 +158,7 @@ public partial class GameTestWindow
                     return;
                 }
                 var (container, data) = hit;
-                if (tool.UseAs == ObjectUse.Key) UseKeyOn(tool, source, container, data);
+                if (tool.Type == ObjectType.Key) UseKeyOn(tool, source, container, data);
                 else UseLockpickOn(tool, source, container, data);
             });
         return true;
