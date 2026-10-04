@@ -396,6 +396,12 @@ public partial class GameTestWindow
         {
             if (!TryStepActor(newFoot, mapCharacter.Lift, mapCharacter.Size.Z, out int newLift, out _, mapCharacter.Placement))
             {
+                // Actor::is_really_blocked: someone in the way is asked to move aside (or swap places); then the step is tried again.
+                int stepX = alongX ? Math.Sign(remaining) : 0, stepY = alongX ? 0 : Math.Sign(remaining);
+                bool cleared = CharacterInTheWay(newFoot, mapCharacter.Lift, mapCharacter.Size.Z, mapCharacter) is { } other
+                    ? MoveAside(other, stepX, stepY, mapCharacter)
+                    : PlayerInTheWay(newFoot, mapCharacter.Lift, mapCharacter.Size.Z) && MovePlayerAside(mapCharacter, stepX, stepY);
+                if (cleared) return; // carries on next frame (or, swapped, thinks again from its new place)
                 // Blocked on the way (someone stepped in front, say): stop and think again shortly.
                 npc.Path = null;
                 npc.WasBlocked = true;

@@ -341,8 +341,9 @@ public partial class GameTestWindow
     }
 
     /// <summary>Where the player stands when placed somewhere directly (startup): on top of whatever solid thing is under their footprint, or the ground.</summary>
-    private int StandingLiftAt(UnitRect foot) =>
-        FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot)), int.MaxValue);
+    /// <summary>The lift something would stand at on that footprint: on top of whatever solid is under it. <paramref name="self"/> (a character's own placement) is left out, or it would stand on top of itself.</summary>
+    private int StandingLiftAt(UnitRect foot, object? self = null) =>
+        FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, self)), int.MaxValue);
 
     // ================= Draw order (objs.cc Game_object::compare) =================
 

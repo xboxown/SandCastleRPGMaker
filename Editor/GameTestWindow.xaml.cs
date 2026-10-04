@@ -1782,6 +1782,9 @@ public partial class GameTestWindow : Window
         if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason))
         {
             StatusText.Text = tileOffMap ? "Blocked: edge of the map." : blockReason;
+            // Actor::is_really_blocked: a character in the way is asked to move aside (or swap places).
+            if (!tileOffMap && CharacterInTheWay(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, null) is { } blocker)
+                MoveAside(blocker, dx, dy, walker: null);
             return;
         }
         if (newLift != _playerZ)
