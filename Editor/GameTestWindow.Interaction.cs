@@ -361,6 +361,7 @@ public partial class GameTestWindow
     /// <summary>Double click.</summary>
     private void UseTarget(InteractionTarget target)
     {
+        if (PlayerKnockedOut) { StatusText.Text = "You are unconscious."; return; } // can identify, but not use or talk
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
@@ -406,6 +407,7 @@ public partial class GameTestWindow
     /// <summary>Exult Dragging_info::start - the first real motion. Builds the origin record and the ghost, hides (never removes) the source visual, and takes mouse capture. False means this press can't be dragged at all.</summary>
     private bool TryStartDrag(PointerSession session)
     {
+        if (PlayerKnockedOut) return false; // can't pick anything up while unconscious
         DragOrigin? origin = null;
         UIElement? source = null;
         switch (session.Target)

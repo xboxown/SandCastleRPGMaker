@@ -64,6 +64,7 @@ public partial class GameTestWindow
         UpdateVitals(elapsedMs, hourChanges); // hunger, healing, poison, ailments, tile effects - everyone
         UpdateCombat(elapsedMs); // the player's blows; who sees whom (enemies on sight, fear, allies under attack)
         UpdateBleeding(elapsedMs); // drips from whoever is bleeding, and temporary puddles far away cleared
+        foreach (var character in AllLivingCharacters().ToList()) UpdateUnconscious(character, elapsedMs); // the knocked out mend and get up
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {

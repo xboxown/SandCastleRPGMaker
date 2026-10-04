@@ -30,6 +30,9 @@ public partial class GameTestWindow
         public Ailment Ailments;
         public double PoisonRemainingMs, PoisonNextTickMs, SleepRemainingMs, ParalyzeRemainingMs, CharmRemainingMs, CurseRemainingMs;
         public bool Dead;
+        /// <summary>Knocked out: health at 0 or below, not yet dead (GameTestWindow.Unconscious.cs).</summary>
+        public bool Unconscious;
+        public double MendCheckMs;
         public double DamageCarry; // fractional tile-effect damage not yet taken
         public (int X, int Y)? Cell;
         public readonly Dictionary<CustomTileEffect, Exposure> Exposures = new(ReferenceEqualityComparer.Instance);
@@ -78,7 +81,7 @@ public partial class GameTestWindow
     private bool Has(CharacterDefinition character, Ailment ailment) => _vitals.TryGetValue(character, out var v) && v.Ailments.HasFlag(ailment);
     /// <summary>Can't move or act: dead, asleep or paralyzed.</summary>
     private bool IsIncapacitated(CharacterDefinition? character) =>
-        character is not null && _vitals.TryGetValue(character, out var v) && (v.Dead || (v.Ailments & (Ailment.Asleep | Ailment.Paralyzed)) != 0);
+        character is not null && _vitals.TryGetValue(character, out var v) && (v.Dead || v.Unconscious || (v.Ailments & (Ailment.Asleep | Ailment.Paralyzed)) != 0);
 
     private long TotalMinutes() => ((long)_clock.Day * 24 + _clock.Hour) * 60 + _clock.Minute;
 
@@ -104,8 +107,10 @@ public partial class GameTestWindow
         FlashHit(character, amount, hp); // Exult's red outline (or, badly hurt, the red screen)
         hp -= amount;
         SetHp(character, hp);
-        if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {Math.Max(0, hp)} left.";
-        if (hp <= 0) Die(character, cause);
+        if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {hp} left.";
+        // Exult: dead below -(Strength / 3); otherwise at 0 or below, knocked out.
+        if (IsDying(character, hp)) Die(character, cause);
+        else if (hp <= 0) KnockOut(character);
     }
 
     private void Die(CharacterDefinition character, string cause)

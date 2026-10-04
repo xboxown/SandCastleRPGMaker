@@ -132,7 +132,7 @@ public partial class GameTestWindow
         if (IsIncapacitated(me) || npc.InCombat) return;
         foreach (var other in LivingCombatants())
         {
-            if (other == me || !CanSee(me, other)) continue;
+            if (other == me || !CanSee(me, other) || IsUnconscious(other)) continue; // nobody starts a fight with the unconscious
             switch (Attitude(me, other))
             {
                 case FactionBehavior.Attack:
@@ -272,10 +272,10 @@ public partial class GameTestWindow
     private CharacterDefinition? FindFoe(MapCharacter mapCharacter)
     {
         var me = mapCharacter.Character;
-        return LivingCombatants()
+        return AwakeFirst(LivingCombatants()
             .Where(other => other != me && CanSee(me, other)
                 && (Attitude(me, other) == FactionBehavior.Attack
-                    || (TargetOf(other) is { } victim && (victim == me || Attitude(me, victim) == FactionBehavior.Ally) && !SameSide(me, other))))
+                    || (TargetOf(other) is { } victim && (victim == me || Attitude(me, victim) == FactionBehavior.Ally) && !SameSide(me, other)))))
             .OrderBy(other => TilesBetween(me, other))
             .FirstOrDefault();
     }
@@ -319,7 +319,7 @@ public partial class GameTestWindow
     {
         if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0) ApplyPoseSprite(_idlePose);
         if (!_combatMode || _player is null || (_playerTarget is null && _playerTargetThing is null)) return;
-        if (_playerTarget is not null && IsDead(_playerTarget)) { _playerTarget = null; return; }
+        if (_playerTarget is not null && (IsDead(_playerTarget) || IsUnconscious(_playerTarget))) { _playerTarget = null; return; } // the Avatar never attacks the unconscious
         if (_playerTargetThing is not null && !ThingStillThere(_playerTargetThing)) { _playerTargetThing = null; return; }
         if (IsIncapacitated(_player)) return;
         _playerStrikeMs -= elapsedMs;
