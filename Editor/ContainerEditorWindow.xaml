@@ -135,6 +135,13 @@
                                             <CheckBox x:Name="WorldSpriteFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0" Checked="WorldSpriteFilterCheck_Checked" Unchecked="WorldSpriteFilterCheck_Unchecked"/>
                                             <ComboBox x:Name="WorldSpriteCombo" SelectionChanged="WorldSprite_Changed" DisplayMemberPath="Name"/>
                                         </DockPanel>
+                                        <TextBlock Text="Locked Sprite (optional - how it looks while locked)" FontWeight="Bold" Margin="0,0,0,2"
+                                                   ToolTip="As in Ultima VII, where a locked chest is a different shape: shown instead of the World Sprite whenever this container is locked - on the map, in a paperdoll slot, or inside another container - and swapped the moment a key or lockpick changes it. Empty: locked or not, it looks the same."/>
+                                        <DockPanel Margin="0,0,0,8">
+                                            <Button x:Name="ClearLockedSpriteButton" DockPanel.Dock="Right" Content="Clear" Padding="8,1" Margin="6,0,0,0" Click="ClearLockedSprite_Click" ToolTip="No locked sprite: it looks the same locked or not"/>
+                                            <CheckBox x:Name="LockedSpriteFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0" Checked="LockedSpriteFilterCheck_Checked" Unchecked="LockedSpriteFilterCheck_Unchecked"/>
+                                            <ComboBox x:Name="LockedSpriteCombo" SelectionChanged="LockedSprite_Changed" DisplayMemberPath="Name"/>
+                                        </DockPanel>
                                         <TextBlock Text="Open-View Background (behind items when opened)" FontWeight="Bold" Margin="0,0,0,2"/>
                                         <DockPanel Margin="0,0,0,8">
                                             <CheckBox x:Name="PaperDollFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0" Checked="PaperDollFilterCheck_Checked" Unchecked="PaperDollFilterCheck_Unchecked"/>

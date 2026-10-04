@@ -88,6 +88,10 @@ public class ContainerData : PlaceableItemBase
     public bool IsLocked { get; set; } = false;
     public ReferencedItemCategory RequiredKeyCategory { get; set; } = ReferencedItemCategory.Object;
     public int RequiredKeyItemId { get; set; } = -1;
+    /// <summary>Ultima VII's locked chest is its own shape: optional sprite shown while this container is locked (on the map, in a slot, inside another container). Empty: it looks the same locked or not.</summary>
+    public string LockedSpriteGroup { get; set; } = string.Empty;
+    public string LockedSpriteName { get; set; } = string.Empty;
+
     /// <summary>Exult's extradimensional storage (a bag of holding): it weighs only itself, whatever is inside it.</summary>
     public bool ExtradimensionalStorage { get; set; } = false;
 

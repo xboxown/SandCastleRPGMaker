@@ -446,7 +446,7 @@ public partial class GameTestWindow
         _lastClickTarget = null; // a drag is never the first half of a double click
 
         var (category, itemId) = PayloadIdentity(origin);
-        var ghost = BuildItemIcon(category, itemId, session.GhostAnimators);
+        var ghost = BuildItemIcon(category, itemId, session.GhostAnimators, PayloadObject(origin) as IHasContainerContents);
         double scale = ViewportScale.ScaleX;
         session.NativeWidth = ghost.Width;
         session.NativeHeight = ghost.Height;
@@ -1106,7 +1106,7 @@ public partial class GameTestWindow
         if (item is not null)
         {
             var animators = new List<SpriteAnimator>();
-            var visual = BuildItemIcon(item.Category, item.ItemId, animators);
+            var visual = BuildItemIcon(item.Category, item.ItemId, animators, item);
             foreach (var animator in animators) RegisterWorldAnimator(visual, animator);
             GameCanvas.Children.Add(visual);
             _map.Items.Add(item);
@@ -1221,13 +1221,13 @@ public partial class GameTestWindow
     /// register it as part of the game world, frozen while the game is
     /// paused (map visuals - see GameTestWindow.Pause.cs).
     /// </summary>
-    private FrameworkElement BuildItemIcon(ReferencedItemCategory category, int itemId, List<SpriteAnimator>? animators)
+    private FrameworkElement BuildItemIcon(ReferencedItemCategory category, int itemId, List<SpriteAnimator>? animators, IHasContainerContents? instance = null)
     {
         SpriteEntry? sprite = null;
         if (category == ReferencedItemCategory.Book && _books.Books.FirstOrDefault(b => b.Id == itemId) is { } book)
             sprite = _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
         else if (category == ReferencedItemCategory.Container && _containers.Containers.FirstOrDefault(c => c.Id == itemId) is { } containerData)
-            sprite = _sprites.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
+            sprite = ContainerSprite(containerData, instance); // its Locked Sprite while locked
 
         if (sprite is not null && sprite.Frames.Count > 0)
         {

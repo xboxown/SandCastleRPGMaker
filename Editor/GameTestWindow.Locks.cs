@@ -53,10 +53,43 @@ public partial class GameTestWindow
         _ => data.IsLocked
     };
 
-    private static void SetLocked(IHasContainerContents container, bool locked)
+    private void SetLocked(IHasContainerContents container, bool locked)
     {
         if (container is PlacedItemInstance placed) placed.IsLockedRuntime = locked;
         else if (container is InventoryItemInstance carried) carried.IsLockedRuntime = locked;
+        RefreshContainerLook(container);
+    }
+
+    /// <summary>
+    /// The sprite a container shows right now: its Locked Sprite while it's
+    /// locked (Ultima VII's locked chest is its own shape), otherwise - or
+    /// with no Locked Sprite - its World Sprite. <paramref name="instance"/>
+    /// null = how it starts (a fresh one).
+    /// </summary>
+    private SpriteEntry? ContainerSprite(ContainerData data, IHasContainerContents? instance)
+    {
+        bool locked = instance is null ? data.IsLocked : IsLockedNow(instance, data);
+        if (locked && !string.IsNullOrEmpty(data.LockedSpriteName)
+            && _sprites.Groups.FirstOrDefault(g => g.Name == data.LockedSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == data.LockedSpriteName) is { } lockedSprite)
+            return lockedSprite;
+        return _sprites.Groups.FirstOrDefault(g => g.Name == data.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == data.SpriteName);
+    }
+
+    /// <summary>After its lock changes: the container on the map swaps sprite, and every open gump redraws (slots, container windows).</summary>
+    private void RefreshContainerLook(IHasContainerContents container)
+    {
+        if (container is PlacedItemInstance placed && _itemVisuals.GetValueOrDefault(placed) is Image image
+            && _containers.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is { } data
+            && ContainerSprite(data, placed) is { Frames.Count: > 0 } sprite)
+        {
+            var frame = LoadStaticFrame(sprite.Frames[0].FilePath);
+            var (width, height) = frame is not null ? SpriteSizing.Quantize(frame.PixelWidth, frame.PixelHeight) : ((int)image.Width, (int)image.Height);
+            image.Width = width;
+            image.Height = height;
+            UnregisterWorldAnimator(image);
+            RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources));
+        }
+        RefreshAfterMove();
     }
 
     // ---------- Choosing a target (Get_click) ----------

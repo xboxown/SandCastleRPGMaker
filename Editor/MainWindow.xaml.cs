@@ -2394,7 +2394,12 @@ public partial class MainWindow : Window
         {
             // Real, confirmed fix - a container is placed exactly like a book (same real PlacedItemInstance), so it gets the exact same real sprite/preview treatment here, not the generic lettered fallback that only ever covered Book by name.
             var containerData = _containerDatabase.Containers.FirstOrDefault(c => c.Id == instance.ItemId);
-            sprite = containerData is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
+            // A container that starts locked shows its Locked Sprite (if it has one), as it will when the game starts.
+            sprite = containerData is null ? null
+                : (containerData.IsLocked && !string.IsNullOrEmpty(containerData.LockedSpriteName)
+                    ? _spriteDatabase.Groups.FirstOrDefault(g => g.Name == containerData.LockedSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.LockedSpriteName)
+                    : null)
+                  ?? _spriteDatabase.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
             tooltip = containerData is not null ? $"{containerData.Name} (hold Shift and hover to preview animation)" : $"Container #{instance.ItemId} (not found)";
         }
         else

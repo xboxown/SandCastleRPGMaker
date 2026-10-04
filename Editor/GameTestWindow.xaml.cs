@@ -414,7 +414,7 @@ public partial class GameTestWindow : Window
             {
                 // Real, confirmed fix, same real bug as the map editor's own PlaceItemVisual - this is GameTestWindow's own SEPARATE map-item-visual builder, never extended for Container at all, so it fell into the generic lettered-marker fallback below instead of showing its real sprite.
                 var containerData = _containers.Containers.FirstOrDefault(c => c.Id == instance.ItemId);
-                var sprite = containerData is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == containerData.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData.SpriteName);
+                var sprite = containerData is null ? null : ContainerSprite(containerData, instance); // its Locked Sprite while locked
 
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
@@ -946,7 +946,7 @@ public partial class GameTestWindow : Window
         if (equippedItem.Category == ReferencedItemCategory.Container)
         {
             var containerData = _containers.Containers.FirstOrDefault(c => c.Id == equippedItem.ItemId);
-            var itemSprite = _sprites.Groups.FirstOrDefault(g => g.Name == containerData?.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == containerData?.SpriteName);
+            var itemSprite = containerData is null ? null : ContainerSprite(containerData, equippedItem); // its Locked Sprite while locked
             if (itemSprite is null || itemSprite.Frames.Count == 0) return null;
             var frameBitmap = LoadStaticFrame(itemSprite.Frames[0].FilePath);
             (int iw, int ih) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : (32, 32);
@@ -1297,7 +1297,7 @@ public partial class GameTestWindow : Window
             else if (item.Category == ReferencedItemCategory.Container)
             {
                 var inner = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
-                var sprite = _sprites.Groups.FirstOrDefault(g => g.Name == inner?.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == inner?.SpriteName);
+                var sprite = inner is null ? null : ContainerSprite(inner, item); // its Locked Sprite while locked
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
                     var img = new AlphaHitImage { Width = 32 * containerItemCounterScale, Height = 32 * containerItemCounterScale, Stretch = Stretch.Uniform };

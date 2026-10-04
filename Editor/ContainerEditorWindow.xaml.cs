@@ -29,6 +29,7 @@ public partial class ContainerEditorWindow : Window
     private readonly CharacterDatabase _characters = new();
     private bool _suppress;
     private string? _worldSpriteFilterGroup;
+    private string? _lockedSpriteFilterGroup;
     private string? _paperDollFilterGroup;
 
     /// <summary>Same real principle as BookEditorWindow's own _current - tracked separately from ContainerListBox.SelectedItem so the Event tab's lazy-attach logic (MainTabControl_SelectionChanged) and its callbacks can reach the right container without re-querying the list every time.</summary>
@@ -171,6 +172,10 @@ public partial class ContainerEditorWindow : Window
         _worldSpriteFilterGroup = string.IsNullOrEmpty(container.SpriteGroup) ? null : container.SpriteGroup;
         WorldSpriteFilterCheck.IsChecked = _worldSpriteFilterGroup is not null;
         PopulateSpriteChoices(WorldSpriteCombo, container.SpriteGroup, container.SpriteName);
+
+        _lockedSpriteFilterGroup = string.IsNullOrEmpty(container.LockedSpriteGroup) ? null : container.LockedSpriteGroup;
+        LockedSpriteFilterCheck.IsChecked = _lockedSpriteFilterGroup is not null;
+        PopulateSpriteChoices(LockedSpriteCombo, container.LockedSpriteGroup, container.LockedSpriteName);
 
         _paperDollFilterGroup = string.IsNullOrEmpty(container.PaperDollSpriteGroup) ? null : container.PaperDollSpriteGroup;
         PaperDollFilterCheck.IsChecked = _paperDollFilterGroup is not null;
@@ -332,6 +337,41 @@ public partial class ContainerEditorWindow : Window
             container.SpriteGroup = _worldSpriteFilterGroup ?? _sprites.Groups.FirstOrDefault(g => g.Sprites.Contains(sprite))?.Name ?? string.Empty;
             SolidSize.SetSprite(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName));
         }
+    }
+
+    private void LockedSpriteFilterCheck_Checked(object sender, RoutedEventArgs e)
+    {
+        if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
+        string? chosen = SelectGroupWindow.Show(this, _sprites.Groups.Select(g => g.Name).ToList(), _lockedSpriteFilterGroup);
+        if (chosen is null) { _suppress = true; LockedSpriteFilterCheck.IsChecked = false; _suppress = false; return; }
+        _lockedSpriteFilterGroup = chosen;
+        PopulateSpriteChoices(LockedSpriteCombo, chosen, container.LockedSpriteName);
+    }
+
+    private void LockedSpriteFilterCheck_Unchecked(object sender, RoutedEventArgs e)
+    {
+        if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
+        _lockedSpriteFilterGroup = null;
+        PopulateSpriteChoices(LockedSpriteCombo, null, container.LockedSpriteName);
+    }
+
+    private void LockedSprite_Changed(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
+        if (LockedSpriteCombo.SelectedItem is SpriteEntry sprite)
+        {
+            container.LockedSpriteName = sprite.Name;
+            container.LockedSpriteGroup = _lockedSpriteFilterGroup ?? _sprites.Groups.FirstOrDefault(g => g.Sprites.Contains(sprite))?.Name ?? string.Empty;
+        }
+    }
+
+    private void ClearLockedSprite_Click(object sender, RoutedEventArgs e)
+    {
+        if (ContainerListBox.SelectedItem is not ContainerData container) return;
+        container.LockedSpriteGroup = container.LockedSpriteName = string.Empty;
+        _suppress = true;
+        LockedSpriteCombo.SelectedItem = null;
+        _suppress = false;
     }
 
     private void PaperDollFilterCheck_Checked(object sender, RoutedEventArgs e)
