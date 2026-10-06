@@ -252,7 +252,7 @@ public partial class GameTestWindow
             StatusText.Text = $"\"{key.Name}\" doesn't fit \"{obj.Name}\".";
             FlashPointer(MousePointerKind.Blocked, playSound: d.WrongKeySoundResourceId < 0);
             PlaySound(d.WrongKeySoundResourceId);
-            PartyBark(KeyDoesntFitBarks[Rng.Next(KeyDoesntFitBarks.Length)]);
+            PartyBark(VerboseKind.WrongKey);
             return;
         }
         if (IsDoorLocked(door))
@@ -293,7 +293,7 @@ public partial class GameTestWindow
         }
         UseUpOne(source);
         PlaySound(d.LockpickBrokeSoundResourceId);
-        if (_player is not null) ShowFloatingText(_player, "The lockpick broke!", 2000);
+        if (_player is not null) Bark(_player, VerboseKind.LockpickFailed);
         StatusText.Text = $"You fail to pick the lock on \"{obj.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByExit);
     }

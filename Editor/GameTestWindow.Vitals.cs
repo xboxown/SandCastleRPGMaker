@@ -105,6 +105,8 @@ public partial class GameTestWindow
     {
         if (amount <= 0 || IsDead(character) || GetHp(character) is not int hp) return;
         FlashHit(character, amount, hp); // Exult's red outline (or, badly hurt, the red screen)
+        int half = MaxHp(character) / 2;
+        if (hp >= half && hp - amount < half && hp - amount > 0 && Rng.Next(2) == 0) Bark(character, VerboseKind.Hurt); // reduce_health: "A little oomph." 
         hp -= amount;
         SetHp(character, hp);
         if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {hp} left.";
@@ -192,6 +194,7 @@ public partial class GameTestWindow
         vitals.Food = Math.Clamp(vitals.Food - Rng.Next(Math.Max(0, s.FoodUsedPerHourMax) + 1), 0, SurvivalSettings.MaxFood);
         if (character == _player && vitals.Food <= s.HungryAtOrBelow)
             StatusText.Text = vitals.Food <= 0 ? "You are starving!" : "You are hungry.";
+        SayHungerMessage(character, vitals.Food); // Exult's say_hunger_message
     }
 
     /// <summary>Npc_hunger_timer: once a game minute while hungry; at food 0, a chance of losing health.</summary>

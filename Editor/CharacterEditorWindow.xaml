@@ -149,6 +149,12 @@
                 </ScrollViewer>
             </TabItem>
 
+            <TabItem x:Name="VerboseTab" Header="Verbose" ToolTip="Human or not, how it treats doors, and what it says (hunger, getting hit, fear, theft warnings...)">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel x:Name="VerbosePanel" Margin="10"/>
+                </ScrollViewer>
+            </TabItem>
+
             <TabItem x:Name="TalkTab" Header="Talk" ToolTip="What happens when the player double-clicks this character (not for the main player)">
                 <DockPanel Margin="10">
                     <TextBlock DockPanel.Dock="Top" TextWrapping="Wrap" Opacity="0.75" Margin="0,0,0,8"

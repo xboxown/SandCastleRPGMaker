@@ -181,7 +181,7 @@ public partial class GameTestWindow
             StatusText.Text = $"\"{key.Name}\" doesn't fit \"{data.Name}\".";
             FlashPointer(MousePointerKind.Blocked, playSound: data.WrongKeySoundResourceId < 0);
             PlaySound(data.WrongKeySoundResourceId);
-            PartyBark(KeyDoesntFitBarks[Rng.Next(KeyDoesntFitBarks.Length)]);
+            PartyBark(VerboseKind.WrongKey);
             return;
         }
 
@@ -231,7 +231,7 @@ public partial class GameTestWindow
 
         UseUpOne(source);
         PlaySound(data.LockpickBrokeSoundResourceId);
-        if (_player is not null) ShowFloatingText(_player, "The lockpick broke!", 2000);
+        if (_player is not null) Bark(_player, VerboseKind.LockpickFailed);
         StatusText.Text = $"You fail to pick the lock on \"{data.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
     }
 
@@ -291,13 +291,14 @@ public partial class GameTestWindow
     /// <summary>Locking: the Lock Sound, or the Unlock Sound if there's none.</summary>
     private static int LockSound(ContainerData data) => data.LockSoundResourceId >= 0 ? data.LockSoundResourceId : data.UnlockSoundResourceId;
 
-    /// <summary>Exult's randomPartyBark: a random member of the party (the player included) says it.</summary>
-    private void PartyBark(string text)
+    /// <summary>Exult's randomPartyBark: a random member of the party who can speak (the player included) says one of their own lines.</summary>
+    private void PartyBark(VerboseKind kind)
     {
         var party = new List<CharacterDefinition>();
         if (_player is not null && !IsDead(_player)) party.Add(_player);
         party.AddRange(_mapCharacters.Select(mc => mc.Character).Where(c => c.IsInParty && c != _player && !IsDead(c)));
-        if (party.Count > 0) ShowFloatingText(party[Rng.Next(party.Count)], text, 3000);
+        party.RemoveAll(c => !c.IsHuman);
+        if (party.Count > 0) Bark(party[Rng.Next(party.Count)], kind);
     }
 
     private bool ToolStillThere(DragOrigin source) => source switch

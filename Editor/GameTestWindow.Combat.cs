@@ -130,6 +130,7 @@ public partial class GameTestWindow
         var me = mapCharacter.Character;
         var npc = mapCharacter.Npc;
         if (IsIncapacitated(me) || npc.InCombat) return;
+        MaybeFeelUneasy(mapCharacter, 1000); // a fight in sight it's no part of
         foreach (var other in LivingCombatants())
         {
             if (other == me || !CanSee(me, other) || IsUnconscious(other)) continue; // nobody starts a fight with the unconscious
@@ -291,7 +292,7 @@ public partial class GameTestWindow
         int y = Math.Clamp(mapCharacter.Placement.Y + dy * CellsForTiles(8 + Rng.Next(8)), 0, _map.Height - 1);
         if (FindPath(mapCharacter, (x, y)) is { Count: > 0 } path) StartPath(mapCharacter, path);
         else npc.WaitMs = StdDelay + Rng.Next(1000);
-        if (npc.FleeCount == 1 && Rng.Next(3) > 0) Say(mapCharacter, "Help!");
+        if (npc.FleeCount == 1 && Rng.Next(3) > 0) Bark(mapCharacter.Character, VerboseKind.Fleeing); // Combat_schedule::run_away: a scream, 2 in 3
     }
 
     // ---------- The player's attacks ----------
@@ -410,7 +411,7 @@ public partial class GameTestWindow
         }
         if (firstBlow) ReportFactionIncident(defender, attacker, FactionIncident.Attack);
         // Being a bully? The player attacking someone not in the party brings their friends.
-        if (attacker == _player && !defender.IsInParty && firstBlow) AttackPlayer(defender, includeSelf: false, "Help! Help!");
+        if (attacker == _player && !defender.IsInParty && firstBlow) { Bark(defender, VerboseKind.CallForHelp); AttackPlayer(defender, includeSelf: false, null); }
     }
 
     /// <summary>Game_window::attack_avatar: up to 3 characters within 20 tiles, on the victim's side and able to reach the player, attack.</summary>
@@ -491,7 +492,7 @@ public partial class GameTestWindow
         }
         if (witness is null)
         {
-            if (closest is not null && Rng.Next(2) == 0) Say(closest, "Did you hear something?");
+            if (closest is not null && Rng.Next(2) == 0) Bark(closest.Character, VerboseKind.HeardNoise);
             return; // didn't get caught
         }
 
@@ -500,12 +501,14 @@ public partial class GameTestWindow
         SetCharacterPose(witness, "Idle", FacingTowards(x, y, _playerPixelX, _playerPixelY));
         if (!witness.Npc.InCombat) StartHounding(witness);
         _theftWarnings++;
-        if (_theftWarnings < 2 + Rng.Next(3))
+        // One warning per line of its Theft warnings (Exult: up to three, its three theft lines); after the last, it calls for help and attacks.
+        int warnings = witness.Character.IsHuman ? witness.Character.Verbose.Get(VerboseKind.TheftWarning).Count : 3;
+        if (_theftWarnings <= warnings)
         {
-            Say(witness, _theftWarnings == 1 ? "Hey! That's not thine!" : "Put that back, thief!");
+            Bark(witness.Character, VerboseKind.TheftWarning, _theftWarnings - 1);
             return;
         }
-        Say(witness, "Thief! Thief!");
+        Bark(witness.Character, VerboseKind.CallForHelp);
         AttackPlayer(witness.Character, includeSelf: true, null);
     }
 

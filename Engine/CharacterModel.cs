@@ -50,6 +50,13 @@ public class CharacterDefinition
 
     /// <summary>Food, poison and ailment immunities (Character Editor > Health).</summary>
     public SurvivalSettings Survival { get; set; } = new();
+    /// <summary>Human (Exult's sentient, can speak): opens doors, sits on chairs, sleeps in beds, and says its Verbose lines. Not human (a rat, a bear): none of that - doors it can't open stop it, unless its faction would break them down.</summary>
+    public bool IsHuman { get; set; } = true;
+    /// <summary>Breaks down closed doors of a side it's hostile to even when they aren't locked (instead of opening them).</summary>
+    public bool BreaksClosedDoors { get; set; }
+    /// <summary>What it says in each situation (Character Editor > Verbose).</summary>
+    public VerboseLines Verbose { get; set; } = new();
+
     /// <summary>Its blood type: a sprite in the Sprite Editor's Blood group, or empty for none (it never bleeds - Exult's cant_bleed).</summary>
     public string BloodSpriteName { get; set; } = string.Empty;
 

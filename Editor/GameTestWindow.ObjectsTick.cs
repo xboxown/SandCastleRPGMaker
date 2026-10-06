@@ -115,16 +115,19 @@ public partial class GameTestWindow
 
     /// <summary>Exult paths.cc: for planning a route, a closed unlocked door counts as open (it will be opened on the way); a locked one stays shut - unless the walker is hostile to the door's side and can break it down.</summary>
     private List<Body> WorldBodiesForPathing(MapCharacter? walker = null) =>
-        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door
-            && (!IsDoorLocked(o) || (walker is not null && WouldBreakDown(walker, door))) ? b with { Solid = false } : b).ToList();
+        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door && !IsDoorOpen(o)
+            && ((!IsDoorLocked(o) && (walker is null || walker.Character.IsHuman)) // a human opens it on the way
+                || (walker is not null && WouldBreakDown(walker, door, IsDoorLocked(o)))) // or it breaks it down
+            ? b with { Solid = false } : b).ToList();
 
     /// <summary>The faction a door belongs to: its own, or its owner's.</summary>
     private int DoorFaction(WorldObject door) =>
         door.FactionId >= 0 ? door.FactionId : door.BelongToId >= 0 ? _characters?.Characters.FirstOrDefault(c => c.Id == door.BelongToId)?.FactionId ?? -1 : -1;
 
-    /// <summary>An NPC breaks a locked door down when its faction would attack the door's (a bear breaking into a house) - and the door can be broken.</summary>
-    private bool WouldBreakDown(MapCharacter walker, WorldObject door) =>
-        IsBreakable(door) && DoorFaction(door) is int faction && faction >= 0
+    /// <summary>An NPC breaks a door down when its faction would attack the door's (a bear breaking into a house) and the door can be broken - a locked one always; a closed, unlocked one only if it's set to break closed doors (Character Editor > Verbose).</summary>
+    private bool WouldBreakDown(MapCharacter walker, WorldObject door, bool locked) =>
+        (locked || walker.Character.BreaksClosedDoors)
+        && IsBreakable(door) && DoorFaction(door) is int faction && faction >= 0
         && _factions.BehaviorToward(walker.Character.FactionId, faction) == FactionBehavior.Attack;
 
     private readonly Dictionary<MapCharacter, double> _doorBashMs = new();
@@ -134,8 +137,8 @@ public partial class GameTestWindow
     {
         foreach (var door in _map.Objects.ToList())
         {
-            if (DefinitionOf(door) is not { Type: ObjectType.Door } obj || IsDoorOpen(door) || !IsDoorLocked(door) || !BodyOf(null, door).Overlaps(nextFoot)) continue;
-            if (!WouldBreakDown(mapCharacter, obj)) return false;
+            if (DefinitionOf(door) is not { Type: ObjectType.Door } obj || IsDoorOpen(door) || !BodyOf(null, door).Overlaps(nextFoot)) continue;
+            if (!WouldBreakDown(mapCharacter, obj, IsDoorLocked(door))) return false;
             double wait = _doorBashMs.GetValueOrDefault(mapCharacter) - elapsedMs;
             if (wait > 0) { _doorBashMs[mapCharacter] = wait; return true; }
             _doorBashMs[mapCharacter] = 2 * StdDelay;
@@ -151,7 +154,9 @@ public partial class GameTestWindow
     /// <summary>A walking NPC blocked by a closed, unlocked door opens it (actions.cc open_door). True if it did.</summary>
     private bool NpcOpensDoor(MapCharacter mapCharacter, UnitRect nextFoot)
     {
+        if (!mapCharacter.Character.IsHuman) return false; // Exult: only the sentient open doors
         if (ClosedUnlockedDoorIn(nextFoot) is not { } door || DefinitionOf(door) is not { } obj) return false;
+        if (mapCharacter.Character.BreaksClosedDoors && WouldBreakDown(mapCharacter, obj, locked: false)) return false; // it'd rather break it down
         OpenDoor(door, obj, mapCharacter);
         _doorsToClose[mapCharacter] = door;
         return true;

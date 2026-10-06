@@ -148,6 +148,7 @@ public partial class CharacterEditorWindow : Window
         BuildSchedulePanel(character);
         BuildTalkEditor(character);
         BuildHealthPanel(character);
+        BuildVerbosePanel(character);
         BuildEventTab(character);
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;

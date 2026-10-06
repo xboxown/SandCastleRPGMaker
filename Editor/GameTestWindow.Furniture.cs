@@ -225,6 +225,7 @@ public partial class GameTestWindow
     private bool GoToFurniture(MapCharacter mapCharacter, bool bed)
     {
         var me = mapCharacter.Character;
+        if (!me.IsHuman) return false; // a rat doesn't take a chair or a bed: it stands, or sleeps where it is
         int range = bed ? CellsForTiles(24) : int.MaxValue;
         var candidates = _map.Objects
             .Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type == (bed ? ObjectType.Bed : ObjectType.Chair))
