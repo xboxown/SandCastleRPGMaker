@@ -181,7 +181,9 @@ public partial class GameTestWindow : Window
         _bodyContainerTemplate = systemSettings.BodyContainer ?? _bodyContainerTemplate; // how every dead body opens
 
         BuildMapVisual();
+        InitializeObjectStates(); // doors open/closed/locked, lights lit, bed covers laid (GameTestWindow.Objects.cs)
         BuildObjectVisuals();
+        HideHiddenTraps();
         BuildBookVisuals();
         SettleAll(); // The Map Editor has no way to author a non-ground Z yet - every item/object starts life at Z 0 in the saved map data. This runs the real settle logic once for every occupied cell at startup, so any cell that already holds more than one thing gets a genuine, correctly-computed initial Z, rather than everything just rendering flat at ground level until the first drag ever touches that cell.
         RefreshStackingVisuals();
@@ -301,28 +303,6 @@ public partial class GameTestWindow : Window
                 Canvas.SetTop(image, y * _tileHeight);
                 GameCanvas.Children.Add(image);
             }
-        }
-    }
-
-    /// <summary>Static for this alpha pass - objects don't yet have their own behavior when walked into. WorldObject uses a plain IconPath, not a Sprite Editor group/name link like Books - so this loads a static image, no SpriteAnimator involved.</summary>
-    private void BuildObjectVisuals()
-    {
-        foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0))
-        {
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-            if (worldObject is null || string.IsNullOrEmpty(worldObject.IconPath) || !File.Exists(worldObject.IconPath)) continue;
-
-            BitmapImage bitmap;
-            try { bitmap = new BitmapImage(new Uri(worldObject.IconPath)); }
-            catch { continue; }
-
-            (int quantW, int quantH) = SpriteSizing.Quantize(bitmap.PixelWidth, bitmap.PixelHeight);
-            var image = new Image { Width = quantW, Height = quantH, IsHitTestVisible = true, Source = bitmap };
-
-            PositionQuantizedVisual(image, instance.X, instance.Y, quantW, quantH, instance.OffsetX, instance.OffsetY);
-            Panel.SetZIndex(image, ComputeDepthZIndex(instance.X + 0.5, instance.Y + 0.5, instance.Z));
-            GameCanvas.Children.Add(image);
-            _objectVisuals[instance] = image;
         }
     }
 
@@ -936,13 +916,7 @@ public partial class GameTestWindow : Window
             return img;
         }
         if (equippedItem.Category == ReferencedItemCategory.Object)
-        {
-            var obj = _objects.Objects.FirstOrDefault(o => o.Id == equippedItem.ItemId);
-            var bmp = string.IsNullOrEmpty(obj?.IconPath) ? null : LoadStaticFrame(obj.IconPath);
-            if (bmp is null) return null;
-            (int iw, int ih) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-            return new AlphaHitImage { Source = bmp, Width = iw * paperdollItemCounterScale, Height = ih * paperdollItemCounterScale, Stretch = Stretch.Uniform };
-        }
+            return BuildCarriedObjectPicture(equippedItem, paperdollItemCounterScale, gump.ItemAnimators); // its look for its state and quantity
         if (equippedItem.Category == ReferencedItemCategory.Container)
         {
             var containerData = _containers.Containers.FirstOrDefault(c => c.Id == equippedItem.ItemId);
@@ -1286,14 +1260,8 @@ public partial class GameTestWindow : Window
             }
             else if (item.Category == ReferencedItemCategory.Object)
             {
-                var obj = _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId);
-                var bmp = string.IsNullOrEmpty(obj?.IconPath) ? null : LoadStaticFrame(obj.IconPath);
-                if (bmp is not null)
-                {
-                    (int iw, int ih) = SpriteSizing.Quantize(bmp.PixelWidth, bmp.PixelHeight);
-                    visual = new AlphaHitImage { Source = bmp, Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
-                    size = visual.Width;
-                }
+                visual = BuildCarriedObjectPicture(item, containerItemCounterScale, gump.ItemAnimators); // its look for its state and quantity
+                if (visual is not null) size = visual.Width;
             }
             else if (item.Category == ReferencedItemCategory.Container)
             {
@@ -1351,7 +1319,14 @@ public partial class GameTestWindow : Window
             return;
         }
         if (isUse && item.Category == ReferencedItemCategory.Object
-            && TryUseLockTool(_objects.Objects.FirstOrDefault(o => o.Id == item.ItemId), new ContainerOrigin(gump.PlacedItem, gump.Data, item))) return;
+            && UseCarriedObject(item, new ContainerOrigin(gump.PlacedItem, gump.Data, item))) return; // keys, lockpicks, lights, By Use
+        if (!isUse && DefinitionOf(item) is { } containedObject)
+        {
+            string objectName = ObjectDisplayName(containedObject, item.IsSpentRuntime, item.Quantity);
+            ShowContainerIdentifyLabel(gump, item, objectName);
+            StatusText.Text = objectName;
+            return;
+        }
         string typeName = item.Category.ToString();
         if (!isUse) ShowContainerIdentifyLabel(gump, item, $"a {typeName}");
         StatusText.Text = isUse
@@ -1420,8 +1395,14 @@ public partial class GameTestWindow : Window
         }
 
         if (isUse && item.Category == ReferencedItemCategory.Object
-            && TryUseLockTool(_objects.Objects.FirstOrDefault(o => o.Id == item.ItemId),
-                slotKey is not null ? new SlotOrigin(gump.Character, slotKey, item) : new BackpackOrigin(gump.Character, item))) return;
+            && UseCarriedObject(item, slotKey is not null ? new SlotOrigin(gump.Character, slotKey, item) : new BackpackOrigin(gump.Character, item))) return; // keys, lockpicks, lights, By Use
+        if (!isUse && DefinitionOf(item) is { } carriedObject)
+        {
+            string objectName = ObjectDisplayName(carriedObject, item.IsSpentRuntime, item.Quantity);
+            if (slotKey is not null) ShowPaperdollIdentifyLabel(gump, slotKey, objectName);
+            StatusText.Text = objectName;
+            return;
+        }
         string typeName = item.Category.ToString();
         if (!isUse && slotKey is not null) ShowPaperdollIdentifyLabel(gump, slotKey, $"a {typeName}");
         StatusText.Text = isUse
@@ -1606,6 +1587,8 @@ public partial class GameTestWindow : Window
     private void ApplyRealDayNightPeriod(string period)
     {
         if (!DayNightPeriodColors.TryGetValue(period, out var setting)) return;
+        _nightDarkness = period == "Evening" ? setting.Opacity : 0; // the dark one: light sources lift it (GameTestWindow.Lighting.cs)
+        _lightLevel = -1;
         LightingOverlay.Fill = new SolidColorBrush(setting.Color);
         var fade = new DoubleAnimation(setting.Opacity, TimeSpan.FromSeconds(0.6));
         LightingOverlay.BeginAnimation(UIElement.OpacityProperty, fade);
@@ -1757,6 +1740,7 @@ public partial class GameTestWindow : Window
     /// </summary>
     private void StepPlayerContinuous(int dx, int dy, double deltaSeconds)
     {
+        if (PlayerSeated) { StandUp(_player!); return; } // moving gets you up off the chair or bed
         var newFacing = (dx, dy) switch
         {
             (-1, 0) => SpriteDirection.West,
@@ -1836,8 +1820,14 @@ public partial class GameTestWindow : Window
         // Real, confirmed fix, per spec ("When I checked collision detection, I could still pass through the chest") - a placed Container was never checked here at all, so its own real IsSolid setting was silently ignored no matter what it was set to. This is squarely collision integration, not a change to the walking/input/frame-timing system itself, which stays completely untouched.
         if (item is not null && item.Category == ReferencedItemCategory.Container)
             return _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.IsSolid ?? false;
-        if (obj is not null)
-            return _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.IsSolid ?? false;
+        if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject)
+            return worldObject.Type switch
+            {
+                ObjectType.Wall => true,                              // always an obstacle
+                ObjectType.Door => obj.IsOpenRuntime != true,         // solid while closed
+                ObjectType.Tile or ObjectType.Trap => false,          // flat, no collision
+                _ => worldObject.IsSolid
+            };
         return false;
     }
 
@@ -2027,7 +2017,9 @@ public partial class GameTestWindow : Window
         if (obj is not null)
         {
             var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId);
-            return worldObject is null ? (false, false, 1, 1, 1) : (worldObject.IsCellStackable, worldObject.AllowCellElevation, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), Math.Max(1, worldObject.SizeZ));
+            if (worldObject is null) return (false, false, 1, 1, 1);
+            bool flat = worldObject.Type is ObjectType.Tile or ObjectType.Trap; // Exult: a flat shape is 0 lifts high
+            return (worldObject.IsCellStackable || flat, worldObject.AllowCellElevation && !flat, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), flat ? 0 : Math.Max(1, worldObject.SizeZ));
         }
         return (false, false, 1, 1, 1);
     }
@@ -2087,6 +2079,8 @@ public partial class GameTestWindow : Window
                 ApplyZToVisual(fe, obj.X, obj.Y, obj.Z, obj.OffsetX, obj.OffsetY);
         }
         ApplyRestingDrawOrder();
+        ApplyWallDrawOrder(); // things near walls, by Exult's compare
+        FixFurnitureDrawOrder(); // sitters over chairs, covers over sleepers
     }
 
     /// <summary>
@@ -2397,22 +2391,6 @@ public partial class GameTestWindow : Window
     /// <summary>While a book is open: what a click anywhere does (next page, or finish on the last), and what Escape does (finish now) - Exult's modal Get_click loop.</summary>
     private Action? _bookNextPage;
     private Action? _bookClose;
-
-    private void HandleObjectClick(ObjectInstance instance, bool isUse)
-    {
-        var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-        string name = worldObject?.Name ?? $"Object #{instance.ObjectId}";
-
-        // WorldObject has no EventPages field at all yet - same honest gap as Weapons/Armor/Items above, not a different code path.
-        if (!isUse)
-        {
-            ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);
-        }
-        else if (!TryUseLockTool(worldObject, new MapObjectOrigin(instance)))
-        {
-            StatusText.Text = $"\"{name}\" has no events authored yet, so nothing happens when you use it - the click system itself is already ready for when it does.";
-        }
-    }
 
     private static BitmapImage? LoadStaticFrame(string path)
     {

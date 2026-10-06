@@ -1,0 +1,141 @@
+using System.Windows;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// Object Editor objects, each frame the game clock runs:
+///  - Lights burn down by the game minutes passing (spent when done).
+///  - Tiles and traps: who is standing on each (player and NPCs alike).
+///    Stepping onto a tile fires its By Step On, standing on it By Stand On
+///    once a second, stepping off By Step Off. Stepping onto a trap sets it
+///    off: damage, maybe an ailment, its sound - unless it's one-shot and
+///    spent, or not re-armed yet; a hidden trap shows itself once sprung.
+///  - NPCs that opened a door to pass close it behind them once they're
+///    clear of the doorway (Exult's Path_walking_actor_action::open_door).
+/// </summary>
+public partial class GameTestWindow
+{
+    private double _lastObjectMinute = -1;
+    private double _floorStayMs;
+    private readonly Dictionary<CharacterDefinition, HashSet<ObjectInstance>> _onFloorObjects = new();
+    private readonly Dictionary<ObjectInstance, double> _trapRearmMs = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Doors NPCs opened on their way, to close behind them.</summary>
+    private readonly Dictionary<MapCharacter, ObjectInstance> _doorsToClose = new();
+
+    private void UpdateObjects(double elapsedMs)
+    {
+        double now = TotalMinutes();
+        if (_lastObjectMinute < 0) _lastObjectMinute = now;
+        if (now > _lastObjectMinute) { BurnLights(now - _lastObjectMinute); _lastObjectMinute = now; }
+
+        foreach (var key in _trapRearmMs.Keys.ToList())
+            if ((_trapRearmMs[key] -= elapsedMs) <= 0) _trapRearmMs.Remove(key);
+
+        UpdateFloorObjects();
+        _floorStayMs += elapsedMs;
+        if (_floorStayMs >= 1000)
+        {
+            _floorStayMs = 0;
+            foreach (var (who, tiles) in _onFloorObjects.ToList())
+                foreach (var tile in tiles.ToList())
+                    if (DefinitionOf(tile) is { Type: ObjectType.Tile } obj) FireObjectEvent(tile, obj, BookTriggerConditionBased.ByStay, MapCharacterOf(who));
+        }
+        CloseDoorsBehindNpcs();
+        UpdateLighting(elapsedMs);
+    }
+
+    // ---------- Tiles and traps ----------
+
+    private UnitRect FootOf(CharacterDefinition who) => who == _player ? PlayerFootprint() : MapCharacterOf(who) is { } mc ? CharacterFootprint(mc) : new UnitRect(-999, -999, 0, 0);
+
+    /// <summary>Which tiles and traps each character stands on now, and what changed since the last frame.</summary>
+    private void UpdateFloorObjects()
+    {
+        var floorThings = _map.Objects.Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type is ObjectType.Tile or ObjectType.Trap).ToList();
+        if (floorThings.Count == 0 && _onFloorObjects.Count == 0) return;
+        foreach (var who in AllLivingCharacters().ToList())
+        {
+            if (who == _player && PlayerSeated) continue;
+            var foot = FootOf(who);
+            int lift = LiftOf(who);
+            var now = new HashSet<ObjectInstance>(floorThings.Where(o => Math.Abs(o.Z - lift) <= 1 && BodyOf(null, o).Overlaps(foot)), ReferenceEqualityComparer.Instance);
+            var before = _onFloorObjects.GetValueOrDefault(who) ?? new HashSet<ObjectInstance>(ReferenceEqualityComparer.Instance);
+            var activator = MapCharacterOf(who);
+            foreach (var entered in now.Where(o => !before.Contains(o)).ToList())
+            {
+                if (DefinitionOf(entered) is not { } obj) continue;
+                if (obj.Type == ObjectType.Trap) SpringTrap(entered, obj, who);
+                else FireObjectEvent(entered, obj, BookTriggerConditionBased.ByEnter, activator);
+            }
+            foreach (var left in before.Where(o => !now.Contains(o)).ToList())
+                if (DefinitionOf(left) is { Type: ObjectType.Tile } obj) FireObjectEvent(left, obj, BookTriggerConditionBased.ByExit, activator);
+            _onFloorObjects[who] = now;
+        }
+    }
+
+    /// <summary>A trap goes off under someone: damage (and an ailment), its sound, revealed if hidden; one-shot traps are then spent.</summary>
+    private void SpringTrap(ObjectInstance trap, WorldObject obj, CharacterDefinition victim)
+    {
+        var t = obj.Trap;
+        if ((t.OneShot && trap.TrapSprungRuntime) || _trapRearmMs.ContainsKey(trap)) return;
+        bool wasHidden = t.Hidden && !trap.TrapSprungRuntime;
+        trap.TrapSprungRuntime = true;
+        if (!t.OneShot && t.RearmSeconds > 0) _trapRearmMs[trap] = t.RearmSeconds * 1000;
+        PlaySound(t.TriggerSoundResourceId);
+        if (wasHidden && VisualOf(trap) is { } visual) visual.Visibility = Visibility.Visible;
+        if (victim == _player) StatusText.Text = $"You set off \"{obj.Name}\"!";
+        FireObjectEvent(trap, obj, BookTriggerConditionBased.ByEnter, MapCharacterOf(victim));
+        int low = Math.Min(t.DamageMin, t.DamageMax), high = Math.Max(t.DamageMin, t.DamageMax);
+        int damage = high <= 0 ? 0 : low + Rng.Next(high - low + 1);
+        if (damage > 0) Damage(victim, damage, $"a {obj.Name.ToLowerInvariant()}");
+        var ailment = t.Ailment switch { TrapAilment.Poisoned => Ailment.Poisoned, TrapAilment.Asleep => Ailment.Asleep, TrapAilment.Paralyzed => Ailment.Paralyzed, _ => (Ailment?)null };
+        if (ailment is { } a && !IsDead(victim)) Inflict(victim, a);
+    }
+
+    /// <summary>Hidden traps start out of sight.</summary>
+    private void HideHiddenTraps()
+    {
+        foreach (var trap in _map.Objects)
+            if (DefinitionOf(trap) is { Type: ObjectType.Trap, Trap.Hidden: true } && !trap.TrapSprungRuntime && VisualOf(trap) is { } visual)
+                visual.Visibility = Visibility.Hidden;
+    }
+
+    /// <summary>Something put down on the map: tiles under it fire By Item Dropped On It.</summary>
+    private void TilesUnderDropped(PlacedItemInstance? item, ObjectInstance? obj)
+    {
+        var body = BodyOf(item, obj);
+        var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
+        foreach (var tile in _map.Objects.Where(o => !ReferenceEquals(o, obj) && o.ContainerInstanceId < 0).ToList())
+            if (DefinitionOf(tile) is { Type: ObjectType.Tile } def && BodyOf(null, tile).Overlaps(foot))
+                FireObjectEvent(tile, def, BookTriggerConditionBased.ByDropItem);
+    }
+
+    // ---------- NPCs and doors ----------
+
+    /// <summary>Exult paths.cc: for planning a route, a closed unlocked door counts as open (it will be opened on the way); a locked one stays shut.</summary>
+    private List<Body> WorldBodiesForPathing() =>
+        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } && !IsDoorLocked(o) ? b with { Solid = false } : b).ToList();
+
+    /// <summary>A walking NPC blocked by a closed, unlocked door opens it (actions.cc open_door). True if it did.</summary>
+    private bool NpcOpensDoor(MapCharacter mapCharacter, UnitRect nextFoot)
+    {
+        if (ClosedUnlockedDoorIn(nextFoot) is not { } door || DefinitionOf(door) is not { } obj) return false;
+        OpenDoor(door, obj, mapCharacter);
+        _doorsToClose[mapCharacter] = door;
+        return true;
+    }
+
+    /// <summary>Once past it and clear of the doorway, the NPC closes the door behind it.</summary>
+    private void CloseDoorsBehindNpcs()
+    {
+        foreach (var (mapCharacter, door) in _doorsToClose.ToList())
+        {
+            if (!_map.Objects.Contains(door) || !IsDoorOpen(door) || DefinitionOf(door) is not { } obj || IsDead(mapCharacter.Character)) { _doorsToClose.Remove(mapCharacter); continue; }
+            var body = BodyOf(null, door);
+            var doorway = new UnitRect(body.Left - 1, body.Top - 1, body.Width + 2, body.Depth + 2); // a tile clear all round
+            if (CharacterFootprint(mapCharacter).Overlaps(doorway)) continue;
+            if (TryCloseDoor(door, obj, mapCharacter)) _doorsToClose.Remove(mapCharacter); // someone in the doorway: try again next frame
+        }
+    }
+}

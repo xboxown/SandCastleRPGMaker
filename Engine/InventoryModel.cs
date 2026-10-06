@@ -67,6 +67,13 @@ public class InventoryItemInstance : IHasContainerContents
     /// <summary>Real, confirmed fix - only meaningful when this instance's own Category is Container: what THIS specific container is itself holding, exactly the same real Contents concept a placed container has (PlacedItemInstance.Contents), just carried here instead once it's been picked up and is sitting in someone's own Inventory/EquippedSlots. Without this, picking up a chest silently lost everything inside it - there was nowhere for it to live at all.</summary>
     public List<InventoryItemInstance> Contents { get; set; } = new();
 
+    /// <summary>A carried light source's state in play (lit, minutes of burning left, burnt out) - travels with it between the map and inventories, as an ObjectInstance's does.</summary>
+    public bool? IsLitRuntime { get; set; }
+    public double BurnLeftRuntime { get; set; } = -1;
+    public bool IsSpentRuntime { get; set; }
+    /// <summary>Frame shown, for objects whose frames are states (a bed cover).</summary>
+    public int FrameRuntime { get; set; }
+
     /// <summary>Per-instance lock state in play - only meaningful for a Container. Null until a key or lockpick changes it (it's then as the container's IsLocked says). Travels with the container wherever it goes, as in Exult, where a locked chest is its own shape.</summary>
     public bool? IsLockedRuntime { get; set; }
 }

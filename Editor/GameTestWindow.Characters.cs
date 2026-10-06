@@ -140,6 +140,7 @@ public partial class GameTestWindow
         Canvas.SetLeft(visual, mapCharacter.PixelX - visual.Width / 2 - mapCharacter.Lift * LiftPixelShift);
         Canvas.SetTop(visual, mapCharacter.PixelY + _tileHeight / 2.0 - visual.Height - mapCharacter.Lift * LiftPixelShift);
         Panel.SetZIndex(visual, ComputeDepthZIndex(mapCharacter.PixelX / _tileWidth, mapCharacter.PixelY / _tileHeight, mapCharacter.Lift));
+        OrderCharacterAmongWalls(mapCharacter); // in front of or behind walls, by Exult's compare
     }
 
     /// <summary>An actor's footprint at a feet position: centred under its feet, its own size - the same rule as the player's.</summary>

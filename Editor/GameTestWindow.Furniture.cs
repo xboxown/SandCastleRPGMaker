@@ -1,0 +1,240 @@
+using System.Windows;
+using System.Windows.Controls;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// Chairs and beds, ported from Exult (schedule.cc Sit_schedule /
+/// Sit_actor_action, Sleep_schedule; intrinsics.cc sit_down):
+///  - A chair or bed has a look per facing, each with its seats / sleeping
+///    places (Object Editor). Someone sitting faces the chair's facing (Exult:
+///    the chair's frame gives the sitter's direction), in the Sit pose.
+///  - Double-click a chair: the main character sits in the free seat nearest
+///    them (the chair's usecode calls sit_down). Double-click a bed: lies down
+///    on the free place nearest them. Moving gets up again.
+///  - A seat or place taken by someone is occupied (is_occupied).
+///  - The Sit schedule: the NPC finds the nearest free chair it can reach,
+///    walks to it and sits; none free: tries again in 1-2 seconds.
+///  - The Sleep schedule: the nearest free bed within 24 tiles; the NPC
+///    walks to it, lies on it, and the bed's cover is turned down over it
+///    (frame 2); getting up makes the bed again (frame 1). No bed: it lies
+///    down where it is (the floor).
+///  - A bed's cover is its own object lying on the bed (spawned at the start
+///    if the bed has one); taken off, the bed has no cover.
+/// </summary>
+public partial class GameTestWindow
+{
+    /// <summary>Who is sitting or lying where: the furniture, the spot, and where they stood before, to get up to.</summary>
+    private sealed record Seat(ObjectInstance Furniture, int Spot, bool Bed, double FromX, double FromY, int FromLift);
+
+    private readonly Dictionary<CharacterDefinition, Seat> _seats = new();
+    /// <summary>NPCs on their way to a seat or bed (Sit / Sleep schedules).</summary>
+    private readonly Dictionary<CharacterDefinition, (ObjectInstance Furniture, int Spot)> _headingToSeat = new();
+
+    private bool PlayerSeated => _player is not null && _seats.ContainsKey(_player);
+
+    // ---------- Spots ----------
+
+    private List<SeatSpot> SpotsOf(ObjectInstance furniture, WorldObject obj) => obj.Furniture.Resolve(furniture.Facing)?.Spots ?? new List<SeatSpot>();
+
+    private bool IsSpotTaken(ObjectInstance furniture, int spot, CharacterDefinition? except = null) =>
+        _seats.Any(kv => kv.Key != except && ReferenceEquals(kv.Value.Furniture, furniture) && kv.Value.Spot == spot)
+        || _headingToSeat.Any(kv => kv.Key != except && ReferenceEquals(kv.Value.Furniture, furniture) && kv.Value.Spot == spot);
+
+    /// <summary>Where someone sitting or lying in this spot has their feet, in world pixels (without the lift shift), and the lift.</summary>
+    private (double X, double Y, int Lift)? SpotPosition(ObjectInstance furniture, WorldObject obj, int spot)
+    {
+        var spots = SpotsOf(furniture, obj);
+        if (spot < 0 || spot >= spots.Count || !_objectVisuals.TryGetValue(furniture, out var visual) || visual is not FrameworkElement element) return null;
+        var sprite = ObjectLooks.SpriteFor(obj, StateOf(furniture), _sprites);
+        var frame = sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
+        double scale = frame is null || frame.PixelWidth == 0 ? 1 : element.Width / frame.PixelWidth;
+        double left = Canvas.GetLeft(element) + furniture.Z * LiftPixelShift, top = Canvas.GetTop(element) + furniture.Z * LiftPixelShift;
+        return (left + spots[spot].X * scale, top + spots[spot].Y * scale, furniture.Z);
+    }
+
+    /// <summary>The free spot nearest a point, or -1.</summary>
+    private int NearestFreeSpot(ObjectInstance furniture, WorldObject obj, double x, double y, CharacterDefinition? who)
+    {
+        int best = -1;
+        double bestDistance = double.MaxValue;
+        for (int i = 0; i < SpotsOf(furniture, obj).Count; i++)
+        {
+            if (IsSpotTaken(furniture, i, who) || SpotPosition(furniture, obj, i) is not { } p) continue;
+            double d = Math.Abs(p.X - x) + Math.Abs(p.Y - y);
+            if (d < bestDistance) { bestDistance = d; best = i; }
+        }
+        return best;
+    }
+
+    // ---------- The main character ----------
+
+    /// <summary>Double-clicking a chair (sit_down): sit in the free seat nearest you.</summary>
+    private void SitOn(ObjectInstance chair, WorldObject obj) => TakeSeatAsPlayer(chair, obj, bed: false);
+
+    /// <summary>Double-clicking a bed: lie down in the free place nearest you.</summary>
+    private void LieOn(ObjectInstance bed, WorldObject obj) => TakeSeatAsPlayer(bed, obj, bed: true);
+
+    private void TakeSeatAsPlayer(ObjectInstance furniture, WorldObject obj, bool bed)
+    {
+        if (_player is null) return;
+        if (PlayerSeated) StandUp(_player);
+        if (SpotsOf(furniture, obj).Count == 0) { StatusText.Text = $"\"{obj.Name}\" has no {(bed ? "place to lie" : "seat")} set for this facing (Object Editor)."; return; }
+        int spot = NearestFreeSpot(furniture, obj, _playerPixelX, _playerPixelY + _tileHeight / 2.0, _player);
+        if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) { StatusText.Text = $"There's no room on \"{obj.Name}\"."; return; }
+        _seats[_player] = new Seat(furniture, spot, bed, _playerPixelX, _playerPixelY, _playerZ);
+        _heldDirectionKeys.Clear();
+        _playerPixelX = p.X;
+        _playerPixelY = p.Y - _tileHeight / 2.0;
+        _playerX = (int)Math.Floor(_playerPixelX / _tileWidth);
+        _playerY = (int)Math.Floor(_playerPixelY / _tileHeight);
+        _playerZ = p.Lift;
+        _playerVisualLiftZ = _playerZ;
+        _playerFacing = furniture.Facing; // Exult: the sitter faces the chair's way
+        ApplyPoseSprite(PoseByName(bed ? "Sleeping" : "Sit") ?? _idlePose);
+        PlaySound(obj.Furniture.SitSoundResourceId);
+        if (bed) SetCover(furniture, obj, turnedDown: true);
+        StatusText.Text = bed ? $"You lie down on \"{obj.Name}\". Move to get up." : $"You sit on \"{obj.Name}\". Move to get up.";
+        FixFurnitureDrawOrder();
+        FireObjectEvent(furniture, obj, BookTriggerConditionBased.ByEnter);
+    }
+
+    // ---------- NPCs (Sit and Sleep schedules) ----------
+
+    /// <summary>Sit_schedule / Sleep_schedule: the nearest free chair (any distance) or bed (within 24 tiles) the NPC can walk to - heading there. False if none.</summary>
+    private bool GoToFurniture(MapCharacter mapCharacter, bool bed)
+    {
+        var me = mapCharacter.Character;
+        int range = bed ? CellsForTiles(24) : int.MaxValue;
+        var candidates = _map.Objects
+            .Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type == (bed ? ObjectType.Bed : ObjectType.Chair))
+            .Where(o => Math.Max(Math.Abs(o.X - mapCharacter.Placement.X), Math.Abs(o.Y - mapCharacter.Placement.Y)) <= range)
+            .OrderBy(o => Math.Abs(o.X - mapCharacter.Placement.X) + Math.Abs(o.Y - mapCharacter.Placement.Y));
+        foreach (var furniture in candidates)
+        {
+            var obj = DefinitionOf(furniture)!;
+            int spot = NearestFreeSpot(furniture, obj, mapCharacter.PixelX, mapCharacter.PixelY, me);
+            if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) continue;
+            var goal = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
+            var here = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
+            var path = here == goal ? new List<(int X, int Y)>() : FindPath(mapCharacter, goal);
+            if (path is null) continue; // not reachable: the next one
+            _headingToSeat[me] = (furniture, spot);
+            if (path.Count == 0) { ArriveAtFurniture(mapCharacter); return true; }
+            StartPath(mapCharacter, path);
+            return true;
+        }
+        return false;
+    }
+
+    /// <summary>Reached the chair or bed it was heading for: sits or lies down (if the spot is still free).</summary>
+    private bool ArriveAtFurniture(MapCharacter mapCharacter)
+    {
+        var me = mapCharacter.Character;
+        if (!_headingToSeat.Remove(me, out var target)) return false;
+        if (DefinitionOf(target.Furniture) is not { } obj || !_map.Objects.Contains(target.Furniture)
+            || IsSpotTaken(target.Furniture, target.Spot, me) || SpotPosition(target.Furniture, obj, target.Spot) is not { } p)
+        {
+            mapCharacter.Npc.WaitMs = 1000 + Rng.Next(1000); // taken meanwhile: look again shortly
+            return true;
+        }
+        bool bed = obj.Type == ObjectType.Bed;
+        _seats[me] = new Seat(target.Furniture, target.Spot, bed, mapCharacter.PixelX, mapCharacter.PixelY, mapCharacter.Lift);
+        mapCharacter.PixelX = p.X;
+        mapCharacter.PixelY = p.Y - _tileHeight / 2.0;
+        mapCharacter.Placement.X = (int)Math.Floor(mapCharacter.PixelX / _tileWidth);
+        mapCharacter.Placement.Y = (int)Math.Floor(mapCharacter.PixelY / _tileHeight);
+        mapCharacter.Lift = p.Lift;
+        SetCharacterPose(mapCharacter, bed ? "Sleeping" : "Sit", target.Furniture.Facing);
+        PositionCharacterVisual(mapCharacter);
+        if (bed) SetCover(target.Furniture, obj, turnedDown: true);
+        FixFurnitureDrawOrder();
+        FireObjectEvent(target.Furniture, obj, BookTriggerConditionBased.ByEnter, mapCharacter);
+        return true;
+    }
+
+    /// <summary>Gets up from a chair or bed: back to where they stood (or the nearest free cell), standing; a bed is made again.</summary>
+    private void StandUp(CharacterDefinition who)
+    {
+        _headingToSeat.Remove(who);
+        if (!_seats.Remove(who, out var seat)) return;
+        var obj = DefinitionOf(seat.Furniture);
+        if (seat.Bed && obj is not null && !_seats.Values.Any(s => ReferenceEquals(s.Furniture, seat.Furniture))) SetCover(seat.Furniture, obj, turnedDown: false);
+        if (who == _player)
+        {
+            _playerPixelX = seat.FromX;
+            _playerPixelY = seat.FromY;
+            _playerX = (int)Math.Floor(_playerPixelX / _tileWidth);
+            _playerY = (int)Math.Floor(_playerPixelY / _tileHeight);
+            _playerZ = seat.FromLift;
+            _playerVisualLiftZ = _playerZ;
+            ApplyPoseSprite(_idlePose);
+            UpdateCamera();
+        }
+        else if (MapCharacterOf(who) is { } mapCharacter)
+        {
+            mapCharacter.PixelX = seat.FromX;
+            mapCharacter.PixelY = seat.FromY;
+            mapCharacter.Placement.X = (int)Math.Floor(seat.FromX / _tileWidth);
+            mapCharacter.Placement.Y = (int)Math.Floor(seat.FromY / _tileHeight);
+            mapCharacter.Lift = seat.FromLift;
+            SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+            PositionCharacterVisual(mapCharacter);
+        }
+        if (obj is not null) FireObjectEvent(seat.Furniture, obj, BookTriggerConditionBased.ByExit, MapCharacterOf(who));
+    }
+
+    // ---------- Bed covers ----------
+
+    /// <summary>At the start of play: a bed with a cover gets it laid on it (its own object), unless one is already there.</summary>
+    private void SpawnBedCovers()
+    {
+        foreach (var bed in _map.Objects.Where(o => o.ContainerInstanceId < 0).ToList())
+        {
+            if (DefinitionOf(bed) is not { Type: ObjectType.Bed } obj || obj.Furniture.CoverObjectId < 0) continue;
+            if (_objects.Objects.All(o => o.Id != obj.Furniture.CoverObjectId) || CoverOf(bed, obj) is not null) continue;
+            _map.Objects.Add(new ObjectInstance
+            {
+                ObjectId = obj.Furniture.CoverObjectId, X = bed.X, Y = bed.Y, Z = bed.Z, OffsetX = bed.OffsetX, OffsetY = bed.OffsetY,
+                ContainerInstanceId = -1, InstanceId = _map.GetNextInstanceId(), Facing = bed.Facing
+            });
+        }
+    }
+
+    /// <summary>The bed's cover lying on it, if it's still there.</summary>
+    private ObjectInstance? CoverOf(ObjectInstance bed, WorldObject obj) =>
+        obj.Furniture.CoverObjectId < 0 ? null
+            : _map.Objects.FirstOrDefault(o => o.ObjectId == obj.Furniture.CoverObjectId && o.X == bed.X && o.Y == bed.Y && o.ContainerInstanceId < 0);
+
+    /// <summary>Exult Sleep_schedule: the cover turned down over a sleeper (frame 2), or the bed made again (frame 1).</summary>
+    private void SetCover(ObjectInstance bed, WorldObject obj, bool turnedDown)
+    {
+        if (CoverOf(bed, obj) is not { } cover) return;
+        cover.FrameRuntime = turnedDown ? 1 : 0;
+        RefreshObjectLook(cover);
+    }
+
+    /// <summary>Paint order on furniture: whoever sits or lies is drawn over the chair or bed, and a bed's cover over its sleeper.</summary>
+    private void FixFurnitureDrawOrder()
+    {
+        foreach (var (who, seat) in _seats)
+        {
+            if (VisualOf(seat.Furniture) is not { } furnitureVisual) continue;
+            int z = Panel.GetZIndex(furnitureVisual) + 1;
+            UIElement? sitter = who == _player ? _playerImage : MapCharacterOf(who)?.Visual;
+            if (sitter is null) continue;
+            Panel.SetZIndex(sitter, Math.Max(Panel.GetZIndex(sitter), z));
+            if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
+                Panel.SetZIndex(coverVisual, Panel.GetZIndex(sitter) + 1);
+        }
+        // Covers on empty beds lie on them.
+        foreach (var bed in _map.Objects.Where(o => o.ContainerInstanceId < 0))
+        {
+            if (DefinitionOf(bed) is not { Type: ObjectType.Bed } obj || CoverOf(bed, obj) is not { } cover) continue;
+            if (_seats.Values.Any(s => ReferenceEquals(s.Furniture, bed))) continue;
+            if (VisualOf(bed) is { } bedVisual && VisualOf(cover) is { } coverVisual)
+                Panel.SetZIndex(coverVisual, Math.Max(Panel.GetZIndex(coverVisual), Panel.GetZIndex(bedVisual) + 1));
+        }
+    }
+}

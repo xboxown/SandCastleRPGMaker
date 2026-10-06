@@ -65,6 +65,7 @@ public partial class GameTestWindow
         UpdateCombat(elapsedMs); // the player's blows; who sees whom (enemies on sight, fear, allies under attack)
         UpdateBleeding(elapsedMs); // drips from whoever is bleeding, and temporary puddles far away cleared
         foreach (var character in AllLivingCharacters().ToList()) UpdateUnconscious(character, elapsedMs); // the knocked out mend and get up
+        UpdateObjects(elapsedMs); // lights burning, tiles and traps underfoot, doors closed behind NPCs
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
@@ -135,6 +136,7 @@ public partial class GameTestWindow
         var npc = mapCharacter.Npc;
         // Already on the way there, or doing the same thing close by: don't interrupt.
         if (npc.Entry == entry && (npc.WalkingToSchedule || (npc.Activity == entry.Type && TileDistance(mapCharacter, spot) <= 16))) return;
+        StandUp(mapCharacter.Character); // off the chair / out of bed (Sleep_schedule::ending makes the bed)
         StopWalking(mapCharacter);
         npc.Hounding = false;
         npc.Entry = entry;
@@ -181,6 +183,12 @@ public partial class GameTestWindow
             case ScheduleType.HorizPace: PaceNowWhat(mapCharacter, horizontal: true); break;
             case ScheduleType.VertPace: PaceNowWhat(mapCharacter, horizontal: false); break;
             case ScheduleType.Dance: DanceNowWhat(mapCharacter); break;
+            case ScheduleType.Sit:
+                if (!_seats.ContainsKey(mapCharacter.Character) && !GoToFurniture(mapCharacter, bed: false)) npc.WaitMs = 1000 + Rng.Next(1000); // Sit_schedule: try again later
+                break;
+            case ScheduleType.Sleep:
+                if (!_seats.ContainsKey(mapCharacter.Character) && !GoToFurniture(mapCharacter, bed: true)) SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing); // no bed: the floor
+                break;
         }
     }
 
@@ -231,7 +239,12 @@ public partial class GameTestWindow
         switch (entry.Type)
         {
             case ScheduleType.Sleep:
-                SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing);
+                // Sleep_schedule: the nearest free bed within 24 tiles; none: lie down here.
+                if (!GoToFurniture(mapCharacter, bed: true)) SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing);
+                break;
+            case ScheduleType.Sit:
+                SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+                if (!GoToFurniture(mapCharacter, bed: false)) npc.WaitMs = 1000 + Rng.Next(1000); // Sit_schedule: none free, try again
                 break;
             case ScheduleType.Dance:
                 SetCharacterPose(mapCharacter, "Dancing", mapCharacter.Facing);
@@ -398,6 +411,8 @@ public partial class GameTestWindow
         {
             if (!TryStepActor(newFoot, mapCharacter.Lift, mapCharacter.Size.Z, out int newLift, out _, mapCharacter.Placement))
             {
+                // A closed, unlocked door in the way: open it and walk on (actions.cc open_door); closed again behind them.
+                if (NpcOpensDoor(mapCharacter, newFoot)) return;
                 // Actor::is_really_blocked: someone in the way is asked to move aside (or swap places); then the step is tried again.
                 int stepX = alongX ? Math.Sign(remaining) : 0, stepY = alongX ? 0 : Math.Sign(remaining);
                 bool cleared = CharacterInTheWay(newFoot, mapCharacter.Lift, mapCharacter.Size.Z, mapCharacter) is { } other
@@ -437,6 +452,7 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         npc.Path = null;
+        if (ArriveAtFurniture(mapCharacter)) return; // was heading for a seat or bed: sits / lies down
         var pose = npc.Activity switch { ScheduleType.Dance => "Dancing", _ => "Idle" };
         SetCharacterPose(mapCharacter, pose, mapCharacter.Facing);
         npc.WaitMs = npc.Activity switch
@@ -474,7 +490,7 @@ public partial class GameTestWindow
     {
         var start = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
         if (start == goal) return new List<(int X, int Y)>();
-        var world = WorldBodies();
+        var world = WorldBodiesForPathing(); // closed unlocked doors will be opened on the way (Exult paths.cc)
         bool goalFree = CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true);
 
         var open = new PriorityQueue<(int X, int Y), int>();

@@ -58,6 +58,7 @@ public partial class GameTestWindow
     {
         public int Right => Left + Width;
         public int Bottom => Top + Depth;
+        public bool Overlaps(UnitRect other) => Left < other.Right && other.Left < Right && Top < other.Bottom && other.Top < Bottom;
     }
 
     private int UnitsPerTileX => Math.Max(1, _tileWidth / SpriteSizing.BaseUnit);
@@ -380,14 +381,14 @@ public partial class GameTestWindow
     private int PlayerZIndex()
     {
         int zIndex = ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ));
-        if (_playerZ <= 0) return zIndex; // on the ground - nothing under them to be drawn after
+        if (_playerZ <= 0) return PlayerOrderAmongWalls(zIndex); // on the ground - nothing under them to be drawn after; walls by Exult's compare
         var foot = PlayerFootprint();
         foreach (var body in WorldBodies())
         {
             if (body.TopLift > _playerZ || !body.Overlaps(foot)) continue;
             if (VisualOf(body.Entity) is { } visual) zIndex = Math.Max(zIndex, Panel.GetZIndex(visual) + 1);
         }
-        return zIndex;
+        return PlayerOrderAmongWalls(zIndex);
     }
 
     private UIElement? VisualOf(object entity) => entity switch

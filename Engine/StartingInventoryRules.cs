@@ -55,6 +55,14 @@ public static class StartingInventoryRules
             return null;
         }
 
+        // Ammo: its own slot first (Object Editor > Ammo), else as anything else.
+        if (category == ReferencedItemCategory.Object && objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Ammo } ammo)
+        {
+            object? ammoSlot = ammo.Ammo.PreferredEquipSlot is { } builtinSlot ? builtinSlot
+                : ammo.Ammo.PreferredCustomSlotName is { } slotName ? character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == slotName)?.Id : null;
+            if (ammoSlot is not null && IsFree(character, ammoSlot)) { Equip(character, item, ammoSlot); return null; }
+        }
+
         double volume = VolumeOf(item, containers, books, objects);
         foreach (var bagSlot in new[] { EquipmentSlot.Backpack, EquipmentSlot.Pouch })
         {

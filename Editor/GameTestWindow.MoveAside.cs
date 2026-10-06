@@ -45,7 +45,7 @@ public partial class GameTestWindow
     private bool MoveAside(MapCharacter blocker, int dx, int dy, MapCharacter? walker)
     {
         var npc = blocker.Npc;
-        if (npc.InCombat || npc.Path is not null || npc.Activity == ScheduleType.Sleep || IsIncapacitated(blocker.Character)) return false;
+        if (npc.InCombat || npc.Path is not null || npc.Activity == ScheduleType.Sleep || IsIncapacitated(blocker.Character) || _seats.ContainsKey(blocker.Character)) return false; // sitting or lying: an obstacle (Exult)
         var here = (blocker.Placement.X, blocker.Placement.Y);
         foreach (var (ax, ay) in AsideDirections(dx, dy))
         {
@@ -73,7 +73,7 @@ public partial class GameTestWindow
     /// <summary>The player moved aside for a character walking into them (Exult's avatar does this too) - only while standing still.</summary>
     private bool MovePlayerAside(MapCharacter walker, int dx, int dy)
     {
-        if (_player is null || _heldDirectionKeys.Count > 0 || _combatMode || IsIncapacitated(_player)) return false;
+        if (_player is null || _heldDirectionKeys.Count > 0 || _combatMode || IsIncapacitated(_player) || PlayerSeated) return false;
         foreach (var (ax, ay) in AsideDirections(dx, dy))
         {
             int x = _playerX + ax, y = _playerY + ay;

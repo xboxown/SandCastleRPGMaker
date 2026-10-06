@@ -152,6 +152,13 @@ public partial class GameTestWindow
             {
                 // The tool may have gone while the player chose (it can't, the game is paused - but stay safe).
                 if (!ToolStillThere(source)) return;
+                // A door (keyring.uc KeyInternal: doors and chests alike).
+                if (target is MapEntityTarget { Entity: ObjectInstance door } && _map.Objects.Contains(door) && DefinitionOf(door) is { Type: ObjectType.Door } doorObj)
+                {
+                    if (tool.Type == ObjectType.Key) UseKeyOnDoor(tool, door, doorObj);
+                    else UseLockpickOnDoor(tool, source, door, doorObj);
+                    return;
+                }
                 if (ContainerTargeted(target) is not { } hit)
                 {
                     StatusText.Text = string.Empty; // KeyInternal: "The target cannot be unlocked" - nothing happens

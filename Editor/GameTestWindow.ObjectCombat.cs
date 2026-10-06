@@ -71,9 +71,16 @@ public partial class GameTestWindow
     {
         if (_player is null) return;
         var visual = VisualOf(entity);
+        if (entity is ObjectInstance placedObject && DefinitionOf(placedObject) is { } objectDefinition)
+        {
+            int str3 = Stat(_player, BuiltInStatKind.Strength, 10) / 3;
+            StrikeObject(placedObject, objectDefinition, (str3 > 0 ? 1 + Rng.Next(str3) : 0) + 1); // doors, junk, chairs...
+            return;
+        }
+        // Exult effective_hps: a locked chest with a key of its own can't be broken (only quality 0 has hit points).
         if (entity is not PlacedItemInstance { Category: ReferencedItemCategory.Container } container
             || _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is not { } data
-            || !data.Destructible || data.IsBodyContainer)
+            || !data.Destructible || data.IsBodyContainer || data.RequiredKeyItemId >= 0)
         {
             ShowFloatingTextOver(visual, "no effect"); // indestructible: Exult's reduce_health returns 0
             return;

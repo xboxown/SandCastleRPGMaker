@@ -18,6 +18,8 @@ public enum ScheduleType
     Wander = 12,
     Sleep = 14,
     Wait = 15,
+    /// <summary>Exult's sit schedule (Schedule::sit): finds the nearest free chair and sits in it.</summary>
+    Sit = 16,
     Custom = 0x80
 }
 
@@ -55,6 +57,7 @@ public static class Schedules
         ScheduleType.Wander => "Wander",
         ScheduleType.Sleep => "Sleep",
         ScheduleType.Wait => "Wait",
+        ScheduleType.Sit => "Sit",
         ScheduleType.Custom => "Custom (event commands)",
         _ => type.ToString()
     };
@@ -67,7 +70,8 @@ public static class Schedules
         ScheduleType.Stand => "Stands at the spot (Exult stand).",
         ScheduleType.Loiter => "Strolls to random places within 12 tiles of the spot, pausing between walks (Exult loiter).",
         ScheduleType.Wander => "Walks off up to 32 tiles at a time, staying within 128 tiles of the spot (Exult wander).",
-        ScheduleType.Sleep => "Lies down at the spot - uses the Sleeping pose (Exult sleep).",
+        ScheduleType.Sleep => "Goes to bed: the nearest free bed within 24 tiles, lying on it with its cover turned down over them; with no bed, lies down at the spot - uses the Sleeping pose (Exult sleep).",
+        ScheduleType.Sit => "Finds the nearest free chair seat, walks to it and sits facing the way the chair faces - uses the Sit pose; with none free, tries again a little later (Exult sit).",
         ScheduleType.Wait => "Stays exactly where it is - and, as in Exult (where Wait is how companions are told to stay), later schedule changes no longer move it.",
         ScheduleType.Custom => "Goes to the spot and runs your event commands there, then stands.",
         _ => ""

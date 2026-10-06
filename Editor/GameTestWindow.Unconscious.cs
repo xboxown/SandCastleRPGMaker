@@ -37,6 +37,7 @@ public partial class GameTestWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Unconscious) return;
+        StandUp(character); // falls off the chair / out of bed
         vitals.Unconscious = true;
         vitals.MendCheckMs = MendCheckMs;
 

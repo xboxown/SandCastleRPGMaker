@@ -174,6 +174,7 @@ public partial class GameTestWindow
         var npc = mapCharacter.Npc;
         if (!npc.InCombat)
         {
+            StandUp(mapCharacter.Character); // out of the chair or bed to fight
             StopWalking(mapCharacter);
             npc.WalkingToSchedule = false;
             npc.Hounding = false;
@@ -450,6 +451,12 @@ public partial class GameTestWindow
     /// <summary>After any successful drop (drag.cc drop: "Check for theft"): moving something that isn't yours, from the world.</summary>
     private void CheckTheft(DragOrigin origin)
     {
+        // An Object Editor object taken from the world: its own Belong To / Faction.
+        if (origin is MapObjectOrigin { Obj: var taken } && DefinitionOf(taken) is { } takenObj)
+        {
+            if (ObjectOwner(takenObj) is { } objectOwned) Theft(objectOwned.Owner, objectOwned.FactionId);
+            return;
+        }
         (ReferencedItemCategory Category, int ItemId)? item = origin switch
         {
             MapItemOrigin m => (m.Item.Category, m.Item.ItemId),

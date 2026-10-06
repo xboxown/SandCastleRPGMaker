@@ -448,7 +448,7 @@ public partial class GameTestWindow
         _lastClickTarget = null; // a drag is never the first half of a double click
 
         var (category, itemId) = PayloadIdentity(origin);
-        var ghost = BuildItemIcon(category, itemId, session.GhostAnimators, PayloadObject(origin) as IHasContainerContents);
+        var ghost = BuildItemIcon(category, itemId, session.GhostAnimators, PayloadObject(origin));
         double scale = ViewportScale.ScaleX;
         session.NativeWidth = ghost.Width;
         session.NativeHeight = ghost.Height;
@@ -632,6 +632,23 @@ public partial class GameTestWindow
         double visualWidth = session.NativeWidth, visualHeight = session.NativeHeight;
         var (newCellX, newCellY) = ComputeDropCell(visualLeft, visualTop, visualWidth, visualHeight);
 
+        // Exult Game_object::drop: the same kind of stackable thing dropped on a stack joins it (up to 100).
+        if (PayloadIdentity(origin) is (ReferencedItemCategory.Object, var stackId) && CanCombine(_objects.Objects.FirstOrDefault(o => o.Id == stackId)))
+        {
+            int adding = PayloadQuantity(origin);
+            var stack = _map.Objects.LastOrDefault(o => !ReferenceEquals(o, PayloadObject(origin)) && o.ContainerInstanceId < 0 && o.ObjectId == stackId
+                && o.X == newCellX && o.Y == newCellY && o.Quantity + adding <= ObjectTypes.MaxQuantity);
+            if (stack is not null)
+            {
+                RemoveFromSource(origin);
+                stack.Quantity += adding;
+                RefreshObjectLook(stack);
+                StatusText.Text = $"Added to the stack - {stack.Quantity} now.";
+                RefreshAfterMove();
+                return true;
+            }
+        }
+
         // A CLOSED container on the target cell takes the item directly - but only when it doesn't allow elevation; one that does is stacked on like any other stackable thing, and its contents are reached by opening it.
         var payloadObject = PayloadObject(origin);
         var targetCellContainer = _map.Items.FirstOrDefault(i => !ReferenceEquals(i, payloadObject) && i.Category == ReferencedItemCategory.Container && i.X == newCellX && i.Y == newCellY);
@@ -669,6 +686,7 @@ public partial class GameTestWindow
         SettleWorld();
 
         StatusText.Text = $"Moved to ({newCellX}, {newCellY}), sub-position ({newOffsetX}, {newOffsetY}).";
+        TilesUnderDropped(item, obj); // a tile's By Item Dropped On It
         var (category, itemId) = PayloadIdentity(origin);
         FireDragTrigger(category, itemId, BookTriggerConditionBased.ByDropItem);
         // Only something that genuinely left a character's own inventory is a "no longer having it" transition - a map-to-map move never was "had".
@@ -691,6 +709,21 @@ public partial class GameTestWindow
         var (category, itemId) = PayloadIdentity(origin);
         var payloadObject = PayloadObject(origin);
         bool isTwoHanded = PayloadIsTwoHanded(origin);
+
+        // Ammo goes to its own slot (Object Editor > Ammo), joining a stack of the same ammo already there.
+        if (category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Ammo } ammo
+            && AmmoSlotFor(ammo, character) is { } ammoSlot)
+        {
+            if (TryGetEquippedInstanceId(character, ammoSlot, out int heldId) && character.Inventory.FirstOrDefault(i => i.InstanceId == heldId) is { } held
+                && held.Category == category && held.ItemId == itemId && held.Quantity + PayloadQuantity(origin) <= ObjectTypes.MaxQuantity)
+            {
+                held.Quantity += PayloadQuantity(origin);
+                RemoveFromSource(origin);
+                FinishCharacterReceive(character, PayloadName(origin));
+                return true;
+            }
+            if (IsSlotFree(character, ammoSlot, origin)) { EquipInSlot(origin, character, ammoSlot); return true; }
+        }
 
         if (category == ReferencedItemCategory.Container)
         {
@@ -724,6 +757,12 @@ public partial class GameTestWindow
             if (slotContainerData is null || !CanContainerAccept(slotContainerData, slotItem, origin, out _, out _)) continue;
 
             string storedName = PayloadName(origin);
+            if (TryCombineIntoContents(slotItem.Contents, category, itemId, PayloadQuantity(origin)))
+            {
+                RemoveFromSource(origin);
+                FinishCharacterReceive(character, storedName);
+                return true;
+            }
             var stored = DetachAsInventoryItem(origin, slotContainerData.GetNextContentsInstanceId);
             PlaceWithinFrame(stored, slotContainerData, topLeft: null);
             slotItem.Contents.Add(stored);
@@ -804,6 +843,16 @@ public partial class GameTestWindow
             return false;
         }
         string name = PayloadName(origin);
+        // Exult drop: onto a stack of the same kind inside, it joins it.
+        var (combineCategory, combineId) = PayloadIdentity(origin);
+        if (TryCombineIntoContents(container.Contents, combineCategory, combineId, PayloadQuantity(origin)))
+        {
+            RemoveFromSource(origin);
+            if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);
+            StatusText.Text = $"You put \"{name}\" into \"{data.Name}\".";
+            RefreshAfterMove();
+            return true;
+        }
         var item = DetachAsInventoryItem(origin, data.GetNextContentsInstanceId);
         PlaceWithinFrame(item, data, dropTopLeft);
         container.Contents.Add(item); // appended = on top of the pile, as Exult's add() appends to the chain
@@ -1116,7 +1165,9 @@ public partial class GameTestWindow
         }
         else if (obj is not null)
         {
-            var visual = BuildItemIcon(ReferencedItemCategory.Object, obj.ObjectId, animators: new List<SpriteAnimator>());
+            var animators = new List<SpriteAnimator>();
+            var visual = BuildObjectVisual(obj, animators);
+            foreach (var animator in animators) RegisterWorldAnimator(visual, animator);
             GameCanvas.Children.Add(visual);
             _map.Objects.Add(obj);
             _objectVisuals[obj] = visual;
@@ -1179,6 +1230,22 @@ public partial class GameTestWindow
         return ResolveContentsVolume(new InventoryItemInstance { Category = category, ItemId = itemId, Quantity = 1 });
     }
 
+    /// <summary>The paperdoll slot an ammo object goes into for this character (a built-in slot, or their custom slot of that name), or null.</summary>
+    private static object? AmmoSlotFor(WorldObject ammo, CharacterDefinition character)
+    {
+        if (ammo.Ammo.PreferredEquipSlot is { } builtin) return builtin;
+        if (ammo.Ammo.PreferredCustomSlotName is { } name) return character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == name)?.Id;
+        return null;
+    }
+
+    /// <summary>How many of it are being moved (a stack moves whole).</summary>
+    private static int PayloadQuantity(DragOrigin origin) => PayloadObject(origin) switch
+    {
+        ObjectInstance o => Math.Max(1, o.Quantity),
+        InventoryItemInstance i => Math.Max(1, i.Quantity),
+        _ => 1
+    };
+
     private bool PayloadIsTwoHanded(DragOrigin origin)
     {
         var (category, itemId) = PayloadIdentity(origin);
@@ -1223,13 +1290,20 @@ public partial class GameTestWindow
     /// register it as part of the game world, frozen while the game is
     /// paused (map visuals - see GameTestWindow.Pause.cs).
     /// </summary>
-    private FrameworkElement BuildItemIcon(ReferencedItemCategory category, int itemId, List<SpriteAnimator>? animators, IHasContainerContents? instance = null)
+    private FrameworkElement BuildItemIcon(ReferencedItemCategory category, int itemId, List<SpriteAnimator>? animators, object? instance = null)
     {
+        // An Object Editor object: its look for its state and quantity.
+        if (category == ReferencedItemCategory.Object)
+        {
+            if (instance is ObjectInstance placed) return BuildObjectVisual(placed, animators);
+            if (instance is InventoryItemInstance carried && BuildCarriedObjectPicture(carried, 1, animators ?? new List<SpriteAnimator>()) is { } picture) return picture;
+            return BuildObjectVisual(new ObjectInstance { ObjectId = itemId }, animators);
+        }
         SpriteEntry? sprite = null;
         if (category == ReferencedItemCategory.Book && _books.Books.FirstOrDefault(b => b.Id == itemId) is { } book)
             sprite = _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
         else if (category == ReferencedItemCategory.Container && _containers.Containers.FirstOrDefault(c => c.Id == itemId) is { } containerData)
-            sprite = ContainerSprite(containerData, instance); // its Locked Sprite while locked
+            sprite = ContainerSprite(containerData, instance as IHasContainerContents); // its Locked Sprite while locked
 
         if (sprite is not null && sprite.Frames.Count > 0)
         {

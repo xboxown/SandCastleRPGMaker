@@ -117,6 +117,7 @@ public partial class GameTestWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
+        StandUp(character);
         vitals.Dead = true;
         vitals.Ailments = Ailment.None;
         if (character == _player)
