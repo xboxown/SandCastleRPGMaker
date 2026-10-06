@@ -614,6 +614,13 @@ public partial class GameTestWindow
         return closest;
     }
 
+    /// <summary>System Settings > Sounds > Drop on map: one sound for everything put down on the map.</summary>
+    private void PlayDropSound()
+    {
+        int id = _systemSettings.Sounds.DropOnMapSoundId;
+        if (id >= 0) SoundPlayback.TryPlay(_resources, id);
+    }
+
     private bool DropOnMap(DragOrigin origin, PointerSession session, Point screen)
     {
         // Exult drop_on_map: "Attempting to drop off screen?" -> refused.
@@ -647,6 +654,7 @@ public partial class GameTestWindow
                 stack.Quantity += adding;
                 RefreshObjectLook(stack);
                 StatusText.Text = $"Added to the stack - {stack.Quantity} now.";
+                PlayDropSound();
                 RefreshAfterMove();
                 return true;
             }
@@ -689,6 +697,7 @@ public partial class GameTestWindow
         SettleWorld();
 
         StatusText.Text = $"Moved to ({newCellX}, {newCellY}), sub-position ({newOffsetX}, {newOffsetY}).";
+        PlayDropSound();
         TilesUnderDropped(item, obj); // a tile's By Item Dropped On It
         var (category, itemId) = PayloadIdentity(origin);
         FireDragTrigger(category, itemId, BookTriggerConditionBased.ByDropItem);

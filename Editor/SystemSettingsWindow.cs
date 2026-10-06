@@ -52,6 +52,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
+        tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
 
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();
@@ -78,6 +79,33 @@ public partial class SystemSettingsWindow : Window
             Text = "Checked: the damage and misses show over whoever is hit (\"-4\", \"miss\") - Exult's \"show hits\" option.\n" +
                    "Unchecked (Exult's default): no numbers. Either way, as in Exult, whoever is hit flashes a red outline for a moment, " +
                    "and a big hit on the main character (a third of its health or more, or while below a quarter) flashes the whole screen red instead.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+        return panel;
+    }
+
+    /// <summary>Sounds the engine plays by itself, for every thing in the game - no event needed on each object.</summary>
+    private UIElement BuildSoundsTab()
+    {
+        var sounds = _settings.Sounds;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var none = new ResourceEntry { Id = -1, Name = "(None)" };
+        var choices = new List<ResourceEntry> { none };
+        choices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
+        var combo = new ComboBox { Width = 220, ItemsSource = choices, DisplayMemberPath = "Name", VerticalAlignment = VerticalAlignment.Center };
+        combo.SelectedItem = choices.FirstOrDefault(s => s.Id == sounds.DropOnMapSoundId) ?? none;
+        combo.SelectionChanged += (_, _) => sounds.DropOnMapSoundId = (combo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        var play = new Button { Content = "▶", Width = 28, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Hear it" };
+        play.Click += (_, _) => { if (sounds.DropOnMapSoundId >= 0) SoundPlayback.TryPlay(_resources, sounds.DropOnMapSoundId); };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        row.Children.Add(new TextBlock { Text = "Drop on map:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(combo);
+        row.Children.Add(play);
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Plays whenever anything is put down on the map - items, objects, containers, stacks of money or ammo, and things taken out of dead bodies. " +
+                   "No Play Sound event is needed on each object. An object's own By Drop Item event still runs too, so remove any Play Sound you added there or both will play.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
         return panel;

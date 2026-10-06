@@ -36,9 +36,17 @@ public class CombatSettings
     public bool ShowHitNumbers { get; set; }
 }
 
+/// <summary>Sounds the engine itself plays, project-wide (System Settings > Sounds).</summary>
+public class SoundSettings
+{
+    /// <summary>Played whenever anything is put down on the map - an item, an object, a container, a stack, a body. -1 = silent.</summary>
+    public int DropOnMapSoundId { get; set; } = -1;
+}
+
 public class SystemSettings
 {
     public MousePointerSettings MousePointers { get; set; } = new();
+    public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
     public CombatSettings Combat { get; set; } = new();
     /// <summary>
