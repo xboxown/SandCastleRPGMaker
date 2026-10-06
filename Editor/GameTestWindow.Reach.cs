@@ -118,7 +118,8 @@ public partial class GameTestWindow
         var src = fromTile;
         var dst = targetTile;
         ClosestEdge(fromVol, toVol, ref src, ref dst);
-        src.Z = fromVol.Z;
+        // Not Exult: the walk is made with the actor's whole footprint (below), so it starts from where the actor really stands.
+        src = fromTile with { Z = fromVol.Z };
 
         var path = query.FindPath(src, dst, destBox, fromVol.W, fromVol.D);
         if (path is null) return false;
@@ -270,13 +271,17 @@ public partial class GameTestWindow
                 && top < destBox.Top + destBox.Depth && destBox.Top < top + actorD;
         }
 
-        /// <summary>Fast_pathfinder_client::get_step_cost: a 1-tile-tall point stepping onto a tile, rising or dropping at most 1 lift (Chunk_cache::is_blocked with height 1, max_drop 1, max_rise 1); -1 if blocked. Returns the new lift.</summary>
-        private int StepTo(int x, int y, int z)
+        /// <summary>
+        /// Fast_pathfinder_client::get_step_cost, with one difference from Exult: the step is taken by the actor's whole
+        /// footprint (its lower-right at this tile), 1 lift tall, rising or dropping at most 1 lift - not by a one-tile
+        /// point. Exult's walls are unbroken lines of tiles, so a point can't slip through them; walls built from pieces
+        /// whose solid boxes don't quite meet (a corner) would let a point reach in where nobody could walk. -1 if blocked.
+        /// </summary>
+        private int StepTo(int x, int y, int z, int actorW, int actorD)
         {
-            if (x < 0 || y < 0 || x >= _mapUnitsWide || y >= _mapUnitsHigh) return -1;
-            if (!TryStepUnit(SolidsAt(x, y), z, 1, out int newLift)) return -1;
-            if (newLift == 0 && !_window.TerrainWalkableUnder(new UnitRect(x, y, 1, 1))) return -1;
-            return newLift;
+            var foot = new UnitRect(x - actorW + 1, y - actorD + 1, actorW, actorD);
+            if (foot.Left < 0 || foot.Top < 0 || foot.Right > _mapUnitsWide || foot.Bottom > _mapUnitsHigh) return -1;
+            return _window.TryStepActor(foot, z, 1, out int newLift, out _, null, _solids) ? newLift : -1;
         }
 
         /// <summary>path.cc Find_path (A*) with Fast_pathfinder_client's costs and limits. Returns the steps (not including the start), or null if no path.</summary>
@@ -309,8 +314,10 @@ public partial class GameTestWindow
                     for (int dx = -1; dx <= 1; dx++)
                     {
                         if (dx == 0 && dy == 0) continue;
-                        int lift = StepTo(current.X + dx, current.Y + dy, current.Z);
+                        int lift = StepTo(current.X + dx, current.Y + dy, current.Z, actorW, actorD);
                         if (lift < 0) continue; // blocked
+                        // No cutting a corner: a diagonal step needs both straight steps beside it open.
+                        if (dx != 0 && dy != 0 && (StepTo(current.X + dx, current.Y, current.Z, actorW, actorD) < 0 || StepTo(current.X, current.Y + dy, current.Z, actorW, actorD) < 0)) continue;
                         var next = new Tile3(current.X + dx, current.Y + dy, lift);
                         int newCost = costHere + 1;
                         if (startCost.TryGetValue(next, out int known) && known <= newCost) continue;
