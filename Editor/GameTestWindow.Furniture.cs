@@ -90,9 +90,11 @@ public partial class GameTestWindow
         public required ObjectInstance Furniture;
         public required WorldObject Obj;
         public required bool Bed;
-        /// <summary>0 = walking there, 1 = looking at it, 2 = turned the chair's way, about to sit.</summary>
+        /// <summary>0 = walking there, 3 = the last steps up to the chair, 1 = looking at it, 2 = turned the chair's way, about to sit.</summary>
         public int Phase;
         public double WaitMs;
+        /// <summary>Where the last steps go: right in front of the seat (world pixels, the player's own position convention).</summary>
+        public double TargetX, TargetY;
     }
 
     private PendingSit? _pendingSit;
@@ -119,15 +121,45 @@ public partial class GameTestWindow
         var (fx, fy) = FacingStep(furniture.Facing);
         var front = (seatCell.Item1 + fx, seatCell.Item2 + fy);
         if (!InsideMap(front.Item1, front.Item2)) front = seatCell;
-        _pendingSit = new PendingSit { Furniture = furniture, Obj = obj, Bed = bed };
-        if ((_playerX, _playerY) == front) { BeginLookingAtSeat(); return; }
-        if (!WalkPlayerTo(front, BeginLookingAtSeat))
+        _pendingSit = new PendingSit
+        {
+            Furniture = furniture, Obj = obj, Bed = bed,
+            // Right up to the seat: one 8px tile in front of the sitter's spot, on the side the chair faces.
+            TargetX = p.X + fx * SpriteSizing.BaseUnit,
+            TargetY = p.Y + fy * SpriteSizing.BaseUnit - _tileHeight / 2.0
+        };
+        if ((_playerX, _playerY) == front) { BeginLastSteps(); return; }
+        if (!WalkPlayerTo(front, BeginLastSteps))
         {
             _pendingSit = null;
             StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
             return;
         }
         StatusText.Text = bed ? $"Going to \"{obj.Name}\"..." : $"Going to sit on \"{obj.Name}\"...";
+    }
+
+    /// <summary>Arrived a cell in front of it: walk on, straight up to the chair (until it's right there, or the chair stops us).</summary>
+    private void BeginLastSteps()
+    {
+        if (_pendingSit is not { } pending) return;
+        pending.Phase = 3;
+    }
+
+    /// <summary>One frame of the last steps: toward the spot in front of the seat, one axis at a time; there (or blocked by the chair) - look at it.</summary>
+    private void StepUpToSeat(PendingSit pending, double elapsedMs)
+    {
+        double rx = pending.TargetX - _playerPixelX, ry = pending.TargetY - _playerPixelY;
+        bool alongX = Math.Abs(rx) > 0.5;
+        if (!alongX && Math.Abs(ry) <= 0.5) { BeginLookingAtSeat(); return; }
+        double remaining = Math.Abs(alongX ? rx : ry);
+        double step = Math.Min(elapsedMs / 1000.0, remaining / (PlayerTilesPerSecond * _tileWidth));
+        if (step <= 0) return;
+        double beforeX = _playerPixelX, beforeY = _playerPixelY;
+        StepPlayerContinuous(alongX ? Math.Sign(rx) : 0, alongX ? 0 : Math.Sign(ry), step);
+        if (_playerPixelX != beforeX || _playerPixelY != beforeY) return;
+        // Stopped by the chair itself (or something beside it): close enough - try the other axis once, else look.
+        if (alongX && Math.Abs(ry) > 0.5) { pending.TargetX = _playerPixelX; return; }
+        BeginLookingAtSeat();
     }
 
     /// <summary>Arrived in front of it: face the chair and look at it for a moment.</summary>
@@ -147,6 +179,7 @@ public partial class GameTestWindow
     private void UpdatePendingSit(double elapsedMs)
     {
         if (_pendingSit is not { Phase: > 0 } pending) return;
+        if (pending.Phase == 3) { StepUpToSeat(pending, elapsedMs); return; }
         if ((pending.WaitMs -= elapsedMs) > 0) return;
         if (pending.Phase == 1)
         {
