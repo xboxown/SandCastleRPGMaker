@@ -54,6 +54,7 @@ public partial class GameTestWindow
         double remaining = Math.Abs(alongX ? rx : ry);
         int dx = alongX ? Math.Sign(rx) : 0, dy = alongX ? 0 : Math.Sign(ry);
         double step = Math.Min(deltaSeconds, remaining / (PlayerTilesPerSecond * _tileWidth));
+        if (step <= 0) return; // a frame with no time in it (WPF can render twice at the same moment): nothing moves, nothing is blocked
         double beforeX = _playerPixelX, beforeY = _playerPixelY;
         StepPlayerContinuous(dx, dy, step);
         if (_playerPixelX == beforeX && _playerPixelY == beforeY)
@@ -62,7 +63,7 @@ public partial class GameTestWindow
             CancelPlayerWalk();
             _pendingSit = null;
             ApplyPoseSprite(_idlePose);
-            StatusText.Text = "Something is in the way.";
+            StatusText.Text = $"Something is in the way - {StatusText.Text}"; // keep the walking rule's own reason
         }
     }
 
