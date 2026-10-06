@@ -413,6 +413,8 @@ public partial class GameTestWindow
             {
                 // A closed, unlocked door in the way: open it and walk on (actions.cc open_door); closed again behind them.
                 if (NpcOpensDoor(mapCharacter, newFoot)) return;
+                // A locked door of a side it's hostile to: break it down.
+                if (NpcBashesDoor(mapCharacter, newFoot, elapsedMs)) return;
                 // Actor::is_really_blocked: someone in the way is asked to move aside (or swap places); then the step is tried again.
                 int stepX = alongX ? Math.Sign(remaining) : 0, stepY = alongX ? 0 : Math.Sign(remaining);
                 bool cleared = CharacterInTheWay(newFoot, mapCharacter.Lift, mapCharacter.Size.Z, mapCharacter) is { } other
@@ -472,7 +474,7 @@ public partial class GameTestWindow
         mapCharacter.Placement.X = cell.X;
         mapCharacter.Placement.Y = cell.Y;
         var foot = CharacterFootprint(mapCharacter);
-        mapCharacter.Lift = FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, mapCharacter.Placement)), int.MaxValue);
+        mapCharacter.Lift = FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, mapCharacter.Placement) && b.Entity is not PlacedCharacter), int.MaxValue);
         SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
         PositionCharacterVisual(mapCharacter);
     }
@@ -490,7 +492,7 @@ public partial class GameTestWindow
     {
         var start = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
         if (start == goal) return new List<(int X, int Y)>();
-        var world = WorldBodiesForPathing(); // closed unlocked doors will be opened on the way (Exult paths.cc)
+        var world = WorldBodiesForPathing(mapCharacter); // closed unlocked doors will be opened on the way (Exult paths.cc); hostile ones broken down
         bool goalFree = CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true);
 
         var open = new PriorityQueue<(int X, int Y), int>();

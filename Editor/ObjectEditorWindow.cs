@@ -452,7 +452,88 @@ public partial class ObjectEditorWindow : Window
             obj.SolidOffsetX = size.OffsetX;
             obj.SolidOffsetY = size.OffsetY;
         };
-        body.Children.Add(size);
+        if (obj.Type != ObjectType.Door) { body.Children.Add(size); return; }
+        // A door: its open sprite's position beside the solid size, so it swings open on its hinge.
+        var sideBySide = new StackPanel { Orientation = Orientation.Horizontal };
+        sideBySide.Children.Add(size);
+        sideBySide.Children.Add(BuildOpenPositionEditor(obj));
+        body.Children.Add(sideBySide);
+    }
+
+    /// <summary>
+    /// Where a door's open sprite is drawn relative to its closed one: the closed door faded, the
+    /// open one over it, three times their size. Drag the open door (or use the arrows) until it
+    /// hangs from the hinge - the Map Editor and the game draw it exactly there.
+    /// </summary>
+    private FrameworkElement BuildOpenPositionEditor(WorldObject obj)
+    {
+        const double zoom = 3, canvasW = 300, canvasH = 260, baseY = 230;
+        var d = obj.Door;
+        var canvas = new Canvas { Width = canvasW, Height = canvasH, Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)), ClipToBounds = true };
+        var closedFrame = SolidSizeEditor.LoadSpriteFrame(_sprites, obj.SpriteGroup, obj.SpriteName);
+        var openFrame = SolidSizeEditor.LoadSpriteFrame(_sprites, d.OpenSprite.SpriteGroup, d.OpenSprite.SpriteName);
+        var label = new TextBlock { Margin = new Thickness(0, 4, 0, 0) };
+        Image? openImage = null;
+        (int W, int H) Size(BitmapSource? frame) => frame is null ? (0, 0) : SpriteSizing.Quantize(frame.PixelWidth, frame.PixelHeight);
+        void Place()
+        {
+            label.Text = $"Open sprite offset: {d.OpenOffsetX} px, {d.OpenOffsetY} px";
+            if (openImage is null) return;
+            var (w, h) = Size(openFrame);
+            Canvas.SetLeft(openImage, canvasW / 2 - w * zoom / 2 + d.OpenOffsetX * zoom);
+            Canvas.SetTop(openImage, baseY - h * zoom + d.OpenOffsetY * zoom);
+        }
+        canvas.Children.Add(new Line { X1 = 0, X2 = canvasW, Y1 = baseY, Y2 = baseY, Stroke = Brushes.Gray, StrokeDashArray = new DoubleCollection { 2, 3 } });
+        if (closedFrame is not null)
+        {
+            var (w, h) = Size(closedFrame);
+            var closed = new Image { Source = closedFrame, Width = w * zoom, Height = h * zoom, Opacity = 0.35, Stretch = Stretch.Fill, IsHitTestVisible = false };
+            RenderOptions.SetBitmapScalingMode(closed, BitmapScalingMode.NearestNeighbor);
+            Canvas.SetLeft(closed, canvasW / 2 - w * zoom / 2);
+            Canvas.SetTop(closed, baseY - h * zoom);
+            canvas.Children.Add(closed);
+        }
+        if (openFrame is not null)
+        {
+            var (w, h) = Size(openFrame);
+            openImage = new Image { Source = openFrame, Width = w * zoom, Height = h * zoom, Opacity = 0.9, Stretch = Stretch.Fill, Cursor = Cursors.SizeAll, ToolTip = "Drag to where the open door hangs from its hinge" };
+            RenderOptions.SetBitmapScalingMode(openImage, BitmapScalingMode.NearestNeighbor);
+            canvas.Children.Add(openImage);
+            Point? grab = null;
+            int startX = 0, startY = 0;
+            openImage.MouseLeftButtonDown += (_, e) => { grab = e.GetPosition(canvas); startX = d.OpenOffsetX; startY = d.OpenOffsetY; openImage.CaptureMouse(); e.Handled = true; };
+            openImage.MouseMove += (_, e) =>
+            {
+                if (grab is not { } g) return;
+                var p = e.GetPosition(canvas);
+                d.OpenOffsetX = startX + (int)Math.Round((p.X - g.X) / zoom);
+                d.OpenOffsetY = startY + (int)Math.Round((p.Y - g.Y) / zoom);
+                Place();
+            };
+            openImage.MouseLeftButtonUp += (_, _) => { grab = null; openImage.ReleaseMouseCapture(); };
+        }
+        Place();
+        var arrows = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        foreach (var (text, dx, dy) in new[] { ("←", -1, 0), ("→", 1, 0), ("↑", 0, -1), ("↓", 0, 1) })
+        {
+            var button = new Button { Content = text, Width = 28, Margin = new Thickness(0, 0, 4, 0) };
+            button.Click += (_, _) => { d.OpenOffsetX += dx; d.OpenOffsetY += dy; Place(); };
+            arrows.Children.Add(button);
+        }
+        var reset = new Button { Content = "Reset", Padding = new Thickness(6, 0, 6, 0) };
+        reset.Click += (_, _) => { d.OpenOffsetX = 0; d.OpenOffsetY = 0; Place(); };
+        arrows.Children.Add(reset);
+        var panel = new StackPanel { Margin = new Thickness(16, 4, 0, 0) };
+        panel.Children.Add(new TextBlock { Text = "Open sprite position", FontWeight = FontWeights.Bold });
+        panel.Children.Add(new TextBlock
+        {
+            Text = openFrame is null ? "Pick an open sprite above first." : "The closed door is faded; drag the open one until it hangs from the hinge.",
+            TextWrapping = TextWrapping.Wrap, MaxWidth = canvasW, Opacity = 0.75, FontSize = 11, Margin = new Thickness(0, 0, 0, 4)
+        });
+        panel.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = canvas, HorizontalAlignment = HorizontalAlignment.Left });
+        panel.Children.Add(arrows);
+        panel.Children.Add(label);
+        return panel;
     }
 
     /// <summary>The sprite the size editor measures: the object's own, or (chairs, beds) its south-facing one.</summary>
@@ -471,35 +552,42 @@ public partial class ObjectEditorWindow : Window
             ? "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a sleeping place (where the sleeper lies), drag one to move it, right-click to remove it. A double bed has two. In the Map Editor you choose which way each placed bed faces."
             : "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a seat (where the sitter's feet go), drag a seat to move it, right-click to remove it. A sofa can have three. The sitter faces the chair's direction (Exult). In the Map Editor you choose which way each placed chair faces."));
 
-        var dial = new UniformGrid { Columns = 8, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 6) };
+        // Laid out like a Character Editor pose: the picture (with play / stop), the direction dial under it, then mute and volume.
+        var block = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 6) };
+        var poseBox = new StackPanel();
+        var poseBorder = new Border
+        {
+            Background = new SolidColorBrush(Color.FromRgb(240, 240, 240)), BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+            Padding = new Thickness(8), Child = poseBox, VerticalAlignment = VerticalAlignment.Top, Margin = new Thickness(0, 0, 14, 0)
+        };
         var detail = new StackPanel();
         void ShowFacing()
         {
+            AnimationPreviewButton.StopAll();
+            poseBox.Children.Clear();
             detail.Children.Clear();
             if (!f.Facings.TryGetValue(_furnitureFacing, out var facing)) f.Facings[_furnitureFacing] = facing = new FurnitureFacing();
+            poseBox.Children.Add(new TextBlock { Text = bed ? "Bed pose" : "Chair pose", FontWeight = FontWeights.Bold, FontSize = 14, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 0, 0, 4) });
+            var picture = new Image { Stretch = Stretch.Uniform };
+            RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+            var square = new Border { Width = 120, Height = 120, Background = Brushes.Black, BorderBrush = Brushes.Black, BorderThickness = new Thickness(2), Child = picture, HorizontalAlignment = HorizontalAlignment.Center };
+            poseBox.Children.Add(square);
+            var sprite = facing.Sprite.IsSet ? ObjectLooks.Find(_sprites, facing.Sprite.SpriteGroup, facing.Sprite.SpriteName) : null;
+            if (sprite is not null)
+                poseBox.Children.Add(new AnimationPreviewButton(sprite, picture, _resources, f.Muted ? 0 : f.Volume / 100.0) { Margin = new Thickness(0, 4, 0, 0) });
+            else
+                square.Child = new TextBlock { Text = "📷", FontSize = 40, Opacity = 0.25, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            poseBox.Children.Add(new TextBlock { Text = $"Direction: {_furnitureFacing}", FontSize = 11, Margin = new Thickness(0, 8, 0, 4), HorizontalAlignment = HorizontalAlignment.Center });
+            poseBox.Children.Add(BuildDirectionDial(f, d => { _furnitureFacing = d; ShowFacing(); }));
+            poseBox.Children.Add(BuildVolumeRow(f, ShowFacing));
+
             detail.Children.Add(SpritePicker($"{_furnitureFacing} sprite", () => (facing.Sprite.SpriteGroup, facing.Sprite.SpriteName),
                 (g, n) => { facing.Sprite.SpriteGroup = g; facing.Sprite.SpriteName = n; ShowFacing(); }));
             detail.Children.Add(BuildSpotEditor(facing, bed));
         }
-        foreach (var direction in Enum.GetValues<SpriteDirection>())
-        {
-            var d = direction;
-            bool hasSprite = f.Facings.TryGetValue(d, out var fd) && fd.Sprite.IsSet;
-            var button = new ToggleButton
-            {
-                Content = Abbreviation(d), Width = 40, Margin = new Thickness(1), IsChecked = d == _furnitureFacing,
-                FontWeight = hasSprite ? FontWeights.Bold : FontWeights.Normal, ToolTip = hasSprite ? $"{d} (has a sprite)" : $"{d} (no sprite yet)"
-            };
-            button.Click += (_, _) =>
-            {
-                _furnitureFacing = d;
-                foreach (ToggleButton other in dial.Children) other.IsChecked = other == button;
-                ShowFacing();
-            };
-            dial.Children.Add(button);
-        }
-        body.Children.Add(dial);
-        body.Children.Add(detail);
+        block.Children.Add(poseBorder);
+        block.Children.Add(detail);
+        body.Children.Add(block);
         ShowFacing();
 
         if (bed)
@@ -513,6 +601,47 @@ public partial class ObjectEditorWindow : Window
             body.Children.Add(Note("In play the cover lies on the bed as its own object: a sleeper gets frame 2 drawn over them, and getting up makes the bed again (frame 1) - as Exult's Sleep_schedule turns the bedspread down and makes the bed. The cover can be taken off the bed like any object; with none, the bed has no cover."));
         }
         body.Children.Add(SoundPicker(bed ? "Lie down sound" : "Sit sound", () => f.SitSoundResourceId, v => f.SitSoundResourceId = v));
+    }
+
+    /// <summary>The Character Editor's direction wheel: eight dots round a circle (green: has a sprite), the chosen one blue with a line to it. Click a dot to pick that facing.</summary>
+    private FrameworkElement BuildDirectionDial(FurnitureSettings f, Action<SpriteDirection> chosen)
+    {
+        const double size = 70, centre = size / 2, radius = 26, dot = 11;
+        var canvas = new Canvas { Width = size, Height = size, HorizontalAlignment = HorizontalAlignment.Center };
+        canvas.Children.Add(new Ellipse { Width = radius * 2, Height = radius * 2, Stroke = Brushes.Gray, StrokeThickness = 1, Margin = new Thickness(centre - radius, centre - radius, 0, 0) });
+        foreach (var direction in Enum.GetValues<SpriteDirection>())
+        {
+            double angle = ((int)direction * 45 - 90) * Math.PI / 180; // North at the top, clockwise
+            double x = centre + radius * Math.Cos(angle), y = centre + radius * Math.Sin(angle);
+            bool selected = direction == _furnitureFacing;
+            bool hasSprite = f.Facings.TryGetValue(direction, out var fd) && fd.Sprite.IsSet;
+            if (selected) canvas.Children.Add(new Line { X1 = centre, Y1 = centre, X2 = x, Y2 = y, Stroke = Brushes.RoyalBlue, StrokeThickness = 2 });
+            var marker = new Ellipse
+            {
+                Width = dot, Height = dot, Stroke = Brushes.DimGray, StrokeThickness = 1, Cursor = Cursors.Hand,
+                Fill = selected ? Brushes.RoyalBlue : hasSprite ? Brushes.MediumSeaGreen : Brushes.White,
+                ToolTip = hasSprite ? $"{direction}" : $"{direction} (no sprite yet)"
+            };
+            Canvas.SetLeft(marker, x - dot / 2);
+            Canvas.SetTop(marker, y - dot / 2);
+            var d = direction;
+            marker.MouseLeftButtonDown += (_, e) => { chosen(d); e.Handled = true; };
+            canvas.Children.Add(marker);
+        }
+        return canvas;
+    }
+
+    /// <summary>Mute toggle and volume slider, as a character pose's (they're independent: changing the volume doesn't unmute).</summary>
+    private static FrameworkElement BuildVolumeRow(FurnitureSettings f, Action changed)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Center, Margin = new Thickness(0, 8, 0, 0) };
+        var mute = new TextBlock { Text = f.Muted ? "🔇" : "🔊", FontSize = 14, Cursor = Cursors.Hand, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), ToolTip = f.Muted ? "Muted - click to unmute" : "Unmuted - click to mute" };
+        mute.MouseLeftButtonDown += (_, _) => { f.Muted = !f.Muted; changed(); };
+        var slider = new Slider { Minimum = 0, Maximum = 100, Value = f.Volume, Width = 80, VerticalAlignment = VerticalAlignment.Center, ToolTip = "Volume (doesn't itself unmute)" };
+        slider.ValueChanged += (_, e) => f.Volume = (int)e.NewValue;
+        row.Children.Add(mute);
+        row.Children.Add(slider);
+        return row;
     }
 
     private static string Abbreviation(SpriteDirection d) => d switch

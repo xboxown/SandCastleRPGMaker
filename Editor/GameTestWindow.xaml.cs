@@ -1704,8 +1704,14 @@ public partial class GameTestWindow : Window
         if (IsIncapacitated(_player)) { _heldDirectionKeys.Clear(); _wasMovingLastFrame = false; } // asleep, paralyzed or dead: can't walk
         if (TryGetActiveHeldDirection(out int dx, out int dy))
         {
+            CancelPlayerWalk(); // the keys take over from walking to a chair or bed
             StepPlayerContinuous(dx, dy, deltaSeconds);
             _wasMovingLastFrame = true;
+        }
+        else if (_playerWalkPath is not null && !IsIncapacitated(_player))
+        {
+            StepPlayerAlongPath(deltaSeconds); // walking there on their own (GameTestWindow.PlayerWalk.cs)
+            _wasMovingLastFrame = _playerWalkPath is not null;
         }
         else if (_wasMovingLastFrame)
         {
@@ -2076,7 +2082,10 @@ public partial class GameTestWindow : Window
         foreach (var obj in _map.Objects.Where(o => o.ContainerInstanceId < 0))
         {
             if (_objectVisuals.TryGetValue(obj, out var visual) && visual is FrameworkElement fe)
+            {
                 ApplyZToVisual(fe, obj.X, obj.Y, obj.Z, obj.OffsetX, obj.OffsetY);
+                ShiftOpenDoor(obj, fe); // hangs from its hinge
+            }
         }
         ApplyRestingDrawOrder();
         ApplyWallDrawOrder(); // things near walls, by Exult's compare

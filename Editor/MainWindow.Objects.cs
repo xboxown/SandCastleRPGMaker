@@ -317,6 +317,12 @@ public partial class MainWindow
         var image = new Image { Source = source, Width = w, Height = h, IsHitTestVisible = false, ToolTip = tip, Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
         PositionQuantizedVisual(image, instance.X, instance.Y, w, h);
+        if (obj is { Type: ObjectType.Door } door && ObjectLooks.StartState(door, instance).Open)
+        {
+            // An open door hangs from its hinge (Object Editor > Open sprite position).
+            Canvas.SetLeft(image, Canvas.GetLeft(image) + door.Door.OpenOffsetX);
+            Canvas.SetTop(image, Canvas.GetTop(image) + door.Door.OpenOffsetY);
+        }
         // Flat things (tiles, traps) under everything; the rest above the tiles, ordered by position.
         Panel.SetZIndex(image, obj?.Type is ObjectType.Tile or ObjectType.Trap ? 9 : 10);
         MapCanvas.Children.Add(image);

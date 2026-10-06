@@ -73,7 +73,8 @@ public partial class GameTestWindow
             if (obj.FramesAreStates && sprite.Frames.Count > 0)
                 image.Source = LoadStaticFrame(sprite.Frames[Math.Clamp(instance.FrameRuntime, 0, sprite.Frames.Count - 1)].FilePath);
             else
-                animators?.Add(new SpriteAnimator(sprite, image, _resources));
+                animators?.Add(new SpriteAnimator(sprite, image, _resources,
+                    obj.Type is ObjectType.Chair or ObjectType.Bed ? (obj.Furniture.Muted ? 0 : obj.Furniture.Volume / 100.0) : null)); // a chair's or bed's own mute / volume
             return image;
         }
         if (obj is not null && !string.IsNullOrEmpty(obj.IconPath) && File.Exists(obj.IconPath) && LoadStaticFrame(obj.IconPath) is { } bitmap)
@@ -118,9 +119,18 @@ public partial class GameTestWindow
             var visual = BuildObjectVisual(instance, animators);
             foreach (var animator in animators) RegisterWorldAnimator(visual, animator);
             ApplyZToVisual(visual, instance.X, instance.Y, instance.Z, instance.OffsetX, instance.OffsetY);
+            ShiftOpenDoor(instance, visual);
             GameCanvas.Children.Add(visual);
             _objectVisuals[instance] = visual;
         }
+    }
+
+    /// <summary>An open door is drawn at its open position (Object Editor), hanging from its hinge.</summary>
+    private void ShiftOpenDoor(ObjectInstance instance, FrameworkElement visual)
+    {
+        if (!IsDoorOpen(instance) || DefinitionOf(instance) is not { Type: ObjectType.Door } door) return;
+        Canvas.SetLeft(visual, Canvas.GetLeft(visual) + door.Door.OpenOffsetX);
+        Canvas.SetTop(visual, Canvas.GetTop(visual) + door.Door.OpenOffsetY);
     }
 
     /// <summary>After an object's state changes (a door opens, a light goes out, a stack grows): its picture is rebuilt for the new state.</summary>
@@ -379,7 +389,7 @@ public partial class GameTestWindow
         && !(obj.Type == ObjectType.Door && (obj.Door.RequiredKeyItemId >= 0 || obj.Door.MagicallyLocked));
 
     /// <summary>A blow at a placed object (Game_object::reduce_health).</summary>
-    private void StrikeObject(ObjectInstance instance, WorldObject obj, int damage)
+    private void StrikeObject(ObjectInstance instance, WorldObject obj, int damage, MapCharacter? attacker = null)
     {
         var visual = VisualOf(instance);
         if (!IsBreakable(obj)) { ShowFloatingTextOver(visual, "no effect"); return; }
@@ -388,7 +398,7 @@ public partial class GameTestWindow
         if (instance.HitPointsRuntime < 0) instance.HitPointsRuntime = obj.HitPoints;
         instance.HitPointsRuntime -= damage;
         if (ShowHitNumbers) ShowFloatingTextOver(visual, $"-{damage}");
-        var owner = ObjectOwner(obj);
+        var owner = attacker is null ? ObjectOwner(obj) : null; // only the player's blows are a crime here
         if (owner is { } owned && _struckOwnedObjects.Add(instance)) Theft(owned.Owner, owned.FactionId);
         if (instance.HitPointsRuntime > 0) return;
 
@@ -400,7 +410,7 @@ public partial class GameTestWindow
         _playerTargetThing = null;
         SettleWorld();
         RefreshAfterMove();
-        StatusText.Text = $"\"{obj.Name}\" breaks apart.";
+        StatusText.Text = attacker is null ? $"\"{obj.Name}\" breaks apart." : $"{attacker.Character.Name} breaks \"{obj.Name}\" down!";
         if (owner is { } brokenOwned) Theft(brokenOwned.Owner, brokenOwned.FactionId);
     }
 

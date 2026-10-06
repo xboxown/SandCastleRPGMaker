@@ -113,9 +113,40 @@ public partial class GameTestWindow
 
     // ---------- NPCs and doors ----------
 
-    /// <summary>Exult paths.cc: for planning a route, a closed unlocked door counts as open (it will be opened on the way); a locked one stays shut.</summary>
-    private List<Body> WorldBodiesForPathing() =>
-        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } && !IsDoorLocked(o) ? b with { Solid = false } : b).ToList();
+    /// <summary>Exult paths.cc: for planning a route, a closed unlocked door counts as open (it will be opened on the way); a locked one stays shut - unless the walker is hostile to the door's side and can break it down.</summary>
+    private List<Body> WorldBodiesForPathing(MapCharacter? walker = null) =>
+        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door
+            && (!IsDoorLocked(o) || (walker is not null && WouldBreakDown(walker, door))) ? b with { Solid = false } : b).ToList();
+
+    /// <summary>The faction a door belongs to: its own, or its owner's.</summary>
+    private int DoorFaction(WorldObject door) =>
+        door.FactionId >= 0 ? door.FactionId : door.BelongToId >= 0 ? _characters?.Characters.FirstOrDefault(c => c.Id == door.BelongToId)?.FactionId ?? -1 : -1;
+
+    /// <summary>An NPC breaks a locked door down when its faction would attack the door's (a bear breaking into a house) - and the door can be broken.</summary>
+    private bool WouldBreakDown(MapCharacter walker, WorldObject door) =>
+        IsBreakable(door) && DoorFaction(door) is int faction && faction >= 0
+        && _factions.BehaviorToward(walker.Character.FactionId, faction) == FactionBehavior.Attack;
+
+    private readonly Dictionary<MapCharacter, double> _doorBashMs = new();
+
+    /// <summary>A walking NPC blocked by a locked door it's hostile to: it hits the door (a blow every two standard delays) until it breaks. True while doing so.</summary>
+    private bool NpcBashesDoor(MapCharacter mapCharacter, UnitRect nextFoot, double elapsedMs)
+    {
+        foreach (var door in _map.Objects.ToList())
+        {
+            if (DefinitionOf(door) is not { Type: ObjectType.Door } obj || IsDoorOpen(door) || !IsDoorLocked(door) || !BodyOf(null, door).Overlaps(nextFoot)) continue;
+            if (!WouldBreakDown(mapCharacter, obj)) return false;
+            double wait = _doorBashMs.GetValueOrDefault(mapCharacter) - elapsedMs;
+            if (wait > 0) { _doorBashMs[mapCharacter] = wait; return true; }
+            _doorBashMs[mapCharacter] = 2 * StdDelay;
+            var (mx, my) = PixelOf(mapCharacter.Character);
+            SetCharacterPose(mapCharacter, "Attacking Melee", FacingTowards(mx, my, door.X * _tileWidth + _tileWidth / 2.0, door.Y * _tileHeight + _tileHeight / 2.0));
+            int str = Stat(mapCharacter.Character, BuiltInStatKind.Strength, 10) / 3;
+            StrikeObject(door, obj, (str > 0 ? 1 + Rng.Next(str) : 0) + 1, mapCharacter);
+            return true;
+        }
+        return false;
+    }
 
     /// <summary>A walking NPC blocked by a closed, unlocked door opens it (actions.cc open_door). True if it did.</summary>
     private bool NpcOpensDoor(MapCharacter mapCharacter, UnitRect nextFoot)

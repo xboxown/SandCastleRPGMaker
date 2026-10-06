@@ -36,7 +36,14 @@ public partial class GameTestWindow
 
     // ---------- Spots ----------
 
-    private List<SeatSpot> SpotsOf(ObjectInstance furniture, WorldObject obj) => obj.Furniture.Resolve(furniture.Facing)?.Spots ?? new List<SeatSpot>();
+    /// <summary>The seats / sleeping places for its facing - or, with none set, one in the middle of its picture (as Exult's chairs have one sitting place each).</summary>
+    private List<SeatSpot> SpotsOf(ObjectInstance furniture, WorldObject obj)
+    {
+        if (obj.Furniture.Resolve(furniture.Facing) is { Spots.Count: > 0 } facing) return facing.Spots;
+        var sprite = ObjectLooks.SpriteFor(obj, StateOf(furniture), _sprites);
+        var frame = sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
+        return frame is null ? new List<SeatSpot>() : new List<SeatSpot> { new() { X = frame.PixelWidth / 2.0, Y = frame.PixelHeight * 0.8 } };
+    }
 
     private bool IsSpotTaken(ObjectInstance furniture, int spot, CharacterDefinition? except = null) =>
         _seats.Any(kv => kv.Key != except && ReferenceEquals(kv.Value.Furniture, furniture) && kv.Value.Spot == spot)
@@ -70,11 +77,26 @@ public partial class GameTestWindow
 
     // ---------- The main character ----------
 
-    /// <summary>Double-clicking a chair (sit_down): sit in the free seat nearest you.</summary>
-    private void SitOn(ObjectInstance chair, WorldObject obj) => TakeSeatAsPlayer(chair, obj, bed: false);
+    /// <summary>Double-clicking a chair (sit_down / Sit_schedule): walk to the free seat nearest you, then sit.</summary>
+    private void SitOn(ObjectInstance chair, WorldObject obj) => ApproachAndSeat(chair, obj, bed: false);
 
-    /// <summary>Double-clicking a bed: lie down in the free place nearest you.</summary>
-    private void LieOn(ObjectInstance bed, WorldObject obj) => TakeSeatAsPlayer(bed, obj, bed: true);
+    /// <summary>Double-clicking a bed: walk to the free place nearest you, then lie down.</summary>
+    private void LieOn(ObjectInstance bed, WorldObject obj) => ApproachAndSeat(bed, obj, bed: true);
+
+    /// <summary>Exult set_action_sequence: walk there first (next to it), then take the seat.</summary>
+    private void ApproachAndSeat(ObjectInstance furniture, WorldObject obj, bool bed)
+    {
+        if (_player is null) return;
+        if (PlayerSeated) StandUp(_player);
+        int spot = NearestFreeSpot(furniture, obj, _playerPixelX, _playerPixelY + _tileHeight / 2.0, _player);
+        if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) { StatusText.Text = $"There's no room on \"{obj.Name}\"."; return; }
+        var goal = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
+        if (Math.Max(Math.Abs(goal.Item1 - _playerX), Math.Abs(goal.Item2 - _playerY)) <= 1) { TakeSeatAsPlayer(furniture, obj, bed); return; }
+        if (!WalkPlayerTo(goal, () => TakeSeatAsPlayer(furniture, obj, bed)))
+            StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
+        else
+            StatusText.Text = bed ? $"Going to \"{obj.Name}\"..." : $"Going to sit on \"{obj.Name}\"...";
+    }
 
     private void TakeSeatAsPlayer(ObjectInstance furniture, WorldObject obj, bool bed)
     {

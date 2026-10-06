@@ -122,6 +122,9 @@ public class DoorSettings
 {
     /// <summary>How it looks open. (The object's own sprite is how it looks closed.)</summary>
     public SpriteLink OpenSprite { get; set; } = new();
+    /// <summary>Where the open sprite is drawn, in pixels from where the closed one is (so it swings on its hinge, not its middle).</summary>
+    public int OpenOffsetX { get; set; }
+    public int OpenOffsetY { get; set; }
     /// <summary>How it looks closed and locked (optional - empty: like closed).</summary>
     public SpriteLink LockedSprite { get; set; } = new();
 
@@ -209,6 +212,9 @@ public class FurnitureSettings
     /// <summary>Bed only: the Junk object laid over the bed as its cover - frame 1 made, frame 2 turned down over a sleeper.</summary>
     public int CoverObjectId { get; set; } = -1;
     public int SitSoundResourceId { get; set; } = -1;
+    /// <summary>Its animation sounds in play, as a character pose's: muted, or at this volume (0-100).</summary>
+    public bool Muted { get; set; }
+    public int Volume { get; set; } = 100;
 
     /// <summary>The facing's settings, falling back to the nearest one that has a sprite.</summary>
     public FurnitureFacing? Resolve(SpriteDirection facing)
