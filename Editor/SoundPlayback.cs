@@ -19,6 +19,20 @@ internal static class SoundPlayback
     /// <summary>Why the most recent TryPlay failed (the real exception message), so a failure can be reported instead of silently swallowed.</summary>
     public static string? LastError { get; private set; }
 
+    /// <summary>Everything playing right now, so it can all be stopped at once (closing Game Test stops its music and sounds).</summary>
+    private static readonly HashSet<WaveOutEvent> Playing = new();
+
+    /// <summary>Stops every sound and piece of music still playing.</summary>
+    public static void StopAll()
+    {
+        List<WaveOutEvent> playing;
+        lock (Playing) playing = Playing.ToList();
+        foreach (var waveOut in playing)
+        {
+            try { waveOut.Stop(); } catch { /* already finishing */ }
+        }
+    }
+
     public static bool TryPlay(ResourceDatabase resources, int resourceId, double? volumeOverride = null)
     {
         var entry = resources.Entries.FirstOrDefault(e => e.Id == resourceId);
@@ -44,9 +58,11 @@ internal static class SoundPlayback
             waveOut.Init(reader);
             waveOut.PlaybackStopped += (_, _) =>
             {
+                lock (Playing) Playing.Remove(waveOut);
                 waveOut.Dispose();
                 reader.Dispose();
             };
+            lock (Playing) Playing.Add(waveOut);
             waveOut.Play();
             return true;
         }

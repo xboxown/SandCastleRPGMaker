@@ -221,7 +221,7 @@ public partial class GameTestWindow : Window
         };
         _stayTimer.Start();
 
-        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); };
+        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); SoundPlayback.StopAll(); }; // the game's music and sounds end with it
     }
 
     /// <summary>
