@@ -1716,7 +1716,8 @@ public partial class GameTestWindow : Window
         }
         else if (_pendingSit is not null)
         {
-            UpdatePendingSit(deltaSeconds * 1000); // looking at the chair, turning, sitting down
+            if (_pendingSit.Phase == 0) { _pendingSit = null; ApplyPoseSprite(_idlePose); } // the walk there ended without arriving
+            else UpdatePendingSit(deltaSeconds * 1000); // looking at the chair, turning, sitting down
             _wasMovingLastFrame = false;
         }
         else if (_wasMovingLastFrame)

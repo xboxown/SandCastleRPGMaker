@@ -19,6 +19,8 @@ public partial class GameTestWindow
     {
         var path = FindPlayerPath(goal);
         if (path is null) return false;
+        // First to the middle of the cell they're standing in: keyboard walking leaves them anywhere in it, and the path is cell centre to cell centre.
+        if (path.Count > 0) path.Insert(0, (_playerX, _playerY));
         _playerWalkPath = path;
         _playerWalkIndex = 0;
         _playerWalkArrived = arrived;
@@ -54,7 +56,14 @@ public partial class GameTestWindow
         double step = Math.Min(deltaSeconds, remaining / (PlayerTilesPerSecond * _tileWidth));
         double beforeX = _playerPixelX, beforeY = _playerPixelY;
         StepPlayerContinuous(dx, dy, step);
-        if (_playerPixelX == beforeX && _playerPixelY == beforeY) CancelPlayerWalk(); // blocked
+        if (_playerPixelX == beforeX && _playerPixelY == beforeY)
+        {
+            // Blocked: stop cleanly - standing, nothing pending.
+            CancelPlayerWalk();
+            _pendingSit = null;
+            ApplyPoseSprite(_idlePose);
+            StatusText.Text = "Something is in the way.";
+        }
     }
 
     /// <summary>A* from the player's cell to the goal (or next to it, if the goal itself is taken - a chair).</summary>
