@@ -53,7 +53,7 @@ public partial class GameTestWindow
         new(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime, Math.Max(1, instance.Quantity), instance.Facing);
 
     private static ObjectState StateOf(InventoryItemInstance item) =>
-        new(false, false, item.IsLitRuntime ?? false, item.IsSpentRuntime, Math.Max(1, item.Quantity), SpriteDirection.South);
+        new(false, false, item.IsLitRuntime ?? false, item.IsSpentRuntime, Math.Max(1, item.Quantity), item.FacingRuntime);
 
     /// <summary>The name it goes by now: "Spent ..." once burnt out, "12 Arrows" for a stack.</summary>
     private static string ObjectDisplayName(WorldObject obj, bool spent, int quantity) =>

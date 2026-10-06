@@ -1113,7 +1113,13 @@ public partial class GameTestWindow
                 RepointContainerGumps(m.Item, fromMap);
                 return fromMap;
             case MapObjectOrigin o:
-                return new InventoryItemInstance { InstanceId = nextInstanceId(), Category = ReferencedItemCategory.Object, ItemId = o.Obj.ObjectId, Quantity = Math.Max(1, o.Obj.Quantity) };
+                // Everything it is now goes with it (Exult: the same object, same frame) - its facing, a torch's flame and burn time, its damage.
+                return new InventoryItemInstance
+                {
+                    InstanceId = nextInstanceId(), Category = ReferencedItemCategory.Object, ItemId = o.Obj.ObjectId, Quantity = Math.Max(1, o.Obj.Quantity),
+                    FacingRuntime = o.Obj.Facing, IsLitRuntime = o.Obj.IsLitRuntime, BurnLeftRuntime = o.Obj.BurnLeftRuntime,
+                    IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime
+                };
             default:
                 var item = (InventoryItemInstance)PayloadObject(origin);
                 item.InstanceId = nextInstanceId();
@@ -1147,7 +1153,12 @@ public partial class GameTestWindow
     private object CreateMapEntityFor(InventoryItemInstance item)
     {
         if (item.Category == ReferencedItemCategory.Object)
-            return new ObjectInstance { ObjectId = item.ItemId, Quantity = Math.Max(1, item.Quantity) };
+            return new ObjectInstance
+            {
+                ObjectId = item.ItemId, Quantity = Math.Max(1, item.Quantity),
+                Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
+                IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime
+            };
         var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId };
         if (item.Category == ReferencedItemCategory.Container)
         {

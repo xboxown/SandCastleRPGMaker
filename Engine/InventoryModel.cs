@@ -73,6 +73,10 @@ public class InventoryItemInstance : IHasContainerContents
     public bool IsSpentRuntime { get; set; }
     /// <summary>Frame shown, for objects whose frames are states (a bed cover).</summary>
     public int FrameRuntime { get; set; }
+    /// <summary>Which way it faces (a chair turned east stays turned east in a backpack and when put back down) - Exult keeps an object's frame wherever it goes.</summary>
+    public SpriteDirection FacingRuntime { get; set; } = SpriteDirection.South;
+    /// <summary>Hit points left once struck (-1 = untouched) - damage goes with it.</summary>
+    public int HitPointsRuntime { get; set; } = -1;
 
     /// <summary>Per-instance lock state in play - only meaningful for a Container. Null until a key or lockpick changes it (it's then as the container's IsLocked says). Travels with the container wherever it goes, as in Exult, where a locked chest is its own shape.</summary>
     public bool? IsLockedRuntime { get; set; }
