@@ -437,6 +437,10 @@ public partial class ObjectEditorWindow : Window
         flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
         if (obj.Type is ObjectType.Junk or ObjectType.Ammo or ObjectType.LightSource)
             flags.Children.Add(Check("Two-handed", () => obj.IsTwoHanded, v => obj.IsTwoHanded = v));
+        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Door or ObjectType.Trap))
+            flags.Children.Add(Check("Things can be put on top of it (they rest at its height: Size Z below)", () => obj.AllowCellElevation,
+                v => { obj.AllowCellElevation = v; obj.IsCellStackable = v; },
+                "A chair seat, a table, a crate: something dropped on it stacks on top, raised to its height (the blue Height Z of the box below). Unticked: nothing can be put on it."));
         body.Children.Add(flags);
         if (obj.Type == ObjectType.Tile) body.Children.Add(Note("A tile is flat (0 lifts high) and never blocks anyone."));
         if (obj.Type == ObjectType.Wall) body.Children.Add(Note("A wall is always solid. Its footprint is what Exult compares to decide who is drawn in front: make a long wall's footprint as long as the wall."));
@@ -550,7 +554,7 @@ public partial class ObjectEditorWindow : Window
         var body = Group(bed ? "Bed: looks and sleeping places" : "Chair: looks and seats");
         body.Children.Add(Note(bed
             ? "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a sleeping place (where the sleeper lies), drag one to move it, right-click to remove it. A double bed has two. In the Map Editor you choose which way each placed bed faces."
-            : "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a seat (where the sitter's feet go), drag a seat to move it, right-click to remove it. A sofa can have three. The sitter faces the chair's direction (Exult). In the Map Editor you choose which way each placed chair faces."));
+            : "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a seat (where the sitter's feet touch the floor - usually the bottom of the chair, under the seat; the Sit pose art does the sitting, as in Ultima VII), drag a seat to move it, right-click to remove it. A sofa can have three. The sitter faces the chair's direction (Exult). In the Map Editor you choose which way each placed chair faces."));
 
         // Laid out like a Character Editor pose: the picture (with play / stop), the direction dial under it, then mute and volume.
         var block = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 6) };

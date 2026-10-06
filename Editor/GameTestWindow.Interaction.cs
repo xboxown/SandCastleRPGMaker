@@ -420,6 +420,9 @@ public partial class GameTestWindow
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
                 if (!IsMovable(obj)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to move."); return false; } // Dragging_info::start: "Don't want to move walls" - !is_dragable -> "too heavy"
+                // Not Exult (which lets you): a chair or bed someone is sitting or lying on is too heavy to move.
+                if (_seats.Values.Any(s => ReferenceEquals(s.Furniture, obj)) || _headingToSeat.Values.Any(h => ReferenceEquals(h.Furniture, obj)))
+                { Refuse(MousePointerKind.TooHeavy, "Someone is on it - it's too heavy to move."); return false; }
                 if (!IsReachable(obj)) { Refuse(MousePointerKind.RedX, CantReachMessage); return false; }
                 origin = new MapObjectOrigin(obj);
                 source = _objectVisuals.GetValueOrDefault(obj);

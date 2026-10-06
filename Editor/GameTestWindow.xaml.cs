@@ -1705,6 +1705,7 @@ public partial class GameTestWindow : Window
         if (TryGetActiveHeldDirection(out int dx, out int dy))
         {
             CancelPlayerWalk(); // the keys take over from walking to a chair or bed
+            CancelPendingSit();
             StepPlayerContinuous(dx, dy, deltaSeconds);
             _wasMovingLastFrame = true;
         }
@@ -1712,6 +1713,11 @@ public partial class GameTestWindow : Window
         {
             StepPlayerAlongPath(deltaSeconds); // walking there on their own (GameTestWindow.PlayerWalk.cs)
             _wasMovingLastFrame = _playerWalkPath is not null;
+        }
+        else if (_pendingSit is not null)
+        {
+            UpdatePendingSit(deltaSeconds * 1000); // looking at the chair, turning, sitting down
+            _wasMovingLastFrame = false;
         }
         else if (_wasMovingLastFrame)
         {

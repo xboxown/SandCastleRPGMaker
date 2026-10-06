@@ -42,7 +42,8 @@ public partial class GameTestWindow
         if (obj.Furniture.Resolve(furniture.Facing) is { Spots.Count: > 0 } facing) return facing.Spots;
         var sprite = ObjectLooks.SpriteFor(obj, StateOf(furniture), _sprites);
         var frame = sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
-        return frame is null ? new List<SeatSpot>() : new List<SeatSpot> { new() { X = frame.PixelWidth / 2.0, Y = frame.PixelHeight * 0.8 } };
+        // Feet on the floor at the middle of the chair (its picture's bottom) - the Sit pose's art does the sitting, as Exult's sit frame.
+        return frame is null ? new List<SeatSpot>() : new List<SeatSpot> { new() { X = frame.PixelWidth / 2.0, Y = frame.PixelHeight } };
     }
 
     private bool IsSpotTaken(ObjectInstance furniture, int spot, CharacterDefinition? except = null) =>
@@ -83,20 +84,83 @@ public partial class GameTestWindow
     /// <summary>Double-clicking a bed: walk to the free place nearest you, then lie down.</summary>
     private void LieOn(ObjectInstance bed, WorldObject obj) => ApproachAndSeat(bed, obj, bed: true);
 
-    /// <summary>Exult set_action_sequence: walk there first (next to it), then take the seat.</summary>
+    /// <summary>A walk-to-sit in progress: after arriving in front of the chair, looking at it, then turning to sit.</summary>
+    private sealed class PendingSit
+    {
+        public required ObjectInstance Furniture;
+        public required WorldObject Obj;
+        public required bool Bed;
+        /// <summary>0 = walking there, 1 = looking at it, 2 = turned the chair's way, about to sit.</summary>
+        public int Phase;
+        public double WaitMs;
+    }
+
+    private PendingSit? _pendingSit;
+
+    /// <summary>The one-step offset in the direction something faces (cells).</summary>
+    private static (int X, int Y) FacingStep(SpriteDirection facing) => facing switch
+    {
+        SpriteDirection.North => (0, -1), SpriteDirection.NorthEast => (1, -1), SpriteDirection.East => (1, 0), SpriteDirection.SouthEast => (1, 1),
+        SpriteDirection.South => (0, 1), SpriteDirection.SouthWest => (-1, 1), SpriteDirection.West => (-1, 0), _ => (-1, -1)
+    };
+
+    /// <summary>
+    /// Exult set_action_sequence + Sit_actor_action, for the main character: walk to the spot just in front of the
+    /// seat (on the side the chair faces), look at the chair for a moment, turn the way the chair faces, then sit
+    /// with feet on the floor at the seat - the Sit pose's art does the rest, as Ultima VII's sit frame does.
+    /// </summary>
     private void ApproachAndSeat(ObjectInstance furniture, WorldObject obj, bool bed)
     {
         if (_player is null) return;
         if (PlayerSeated) StandUp(_player);
         int spot = NearestFreeSpot(furniture, obj, _playerPixelX, _playerPixelY + _tileHeight / 2.0, _player);
         if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) { StatusText.Text = $"There's no room on \"{obj.Name}\"."; return; }
-        var goal = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
-        if (Math.Max(Math.Abs(goal.Item1 - _playerX), Math.Abs(goal.Item2 - _playerY)) <= 1) { TakeSeatAsPlayer(furniture, obj, bed); return; }
-        if (!WalkPlayerTo(goal, () => TakeSeatAsPlayer(furniture, obj, bed)))
+        var seatCell = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
+        var (fx, fy) = FacingStep(furniture.Facing);
+        var front = (seatCell.Item1 + fx, seatCell.Item2 + fy);
+        if (!InsideMap(front.Item1, front.Item2)) front = seatCell;
+        _pendingSit = new PendingSit { Furniture = furniture, Obj = obj, Bed = bed };
+        if ((_playerX, _playerY) == front) { BeginLookingAtSeat(); return; }
+        if (!WalkPlayerTo(front, BeginLookingAtSeat))
+        {
+            _pendingSit = null;
             StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
-        else
-            StatusText.Text = bed ? $"Going to \"{obj.Name}\"..." : $"Going to sit on \"{obj.Name}\"...";
+            return;
+        }
+        StatusText.Text = bed ? $"Going to \"{obj.Name}\"..." : $"Going to sit on \"{obj.Name}\"...";
     }
+
+    /// <summary>Arrived in front of it: face the chair and look at it for a moment.</summary>
+    private void BeginLookingAtSeat()
+    {
+        if (_pendingSit is not { } pending || !_map.Objects.Contains(pending.Furniture)) { _pendingSit = null; return; }
+        var furnitureVisual = VisualOf(pending.Furniture) as FrameworkElement;
+        double cx = furnitureVisual is null ? pending.Furniture.X * _tileWidth + _tileWidth / 2.0 : Canvas.GetLeft(furnitureVisual) + furnitureVisual.Width / 2;
+        double cy = furnitureVisual is null ? pending.Furniture.Y * _tileHeight + _tileHeight / 2.0 : Canvas.GetTop(furnitureVisual) + furnitureVisual.Height;
+        _playerFacing = FacingTowards(_playerPixelX, _playerPixelY + _tileHeight / 2.0, cx, cy);
+        ApplyPoseSprite(_idlePose);
+        pending.Phase = 1;
+        pending.WaitMs = 1000;
+    }
+
+    /// <summary>Each frame of a walk-to-sit: the look, the turn, then sitting down.</summary>
+    private void UpdatePendingSit(double elapsedMs)
+    {
+        if (_pendingSit is not { Phase: > 0 } pending) return;
+        if ((pending.WaitMs -= elapsedMs) > 0) return;
+        if (pending.Phase == 1)
+        {
+            _playerFacing = pending.Furniture.Facing; // turn the way the chair faces
+            ApplyPoseSprite(_idlePose);
+            pending.Phase = 2;
+            pending.WaitMs = 300;
+            return;
+        }
+        _pendingSit = null;
+        if (_map.Objects.Contains(pending.Furniture)) TakeSeatAsPlayer(pending.Furniture, pending.Obj, pending.Bed);
+    }
+
+    private void CancelPendingSit() => _pendingSit = null;
 
     private void TakeSeatAsPlayer(ObjectInstance furniture, WorldObject obj, bool bed)
     {
