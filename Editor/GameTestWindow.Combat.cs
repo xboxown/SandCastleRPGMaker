@@ -89,6 +89,7 @@ public partial class GameTestWindow
         var (vx, vy) = PixelOf(viewer);
         var (ox, oy) = PixelOf(other);
         if (double.IsNaN(vx) || double.IsNaN(ox)) return false;
+        if (Has(other, Ailment.Invisible) && !SameSide(viewer, other) && !(IsPartyOrPlayer(viewer) && IsPartyOrPlayer(other))) return false; // Exult: invisible to those who can't see invisible
         if (Math.Abs(vx - ox) > ViewportWidth / 2 || Math.Abs(vy - oy) > ViewportHeight / 2) return false;
         return HasLineOfSight(vx, vy, LiftOf(viewer), ox, oy);
     }
@@ -96,7 +97,7 @@ public partial class GameTestWindow
     /// <summary>Nothing solid taller than eye level (3 lifts above the feet) lies on the straight line between two feet positions. Characters don't block sight.</summary>
     private bool HasLineOfSight(double fromX, double fromY, int fromLift, double toX, double toY)
     {
-        var solids = WorldBodies().Where(b => b.Solid && b.Entity is not PlacedCharacter && b.TopLift > fromLift + 3 && b.Z <= fromLift + 3).ToList();
+        var solids = WorldBodies().Where(b => b.Solid && b.Entity is not PlacedCharacter && b.TopLift > fromLift + 3 && b.Z <= fromLift + 3 && !LetsSightThrough(b.Entity)).ToList(); // seen through windows
         if (solids.Count == 0) return true;
         double length = Math.Max(Math.Abs(toX - fromX), Math.Abs(toY - fromY));
         int steps = Math.Max(1, (int)(length / 4));
@@ -385,7 +386,7 @@ public partial class GameTestWindow
     {
         if (IsDead(defender)) return;
         int attval = Stat(attacker, BuiltInStatKind.Combat, 10);
-        int defval = Stat(defender, BuiltInStatKind.Combat, 10);
+        int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
         bool hit = RollToWin(attval, defval);
         FightBack(defender, attacker);
         if (!hit)

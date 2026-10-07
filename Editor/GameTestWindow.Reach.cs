@@ -233,7 +233,7 @@ public partial class GameTestWindow
             _window = window;
             // Walls and closed doors reach up to the roof, as Ultima VII's house walls do - nothing is reached over them, however short their drawn box.
             _solids = window.WorldBodies().Where(b => b.Solid)
-                .Select(b => b.Entity is ObjectInstance o && window.DefinitionOf(o)?.Type is ObjectType.Wall or ObjectType.Door ? b with { Height = Math.Max(b.Height, 64) } : b)
+                .Select(b => b.Entity is ObjectInstance o && window.DefinitionOf(o)?.Type is ObjectType.Wall or ObjectType.Door or ObjectType.Window ? b with { Height = Math.Max(b.Height, 64) } : b)
                 .ToList();
             _mapUnitsWide = window._map.Width * window.UnitsPerTileX;
             _mapUnitsHigh = window._map.Height * window.UnitsPerTileY;

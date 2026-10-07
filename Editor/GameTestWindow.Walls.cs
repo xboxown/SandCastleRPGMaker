@@ -89,7 +89,7 @@ public partial class GameTestWindow
     {
         foreach (var instance in _map.Objects)
         {
-            if (instance.ContainerInstanceId >= 0 || DefinitionOf(instance) is not { Type: ObjectType.Wall or ObjectType.Door } obj) continue;
+            if (instance.ContainerInstanceId >= 0 || DefinitionOf(instance) is not { Type: ObjectType.Wall or ObjectType.Door or ObjectType.Window } obj) continue;
             if (!_objectVisuals.TryGetValue(instance, out var visual)) continue;
             var body = BodyOf(null, instance);
             yield return (instance, BoxOf(new UnitRect(body.Left, body.Top, body.Width, body.Depth), body.Z, body.Height, ScreenRectOf(visual)), visual, obj.Occludes);
@@ -135,6 +135,6 @@ public partial class GameTestWindow
         }
         foreach (var (item, visual) in _itemVisuals.ToList()) Order(item, visual);
         foreach (var (obj, visual) in _objectVisuals.ToList())
-            if (DefinitionOf(obj)?.Type is not (ObjectType.Wall or ObjectType.Door)) Order(obj, visual);
+            if (DefinitionOf(obj)?.Type is not (ObjectType.Wall or ObjectType.Door or ObjectType.Window or ObjectType.Roof)) Order(obj, visual);
     }
 }

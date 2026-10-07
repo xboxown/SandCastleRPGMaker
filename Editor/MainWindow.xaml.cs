@@ -106,6 +106,7 @@ public partial class MainWindow : Window
         ProjectSession.VariablesProvider = () => _variableDatabase;
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
+        ProjectSession.PosesProvider = () => _poseDatabase;
         ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
         ProjectSession.StatsProvider = () => _statDatabase;

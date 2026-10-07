@@ -107,6 +107,7 @@ public partial class GameTestWindow
     {
         if (_choosingTarget is not { } onChosen) return false;
         _choosingTarget = null;
+        _lastTargetClickWorld = e.GetPosition(GameCanvas); // Get_click's x, y - where on the floor, for a spill
         var target = FindInteractionTarget(e.GetPosition(PaperdollGumpsCanvas));
         ShowPointer(RestingPointer);
         e.Handled = true;

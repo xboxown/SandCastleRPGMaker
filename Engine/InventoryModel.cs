@@ -77,6 +77,10 @@ public class InventoryItemInstance : IHasContainerContents
     public SpriteDirection FacingRuntime { get; set; } = SpriteDirection.South;
     /// <summary>Hit points left once struck (-1 = untouched) - damage goes with it.</summary>
     public int HitPointsRuntime { get; set; } = -1;
+    /// <summary>A keychain's keys, a useable object's charges left, a liquid container's liquid - they go with it (see ObjectInstance).</summary>
+    public List<int>? KeyIdsRuntime { get; set; }
+    public int ChargesRuntime { get; set; } = -1;
+    public string? LiquidRuntime { get; set; }
 
     /// <summary>Per-instance lock state in play - only meaningful for a Container. Null until a key or lockpick changes it (it's then as the container's IsLocked says). Travels with the container wherever it goes, as in Exult, where a locked chest is its own shape.</summary>
     public bool? IsLockedRuntime { get; set; }

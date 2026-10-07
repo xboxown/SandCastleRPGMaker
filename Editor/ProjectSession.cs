@@ -31,6 +31,8 @@ internal static class ProjectSession
     public static Func<VariableDatabase>? VariablesProvider;
     public static Func<BookDatabase>? BooksProvider;
     public static Func<ObjectDatabase>? ObjectsProvider;
+    public static Func<PoseDatabase>? PosesProvider;
+    public static PoseDatabase Poses => PosesProvider?.Invoke() ?? PoseDatabase.CreateDefault();
     public static Func<ContainerDatabase>? ContainersProvider;
     public static Func<CurrencyDatabase>? CurrenciesProvider;
     public static CurrencyDatabase Currencies => CurrenciesProvider?.Invoke() ?? new CurrencyDatabase();

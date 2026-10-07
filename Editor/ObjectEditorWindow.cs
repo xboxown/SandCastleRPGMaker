@@ -185,10 +185,12 @@ public partial class ObjectEditorWindow : Window
             case ObjectType.Chair: BuildFurniture(obj, bed: false); break;
             case ObjectType.Bed: BuildFurniture(obj, bed: true); break;
             case ObjectType.Trap: BuildTrap(obj); break;
+            default: BuildNewTypePanel(obj); break;
         }
-        if (obj.Type is ObjectType.Door or ObjectType.Junk or ObjectType.Chair or ObjectType.Bed or ObjectType.LightSource or ObjectType.Trap)
+        if (HasDurability(obj.Type))
             BuildDurability(obj);
         BuildOwnership(obj);
+        BuildLiquidSource(obj);
         BuildBody(obj);
     }
 
@@ -230,7 +232,7 @@ public partial class ObjectEditorWindow : Window
         ObjectType.Trap => "Hurts whoever steps on it, and can poison, sleep or paralyze. Can be hidden until it goes off, and can go off once or again and again.",
         ObjectType.Key => "Double-click it, then click a container or door it's the key of, to lock or unlock it (Exult's key).",
         ObjectType.Lockpick => "Double-click it, then click a locked container or door to try to pick the lock - it breaks when it fails.",
-        _ => ""
+        _ => NewTypeDescription(type)
     };
 
     private void BuildIdentity(WorldObject obj)
@@ -266,6 +268,14 @@ public partial class ObjectEditorWindow : Window
         {
             ObjectType.Door => "Closed sprite",
             ObjectType.LightSource => "Unlit sprite",
+            ObjectType.Window => "Sprite (closed, if it has shutters)",
+            ObjectType.Plant => "Sprite (used for any stage without its own)",
+            ObjectType.Keychain => "Sprite (frames: 0, 1, 2, 3, 4+ keys)",
+            ObjectType.Lever => "Off sprite",
+            ObjectType.Explosive => "Sprite (unlit)",
+            ObjectType.Bedroll => "Sprite (rolled up)",
+            ObjectType.LiquidContainer => "Empty sprite",
+            ObjectType.Reagent => "Sprite",
             ObjectType.Ammo or ObjectType.Money => "Icon (shown in lists; the bundle pictures below are used in play)",
             _ => "Sprite"
         };
@@ -432,12 +442,12 @@ public partial class ObjectEditorWindow : Window
     {
         var body = Group("Size and collision");
         var flags = new WrapPanel();
-        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Trap or ObjectType.Door))
+        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Trap or ObjectType.Door or ObjectType.Window or ObjectType.Stairs))
             flags.Children.Add(Check("Solid (blocks walking)", () => obj.IsSolid, v => obj.IsSolid = v));
         flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
-        if (obj.Type is ObjectType.Junk or ObjectType.Ammo or ObjectType.LightSource)
+        if (obj.Type is ObjectType.Junk or ObjectType.Ammo or ObjectType.LightSource or ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject)
             flags.Children.Add(Check("Two-handed", () => obj.IsTwoHanded, v => obj.IsTwoHanded = v));
-        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Door or ObjectType.Trap))
+        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Door or ObjectType.Trap or ObjectType.Window or ObjectType.Roof or ObjectType.Stairs))
             flags.Children.Add(Check("Things can be put on top of it (they rest at its height: Size Z below)", () => obj.AllowCellElevation,
                 v => { obj.AllowCellElevation = v; obj.IsCellStackable = v; },
                 "A chair seat, a table, a crate: something dropped on it stacks on top, raised to its height (the blue Height Z of the box below). Unticked: nothing can be put on it."));
@@ -445,9 +455,12 @@ public partial class ObjectEditorWindow : Window
         if (obj.Type == ObjectType.Tile) body.Children.Add(Note("A tile is flat (0 lifts high) and never blocks anyone."));
         if (obj.Type == ObjectType.Wall) body.Children.Add(Note("A wall is always solid. Its footprint is what Exult compares to decide who is drawn in front: make a long wall's footprint as long as the wall."));
         if (obj.Type == ObjectType.Door) body.Children.Add(Note("A door is solid while closed and walked through while open."));
+        if (obj.Type == ObjectType.Window) body.Children.Add(Note("A window is always solid, and drawn by Exult's wall rule like a wall: make a long window's footprint as long as the window."));
+        if (obj.Type == ObjectType.Stairs && obj.Stairs.Kind == StairsKind.Stairs) body.Children.Add(Note($"Height (blue, Size Z) = how many steps up; the footprint is cut into that many steps toward {obj.Stairs.RisesToward}."));
+        if (obj.Type == ObjectType.Roof) body.Children.Add(Note("A roof's footprint is the area it covers; it is 1 lift thick and sits at its Height."));
         var size = new SolidSizeEditor { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
         size.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, obj.SpriteGroup, MainSpriteName(obj)), obj.SizeX, obj.SizeY, obj.SizeZ, obj.SolidOffsetX, obj.SolidOffsetY,
-            obj.IsSolid || obj.Type is ObjectType.Wall or ObjectType.Door);
+            obj.IsSolid || ObjectTypes.IsWallLike(obj.Type));
         size.SizeEdited += (_, _) =>
         {
             obj.SizeX = size.SizeX;
@@ -772,8 +785,15 @@ public partial class ObjectEditorWindow : Window
         _eventHost.Content = dock;
     }
 
-    /// <summary>Each type's own names for the triggers its object fires in play.</summary>
-    private static IReadOnlyDictionary<BookTriggerConditionBased, string> TriggerLabels(ObjectType type) => type switch
+    /// <summary>Each type's own names for the triggers its object fires in play - and, for every type, By Tool Used On It (a Tool object used on it).</summary>
+    private static IReadOnlyDictionary<BookTriggerConditionBased, string> TriggerLabels(ObjectType type)
+    {
+        var labels = new Dictionary<BookTriggerConditionBased, string>(BaseTriggerLabels(type));
+        labels[BookTriggerConditionBased.ByTradeItem] = "By Tool Used On It";
+        return labels;
+    }
+
+    private static IReadOnlyDictionary<BookTriggerConditionBased, string> BaseTriggerLabels(ObjectType type) => type switch
     {
         ObjectType.Tile => new Dictionary<BookTriggerConditionBased, string>
         {
@@ -804,6 +824,32 @@ public partial class ObjectEditorWindow : Window
         {
             [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByEnter] = "By Lie Down", [BookTriggerConditionBased.ByExit] = "By Get Up"
         },
+        ObjectType.Lever => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Pull (double-click)", [BookTriggerConditionBased.ByAfterReadItem] = "By Turned On",
+            [BookTriggerConditionBased.ByEnter] = "By Turned Off"
+        },
+        ObjectType.Plant => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByAfterReadItem] = "By Harvested",
+            [BookTriggerConditionBased.ByStay] = "By Grown"
+        },
+        ObjectType.CraftingStation => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByAfterReadItem] = "By Made Something"
+        },
+        ObjectType.Explosive => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Lit (double-click)", [BookTriggerConditionBased.ByDestroyItem] = "By Exploded"
+        },
+        ObjectType.Window => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByDestroyItem] = "By Glass Broken"
+        },
+        ObjectType.BreakableGlass => new Dictionary<BookTriggerConditionBased, string>
+        {
+            [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)", [BookTriggerConditionBased.ByDestroyItem] = "By Shattered"
+        },
         _ => new Dictionary<BookTriggerConditionBased, string> { [BookTriggerConditionBased.ByUseItem] = "By Use (double-click)" }
     };
 
@@ -813,6 +859,10 @@ public partial class ObjectEditorWindow : Window
         ObjectType.Door => "By Open / Close fires before the door moves - a page with commands takes over (a talking door, a riddle). The After... triggers fire once it has happened.",
         ObjectType.LightSource => "By Light / Put Out fires on the double-click; a page with commands takes over (batteries, a puzzle lamp).",
         ObjectType.Junk => "By Use fires on the double-click - this is how one-off items get their behaviour.",
+        ObjectType.Lever => "By Pull fires on the double-click (a page with commands takes over); By Turned On / Off once it has flipped.",
+        ObjectType.Plant => "By Harvested fires once it's been harvested; By Grown each time it reaches its next stage.",
+        ObjectType.CraftingStation => "By Made Something fires once its work is done.",
+        ObjectType.Explosive => "By Lit fires when its fuse is lit; By Exploded when it goes off.",
         _ => "Evaluates this page's conditions against a simulated scenario, then lets you step through its commands."
     };
 

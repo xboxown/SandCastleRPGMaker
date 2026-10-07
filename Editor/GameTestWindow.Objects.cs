@@ -46,14 +46,17 @@ public partial class GameTestWindow
             if (obj.Type == ObjectType.LightSource && obj.Light.BurnMinutes > 0 && instance.BurnLeftRuntime < 0) instance.BurnLeftRuntime = obj.Light.BurnMinutes;
             if (obj.HitPoints > 0 && instance.HitPointsRuntime < 0) instance.HitPointsRuntime = obj.HitPoints;
         }
+        InitializeNewTypeStates();
         SpawnBedCovers();
     }
 
     private static ObjectState StateOf(ObjectInstance instance) =>
-        new(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime, Math.Max(1, instance.Quantity), instance.Facing);
+        new(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime, Math.Max(1, instance.Quantity), instance.Facing,
+            Stage: instance.FrameRuntime, Liquid: instance.LiquidRuntime);
 
     private static ObjectState StateOf(InventoryItemInstance item) =>
-        new(false, false, item.IsLitRuntime ?? false, item.IsSpentRuntime, Math.Max(1, item.Quantity), item.FacingRuntime);
+        new(false, false, item.IsLitRuntime ?? false, item.IsSpentRuntime, Math.Max(1, item.Quantity), item.FacingRuntime,
+            Stage: item.FrameRuntime, Liquid: item.LiquidRuntime);
 
     /// <summary>The name it goes by now: "Spent ..." once burnt out, "12 Arrows" for a stack.</summary>
     private static string ObjectDisplayName(WorldObject obj, bool spent, int quantity) =>
@@ -154,6 +157,7 @@ public partial class GameTestWindow
     {
         var obj = DefinitionOf(instance);
         string name = obj is null ? $"Object #{instance.ObjectId}" : ObjectDisplayName(obj, instance.IsSpentRuntime, instance.Quantity);
+        if (obj is { Type: ObjectType.LiquidContainer } && instance.LiquidRuntime is { Length: > 0 } liquid) name = $"{name} of {liquid.ToLowerInvariant()}"; // a bucket of water
         if (!isUse)
         {
             ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);
@@ -168,6 +172,7 @@ public partial class GameTestWindow
             case ObjectType.Chair: if (!FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem)) SitOn(instance, obj); return;
             case ObjectType.Bed: if (!FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem)) LieOn(instance, obj); return;
         }
+        if (UseNewTypeOnMap(instance, obj)) return; // windows, plants, levers, food, potions... (GameTestWindow.Types.cs)
         if (!FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem))
             StatusText.Text = $"\"{name}\" - nothing happens."; // Exult: no usecode, nothing
     }
@@ -178,6 +183,7 @@ public partial class GameTestWindow
         if (DefinitionOf(item) is not { } obj) return false;
         if (TryUseLockTool(obj, source)) return true;
         if (obj.Type == ObjectType.LightSource) { UseCarriedLight(item, obj); return true; }
+        if (UseNewTypeCarried(item, obj, source)) return true; // food, potions, keychains, maps, spellbooks... (GameTestWindow.Types.cs)
         if (TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired.")) return true;
         StatusText.Text = $"\"{ObjectDisplayName(obj, item.IsSpentRuntime, item.Quantity)}\" - nothing happens.";
         return true;
@@ -388,30 +394,25 @@ public partial class GameTestWindow
         obj.HitPoints > 0 && !obj.CannotBeDestroyed
         && !(obj.Type == ObjectType.Door && (obj.Door.RequiredKeyItemId >= 0 || obj.Door.MagicallyLocked));
 
-    /// <summary>A blow at a placed object (Game_object::reduce_health).</summary>
-    private void StrikeObject(ObjectInstance instance, WorldObject obj, int damage, MapCharacter? attacker = null)
+    /// <summary>A blow at a placed object (Game_object::reduce_health). <paramref name="byPlayer"/> false: nobody's doing (an explosion nobody lit) - no crime.</summary>
+    private void StrikeObject(ObjectInstance instance, WorldObject obj, int damage, MapCharacter? attacker = null, bool byPlayer = true)
     {
         var visual = VisualOf(instance);
+        if (obj.Type == ObjectType.Explosive && obj.Explosive.ExplodesWhenStruck) { Explode(instance, obj, attacker is null && byPlayer); return; } // a struck powder keg goes off
+        if (obj.Type == ObjectType.Window && instance.IsSpentRuntime) { ShowFloatingTextOver(visual, "no effect"); return; } // already broken
         if (!IsBreakable(obj)) { ShowFloatingTextOver(visual, "no effect"); return; }
         if (obj.Defense > 0) damage -= 1 + Rng.Next(obj.Defense);
         if (damage <= 0) { ShowFloatingTextOver(visual, "no damage"); return; }
         if (instance.HitPointsRuntime < 0) instance.HitPointsRuntime = obj.HitPoints;
         instance.HitPointsRuntime -= damage;
         if (ShowHitNumbers) ShowFloatingTextOver(visual, $"-{damage}");
-        var owner = attacker is null ? ObjectOwner(obj) : null; // only the player's blows are a crime here
+        var owner = attacker is null && byPlayer ? ObjectOwner(obj) : null; // only the player's blows are a crime here
         if (owner is { } owned && _struckOwnedObjects.Add(instance)) Theft(owned.Owner, owned.FactionId);
         if (instance.HitPointsRuntime > 0) return;
 
-        // Broken: gone from the world (Exult's DestroyObjectsUsecode).
-        PlaySound(obj.DestroyedSoundResourceId);
-        FireObjectEvent(instance, obj, BookTriggerConditionBased.ByDestroyItem);
-        if (_objectVisuals.Remove(instance, out var gone)) { UnregisterWorldAnimator(gone); GameCanvas.Children.Remove(gone); }
-        _map.Objects.Remove(instance);
+        // Broken: gone from the world (Exult's DestroyObjectsUsecode) - or, a window with a Broken sprite, broken where it is.
         _playerTargetThing = null;
-        SettleWorld();
-        RefreshAfterMove();
-        StatusText.Text = attacker is null ? $"\"{obj.Name}\" breaks apart." : $"{attacker.Character.Name} breaks \"{obj.Name}\" down!";
-        if (owner is { } brokenOwned) Theft(brokenOwned.Owner, brokenOwned.FactionId);
+        BreakObject(instance, obj, owner, attacker);
     }
 
     private readonly HashSet<ObjectInstance> _struckOwnedObjects = new(ReferenceEqualityComparer.Instance);

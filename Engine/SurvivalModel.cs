@@ -13,7 +13,11 @@ public enum Ailment
     Asleep = 2,
     Paralyzed = 4,
     Charmed = 8,
-    Cursed = 16
+    Cursed = 16,
+    /// <summary>Exult's invisibility flag (a potion or spell; 60-80 s): enemies that can't see invisible leave them be. Not an ailment one can be immune to.</summary>
+    Invisible = 32,
+    /// <summary>Exult's protection flag (60-80 s): +3 to defence. Not an ailment one can be immune to.</summary>
+    Protected = 64
 }
 
 public static class Ailments
@@ -27,6 +31,8 @@ public static class Ailments
         Ailment.Paralyzed => "Paralyzed",
         Ailment.Charmed => "Charmed",
         Ailment.Cursed => "Cursed",
+        Ailment.Invisible => "Invisible",
+        Ailment.Protected => "Protected",
         _ => ailment.ToString()
     };
 

@@ -143,6 +143,12 @@ public partial class GameTestWindow
             e.Handled = true;
             return;
         }
+        if (_objectOverlayOpen)
+        {
+            // A map being looked at: any click puts it away (Exult's display_map Get_click). A spellbook: only its own buttons work.
+            if (!_objectOverlayTakesClicks) { CloseObjectOverlay(); e.Handled = true; }
+            return;
+        }
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: nothing can be clicked (only a dialog box, above)
         if (TryChooseTarget(e)) return; // a key or lockpick is waiting for its target (Get_click)
         if (_pointer is { IsDragging: true }) { e.Handled = true; return; }
@@ -693,6 +699,7 @@ public partial class GameTestWindow
         }
         SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
         SetZ((object?)item ?? obj!, newZ);
+        if (obj is not null) NoteGlassFall(obj, _playerZ, newZ); // glass let go of above a lower floor falls - and maybe shatters
         // Gravity everywhere: whatever rested on it where it came from falls, and so does the player if it was under them.
         SettleWorld();
 
@@ -1118,7 +1125,8 @@ public partial class GameTestWindow
                 {
                     InstanceId = nextInstanceId(), Category = ReferencedItemCategory.Object, ItemId = o.Obj.ObjectId, Quantity = Math.Max(1, o.Obj.Quantity),
                     FacingRuntime = o.Obj.Facing, IsLitRuntime = o.Obj.IsLitRuntime, BurnLeftRuntime = o.Obj.BurnLeftRuntime,
-                    IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime
+                    IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime,
+                    KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidRuntime = o.Obj.LiquidRuntime
                 };
             default:
                 var item = (InventoryItemInstance)PayloadObject(origin);
@@ -1157,7 +1165,8 @@ public partial class GameTestWindow
             {
                 ObjectId = item.ItemId, Quantity = Math.Max(1, item.Quantity),
                 Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
-                IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime
+                IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime,
+                KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidRuntime = item.LiquidRuntime
             };
         var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId };
         if (item.Category == ReferencedItemCategory.Container)

@@ -91,7 +91,7 @@ public partial class GameTestWindow
 
     private List<Body> WorldBodies() =>
         _map.Items.Select(i => BodyOf(i, null))
-            .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).Select(o => BodyOf(null, o)))
+            .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).SelectMany(ObjectBodies)) // stairs: one body a step
             .Concat(CharacterBodies()) // placed characters: solid, like Exult's actors
             .ToList();
 
@@ -114,7 +114,9 @@ public partial class GameTestWindow
         var settled = new List<Body>(order.Count);
         foreach (var body in order)
         {
+            if (body.Entity is ObjectInstance roof && DefinitionOf(roof)?.Type == ObjectType.Roof) { settled.Add(body); continue; } // a roof stays up at its height
             int z = body.Elevates ? RestingLift(settled, new UnitRect(body.Left, body.Top, body.Width, body.Depth)) : 0;
+            if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);
             settled.Add(body with { Z = z });
         }
@@ -135,6 +137,7 @@ public partial class GameTestWindow
     {
         SettleAll();
         ApplyGravityToPlayer();
+        ShatterFallenGlass();
     }
 
     /// <summary>

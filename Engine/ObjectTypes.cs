@@ -30,7 +30,54 @@ public enum ObjectType
     /// <summary>Locks and unlocks the containers and doors it is the key of.</summary>
     Key,
     /// <summary>Tries to pick a lock; breaks when it fails.</summary>
-    Lockpick
+    Lockpick,
+
+    // ---- Added in build 248 (appended, so saved projects keep their numbers) ----
+
+    /// <summary>Solid like a wall, but you can see through it; may have shutters that open, and glass that breaks.</summary>
+    Window,
+    /// <summary>Grows through its stage pictures with the game clock; ripe, it can be harvested for produce.</summary>
+    Plant,
+    /// <summary>Exult's keyring: holds keys and opens whatever any of them fits.</summary>
+    Keychain,
+    /// <summary>Tells where you are in degrees (Exult's coordinates), and lets a map show your position.</summary>
+    Sextant,
+    /// <summary>Double-click to look at it: its picture fills the screen (with your position, if the party has a sextant).</summary>
+    Map,
+    /// <summary>Eaten by whoever you click (Exult's food): fills them up by its nutrition.</summary>
+    Food,
+    /// <summary>Drunk by whoever you click: heals, cures, poisons, puts to sleep... (its effects).</summary>
+    Potion,
+    /// <summary>Glass, vases, bottles: shatters when struck (or dropped), leaving shards if you like.</summary>
+    BreakableGlass,
+    /// <summary>A book of spells, by circle: cast with mana and reagents (Exult's spellbook).</summary>
+    Spellbook,
+    /// <summary>Runs its events and effects when used - magic scrolls, wands, one-off items; can have charges.</summary>
+    UseableObject,
+    /// <summary>A lever, switch or button: flips on and off, and works the doors, lights and other things it's linked to.</summary>
+    Lever,
+    /// <summary>Stairs you walk up a step at a time, or a ladder that takes you up or down to another spot.</summary>
+    Stairs,
+    /// <summary>Covers a building; disappears while you're under it (Exult's roofs).</summary>
+    Roof,
+    /// <summary>Double-click to see the time (Exult's pocketwatch); a sundial only by day.</summary>
+    Clock,
+    /// <summary>A hammer, scythe, shears...: used on plants and crafting stations that need it.</summary>
+    Tool,
+    /// <summary>An anvil, millstone, loom, oven...: turns ingredients into something new (its recipes).</summary>
+    CraftingStation,
+    /// <summary>A lute, harp, harpsichord: double-click to play a tune.</summary>
+    MusicalInstrument,
+    /// <summary>A powder keg: lit or struck, it blows up, hurting and breaking what's around it.</summary>
+    Explosive,
+    /// <summary>Laid out to sleep the night through: the party rests, heals and gets hungry.</summary>
+    Bedroll,
+    /// <summary>Spell ingredients (black pearl, garlic...): stack up to 100; spells use them up.</summary>
+    Reagent,
+    /// <summary>A table, counter, shelf or altar: solid, and things put on it rest on top.</summary>
+    Table,
+    /// <summary>A bucket, bottle or cauldron: filled at a source (a well, a trough) and drunk, poured or emptied.</summary>
+    LiquidContainer
 }
 
 public static class ObjectTypes
@@ -39,18 +86,37 @@ public static class ObjectTypes
     public static readonly ObjectType[] All =
     {
         ObjectType.Junk, ObjectType.Tile, ObjectType.Wall, ObjectType.Door, ObjectType.LightSource, ObjectType.Ammo,
-        ObjectType.Money, ObjectType.Chair, ObjectType.Bed, ObjectType.Trap, ObjectType.Key, ObjectType.Lockpick
+        ObjectType.Money, ObjectType.Chair, ObjectType.Bed, ObjectType.Trap, ObjectType.Key, ObjectType.Lockpick,
+        ObjectType.Window, ObjectType.Plant, ObjectType.Keychain, ObjectType.Sextant, ObjectType.Map, ObjectType.Food,
+        ObjectType.Potion, ObjectType.BreakableGlass, ObjectType.Spellbook, ObjectType.UseableObject, ObjectType.Lever,
+        ObjectType.Stairs, ObjectType.Roof, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
+        ObjectType.MusicalInstrument, ObjectType.Explosive, ObjectType.Bedroll, ObjectType.Reagent, ObjectType.Table,
+        ObjectType.LiquidContainer
     };
 
     public static string Name(ObjectType type) => type switch
     {
         ObjectType.LightSource => "Light Source",
         ObjectType.Lockpick => "Picklock",
+        ObjectType.BreakableGlass => "Breakable Glass",
+        ObjectType.UseableObject => "Useable Object",
+        ObjectType.Lever => "Lever / Switch / Button",
+        ObjectType.Stairs => "Stairs / Ladder",
+        ObjectType.CraftingStation => "Crafting Station",
+        ObjectType.MusicalInstrument => "Musical Instrument",
+        ObjectType.Table => "Table / Surface",
+        ObjectType.LiquidContainer => "Liquid Container",
         _ => type.ToString()
     };
 
     /// <summary>Whether the type stacks into quantities with bundle pictures (Ammo, Money).</summary>
     public static bool IsBundle(ObjectType type) => type is ObjectType.Ammo or ObjectType.Money;
+
+    /// <summary>Always solid and drawn by Exult's wall rule (Game_object::compare): walls, doors and windows.</summary>
+    public static bool IsWallLike(ObjectType type) => type is ObjectType.Wall or ObjectType.Door or ObjectType.Window;
+
+    /// <summary>Types that stack into quantities (up to 100) without bundle pictures: reagents (and food, as Ultima VII's garlic).</summary>
+    public static bool StacksByDefault(ObjectType type) => type is ObjectType.Reagent;
 
     /// <summary>
     /// Exult's quantity frames (objs.cc modify_quantity, "Verified"): 1 to 6
@@ -104,6 +170,56 @@ public static class ObjectTypes
             case ObjectType.Trap:
                 obj.IsSolid = false;
                 obj.SizeZ = 0;
+                break;
+            case ObjectType.Window:
+                obj.IsPortable = false;
+                obj.IsSolid = true;          // you can't climb through it
+                obj.Occludes = false;        // but you can see through it
+                obj.SizeZ = Math.Max(obj.SizeZ, 5);
+                break;
+            case ObjectType.Plant:
+                obj.IsPortable = false;
+                obj.IsSolid = false;
+                break;
+            case ObjectType.Keychain:
+                obj.FramesAreStates = true;  // Exult: the keyring's frame shows how many keys (0-4)
+                break;
+            case ObjectType.BreakableGlass:
+                obj.HitPoints = 1;           // one blow shatters it
+                break;
+            case ObjectType.Lever:
+                obj.IsPortable = false;
+                break;
+            case ObjectType.Stairs:
+                obj.IsPortable = false;
+                obj.IsSolid = true;
+                obj.SizeY = Math.Max(obj.SizeY, 4);
+                obj.SizeZ = Math.Max(obj.SizeZ, 4); // four steps of 1 lift - Exult's stairs rise a lift a step
+                break;
+            case ObjectType.Roof:
+                obj.IsPortable = false;
+                obj.IsSolid = true;          // you can walk on a roof (stairs up to it)
+                obj.SizeZ = 1;
+                break;
+            case ObjectType.CraftingStation:
+                obj.IsPortable = false;
+                obj.IsSolid = true;
+                obj.SizeZ = Math.Max(obj.SizeZ, 2);
+                break;
+            case ObjectType.Explosive:
+                obj.HitPoints = 1;
+                obj.IsSolid = true;
+                break;
+            case ObjectType.Reagent:
+                obj.IsStackable = true;
+                obj.MaxStackSize = MaxQuantity;
+                break;
+            case ObjectType.Table:
+                obj.IsPortable = false;
+                obj.IsSolid = true;
+                obj.AllowCellElevation = true; // things put on it rest on top
+                obj.IsCellStackable = true;
+                obj.SizeZ = Math.Max(obj.SizeZ, 2);
                 break;
         }
     }

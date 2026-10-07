@@ -128,6 +128,20 @@ public class GameClock
         return hoursPassed;
     }
 
+    /// <summary>Time passes at once (resting): this many game minutes. Returns the hour changes.</summary>
+    public int AdvanceMinutes(int minutes)
+    {
+        int hoursPassed = 0;
+        Minute += Math.Max(0, minutes);
+        while (Minute >= 60)
+        {
+            Minute -= 60;
+            if (++Hour >= 24) { Hour -= 24; Day++; }
+            hoursPassed++;
+        }
+        return hoursPassed;
+    }
+
     /// <summary>Exult's fake_next_period: jump to the start of the next 3-hour period.</summary>
     public void SkipToNextPeriod()
     {

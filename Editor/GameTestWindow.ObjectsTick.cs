@@ -42,6 +42,7 @@ public partial class GameTestWindow
                     if (DefinitionOf(tile) is { Type: ObjectType.Tile } obj) FireObjectEvent(tile, obj, BookTriggerConditionBased.ByStay, MapCharacterOf(who));
         }
         CloseDoorsBehindNpcs();
+        UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
     }
 

@@ -28,7 +28,7 @@ public partial class GameTestWindow
     {
         public int Food;
         public Ailment Ailments;
-        public double PoisonRemainingMs, PoisonNextTickMs, SleepRemainingMs, ParalyzeRemainingMs, CharmRemainingMs, CurseRemainingMs;
+        public double PoisonRemainingMs, PoisonNextTickMs, SleepRemainingMs, ParalyzeRemainingMs, CharmRemainingMs, CurseRemainingMs, InvisibleRemainingMs, ProtectedRemainingMs;
         public bool Dead;
         /// <summary>Knocked out: health at 0 or below, not yet dead (GameTestWindow.Unconscious.cs).</summary>
         public bool Unconscious;
@@ -230,11 +230,13 @@ public partial class GameTestWindow
         if (vitals.Ailments.HasFlag(Ailment.Paralyzed) && (vitals.ParalyzeRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Paralyzed);
         if (vitals.Ailments.HasFlag(Ailment.Charmed) && (vitals.CharmRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Charmed);
         if (vitals.Ailments.HasFlag(Ailment.Cursed) && (vitals.CurseRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Cursed);
+        if (vitals.Ailments.HasFlag(Ailment.Invisible) && (vitals.InvisibleRemainingMs -= elapsedMs) <= 0) { Cure(character, Ailment.Invisible); ShowInvisibility(character); }
+        if (vitals.Ailments.HasFlag(Ailment.Protected) && (vitals.ProtectedRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Protected);
     }
 
     private bool Inflict(CharacterDefinition character, Ailment ailment)
     {
-        if (IsDead(character) || character.Survival.Immunities.HasFlag(ailment)) return false;
+        if (IsDead(character) || (ailment is not (Ailment.Invisible or Ailment.Protected) && character.Survival.Immunities.HasFlag(ailment))) return false;
         var vitals = VitalsOf(character);
         vitals.Ailments |= ailment;
         var s = character.Survival;
@@ -257,10 +259,17 @@ public partial class GameTestWindow
             case Ailment.Cursed:
                 vitals.CurseRemainingMs = 60000 + Rng.Next(60000);
                 break;
+            case Ailment.Invisible:
+                vitals.InvisibleRemainingMs = 60000 + Rng.Next(20000); // Npc_invisibility_timer
+                break;
+            case Ailment.Protected:
+                vitals.ProtectedRemainingMs = 60000 + Rng.Next(20000); // Npc_protection_timer
+                break;
         }
         if (ailment is Ailment.Asleep or Ailment.Paralyzed) StopActing(character, ailment == Ailment.Asleep);
         if (character == _player) StatusText.Text = $"You are {Ailments.Describe(ailment).ToLowerInvariant()}.";
-        FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
+        if (ailment == Ailment.Invisible) { StopAttackingInvisible(character); ShowInvisibility(character); }
+        if (ailment is not (Ailment.Invisible or Ailment.Protected)) FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
         return true;
     }
 

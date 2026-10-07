@@ -1482,6 +1482,8 @@ public partial class GameTestWindow : Window
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (PlayerKnockedOut && e.Key != Key.F6) { e.Handled = true; return; } // unconscious: nothing until back on your feet
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
+        if (_objectOverlayOpen) { if (e.Key is Key.Escape or Key.Enter or Key.Space) CloseObjectOverlay(); e.Handled = true; return; } // a map or spellbook is up
+        if (_restingNow) { e.Handled = true; return; } // the party is asleep
         if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
         if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens
         if (_isReadingBook) return;
@@ -1836,7 +1838,7 @@ public partial class GameTestWindow : Window
         if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject)
             return worldObject.Type switch
             {
-                ObjectType.Wall => true,                              // always an obstacle
+                ObjectType.Wall or ObjectType.Window or ObjectType.Roof => true, // always an obstacle (a roof: up at its height)
                 ObjectType.Door => obj.IsOpenRuntime != true,         // solid while closed
                 ObjectType.Tile or ObjectType.Trap => false,          // flat, no collision
                 _ => worldObject.IsSolid
@@ -2097,6 +2099,7 @@ public partial class GameTestWindow : Window
         ApplyRestingDrawOrder();
         ApplyWallDrawOrder(); // things near walls, by Exult's compare
         FixFurnitureDrawOrder(); // sitters over chairs, covers over sleepers
+        FixRoofDrawOrder(); // roofs over everything under them
     }
 
     /// <summary>

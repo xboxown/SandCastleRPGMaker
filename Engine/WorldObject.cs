@@ -128,6 +128,29 @@ public class WorldObject
     public MoneySettings Money { get; set; } = new();
     public FurnitureSettings Furniture { get; set; } = new();
     public TrapSettings Trap { get; set; } = new();
+    public WindowSettings Window { get; set; } = new();
+    public PlantSettings Plant { get; set; } = new();
+    public KeychainSettings Keychain { get; set; } = new();
+    public SextantSettings Sextant { get; set; } = new();
+    public MapSettings MapPicture { get; set; } = new();
+    public FoodSettings Food { get; set; } = new();
+    public PotionSettings Potion { get; set; } = new();
+    public GlassSettings Glass { get; set; } = new();
+    public SpellbookSettings Spellbook { get; set; } = new();
+    public UseableSettings Useable { get; set; } = new();
+    public LeverSettings Lever { get; set; } = new();
+    public StairsSettings Stairs { get; set; } = new();
+    public RoofSettings Roof { get; set; } = new();
+    public ClockSettings Clock { get; set; } = new();
+    public ToolSettings Tool { get; set; } = new();
+    public CraftingSettings Crafting { get; set; } = new();
+    public InstrumentSettings Instrument { get; set; } = new();
+    public ExplosiveSettings Explosive { get; set; } = new();
+    public BedrollSettings Bedroll { get; set; } = new();
+    public LiquidContainerSettings Liquid { get; set; } = new();
+
+    /// <summary>Any object can be a liquid source (Exult's well, water trough): a liquid container used on it is filled with this liquid. Empty = not a source.</summary>
+    public string LiquidSource { get; set; } = string.Empty;
 
     /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
@@ -137,7 +160,13 @@ public class WorldObject
     public void SyncLocalVariableIdAfterLoad() => _nextLocalVariableId = LocalVariables.Count == 0 ? 1 : LocalVariables.Max(v => v.Id) + 1;
 
     /// <summary>The name it goes by in play: a burnt-out light is "Spent ..." (as Ultima VII's "spent torch").</summary>
-    public string DisplayName(bool spent = false) => spent && Type == ObjectType.LightSource ? $"Spent {Name.ToLowerInvariant()}" : Name;
+    public string DisplayName(bool spent = false) => !spent ? Name : Type switch
+    {
+        ObjectType.LightSource => $"Spent {Name.ToLowerInvariant()}",
+        ObjectType.Window => $"Broken {Name.ToLowerInvariant()}",
+        ObjectType.UseableObject => $"Used {Name.ToLowerInvariant()}",
+        _ => Name
+    };
 }
 
 /// <summary>What double-clicking an object does in play.</summary>
@@ -208,6 +237,30 @@ public class ObjectInstance
     public int FrameRuntime { get; set; }
     /// <summary>A trap that has gone off (one-shot), or is revealed.</summary>
     public bool TrapSprungRuntime { get; set; }
+
+    // ---------- Build 248 types: set in the Map Editor ----------
+    /// <summary>A plant's starting growth stage (null = the first).</summary>
+    public int? StartStage { get; set; }
+    /// <summary>A liquid container's starting liquid (null = as the Object Editor says; "" = empty).</summary>
+    public string? StartsFullOf { get; set; }
+    /// <summary>A lever's links: the InstanceIds of the placed objects it works.</summary>
+    public List<int> LinkedInstanceIds { get; set; } = new();
+    /// <summary>A ladder's destination cell and lift (-1 = none set).</summary>
+    public int DestinationX { get; set; } = -1;
+    public int DestinationY { get; set; } = -1;
+    public int DestinationLift { get; set; }
+
+    // ---------- Build 248 types: live state in play ----------
+    /// <summary>Game minutes a plant has grown since its last stage.</summary>
+    public double GrowMinutesRuntime { get; set; }
+    /// <summary>A keychain's keys (Key object ids); null until play starts (then its Starting Keys).</summary>
+    public List<int>? KeyIdsRuntime { get; set; }
+    /// <summary>Uses left (-1 = not counting yet: as many as its Charges).</summary>
+    public int ChargesRuntime { get; set; } = -1;
+    /// <summary>What a liquid container holds now ("" = empty; null = not set yet).</summary>
+    public string? LiquidRuntime { get; set; }
+    /// <summary>Seconds left on a lit fuse (-1 = not lit).</summary>
+    public double FuseRuntime { get; set; } = -1;
 }
 
 /// <summary>

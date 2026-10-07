@@ -29,7 +29,7 @@ public partial class GameTestWindow
         _lightCheckMs = 250;
         if (_nightDarkness <= 0 || _player is null) { _lightLevel = -1; return; }
         int light = LightStrength();
-        int level = light <= 0 ? 0 : light < 224 ? 1 : light < 640 ? 2 : 3;
+        int level = _specialLightMinutes > 0 ? 3 : light <= 0 ? 0 : light < 224 ? 1 : light < 640 ? 2 : 3; // a light spell: as many lights (add_special_light)
         if (level == _lightLevel) return;
         _lightLevel = level;
         LightingOverlay.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(_nightDarkness * DarknessLeftAtLevel[level], TimeSpan.FromSeconds(0.4)));

@@ -98,11 +98,12 @@ public partial class MainWindow
     /// <summary>How an object first looks: its sprite's first frame (for its starting state), or an older object's icon file.</summary>
     private BitmapSource? ObjectIcon(WorldObject obj, ObjectInstance? instance = null)
     {
-        var state = instance is null ? new ObjectState(obj.Door.StartsOpen, obj.Door.StartsLocked, obj.Light.StartsLit, false, 1, SpriteDirection.South) : ObjectLooks.StartState(obj, instance);
+        var state = instance is null ? ObjectLooks.DefaultState(obj) : ObjectLooks.StartState(obj, instance);
         var sprite = ObjectLooks.SpriteFor(obj, state, _spriteDatabase);
         if (sprite is not null)
         {
-            int frame = obj.FramesAreStates && instance is not null ? Math.Clamp(instance.FrameRuntime, 0, Math.Max(0, sprite.Frames.Count - 1)) : 0;
+            int frame = obj.Type == ObjectType.Keychain ? Math.Clamp(Math.Min(obj.Keychain.StartingKeyIds.Count, 4), 0, Math.Max(0, sprite.Frames.Count - 1)) // Exult: the keyring's frame is its key count
+                : obj.FramesAreStates && instance is not null ? Math.Clamp(instance.FrameRuntime, 0, Math.Max(0, sprite.Frames.Count - 1)) : 0;
             string path = sprite.Frames.Count > 0 ? sprite.Frames[frame].FilePath : sprite.FilePath;
             return LoadStaticFrame(path);
         }
@@ -118,6 +119,7 @@ public partial class MainWindow
     private void ObjectMode_MouseLeftButtonDown(int x, int y)
     {
         if (_map is null) return;
+        if (_objectPick is { } pick) { pick(x, y); return; } // linking a lever, setting a ladder's destination
         // On a placed object: select it and drag it (Ctrl+click places another on top of it instead).
         if (ObjectAt(x, y) is { } existing && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
         {
@@ -203,6 +205,7 @@ public partial class MainWindow
                 bool lit = existing.StartsLit ?? obj.Light.StartsLit;
                 AddStateItem(menu, "Starts lit", lit, () => existing.StartsLit = !lit, existing);
             }
+            AddNewTypeMenuItems(menu, obj, existing);
             if (ObjectTypes.IsBundle(obj.Type) || obj.IsStackable)
             {
                 var quantity = new MenuItem { Header = $"Quantity ({existing.Quantity})..." };
@@ -242,6 +245,7 @@ public partial class MainWindow
     private bool ObjectMode_KeyDown(KeyEventArgs e)
     {
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
+        if (e.Key == Key.Escape && _objectPick is not null) { EndObjectPick("Done."); return true; }
         if (ctrl && e.Key == Key.X && _selectedObjectInstance is { } toCut) { CutObjectInstance(toCut); return true; }
         if (ctrl && e.Key == Key.C && _selectedObjectInstance is { } toCopy) { CopyObjectInstance(toCopy); return true; }
         if (ctrl && e.Key == Key.V && _copiedObject is not null)
@@ -260,7 +264,9 @@ public partial class MainWindow
     private static ObjectInstance CopyOf(ObjectInstance source) => new()
     {
         ObjectId = source.ObjectId, Quantity = source.Quantity, Facing = source.Facing, ContainerInstanceId = -1,
-        StartsOpen = source.StartsOpen, StartsLocked = source.StartsLocked, StartsLit = source.StartsLit, OffsetX = source.OffsetX, OffsetY = source.OffsetY
+        StartsOpen = source.StartsOpen, StartsLocked = source.StartsLocked, StartsLit = source.StartsLit, OffsetX = source.OffsetX, OffsetY = source.OffsetY,
+        StartStage = source.StartStage, StartsFullOf = source.StartsFullOf, LinkedInstanceIds = source.LinkedInstanceIds.ToList(),
+        DestinationX = source.DestinationX, DestinationY = source.DestinationY, DestinationLift = source.DestinationLift
     };
 
     private void CopyObjectInstance(ObjectInstance source)
@@ -348,11 +354,13 @@ public partial class MainWindow
     {
         if (_objectSelectionVisual is not null) MapCanvas.Children.Remove(_objectSelectionVisual);
         _objectSelectionVisual = null;
+        ClearLinkVisuals();
         if (_selectedObjectInstance is not { } selected || !_mapObjectVisuals.TryGetValue(selected.InstanceId, out var visual)) return;
         _objectSelectionVisual = new Border { BorderBrush = Brushes.Yellow, BorderThickness = new Thickness(1.5), IsHitTestVisible = false, Width = visual.Width + 4, Height = visual.Height + 4 };
         Canvas.SetLeft(_objectSelectionVisual, Canvas.GetLeft(visual) - 2);
         Canvas.SetTop(_objectSelectionVisual, Canvas.GetTop(visual) - 2);
         Panel.SetZIndex(_objectSelectionVisual, 17);
         MapCanvas.Children.Add(_objectSelectionVisual);
+        ShowLinksOf(selected);
     }
 }
