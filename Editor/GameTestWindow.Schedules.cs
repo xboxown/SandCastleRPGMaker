@@ -204,12 +204,13 @@ public partial class GameTestWindow
         }
         // No teleporting (Exult jumps there after 2 failed tries or 40 legs): it keeps walking, a leg at a time.
         // A leg that gets it no nearer counts as a try; after 5 such tries the spot can't be reached (a locked
-        // door, a wall all round) and it gets on with its activity where it is.
+        // door, a wall all round) - and only then, as Exult does, it's put there.
         int distance = TileDistance(mapCharacter, npc.Dest);
         if (distance < npc.BestDistance) { npc.BestDistance = distance; npc.Retries = 0; }
         else npc.Retries++;
         if (npc.Retries >= 5)
         {
+            Teleport(mapCharacter, npc.Dest); // no way there: Exult's jump
             BeginActivity(mapCharacter);
             return;
         }
