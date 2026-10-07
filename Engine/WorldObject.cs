@@ -149,8 +149,8 @@ public class WorldObject
     public BedrollSettings Bedroll { get; set; } = new();
     public LiquidContainerSettings Liquid { get; set; } = new();
 
-    /// <summary>Any object can be a liquid source (Exult's well, water trough): a liquid container used on it is filled with this liquid. Empty = not a source.</summary>
-    public string LiquidSource { get; set; } = string.Empty;
+    /// <summary>A liquid source (Exult's well, water trough): a liquid container used on it is filled with this liquid (a liquid Food's id). -1 = not a source.</summary>
+    public int LiquidSourceId { get; set; } = -1;
 
     /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
@@ -241,8 +241,8 @@ public class ObjectInstance
     // ---------- Build 248 types: set in the Map Editor ----------
     /// <summary>A plant's starting growth stage (null = the first).</summary>
     public int? StartStage { get; set; }
-    /// <summary>A liquid container's starting liquid (null = as the Object Editor says; "" = empty).</summary>
-    public string? StartsFullOf { get; set; }
+    /// <summary>A liquid container's starting liquid (a liquid Food's id; null = as the Object Editor says; -1 = empty).</summary>
+    public int? StartsFullOfId { get; set; }
     /// <summary>A lever's links: the InstanceIds of the placed objects it works.</summary>
     public List<int> LinkedInstanceIds { get; set; } = new();
     /// <summary>A ladder's destination cell and lift (-1 = none set).</summary>
@@ -257,8 +257,8 @@ public class ObjectInstance
     public List<int>? KeyIdsRuntime { get; set; }
     /// <summary>Uses left (-1 = not counting yet: as many as its Charges).</summary>
     public int ChargesRuntime { get; set; } = -1;
-    /// <summary>What a liquid container holds now ("" = empty; null = not set yet).</summary>
-    public string? LiquidRuntime { get; set; }
+    /// <summary>What a liquid container holds now (a liquid Food's id; -1 = empty; null = not set yet).</summary>
+    public int? LiquidIdRuntime { get; set; }
     /// <summary>Seconds left on a lit fuse (-1 = not lit).</summary>
     public double FuseRuntime { get; set; } = -1;
 }

@@ -169,9 +169,20 @@ public class MapSettings
     public int AreaBottom { get; set; } = -1;
 }
 
-/// <summary>Food (Exult's Food shape#0x179 / consumeEdible).</summary>
+/// <summary>
+/// Food (Exult's Food shape#0x179 / consumeEdible). Solid food is eaten;
+/// liquid food (milk, water, wine, blood) is what liquid containers hold:
+/// it says what the liquid does when drunk, and each container says how it
+/// looks full of it (LiquidContainerSettings).
+/// </summary>
 public class FoodSettings
 {
+    /// <summary>A liquid (milk, water, wine): carried in liquid containers, filled at sources (a well, a cow).</summary>
+    public bool IsLiquid { get; set; }
+    /// <summary>A liquid that douses lit lights and fires (Exult's bucket of water).</summary>
+    public bool PutsOutFires { get; set; }
+    /// <summary>A liquid nobody drinks ("No, thank thee." - Exult's bucket of blood).</summary>
+    public bool Undrinkable { get; set; }
     /// <summary>How much it fills (Exult: an apple 2, bread 4, a ham 24). Food level runs 0-31; at 25 or more they're full.</summary>
     public int Nutrition { get; set; } = 4;
     public int EatSoundResourceId { get; set; } = -1;
@@ -347,27 +358,22 @@ public class BedrollSettings
     public SpriteLink LaidOutSprite { get; set; } = new();
 }
 
-/// <summary>One liquid a container can hold.</summary>
+/// <summary>One liquid a container can hold: which liquid (a Food object set to Liquid), and how this container looks full of it.</summary>
 public class LiquidDefinition
 {
-    public string Name { get; set; } = "Water";
-    /// <summary>How the container looks full of it.</summary>
+    /// <summary>The liquid - a Food object set to Liquid (what drinking it does is set there).</summary>
+    public int FoodId { get; set; } = -1;
+    /// <summary>How this container looks full of it (a steel bucket of milk, a glass bottle of wine).</summary>
     public SpriteLink Sprite { get; set; } = new();
-    /// <summary>Drinking it: nutrition, and any effects (wine, milk, a poisoned well).</summary>
-    public int Nutrition { get; set; }
-    public List<MagicEffect> Effects { get; set; } = new();
-    /// <summary>Exult's bucket of water douses lit lights and fires.</summary>
-    public bool PutsOutFires { get; set; } = true;
-    /// <summary>Drinking it is refused ("No, thank thee." - a bucket of blood).</summary>
-    public bool Undrinkable { get; set; }
 }
 
-/// <summary>A liquid container (Exult's bucket.uc): empty (its own sprite) or full of one of its liquids.</summary>
+/// <summary>A liquid container (Exult's bucket.uc): empty (its own sprite) or full of one of the liquids it can hold.</summary>
 public class LiquidContainerSettings
 {
-    public List<LiquidDefinition> Liquids { get; set; } = new() { new() };
-    /// <summary>The liquid it starts full of (empty = it starts empty).</summary>
-    public string StartsFullOf { get; set; } = string.Empty;
+    /// <summary>The liquids it can hold, each with its own full look. One not listed can't go in it.</summary>
+    public List<LiquidDefinition> Liquids { get; set; } = new();
+    /// <summary>The liquid (Food id) it starts full of; -1 = it starts empty.</summary>
+    public int StartsFullOfId { get; set; } = -1;
     public int FillSoundResourceId { get; set; } = -1;
     public int PourSoundResourceId { get; set; } = -1;
     /// <summary>What a spill leaves on the floor (a puddle object; -1 = nothing).</summary>

@@ -34,6 +34,17 @@ public class CharacterDefinition
     /// <summary>Keyed by PoseDefinition.Id, same reasoning as StatValues - a pose can be renamed (if custom) without breaking every character's sprite link to it. Each pose now holds up to 8 directional sprite links plus its own mute flag, not a single sprite - per spec, the engine supports 8-directional facing.</summary>
     public Dictionary<int, PoseAssignment> PoseSprites { get; set; } = new();
 
+    /// <summary>
+    /// Milking (Exult's milking.uc): an empty liquid container used on this
+    /// character is filled with this liquid (a liquid Food's id) - a cow
+    /// gives milk. -1 = gives nothing (a full container used on it douses it).
+    /// </summary>
+    public int GivesLiquidFoodId { get; set; } = -1;
+    /// <summary>What it says while giving it (Exult's cow: "MoooOOOoooo").</summary>
+    public string GivesLiquidBark { get; set; } = "MoooOOOoooo";
+    /// <summary>The sound while it's milked (Exult's SOUND_MILKING, three times).</summary>
+    public int GivesLiquidSoundResourceId { get; set; } = -1;
+
     /// <summary>Which character the Internal Engine test controls - only one can be true at a time, same "only one" rule as Start Position. Toggled from the PC Editor.</summary>
     public bool IsTestPlayer { get; set; }
 

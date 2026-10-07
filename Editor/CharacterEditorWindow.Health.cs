@@ -81,6 +81,38 @@ public partial class CharacterEditorWindow
             TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8)
         });
 
+        // ---------- Gives a liquid (milking) ----------
+        HealthPanel.Children.Add(Heading("Gives a liquid (milking a cow)"));
+        var liquids = new List<WorldObject> { new() { Id = -1, Name = "(Nothing)" } };
+        liquids.AddRange((ProjectSession.ObjectsProvider?.Invoke()?.Objects ?? new List<WorldObject>()).Where(o => o.TypeChosen && o.Type == ObjectType.Food && o.Food.IsLiquid));
+        var liquidCombo = new ComboBox { ItemsSource = liquids, DisplayMemberPath = "Name", Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2) };
+        liquidCombo.SelectedItem = liquids.FirstOrDefault(l => l.Id == character.GivesLiquidFoodId) ?? liquids[0];
+        liquidCombo.SelectionChanged += (_, _) => character.GivesLiquidFoodId = (liquidCombo.SelectedItem as WorldObject)?.Id ?? -1;
+        HealthPanel.Children.Add(liquidCombo);
+        var barkRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        barkRow.Children.Add(new TextBlock { Text = "It says:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        var barkBox = new TextBox { Width = 200, Text = character.GivesLiquidBark };
+        barkBox.TextChanged += (_, _) => character.GivesLiquidBark = barkBox.Text;
+        barkRow.Children.Add(barkBox);
+        HealthPanel.Children.Add(barkRow);
+        var sounds = new List<ResourceEntry> { new() { Id = -1, Name = "(None)" } };
+        sounds.AddRange((ProjectSession.ResourcesProvider?.Invoke()?.Entries ?? new List<ResourceEntry>()).Where(r => r.Kind == ResourceKind.Sound));
+        var soundRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        soundRow.Children.Add(new TextBlock { Text = "Milking sound:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        var soundCombo = new ComboBox { ItemsSource = sounds, DisplayMemberPath = "Name", Width = 200, SelectedItem = sounds.FirstOrDefault(r => r.Id == character.GivesLiquidSoundResourceId) ?? sounds[0] };
+        soundCombo.SelectionChanged += (_, _) => character.GivesLiquidSoundResourceId = (soundCombo.SelectedItem as ResourceEntry)?.Id ?? -1;
+        soundRow.Children.Add(soundCombo);
+        HealthPanel.Children.Add(soundRow);
+        var help = new Button { Content = "How liquids work (with pictures)...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 2, 0, 2) };
+        help.Click += (_, _) => new LiquidsHelpWindow { Owner = this }.ShowDialog();
+        HealthPanel.Children.Add(help);
+        HealthPanel.Children.Add(new TextBlock
+        {
+            Text = "A cow gives milk (Exult's milking): an empty bucket or bottle used on it is filled with this liquid - if the container can hold it. " +
+                   "The list shows your liquids (Food objects set to Liquid). (Nothing): a full bucket used on it just douses it.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 8)
+        });
+
         // ---------- Body ----------
         HealthPanel.Children.Add(Heading("Body (after death)"));
         HealthPanel.Children.Add(new TextBlock

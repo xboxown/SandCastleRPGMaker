@@ -4,7 +4,7 @@ namespace SandcastleRpgMaker.Editor;
 
 /// <summary>What an object looks like in a given state - one rule for the Map Editor and the game alike.</summary>
 /// <summary>Open = a door or window open, a lever on, a bedroll laid out; Spent = a light burnt out, a window broken, a useable object used up; Stage = a plant's growth stage; Liquid = what a liquid container holds ("" or null = empty).</summary>
-internal readonly record struct ObjectState(bool Open, bool Locked, bool Lit, bool Spent, int Quantity, SpriteDirection Facing, int Stage = 0, string? Liquid = null);
+internal readonly record struct ObjectState(bool Open, bool Locked, bool Lit, bool Spent, int Quantity, SpriteDirection Facing, int Stage = 0, int LiquidId = -1);
 
 /// <summary>
 /// Which sprite an object shows: a door's closed / open / locked look, a
@@ -62,16 +62,16 @@ internal static class ObjectLooks
             case ObjectType.UseableObject:
                 return state.Spent ? Find(sprites, obj.Useable.UsedUpSprite) ?? own : own;
             case ObjectType.LiquidContainer:
-                if (string.IsNullOrEmpty(state.Liquid)) return own;
-                return obj.Liquid.Liquids.FirstOrDefault(l => string.Equals(l.Name, state.Liquid, StringComparison.OrdinalIgnoreCase)) is { } liquid ? Find(sprites, liquid.Sprite) ?? own : own;
+                if (state.LiquidId < 0) return own;
+                return obj.Liquid.Liquids.FirstOrDefault(l => l.FoodId == state.LiquidId) is { } liquid ? Find(sprites, liquid.Sprite) ?? own : own;
             default:
                 return own;
         }
     }
 
-    /// <summary>A liquid container's starting liquid (the placement's choice, else the Object Editor's) - "" if empty.</summary>
-    public static string StartLiquid(WorldObject obj, ObjectInstance? instance) =>
-        obj.Type != ObjectType.LiquidContainer ? "" : (instance?.StartsFullOf ?? obj.Liquid.StartsFullOf).Trim();
+    /// <summary>A liquid container's starting liquid, a liquid Food's id (the placement's choice, else the Object Editor's) - -1 if empty.</summary>
+    public static int StartLiquid(WorldObject obj, ObjectInstance? instance) =>
+        obj.Type != ObjectType.LiquidContainer ? -1 : instance?.StartsFullOfId ?? obj.Liquid.StartsFullOfId;
 
     /// <summary>The state an object starts in when the game begins (the Map Editor's overrides, else the Object Editor's).</summary>
     public static ObjectState StartState(WorldObject obj, ObjectInstance instance) => new(
@@ -88,7 +88,7 @@ internal static class ObjectLooks
         Quantity: Math.Max(1, instance.Quantity),
         Facing: instance.Facing,
         Stage: obj.Type == ObjectType.Plant ? Math.Clamp(instance.StartStage ?? 0, 0, Math.Max(0, obj.Plant.Stages.Count - 1)) : 0,
-        Liquid: StartLiquid(obj, instance));
+        LiquidId: StartLiquid(obj, instance));
 
     /// <summary>How an object first looks when it isn't placed yet (a palette entry): its Object Editor starting state.</summary>
     public static ObjectState DefaultState(WorldObject obj) => new(
@@ -103,5 +103,5 @@ internal static class ObjectLooks
         Lit: obj.Type == ObjectType.LightSource && obj.Light.StartsLit,
         Spent: false, Quantity: 1, Facing: SpriteDirection.South,
         Stage: obj.Type == ObjectType.Plant ? Math.Max(0, obj.Plant.Stages.Count - 1) : 0,
-        Liquid: StartLiquid(obj, null));
+        LiquidId: StartLiquid(obj, null));
 }

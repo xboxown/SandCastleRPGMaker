@@ -58,7 +58,7 @@ public partial class GameTestWindow
                     instance.FrameRuntime = Math.Min(instance.KeyIdsRuntime.Count, 4);
                     break;
                 case ObjectType.LiquidContainer:
-                    instance.LiquidRuntime ??= ObjectLooks.StartLiquid(obj, instance);
+                    instance.LiquidIdRuntime ??= ObjectLooks.StartLiquid(obj, instance);
                     break;
                 case ObjectType.Roof:
                     instance.Z = Math.Max(1, obj.Roof.HeightLifts); // it sits up over the building
@@ -115,12 +115,13 @@ public partial class GameTestWindow
 
     // ================= Its state, placed or carried =================
 
-    private string LiquidOf(Used u) => (u.Placed?.LiquidRuntime ?? u.Carried?.LiquidRuntime) ?? ObjectLooks.StartLiquid(u.Obj, u.Placed);
+    /// <summary>What a liquid container holds (a liquid Food's id), or -1 if it's empty.</summary>
+    private int LiquidOf(Used u) => (u.Placed?.LiquidIdRuntime ?? u.Carried?.LiquidIdRuntime) ?? ObjectLooks.StartLiquid(u.Obj, u.Placed);
 
-    private void SetLiquid(Used u, string liquid)
+    private void SetLiquid(Used u, int liquidId)
     {
-        if (u.Placed is { } placed) placed.LiquidRuntime = liquid;
-        if (u.Carried is { } carried) carried.LiquidRuntime = liquid;
+        if (u.Placed is { } placed) placed.LiquidIdRuntime = liquidId;
+        if (u.Carried is { } carried) carried.LiquidIdRuntime = liquidId;
         RefreshUsed(u);
     }
 

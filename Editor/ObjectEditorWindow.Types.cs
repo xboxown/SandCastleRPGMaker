@@ -59,7 +59,7 @@ public partial class ObjectEditorWindow
         ObjectType.Keychain => "Exult's keyring. Double-click it, then click: yourself - every key the party carries goes onto it (\"Added 3 keys\"); a door or container - it opens whatever any of its keys fits (\"We don't have that key.\"). Its frames show how many keys it holds: 0, 1, 2, 3, 4 or more.",
         ObjectType.Sextant => "Double-click to read your position: \"34 South, 12 East\" (Exult's coordinates, 10 tiles a degree). Indoors, under a roof, it can't see the sky. With one in the party, maps show where you are.",
         ObjectType.Map => "Double-click to look at it: its picture fills the screen until you click. With a sextant in the party, outdoors, a cross marks where you are (Exult's display_map).",
-        ObjectType.Food => "Double-click it, then click who eats it (Exult's food): a party member, awake. At food 25 or more they say \"No, thank thee.\"; otherwise it's eaten, they're filled by its nutrition and say how they feel (\"Ah yes, much better.\").",
+        ObjectType.Food => "Solid food: double-click it, then click who eats it (Exult's food) - a party member, awake. At food 25 or more they say \"No, thank thee.\"; otherwise it's eaten and they say how they feel (\"Ah yes, much better.\"). Liquid food (milk, water, wine): what buckets and bottles hold - drunk from them.",
         ObjectType.Potion => "Double-click it, then click who drinks it: its effects (heal, cure poison, sleep, protection, invisibility...) go on them, and it's used up - leaving an empty bottle if you like.",
         ObjectType.BreakableGlass => "Glass, a vase, a bottle: one blow shatters it (its hit points), and so can dropping it from a height. It can leave shards behind. Owned glass broken in front of its owner's side is a crime.",
         ObjectType.Spellbook => "Double-click to open it: its spells by circle. Casting one needs mana (its circle, as Exult), Level at least its circle, and one of each of its reagents carried; targeted spells then ask you to click who or what.",
@@ -75,7 +75,7 @@ public partial class ObjectEditorWindow
         ObjectType.Bedroll => "Double-click to sleep: the party rests for the night (Exult's advanceTimeDueToRest) - time passes, health and mana come back, ailments wear off, everyone gets hungrier, lights burn down. Not with enemies about.",
         ObjectType.Reagent => "Spell ingredients: stack up to 100. A spell uses one of each of its reagents (Exult).",
         ObjectType.Table => "Solid: you can't walk through it, but things put on it rest on top, at its height - food on a table, a book on a shelf, an altar's offering. You can reach over it to take things.",
-        ObjectType.LiquidContainer => "Exult's bucket. Double-click it, then click: a source (a well, a trough, anything with Liquid Source set) - it fills; yourself - you drink it (\"Ahhh, how refreshing.\"); someone else - they're doused (\"Hey, stop that!\"); a lit light - water puts it out; the floor - it's spilt. Empty: \"The bucket is empty.\"",
+        ObjectType.LiquidContainer => "Exult's bucket. It holds the liquids on its list (liquid Food objects), each with its own look. Double-click it, then click: a well or trough - it fills; a cow - it's milked; yourself - you drink it (\"Ahhh, how refreshing.\"); someone else - they're doused (\"Hey, stop that!\"); a lit light - water puts it out; the floor - it's spilt.",
         _ => ""
     };
 
@@ -218,12 +218,29 @@ public partial class ObjectEditorWindow
     {
         var f = obj.Food;
         var body = Group("Food");
+        var kind = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        var solid = new RadioButton { Content = "Solid (eaten: bread, an apple, cheese)", GroupName = "FoodKind" + obj.Id, IsChecked = !f.IsLiquid, Margin = new Thickness(0, 0, 16, 0) };
+        var liquid = new RadioButton { Content = "Liquid (drunk: milk, water, wine - held in buckets and bottles)", GroupName = "FoodKind" + obj.Id, IsChecked = f.IsLiquid };
+        solid.Checked += (_, _) => { if (f.IsLiquid) { f.IsLiquid = false; ShowCurrent(); } };
+        liquid.Checked += (_, _) => { if (!f.IsLiquid) { f.IsLiquid = true; ShowCurrent(); } };
+        kind.Children.Add(solid);
+        kind.Children.Add(liquid);
+        body.Children.Add(kind);
         var row = new WrapPanel();
-        row.Children.Add(NumberField("Nutrition (Exult: apple 2, bread 4, ham 24)", () => f.Nutrition, v => f.Nutrition = (int)Math.Clamp(v, 0, SurvivalSettings.MaxFood)));
-        row.Children.Add(SoundPicker("Eat sound", () => f.EatSoundResourceId, v => f.EatSoundResourceId = v));
-        row.Children.Add(Check("Stackable (garlic, berries)", () => obj.IsStackable, v => obj.IsStackable = v));
+        row.Children.Add(NumberField(f.IsLiquid ? "Nutrition when drunk" : "Nutrition (Exult: apple 2, bread 4, ham 24)", () => f.Nutrition, v => f.Nutrition = (int)Math.Clamp(v, 0, SurvivalSettings.MaxFood)));
+        row.Children.Add(SoundPicker(f.IsLiquid ? "Drink sound" : "Eat sound", () => f.EatSoundResourceId, v => f.EatSoundResourceId = v));
+        if (!f.IsLiquid) row.Children.Add(Check("Stackable (garlic, berries)", () => obj.IsStackable, v => obj.IsStackable = v));
         body.Children.Add(row);
-        body.Children.Add(EffectsEditor("Also does (optional - poisoned food, a healing herb)", f.Effects));
+        if (f.IsLiquid)
+        {
+            var flags = new WrapPanel();
+            flags.Children.Add(Check("Puts out fires (water)", () => f.PutsOutFires, v => f.PutsOutFires = v));
+            flags.Children.Add(Check("Undrinkable (blood: \"No, thank thee.\")", () => f.Undrinkable, v => f.Undrinkable = v));
+            body.Children.Add(flags);
+            body.Children.Add(Note("A liquid is what buckets and bottles hold. Here you say what it does; each Liquid Container says how it looks full of it. Wells, troughs and animals (a cow) are set to give it."));
+            body.Children.Add(LiquidsHelpButton());
+        }
+        body.Children.Add(EffectsEditor(f.IsLiquid ? "Drinking it also does (optional - wine, a poisoned well)" : "Also does (optional - poisoned food, a healing herb)", f.Effects));
     }
 
     private void BuildPotion(WorldObject obj)
@@ -520,50 +537,57 @@ public partial class ObjectEditorWindow
     {
         var l = obj.Liquid;
         var body = Group("Liquid container (Exult's bucket)");
-        body.Children.Add(Note("Its own sprite is how it looks empty. Each liquid it can hold has its own look. It's filled at any object whose Liquid Source names one of its liquids (a well, a trough, a wine cask)."));
+        body.Children.Add(Note("Its own sprite (Look, above) is how it looks empty. Below: the liquids it can hold - each a Food object set to Liquid - and how THIS container looks full of each. A liquid not on the list can't go in it."));
+        body.Children.Add(LiquidsHelpButton());
+        var liquids = LiquidFoods();
+        if (liquids.Count == 0)
+            body.Children.Add(new TextBlock { Text = "No liquids yet: make a Food object and set it to Liquid (Milk, Water, Wine...), then add it here.", Foreground = Brushes.Firebrick, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) });
         var list = new StackPanel();
         void Show()
         {
+            AnimationPreviewButton.StopAll();
             list.Children.Clear();
-            foreach (var liquid in l.Liquids.ToList())
+            foreach (var entry in l.Liquids.ToList())
             {
-                var box = new GroupBox { Header = liquid.Name, Padding = new Thickness(6), Margin = new Thickness(0, 4, 0, 4) };
-                var inner = new StackPanel();
-                var top = new WrapPanel();
-                top.Children.Add(TextField("Liquid", 120, () => liquid.Name, v => { liquid.Name = v.Length > 0 ? v : liquid.Name; box.Header = liquid.Name; }));
-                top.Children.Add(NumberField("Nutrition", () => liquid.Nutrition, v => liquid.Nutrition = (int)Math.Clamp(v, 0, SurvivalSettings.MaxFood)));
-                top.Children.Add(Check("Puts out fires", () => liquid.PutsOutFires, v => liquid.PutsOutFires = v));
-                top.Children.Add(Check("Undrinkable", () => liquid.Undrinkable, v => liquid.Undrinkable = v));
-                inner.Children.Add(top);
-                inner.Children.Add(SpritePicker("Full sprite", () => (liquid.Sprite.SpriteGroup, liquid.Sprite.SpriteName), (g, n) => { liquid.Sprite.SpriteGroup = g; liquid.Sprite.SpriteName = n; }));
-                inner.Children.Add(EffectsEditor("Drinking it also does", liquid.Effects));
-                var remove = new Button { Content = "Remove liquid", Padding = new Thickness(8, 1, 8, 1), HorizontalAlignment = HorizontalAlignment.Left };
-                remove.Click += (_, _) => { l.Liquids.Remove(liquid); Show(); };
-                inner.Children.Add(remove);
-                box.Content = inner;
-                list.Children.Add(box);
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+                row.Children.Add(ObjectPicker("Holds", o => o.Type == ObjectType.Food && o.Food.IsLiquid, () => entry.FoodId, v => { entry.FoodId = v; }, "(choose a liquid)"));
+                row.Children.Add(SpritePicker("Its look full of it", () => (entry.Sprite.SpriteGroup, entry.Sprite.SpriteName), (g, n) => { entry.Sprite.SpriteGroup = g; entry.Sprite.SpriteName = n; }, compact: true));
+                var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+                remove.Click += (_, _) => { l.Liquids.Remove(entry); if (l.StartsFullOfId == entry.FoodId) l.StartsFullOfId = -1; Show(); };
+                row.Children.Add(remove);
+                list.Children.Add(row);
             }
-            var add = new Button { Content = "Add liquid", Padding = new Thickness(8, 2, 8, 2), HorizontalAlignment = HorizontalAlignment.Left };
-            add.Click += (_, _) => { l.Liquids.Add(new LiquidDefinition { Name = "New liquid" }); Show(); };
+            var add = new Button { Content = "Add a liquid it can hold", Padding = new Thickness(8, 2, 8, 2), HorizontalAlignment = HorizontalAlignment.Left, IsEnabled = liquids.Count > 0 };
+            add.Click += (_, _) => { l.Liquids.Add(new LiquidDefinition { FoodId = liquids.FirstOrDefault(f => l.Liquids.All(x => x.FoodId != f.Id))?.Id ?? -1 }); Show(); };
             list.Children.Add(add);
         }
         Show();
         body.Children.Add(list);
-        var row = new WrapPanel();
-        row.Children.Add(TextField("Starts full of (empty = empty)", 140, () => l.StartsFullOf, v => l.StartsFullOf = v));
-        row.Children.Add(SoundPicker("Fill sound", () => l.FillSoundResourceId, v => l.FillSoundResourceId = v));
-        row.Children.Add(SoundPicker("Pour sound", () => l.PourSoundResourceId, v => l.PourSoundResourceId = v));
-        row.Children.Add(ObjectPicker("A spill leaves", o => o.Id != obj.Id, () => l.SpillObjectId, v => l.SpillObjectId = v, "(nothing)"));
-        body.Children.Add(row);
+        var row2 = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        row2.Children.Add(ObjectPicker("Starts full of", o => o.Type == ObjectType.Food && o.Food.IsLiquid, () => l.StartsFullOfId, v => l.StartsFullOfId = v, "(empty)"));
+        row2.Children.Add(SoundPicker("Fill sound", () => l.FillSoundResourceId, v => l.FillSoundResourceId = v));
+        row2.Children.Add(SoundPicker("Pour sound", () => l.PourSoundResourceId, v => l.PourSoundResourceId = v));
+        row2.Children.Add(ObjectPicker("A spill leaves", o => o.Id != obj.Id, () => l.SpillObjectId, v => l.SpillObjectId = v, "(nothing)"));
+        body.Children.Add(row2);
     }
 
-    /// <summary>Any object (but a liquid container itself is usually not) can be a liquid source - Exult's well and water trough.</summary>
+    private List<WorldObject> LiquidFoods() => _db.Objects.Where(o => o.TypeChosen && o.Type == ObjectType.Food && o.Food.IsLiquid).ToList();
+
+    private Button LiquidsHelpButton()
+    {
+        var help = new Button { Content = "How liquids work (with pictures)...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 2, 0, 6) };
+        help.Click += (_, _) => new LiquidsHelpWindow { Owner = this }.ShowDialog();
+        return help;
+    }
+
+    /// <summary>A liquid source (Exult's well, water trough, a wine cask): a liquid container used on it fills with its liquid.</summary>
     private void BuildLiquidSource(WorldObject obj)
     {
         if (obj.Type is not (ObjectType.Junk or ObjectType.UseableObject or ObjectType.CraftingStation)) return; // a well, a trough, a wine cask
         var body = Group("Liquid source (a well, a water trough, a wine cask)");
-        body.Children.Add(TextField("Fills liquid containers with (e.g. Water; empty = not a source)", 220, () => obj.LiquidSource, v => obj.LiquidSource = v));
-        body.Children.Add(Note("Leave it empty unless this is something a bucket or bottle is filled at (Exult's well): using a Liquid Container on it fills it with this liquid."));
+        body.Children.Add(ObjectPicker("Fills liquid containers with", o => o.Type == ObjectType.Food && o.Food.IsLiquid, () => obj.LiquidSourceId, v => obj.LiquidSourceId = v, "(nothing - not a source)"));
+        body.Children.Add(Note("Leave it at (nothing) unless a bucket or bottle is filled here (Exult's well). The list shows your liquids: Food objects set to Liquid."));
+        body.Children.Add(LiquidsHelpButton());
     }
 
     // ================= Building blocks =================
@@ -755,7 +779,6 @@ public partial class ObjectEditorWindow
             yield return o.Potion.Effects;
             yield return o.Useable.Effects;
             foreach (var spell in o.Spellbook.Spells) yield return spell.Effects;
-            foreach (var liquid in o.Liquid.Liquids) yield return liquid.Effects;
         }
     }
 

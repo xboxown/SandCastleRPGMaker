@@ -52,11 +52,11 @@ public partial class GameTestWindow
 
     private static ObjectState StateOf(ObjectInstance instance) =>
         new(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime, Math.Max(1, instance.Quantity), instance.Facing,
-            Stage: instance.FrameRuntime, Liquid: instance.LiquidRuntime);
+            Stage: instance.FrameRuntime, LiquidId: instance.LiquidIdRuntime ?? -1);
 
     private static ObjectState StateOf(InventoryItemInstance item) =>
         new(false, false, item.IsLitRuntime ?? false, item.IsSpentRuntime, Math.Max(1, item.Quantity), item.FacingRuntime,
-            Stage: item.FrameRuntime, Liquid: item.LiquidRuntime);
+            Stage: item.FrameRuntime, LiquidId: item.LiquidIdRuntime ?? -1);
 
     /// <summary>The name it goes by now: "Spent ..." once burnt out, "12 Arrows" for a stack.</summary>
     private static string ObjectDisplayName(WorldObject obj, bool spent, int quantity) =>
@@ -157,7 +157,7 @@ public partial class GameTestWindow
     {
         var obj = DefinitionOf(instance);
         string name = obj is null ? $"Object #{instance.ObjectId}" : ObjectDisplayName(obj, instance.IsSpentRuntime, instance.Quantity);
-        if (obj is { Type: ObjectType.LiquidContainer } && instance.LiquidRuntime is { Length: > 0 } liquid) name = $"{name} of {liquid.ToLowerInvariant()}"; // a bucket of water
+        if (obj is { Type: ObjectType.LiquidContainer } && LiquidFood(instance.LiquidIdRuntime ?? -1) is { } liquid) name = $"{name} of {liquid.Name.ToLowerInvariant()}"; // a bucket of water
         if (!isUse)
         {
             ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);

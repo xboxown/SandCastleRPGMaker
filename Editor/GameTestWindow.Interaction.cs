@@ -1126,7 +1126,7 @@ public partial class GameTestWindow
                     InstanceId = nextInstanceId(), Category = ReferencedItemCategory.Object, ItemId = o.Obj.ObjectId, Quantity = Math.Max(1, o.Obj.Quantity),
                     FacingRuntime = o.Obj.Facing, IsLitRuntime = o.Obj.IsLitRuntime, BurnLeftRuntime = o.Obj.BurnLeftRuntime,
                     IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime,
-                    KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidRuntime = o.Obj.LiquidRuntime
+                    KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidIdRuntime = o.Obj.LiquidIdRuntime
                 };
             default:
                 var item = (InventoryItemInstance)PayloadObject(origin);
@@ -1166,7 +1166,7 @@ public partial class GameTestWindow
                 ObjectId = item.ItemId, Quantity = Math.Max(1, item.Quantity),
                 Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
                 IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime,
-                KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidRuntime = item.LiquidRuntime
+                KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidIdRuntime = item.LiquidIdRuntime
             };
         var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId };
         if (item.Category == ReferencedItemCategory.Container)

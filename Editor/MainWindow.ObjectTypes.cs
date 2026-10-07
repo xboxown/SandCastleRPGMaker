@@ -78,15 +78,16 @@ public partial class MainWindow
             case ObjectType.LiquidContainer:
             {
                 var full = new MenuItem { Header = "Starts full of" };
-                string current = ObjectLooks.StartLiquid(obj, existing);
-                var empty = new MenuItem { Header = "(empty)", IsCheckable = true, IsChecked = current.Length == 0 };
-                empty.Click += (_, _) => { existing.StartsFullOf = ""; PlaceObjectVisual(existing); };
+                int current = ObjectLooks.StartLiquid(obj, existing);
+                var empty = new MenuItem { Header = "(empty)", IsCheckable = true, IsChecked = current < 0 };
+                empty.Click += (_, _) => { existing.StartsFullOfId = -1; PlaceObjectVisual(existing); };
                 full.Items.Add(empty);
                 foreach (var liquid in obj.Liquid.Liquids)
                 {
-                    string name = liquid.Name;
-                    var item = new MenuItem { Header = name, IsCheckable = true, IsChecked = string.Equals(current, name, StringComparison.OrdinalIgnoreCase) };
-                    item.Click += (_, _) => { existing.StartsFullOf = name; PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" starts full of {name}."; };
+                    if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == liquid.FoodId) is not { } food) continue;
+                    int id = food.Id;
+                    var item = new MenuItem { Header = food.Name, IsCheckable = true, IsChecked = current == id };
+                    item.Click += (_, _) => { existing.StartsFullOfId = id; PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" starts full of {food.Name}."; };
                     full.Items.Add(item);
                 }
                 menu.Items.Add(full);

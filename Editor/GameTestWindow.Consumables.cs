@@ -44,6 +44,7 @@ public partial class GameTestWindow
     private void Eat(Used u, CharacterDefinition npc)
     {
         if (!IsPartyOrPlayer(npc) || IsDead(npc) || Has(npc, Ailment.Asleep) || Has(npc, Ailment.Paralyzed)) return;
+        if (u.Obj.Food.IsLiquid && u.Obj.Food.Undrinkable) { if (npc.IsHuman) ShowFloatingText(npc, "No, thank thee.", 2500); return; }
         var vitals = VitalsOf(npc);
         int foodLevel = vitals.Food;
         int nutrition = u.Obj.Food.Nutrition;
@@ -106,6 +107,12 @@ public partial class GameTestWindow
 
     // ================= Liquid containers (Exult's bucket) =================
 
+    /// <summary>A liquid: a Food object set to Liquid, by id.</summary>
+    private WorldObject? LiquidFood(int foodId) => foodId < 0 ? null : _objects.Objects.FirstOrDefault(o => o.Id == foodId && o.Type == ObjectType.Food);
+
+    /// <summary>Whether this container can hold that liquid (it's on its list).</summary>
+    private static bool CanHold(WorldObject container, int foodId) => container.Liquid.Liquids.Any(l => l.FoodId == foodId);
+
     private void UseLiquid(Used u)
     {
         if (FireUseEvent(u)) return;
@@ -113,73 +120,79 @@ public partial class GameTestWindow
         BeginChoosingTarget($"Use \"{u.Obj.Name}\" on what?", target =>
         {
             if (!ToolStillThere(u.Source)) return;
-            string liquidName = LiquidOf(u);
-            var liquid = u.Obj.Liquid.Liquids.FirstOrDefault(l => string.Equals(l.Name, liquidName, StringComparison.OrdinalIgnoreCase));
-            bool empty = liquidName.Length == 0;
+            int liquidId = LiquidOf(u);
+            var liquid = LiquidFood(liquidId);
+            bool empty = liquid is null;
 
-            // Yourself: drink it.
+            // Yourself: drink it (bucket.uc: "Ahhh, how refreshing.").
             if (target is PlayerTarget || CharacterTargeted(target) == _player)
             {
                 if (empty) { AvatarBark($"The {name} is empty."); return; }
-                if (liquid?.Undrinkable == true) { AvatarBark("No, thank thee."); return; }
+                if (liquid!.Food.Undrinkable) { AvatarBark("No, thank thee."); return; }
                 AvatarBark("Ahhh, how refreshing.");
-                SetLiquid(u, "");
-                if (liquid is not null && _player is not null)
+                SetLiquid(u, -1);
+                if (_player is not null)
                 {
-                    if (liquid.Nutrition > 0) VitalsOf(_player).Food = Math.Clamp(VitalsOf(_player).Food + liquid.Nutrition, 0, SurvivalSettings.MaxFood);
-                    ApplyEffects(liquid.Effects, _player, liquid.Name);
+                    if (liquid.Food.Nutrition > 0) VitalsOf(_player).Food = Math.Clamp(VitalsOf(_player).Food + liquid.Food.Nutrition, 0, SurvivalSettings.MaxFood);
+                    ApplyEffects(liquid.Food.Effects, _player, liquid.Name);
                     ShowClock();
                 }
                 return;
             }
 
-            // Someone else: doused (useBucketOnNPC) - woken, peeved.
             if (CharacterTargeted(target) is { } npc)
             {
+                // Someone who gives a liquid (a cow): milked into an empty container (milking.uc).
+                if (npc.GivesLiquidFoodId >= 0 && LiquidFood(npc.GivesLiquidFoodId) is { } given && !IsDead(npc))
+                {
+                    if (!empty) { AvatarBark($"The {name} is full."); return; }
+                    if (!CanHold(u.Obj, given.Id)) { StatusText.Text = $"\"{u.Obj.Name}\" can't hold {given.Name.ToLowerInvariant()}."; return; }
+                    Milk(u, npc, given);
+                    return;
+                }
+                // Anyone else: doused and woken (useBucketOnNPC: "Hey, stop that!").
                 if (empty) { AvatarBark($"The {name} is empty."); return; }
                 Cure(npc, Ailment.Asleep);
                 if (npc.IsHuman) ShowFloatingText(npc, "Hey, stop that!", 2500);
                 PlaySound(u.Obj.Liquid.PourSoundResourceId);
-                SetLiquid(u, "");
+                SetLiquid(u, -1);
                 var (nx, ny) = CellOf(npc);
                 if (u.Obj.Liquid.SpillObjectId >= 0) SpawnObjectAt(u.Obj.Liquid.SpillObjectId, 1, nx, ny);
                 return;
             }
 
-            if (ObjectTargeted(target) is { } hit)
+            if (ObjectTargeted(target) is { } hit && !ReferenceEquals(hit.Instance, u.Placed))
             {
-                // A source (a well, a trough): filled.
-                if (hit.Obj.LiquidSource.Trim().Length > 0 && !ReferenceEquals(hit.Instance, u.Placed))
+                // A source (a well, a trough): filled (useBucketOnWell: "The bucket is full." if it isn't empty).
+                if (LiquidFood(hit.Obj.LiquidSourceId) is { } source)
                 {
                     if (!empty) { AvatarBark($"The {name} is full."); return; }
-                    string source = hit.Obj.LiquidSource.Trim();
-                    var fits = u.Obj.Liquid.Liquids.FirstOrDefault(l => string.Equals(l.Name, source, StringComparison.OrdinalIgnoreCase));
-                    if (fits is null) { StatusText.Text = $"\"{u.Obj.Name}\" can't hold {source.ToLowerInvariant()}."; return; }
+                    if (!CanHold(u.Obj, source.Id)) { StatusText.Text = $"\"{u.Obj.Name}\" can't hold {source.Name.ToLowerInvariant()}."; return; }
                     PlaySound(u.Obj.Liquid.FillSoundResourceId);
-                    SetLiquid(u, fits.Name);
-                    StatusText.Text = $"You fill \"{u.Obj.Name}\" with {fits.Name.ToLowerInvariant()}.";
+                    SetLiquid(u, source.Id);
+                    StatusText.Text = $"You fill \"{u.Obj.Name}\" with {source.Name.ToLowerInvariant()}.";
                     return;
                 }
                 // A lit light: water puts it out (useBucketOnDousable).
                 if (hit.Obj.Type == ObjectType.LightSource && hit.Instance.IsLitRuntime == true)
                 {
                     if (empty) { AvatarBark($"The {name} is empty."); return; }
-                    if (liquid?.PutsOutFires != true) return;
+                    if (!liquid!.Food.PutsOutFires) return;
                     hit.Instance.IsLitRuntime = false;
                     PlaySound(hit.Obj.Light.OffSoundResourceId);
                     PlaySound(u.Obj.Liquid.PourSoundResourceId);
                     RefreshObjectLook(hit.Instance);
-                    SetLiquid(u, "");
+                    SetLiquid(u, -1);
                     StatusText.Text = $"You douse \"{hit.Obj.Name}\".";
                     return;
                 }
                 // A lit fuse: water puts that out too.
-                if (hit.Obj.Type == ObjectType.Explosive && hit.Instance.FuseRuntime >= 0 && liquid?.PutsOutFires == true)
+                if (hit.Obj.Type == ObjectType.Explosive && hit.Instance.FuseRuntime >= 0 && liquid?.Food.PutsOutFires == true)
                 {
                     hit.Instance.FuseRuntime = -1;
                     hit.Instance.IsLitRuntime = false;
                     RefreshObjectLook(hit.Instance);
-                    SetLiquid(u, "");
+                    SetLiquid(u, -1);
                     StatusText.Text = $"You douse the fuse of \"{hit.Obj.Name}\".";
                     return;
                 }
@@ -188,11 +201,51 @@ public partial class GameTestWindow
             // Anything else - the floor: spilt (useBucketOnGround).
             if (empty) { AvatarBark($"The {name} is empty."); return; }
             PlaySound(u.Obj.Liquid.PourSoundResourceId);
-            SetLiquid(u, "");
+            SetLiquid(u, -1);
             var (sx, sy) = LastTargetCell();
             if (u.Obj.Liquid.SpillObjectId >= 0) SpawnObjectAt(u.Obj.Liquid.SpillObjectId, 1, sx, sy);
             StatusText.Text = $"You empty \"{u.Obj.Name}\".";
         });
+    }
+
+    /// <summary>
+    /// milking.uc milkCow: "Hold still..." (3 in 10), the milking sound three
+    /// times while the animal stands still, then the container is full, the
+    /// Avatar says "That's a good girl!", the animal its bark ("MoooOOOoooo"),
+    /// and 1 in 3 a party member asks "Don't we have a quest?".
+    /// </summary>
+    private void Milk(Used u, CharacterDefinition animal, WorldObject liquid)
+    {
+        if (Rng.Next(10) < 3) AvatarBark("Hold still...");
+        if (MapCharacterOf(animal) is { } standing) { StopWalking(standing); standing.Npc.WaitMs = 3500; } // it stands still to be milked
+        ShowPlayerAtWork(400);
+        StatusText.Text = $"You milk {animal.Name}...";
+        int beats = 0;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(800) };
+        timer.Tick += (_, _) =>
+        {
+            if (_gamePaused) return; // waits while the game is paused
+            beats++;
+            if (beats <= 3)
+            {
+                PlaySound(animal.GivesLiquidSoundResourceId);
+                ShowPlayerAtWork(400);
+                return;
+            }
+            timer.Stop();
+            if (!ToolStillThere(u.Source) || LiquidOf(u) >= 0) return;
+            SetLiquid(u, liquid.Id);
+            AvatarBark("That's a good girl!");
+            if (animal.GivesLiquidBark.Trim().Length > 0 && !IsDead(animal)) ShowFloatingText(animal, animal.GivesLiquidBark.Trim(), 2500);
+            if (Rng.Next(3) == 0)
+            {
+                var others = AllLivingCharacters().Where(c => c.IsInParty && c != _player && c.IsHuman && !IsIncapacitated(c)).ToList();
+                if (others.Count > 0) ShowFloatingText(others[Rng.Next(others.Count)], "Don't we have a quest?", 3000);
+            }
+            StatusText.Text = $"\"{u.Obj.Name}\" is full of {liquid.Name.ToLowerInvariant()}.";
+        };
+        PlaySound(animal.GivesLiquidSoundResourceId);
+        timer.Start();
     }
 
     // ================= Useable objects =================
