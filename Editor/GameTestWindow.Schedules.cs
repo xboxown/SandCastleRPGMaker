@@ -37,6 +37,8 @@ public partial class GameTestWindow
         /// <summary>Loiter/wander/dance centre: where the activity began.</summary>
         public (int X, int Y) Center;
         public int Retries, Legs, Phase, PaceDirection = 1;
+        /// <summary>Walking to a schedule spot: the nearest it has got so far (Exult tiles) - legs that get no nearer count as tries.</summary>
+        public int BestDistance = int.MaxValue;
         /// <summary>Milliseconds until the activity's next now_what; negative = nothing pending.</summary>
         public double WaitMs = -1;
         public List<(int X, int Y)>? Path;
@@ -145,16 +147,12 @@ public partial class GameTestWindow
         npc.Entry = entry;
         npc.Dest = spot;
         npc.Activity = null;
-        if (!IsOnScreen(mapCharacter.PixelX, mapCharacter.PixelY) && !IsOnScreen(CellCenterX(spot.X), CellCenterY(spot.Y)))
-        {
-            // Both off-screen: Exult just puts it there (if it's more than 12 tiles away).
-            if (TileDistance(mapCharacter, spot) > 12) Teleport(mapCharacter, spot);
-            BeginActivity(mapCharacter);
-            return;
-        }
+        // Exult puts a character straight there when it and the spot are both off-screen; here it always walks
+        // (the designer's choice) - whatever happens on the way happens: a fight, a trap, a locked door.
         npc.WalkingToSchedule = true;
         npc.Retries = 0;
         npc.Legs = 0;
+        npc.BestDistance = int.MaxValue;
         // Walk_to_schedule: first delay 0-5 s when random, then 0-1 s more before setting off.
         npc.WaitMs = (delayMs >= 0 ? delayMs : Rng.Next(5000)) + Rng.Next(1000);
     }
@@ -204,27 +202,24 @@ public partial class GameTestWindow
             BeginActivity(mapCharacter); // close enough
             return;
         }
-        if (npc.Legs >= 40 || npc.Retries >= 2)
+        // No teleporting (Exult jumps there after 2 failed tries or 40 legs): it keeps walking, a leg at a time.
+        // A leg that gets it no nearer counts as a try; after 5 such tries the spot can't be reached (a locked
+        // door, a wall all round) and it gets on with its activity where it is.
+        int distance = TileDistance(mapCharacter, npc.Dest);
+        if (distance < npc.BestDistance) { npc.BestDistance = distance; npc.Retries = 0; }
+        else npc.Retries++;
+        if (npc.Retries >= 5)
         {
-            Teleport(mapCharacter, npc.Dest); // trying too hard: going to jump there
             BeginActivity(mapCharacter);
             return;
         }
-        if (!IsOnScreen(mapCharacter.PixelX, mapCharacter.PixelY) && !IsOnScreen(CellCenterX(npc.Dest.X), CellCenterY(npc.Dest.Y)))
+        var path = FindPath(mapCharacter, npc.Dest, allowPartial: true); // a long way: as far toward it as can be planned, then on from there
+        if (path is not { Count: > 0 })
         {
-            npc.Retries = 100; // force a teleport on the next tick
-            npc.WaitMs = 100;
-            return;
-        }
-        var path = FindPath(mapCharacter, npc.Dest);
-        if (path is null)
-        {
-            npc.Retries++; // failed: wait a second and try again
-            npc.WaitMs = 1000;
+            npc.WaitMs = 1000 + 500 * npc.Retries; // nothing to walk yet (someone in the way): try again shortly
             return;
         }
         npc.Legs++;
-        npc.Retries = 0;
         StartPath(mapCharacter, path);
     }
 
@@ -503,7 +498,8 @@ public partial class GameTestWindow
     /// (someone standing on it), a neighbouring cell will do - Exult's walk to
     /// a schedule is satisfied within 3 tiles. Null if there's no way there.
     /// </summary>
-    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal)
+    /// <param name="allowPartial">No way found (too far to plan in one go, or blocked): a path to the reachable cell nearest the goal instead of null - a leg of a long walk.</param>
+    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false)
     {
         var start = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
         if (start == goal) return new List<(int X, int Y)>();
@@ -516,9 +512,13 @@ public partial class GameTestWindow
         var liftAt = new Dictionary<(int X, int Y), int> { [start] = mapCharacter.Lift };
         open.Enqueue(start, Heuristic(start, goal));
         int expansions = 0;
+        var nearest = start;
+        int nearestH = Heuristic(start, goal);
         while (open.Count > 0 && expansions++ < 6000)
         {
             var current = open.Dequeue();
+            int h = Heuristic(current, goal);
+            if (h < nearestH) { nearest = current; nearestH = h; }
             bool done = current == goal || (!goalFree && Math.Max(Math.Abs(current.X - goal.X), Math.Abs(current.Y - goal.Y)) <= 1 && current != start);
             if (done)
             {
@@ -540,7 +540,11 @@ public partial class GameTestWindow
                 open.Enqueue(next, newCost + Heuristic(next, goal));
             }
         }
-        return null;
+        if (!allowPartial || nearest == start) return null;
+        var partial = new List<(int X, int Y)>();
+        for (var step = nearest; step != start; step = cameFrom[step]) partial.Add(step);
+        partial.Reverse();
+        return partial;
     }
 
     private static int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
