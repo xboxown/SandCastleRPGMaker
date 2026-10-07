@@ -32,7 +32,9 @@ public enum MagicEffectKind
     /// <summary>Min..Max damage.</summary>
     Damage,
     /// <summary>Food: Min..Max nutrition.</summary>
-    Nourish
+    Nourish,
+    /// <summary>A custom effect (Object Editor > Add Custom Stat): its own event commands, run on whoever it's used on.</summary>
+    Custom
 }
 
 public class MagicEffect
@@ -40,6 +42,18 @@ public class MagicEffect
     public MagicEffectKind Kind { get; set; } = MagicEffectKind.Heal;
     public int Min { get; set; } = 1;
     public int Max { get; set; } = 1;
+    /// <summary>Kind Custom: which custom effect (ObjectDatabase.CustomEffects).</summary>
+    public int CustomEffectId { get; set; } = -1;
+
+    /// <summary>A built-in effect's name as the editor lists it ("Restore Mana", "Cure Poison").</summary>
+    public static string KindName(MagicEffectKind kind) => kind switch
+    {
+        MagicEffectKind.RestoreMana => "Restore Mana",
+        MagicEffectKind.CurePoison => "Cure Poison",
+        MagicEffectKind.CureParalysis => "Cure Paralysis",
+        MagicEffectKind.RemoveCurse => "Remove Curse",
+        _ => kind.ToString()
+    };
 
     public static string Describe(MagicEffect e) => e.Kind switch
     {
@@ -58,13 +72,22 @@ public class MagicEffect
         MagicEffectKind.Light => $"Light ({Range(e)} game minutes)",
         MagicEffectKind.Damage => $"Damage {Range(e)}",
         MagicEffectKind.Nourish => $"Nourish {Range(e)}",
-        _ => e.Kind.ToString()
+        MagicEffectKind.Custom => "Custom (its own event commands)",
+        _ => KindName(e.Kind)
     };
 
     /// <summary>Whether the amount (Min..Max) means anything for this effect.</summary>
     public static bool HasAmount(MagicEffectKind kind) => kind is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Light or MagicEffectKind.Damage or MagicEffectKind.Nourish;
 
     private static string Range(MagicEffect e) => e.Min == e.Max ? e.Min.ToString() : $"{e.Min}-{e.Max}";
+}
+
+/// <summary>A custom effect (Object Editor > Add Custom Stat): a name, and the event commands it runs on whoever it's used on (as the Activator).</summary>
+public class CustomEffect
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "New Custom Stat";
+    public List<EventCommand> Commands { get; set; } = new();
 }
 
 /// <summary>A window: its own sprite is how it looks closed (or, without shutters, always).</summary>
@@ -124,10 +147,26 @@ public class SextantSettings
 public class MapSettings
 {
     public SpriteLink Picture { get; set; } = new();
+    /// <summary>Its paperdoll: the art the map is shown within (a parchment, a scroll's rollers, a frame). Empty: the map picture alone.</summary>
+    public SpriteLink PaperdollSprite { get; set; } = new();
+    /// <summary>Where the map picture sits inside the paperdoll, in the paperdoll's own pixels (0 = a 10% border all round).</summary>
+    public int PictureLeft { get; set; }
+    public int PictureTop { get; set; }
+    public int PictureWidth { get; set; }
+    public int PictureHeight { get; set; }
+    /// <summary>Played when it's opened (unrolled).</summary>
+    public int OpenSoundResourceId { get; set; } = -1;
     /// <summary>Mark where the party is - Exult does when someone in the party carries a sextant and they're outdoors.</summary>
     public bool ShowLocation { get; set; } = true;
     /// <summary>Exult: the mark needs a sextant in the party. Unticked: always shown (outdoors).</summary>
     public bool LocationNeedsSextant { get; set; } = true;
+    /// <summary>Exult: no mark while inside (under a roof - a house, a cave with a ceiling). Unticked: marked inside too (a map of a dungeon).</summary>
+    public bool OutdoorsOnly { get; set; } = true;
+    /// <summary>The part of the game map the picture shows, in cells (-1 = the whole map): a map of one cave, maze or house. Outside it, there's no mark.</summary>
+    public int AreaLeft { get; set; } = -1;
+    public int AreaTop { get; set; } = -1;
+    public int AreaRight { get; set; } = -1;
+    public int AreaBottom { get; set; } = -1;
 }
 
 /// <summary>Food (Exult's Food shape#0x179 / consumeEdible).</summary>

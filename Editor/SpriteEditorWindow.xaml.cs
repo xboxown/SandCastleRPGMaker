@@ -69,6 +69,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Blood group is hardcoded and can't be deleted - every blood type characters bleed is a sprite in it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.KeychainGroupName)
+        {
+            MessageBox.Show("The Keychain group is hardcoded and can't be deleted - Keychain objects take their look (a frame for each number of keys) from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         Database.Groups.Remove(_currentGroup);
         _currentGroup = null;
         RefreshGroups();
@@ -91,6 +96,7 @@ public partial class SpriteEditorWindow : Window
 
         // Ammo / Money: how bundle pictures work, before the first one is made.
         if (SpriteDatabase.IsBundleGroup(_currentGroup.Name)) new BundleGuideWindow(_currentGroup.Name) { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.KeychainGroupName) new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 
@@ -101,7 +107,7 @@ public partial class SpriteEditorWindow : Window
         }
         // In the Fonts group a new sprite is an extra font - offered only in the Book Editor's Text Font list.
         // In the Blood group a new sprite is a blood type: puddle sizes, never animated.
-        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name != SpriteDatabase.FontsGroupName && _currentGroup.Name != SpriteDatabase.BloodGroupName };
+        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name is not (SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName) };
         _currentGroup.Sprites.Add(entry);
         RefreshSprites();
         SpriteListView.SelectedItem = entry;
@@ -162,7 +168,8 @@ public partial class SpriteEditorWindow : Window
         bool isTilesetGroup = _currentGroup?.Name == SpriteDatabase.TilesetGroupName;
         bool isFont = _currentGroup?.Name == SpriteDatabase.FontsGroupName; // every sprite in Fonts is a font: glyph frames, no sound or animation
         bool isBlood = _currentGroup?.Name == SpriteDatabase.BloodGroupName; // every sprite in Blood is a blood type: size frames, no sound or animation
-        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood) { Owner = this };
+        bool isKeychain = _currentGroup?.Name == SpriteDatabase.KeychainGroupName; // frames by how many keys: no sound or animation
+        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood, isKeychain) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
     }

@@ -182,6 +182,7 @@ public partial class ObjectEditorWindow : Window
             case ObjectType.LightSource: BuildLight(obj); break;
             case ObjectType.Ammo: BuildBundles(obj, SpriteDatabase.AmmoGroupName); BuildAmmo(obj); break;
             case ObjectType.Money: BuildBundles(obj, SpriteDatabase.MoneyGroupName); BuildMoney(obj); break;
+            case ObjectType.Lockpick: BuildBundles(obj, SpriteDatabase.LockpickGroupName); break;
             case ObjectType.Chair: BuildFurniture(obj, bed: false); break;
             case ObjectType.Bed: BuildFurniture(obj, bed: true); break;
             case ObjectType.Trap: BuildTrap(obj); break;
@@ -264,6 +265,7 @@ public partial class ObjectEditorWindow : Window
     private void BuildLook(WorldObject obj)
     {
         if (obj.Type is ObjectType.Chair or ObjectType.Bed) return; // their looks are per facing, below
+        if (obj.Type == ObjectType.Keychain) { BuildKeychainLook(obj); return; } // from the Keychain group, frames by key count
         string label = obj.Type switch
         {
             ObjectType.Door => "Closed sprite",
@@ -276,7 +278,7 @@ public partial class ObjectEditorWindow : Window
             ObjectType.Bedroll => "Sprite (rolled up)",
             ObjectType.LiquidContainer => "Empty sprite",
             ObjectType.Reagent => "Sprite",
-            ObjectType.Ammo or ObjectType.Money => "Icon (shown in lists; the bundle pictures below are used in play)",
+            ObjectType.Ammo or ObjectType.Money or ObjectType.Lockpick => "Icon (shown in lists; the bundle pictures below are used in play)",
             _ => "Sprite"
         };
         var body = Group("Look");
@@ -295,7 +297,7 @@ public partial class ObjectEditorWindow : Window
         states.Children.Add(Check("Magically locked (no key or lockpick opens it; can't be broken)", () => d.MagicallyLocked, v => d.MagicallyLocked = v));
         body.Children.Add(states);
         var keyRow = new WrapPanel();
-        var keys = new List<object> { "(No key - a lockpick or force opens it)" };
+        var keys = new List<object> { new WorldObject { Id = -1, Name = "(No key - a lockpick or force opens it)" } };
         keys.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Key));
         var keyCombo = new ComboBox { Width = 260, ItemsSource = keys, DisplayMemberPath = "Name" };
         keyCombo.SelectedItem = keys.OfType<WorldObject>().FirstOrDefault(k => k.Id == d.RequiredKeyItemId) ?? keys[0];
@@ -380,7 +382,7 @@ public partial class ObjectEditorWindow : Window
     {
         var body = Group("Money");
         var currencies = ProjectSession.Currencies.Currencies;
-        var choices = new List<object> { "(no currency yet)" };
+        var choices = new List<object> { new Currency { Id = -1, Name = "(no currency yet)" } };
         choices.AddRange(currencies);
         var combo = new ComboBox { Width = 200, ItemsSource = choices, DisplayMemberPath = "Name" };
         combo.SelectedItem = currencies.FirstOrDefault(c => c.Id == obj.Money.CurrencyId) ?? choices[0];
@@ -444,7 +446,8 @@ public partial class ObjectEditorWindow : Window
         var flags = new WrapPanel();
         if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Trap or ObjectType.Door or ObjectType.Window or ObjectType.Stairs))
             flags.Children.Add(Check("Solid (blocks walking)", () => obj.IsSolid, v => obj.IsSolid = v));
-        flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
+        if (obj.Type != ObjectType.Window) // a window's sight is its shutters' setting (Window, above)
+            flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
         if (obj.Type is ObjectType.Junk or ObjectType.Ammo or ObjectType.LightSource or ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject)
             flags.Children.Add(Check("Two-handed", () => obj.IsTwoHanded, v => obj.IsTwoHanded = v));
         if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Door or ObjectType.Trap or ObjectType.Window or ObjectType.Roof or ObjectType.Stairs))
@@ -609,7 +612,7 @@ public partial class ObjectEditorWindow : Window
 
         if (bed)
         {
-            var covers = new List<object> { "(No cover)" };
+            var covers = new List<object> { new WorldObject { Id = -1, Name = "(No cover)" } };
             covers.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Junk && o.FramesAreStates));
             var coverCombo = new ComboBox { Width = 240, ItemsSource = covers, DisplayMemberPath = "Name" };
             coverCombo.SelectedItem = covers.OfType<WorldObject>().FirstOrDefault(o => o.Id == f.CoverObjectId) ?? covers[0];
@@ -880,8 +883,9 @@ public partial class ObjectEditorWindow : Window
 
     private static FrameworkElement Labeled(string label, FrameworkElement control)
     {
-        var panel = new StackPanel { Margin = new Thickness(0, 0, 16, 6) };
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 16, 6), HorizontalAlignment = HorizontalAlignment.Left };
         panel.Children.Add(new TextBlock { Text = label });
+        if (control.HorizontalAlignment == HorizontalAlignment.Stretch) control.HorizontalAlignment = HorizontalAlignment.Left;
         panel.Children.Add(control);
         return panel;
     }

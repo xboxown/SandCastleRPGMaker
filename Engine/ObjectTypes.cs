@@ -110,7 +110,12 @@ public static class ObjectTypes
     };
 
     /// <summary>Whether the type stacks into quantities with bundle pictures (Ammo, Money).</summary>
-    public static bool IsBundle(ObjectType type) => type is ObjectType.Ammo or ObjectType.Money;
+    public static bool IsBundle(ObjectType type) => type is ObjectType.Ammo or ObjectType.Money or ObjectType.Lockpick;
+
+    /// <summary>Things that can't be broken by blows (no Durability): plants, food, potions, reagents, keys...</summary>
+    public static bool CanBeBroken(ObjectType type) => type is not (ObjectType.Plant or ObjectType.Food or ObjectType.Potion or ObjectType.Reagent
+        or ObjectType.Key or ObjectType.Lockpick or ObjectType.Keychain or ObjectType.Ammo or ObjectType.Money or ObjectType.Tile or ObjectType.Wall
+        or ObjectType.Roof or ObjectType.Stairs or ObjectType.Sextant or ObjectType.Map or ObjectType.Spellbook);
 
     /// <summary>Always solid and drawn by Exult's wall rule (Game_object::compare): walls, doors and windows.</summary>
     public static bool IsWallLike(ObjectType type) => type is ObjectType.Wall or ObjectType.Door or ObjectType.Window;
@@ -164,6 +169,7 @@ public static class ObjectTypes
                 break;
             case ObjectType.Ammo:
             case ObjectType.Money:
+            case ObjectType.Lockpick:
                 obj.IsStackable = true;
                 obj.MaxStackSize = MaxQuantity;
                 break;

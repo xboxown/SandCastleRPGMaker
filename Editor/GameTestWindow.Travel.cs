@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using SandcastleRpgMaker.Engine;
 
@@ -110,27 +111,55 @@ public partial class GameTestWindow
     {
         if (FireUseEvent(u)) return;
         var m = u.Obj.MapPicture;
-        var sprite = m.Picture.IsSet ? ObjectLooks.Find(_sprites, m.Picture.SpriteGroup, m.Picture.SpriteName) : null;
-        var frame = sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
-        if (frame is null) { StatusText.Text = $"\"{u.Obj.Name}\" has no picture (Object Editor > Map)."; return; }
-        // Fits the screen, keeping its shape, in whole steps where it can (pixel art).
-        double scale = Math.Min(ViewportWidth / (double)frame.PixelWidth, ViewportHeight / (double)frame.PixelHeight);
+        BitmapSource? First(SpriteLink link) => link.IsSet && ObjectLooks.Find(_sprites, link.SpriteGroup, link.SpriteName) is { Frames.Count: > 0 } sprite ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
+        var map = First(m.Picture);
+        if (map is null) { StatusText.Text = $"\"{u.Obj.Name}\" has no picture (Object Editor > Map)."; return; }
+        var paperdoll = First(m.PaperdollSprite);
+
+        // The whole view (the paperdoll, or the map alone) fits the screen, keeping its shape, in whole steps where it can (pixel art).
+        double fullW = paperdoll?.PixelWidth ?? map.PixelWidth, fullH = paperdoll?.PixelHeight ?? map.PixelHeight;
+        double scale = Math.Min(ViewportWidth / fullW, ViewportHeight / fullH);
         if (scale >= 1) scale = Math.Floor(scale);
-        double width = frame.PixelWidth * scale, height = frame.PixelHeight * scale;
-        var canvas = new Canvas { Width = width, Height = height };
-        var image = new Image { Source = frame, Width = width, Height = height, Stretch = Stretch.Fill };
-        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-        canvas.Children.Add(image);
-        // Paint_map: a cross where the party is - with a sextant in the party, and not inside.
-        bool sextant = PartyItems().Any(p => DefinitionOf(p.Item) is { Type: ObjectType.Sextant });
-        if (m.ShowLocation && !PlayerUnderRoof && (!m.LocationNeedsSextant || sextant))
+        var canvas = new Canvas { Width = fullW * scale, Height = fullH * scale };
+        double mapX = 0, mapY = 0, mapW = fullW * scale, mapH = fullH * scale;
+        if (paperdoll is not null)
         {
-            double x = _playerPixelX / Math.Max(1, _map.Width * _tileWidth) * width, y = _playerPixelY / Math.Max(1, _map.Height * _tileHeight) * height;
-            canvas.Children.Add(new Line { X1 = x, Y1 = y - 2.5, X2 = x, Y2 = y + 2.5, Stroke = Brushes.Red, StrokeThickness = 1 });
-            canvas.Children.Add(new Line { X1 = x - 2.5, Y1 = y, X2 = x + 2.5, Y2 = y, Stroke = Brushes.Red, StrokeThickness = 1 });
+            var back = new Image { Source = paperdoll, Width = canvas.Width, Height = canvas.Height, Stretch = Stretch.Fill };
+            RenderOptions.SetBitmapScalingMode(back, BitmapScalingMode.NearestNeighbor);
+            canvas.Children.Add(back);
+            bool automatic = m.PictureWidth <= 0 || m.PictureHeight <= 0;
+            mapX = (automatic ? fullW * 0.1 : m.PictureLeft) * scale;
+            mapY = (automatic ? fullH * 0.1 : m.PictureTop) * scale;
+            mapW = (automatic ? fullW * 0.8 : m.PictureWidth) * scale;
+            mapH = (automatic ? fullH * 0.8 : m.PictureHeight) * scale;
         }
-        ShowObjectOverlay(canvas, takesClicks: false, scaleLikeViewport: true);
+        var image = new Image { Source = map, Width = mapW, Height = mapH, Stretch = Stretch.Fill };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        Canvas.SetLeft(image, mapX);
+        Canvas.SetTop(image, mapY);
+        canvas.Children.Add(image);
+
+        // Paint_map: a cross where the party is - with a sextant in the party, outdoors (unless the map says otherwise), and inside the area it shows.
+        bool sextant = PartyItems().Any(p => DefinitionOf(p.Item) is { Type: ObjectType.Sextant });
+        bool whole = m.AreaLeft < 0;
+        double areaLeft = whole ? 0 : m.AreaLeft * _tileWidth, areaTop = whole ? 0 : m.AreaTop * _tileHeight;
+        double areaWidth = whole ? _map.Width * _tileWidth : (Math.Max(m.AreaLeft, m.AreaRight) - m.AreaLeft + 1) * _tileWidth;
+        double areaHeight = whole ? _map.Height * _tileHeight : (Math.Max(m.AreaTop, m.AreaBottom) - m.AreaTop + 1) * _tileHeight;
+        double fx = (_playerPixelX - areaLeft) / Math.Max(1, areaWidth), fy = (_playerPixelY - areaTop) / Math.Max(1, areaHeight);
+        bool onIt = fx >= 0 && fx <= 1 && fy >= 0 && fy <= 1;
         StatusText.Text = "Click to put the map away.";
+        if (m.ShowLocation && (!m.OutdoorsOnly || !PlayerUnderRoof) && (!m.LocationNeedsSextant || sextant))
+        {
+            if (onIt)
+            {
+                double x = mapX + fx * mapW, y = mapY + fy * mapH;
+                canvas.Children.Add(new Line { X1 = x, Y1 = y - 2.5, X2 = x, Y2 = y + 2.5, Stroke = Brushes.Red, StrokeThickness = 1 });
+                canvas.Children.Add(new Line { X1 = x - 2.5, Y1 = y, X2 = x + 2.5, Y2 = y, Stroke = Brushes.Red, StrokeThickness = 1 });
+            }
+            else StatusText.Text = "You can't find where you are on this map. (Click to put it away.)";
+        }
+        PlaySound(m.OpenSoundResourceId);
+        ShowObjectOverlay(canvas, takesClicks: false, scaleLikeViewport: true);
     }
 
     // ================= Clock =================

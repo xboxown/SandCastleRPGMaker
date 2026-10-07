@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
@@ -46,11 +47,10 @@ public partial class ObjectEditorWindow
     }
 
     /// <summary>Which types have hit points to lose (the Durability box).</summary>
-    private static bool HasDurability(ObjectType type) => type is ObjectType.Door or ObjectType.Junk or ObjectType.Chair or ObjectType.Bed
-        or ObjectType.LightSource or ObjectType.Trap or ObjectType.Window or ObjectType.Plant or ObjectType.BreakableGlass
+    private static bool HasDurability(ObjectType type) => ObjectTypes.CanBeBroken(type) && type is ObjectType.Door or ObjectType.Junk or ObjectType.Chair
+        or ObjectType.Bed or ObjectType.LightSource or ObjectType.Trap or ObjectType.Window or ObjectType.BreakableGlass
         or ObjectType.UseableObject or ObjectType.Lever or ObjectType.CraftingStation or ObjectType.MusicalInstrument
-        or ObjectType.Explosive or ObjectType.Table or ObjectType.LiquidContainer or ObjectType.Food or ObjectType.Potion
-        or ObjectType.Clock or ObjectType.Tool or ObjectType.Bedroll;
+        or ObjectType.Explosive or ObjectType.Table or ObjectType.LiquidContainer or ObjectType.Clock or ObjectType.Tool or ObjectType.Bedroll;
 
     private static string NewTypeDescription(ObjectType type) => type switch
     {
@@ -137,7 +137,7 @@ public partial class ObjectEditorWindow
         var harvest = new WrapPanel();
         harvest.Children.Add(ObjectPicker("Produce (what harvesting gives)", o => o.Type != ObjectType.Plant, () => p.ProduceObjectId, v => p.ProduceObjectId = v, "(nothing - a decoration)"));
         harvest.Children.Add(NumberField("How many", () => p.ProduceQuantity, v => p.ProduceQuantity = (int)Math.Clamp(v, 1, ObjectTypes.MaxQuantity)));
-        harvest.Children.Add(TextField("Needs tool (e.g. Scythe; empty = by hand)", 150, () => p.HarvestToolKind, v => p.HarvestToolKind = v));
+        harvest.Children.Add(ToolKindPicker("Needs tool to harvest", () => p.HarvestToolKind, v => p.HarvestToolKind = v, "(none - by hand, double-click)"));
         body.Children.Add(harvest);
         var after = new WrapPanel();
         after.Children.Add(Check("Only when ripe (the last stage)", () => p.OnlyWhenRipe, v => p.OnlyWhenRipe = v));
@@ -153,9 +153,9 @@ public partial class ObjectEditorWindow
     {
         var k = obj.Keychain;
         var body = Group("Keychain (Exult's keyring)");
-        body.Children.Add(Note("Give its sprite five frames - holding 0, 1, 2, 3, and 4 or more keys (Exult's keyring frames). Keys put on it are gone from the world: it opens whatever any of them fits."));
-        body.Children.Add(ObjectIdList("Keys it starts with", k.StartingKeyIds, o => o.Type == ObjectType.Key));
+        body.Children.Add(ObjectIdList("Keys it starts with (add as many as you like; click one to take it off)", k.StartingKeyIds, o => o.Type == ObjectType.Key));
         body.Children.Add(SoundPicker("Add key sound", () => k.AddKeySoundResourceId, v => k.AddKeySoundResourceId = v));
+        body.Children.Add(Note("In play: double-click it, then click yourself - every key the party carries goes onto it - or click a door or chest to open it with whichever of its keys fits."));
     }
 
     // ================= Sextants and maps =================
@@ -177,11 +177,39 @@ public partial class ObjectEditorWindow
         var m = obj.MapPicture;
         var body = Group("Map");
         body.Children.Add(SpritePicker("Map picture (shown when it's used)", () => (m.Picture.SpriteGroup, m.Picture.SpriteName), (g, n) => { m.Picture.SpriteGroup = g; m.Picture.SpriteName = n; }));
+        body.Children.Add(SpritePicker("Paperdoll (optional - the parchment or frame the map is shown in)", () => (m.PaperdollSprite.SpriteGroup, m.PaperdollSprite.SpriteName), (g, n) => { m.PaperdollSprite.SpriteGroup = g; m.PaperdollSprite.SpriteName = n; }));
+        var inset = new WrapPanel();
+        inset.Children.Add(NumberField("Map inside it: left (px)", () => m.PictureLeft, v => m.PictureLeft = (int)Math.Max(0, v)));
+        inset.Children.Add(NumberField("top", () => m.PictureTop, v => m.PictureTop = (int)Math.Max(0, v)));
+        inset.Children.Add(NumberField("width (0 = automatic)", () => m.PictureWidth, v => m.PictureWidth = (int)Math.Max(0, v)));
+        inset.Children.Add(NumberField("height", () => m.PictureHeight, v => m.PictureHeight = (int)Math.Max(0, v)));
+        inset.Children.Add(SoundPicker("Open sound", () => m.OpenSoundResourceId, v => m.OpenSoundResourceId = v));
+        body.Children.Add(inset);
+        body.Children.Add(Note("With a paperdoll, the map picture is drawn inside it at the place above, in the paperdoll's own pixels (all 0: a 10% border all round). Without one, the map picture alone fills the screen."));
         var row = new WrapPanel();
         row.Children.Add(Check("Mark where the party is", () => m.ShowLocation, v => m.ShowLocation = v));
         row.Children.Add(Check("...only with a sextant in the party (Exult)", () => m.LocationNeedsSextant, v => m.LocationNeedsSextant = v));
+        row.Children.Add(Check("...only outdoors (Exult: none inside a house or a roofed cave)", () => m.OutdoorsOnly, v => m.OutdoorsOnly = v));
         body.Children.Add(row);
-        body.Children.Add(Note("The picture stands for the whole game map, corner to corner: the mark is placed by where the party is on it. Never marked indoors (under a roof), as Exult."));
+        var area = new WrapPanel();
+        area.Children.Add(Check("Shows only part of the map (a cave, a maze, a house)", () => m.AreaLeft >= 0, v =>
+        {
+            if (v) { m.AreaLeft = 0; m.AreaTop = 0; m.AreaRight = 19; m.AreaBottom = 19; }
+            else m.AreaLeft = m.AreaTop = m.AreaRight = m.AreaBottom = -1;
+            ShowCurrent();
+        }));
+        body.Children.Add(area);
+        if (m.AreaLeft >= 0)
+        {
+            var cells = new WrapPanel();
+            cells.Children.Add(NumberField("From cell X", () => m.AreaLeft, v => m.AreaLeft = (int)Math.Max(0, v)));
+            cells.Children.Add(NumberField("Y", () => m.AreaTop, v => m.AreaTop = (int)Math.Max(0, v)));
+            cells.Children.Add(NumberField("To cell X", () => m.AreaRight, v => m.AreaRight = (int)Math.Max(0, v)));
+            cells.Children.Add(NumberField("Y", () => m.AreaBottom, v => m.AreaBottom = (int)Math.Max(0, v)));
+            body.Children.Add(cells);
+        }
+        body.Children.Add(Note("The picture stands for the whole game map (or just the area above), corner to corner: the mark is placed by where the party is on it. Outside the area there's no mark: \"You can't find where you are on this map.\" " +
+                               "To let only someone in particular use it, give it a By Use page in its Event tab with that condition: a page with commands takes over the use."));
     }
 
     // ================= Food, potions, glass =================
@@ -376,7 +404,7 @@ public partial class ObjectEditorWindow
                 var inner = new StackPanel();
                 var top = new WrapPanel();
                 top.Children.Add(TextField("Name", 160, () => recipe.Name, v => { recipe.Name = v.Length > 0 ? v : recipe.Name; box.Header = recipe.Name; }));
-                top.Children.Add(TextField("Needs tool (empty = double-click)", 120, () => recipe.ToolKind, v => recipe.ToolKind = v));
+                top.Children.Add(ToolKindPicker("Needs tool", () => recipe.ToolKind, v => recipe.ToolKind = v, "(none - double-click)"));
                 top.Children.Add(NumberField("Work (seconds)", () => recipe.WorkSeconds, v => recipe.WorkSeconds = Math.Max(0, v)));
                 top.Children.Add(SoundPicker("Work sound", () => recipe.WorkSoundResourceId, v => recipe.WorkSoundResourceId = v));
                 inner.Children.Add(top);
@@ -532,9 +560,10 @@ public partial class ObjectEditorWindow
     /// <summary>Any object (but a liquid container itself is usually not) can be a liquid source - Exult's well and water trough.</summary>
     private void BuildLiquidSource(WorldObject obj)
     {
-        if (obj.Type is ObjectType.Ammo or ObjectType.Money or ObjectType.Key or ObjectType.Lockpick or ObjectType.Reagent) return;
-        var body = Group("Liquid source");
+        if (obj.Type is not (ObjectType.Junk or ObjectType.UseableObject or ObjectType.CraftingStation)) return; // a well, a trough, a wine cask
+        var body = Group("Liquid source (a well, a water trough, a wine cask)");
         body.Children.Add(TextField("Fills liquid containers with (e.g. Water; empty = not a source)", 220, () => obj.LiquidSource, v => obj.LiquidSource = v));
+        body.Children.Add(Note("Leave it empty unless this is something a bucket or bottle is filled at (Exult's well): using a Liquid Container on it fills it with this liquid."));
     }
 
     // ================= Building blocks =================
@@ -542,7 +571,7 @@ public partial class ObjectEditorWindow
     /// <summary>A drop-down of objects (filtered), with a "none" choice.</summary>
     private FrameworkElement ObjectPicker(string label, Func<WorldObject, bool> filter, Func<int> get, Action<int> set, string none)
     {
-        var choices = new List<object> { none };
+        var choices = new List<object> { new WorldObject { Id = -1, Name = none } };
         choices.AddRange(_db.Objects.Where(o => o.TypeChosen && filter(o)));
         var combo = new ComboBox { Width = 200, ItemsSource = choices, DisplayMemberPath = "Name" };
         combo.SelectedItem = choices.OfType<WorldObject>().FirstOrDefault(o => o.Id == get()) ?? choices[0];
@@ -566,10 +595,10 @@ public partial class ObjectEditorWindow
                 chip.Click += (_, _) => { ids.Remove(id); Show(); };
                 row.Children.Add(chip);
             }
-            var choices = new List<object> { "Add..." };
+            var choices = new List<object> { new WorldObject { Id = -1, Name = "Add..." } };
             choices.AddRange(_db.Objects.Where(o => o.TypeChosen && filter(o)));
-            var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2) };
-            add.SelectionChanged += (_, _) => { if (add.SelectedItem is WorldObject o) { ids.Add(o.Id); Show(); } };
+            var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            add.SelectionChanged += (_, _) => { if (add.SelectedItem is WorldObject { Id: >= 0 } o) { ids.Add(o.Id); Show(); } };
             row.Children.Add(add);
             panel.Children.Add(row);
         }
@@ -593,10 +622,10 @@ public partial class ObjectEditorWindow
                 chip.Click += (_, _) => { ids.Remove(id); Show(); };
                 row.Children.Add(chip);
             }
-            var choices = new List<object> { "Add..." };
+            var choices = new List<object> { new ResourceEntry { Id = -1, Name = "Add..." } };
             choices.AddRange(_resources.Entries.Where(r => r.Kind is ResourceKind.Sound or ResourceKind.Music));
-            var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2) };
-            add.SelectionChanged += (_, _) => { if (add.SelectedItem is ResourceEntry r) { ids.Add(r.Id); Show(); } };
+            var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            add.SelectionChanged += (_, _) => { if (add.SelectedItem is ResourceEntry { Id: >= 0 } r) { ids.Add(r.Id); Show(); } };
             row.Children.Add(add);
             panel.Children.Add(row);
         }
@@ -604,7 +633,18 @@ public partial class ObjectEditorWindow
         return panel;
     }
 
-    /// <summary>A list of effects: each a kind and (where it means something) an amount from-to, with Remove; and Add.</summary>
+    /// <summary>One choice in an effect's drop-down: a built-in effect, or a custom one (green).</summary>
+    private sealed record EffectChoice(MagicEffectKind Kind, CustomEffect? Custom)
+    {
+        public override string ToString() => Custom is null ? MagicEffect.KindName(Kind) : Custom.Name;
+    }
+
+    /// <summary>
+    /// A list of effects: each a kind - built in, or a custom one (green) -
+    /// and (where it means something) an amount from-to, with Remove; and Add.
+    /// "Add Custom Stat..." makes a new custom effect: a name and the event
+    /// commands it runs (no conditions). Custom ones can be edited and deleted.
+    /// </summary>
     private FrameworkElement EffectsEditor(string label, List<MagicEffect> effects)
     {
         var panel = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
@@ -612,11 +652,24 @@ public partial class ObjectEditorWindow
         {
             panel.Children.Clear();
             panel.Children.Add(new TextBlock { Text = label });
+            var choices = Enum.GetValues<MagicEffectKind>().Where(k => k != MagicEffectKind.Custom).Select(k => new EffectChoice(k, null))
+                .Concat(_db.CustomEffects.Select(c => new EffectChoice(MagicEffectKind.Custom, c))).ToList();
             foreach (var effect in effects.ToList())
             {
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
-                var kind = new ComboBox { Width = 150, ItemsSource = Enum.GetValues<MagicEffectKind>(), SelectedItem = effect.Kind };
-                kind.SelectionChanged += (_, _) => { effect.Kind = (MagicEffectKind)kind.SelectedItem; Show(); };
+                var kind = new ComboBox { Width = 170, ItemsSource = choices };
+                kind.ItemContainerStyle = CustomEffectStyle();
+                kind.SelectedItem = effect.Kind == MagicEffectKind.Custom
+                    ? choices.FirstOrDefault(c => c.Custom?.Id == effect.CustomEffectId)
+                    : choices.FirstOrDefault(c => c.Custom is null && c.Kind == effect.Kind);
+                if (effect.Kind == MagicEffectKind.Custom) kind.Foreground = Brushes.Green;
+                kind.SelectionChanged += (_, _) =>
+                {
+                    if (kind.SelectedItem is not EffectChoice choice) return;
+                    effect.Kind = choice.Kind;
+                    effect.CustomEffectId = choice.Custom?.Id ?? -1;
+                    Show();
+                };
                 row.Children.Add(kind);
                 if (MagicEffect.HasAmount(effect.Kind))
                 {
@@ -624,18 +677,126 @@ public partial class ObjectEditorWindow
                     row.Children.Add(new TextBlock { Text = "to", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0) });
                     row.Children.Add(InlineNumber(() => effect.Max, v => effect.Max = v));
                 }
-                row.Children.Add(new TextBlock { Text = MagicEffect.Describe(effect), Opacity = 0.6, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) });
-                var remove = new Button { Content = "✕", Width = 22, ToolTip = "Remove" };
+                if (effect.Kind == MagicEffectKind.Custom && _db.CustomEffects.FirstOrDefault(c => c.Id == effect.CustomEffectId) is { } custom)
+                {
+                    var editCustom = new Button { Content = "Edit...", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Its name and event commands" };
+                    editCustom.Click += (_, _) => { EditCustomEffect(custom); Show(); };
+                    row.Children.Add(editCustom);
+                }
+                else row.Children.Add(new TextBlock { Text = MagicEffect.Describe(effect), Opacity = 0.6, FontSize = 11, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0) });
+                var remove = new Button { Content = "✕", Width = 22, ToolTip = "Remove this effect", Margin = new Thickness(6, 0, 0, 0) };
                 remove.Click += (_, _) => { effects.Remove(effect); Show(); };
                 row.Children.Add(remove);
                 panel.Children.Add(row);
             }
-            var add = new Button { Content = "Add effect", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 0) };
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+            var add = new Button { Content = "Add effect", Padding = new Thickness(6, 1, 6, 1) };
             add.Click += (_, _) => { effects.Add(new MagicEffect()); Show(); };
-            panel.Children.Add(add);
+            var addCustom = new Button { Content = "Add Custom Stat...", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(6, 0, 0, 0), Foreground = Brushes.Green,
+                ToolTip = "A new effect of your own: a name, and the event commands it runs on whoever it's used on" };
+            addCustom.Click += (_, _) =>
+            {
+                var custom = new CustomEffect { Id = _db.NextCustomEffectId(), Name = "New Custom Stat" };
+                if (!EditCustomEffect(custom, isNew: true)) return;
+                _db.CustomEffects.Add(custom);
+                effects.Add(new MagicEffect { Kind = MagicEffectKind.Custom, CustomEffectId = custom.Id });
+                Show();
+            };
+            var deleteCustom = new Button { Content = "Delete a Custom Stat...", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(6, 0, 0, 0), IsEnabled = _db.CustomEffects.Count > 0 };
+            deleteCustom.Click += (_, _) =>
+            {
+                var menu = new ContextMenu();
+                foreach (var custom in _db.CustomEffects.ToList())
+                {
+                    var item = new MenuItem { Header = custom.Name, Foreground = Brushes.Green };
+                    item.Click += (_, _) =>
+                    {
+                        if (MessageBox.Show($"Delete the custom stat \"{custom.Name}\"? Every potion, food, spell and object using it loses it.", "Delete Custom Stat", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                        _db.CustomEffects.Remove(custom);
+                        foreach (var list in AllEffectLists()) list.RemoveAll(e => e.Kind == MagicEffectKind.Custom && e.CustomEffectId == custom.Id);
+                        ShowCurrent();
+                    };
+                    menu.Items.Add(item);
+                }
+                menu.PlacementTarget = deleteCustom;
+                menu.IsOpen = true;
+            };
+            buttons.Children.Add(add);
+            buttons.Children.Add(addCustom);
+            buttons.Children.Add(deleteCustom);
+            panel.Children.Add(buttons);
         }
         Show();
         return panel;
+    }
+
+    /// <summary>Custom effects in a drop-down are green; built-in ones black.</summary>
+    private static Style CustomEffectStyle()
+    {
+        var style = new Style(typeof(ComboBoxItem));
+        var trigger = new DataTrigger { Binding = new System.Windows.Data.Binding("Custom") { Converter = new IsNotNullConverter() }, Value = true };
+        trigger.Setters.Add(new Setter(Control.ForegroundProperty, Brushes.Green));
+        style.Triggers.Add(trigger);
+        return style;
+    }
+
+    private sealed class IsNotNullConverter : System.Windows.Data.IValueConverter
+    {
+        public object Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => value is not null;
+        public object ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture) => throw new NotSupportedException();
+    }
+
+    /// <summary>Every list of effects in every object - for removing a deleted custom stat from them all.</summary>
+    private IEnumerable<List<MagicEffect>> AllEffectLists()
+    {
+        foreach (var o in _db.Objects)
+        {
+            yield return o.Food.Effects;
+            yield return o.Potion.Effects;
+            yield return o.Useable.Effects;
+            foreach (var spell in o.Spellbook.Spells) yield return spell.Effects;
+            foreach (var liquid in o.Liquid.Liquids) yield return liquid.Effects;
+        }
+    }
+
+    /// <summary>The custom effect's own window: its name and its event commands (no conditions). True if kept.</summary>
+    private bool EditCustomEffect(CustomEffect custom, bool isNew = false)
+    {
+        var window = new CustomEffectWindow(custom, _resources, _variables, _books, _db, _containers, _sprites, isNew) { Owner = this };
+        return window.ShowDialog() == true;
+    }
+
+    /// <summary>A drop-down of the Tool objects: the kind of tool needed (any tool of that kind will do).</summary>
+    private FrameworkElement ToolKindPicker(string label, Func<string> get, Action<string> set, string none)
+    {
+        var tools = _db.Objects.Where(o => o.TypeChosen && o.Type == ObjectType.Tool && o.Tool.ToolKind.Trim().Length > 0).ToList();
+        var choices = new List<object> { new WorldObject { Id = -1, Name = none } };
+        choices.AddRange(tools.Select(t => new WorldObject { Id = t.Id, Name = $"{t.Name}  (any {t.Tool.ToolKind.Trim()})", Tool = t.Tool }));
+        string current = get().Trim();
+        var combo = new ComboBox { Width = 230, ItemsSource = choices, DisplayMemberPath = "Name" };
+        combo.SelectedItem = current.Length == 0 ? choices[0]
+            : choices.OfType<WorldObject>().FirstOrDefault(o => o.Id >= 0 && string.Equals(o.Tool.ToolKind.Trim(), current, StringComparison.OrdinalIgnoreCase)) ?? choices[0];
+        if (current.Length > 0 && combo.SelectedItem == choices[0])
+        {
+            // A kind no Tool object has (yet): kept, and shown.
+            var orphan = new WorldObject { Id = -2, Name = $"(a {current} - no Tool object of that kind yet)", Tool = new ToolSettings { ToolKind = current } };
+            choices.Add(orphan);
+            combo.ItemsSource = null;
+            combo.ItemsSource = choices;
+            combo.SelectedItem = orphan;
+        }
+        combo.SelectionChanged += (_, _) => set(combo.SelectedItem is WorldObject { Id: not -1 } tool ? tool.Tool.ToolKind.Trim() : string.Empty);
+        return Labeled(label, combo);
+    }
+
+    /// <summary>A keychain's look: a sprite from the Sprite Editor's Keychain group (frames 1-5 = 0, 1, 2, 3, 4+ keys), with its guide.</summary>
+    private void BuildKeychainLook(WorldObject obj)
+    {
+        var body = Group("Look");
+        body.Children.Add(SpritePicker("Sprite (from the Keychain group)", () => (obj.SpriteGroup, obj.SpriteName), (g, n) => { obj.SpriteGroup = g; obj.SpriteName = n; }, onlyGroup: SpriteDatabase.KeychainGroupName));
+        var guide = new Button { Content = "How keychain sprites work...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1) };
+        guide.Click += (_, _) => new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
+        body.Children.Add(guide);
     }
 
     private static TextBox InlineNumber(Func<int> get, Action<int> set)

@@ -391,7 +391,7 @@ public partial class GameTestWindow
 
     /// <summary>Whether blows can hurt it (Exult effective_hps): hit points, not "Cannot be destroyed", and - a door - no key and not magically locked.</summary>
     private static bool IsBreakable(WorldObject obj) =>
-        obj.HitPoints > 0 && !obj.CannotBeDestroyed
+        obj.HitPoints > 0 && !obj.CannotBeDestroyed && ObjectTypes.CanBeBroken(obj.Type) // plants, food, potions: never broken
         && !(obj.Type == ObjectType.Door && (obj.Door.RequiredKeyItemId >= 0 || obj.Door.MagicallyLocked));
 
     /// <summary>A blow at a placed object (Game_object::reduce_health). <paramref name="byPlayer"/> false: nobody's doing (an explosion nobody lit) - no crime.</summary>

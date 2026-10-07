@@ -42,7 +42,7 @@ public partial class SpriteFrameEditorWindow : Window
         "Custom"
     };
 
-    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false)
+    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false, bool isKeychainSprite = false)
     {
         InitializeComponent();
         _sprite = sprite;
@@ -95,6 +95,8 @@ public partial class SpriteFrameEditorWindow : Window
 
         if (_isFontSprite) SetUpFontMode();
         if (_isBloodSprite) SetUpBloodMode();
+        if (_isTilesetGroup) SetUpStatesMode(FrameStatesGuideWindow.Tileset, 0); // a tile a frame: no animation, no sound
+        if (isKeychainSprite) SetUpStatesMode(FrameStatesGuideWindow.Keychain, SpriteDatabase.KeychainFrames); // frame by how many keys
     }
 
     /// <summary>A blood type: puddle-size frames only - nothing that animates or makes sound - and the Blood Guide alongside.</summary>
@@ -407,6 +409,8 @@ public partial class SpriteFrameEditorWindow : Window
     private void RebuildFrameStrip()
     {
         TrimBloodFrames(); // every way of adding frames ends here
+        TrimStatesFrames();
+        if (IsStatesSprite || _isBloodSprite) foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1;
         FrameStripPanel.Children.Clear();
         _thumbnailBorders.Clear();
 
@@ -440,7 +444,7 @@ public partial class SpriteFrameEditorWindow : Window
         // Hidden entirely for the Tileset group - each frame there is a
         // distinct tile cell, not an animation frame, so per-frame sound
         // doesn't apply to it the way it does everywhere else.
-        if (!_isTilesetGroup && !_isFontSprite)
+        if (!_isTilesetGroup && !_isFontSprite && !_isBloodSprite && !IsStatesSprite)
         {
             var volumeIcon = new TextBlock
             {
@@ -622,6 +626,7 @@ public partial class SpriteFrameEditorWindow : Window
             _thumbnailBorders[i].BorderBrush = i == _currentFrameIndex ? Brushes.OrangeRed : Brushes.Transparent;
         _fontGuide?.Refresh(_currentFrameIndex);
         _bloodGuide?.Refresh(_currentFrameIndex);
+        _statesGuide?.Refresh(_currentFrameIndex);
     }
 
     /// <summary>The character a font frame draws, for its thumbnail label.</summary>

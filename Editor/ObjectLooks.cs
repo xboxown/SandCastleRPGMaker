@@ -38,6 +38,7 @@ internal static class ObjectLooks
                 return own;
             case ObjectType.Ammo:
             case ObjectType.Money:
+            case ObjectType.Lockpick:
                 for (int level = ObjectTypes.BundleLevel(Math.Max(1, state.Quantity)); level >= 0; level--)
                     if (level < obj.Bundle.Levels.Count && Find(sprites, obj.Bundle.Levels[level]) is { } bundle) return bundle;
                 return own;

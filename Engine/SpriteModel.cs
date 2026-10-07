@@ -164,9 +164,21 @@ public class SpriteDatabase
     public const string AmmoGroupName = "Ammo";
     public const string MoneyGroupName = "Money";
 
-    public static bool IsBundleGroup(string name) => name == AmmoGroupName || name == MoneyGroupName;
+    /// <summary>Lockpicks stack too (Ultima VII: "5 lockpicks"), drawn by how many - the same eight bundle pictures.</summary>
+    public const string LockpickGroupName = "Lockpick";
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || IsBundleGroup(name);
+    public static bool IsBundleGroup(string name) => name == AmmoGroupName || name == MoneyGroupName || name == LockpickGroupName;
+
+    /// <summary>
+    /// Reserved group for keychains (Exult's keyring): each sprite is one
+    /// keychain look, its frames how many keys it holds - frame 1 none, then
+    /// 1, 2, 3, and 4 or more (Exult's set_keyring_frame). States, not an
+    /// animation: no sound, no animation.
+    /// </summary>
+    public const string KeychainGroupName = "Keychain";
+    public const int KeychainFrames = 5;
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || IsBundleGroup(name);
     public static bool IsFontSprite(string groupName, string spriteName) =>
         groupName == FontsGroupName && (spriteName == InGameFontName || spriteName == DialogFontName);
 
@@ -184,6 +196,8 @@ public class SpriteDatabase
         GetOrCreateGroup(BloodGroupName);
         GetOrCreateGroup(AmmoGroupName);
         GetOrCreateGroup(MoneyGroupName);
+        GetOrCreateGroup(LockpickGroupName);
+        GetOrCreateGroup(KeychainGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

@@ -15,8 +15,9 @@ public class BundleGuideWindow : Window
     public BundleGuideWindow(string groupName)
     {
         bool money = groupName == SpriteDatabase.MoneyGroupName;
-        string thing = money ? "coins" : "arrows";
-        string example = money ? "GoldCoins" : "FireArrow";
+        bool lockpicks = groupName == SpriteDatabase.LockpickGroupName;
+        string thing = money ? "coins" : lockpicks ? "lockpicks" : "arrows";
+        string example = money ? "GoldCoins" : lockpicks ? "Lockpicks" : "FireArrow";
         Title = $"{groupName} Guide";
         SizeToContent = SizeToContent.Height;
         Width = 560;
@@ -48,7 +49,7 @@ public class BundleGuideWindow : Window
         root.Children.Add(new TextBlock
         {
             Text = "Each sprite is an ordinary sprite: give it several frames to animate it (burning arrows, glinting gold) and a sound on any frame. " +
-                   "Then, in the Object Editor, make an " + (money ? "object of type Money" : "object of type Ammo") +
+                   "Then, in the Object Editor, make an " + (money ? "object of type Money" : lockpicks ? "object of type Picklock" : "object of type Ammo") +
                    " and pick these eight sprites for its eight bundle pictures. A picture left empty uses the nearest smaller one that's set, so even one sprite works.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
         });
@@ -56,6 +57,7 @@ public class BundleGuideWindow : Window
         {
             Text = money
                 ? "Money: its Weight is per coin (a stack weighs Weight x how many), and it's worth its currency's value per coin (Currency Editor)."
+                : lockpicks ? "Picklock: its Weight is per lockpick. A failed try breaks one - the stack gets one smaller, and its picture changes with it."
                 : "Ammo: its Weight is per arrow (a stack weighs Weight x how many). It goes in the paperdoll slot set in the Object Editor.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Margin = new Thickness(0, 0, 0, 10)
         });

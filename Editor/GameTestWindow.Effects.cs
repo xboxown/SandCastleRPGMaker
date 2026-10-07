@@ -63,6 +63,9 @@ public partial class GameTestWindow
                 case MagicEffectKind.Damage:
                     if (amount > 0) Damage(target, amount, cause);
                     break;
+                case MagicEffectKind.Custom:
+                    RunCustomEffect(effect.CustomEffectId, target);
+                    break;
                 case MagicEffectKind.Nourish:
                 {
                     var vitals = VitalsOf(target);
@@ -84,6 +87,21 @@ public partial class GameTestWindow
     {
         foreach (var effect in effects.Where(e => e.Kind == MagicEffectKind.Damage).ToList())
             if (_map.Objects.Contains(instance)) StrikeObject(instance, obj, RollEffect(effect));
+    }
+
+    /// <summary>A custom effect's event commands, run with whoever it's used on as the Activator.</summary>
+    private void RunCustomEffect(int customEffectId, CharacterDefinition target)
+    {
+        if (_objects.CustomEffects.FirstOrDefault(c => c.Id == customEffectId) is not { Commands.Count: > 0 } custom) return;
+        var (previous, previousStep) = (_activator, _activatedByCharacterStep);
+        _activator = target == _player ? null : MapCharacterOf(target);
+        _activatedByCharacterStep = false;
+        try
+        {
+            _execContext.SelfBookId = -1;
+            EventCommandInterpreter.Run(custom.Commands, _execContext, new List<string>());
+        }
+        finally { (_activator, _activatedByCharacterStep) = (previous, previousStep); }
     }
 
     private void SetStat(CharacterDefinition character, BuiltInStatKind kind, int value)

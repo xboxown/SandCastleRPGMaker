@@ -270,6 +270,9 @@ public class ObjectInstance
 public class ObjectDatabase
 {
     public List<WorldObject> Objects { get; set; } = new();
+    /// <summary>Custom effects (Object Editor > Add Custom Stat), shared by every potion, food, spell and useable object.</summary>
+    public List<CustomEffect> CustomEffects { get; set; } = new();
+    public int NextCustomEffectId() => CustomEffects.Count == 0 ? 1 : CustomEffects.Max(c => c.Id) + 1;
 
     private int _nextId = 1;
 
