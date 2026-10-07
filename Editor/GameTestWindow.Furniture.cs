@@ -269,6 +269,7 @@ public partial class GameTestWindow
         SetCharacterPose(mapCharacter, bed ? "Sleeping" : "Sit", target.Furniture.Facing);
         PositionCharacterVisual(mapCharacter);
         if (bed) SetCover(target.Furniture, obj, turnedDown: true);
+        if (bed) LockHouseDoorsForNight(mapCharacter); // its own doors locked for the night
         FixFurnitureDrawOrder();
         FireObjectEvent(target.Furniture, obj, BookTriggerConditionBased.ByEnter, mapCharacter);
         return true;

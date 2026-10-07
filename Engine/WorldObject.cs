@@ -261,6 +261,8 @@ public class ObjectInstance
     public int? LiquidIdRuntime { get; set; }
     /// <summary>Seconds left on a lit fuse (-1 = not lit).</summary>
     public double FuseRuntime { get; set; } = -1;
+    /// <summary>Who this one belongs to in play, over its Object Editor Belong To (a dish a waiter served: the customer's). -1 = as the Object Editor says.</summary>
+    public int OwnerIdRuntime { get; set; } = -1;
 }
 
 /// <summary>

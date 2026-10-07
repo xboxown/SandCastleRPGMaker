@@ -54,7 +54,7 @@ public partial class GameTestWindow
             if (npc.IsHuman) ShowFloatingText(npc, "No, thank thee.", 2500);
             return;
         }
-        if (u.Placed is not null && ObjectOwner(u.Obj) is { } owned) Theft(owned.Owner, owned.FactionId); // stealItem: "Make sure it has been properly nicked"
+        if (u.Placed is not null && ObjectOwner(u.Obj, u.Placed) is { } owned) Theft(owned.Owner, owned.FactionId); // stealItem: "Make sure it has been properly nicked"
         PlaySound(u.Obj.Food.EatSoundResourceId);
         UseUpOne(u.Source);
 

@@ -39,6 +39,15 @@ public partial class GameTestWindow
         public int Retries, Legs, Phase, PaceDirection = 1;
         /// <summary>Walking to a schedule spot: the nearest it has got so far (Exult tiles) - legs that get no nearer count as tries.</summary>
         public int BestDistance = int.MaxValue;
+        // Eating (GameTestWindow.Meals.cs).
+        public MealStep Meal;
+        public ObjectInstance? MealFood;
+        public double MealCheckMs = 2000;
+        public readonly HashSet<ObjectInstance> ServedDishes = new(ReferenceEqualityComparer.Instance);
+        // Waiting at table (the Waiter schedule).
+        public WaiterStep Waiter;
+        public MapCharacter? WaiterCustomer;
+        public int WaiterDishId = -1;
         /// <summary>Milliseconds until the activity's next now_what; negative = nothing pending.</summary>
         public double WaitMs = -1;
         public List<(int X, int Y)>? Path;
@@ -122,6 +131,7 @@ public partial class GameTestWindow
     {
         var schedules = mapCharacter.Character.Schedules;
         if (mapCharacter.Character.IsInParty || mapCharacter.Character.IsTestPlayer || schedules.Count == 0 || IsDead(mapCharacter.Character)) return;
+        if (mapCharacter.Npc.Meal != MealStep.None) return; // eating: its schedule waits till it's full
         var npc = mapCharacter.Npc;
         var entry = schedules.FirstOrDefault(s => s.Period == period);
         if (entry is null)
@@ -163,6 +173,7 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         if (IsIncapacitated(mapCharacter.Character)) return; // dead, asleep or paralyzed: does nothing at all
+        CheckHunger(mapCharacter, elapsedMs); // hungry: off to eat (GameTestWindow.Meals.cs)
         if (npc.Path is not null) { MoveAlongPath(mapCharacter, elapsedMs); return; }
         if (npc.WaitMs < 0) return;
         npc.WaitMs -= elapsedMs;
@@ -175,6 +186,7 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         if (npc.InCombat) { CombatNowWhat(mapCharacter); return; }
+        if (npc.Meal != MealStep.None) { MealNowWhat(mapCharacter); return; } // eating comes before its schedule
         if (npc.Hounding) { HoundNowWhat(mapCharacter); return; }
         if (npc.WalkingToSchedule) { WalkToScheduleNowWhat(mapCharacter); return; }
         switch (npc.Activity)
@@ -190,6 +202,8 @@ public partial class GameTestWindow
             case ScheduleType.Sleep:
                 if (!_seats.ContainsKey(mapCharacter.Character) && !GoToFurniture(mapCharacter, bed: true)) SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing); // no bed: the floor
                 break;
+            case ScheduleType.Waiter: WaiterNowWhat(mapCharacter); break;
+            case ScheduleType.EatAtInn: InnCustomerNowWhat(mapCharacter); break;
         }
     }
 
@@ -239,7 +253,17 @@ public partial class GameTestWindow
         {
             case ScheduleType.Sleep:
                 // Sleep_schedule: the nearest free bed within 24 tiles; none: lie down here.
-                if (!GoToFurniture(mapCharacter, bed: true)) SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing);
+                if (!GoToFurniture(mapCharacter, bed: true)) { SetCharacterPose(mapCharacter, "Sleeping", mapCharacter.Facing); LockHouseDoorsForNight(mapCharacter); }
+                break;
+            case ScheduleType.Waiter:
+                SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+                npc.Waiter = WaiterStep.FindCustomer;
+                npc.WaiterCustomer = null;
+                npc.WaitMs = 1000;
+                break;
+            case ScheduleType.EatAtInn:
+                SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+                if (!GoToFurniture(mapCharacter, bed: false)) npc.WaitMs = 1000 + Rng.Next(1000);
                 break;
             case ScheduleType.Sit:
                 SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);

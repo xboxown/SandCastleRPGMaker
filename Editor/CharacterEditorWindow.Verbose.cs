@@ -36,6 +36,7 @@ public partial class CharacterEditorWindow
         breaks.Checked += (_, _) => character.BreaksClosedDoors = true;
         breaks.Unchecked += (_, _) => character.BreaksClosedDoors = false;
         VerbosePanel.Children.Add(breaks);
+        VerbosePanel.Children.Add(BuildLocksHouseDoor(character));
         VerbosePanel.Children.Add(VerboseNote("Unticked: a locked door of a side it's hostile to (Faction Editor) is broken down; an unlocked one is opened (human) or stops it (not human). " +
             "Ticked: it breaks closed doors of that side down whether locked or not - a raider, a bear. Doors with a key, magically locked doors and doors that can't be destroyed always stop it (Exult)."));
 

@@ -13,7 +13,12 @@ public enum VerboseKind
     HeardNoise,
     WrongKey,
     LockpickFailed,
-    Uneasy
+    Uneasy,
+    Munching,
+    WantsFood,
+    FoodStolen,
+    WaiterAsks,
+    WaiterServes
 }
 
 /// <summary>
@@ -41,6 +46,11 @@ public class VerboseLines
         VerboseKind.WrongKey => new[] { "The key doesn't fit.", "Maybe it is another key." },
         VerboseKind.LockpickFailed => new[] { "The lockpick broke!", "Blast, it snapped!" },
         VerboseKind.Uneasy => new[] { "I do not like this.", "Something is not right here.", "I feel uneasy..." },
+        VerboseKind.Munching => new[] { "Mmmm!", "Delicious.", "*munch munch*", "Tasty!" },
+        VerboseKind.WantsFood => new[] { "Where is my food?", "I am famished - bring me something!", "Food, please!", "Is anyone serving here?", "More food!" },
+        VerboseKind.FoodStolen => new[] { "Hey! That was my food!", "Who took my supper?", "Thief! My food!" },
+        VerboseKind.WaiterAsks => new[] { "What wouldst thou like?", "Hungry, art thou?", "May I bring thee something?", "What shall it be?", "Thou lookest hungry." },
+        VerboseKind.WaiterServes => new[] { "Here thou art.", "Enjoy thy meal." },
         _ => Array.Empty<string>()
     };
 
@@ -59,6 +69,11 @@ public class VerboseLines
         VerboseKind.WrongKey => "Wrong key",
         VerboseKind.LockpickFailed => "Lockpick broke",
         VerboseKind.Uneasy => "Not feeling safe",
+        VerboseKind.Munching => "Eating",
+        VerboseKind.WantsFood => "Asking for food (at the inn)",
+        VerboseKind.FoodStolen => "Its food was taken",
+        VerboseKind.WaiterAsks => "Waiter: taking an order",
+        VerboseKind.WaiterServes => "Waiter: serving",
         _ => kind.ToString()
     };
 
@@ -75,6 +90,11 @@ public class VerboseLines
         VerboseKind.WrongKey => "Said by a party member when a key that doesn't fit is tried (Exult's keyring).",
         VerboseKind.LockpickFailed => "Said by whoever was picking the lock when the lockpick breaks.",
         VerboseKind.Uneasy => "Not in Exult: now and then when it sees a fight it's not part of.",
+        VerboseKind.Munching => "Eating a dish or its own food, three times in four (Exult's eat_at_inn munch lines - the original's words aren't in Exult's source, so these are ours).",
+        VerboseKind.WantsFood => "Sitting at the inn with nothing in front of it, three times in four now and then (Exult's eat_at_inn \"more food\" lines).",
+        VerboseKind.FoodStolen => "Not in Exult: the dish served to it, or its own food it was going to eat, was taken.",
+        VerboseKind.WaiterAsks => "As a Waiter, at a customer's table, taking the order (Exult's waiter ask lines).",
+        VerboseKind.WaiterServes => "As a Waiter, putting a dish down, two times in three (Exult's waiter serve lines).",
         _ => ""
     };
 }

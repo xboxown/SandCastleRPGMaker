@@ -118,6 +118,7 @@ public partial class GameTestWindow
     private List<Body> WorldBodiesForPathing(MapCharacter? walker = null) =>
         WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door && !IsDoorOpen(o)
             && ((!IsDoorLocked(o) && (walker is null || walker.Character.IsHuman)) // a human opens it on the way
+                || (walker is not null && IsDoorLocked(o) && HoldsHouseKey(walker, door)) // its own door: it has the key
                 || (walker is not null && WouldBreakDown(walker, door, IsDoorLocked(o)))) // or it breaks it down
             ? b with { Solid = false } : b).ToList();
 
@@ -156,6 +157,7 @@ public partial class GameTestWindow
     private bool NpcOpensDoor(MapCharacter mapCharacter, UnitRect nextFoot)
     {
         if (!mapCharacter.Character.IsHuman) return false; // Exult: only the sentient open doors
+        if (NpcUnlocksOwnDoor(mapCharacter, nextFoot)) return true; // its own locked door: the key from its pocket
         if (ClosedUnlockedDoorIn(nextFoot) is not { } door || DefinitionOf(door) is not { } obj) return false;
         if (mapCharacter.Character.BreaksClosedDoors && WouldBreakDown(mapCharacter, obj, locked: false)) return false; // it'd rather break it down
         OpenDoor(door, obj, mapCharacter);
@@ -172,7 +174,11 @@ public partial class GameTestWindow
             var body = BodyOf(null, door);
             var doorway = new UnitRect(body.Left - 1, body.Top - 1, body.Width + 2, body.Depth + 2); // a tile clear all round
             if (CharacterFootprint(mapCharacter).Overlaps(doorway)) continue;
-            if (TryCloseDoor(door, obj, mapCharacter)) _doorsToClose.Remove(mapCharacter); // someone in the doorway: try again next frame
+            if (TryCloseDoor(door, obj, mapCharacter)) // someone in the doorway: try again next frame
+            {
+                _doorsToClose.Remove(mapCharacter);
+                LockBehindIfLeaving(mapCharacter, door, obj); // its own house door, and it's left: locked behind it
+            }
         }
     }
 }

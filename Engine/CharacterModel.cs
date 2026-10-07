@@ -45,6 +45,18 @@ public class CharacterDefinition
     /// <summary>The sound while it's milked (Exult's SOUND_MILKING, three times).</summary>
     public int GivesLiquidSoundResourceId { get; set; } = -1;
 
+    /// <summary>A Waiter's menu (Food objects): what it brings its customers, one picked each time.</summary>
+    public List<int> WaiterServesFoodIds { get; set; } = new();
+
+    /// <summary>
+    /// Humans: it locks its house door. Only for a door whose key (Object
+    /// Editor > Door > Required key) belongs to this character and that it
+    /// carries: it unlocks it to get through, locks it behind itself when it
+    /// leaves (out from under the roof), and locks it again when it goes to
+    /// sleep. Without such a key, nothing of this happens.
+    /// </summary>
+    public bool LocksHouseDoor { get; set; }
+
     /// <summary>Which character the Internal Engine test controls - only one can be true at a time, same "only one" rule as Start Position. Toggled from the PC Editor.</summary>
     public bool IsTestPlayer { get; set; }
 

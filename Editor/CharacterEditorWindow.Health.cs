@@ -47,6 +47,7 @@ public partial class CharacterEditorWindow
         hungerBox.Children.Add(NumberRow("Starving chance:", () => s.StarvingChancePercent, v => s.StarvingChancePercent = Math.Clamp(v, 0, 100), "% each game minute at food 0 (Exult: 40)"));
         hungerBox.Children.Add(estimate);
         Estimate();
+        BuildHungerHabits(character, hungerBox); // its own food, food it carries, the inn; a Waiter's menu
         HealthPanel.Children.Add(hungerBox);
         void HungerChanged() { s.CanGetHungry = canHunger.IsChecked == true; hungerBox.IsEnabled = s.CanGetHungry; }
         canHunger.Checked += (_, _) => HungerChanged();

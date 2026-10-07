@@ -483,7 +483,7 @@ public partial class GameTestWindow
         // An Object Editor object taken from the world: its own Belong To / Faction.
         if (origin is MapObjectOrigin { Obj: var taken } && DefinitionOf(taken) is { } takenObj)
         {
-            if (ObjectOwner(takenObj) is { } objectOwned) Theft(objectOwned.Owner, objectOwned.FactionId);
+            if (ObjectOwner(takenObj, taken) is { } objectOwned) Theft(objectOwned.Owner, objectOwned.FactionId); // a served dish is its customer's
             return;
         }
         (ReferencedItemCategory Category, int ItemId)? item = origin switch

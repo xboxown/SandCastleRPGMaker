@@ -74,6 +74,17 @@ public class SurvivalSettings
 
     /// <summary>False = never gets hungry (Exult's "does not eat").</summary>
     public bool CanGetHungry { get; set; } = true;
+
+    // ---------- When hungry, what it does about it (not the party: as in Exult, you feed them) ----------
+    /// <summary>It eats food on the map that belongs to it (Belong To) - at home - walking to it.</summary>
+    public bool EatsOwnFood { get; set; } = true;
+    /// <summary>It eats food it carries.</summary>
+    public bool EatsCarriedFood { get; set; } = true;
+    /// <summary>It goes to the inn (the spot below), sits down and is served by the waiter.</summary>
+    public bool GoesToInn { get; set; }
+    /// <summary>The inn: a cell on the map (-1 = none set).</summary>
+    public int InnX { get; set; } = -1;
+    public int InnY { get; set; } = -1;
     /// <summary>Food level the game starts with, 0-31.</summary>
     public int StartingFood { get; set; } = 24;
     /// <summary>Hungry (and complaining) at or below this - Exult: 9.</summary>
