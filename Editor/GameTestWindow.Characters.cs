@@ -173,13 +173,31 @@ public partial class GameTestWindow
     /// <summary>The placed character whose visual is under this world point, if any.</summary>
     private PlacedCharacter? HitTestCharacter(Point world)
     {
-        var result = VisualTreeHelper.HitTest(GameCanvas, world);
-        for (DependencyObject? current = result?.VisualHit; current is not null; current = VisualTreeHelper.GetParent(current))
+        for (DependencyObject? current = TopHitInWorld(world); current is not null; current = VisualTreeHelper.GetParent(current))
         {
             var match = _mapCharacters.FirstOrDefault(mc => ReferenceEquals(mc.Visual, current));
             if (match is not null) return match.Placement;
         }
         return null;
+    }
+
+    /// <summary>
+    /// The topmost thing drawn under a point of the world - skipping what isn't
+    /// meant to be clicked (a status or hit outline, floating words) and what's
+    /// hidden (a roof while you're under it). VisualTreeHelper.HitTest on its own
+    /// doesn't skip them: an outline drawn over a poisoned character used to
+    /// catch the click, so a second potion found nobody to drink it.
+    /// </summary>
+    private DependencyObject? TopHitInWorld(Point world)
+    {
+        DependencyObject? top = null;
+        VisualTreeHelper.HitTest(GameCanvas,
+            candidate => candidate is UIElement { IsHitTestVisible: false } or UIElement { Visibility: not Visibility.Visible }
+                ? HitTestFilterBehavior.ContinueSkipSelfAndChildren
+                : HitTestFilterBehavior.Continue,
+            result => { top = result.VisualHit; return HitTestResultBehavior.Stop; },
+            new PointHitTestParameters(world));
+        return top;
     }
 
     private void IdentifyCharacter(PlacedCharacter placement)

@@ -146,6 +146,7 @@ public partial class GameTestWindow
     {
         if (visual is not FrameworkElement element) return;
         var label = GameTextLabel(text);
+        label.IsHitTestVisible = false; // words in the air never catch a click
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(label, Canvas.GetLeft(element) + element.Width / 2 - label.DesiredSize.Width / 2);
         Canvas.SetTop(label, Canvas.GetTop(element) - label.DesiredSize.Height - 2);

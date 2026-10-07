@@ -1984,8 +1984,7 @@ public partial class GameTestWindow : Window
     /// </summary>
     private (PlacedItemInstance? item, ObjectInstance? obj) HitTestStack(Point pos)
     {
-        var result = VisualTreeHelper.HitTest(GameCanvas, pos);
-        DependencyObject? current = result?.VisualHit;
+        DependencyObject? current = TopHitInWorld(pos); // outlines, floating words and hidden roofs never catch the click
         while (current is not null)
         {
             if (current is UIElement element)

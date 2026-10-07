@@ -577,6 +577,7 @@ public partial class GameTestWindow
         var (x, y) = PixelOf(over);
         if (double.IsNaN(x)) return;
         var label = GameTextLabel(text);
+        label.IsHitTestVisible = false; // words in the air never catch a click
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double height = MapCharacterOf(over)?.Visual?.Height ?? _playerImage.Height;
         Canvas.SetLeft(label, x - label.DesiredSize.Width / 2);
