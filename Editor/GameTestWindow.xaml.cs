@@ -1695,6 +1695,7 @@ public partial class GameTestWindow : Window
         _lastRenderTime = now;
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
+        UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 

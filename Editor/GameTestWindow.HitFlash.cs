@@ -42,7 +42,7 @@ public partial class GameTestWindow
     {
         var visual = character == _player ? _playerImage : MapCharacterOf(character)?.Visual as Image;
         if (visual?.Source is not BitmapSource frame || visual.Width <= 0 || frame.PixelWidth <= 0) return;
-        var outline = OutlineOf(frame);
+        var outline = OutlineOf(frame, HitColor);
         double scale = visual.Width / frame.PixelWidth;
         var image = new Image
         {
@@ -71,7 +71,7 @@ public partial class GameTestWindow
     }
 
     /// <summary>The 1-pixel outline of a frame's shape: every see-through pixel touching a solid one, in the hit colour, one pixel bigger all round.</summary>
-    private static BitmapSource OutlineOf(BitmapSource frame)
+    private static BitmapSource OutlineOf(BitmapSource frame, Color color)
     {
         var source = new FormatConvertedBitmap(frame, PixelFormats.Bgra32, null, 0);
         int w = source.PixelWidth, h = source.PixelHeight;
@@ -86,7 +86,7 @@ public partial class GameTestWindow
             {
                 if (Solid(x, y) || !(Solid(x - 1, y) || Solid(x + 1, y) || Solid(x, y - 1) || Solid(x, y + 1))) continue;
                 int i = ((y + 1) * ow + (x + 1)) * 4;
-                outline[i] = HitColor.B; outline[i + 1] = HitColor.G; outline[i + 2] = HitColor.R; outline[i + 3] = 255;
+                outline[i] = color.B; outline[i + 1] = color.G; outline[i + 2] = color.R; outline[i + 3] = 255;
             }
         var bitmap = BitmapSource.Create(ow, oh, 96, 96, PixelFormats.Bgra32, null, outline, ow * 4);
         bitmap.Freeze();
