@@ -63,6 +63,7 @@ public partial class GameTestWindow
             StatusText.Text = $"{character.Name} can't answer right now ({DescribeVitals(character)}).";
             return;
         }
+        if (mapCharacter.Npc.InCombat && !character.IsInParty) return; // Actor::activate: "Too busy fighting." - nothing happens
         if (character.IsInParty && IsGamePaused)
         {
             OpenPaperdoll(character); // Exult: with gumps showing, a party member's inventory opens instead

@@ -193,6 +193,7 @@ public partial class GameTestWindow
         var npc = mapCharacter.Npc;
         npc.InCombat = false;
         npc.Fleeing = false;
+        npc.Chasing = false;
         npc.Target = null;
         npc.FleeFrom = null;
         npc.Entry = null;
@@ -236,6 +237,15 @@ public partial class GameTestWindow
             return;
         }
 
+        // Combat_schedule::now_what (approach): build Dexterity points each standard delay until there are 30 - wherever it is, so it hits the moment it arrives.
+        if (npc.DexPoints < DexToAttack)
+        {
+            npc.DexPoints += Math.Max(1, Stat(me, BuiltInStatKind.Dexterity, 10));
+            npc.WaitMs = StdDelay;
+            return;
+        }
+
+        // start_strike: out of reach -> approach_foe, walking the whole way (Approach_actor_action), not a few steps at a time.
         if (!InReach(me, target))
         {
             var (tx, ty) = CellOf(target);
@@ -243,7 +253,9 @@ public partial class GameTestWindow
             if (path is { Count: > 0 })
             {
                 npc.Failures = 0;
-                StartPath(mapCharacter, path.Take(3).ToList()); // walk there, checking again on the way (the target moves)
+                StartPath(mapCharacter, path);
+                npc.Chasing = true;
+                npc.ChaseFrom = (tx, ty);
             }
             else
             {
@@ -254,20 +266,35 @@ public partial class GameTestWindow
             return;
         }
 
-        if (npc.DexPoints >= DexToAttack)
+        npc.DexPoints -= DexToAttack;
+        var (mx, my) = PixelOf(me);
+        var (ox, oy) = PixelOf(target);
+        SetCharacterPose(mapCharacter, "Attacking Melee", FacingTowards(mx, my, ox, oy));
+        Strike(me, target);
+        npc.WaitMs = 2 * StdDelay; // the swing, then back to ready
+    }
+
+    /// <summary>
+    /// Approach_actor_action::handle_event, each cell of a chase: close enough
+    /// to strike, or the target has moved more than 2 tiles from where it was
+    /// -> stop and think again at once. True if the chase was stopped.
+    /// </summary>
+    private bool ChaseCheck(MapCharacter mapCharacter)
+    {
+        var npc = mapCharacter.Npc;
+        if (!npc.Chasing) return false;
+        var target = npc.Target;
+        bool stop = !npc.InCombat || target is null || IsDead(target) || InReach(mapCharacter.Character, target);
+        if (!stop)
         {
-            npc.DexPoints -= DexToAttack;
-            var (mx, my) = PixelOf(me);
-            var (ox, oy) = PixelOf(target);
-            SetCharacterPose(mapCharacter, "Attacking Melee", FacingTowards(mx, my, ox, oy));
-            Strike(me, target);
-            npc.WaitMs = 2 * StdDelay; // the swing, then back to ready
+            var (tx, ty) = CellOf(target!);
+            stop = Math.Max(Math.Abs(tx - npc.ChaseFrom.X), Math.Abs(ty - npc.ChaseFrom.Y)) > CellsForTiles(2);
         }
-        else
-        {
-            npc.DexPoints += Math.Max(1, Stat(me, BuiltInStatKind.Dexterity, 10));
-            npc.WaitMs = StdDelay;
-        }
+        if (!stop) return false;
+        npc.Chasing = false;
+        npc.Path = null;
+        npc.WaitMs = 0; // now_what straight away
+        return true;
     }
 
     /// <summary>find_foe (nearest mode): the nearest one this character would attack, or who is attacking it or its allies.</summary>

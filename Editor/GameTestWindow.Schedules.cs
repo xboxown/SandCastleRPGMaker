@@ -49,6 +49,9 @@ public partial class GameTestWindow
         public bool InCombat, Fleeing, Hounding;
         public CharacterDefinition? Target, FleeFrom, Oppressor;
         public int DexPoints, Failures, FleeCount;
+        /// <summary>Approach_actor_action: chasing the target, and the cell it stood on when the chase began (moved more than 2 tiles = think again).</summary>
+        public bool Chasing;
+        public (int X, int Y) ChaseFrom;
     }
 
     private GameClock _clock = new();
@@ -375,6 +378,7 @@ public partial class GameTestWindow
     {
         mapCharacter.Npc.Path = path;
         mapCharacter.Npc.PathIndex = 0;
+        mapCharacter.Npc.Chasing = false; // a chase says so itself, after starting its path
     }
 
     private void StopWalking(MapCharacter mapCharacter)
@@ -425,8 +429,10 @@ public partial class GameTestWindow
                 npc.Path = null;
                 npc.WasBlocked = true;
                 if (npc.WalkingToSchedule) npc.Retries++;
-                SetCharacterPose(mapCharacter, npc.Activity == ScheduleType.Dance ? "Dancing" : "Idle", mapCharacter.Facing);
-                npc.WaitMs = npc.Activity is ScheduleType.HorizPace or ScheduleType.VertPace ? StdDelay : 500 + Rng.Next(500);
+                SetCharacterPose(mapCharacter, npc.Activity == ScheduleType.Dance && !npc.InCombat ? "Dancing" : "Idle", mapCharacter.Facing);
+                // In a fight (Path_walking_actor_action stops when blocked): think again on the next standard delay, not the schedule's pause.
+                npc.Chasing = false;
+                npc.WaitMs = npc.InCombat || npc.Activity is ScheduleType.HorizPace or ScheduleType.VertPace ? StdDelay : 500 + Rng.Next(500);
                 return;
             }
             mapCharacter.Lift = newLift;
@@ -445,6 +451,7 @@ public partial class GameTestWindow
 
         if (Math.Abs(targetX - newX) < 0.01 && Math.Abs(targetY - newY) < 0.01)
         {
+            if (ChaseCheck(mapCharacter)) return; // in reach, or the target moved off: strike / think again now
             npc.PathIndex++;
             if (npc.PathIndex >= npc.Path.Count) FinishPath(mapCharacter);
         }
@@ -454,6 +461,14 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         npc.Path = null;
+        if (npc.InCombat)
+        {
+            // A chase or a run away done: Combat_schedule::now_what at once - no schedule pause in a fight.
+            npc.Chasing = false;
+            SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+            npc.WaitMs = 0;
+            return;
+        }
         if (ArriveAtFurniture(mapCharacter)) return; // was heading for a seat or bed: sits / lies down
         var pose = npc.Activity switch { ScheduleType.Dance => "Dancing", _ => "Idle" };
         SetCharacterPose(mapCharacter, pose, mapCharacter.Facing);
