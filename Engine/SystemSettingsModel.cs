@@ -74,6 +74,67 @@ public class SliderSettings
     public int CheckY { get; set; } = 18;
     /// <summary>Played each time the value changes.</summary>
     public int ClickSoundResourceId { get; set; } = -1;
+
+    /// <summary>Classic: Ultima VII's slider (everything above). Custom: one built from pieces (Custom below).</summary>
+    public SliderStyle Style { get; set; } = SliderStyle.Classic;
+    public CustomSliderDesign Custom { get; set; } = new();
+}
+
+public enum SliderStyle { Classic, Custom }
+
+public enum SliderPieceKind
+{
+    /// <summary>A button that takes Step off the number (and Left).</summary>
+    Decrease,
+    /// <summary>A button that adds Step to the number (and Right).</summary>
+    Increase,
+    /// <summary>A button that accepts the number (and Enter).</summary>
+    Accept,
+    /// <summary>A button that cancels (and Escape).</summary>
+    Cancel,
+    /// <summary>The number: drawn with a digit sprite (its frames 1-10 are 0-9) or the game's font.</summary>
+    Number,
+    /// <summary>A track the thumb (this piece's sprite) slides along, Width pixels long; clicking it sets the number.</summary>
+    Track,
+    /// <summary>Just a picture (a frame, a label, a light).</summary>
+    Decoration
+}
+
+/// <summary>One piece of a custom slider, placed on its background.</summary>
+public class SliderPiece
+{
+    public SliderPieceKind Kind { get; set; } = SliderPieceKind.Decoration;
+    /// <summary>Its picture. Buttons: frame 1 normal, frame 2 (if any) while pressed. Number: the digit sprite (frames 1-10 = 0-9; an 11th = a blank). Track: the thumb.</summary>
+    public SpriteLink Sprite { get; set; } = new();
+    public int X { get; set; }
+    public int Y { get; set; }
+    /// <summary>Buttons: the sound when it's clicked.</summary>
+    public int SoundResourceId { get; set; } = -1;
+    /// <summary>Number: how many digits are shown (0 = as many as the number has).</summary>
+    public int DigitCount { get; set; } = 3;
+    /// <summary>Number: "008" rather than "  8".</summary>
+    public bool LeadingZeros { get; set; } = true;
+    /// <summary>Number: pixels between digits.</summary>
+    public int DigitSpacing { get; set; } = 1;
+    /// <summary>Track: its length in pixels.</summary>
+    public int Width { get; set; } = 64;
+}
+
+/// <summary>A slider made from pieces (System Settings > Slider > Custom): a background, and buttons, a number, a track and decorations placed on it, with sounds.</summary>
+public class CustomSliderDesign
+{
+    public SpriteLink Background { get; set; } = new();
+    public List<SliderPiece> Pieces { get; set; } = new()
+    {
+        new() { Kind = SliderPieceKind.Decrease, X = 4, Y = 4 },
+        new() { Kind = SliderPieceKind.Number, X = 24, Y = 4 },
+        new() { Kind = SliderPieceKind.Increase, X = 60, Y = 4 },
+        new() { Kind = SliderPieceKind.Accept, X = 80, Y = 4 }
+    };
+    /// <summary>A sound for each digit 0-9, played when the number changes to end in it (-1 = none: the change sound instead).</summary>
+    public List<int> DigitSoundIds { get; set; } = Enumerable.Repeat(-1, 10).ToList();
+    /// <summary>Played when the number changes (when its last digit has no sound of its own).</summary>
+    public int ChangeSoundResourceId { get; set; } = -1;
 }
 
 public class SystemSettings

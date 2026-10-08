@@ -49,6 +49,7 @@ public class NumberSliderControl : Canvas
         ClipToBounds = false;
         Focusable = true;
         RenderOptions.SetBitmapScalingMode(this, BitmapScalingMode.NearestNeighbor);
+        if (settings.Style == SliderStyle.Custom) { BuildCustom(settings.Custom, sprites); return; } // a slider made from pieces (below); the classic one follows
 
         // ---------- Background ----------
         var background = Load(sprites, settings.Background);
@@ -138,6 +139,7 @@ public class NumberSliderControl : Canvas
 
     private void ShowValue(bool playSound)
     {
+        if (_custom is not null) { ShowCustomValue(playSound); return; }
         double t = _max == _min ? 0 : (_value - _min) / (double)(_max - _min);
         SetLeft(_diamond, _xmin + t * (_xmax - _xmin));
         if (_number is not null) Children.Remove(_number);
@@ -146,6 +148,186 @@ public class NumberSliderControl : Canvas
         _number.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Add(_number, _settings.NumberX - _number.DesiredSize.Width, _settings.NumberY); // right-aligned, ending at NumberX
         if (playSound && _settings.ClickSoundResourceId >= 0 && _resources is not null) SoundPlayback.TryPlay(_resources, _settings.ClickSoundResourceId);
+    }
+
+    // ================= Custom style (System Settings > Slider > Custom) =================
+
+    private CustomSliderDesign? _custom;
+    private SpriteDatabase? _sprites;
+    private SliderPiece? _numberPiece;
+    private readonly List<FrameworkElement> _digitVisuals = new();
+    private SliderPiece? _trackPiece;
+    private FrameworkElement? _thumb;
+    private double _thumbWidth;
+    private readonly System.Windows.Threading.DispatcherTimer _repeat = new() { Interval = TimeSpan.FromMilliseconds(400) };
+    private int _repeatDirection;
+
+    /// <summary>A slider made from pieces placed on a background: buttons (frame 2 while pressed, a sound each, held down they repeat), the number (a digit sprite or the game font), a track with its thumb, decorations.</summary>
+    private void BuildCustom(CustomSliderDesign design, SpriteDatabase sprites)
+    {
+        _custom = design;
+        _sprites = sprites;
+        _repeat.Tick += (_, _) => { _repeat.Interval = TimeSpan.FromMilliseconds(110); Step(_repeatDirection); };
+
+        var background = Load(sprites, design.Background);
+        double width = background?.PixelWidth ?? 0, height = background?.PixelHeight ?? 0;
+        if (background is null)
+        {
+            // No background: a plain panel round the pieces.
+            foreach (var piece in design.Pieces)
+            {
+                var art = Load(sprites, piece.Sprite);
+                double pw = piece.Kind == SliderPieceKind.Track ? piece.Width : art?.PixelWidth ?? 14, ph = art?.PixelHeight ?? 12;
+                if (piece.Kind == SliderPieceKind.Number) pw = Math.Max(pw * Math.Max(1, piece.DigitCount), 18);
+                width = Math.Max(width, piece.X + pw + 4);
+                height = Math.Max(height, piece.Y + ph + 4);
+            }
+            Add(new Rectangle { Width = Math.Max(20, width), Height = Math.Max(12, height), Fill = new SolidColorBrush(Color.FromRgb(0x30, 0x34, 0x3A)), Stroke = Brushes.Black, StrokeThickness = 1 }, 0, 0);
+        }
+        else Add(new Image { Source = background, Width = width, Height = height }, 0, 0);
+        Width = Math.Max(20, width);
+        Height = Math.Max(12, height);
+
+        foreach (var piece in design.Pieces)
+        {
+            switch (piece.Kind)
+            {
+                case SliderPieceKind.Decrease:
+                case SliderPieceKind.Increase:
+                case SliderPieceKind.Accept:
+                case SliderPieceKind.Cancel:
+                    Add(CustomButton(piece), piece.X, piece.Y);
+                    break;
+                case SliderPieceKind.Number:
+                    _numberPiece = piece;
+                    break;
+                case SliderPieceKind.Track:
+                {
+                    _trackPiece = piece;
+                    var art = Load(sprites, piece.Sprite);
+                    _thumbWidth = art?.PixelWidth ?? 6;
+                    double thumbHeight = art?.PixelHeight ?? 8;
+                    var track = new Rectangle { Width = Math.Max(1, piece.Width), Height = thumbHeight, Fill = Brushes.Transparent, Cursor = Cursors.Hand };
+                    track.MouseLeftButtonDown += (_, e) => { SetFromTrack(e.GetPosition(this).X - _thumbWidth / 2); e.Handled = true; };
+                    Add(track, piece.X, piece.Y);
+                    if (art is null) Add(new Rectangle { Width = Math.Max(1, piece.Width), Height = 1, Fill = Brushes.LightGray, IsHitTestVisible = false }, piece.X, piece.Y + thumbHeight / 2);
+                    _thumb = art is not null ? new Image { Source = art, Width = _thumbWidth, Height = thumbHeight } : DiamondShape(_thumbWidth, thumbHeight);
+                    _thumb.Cursor = Cursors.SizeWE;
+                    _thumb.MouseLeftButtonDown += (_, e) => { _dragging = true; CaptureMouse(); e.Handled = true; };
+                    Add(_thumb, piece.X, piece.Y);
+                    MouseMove += (_, e) => { if (_dragging) SetFromTrack(e.GetPosition(this).X - _thumbWidth / 2); };
+                    MouseLeftButtonUp += (_, _) => { _dragging = false; ReleaseMouseCapture(); };
+                    break;
+                }
+                default:
+                    if (Load(sprites, piece.Sprite) is { } decoration) Add(new Image { Source = decoration, Width = decoration.PixelWidth, Height = decoration.PixelHeight, IsHitTestVisible = false }, piece.X, piece.Y);
+                    break;
+            }
+        }
+        ShowCustomValue(playSound: false);
+    }
+
+    /// <summary>A button piece: its picture (frame 2 while pressed), its sound, and what it does; minus and plus repeat while held.</summary>
+    private FrameworkElement CustomButton(SliderPiece piece)
+    {
+        var sprite = piece.Sprite.IsSet && _sprites is not null ? ObjectLooks.Find(_sprites, piece.Sprite.SpriteGroup, piece.Sprite.SpriteName) : null;
+        var normal = sprite is { Frames.Count: > 0 } ? SolidSizeEditor.LoadImageFile(sprite.Frames[0].FilePath) : null;
+        var pressed = sprite is { Frames.Count: > 1 } ? SolidSizeEditor.LoadImageFile(sprite.Frames[1].FilePath) : null;
+        FrameworkElement visual;
+        Image? image = null;
+        if (normal is not null) visual = image = new Image { Source = normal, Width = normal.PixelWidth, Height = normal.PixelHeight };
+        else
+        {
+            string text = piece.Kind switch { SliderPieceKind.Decrease => "-", SliderPieceKind.Increase => "+", SliderPieceKind.Accept => "✔", _ => "✕" };
+            visual = new Border { Width = 12, Height = 11, Background = new SolidColorBrush(Color.FromRgb(0x55, 0x60, 0x6A)), BorderBrush = Brushes.Black, BorderThickness = new Thickness(0.5),
+                Child = new TextBlock { Text = text, FontSize = 8, FontWeight = FontWeights.Bold, Foreground = Brushes.White, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center } };
+        }
+        visual.Cursor = Cursors.Hand;
+        visual.ToolTip = piece.Kind switch { SliderPieceKind.Decrease => "Less (Left)", SliderPieceKind.Increase => "More (Right)", SliderPieceKind.Accept => "Accept (Enter)", _ => "Cancel (Escape)" };
+        visual.MouseLeftButtonDown += (_, e) =>
+        {
+            if (image is not null && pressed is not null) image.Source = pressed;
+            if (piece.SoundResourceId >= 0 && _resources is not null) SoundPlayback.TryPlay(_resources, piece.SoundResourceId);
+            switch (piece.Kind)
+            {
+                case SliderPieceKind.Decrease: StartRepeat(-1); break;
+                case SliderPieceKind.Increase: StartRepeat(+1); break;
+                case SliderPieceKind.Accept: Accepted?.Invoke(_value); break;
+                default: Cancelled?.Invoke(); break;
+            }
+            visual.CaptureMouse();
+            e.Handled = true;
+        };
+        visual.MouseLeftButtonUp += (_, _) =>
+        {
+            if (image is not null && normal is not null) image.Source = normal;
+            _repeat.Stop();
+            visual.ReleaseMouseCapture();
+        };
+        return visual;
+    }
+
+    private void StartRepeat(int direction)
+    {
+        Step(direction);
+        _repeatDirection = direction;
+        _repeat.Interval = TimeSpan.FromMilliseconds(400); // held down: after a moment it keeps going
+        _repeat.Start();
+    }
+
+    private void SetFromTrack(double x)
+    {
+        if (_trackPiece is null) return;
+        double span = Math.Max(1, _trackPiece.Width - _thumbWidth);
+        double t = Math.Clamp((x - _trackPiece.X) / span, 0, 1);
+        int raw = _min + (int)Math.Round(t * (_max - _min));
+        SetValue(_min + (int)Math.Round((raw - _min) / (double)_step) * _step);
+    }
+
+    /// <summary>The number in its digits (or the game font), the thumb on its track, and the digit's (or the change) sound.</summary>
+    private void ShowCustomValue(bool playSound)
+    {
+        foreach (var old in _digitVisuals) Children.Remove(old);
+        _digitVisuals.Clear();
+        if (_numberPiece is { } piece)
+        {
+            var sprite = piece.Sprite.IsSet && _sprites is not null ? ObjectLooks.Find(_sprites, piece.Sprite.SpriteGroup, piece.Sprite.SpriteName) : null;
+            string digits = _value.ToString();
+            if (piece.DigitCount > 0) digits = piece.LeadingZeros ? digits.PadLeft(piece.DigitCount, '0') : digits.PadLeft(piece.DigitCount, ' ');
+            if (sprite is { Frames.Count: >= 10 })
+            {
+                double x = piece.X;
+                foreach (char c in digits)
+                {
+                    int frame = c == ' ' ? 10 : c - '0';
+                    var bitmap = frame < sprite.Frames.Count ? SolidSizeEditor.LoadImageFile(sprite.Frames[frame].FilePath) : null;
+                    double w = bitmap?.PixelWidth ?? SolidSizeEditor.LoadImageFile(sprite.Frames[0].FilePath)?.PixelWidth ?? 6;
+                    if (bitmap is not null)
+                    {
+                        var image = new Image { Source = bitmap, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, IsHitTestVisible = false };
+                        Add(image, x, piece.Y);
+                        _digitVisuals.Add(image);
+                    }
+                    x += w + piece.DigitSpacing;
+                }
+            }
+            else
+            {
+                var label = _numberLabel(digits.Trim().Length == 0 ? "0" : digits);
+                label.IsHitTestVisible = false;
+                Add(label, piece.X, piece.Y);
+                _digitVisuals.Add(label);
+            }
+        }
+        if (_thumb is not null && _trackPiece is not null)
+        {
+            double t = _max == _min ? 0 : (_value - _min) / (double)(_max - _min);
+            SetLeft(_thumb, _trackPiece.X + t * Math.Max(0, _trackPiece.Width - _thumbWidth));
+        }
+        if (!playSound || _custom is null || _resources is null) return;
+        int digitSound = _value % 10 < _custom.DigitSoundIds.Count ? _custom.DigitSoundIds[_value % 10] : -1;
+        int sound = digitSound >= 0 ? digitSound : _custom.ChangeSoundResourceId;
+        if (sound >= 0) SoundPlayback.TryPlay(_resources, sound);
     }
 
     private void Add(FrameworkElement element, double x, double y)

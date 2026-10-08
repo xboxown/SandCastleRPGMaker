@@ -106,7 +106,7 @@ public partial class SystemSettingsWindow
             var exult = new SliderSettings();
             s.SliderX = exult.SliderX; s.SliderY = exult.SliderY; s.TrackWidth = exult.TrackWidth;
             s.NumberX = exult.NumberX; s.NumberY = exult.NumberY; s.CheckX = exult.CheckX; s.CheckY = exult.CheckY;
-            _sliderTabHost!.Content = BuildSliderTab();
+            _sliderTabHost!.Content = BuildSliderStyleChooser();
         };
         panel.Children.Add(reset);
 

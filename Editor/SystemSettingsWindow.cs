@@ -53,7 +53,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
-        _sliderTabHost = new ContentControl { Content = BuildSliderTab() };
+        _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
