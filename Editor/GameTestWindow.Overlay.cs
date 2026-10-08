@@ -53,7 +53,7 @@ public partial class GameTestWindow
             Child = content,
             HorizontalAlignment = HorizontalAlignment.Center,
             VerticalAlignment = VerticalAlignment.Center,
-            LayoutTransform = scaleLikeViewport ? new ScaleTransform(ViewportScale.ScaleX, ViewportScale.ScaleY) : Transform.Identity
+            LayoutTransform = scaleLikeViewport ? ViewportScale : Transform.Identity // the screen's own zoom: it grows and shrinks with the window, like everything else
         };
         RenderOptions.SetBitmapScalingMode(_objectOverlay, BitmapScalingMode.NearestNeighbor);
         Panel.SetZIndex(_objectOverlay, 1001);
