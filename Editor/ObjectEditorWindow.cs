@@ -670,34 +670,77 @@ public partial class ObjectEditorWindow : Window
         SpriteDirection.South => "S", SpriteDirection.SouthWest => "SW", SpriteDirection.West => "W", _ => "NW"
     };
 
-    /// <summary>The facing's sprite, three times its size, with its seats or sleeping places as numbered dots: click to add, drag to move, right-click to remove.</summary>
+    /// <summary>The character whose Sleeping / Sit pose is drawn on the spots (remembered while the editor is open).</summary>
+    private static int _spotPreviewCharacterId = -1;
+
+    /// <summary>
+    /// The facing's sprite, three times its size, with room round it, and its
+    /// seats or sleeping places: each shows the sitter or sleeper itself - a
+    /// character's Sit or Sleeping pose for this facing, drawn exactly where
+    /// the game puts it (its feet, the bottom middle of the pose, on the spot) -
+    /// with a numbered dot. Click to add one, drag the body or the dot to move
+    /// it, right-click to remove it.
+    /// </summary>
     private FrameworkElement BuildSpotEditor(FurnitureFacing facing, bool bed)
     {
-        const double zoom = 3;
+        const double zoom = 3, pad = 28; // sprite pixels of room all round, to see a body hanging over the edge
         var canvas = new Canvas { Background = new SolidColorBrush(Color.FromRgb(0x2A, 0x2A, 0x2A)), ClipToBounds = true };
         var frame = SolidSizeEditor.LoadSpriteFrame(_sprites, facing.Sprite.SpriteGroup, facing.Sprite.SpriteName);
         double w = frame?.PixelWidth ?? 32, h = frame?.PixelHeight ?? 32;
-        canvas.Width = w * zoom;
-        canvas.Height = h * zoom;
+        canvas.Width = (w + 2 * pad) * zoom;
+        canvas.Height = (h + 2 * pad) * zoom;
         if (frame is not null)
         {
             var picture = new Image { Source = frame, Width = w * zoom, Height = h * zoom, IsHitTestVisible = false };
             RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
+            Canvas.SetLeft(picture, pad * zoom);
+            Canvas.SetTop(picture, pad * zoom);
             canvas.Children.Add(picture);
         }
+
+        // The body drawn on each spot: a character's Sleeping (bed) or Sit (chair) pose for this facing.
+        string poseName = bed ? "Sleeping" : "Sit";
+        var pose = ProjectSession.Poses.Poses.FirstOrDefault(pd => pd.Name == poseName);
+        var withPose = pose is null ? new List<CharacterDefinition>()
+            : ProjectSession.Characters.Characters.Where(c => c.PoseSprites.TryGetValue(pose.Id, out var a) && a.Directions.Count > 0).ToList();
+        var previewChoices = new List<CharacterDefinition> { new() { Id = -1, Name = "(no body - dots only)" } };
+        previewChoices.AddRange(withPose);
+        if (_spotPreviewCharacterId == -1 && withPose.Count > 0) _spotPreviewCharacterId = withPose[0].Id;
+        var previewCombo = new ComboBox { Width = 200, ItemsSource = previewChoices, DisplayMemberPath = "Name", HorizontalAlignment = HorizontalAlignment.Left };
+        previewCombo.SelectedItem = previewChoices.FirstOrDefault(c => c.Id == _spotPreviewCharacterId) ?? previewChoices[0];
+        System.Windows.Media.Imaging.BitmapSource? Body()
+        {
+            if (pose is null || previewCombo.SelectedItem is not CharacterDefinition { Id: >= 0 } who || !who.PoseSprites.TryGetValue(pose.Id, out var assignment)) return null;
+            var link = assignment.Resolve(_furnitureFacing);
+            return link is null ? null : SolidSizeEditor.LoadSpriteFrame(_sprites, link.SpriteGroup, link.SpriteName);
+        }
+
         int dragging = -1;
         void Redraw()
         {
             foreach (var old in canvas.Children.OfType<FrameworkElement>().Where(c => c.Tag is int).ToList()) canvas.Children.Remove(old);
+            var body = Body();
             for (int i = 0; i < facing.Spots.Count; i++)
             {
                 var spot = facing.Spots[i];
+                int index = i;
+                if (body is not null)
+                {
+                    double bw = body.PixelWidth, bh = body.PixelHeight;
+                    var ghost = new Image { Source = body, Width = bw * zoom, Height = bh * zoom, Opacity = 0.8, Tag = i, Cursor = Cursors.SizeAll,
+                        ToolTip = $"{(bed ? "Sleeper" : "Sitter")} {i + 1} - drag to move, right-click to remove" };
+                    RenderOptions.SetBitmapScalingMode(ghost, BitmapScalingMode.NearestNeighbor);
+                    Canvas.SetLeft(ghost, (spot.X + pad - bw / 2) * zoom); // the game: feet (bottom middle) on the spot
+                    Canvas.SetTop(ghost, (spot.Y + pad - bh) * zoom);
+                    ghost.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
+                    ghost.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
+                    canvas.Children.Add(ghost);
+                }
                 var dot = new Grid { Width = 18, Height = 18, Tag = i, Cursor = Cursors.SizeAll, ToolTip = $"{(bed ? "Sleeping place" : "Seat")} {i + 1} - drag to move, right-click to remove" };
                 dot.Children.Add(new Ellipse { Fill = bed ? Brushes.MediumPurple : Brushes.Orange, Stroke = Brushes.Black, StrokeThickness = 1 });
                 dot.Children.Add(new TextBlock { Text = (i + 1).ToString(), FontSize = 10, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
-                Canvas.SetLeft(dot, spot.X * zoom - 9);
-                Canvas.SetTop(dot, spot.Y * zoom - 9);
-                int index = i;
+                Canvas.SetLeft(dot, (spot.X + pad) * zoom - 9);
+                Canvas.SetTop(dot, (spot.Y + pad) * zoom - 9);
                 dot.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
                 dot.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
                 canvas.Children.Add(dot);
@@ -707,23 +750,32 @@ public partial class ObjectEditorWindow : Window
         {
             if (frame is null) return;
             var p = e.GetPosition(canvas);
-            facing.Spots.Add(new SeatSpot { X = Math.Round(p.X / zoom), Y = Math.Round(p.Y / zoom) });
+            facing.Spots.Add(new SeatSpot { X = Math.Round(p.X / zoom - pad), Y = Math.Round(p.Y / zoom - pad) });
             Redraw();
         };
         canvas.MouseMove += (_, e) =>
         {
             if (dragging < 0 || dragging >= facing.Spots.Count) return;
             var p = e.GetPosition(canvas);
-            facing.Spots[dragging].X = Math.Clamp(Math.Round(p.X / zoom), 0, w);
-            facing.Spots[dragging].Y = Math.Clamp(Math.Round(p.Y / zoom), 0, h);
+            facing.Spots[dragging].X = Math.Clamp(Math.Round(p.X / zoom - pad), -pad, w + pad);
+            facing.Spots[dragging].Y = Math.Clamp(Math.Round(p.Y / zoom - pad), -pad, h + pad);
             Redraw();
         };
         canvas.MouseLeftButtonUp += (_, _) => { dragging = -1; canvas.ReleaseMouseCapture(); };
+        previewCombo.SelectionChanged += (_, _) => { _spotPreviewCharacterId = (previewCombo.SelectedItem as CharacterDefinition)?.Id ?? -1; Redraw(); };
         Redraw();
+
         var border = new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Child = canvas, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 6) };
         var panel = new StackPanel();
+        var previewRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 0) };
+        previewRow.Children.Add(new TextBlock { Text = $"Show the {poseName} pose of: ", VerticalAlignment = VerticalAlignment.Center });
+        previewRow.Children.Add(previewCombo);
+        panel.Children.Add(previewRow);
+        if (withPose.Count == 0)
+            panel.Children.Add(Note($"No character has a {poseName} pose yet (Character Editor > poses) - give one a {poseName} sprite to see the {(bed ? "sleeper" : "sitter")} here."));
         panel.Children.Add(border);
-        panel.Children.Add(Note(frame is null ? "Give this facing a sprite first." : $"{facing.Spots.Count} {(bed ? "sleeping place" : "seat")}{(facing.Spots.Count == 1 ? "" : "s")}. Click the picture to add one."));
+        panel.Children.Add(Note(frame is null ? "Give this facing a sprite first."
+            : $"{facing.Spots.Count} {(bed ? "sleeping place" : "seat")}{(facing.Spots.Count == 1 ? "" : "s")}. Click to add one; drag the {(bed ? "sleeper" : "sitter")} (or its dot) until it lies right on the {(bed ? "mattress" : "seat")} - the game puts it exactly there. Right-click to remove."));
         return panel;
     }
 
