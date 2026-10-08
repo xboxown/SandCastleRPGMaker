@@ -115,7 +115,8 @@ public partial class GameTestWindow
         foreach (var body in order)
         {
             if (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
-            int z = body.Elevates ? RestingLift(settled, new UnitRect(body.Left, body.Top, body.Width, body.Depth)) : 0;
+            var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
+            int z = body.Elevates ? RestingLift(settled, rect) : SurfaceTop(settled, rect); // lying flat: on the floor - a table top is a floor
             if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);
             settled.Add(body with { Z = z });
@@ -125,6 +126,20 @@ public partial class GameTestWindow
     /// <summary>The lift something with this footprint comes to rest at: the top of the highest elevating thing under any part of it.</summary>
     private static int RestingLift(IEnumerable<Body> candidates, UnitRect foot) =>
         candidates.Where(b => b.Elevates && b.Overlaps(foot)).Select(b => b.TopLift).DefaultIfEmpty(0).Max();
+
+    /// <summary>
+    /// Surfaces - a table, a counter, a shelf, a solid tile (a floor upstairs):
+    /// whatever is put down over one lies on top of it, as in Exult, whatever its
+    /// own flags (a key, an apple). Between other things, each one's own
+    /// Stackable / elevation rules still decide.
+    /// </summary>
+    private bool IsSurface(Body body) =>
+        body.Entity is ObjectInstance instance && DefinitionOf(instance) is { } obj
+        && (obj.Type == ObjectType.Table || (obj.Type == ObjectType.Tile && obj.IsSolid));
+
+    /// <summary>The floor something lying flat comes to rest on: the top of the highest surface under it, or the ground.</summary>
+    private int SurfaceTop(IEnumerable<Body> candidates, UnitRect foot) =>
+        candidates.Where(b => b.Overlaps(foot) && IsSurface(b)).Select(b => b.TopLift).DefaultIfEmpty(0).Max();
 
     private static void SetZ(object entity, int z)
     {
@@ -165,14 +180,15 @@ public partial class GameTestWindow
         var foot = FootprintAt(newCellX, newCellY, newOffsetX + solidOffsetX, newOffsetY + solidOffsetY, sizeX, sizeY);
         var self = (object?)item ?? obj;
         var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot)).ToList();
+        var stackedOn = others.Where(b => !IsSurface(b)).ToList(); // a table or a floor under it isn't a stack: anything can go on them
 
-        if (others.Count > 0 && (!stackable || others.Any(b => !b.Stackable)))
+        if (stackedOn.Count > 0 && (!stackable || stackedOn.Any(b => !b.Stackable)))
         {
             rejection = "Can't stack there - one of the items isn't marked Is Stackable.";
             return false;
         }
 
-        newZ = elevates ? RestingLift(others, foot) : 0;
+        newZ = elevates ? RestingLift(others, foot) : SurfaceTop(others, foot); // lying flat: on the table top (or the ground)
         if (newZ > _playerZ + MaxDropAboveActor)
         {
             rejection = "That's too high to reach from here.";
