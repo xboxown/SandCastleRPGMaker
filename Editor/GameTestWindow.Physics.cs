@@ -384,6 +384,7 @@ public partial class GameTestWindow
     private int PlayerZIndex()
     {
         int zIndex = ComputeDepthZIndex(_playerPixelX / _tileWidth, _playerPixelY / _tileHeight, (int)Math.Round(_playerVisualLiftZ));
+        if (_player is not null && SeatedZIndex(_player, zIndex) is int seated) return seated; // on a chair or in bed: over it, under its cover
         if (_playerZ <= 0) return PlayerOrderAmongWalls(zIndex); // on the ground - nothing under them to be drawn after; walls by Exult's compare
         var foot = PlayerFootprint();
         foreach (var body in WorldBodies())

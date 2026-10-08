@@ -340,6 +340,21 @@ public partial class GameTestWindow
     }
 
     /// <summary>Paint order on furniture: whoever sits or lies is drawn over the chair or bed, and a bed's cover over its sleeper.</summary>
+    /// <summary>
+    /// Someone sitting or lying down is drawn over their chair or bed (and a
+    /// bed's cover over them) - whatever their place on the map would say: the
+    /// seat or pillow is usually toward the back of the furniture, which on
+    /// its own would draw them behind it. Null if they aren't seated.
+    /// </summary>
+    private int? SeatedZIndex(CharacterDefinition who, int zIndex)
+    {
+        if (!_seats.TryGetValue(who, out var seat) || VisualOf(seat.Furniture) is not { } furnitureVisual) return null;
+        int z = Math.Max(zIndex, Panel.GetZIndex(furnitureVisual) + 1);
+        if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
+            Panel.SetZIndex(coverVisual, z + 1);
+        return z;
+    }
+
     private void FixFurnitureDrawOrder()
     {
         foreach (var (who, seat) in _seats)
