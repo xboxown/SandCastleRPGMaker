@@ -214,10 +214,12 @@ public partial class GameTestWindow
         var hide = new HashSet<UIElement>(ReferenceEqualityComparer.Instance);
         if (skipAbove is int lift)
         {
-            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && o.Z >= lift))
+            // At the ceiling's own lift only the solid things go (the ceiling itself, a roof) - something small lying on a table top as high as that stays.
+            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && IsSolidAt(null, o)))))
                 if (_objectVisuals.GetValueOrDefault(instance) is UIElement v) hide.Add(v);
-            foreach (var item in _map.Items.Where(i => i.Z >= lift))
+            foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && IsSolidAt(i, null))))
                 if (_itemVisuals.GetValueOrDefault(item) is UIElement v) hide.Add(v);
+            foreach (var (slabLift, v) in _floorTileVisuals.Where(t => t.SlabLift >= lift)) hide.Add(v); // the floors overhead
             foreach (var mapCharacter in _mapCharacters.Where(mc => mc.Lift >= lift))
                 if (mapCharacter.Visual is { } v) hide.Add(v);
         }
@@ -302,7 +304,7 @@ public partial class GameTestWindow
         double bottom = at is null ? _playerPixelY : Canvas.GetTop(at) + at.Height;
         Canvas.SetLeft(image, left - width / 2.0);
         Canvas.SetTop(image, bottom - height);
-        Panel.SetZIndex(image, (_map.Width + _map.Height) * 100 + 400);
+        Panel.SetZIndex(image, FloorBand(_playerZ) + (_map.Width + _map.Height) * 100 + 400); // over everything on the player's floor
         GameCanvas.Children.Add(image);
         var animator = new SpriteAnimator(sprite, image, _resources);
         RegisterWorldAnimator(image, animator);

@@ -93,6 +93,7 @@ public partial class GameTestWindow
         _map.Items.Select(i => BodyOf(i, null))
             .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).SelectMany(ObjectBodies)) // stairs: one body a step
             .Concat(CharacterBodies()) // placed characters: solid, like Exult's actors
+            .Concat(_floorSlabBodies) // upper floors' tiles: slabs to stand on, ceilings for whoever is below
             .ToList();
 
     // ================= Item stacking and gravity =================
@@ -114,9 +115,10 @@ public partial class GameTestWindow
         var settled = new List<Body>(order.Count);
         foreach (var body in order)
         {
-            if (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
+            if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-            int z = body.Elevates ? RestingLift(settled, rect) : SurfaceTop(settled, rect); // lying flat: on the floor - a table top is a floor
+            var supports = settled.Where(b => BelowCeilingOf(b, body.Z)).ToList(); // never held up by the floor above (its slab is the ceiling)
+            int z = body.Elevates ? RestingLift(supports, rect) : SurfaceTop(supports, rect); // lying flat: on the floor - a table top is a floor
             if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);
             settled.Add(body with { Z = z });
@@ -134,7 +136,7 @@ public partial class GameTestWindow
     /// Stackable / elevation rules still decide.
     /// </summary>
     private bool IsSurface(Body body) =>
-        body.Entity is ObjectInstance instance && DefinitionOf(instance) is { } obj
+        body.Entity is FloorSlab || body.Entity is ObjectInstance instance && DefinitionOf(instance) is { } obj
         && (obj.Type == ObjectType.Table || (obj.Type == ObjectType.Tile && obj.IsSolid));
 
     /// <summary>The floor something lying flat comes to rest on: the top of the highest surface under it, or the ground.</summary>
@@ -179,7 +181,8 @@ public partial class GameTestWindow
         var (solidOffsetX, solidOffsetY) = ResolveSolidOffset(item, obj);
         var foot = FootprintAt(newCellX, newCellY, newOffsetX + solidOffsetX, newOffsetY + solidOffsetY, sizeX, sizeY);
         var self = (object?)item ?? obj;
-        var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot)).ToList();
+        int ceiling = RoofLiftOverPlayer() ?? int.MaxValue; // under a ceiling, nothing goes up through it (the floor above isn't reachable from here)
+        var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot) && b.Z < ceiling).ToList();
         var stackedOn = others.Where(b => !IsSurface(b)).ToList(); // a table or a floor under it isn't a stack: anything can go on them
 
         if (stackedOn.Count > 0 && (!stackable || stackedOn.Any(b => !b.Stackable)))
@@ -310,6 +313,7 @@ public partial class GameTestWindow
         ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Name ?? "object",
         PlacedCharacter placed => _mapCharacters.FirstOrDefault(mc => mc.Placement == placed)?.Character.Name ?? "someone",
         CharacterDefinition character => character.Name,
+        FloorSlab => "the floor above",
         _ => "something"
     };
 

@@ -124,7 +124,7 @@ public partial class GameTestWindow
     private void CharacterChangedCell(MapCharacter mapCharacter)
     {
         var leaving = mapCharacter.Npc.EventUnder;
-        var now = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y);
+        var now = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y, mapCharacter.Lift);
         mapCharacter.Npc.EventUnder = now;
         if (leaving is not null && leaving != now) FireEventAs(mapCharacter, leaving, BookTriggerConditionBased.ByExit);
         if (now is not null && now != leaving) FireEventAs(mapCharacter, now, BookTriggerConditionBased.ByEnter);
@@ -137,7 +137,8 @@ public partial class GameTestWindow
             if (mapCharacter.Npc.EventUnder is { } gameEvent) FireEventAs(mapCharacter, gameEvent, BookTriggerConditionBased.ByStay);
     }
 
-    private GameEvent? EventAt(int x, int y) => _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
+    /// <summary>The event on this cell of the floor someone at this lift is on.</summary>
+    private GameEvent? EventAt(int x, int y, int lift) => _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == MapFloors.FloorOfLift(lift));
 
     // ---------- Teleport / Change Behavior ----------
 
@@ -156,9 +157,9 @@ public partial class GameTestWindow
             _playerY = y;
             _playerPixelX = x * _tileWidth + _tileWidth / 2.0;
             _playerPixelY = y * _tileHeight + _tileHeight / 2.0;
-            _playerZ = StandingLiftAt(PlayerFootprint());
+            _playerZ = StandingLiftOnFloor(PlayerFootprint(), MapFloors.FloorOfLift(_playerZ)); // on the floor they were on
             _playerVisualLiftZ = _playerZ;
-            _eventUnderPlayer = EventAt(x, y); // arriving doesn't set off the event there
+            _eventUnderPlayer = EventAt(x, y, _playerZ); // arriving doesn't set off the event there
             SnapPlayerPosition();
             UpdateCamera();
             return true;
@@ -167,7 +168,7 @@ public partial class GameTestWindow
         if (mapCharacter is null) return false;
         bool wasBusy = mapCharacter.Npc.WalkingToSchedule || mapCharacter.Npc.Activity is ScheduleType.Loiter or ScheduleType.Wander or ScheduleType.Dance or ScheduleType.HorizPace or ScheduleType.VertPace;
         Teleport(mapCharacter, (x, y));
-        mapCharacter.Npc.EventUnder = EventAt(x, y);
+        mapCharacter.Npc.EventUnder = EventAt(x, y, mapCharacter.Lift);
         if (wasBusy) mapCharacter.Npc.WaitMs = StdDelay; // think again from the new place
         return true;
     }

@@ -94,7 +94,7 @@ public partial class GameTestWindow
     private void PutCharacter(MapCharacter mapCharacter, (int X, int Y) cell)
     {
         Teleport(mapCharacter, cell);
-        mapCharacter.Npc.EventUnder = EventAt(cell.X, cell.Y);
+        mapCharacter.Npc.EventUnder = EventAt(cell.X, cell.Y, mapCharacter.Lift);
         mapCharacter.Npc.WaitMs = StdDelay;
     }
 }

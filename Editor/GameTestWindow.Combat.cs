@@ -582,7 +582,7 @@ public partial class GameTestWindow
         double height = MapCharacterOf(over)?.Visual?.Height ?? _playerImage.Height;
         Canvas.SetLeft(label, x - label.DesiredSize.Width / 2);
         Canvas.SetTop(label, y + _tileHeight / 2.0 - height - label.DesiredSize.Height - 2 - LiftOf(over) * LiftPixelShift);
-        Panel.SetZIndex(label, 1_000_000);
+        Panel.SetZIndex(label, AboveEverythingZIndex);
         GameCanvas.Children.Add(label);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
         timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(label); };

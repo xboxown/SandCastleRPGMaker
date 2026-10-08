@@ -33,6 +33,9 @@ public class MapLayer
     public string Name { get; set; } = "Ground";
     public List<int> TileIndices { get; set; } = new();
 
+    /// <summary>Which floor (1-9, MapFloors) this layer is the tiles of. 1 = the ground; an upper floor's tiles are solid slabs you walk on.</summary>
+    public int Floor { get; set; } = 1;
+
     public int GetTile(int x, int y, int mapWidth)
     {
         int i = y * mapWidth + x;
@@ -82,6 +85,22 @@ public class MapData
     /// </summary>
     public int StartX { get; set; } = -1;
     public int StartY { get; set; } = -1;
+    /// <summary>The floor (1-9) the player starts on.</summary>
+    public int StartFloor { get; set; } = 1;
+
+    /// <summary>The tile layer of this floor (1 = the ground), or null if nothing was ever painted there. create: make it (empty) if missing.</summary>
+    public MapLayer? LayerForFloor(int floor, bool create = false)
+    {
+        var layer = floor <= 1 ? Layers.FirstOrDefault() : Layers.FirstOrDefault(l => l.Floor == floor);
+        if (layer is not null || !create) return layer;
+        layer = new MapLayer { Name = $"Floor {floor}", Floor = floor };
+        layer.TileIndices.AddRange(Enumerable.Repeat(-1, Width * Height));
+        Layers.Add(layer);
+        return layer;
+    }
+
+    /// <summary>The upper floors' tile layers (floor 2 and up).</summary>
+    public IEnumerable<MapLayer> UpperFloorLayers => Layers.Skip(1).Where(l => l.Floor > 1);
 
     /// <summary>Weapons/Armors/Items/Books placed as physical, interactable objects on the map - one generic mechanism instead of a separate one per item category, since they all come from the same Select Item picker. Objects keep their own separate, established placement system (the Objects palette tab) rather than duplicating through here too.</summary>
     public List<PlacedItemInstance> Items { get; set; } = new();
@@ -170,4 +189,6 @@ public class PlacedCharacter
     public int Y { get; set; }
     public int PoseId { get; set; } = -1;
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
+    /// <summary>The floor (1-9) they start on.</summary>
+    public int Floor { get; set; } = 1;
 }

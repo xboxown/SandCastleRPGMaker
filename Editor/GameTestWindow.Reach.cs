@@ -56,6 +56,7 @@ public partial class GameTestWindow
     private bool IsMovable(object entity) => entity switch
     {
         ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.IsPortable ?? true,
+        FloorSlab => false, // a floor overhead: you can't reach through it
         _ => true
     };
 

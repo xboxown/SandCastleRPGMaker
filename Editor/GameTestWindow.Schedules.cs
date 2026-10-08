@@ -114,7 +114,7 @@ public partial class GameTestWindow
         foreach (var mapCharacter in _mapCharacters)
         {
             mapCharacter.Npc.Home = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-            mapCharacter.Npc.EventUnder = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y); // standing there from the start doesn't set it off
+            mapCharacter.Npc.EventUnder = EventAt(mapCharacter.Placement.X, mapCharacter.Placement.Y, mapCharacter.Lift); // standing there from the start doesn't set it off
             UpdateSchedule(mapCharacter, _clock.Period, -1);
         }
         ShowClock();
@@ -509,7 +509,7 @@ public partial class GameTestWindow
         mapCharacter.Placement.X = cell.X;
         mapCharacter.Placement.Y = cell.Y;
         var foot = CharacterFootprint(mapCharacter);
-        mapCharacter.Lift = FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, mapCharacter.Placement) && b.Entity is not PlacedCharacter), int.MaxValue);
+        mapCharacter.Lift = StandingLiftOnFloor(foot, MapFloors.FloorOfLift(mapCharacter.Lift), mapCharacter.Placement); // on the floor they were on
         SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
         PositionCharacterVisual(mapCharacter);
     }

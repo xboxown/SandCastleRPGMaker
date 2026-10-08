@@ -150,7 +150,7 @@ public partial class GameTestWindow
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(label, Canvas.GetLeft(element) + element.Width / 2 - label.DesiredSize.Width / 2);
         Canvas.SetTop(label, Canvas.GetTop(element) - label.DesiredSize.Height - 2);
-        Panel.SetZIndex(label, 1_000_000);
+        Panel.SetZIndex(label, AboveEverythingZIndex);
         GameCanvas.Children.Add(label);
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(milliseconds) };
         timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(label); };

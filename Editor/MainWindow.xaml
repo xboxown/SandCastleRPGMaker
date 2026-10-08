@@ -84,6 +84,9 @@
             <Separator/>
             <Button x:Name="ObjectDatabaseButton" Content="Object Editor..." Click="ObjectDatabaseButton_Click" Padding="6,2" Margin="2"/>
             <Separator/>
+            <TextBlock Text="Floor:" VerticalAlignment="Center" Margin="4,0,2,0" ToolTip="Paint and place on this floor. The floors below show darkened; the floors above are hidden."/>
+            <ComboBox x:Name="FloorCombo" Width="70" SelectionChanged="FloorCombo_SelectionChanged" ToolTip="Paint and place on this floor. The floors below show darkened; the floors above are hidden."/>
+            <Separator/>
             <TextBlock Text="Zoom:" VerticalAlignment="Center" Margin="4,0,2,0" ToolTip="100% = the game's own size in full screen. Ctrl + mouse wheel zooms too."/>
             <ComboBox x:Name="ZoomCombo" Width="70" SelectionChanged="ZoomCombo_SelectionChanged" ToolTip="100% = the game's own size in full screen. Ctrl + mouse wheel zooms too."/>
         </ToolBar>

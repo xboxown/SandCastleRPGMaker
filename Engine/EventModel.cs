@@ -93,5 +93,7 @@ public class GameEvent
     public string Name { get; set; } = "New Event";
     public int X { get; set; }
     public int Y { get; set; }
+    /// <summary>The floor (1-9) it's on: only someone on that floor steps on it.</summary>
+    public int Floor { get; set; } = 1;
     public List<BookEventPage> EventPages { get; set; } = new();
 }

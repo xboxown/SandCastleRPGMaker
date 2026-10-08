@@ -75,7 +75,7 @@ public partial class MainWindow
             ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
     }
 
-    private PlacedCharacter? CharacterAt(int x, int y) => _map?.Characters.FirstOrDefault(c => c.X == x && c.Y == y);
+    private PlacedCharacter? CharacterAt(int x, int y) => _map?.Characters.FirstOrDefault(c => c.X == x && c.Y == y && c.Floor == _currentFloor);
 
     // ---------- Mouse ----------
 
@@ -96,7 +96,7 @@ public partial class MainWindow
             StatusText.Text = "Pick a character in the Characters tab first.";
             return;
         }
-        var placed = new PlacedCharacter { Id = _map.GetNextCharacterPlacementId(), CharacterId = entry.Character.Id, X = x, Y = y };
+        var placed = new PlacedCharacter { Id = _map.GetNextCharacterPlacementId(), CharacterId = entry.Character.Id, X = x, Y = y, Floor = _currentFloor };
         _map.Characters.Add(placed);
         PlaceCharacterVisual(placed);
         SelectPlacedCharacter(placed);
@@ -225,7 +225,7 @@ public partial class MainWindow
             StatusText.Text = "That character no longer exists in the Character Editor.";
             return;
         }
-        var pasted = new PlacedCharacter { Id = _map.GetNextCharacterPlacementId(), CharacterId = copied.CharacterId, PoseId = copied.PoseId, Facing = copied.Facing, X = x, Y = y };
+        var pasted = new PlacedCharacter { Id = _map.GetNextCharacterPlacementId(), CharacterId = copied.CharacterId, PoseId = copied.PoseId, Facing = copied.Facing, X = x, Y = y, Floor = _currentFloor };
         _map.Characters.Add(pasted);
         PlaceCharacterVisual(pasted);
         SelectPlacedCharacter(pasted);
@@ -271,6 +271,7 @@ public partial class MainWindow
         }
         PositionQuantizedVisual(visual, placed.X, placed.Y, width, height);
         Panel.SetZIndex(visual, 16); // above items, below the event/start markers
+        if (FitToFloor(visual, placed.Floor) is null) return; // on a floor above the picked one
         MapCanvas.Children.Add(visual);
         _mapCharacterVisuals[placed] = visual;
         if (_selectedPlacedCharacter == placed) UpdateCharacterSelectionVisual();

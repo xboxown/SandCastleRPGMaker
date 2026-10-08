@@ -113,7 +113,7 @@ public partial class MainWindow
     // ---------- Mouse ----------
 
     private ObjectInstance? ObjectAt(int x, int y) =>
-        _map?.Objects.Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y).LastOrDefault();
+        _map?.Objects.Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y && FloorOf(o) == _currentFloor).LastOrDefault();
 
     /// <summary>Left button in Objects mode: on a placed object, select it and start dragging it; on a cell without the picked object, place it (and keep placing while the button is held).</summary>
     private void ObjectMode_MouseLeftButtonDown(int x, int y)
@@ -142,7 +142,7 @@ public partial class MainWindow
         if (!_paintingObjects) return;
         if (left != MouseButtonState.Pressed) { _paintingObjects = false; return; }
         if (!IsInsideMap(x, y) || _selectedObjectId < 0) return;
-        if (_map!.Objects.Any(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y && o.ObjectId == _selectedObjectId)) return;
+        if (_map!.Objects.Any(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y && o.ObjectId == _selectedObjectId && FloorOf(o) == _currentFloor)) return;
         PlaceNewObject(x, y);
     }
 
@@ -150,7 +150,7 @@ public partial class MainWindow
     {
         if (_map is null) return;
         var obj = _objectDatabase.Objects.FirstOrDefault(o => o.Id == _selectedObjectId);
-        var instance = new ObjectInstance { ObjectId = _selectedObjectId, X = x, Y = y, Quantity = 1, ContainerInstanceId = -1, InstanceId = _map.GetNextInstanceId() };
+        var instance = new ObjectInstance { ObjectId = _selectedObjectId, X = x, Y = y, Z = MapFloors.BaseLift(_currentFloor), Quantity = 1, ContainerInstanceId = -1, InstanceId = _map.GetNextInstanceId() };
         _map.Objects.Add(instance);
         PlaceObjectVisual(instance);
         SelectObjectInstance(instance);
@@ -290,6 +290,7 @@ public partial class MainWindow
         var pasted = CopyOf(_copiedObject);
         pasted.X = x;
         pasted.Y = y;
+        pasted.Z = MapFloors.BaseLift(_currentFloor);
         pasted.InstanceId = _map.GetNextInstanceId();
         _map.Objects.Add(pasted);
         PlaceObjectVisual(pasted);
@@ -331,6 +332,7 @@ public partial class MainWindow
         }
         // Flat things (tiles, traps) under everything; the rest above the tiles, ordered by position.
         Panel.SetZIndex(image, obj?.Type is ObjectType.Tile or ObjectType.Trap ? 9 : 10);
+        if (FitToFloor(image, FloorOf(instance)) is null) return; // on a floor above the picked one
         MapCanvas.Children.Add(image);
         _mapObjectVisuals[instance.InstanceId] = image;
         if (_selectedObjectInstance == instance) UpdateObjectSelectionVisual();

@@ -180,7 +180,9 @@ public partial class GameTestWindow : Window
         _clock = new GameClock(systemSettings.Clock.StartHour, systemSettings.Clock.TimeRate);
         _bodyContainerTemplate = systemSettings.BodyContainer ?? _bodyContainerTemplate; // how every dead body opens
 
+        BuildFloorSlabs(); // upper floors' tiles: slabs to stand on - before anything asks what's solid
         BuildMapVisual();
+        BuildUpperFloorVisuals();
         InitializeObjectStates(); // doors open/closed/locked, lights lit, bed covers laid (GameTestWindow.Objects.cs)
         BuildObjectVisuals();
         HideHiddenTraps();
@@ -454,7 +456,7 @@ public partial class GameTestWindow : Window
         _playerPixelX = _playerX * _tileWidth + _tileWidth / 2.0;
         _playerPixelY = _playerY * _tileHeight + _tileHeight / 2.0;
         // Safe to compute here: SettleAll has already run (see the constructor), so every item/object already has its real Z. The player starts standing on top of whatever solid thing is under their footprint.
-        _playerZ = StandingLiftAt(PlayerFootprint());
+        _playerZ = StandingLiftOnFloor(PlayerFootprint(), _map.StartFloor); // on the Start Position's floor
         _playerVisualLiftZ = _playerZ; // starting position - no real fall to animate on first appearing in the world
 
         _idlePose = poses.Poses.FirstOrDefault(p => p.Name == "Idle");
@@ -484,7 +486,7 @@ public partial class GameTestWindow : Window
         GameCanvas.Children.Add(_playerImage);
         SnapPlayerPosition();
 
-        _eventUnderPlayer = _map.Events.FirstOrDefault(ev => ev.X == _playerX && ev.Y == _playerY);
+        _eventUnderPlayer = EventAt(_playerX, _playerY, _playerZ);
     }
 
     /// <summary>
@@ -1444,7 +1446,7 @@ public partial class GameTestWindow : Window
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         Canvas.SetLeft(label, at.X);
         Canvas.SetTop(label, at.Y - label.DesiredSize.Height - 2);
-        Panel.SetZIndex(label, 1_000_000);
+        Panel.SetZIndex(label, AboveEverythingZIndex);
         PaperdollGumpsCanvas.Children.Add(label);
 
         var timer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };
@@ -1823,7 +1825,7 @@ public partial class GameTestWindow : Window
             if (leavingEvent is not null && (leavingEvent.X != _playerX || leavingEvent.Y != _playerY))
                 TryFireEventPages(leavingEvent, leavingEvent.EventPages, BookTriggerConditionBased.ByExit, selfBookId: -1, $"\"{leavingEvent.Name}\" fired (ByExit)");
 
-            _eventUnderPlayer = _map.Events.FirstOrDefault(ev => ev.X == _playerX && ev.Y == _playerY);
+            _eventUnderPlayer = EventAt(_playerX, _playerY, _playerZ);
             if (_eventUnderPlayer is not null)
                 TryFireEventPages(_eventUnderPlayer, _eventUnderPlayer.EventPages, BookTriggerConditionBased.ByEnter, selfBookId: -1, $"\"{_eventUnderPlayer.Name}\" fired (ByEnter)");
         }
@@ -2135,7 +2137,7 @@ public partial class GameTestWindow : Window
     /// tile, a gap no realistic stack height could ever close - so the
     /// player always won regardless of how tall anything got.
     /// </summary>
-    private static int ComputeDepthZIndex(double worldTileCenterX, double worldTileCenterY, int z) => (int)Math.Round((worldTileCenterX + worldTileCenterY) * 100) + z;
+    private static int ComputeDepthZIndex(double worldTileCenterX, double worldTileCenterY, int z) => FloorBand(z) + (int)Math.Round((worldTileCenterX + worldTileCenterY) * 100) + z;
 
     private void ApplyZToVisual(FrameworkElement visual, int x, int y, int z, int offsetX, int offsetY)
     {
@@ -2164,7 +2166,7 @@ public partial class GameTestWindow : Window
     private void ShowIdentifyLabel(string name, int cellX, int cellY, FrameworkElement? visual = null)
     {
         var shown = SetIdentifyText(name);
-        Panel.SetZIndex(shown, 1_000_000); // above everything on the map, so nothing covers the name
+        Panel.SetZIndex(shown, AboveEverythingZIndex); // above everything on the map, so nothing covers the name
         Canvas.SetLeft(shown, cellX * _tileWidth);
         double topAnchor = visual is not null ? Canvas.GetTop(visual) : cellY * _tileHeight;
         Canvas.SetTop(shown, topAnchor - (shown == IdentifyFontImage ? shown.Height + 4 : 20));

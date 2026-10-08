@@ -95,6 +95,7 @@ public partial class MainWindow : Window
         Title += $" [{BuildInfo.CurrentBuild}]";
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         InitZoom();
+        InitFloors();
         ProjectSession.Bind(() => _factionDatabase, () => _characterDatabase, () => _spriteDatabase, (owner, characterId) =>
         {
             var editor = new CharacterEditorWindow(_characterDatabase, _statDatabase, _poseDatabase, _spriteDatabase, _bookDatabase, _objectDatabase, _resourceDatabase)
@@ -171,7 +172,7 @@ public partial class MainWindow : Window
 
         _tilesetBitmap = bitmap;
         bool tilesetGenuinelyChanged = _map is not null && !string.Equals(_map.Tileset.TilesetSpriteName, sprite.Name, StringComparison.Ordinal);
-        bool mapHasPaintedTiles = _map is not null && _map.Layers.Count > 0 && _map.Layers[0].TileIndices.Any(t => t >= 0);
+        bool mapHasPaintedTiles = _map is not null && _map.Layers.Any(l => l.TileIndices.Any(t => t >= 0));
 
         if (tilesetGenuinelyChanged && mapHasPaintedTiles)
         {
@@ -1402,9 +1403,12 @@ public partial class MainWindow : Window
             });
         }
 
-        // Paint any tiles the loaded map already has (used after Load Map).
-        var ground = _map.Layers[0];
-        for (int y = 0; y < _map.Height; y++)
+        // The floors below the picked one, darkened (MainWindow.Floors.cs).
+        DrawLowerFloorTiles();
+
+        // Paint the picked floor's tiles (used after Load Map, and on changing floor).
+        var ground = _map.LayerForFloor(_currentFloor);
+        for (int y = 0; ground is not null && y < _map.Height; y++)
         {
             for (int x = 0; x < _map.Width; x++)
             {
@@ -1423,7 +1427,7 @@ public partial class MainWindow : Window
             PlaceEventVisual(gameEvent);
 
         // Restore the Start Position marker, if this map already has one.
-        if (_map.StartX >= 0 && _map.StartY >= 0)
+        if (_map.StartX >= 0 && _map.StartY >= 0 && _map.StartFloor == _currentFloor)
             PlaceStartPositionVisual(_map.StartX, _map.StartY);
 
         // Restore any books already placed on this map.
@@ -1489,7 +1493,7 @@ public partial class MainWindow : Window
             var picked = PromptForItem(_selectedItemCategory);
             if (picked is null) return;
 
-            var instance = new PlacedItemInstance { Category = picked.Category, ItemId = picked.ItemId, X = x, Y = y };
+            var instance = new PlacedItemInstance { Category = picked.Category, ItemId = picked.ItemId, X = x, Y = y, Z = MapFloors.BaseLift(_currentFloor) };
             _map.Items.Add(instance);
             PlaceItemVisual(instance);
             StatusText.Text = $"Placed \"{picked.DisplayName}\" at ({x}, {y}).";
@@ -1498,8 +1502,9 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.StartPosition)
         {
+            _map.StartFloor = _currentFloor;
             PlaceStartPositionVisual(x, y);
-            StatusText.Text = $"Start Position set to ({x}, {y}).";
+            StatusText.Text = $"Start Position set to ({x}, {y}) on floor {_currentFloor}.";
             return;
         }
 
@@ -1508,7 +1513,7 @@ public partial class MainWindow : Window
             if (ctrl)
             {
                 // Pick up the event at this cell so it can be dropped elsewhere on mouse-up.
-                var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
+                var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor);
                 if (existing is null) return;
 
                 _draggingEvent = existing;
@@ -1520,7 +1525,7 @@ public partial class MainWindow : Window
                 return;
             }
 
-            var eventAtCell = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
+            var eventAtCell = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor);
             if (eventAtCell is not null) _selectedMapEvent = eventAtCell; // click on an existing marker selects it for keyboard shortcuts, without opening it
 
             // Per spec: click places a marker, double-click opens it for
@@ -1535,7 +1540,7 @@ public partial class MainWindow : Window
             if (eventAtCell is null)
             {
                 int newId = _map.GetNextEventId();
-                var newEvent = new GameEvent { Id = newId, Name = $"Event {newId}", X = x, Y = y };
+                var newEvent = new GameEvent { Id = newId, Name = $"Event {newId}", X = x, Y = y, Floor = _currentFloor };
                 _map.Events.Add(newEvent);
                 PlaceEventVisual(newEvent);
                 _selectedMapEvent = newEvent;
@@ -1554,7 +1559,7 @@ public partial class MainWindow : Window
 
         if (_drawShape == DrawShape.Single)
         {
-            _map.Layers[0].SetTile(x, y, _map.Width, _selectedTileIndex);
+            CurrentFloorLayer.SetTile(x, y, _map.Width, _selectedTileIndex);
             PaintCellVisual(x, y, _selectedTileIndex);
             _isFreehandPainting = true; // per spec: click-and-drag paints continuously like a normal pencil tool, no modifier key needed
         }
@@ -1614,7 +1619,7 @@ public partial class MainWindow : Window
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
 
-        _map.Layers[0].SetTile(x, y, _map.Width, _selectedTileIndex);
+        CurrentFloorLayer.SetTile(x, y, _map.Width, _selectedTileIndex);
         PaintCellVisual(x, y, _selectedTileIndex);
     }
 
@@ -1659,7 +1664,7 @@ public partial class MainWindow : Window
             foreach (var (cx, cy) in cells)
             {
                 if (!IsInsideMap(cx, cy)) continue;
-                _map.Layers[0].SetTile(cx, cy, _map.Width, _selectedTileIndex);
+                CurrentFloorLayer.SetTile(cx, cy, _map.Width, _selectedTileIndex);
                 PaintCellVisual(cx, cy, _selectedTileIndex);
             }
         }
@@ -1676,7 +1681,7 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.Event)
         {
-            var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
+            var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor);
             if (existing is not null) _selectedMapEvent = existing;
             ShowMapEventContextMenu(existing, x, y);
             return;
@@ -1696,7 +1701,7 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.Item)
         {
-            var itemInstance = _map.Items.FirstOrDefault(i => i.X == x && i.Y == y);
+            var itemInstance = _map.Items.FirstOrDefault(i => i.X == x && i.Y == y && FloorOf(i) == _currentFloor);
             if (itemInstance is null) return;
 
             _map.Items.Remove(itemInstance);
@@ -1710,7 +1715,7 @@ public partial class MainWindow : Window
         }
 
         {
-            _map.Layers[0].SetTile(x, y, _map.Width, -1);
+            CurrentFloorLayer.SetTile(x, y, _map.Width, -1);
 
             if (_mapCellAnimators.TryGetValue((x, y), out var animator))
             {
@@ -1788,6 +1793,7 @@ public partial class MainWindow : Window
             Name = $"{source.Name} (Copy)",
             X = newX,
             Y = newY,
+            Floor = source.Floor,
             EventPages = CloneEventPages(source.EventPages)
         };
         _map.Events.Add(duplicate);
@@ -1814,7 +1820,7 @@ public partial class MainWindow : Window
     private void PasteMapEvent(int x, int y)
     {
         if (_map is null || _copiedEventPages is null) return;
-        if (_map.Events.Any(ev => ev.X == x && ev.Y == y))
+        if (_map.Events.Any(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor))
         {
             MessageBox.Show("There's already an event at this cell.", "Paste Event", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
@@ -1827,6 +1833,7 @@ public partial class MainWindow : Window
             Name = $"Event {newId}",
             X = x,
             Y = y,
+            Floor = _currentFloor,
             EventPages = CloneEventPages(_copiedEventPages) // clone again - pasting more than once must never have every copy share the same page objects
         };
         _map.Events.Add(pasted);
@@ -1990,7 +1997,7 @@ public partial class MainWindow : Window
     {
         if (_map is null) return;
 
-        var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y);
+        var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor);
         bool isNew = existing is null;
 
         var target = existing ?? new GameEvent
@@ -1998,7 +2005,8 @@ public partial class MainWindow : Window
             Id = _map.GetNextEventId(),
             Name = $"Event {_map.GetNextEventId()}",
             X = x,
-            Y = y
+            Y = y,
+            Floor = _currentFloor
         };
 
         var dialog = new EventEditorWindow(target, _resourceDatabase, _variableDatabase, _bookDatabase, _objectDatabase, _spriteDatabase, _statDatabase, _containerDatabase) { Owner = this };
@@ -2025,6 +2033,7 @@ public partial class MainWindow : Window
 
         if (_mapEventVisuals.TryGetValue(gameEvent.Id, out var old))
             MapCanvas.Children.Remove(old);
+        if (gameEvent.Floor != _currentFloor) { _mapEventVisuals.Remove(gameEvent.Id); return; } // only the picked floor's events show
 
         // Pulsating green, PS4-light style: a continuous, looping brightness
         // fade on the fill color itself (not just opacity), so it genuinely
@@ -2340,9 +2349,11 @@ public partial class MainWindow : Window
 
         PositionQuantizedVisual(marker, instance.X, instance.Y, markerW, markerH);
         Panel.SetZIndex(marker, 15); // Above tiles/objects, below the "E"/"S" markers - an item is something you walk up to and interact with, not a trigger zone.
+        var onFloor = FitToFloor(marker, FloorOf(instance));
+        if (onFloor is null) return; // on a floor above the picked one
 
         MapCanvas.Children.Add(marker);
-        _mapItemVisuals[(instance.X, instance.Y)] = marker;
+        if (onFloor == true) _mapItemVisuals[(instance.X, instance.Y)] = marker; // only the picked floor's items can be clicked
     }
 
     private static BitmapImage? LoadStaticFrame(string path)
