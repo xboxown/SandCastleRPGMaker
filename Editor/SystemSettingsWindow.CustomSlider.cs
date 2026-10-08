@@ -86,6 +86,9 @@ public partial class SystemSettingsWindow
             Refresh();
         };
 
+        var help = new Button { Content = "How custom sliders work (with pictures)...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 0, 8) };
+        help.Click += (_, _) => new CustomSliderHelpWindow { Owner = this }.ShowDialog();
+        panel.Children.Add(help);
         panel.Children.Add(SliderSpritePicker("Background:", design.Background, sprites, Refresh));
 
         // The design canvas and, beside it, the selected piece's properties.
