@@ -36,12 +36,13 @@ public partial class SelectItemPickerWindow : Window
             b => ResolveSpriteEntry(b.SpriteGroup, b.SpriteName),
             ReferencedItemCategory.Book);
 
-        // Objects only ever have a flat IconPath - no SpriteGroup/Frames/Fps concept exists for them, so a static picture is genuinely all there is to show here, not a gap to fix.
-        BuildCategoryTab(ObjectsTabContent, _objects.Objects,
+        // Objects have their own Sprite Editor look now (SpriteGroup/SpriteName), animated like a book's; older objects without one still show their flat IconPath.
+        BuildAnimatedCategoryTab(ObjectsTabContent, _objects.Objects,
             o => o.Id, o => o.Name,
             o => $"Name: {o.Name}\nPortable: {o.IsPortable}\nStackable: {o.IsStackable}\nContainer: {o.IsContainer}\nInteractable: {o.IsInteractable}",
-            o => string.IsNullOrEmpty(o.IconPath) ? null : o.IconPath,
-            ReferencedItemCategory.Object);
+            o => string.IsNullOrEmpty(o.SpriteName) ? null : ResolveSpriteEntry(o.SpriteGroup, o.SpriteName),
+            ReferencedItemCategory.Object,
+            o => string.IsNullOrEmpty(o.IconPath) ? null : o.IconPath);
 
         // Containers reference a real animated SpriteEntry, exactly the same shape as Book's own world sprite - same real preview treatment, not the static-picture path Objects use.
         BuildAnimatedCategoryTab(ContainersTabContent, _containers.Containers,
@@ -138,7 +139,7 @@ public partial class SelectItemPickerWindow : Window
     /// <summary>Same shape as BuildCategoryTab, but for entries with a real animated SpriteEntry (Books) instead of a flat static-image path (Objects) - the preview shows real Frames/FPS/Loop animation, same as everywhere else that's been upgraded to this.</summary>
     private void BuildAnimatedCategoryTab<T>(Grid container, IEnumerable<T> entries,
         Func<T, int> getId, Func<T, string> getName, Func<T, string> buildInfoText, Func<T, SpriteEntry?> getSprite,
-        ReferencedItemCategory category)
+        ReferencedItemCategory category, Func<T, string?>? getFallbackImagePath = null)
     {
         container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
         container.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(220) });
@@ -179,6 +180,8 @@ public partial class SelectItemPickerWindow : Window
                 currentAnimator = new SpriteAnimator(sprite, infoImage);
                 _activeAnimators.Add(currentAnimator);
             }
+            else if (getFallbackImagePath?.Invoke(entry) is { } imagePath && File.Exists(imagePath))
+                infoImage.Source = LoadBitmap(imagePath); // older objects without a sprite
 
             Result = new ItemReference { Category = category, ItemId = getId(entry), DisplayName = getName(entry) };
         };

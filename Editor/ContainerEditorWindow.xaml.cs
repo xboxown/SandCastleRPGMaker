@@ -776,7 +776,16 @@ public partial class ContainerEditorWindow : Window
             else if (item.Category == ReferencedItemCategory.Object)
             {
                 var obj = _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId);
-                if (!string.IsNullOrEmpty(obj?.IconPath) && File.Exists(obj.IconPath))
+                var sprite = obj is null || string.IsNullOrEmpty(obj.SpriteName) ? null
+                    : _sprites.Groups.FirstOrDefault(g => g.Name == obj.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == obj.SpriteName)
+                      ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == obj.SpriteName);
+                if (sprite is not null && sprite.Frames.Count > 0) // its look from the Sprite Editor, as the game draws it
+                {
+                    var img = new Image { Width = 32, Height = 32, Stretch = Stretch.Uniform };
+                    _contentsPreviewAnimators.Add(new SpriteAnimator(sprite, img, _resources));
+                    visual = img;
+                }
+                else if (!string.IsNullOrEmpty(obj?.IconPath) && File.Exists(obj.IconPath)) // older objects without a sprite
                     visual = new Image { Source = LoadBitmapForPreview(obj.IconPath), Width = 32, Height = 32, Stretch = Stretch.Uniform };
             }
             else if (item.Category == ReferencedItemCategory.Container)
