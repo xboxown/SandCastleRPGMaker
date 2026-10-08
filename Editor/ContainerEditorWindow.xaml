@@ -210,7 +210,7 @@
                             <StackPanel Margin="10">
                                 <TextBlock Text="Items placed here appear inside every new placement of this container at runtime, exactly like a character's own Starting Inventory." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
                                 <DockPanel Margin="0,0,0,8">
-                                    <ComboBox x:Name="ContentsCategoryCombo" DockPanel.Dock="Left" Width="90" Margin="0,0,6,0"/>
+                                    <ComboBox x:Name="ContentsCategoryCombo" DockPanel.Dock="Left" Width="150" Margin="0,0,6,0"/>
                                     <ComboBox x:Name="ContentsItemCombo" DockPanel.Dock="Left" Width="220" Margin="0,0,6,0" DisplayMemberPath="Name"/>
                                     <Button Content="Add" Width="60" Click="AddContents_Click"/>
                                 </DockPanel>

@@ -1090,7 +1090,7 @@ public partial class CharacterEditorWindow : Window
 
     private void PopulateInventoryCategoryChoices()
     {
-        InventoryCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Book, ReferencedItemCategory.Object, ReferencedItemCategory.Container };
+        InventoryCategoryCombo.ItemsSource = StartingContentsChoice.All(); // Book, Container and every object type
         InventoryCategoryCombo.SelectionChanged -= InventoryCategoryCombo_SelectionChanged;
         InventoryCategoryCombo.SelectionChanged += InventoryCategoryCombo_SelectionChanged;
         InventoryCategoryCombo.SelectedIndex = 0;
@@ -1098,11 +1098,11 @@ public partial class CharacterEditorWindow : Window
 
     private void InventoryCategoryCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (InventoryCategoryCombo.SelectedItem is not ReferencedItemCategory category) return;
-        InventoryItemCombo.ItemsSource = category switch
+        if (InventoryCategoryCombo.SelectedItem is not StartingContentsChoice choice) return;
+        InventoryItemCombo.ItemsSource = choice.Category switch
         {
             ReferencedItemCategory.Book => _books.Books.Cast<object>().ToList(),
-            ReferencedItemCategory.Object => _objects.Objects.Cast<object>().ToList(),
+            ReferencedItemCategory.Object => choice.ObjectsOf(_objects.Objects).Cast<object>().ToList(),
             ReferencedItemCategory.Container => Containers.Containers.Where(c => !c.IsBodyContainer).Cast<object>().ToList(), // a body isn't something you carry
             _ => new List<object>()
         };
@@ -1112,7 +1112,7 @@ public partial class CharacterEditorWindow : Window
     private void AddInventoryItem_Click(object sender, RoutedEventArgs e)
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
-        if (InventoryCategoryCombo.SelectedItem is not ReferencedItemCategory category) return;
+        if (InventoryCategoryCombo.SelectedItem is not StartingContentsChoice { Category: var category }) return;
         int itemId = InventoryItemCombo.SelectedItem switch
         {
             BookData book => book.Id,

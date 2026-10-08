@@ -866,7 +866,7 @@ public partial class ContainerEditorWindow : Window
 
     private void PopulateContentsCategoryChoices()
     {
-        ContentsCategoryCombo.ItemsSource = new[] { ReferencedItemCategory.Book, ReferencedItemCategory.Object, ReferencedItemCategory.Container };
+        ContentsCategoryCombo.ItemsSource = StartingContentsChoice.All(); // Book, Container and every object type
         ContentsCategoryCombo.SelectionChanged -= ContentsCategoryCombo_SelectionChanged;
         ContentsCategoryCombo.SelectionChanged += ContentsCategoryCombo_SelectionChanged;
         ContentsCategoryCombo.SelectedIndex = 0;
@@ -874,11 +874,11 @@ public partial class ContainerEditorWindow : Window
 
     private void ContentsCategoryCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        if (ContentsCategoryCombo.SelectedItem is not ReferencedItemCategory category) return;
-        ContentsItemCombo.ItemsSource = category switch
+        if (ContentsCategoryCombo.SelectedItem is not StartingContentsChoice choice) return;
+        ContentsItemCombo.ItemsSource = choice.Category switch
         {
             ReferencedItemCategory.Book => _books.Books.Cast<object>().ToList(),
-            ReferencedItemCategory.Object => _objects.Objects.Cast<object>().ToList(),
+            ReferencedItemCategory.Object => choice.ObjectsOf(_objects.Objects).Cast<object>().ToList(),
             ReferencedItemCategory.Container => Database.Containers.Cast<object>().ToList(),
             _ => new List<object>()
         };
@@ -887,7 +887,7 @@ public partial class ContainerEditorWindow : Window
     private void AddContents_Click(object sender, RoutedEventArgs e)
     {
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
-        if (ContentsCategoryCombo.SelectedItem is not ReferencedItemCategory category) return;
+        if (ContentsCategoryCombo.SelectedItem is not StartingContentsChoice { Category: var category }) return;
         int itemId = ContentsItemCombo.SelectedItem switch
         {
             BookData book => book.Id,
