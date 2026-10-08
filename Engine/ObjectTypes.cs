@@ -338,6 +338,15 @@ public class FurnitureSettings
     public bool Muted { get; set; }
     public int Volume { get; set; } = 100;
 
+    /// <summary>Which facing's look and spots are really used for this facing (it, else South, else any with a sprite) - the sitter or sleeper faces that way too, so it lies exactly as shown in the Object Editor for that facing.</summary>
+    public SpriteDirection? ResolveDirection(SpriteDirection facing)
+    {
+        if (Facings.TryGetValue(facing, out var exact) && exact.Sprite.IsSet) return facing;
+        if (Facings.TryGetValue(SpriteDirection.South, out var south) && south.Sprite.IsSet) return SpriteDirection.South;
+        foreach (var (direction, f) in Facings) if (f.Sprite.IsSet) return direction;
+        return null;
+    }
+
     /// <summary>The facing's settings, falling back to the nearest one that has a sprite.</summary>
     public FurnitureFacing? Resolve(SpriteDirection facing)
     {

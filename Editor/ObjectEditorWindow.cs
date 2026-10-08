@@ -726,11 +726,12 @@ public partial class ObjectEditorWindow : Window
                 int index = i;
                 if (body is not null)
                 {
-                    double bw = body.PixelWidth, bh = body.PixelHeight;
-                    var ghost = new Image { Source = body, Width = bw * zoom, Height = bh * zoom, Opacity = 0.8, Tag = i, Cursor = Cursors.SizeAll,
+                    // Exactly as the game draws it: in a box rounded up to 8 pixels (fitted, centred), the box's bottom middle on the spot.
+                    var (bw, bh) = SpriteSizing.Quantize(body.PixelWidth, body.PixelHeight);
+                    var ghost = new Image { Source = body, Width = bw * zoom, Height = bh * zoom, Stretch = Stretch.Uniform, Opacity = 0.8, Tag = i, Cursor = Cursors.SizeAll,
                         ToolTip = $"{(bed ? "Sleeper" : "Sitter")} {i + 1} - drag to move, right-click to remove" };
                     RenderOptions.SetBitmapScalingMode(ghost, BitmapScalingMode.NearestNeighbor);
-                    Canvas.SetLeft(ghost, (spot.X + pad - bw / 2) * zoom); // the game: feet (bottom middle) on the spot
+                    Canvas.SetLeft(ghost, (spot.X + pad - bw / 2.0) * zoom);
                     Canvas.SetTop(ghost, (spot.Y + pad - bh) * zoom);
                     ghost.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
                     ghost.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };

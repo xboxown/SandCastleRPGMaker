@@ -57,8 +57,11 @@ public partial class GameTestWindow
         if (spot < 0 || spot >= spots.Count || !_objectVisuals.TryGetValue(furniture, out var visual) || visual is not FrameworkElement element) return null;
         var sprite = ObjectLooks.SpriteFor(obj, StateOf(furniture), _sprites);
         var frame = sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[0].FilePath) : null;
-        double scale = frame is null || frame.PixelWidth == 0 ? 1 : element.Width / frame.PixelWidth;
-        double left = Canvas.GetLeft(element) + furniture.Z * LiftPixelShift, top = Canvas.GetTop(element) + furniture.Z * LiftPixelShift;
+        // The picture is drawn fitted into its box (rounded up to 8 pixels), keeping its shape, centred - the spot is on the picture itself.
+        double fw = frame?.PixelWidth ?? 0, fh = frame?.PixelHeight ?? 0;
+        double scale = fw <= 0 || fh <= 0 ? 1 : Math.Min(element.Width / fw, element.Height / fh);
+        double insetX = fw <= 0 ? 0 : (element.Width - fw * scale) / 2, insetY = fh <= 0 ? 0 : (element.Height - fh * scale) / 2;
+        double left = Canvas.GetLeft(element) + furniture.Z * LiftPixelShift + insetX, top = Canvas.GetTop(element) + furniture.Z * LiftPixelShift + insetY;
         return (left + spots[spot].X * scale, top + spots[spot].Y * scale, furniture.Z);
     }
 
@@ -210,7 +213,7 @@ public partial class GameTestWindow
         _playerY = (int)Math.Floor(_playerPixelY / _tileHeight);
         _playerZ = p.Lift;
         _playerVisualLiftZ = _playerZ;
-        _playerFacing = furniture.Facing; // Exult: the sitter faces the chair's way
+        _playerFacing = obj.Furniture.ResolveDirection(furniture.Facing) ?? furniture.Facing; // Exult: the sitter faces the chair's way - the facing whose look and spots are used
         ApplyPoseSprite(PoseByName(bed ? "Sleeping" : "Sit") ?? _idlePose);
         PlaySound(obj.Furniture.SitSoundResourceId);
         if (bed) SetCover(furniture, obj, turnedDown: true);
@@ -266,7 +269,7 @@ public partial class GameTestWindow
         mapCharacter.Placement.X = (int)Math.Floor(mapCharacter.PixelX / _tileWidth);
         mapCharacter.Placement.Y = (int)Math.Floor(mapCharacter.PixelY / _tileHeight);
         mapCharacter.Lift = p.Lift;
-        SetCharacterPose(mapCharacter, bed ? "Sleeping" : "Sit", target.Furniture.Facing);
+        SetCharacterPose(mapCharacter, bed ? "Sleeping" : "Sit", obj.Furniture.ResolveDirection(target.Furniture.Facing) ?? target.Furniture.Facing); // the facing whose look and spots are used
         PositionCharacterVisual(mapCharacter);
         if (bed) SetCover(target.Furniture, obj, turnedDown: true);
         if (bed) LockHouseDoorsForNight(mapCharacter); // its own doors locked for the night
