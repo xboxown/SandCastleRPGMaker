@@ -685,7 +685,20 @@ public partial class GameTestWindow
             obj = candidate as ObjectInstance;
         }
 
-        if (!TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out int newOffsetX, out int newOffsetY, out int newZ, out string rejection, out MousePointerKind rejectionPointer))
+        // drag.cc drop_on_map: "for (int lift = max_lift; lift >= 0; lift--)" - the release point is projected at each lift in turn (a thing at lift z is
+        // drawn z*4px up-left), highest first, and the first lift where the thing really comes to rest there wins. So something let go of over a table
+        // top lands under the pointer on the top, not one table-height down-right on the floor behind it. Nothing fits at any lift: the ground (lift 0) rules.
+        int newOffsetX = 0, newOffsetY = 0, newZ = 0;
+        bool placed = false;
+        for (int lift = _playerZ + MaxDropAboveActor; lift > 0 && !placed; lift--)
+        {
+            double liftedLeft = Math.Clamp(visualLeft + lift * LiftPixelShift, 0, Math.Max(0, GameCanvas.Width - _tileWidth));
+            double liftedTop = Math.Clamp(visualTop + lift * LiftPixelShift, 0, Math.Max(0, GameCanvas.Height - _tileHeight));
+            var (liftCellX, liftCellY) = ComputeDropCell(liftedLeft, liftedTop, visualWidth, visualHeight);
+            if (TryResolveMapPlacement(item, obj, liftCellX, liftCellY, liftedLeft, liftedTop, visualWidth, visualHeight, out int ox, out int oy, out int z, out _, out _) && z == lift)
+                (newCellX, newCellY, newOffsetX, newOffsetY, newZ, placed) = (liftCellX, liftCellY, ox, oy, z, true);
+        }
+        if (!placed && !TryResolveMapPlacement(item, obj, newCellX, newCellY, visualLeft, visualTop, visualWidth, visualHeight, out newOffsetX, out newOffsetY, out newZ, out string rejection, out MousePointerKind rejectionPointer))
         {
             Refuse(rejectionPointer, rejection);
             return false;
