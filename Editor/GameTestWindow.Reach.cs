@@ -151,7 +151,7 @@ public partial class GameTestWindow
         foreach (var p in line)
         {
             if (toVol.Has(p) || srcVol.Has(p) || movedVol.Has(p)) continue;
-            if (query.BlockingAt(p) is { } blocker && !query.Movable(blocker.Entity)) return false;
+            if (query.ReachBlockerAt(p) is { } blocker && !query.Movable(blocker.Entity)) return false;
         }
         return true;
     }
@@ -258,6 +258,19 @@ public partial class GameTestWindow
         }
 
         public bool IsOccupied(Tile3 t) => BlockingAt(t) is not null;
+
+        /// <summary>
+        /// The solid thing a reaching arm would hit here. A table never does: you reach over it to
+        /// put things on its top, take them off, or reach what's behind it (in Ultima VII a table is
+        /// always lower than the avatar's head, so Exult's line passes over it - here a table may be
+        /// drawn as tall as the player, and must still be reachable over). You still walk around it.
+        /// </summary>
+        public Body? ReachBlockerAt(Tile3 t)
+        {
+            foreach (var body in SolidsAt(t.X, t.Y))
+                if (t.Z >= body.Z && t.Z < body.TopLift && !(body.Entity is ObjectInstance o && _window.DefinitionOf(o)?.Type == ObjectType.Table)) return body;
+            return null;
+        }
 
         public bool Movable(object entity) => _window.IsMovable(entity);
 
