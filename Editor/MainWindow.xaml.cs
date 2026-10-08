@@ -94,6 +94,7 @@ public partial class MainWindow : Window
         InitializeComponent();
         Title += $" [{BuildInfo.CurrentBuild}]";
         PreviewKeyDown += MainWindow_PreviewKeyDown;
+        InitZoom();
         ProjectSession.Bind(() => _factionDatabase, () => _characterDatabase, () => _spriteDatabase, (owner, characterId) =>
         {
             var editor = new CharacterEditorWindow(_characterDatabase, _statDatabase, _poseDatabase, _spriteDatabase, _bookDatabase, _objectDatabase, _resourceDatabase)
@@ -1388,7 +1389,7 @@ public partial class MainWindow : Window
             {
                 X1 = col * _tileset.TileWidth, Y1 = 0,
                 X2 = col * _tileset.TileWidth, Y2 = pixelHeight,
-                Stroke = Brushes.Gray, StrokeThickness = 0.5, Opacity = 0.5
+                Stroke = Brushes.Gray, StrokeThickness = GridLineThickness, Opacity = 0.5, Tag = GridLineTag
             });
         }
         for (int row = 0; row <= _map.Height; row++)
@@ -1397,7 +1398,7 @@ public partial class MainWindow : Window
             {
                 X1 = 0, Y1 = row * _tileset.TileHeight,
                 X2 = pixelWidth, Y2 = row * _tileset.TileHeight,
-                Stroke = Brushes.Gray, StrokeThickness = 0.5, Opacity = 0.5
+                Stroke = Brushes.Gray, StrokeThickness = GridLineThickness, Opacity = 0.5, Tag = GridLineTag
             });
         }
 
