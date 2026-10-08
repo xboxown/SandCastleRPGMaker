@@ -334,6 +334,16 @@ public class FurnitureSettings
     /// <summary>Bed only: the Junk object laid over the bed as its cover - frame 1 made, frame 2 turned down over a sleeper.</summary>
     public int CoverObjectId { get; set; } = -1;
     public int SitSoundResourceId { get; set; } = -1;
+
+    // ---------- Bed: sleeping the hours away (Exult's rest: the clock jumps on) ----------
+    /// <summary>Bed only: lying down, the player is asked how many hours to sleep (the slider, System Settings > Slider).</summary>
+    public bool AsksSleepHours { get; set; } = true;
+    public string SleepQuestion { get; set; } = "How many hours wilt thou sleep?";
+    /// <summary>The slider's range for this bed (the slider allows at most 999).</summary>
+    public int SleepMinHours { get; set; } = 1;
+    public int SleepMaxHours { get; set; } = 12;
+    public int SleepDefaultHours { get; set; } = 8;
+    public int SleepStepHours { get; set; } = 1;
     /// <summary>Its animation sounds in play, as a character pose's: muted, or at this volume (0-100).</summary>
     public bool Muted { get; set; }
     public int Volume { get; set; } = 100;

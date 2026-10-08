@@ -621,6 +621,20 @@ public partial class ObjectEditorWindow : Window
             body.Children.Add(Note("In play the cover lies on the bed as its own object: a sleeper gets frame 2 drawn over them, and getting up makes the bed again (frame 1) - as Exult's Sleep_schedule turns the bedspread down and makes the bed. The cover can be taken off the bed like any object; with none, the bed has no cover."));
         }
         body.Children.Add(SoundPicker(bed ? "Lie down sound" : "Sit sound", () => f.SitSoundResourceId, v => f.SitSoundResourceId = v));
+        if (!bed) return;
+        var sleep = Group("Sleeping in it (the player)");
+        sleep.Children.Add(Check("Ask how many hours to sleep (the slider - Edit > Settings > Slider)", () => f.AsksSleepHours, v => { f.AsksSleepHours = v; ShowCurrent(); }));
+        if (!f.AsksSleepHours) { sleep.Children.Add(Note("Unticked: lying down is just lying down - no sleep, no time passing.")); return; }
+        sleep.Children.Add(TextField("Question", 320, () => f.SleepQuestion, v => f.SleepQuestion = v));
+        var range = new WrapPanel();
+        range.Children.Add(NumberField("Fewest hours", () => f.SleepMinHours, v => f.SleepMinHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
+        range.Children.Add(NumberField("Most hours (999 at most)", () => f.SleepMaxHours, v => f.SleepMaxHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
+        range.Children.Add(NumberField("Starts at", () => f.SleepDefaultHours, v => f.SleepDefaultHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
+        range.Children.Add(NumberField("Step", () => f.SleepStepHours, v => f.SleepStepHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
+        sleep.Children.Add(range);
+        sleep.Children.Add(Note("Lying down, the player is asked how long to sleep, within this range. Accepted: the screen fades to black and the hours pass at once, as Exult's rest does - " +
+                               "food goes down by the hours slept, health and mana come back, ailments wear off, lights burn down, and everyone moves on to where their schedule puts them. " +
+                               "Then it fades back in, still lying in bed (move to get up). Escape: just lying there. Not with enemies in sight."));
     }
 
     /// <summary>The Character Editor's direction wheel: eight dots round a circle (green: has a sprite), the chosen one blue with a line to it. Click a dot to pick that facing.</summary>

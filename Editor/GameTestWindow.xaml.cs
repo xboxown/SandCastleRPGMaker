@@ -1482,7 +1482,14 @@ public partial class GameTestWindow : Window
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (PlayerKnockedOut && e.Key != Key.F6) { e.Handled = true; return; } // unconscious: nothing until back on your feet
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
-        if (_objectOverlayOpen) { if (e.Key is Key.Escape or Key.Enter or Key.Space) CloseObjectOverlay(); e.Handled = true; return; } // a map or spellbook is up
+        if (_objectOverlayOpen)
+        {
+            // A slider: its own keys. A map or a spellbook: Escape, Enter or Space puts it away.
+            if (_overlayKeys is { } keys) keys(e.Key);
+            else if (e.Key is Key.Escape or Key.Enter or Key.Space) CloseObjectOverlay();
+            e.Handled = true;
+            return;
+        }
         if (_restingNow) { e.Handled = true; return; } // the party is asleep
         if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
         if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens

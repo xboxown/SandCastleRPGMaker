@@ -43,8 +43,42 @@ public class SoundSettings
     public int DropOnMapSoundId { get; set; } = -1;
 }
 
+/// <summary>
+/// The number slider (System Settings > Slider) - Ultima VII's Slider_gump
+/// (Exult gumps/Slider_gump.cc, Slider_widget.cc), used whenever the game
+/// asks "how many" (how many hours to sleep...). Its look is the game's own:
+/// a background, left and right arrows, a diamond sliding along a track
+/// between them, the number, and a check mark to accept. Positions are in
+/// the background's pixels; the defaults are Exult's layout. Values never go
+/// past 999.
+/// </summary>
+public class SliderSettings
+{
+    public const int MaxValue = 999;
+
+    public SpriteLink Background { get; set; } = new();
+    public SpriteLink LeftArrow { get; set; } = new();
+    public SpriteLink RightArrow { get; set; } = new();
+    public SpriteLink Diamond { get; set; } = new();
+    public SpriteLink CheckMark { get; set; } = new();
+    /// <summary>Where the left arrow starts (Exult: the widget at 24, 6).</summary>
+    public int SliderX { get; set; } = 24;
+    public int SliderY { get; set; } = 6;
+    /// <summary>The track's length between the arrows (Exult: 64).</summary>
+    public int TrackWidth { get; set; } = 64;
+    /// <summary>Where the number ends (it's written right-aligned there; Exult: 128, 7).</summary>
+    public int NumberX { get; set; } = 128;
+    public int NumberY { get; set; } = 7;
+    /// <summary>The check mark (Exult: 22, 18).</summary>
+    public int CheckX { get; set; } = 22;
+    public int CheckY { get; set; } = 18;
+    /// <summary>Played each time the value changes.</summary>
+    public int ClickSoundResourceId { get; set; } = -1;
+}
+
 public class SystemSettings
 {
+    public SliderSettings Slider { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();
     public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();

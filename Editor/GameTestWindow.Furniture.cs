@@ -220,6 +220,7 @@ public partial class GameTestWindow
         StatusText.Text = bed ? $"You lie down on \"{obj.Name}\". Move to get up." : $"You sit on \"{obj.Name}\". Move to get up.";
         FixFurnitureDrawOrder();
         FireObjectEvent(furniture, obj, BookTriggerConditionBased.ByEnter);
+        if (bed) AskHowLongToSleep(obj); // the slider: how many hours (Exult's rest)
     }
 
     // ---------- NPCs (Sit and Sleep schedules) ----------

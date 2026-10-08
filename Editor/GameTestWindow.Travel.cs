@@ -196,8 +196,18 @@ public partial class GameTestWindow
         if (u.Obj.Bedroll.WakeAtDawn) hours = (6 - _clock.Hour + 24) % 24 is int untilDawn && untilDawn > 0 ? untilDawn : 24;
         hours = Math.Clamp(hours, 1, 24);
         if (u.Placed is { } laid) { laid.IsOpenRuntime = true; RefreshObjectLook(laid); } // laid out
-        _restingNow = true;
         ApplyPoseSprite(PoseByName("Sleeping") ?? _idlePose);
+        SleepTheHoursAway(hours, () =>
+        {
+            ApplyPoseSprite(_idlePose);
+            if (u.Placed is { } placed && _map.Objects.Contains(placed)) { placed.IsOpenRuntime = false; RefreshObjectLook(placed); }
+        });
+    }
+
+    /// <summary>The screen fades to black, Exult's rest makes the hours pass at once (advanceTimeDueToRest), and it fades back in.</summary>
+    private void SleepTheHoursAway(int hours, Action? onWake)
+    {
+        _restingNow = true;
         var dark = new Rectangle { Fill = Brushes.Black, Opacity = 0, IsHitTestVisible = false };
         Panel.SetZIndex(dark, 999);
         ViewportHost.Children.Add(dark);
@@ -210,13 +220,33 @@ public partial class GameTestWindow
             {
                 ViewportHost.Children.Remove(dark);
                 _restingNow = false;
-                ApplyPoseSprite(_idlePose);
-                if (u.Placed is { } placed && _map.Objects.Contains(placed)) { placed.IsOpenRuntime = false; RefreshObjectLook(placed); }
+                onWake?.Invoke();
                 StatusText.Text = $"You wake, rested ({hours} hour{(hours == 1 ? "" : "s")} have passed).";
             };
             dark.BeginAnimation(UIElement.OpacityProperty, rise);
         };
         dark.BeginAnimation(UIElement.OpacityProperty, fall);
+    }
+
+    /// <summary>Not with enemies in sight (Exult's rest refuses too).</summary>
+    private bool FoesInSight() =>
+        _player is not null && AllLivingCharacters().Any(c => !IsPartyOrPlayer(c) && !IsIncapacitated(c) && Attitude(c, _player) == FactionBehavior.Attack && CanSee(c, _player));
+
+    /// <summary>
+    /// Lying down in a bed: the slider asks how many hours (the bed's own
+    /// range), then the hours pass as Exult's rest does. Escape: just lying
+    /// there. Enemies in sight: no sleeping.
+    /// </summary>
+    private void AskHowLongToSleep(WorldObject bed)
+    {
+        var f = bed.Furniture;
+        if (!f.AsksSleepHours || _player is null) return;
+        int max = Math.Clamp(f.SleepMaxHours, 1, SliderSettings.MaxValue), min = Math.Clamp(f.SleepMinHours, 1, max);
+        ShowNumberSlider(f.SleepQuestion, min, max, f.SleepStepHours, Math.Clamp(f.SleepDefaultHours, min, max), hours =>
+        {
+            if (FoesInSight()) { AvatarBark("We cannot rest with foes about!"); StatusText.Text = "You can't sleep with enemies in sight."; return; }
+            SleepTheHoursAway(hours, null); // wakes still lying in bed - move to get up
+        });
     }
 
     /// <summary>advanceTimeDueToRest for the party, then the clock moves on.</summary>
