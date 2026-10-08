@@ -23,7 +23,7 @@ public partial class MainWindow
     private bool _settingFloorCombo;
 
     /// <summary>Draw-order step per floor below: a lower floor's things are all under this floor's.</summary>
-    private const int LowerFloorZIndexStep = 1000;
+    private const int LowerFloorZIndexStep = 1_000_000;
 
     private void InitFloors()
     {

@@ -151,13 +151,13 @@ public partial class MainWindow
             var outline = new Border { BorderBrush = Brushes.Cyan, BorderThickness = new Thickness(1.5), IsHitTestVisible = false, Width = to.Width + 4, Height = to.Height + 4 };
             Canvas.SetLeft(outline, Canvas.GetLeft(to) - 2);
             Canvas.SetTop(outline, Canvas.GetTop(to) - 2);
-            Panel.SetZIndex(outline, 17);
+            Panel.SetZIndex(outline, SelectionZIndex);
             var line = new Line
             {
                 X1 = start.X, Y1 = start.Y, X2 = Canvas.GetLeft(to) + to.Width / 2, Y2 = Canvas.GetTop(to) + to.Height / 2,
                 Stroke = Brushes.Cyan, StrokeThickness = 1, StrokeDashArray = new DoubleCollection { 3, 2 }, IsHitTestVisible = false
             };
-            Panel.SetZIndex(line, 17);
+            Panel.SetZIndex(line, SelectionZIndex);
             MapCanvas.Children.Add(outline);
             MapCanvas.Children.Add(line);
             _linkVisuals.Add(outline);

@@ -43,7 +43,7 @@ public partial class GameTestWindow
                 if (placed.Category == ReferencedItemCategory.Container && !ItemWeights.WeighsOnlyItself(placed.Category, placed.ItemId, _containers))
                 {
                     // Never opened: its Starting Contents are in it all the same.
-                    var contents = placed.InstanceId == 0 ? SeedStartingContents(placed.ItemId) : placed.Contents;
+                    var contents = placed.InstanceId == 0 ? SeedContentsOf(placed) : placed.Contents;
                     weight += contents.Sum(i => ItemWeights.WeightOf(i, _containers, _books, _objects));
                 }
                 return weight;

@@ -270,7 +270,7 @@ public partial class MainWindow
             visual = BuildLetteredItemMarker("C", Color.FromArgb(200, 160, 60, 160), Brushes.Orchid, tip);
         }
         PositionQuantizedVisual(visual, placed.X, placed.Y, width, height);
-        Panel.SetZIndex(visual, 16); // above items, below the event/start markers
+        Panel.SetZIndex(visual, CharacterZIndex); // above objects and items, below the event/start markers
         if (FitToFloor(visual, placed.Floor) is null) return; // on a floor above the picked one
         MapCanvas.Children.Add(visual);
         _mapCharacterVisuals[placed] = visual;
@@ -296,7 +296,7 @@ public partial class MainWindow
         };
         Canvas.SetLeft(_characterSelectionVisual, Canvas.GetLeft(visual) - 2);
         Canvas.SetTop(_characterSelectionVisual, Canvas.GetTop(visual) - 2);
-        Panel.SetZIndex(_characterSelectionVisual, 17);
+        Panel.SetZIndex(_characterSelectionVisual, SelectionZIndex);
         MapCanvas.Children.Add(_characterSelectionVisual);
     }
 

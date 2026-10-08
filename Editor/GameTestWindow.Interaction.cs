@@ -712,6 +712,8 @@ public partial class GameTestWindow
         }
         SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
         SetZ((object?)item ?? obj!, newZ);
+        if (item is not null) item.LiesUnder = false; // put down by hand: no longer tucked underneath anything
+        if (obj is not null) obj.LiesUnder = false;
         if (obj is not null) NoteGlassFall(obj, _playerZ, newZ); // glass let go of above a lower floor falls - and maybe shatters
         // Gravity everywhere: whatever rested on it where it came from falls, and so does the player if it was under them.
         SettleWorld();
@@ -1128,7 +1130,7 @@ public partial class GameTestWindow
                     // InstanceId 0 = this placed container was never opened, so it still holds its authored Starting Contents; anything else already has live Contents, carried over exactly as they are, empty or not.
                     Contents = m.Item.Category != ReferencedItemCategory.Container ? new List<InventoryItemInstance>()
                         : m.Item.InstanceId != 0 ? m.Item.Contents
-                        : SeedStartingContents(m.Item.ItemId)
+                        : SeedContentsOf(m.Item)
                 };
                 RepointContainerGumps(m.Item, fromMap);
                 return fromMap;
@@ -1161,9 +1163,17 @@ public partial class GameTestWindow
     {
         if (container is not PlacedItemInstance { InstanceId: 0 } placed) return false;
         placed.InstanceId = _nextContainerRuntimeInstanceId++;
-        placed.Contents.InsertRange(0, SeedStartingContents(data.Id));
+        placed.Contents.InsertRange(0, SeedContentsOf(placed));
         return true;
     }
+
+    /// <summary>What a placed container starts with: its own contents if the Map Editor gave it some (Ctrl + double-click), otherwise its Starting Contents.</summary>
+    private List<InventoryItemInstance> SeedContentsOf(PlacedItemInstance placed) =>
+        placed.OwnContents is { } own ? CopyContents(own) : SeedStartingContents(placed.ItemId);
+
+    /// <summary>Fresh live copies of authored contents - the template itself is never played with.</summary>
+    private static List<InventoryItemInstance> CopyContents(IEnumerable<InventoryItemInstance> seeds) =>
+        seeds.Select(seed => new InventoryItemInstance { InstanceId = seed.InstanceId, Category = seed.Category, ItemId = seed.ItemId, Quantity = seed.Quantity, ContainerX = seed.ContainerX, ContainerY = seed.ContainerY }).ToList();
 
     private List<InventoryItemInstance> SeedStartingContents(int containerId) =>
         _containers.Containers.FirstOrDefault(c => c.Id == containerId)?.StartingContents

@@ -117,8 +117,9 @@ public partial class GameTestWindow
         {
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-            var supports = settled.Where(b => BelowCeilingOf(b, body.Z)).ToList(); // never held up by the floor above (its slab is the ceiling)
-            int z = body.Elevates ? RestingLift(supports, rect) : SurfaceTop(supports, rect); // lying flat: on the floor - a table top is a floor
+            var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity)).ToList(); // never held up by the floor above (its slab is the ceiling), nor by something put underneath
+            int z = LiesUnder(body.Entity) ? FloorTop(supports, rect) // put underneath: on the floor itself, under the table
+                : body.Elevates ? RestingLift(supports, rect) : SurfaceTop(supports, rect); // lying flat: on the floor - a table top is a floor
             if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);
             settled.Add(body with { Z = z });
@@ -142,6 +143,13 @@ public partial class GameTestWindow
     /// <summary>The floor something lying flat comes to rest on: the top of the highest surface under it, or the ground.</summary>
     private int SurfaceTop(IEnumerable<Body> candidates, UnitRect foot) =>
         candidates.Where(b => b.Overlaps(foot) && IsSurface(b)).Select(b => b.TopLift).DefaultIfEmpty(0).Max();
+
+    /// <summary>The floor itself under this footprint - an upper floor's slab or a solid floor tile, never a table: where something put underneath lies.</summary>
+    private int FloorTop(IEnumerable<Body> candidates, UnitRect foot) =>
+        candidates.Where(b => b.Overlaps(foot) && (b.Entity is FloorSlab || (b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Tile, IsSolid: true }))).Select(b => b.TopLift).DefaultIfEmpty(0).Max();
+
+    /// <summary>Put underneath in the Map Editor (ObjectInstance / PlacedItemInstance.LiesUnder).</summary>
+    private static bool LiesUnder(object entity) => entity is ObjectInstance { LiesUnder: true } or PlacedItemInstance { LiesUnder: true };
 
     private static void SetZ(object entity, int z)
     {
@@ -182,7 +190,7 @@ public partial class GameTestWindow
         var foot = FootprintAt(newCellX, newCellY, newOffsetX + solidOffsetX, newOffsetY + solidOffsetY, sizeX, sizeY);
         var self = (object?)item ?? obj;
         int ceiling = RoofLiftOverPlayer() ?? int.MaxValue; // under a ceiling, nothing goes up through it (the floor above isn't reachable from here)
-        var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot) && b.Z < ceiling).ToList();
+        var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot) && b.Z < ceiling && !LiesUnder(b.Entity)).ToList(); // something lying under a table is no stack to put things on
         var stackedOn = others.Where(b => !IsSurface(b)).ToList(); // a table or a floor under it isn't a stack: anything can go on them
 
         if (stackedOn.Count > 0 && (!stackable || stackedOn.Any(b => !b.Stackable)))
@@ -396,6 +404,17 @@ public partial class GameTestWindow
                 if (order.TryGetValue(below.Entity, out int belowIndex)) zIndex = Math.Max(zIndex, belowIndex + 1);
             }
             order[body.Entity] = zIndex;
+            Panel.SetZIndex(visual, zIndex);
+        }
+        // Put underneath: drawn below everything over it (the table it lies under, and what's on it).
+        foreach (var body in bodies.Where(b => LiesUnder(b.Entity)))
+        {
+            if (VisualOf(body.Entity) is not { } visual) continue;
+            var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
+            int zIndex = Panel.GetZIndex(visual);
+            foreach (var over in bodies)
+                if (!ReferenceEquals(over.Entity, body.Entity) && !LiesUnder(over.Entity) && over.Overlaps(foot) && VisualOf(over.Entity) is { } overVisual)
+                    zIndex = Math.Min(zIndex, Panel.GetZIndex(overVisual) - 1);
             Panel.SetZIndex(visual, zIndex);
         }
     }

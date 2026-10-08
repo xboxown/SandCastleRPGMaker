@@ -47,7 +47,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character, Object }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -81,7 +81,8 @@ public partial class MainWindow : Window
     private GameEvent? _draggingEvent;
     private Border? _startPositionVisual;
     private Rectangle? _hoverCursorVisual;
-    private readonly Dictionary<(int x, int y), UIElement> _mapItemVisuals = new();
+    /// <summary>Each placed book / container's picture - one per placement (Free Placement lets several share a cell).</summary>
+    private readonly Dictionary<PlacedItemInstance, UIElement> _mapItemVisuals = new(ReferenceEqualityComparer.Instance);
     /// <summary>Which event marker keyboard shortcuts (Ctrl+X, Delete) act on - set whenever a mouse click (left or right) lands on an existing marker.</summary>
     private GameEvent? _selectedMapEvent;
     /// <summary>Cut/Duplicate both populate this - Paste (mouse menu or Ctrl+V) creates a new event from it wherever you target next.</summary>
@@ -981,6 +982,8 @@ public partial class MainWindow : Window
         StartPositionModeMenuItem.IsChecked = false;
         CharacterModeMenuItem.IsChecked = false;
         ObjectModeMenuItem.IsChecked = false;
+        FreeModeMenuItem.IsChecked = false;
+        ClearFreeSelection();
         ItemTypeWeaponMenuItem.IsChecked = false;
         ItemTypeArmorMenuItem.IsChecked = false;
         ItemTypeItemMenuItem.IsChecked = false;
@@ -1470,6 +1473,21 @@ public partial class MainWindow : Window
 
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control);
 
+        // Ctrl + double-click on a container: what THIS one holds (MainWindow.Free.cs).
+        if (ctrl && ContainerAtPoint(e.GetPosition(MapCanvas)) is { } clickedContainer)
+        {
+            // The first click of the double-click does nothing (it would otherwise put the picked thing on the chest); drag something onto a container to put it on top.
+            if (e.ClickCount >= 2) EditPlacedContainerContents(clickedContainer);
+            else StatusText.Text = "Ctrl + double-click a container to fill it. (To put something on top of it, drag it there.)";
+            return;
+        }
+
+        if (_editMode == EditMode.Free)
+        {
+            FreeMode_MouseLeftButtonDown(e.GetPosition(MapCanvas), ctrl);
+            return;
+        }
+
         if (_editMode == EditMode.Character)
         {
             CharacterMode_MouseLeftButtonDown(x, y);
@@ -1484,7 +1502,7 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.Item)
         {
-            if (_mapItemVisuals.ContainsKey((x, y)))
+            if (_map.Items.Any(i => i.X == x && i.Y == y && FloorOf(i) == _currentFloor))
             {
                 StatusText.Text = "There's already an item at this cell - right-click it to remove it first.";
                 return;
@@ -1607,6 +1625,7 @@ public partial class MainWindow : Window
         }
 
         if (_editMode == EditMode.Object) { ObjectMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
+        if (_editMode == EditMode.Free) { FreeMode_MouseMove(rawPoint, e.LeftButton); return; }
 
         if (!_isFreehandPainting) return;
         if (e.LeftButton != MouseButtonState.Pressed)
@@ -1636,6 +1655,7 @@ public partial class MainWindow : Window
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
 
+        if (FreeMode_MouseLeftButtonUp(e.GetPosition(MapCanvas))) return;
         if (CharacterMode_MouseLeftButtonUp(x, y)) return;
         if (ObjectMode_MouseLeftButtonUp(x, y)) return;
 
@@ -1687,6 +1707,12 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (_editMode == EditMode.Free)
+        {
+            FreeMode_MouseRightButtonDown(e.GetPosition(MapCanvas));
+            return;
+        }
+
         if (_editMode == EditMode.Character)
         {
             CharacterMode_MouseRightButtonDown(x, y);
@@ -1705,11 +1731,8 @@ public partial class MainWindow : Window
             if (itemInstance is null) return;
 
             _map.Items.Remove(itemInstance);
-            if (_mapItemVisuals.TryGetValue((x, y), out var visual))
-            {
+            if (_mapItemVisuals.Remove(itemInstance, out var visual))
                 MapCanvas.Children.Remove(visual);
-                _mapItemVisuals.Remove((x, y));
-            }
             StatusText.Text = $"Removed item at ({x}, {y}).";
             return;
         }
@@ -1880,6 +1903,12 @@ public partial class MainWindow : Window
         if (_editMode == EditMode.Object && _map is not null)
         {
             if (ObjectMode_KeyDown(e)) e.Handled = true;
+            return;
+        }
+
+        if (_editMode == EditMode.Free && _map is not null)
+        {
+            if (FreeMode_KeyDown(e)) e.Handled = true;
             return;
         }
 
@@ -2073,7 +2102,7 @@ public partial class MainWindow : Window
         };
         Canvas.SetLeft(marker, gameEvent.X * _tileset.TileWidth);
         Canvas.SetTop(marker, gameEvent.Y * _tileset.TileHeight);
-        Panel.SetZIndex(marker, 20); // Above tiles and objects.
+        Panel.SetZIndex(marker, MarkerZIndex); // Above tiles and objects.
 
         MapCanvas.Children.Add(marker);
         _mapEventVisuals[gameEvent.Id] = marker;
@@ -2147,7 +2176,7 @@ public partial class MainWindow : Window
             };
             Canvas.SetLeft(square, cx * _tileset.TileWidth);
             Canvas.SetTop(square, cy * _tileset.TileHeight);
-            Panel.SetZIndex(square, 24); // just below the hover cursor (25), above everything else
+            Panel.SetZIndex(square, MarkerZIndex + 4); // just below the hover cursor (25), above everything else
             MapCanvas.Children.Add(square);
             _shapePreviewVisuals.Add(square);
         }
@@ -2187,7 +2216,7 @@ public partial class MainWindow : Window
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed
         };
-        Panel.SetZIndex(_hoverCursorVisual, 25); // above even the "S" marker (21) - always visible regardless of what's underneath
+        Panel.SetZIndex(_hoverCursorVisual, MarkerZIndex + 5); // above even the "S" marker (21) - always visible regardless of what's underneath
         MapCanvas.Children.Add(_hoverCursorVisual);
     }
 
@@ -2231,7 +2260,7 @@ public partial class MainWindow : Window
         };
         Canvas.SetLeft(marker, x * _tileset.TileWidth);
         Canvas.SetTop(marker, y * _tileset.TileHeight);
-        Panel.SetZIndex(marker, 21); // Above even the "E" event markers - there's only ever one of these, it should never get visually buried.
+        Panel.SetZIndex(marker, MarkerZIndex + 1); // Above even the "E" event markers - there's only ever one of these, it should never get visually buried.
 
         MapCanvas.Children.Add(marker);
         _startPositionVisual = marker;
@@ -2256,6 +2285,7 @@ public partial class MainWindow : Window
     private void PlaceItemVisual(PlacedItemInstance instance)
     {
         if (_tileset is null) return;
+        if (_mapItemVisuals.Remove(instance, out var oldVisual)) MapCanvas.Children.Remove(oldVisual);
 
         SpriteEntry? sprite = null;
         string tooltip;
@@ -2347,13 +2377,15 @@ public partial class MainWindow : Window
             marker = BuildLetteredItemMarker(letter, fill, border, tooltip);
         }
 
-        PositionQuantizedVisual(marker, instance.X, instance.Y, markerW, markerH);
+        PositionPlacedVisual(marker, instance.X, instance.Y, markerW, markerH, instance.OffsetX, instance.OffsetY, instance.Z);
         Panel.SetZIndex(marker, 15); // Above tiles/objects, below the "E"/"S" markers - an item is something you walk up to and interact with, not a trigger zone.
         var onFloor = FitToFloor(marker, FloorOf(instance));
         if (onFloor is null) return; // on a floor above the picked one
 
         MapCanvas.Children.Add(marker);
-        if (onFloor == true) _mapItemVisuals[(instance.X, instance.Y)] = marker; // only the picked floor's items can be clicked
+        _mapItemVisuals[instance] = marker;
+        if (onFloor == true) ApplyFreeDrawOrder();
+        if (ReferenceEquals(_freeSelected, instance)) UpdateFreeSelectionVisual();
     }
 
     private static BitmapImage? LoadStaticFrame(string path)

@@ -216,6 +216,9 @@ public class ObjectInstance
     public int OffsetX { get; set; } = 0;
     public int OffsetY { get; set; } = 0;
 
+    /// <summary>Put underneath (Map Editor, Free Placement): it lies on the floor under whatever is over it (under a table), holds nothing up, and is drawn below what it's under. Picked up and put down again in play, it's an ordinary thing again.</summary>
+    public bool LiesUnder { get; set; }
+
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
 

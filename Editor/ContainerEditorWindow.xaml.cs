@@ -68,6 +68,51 @@ public partial class ContainerEditorWindow : Window
         RefreshContainerList();
     }
 
+    /// <summary>
+    /// Map Editor, Ctrl + double-click on a placed container: edit what THIS
+    /// placement holds, in this editor's own Starting Contents tab (the list,
+    /// adding by kind, the live drag-to-arrange preview) - on a copy. The
+    /// Container Editor's own container and its Starting Contents are never
+    /// touched. Returns the edited contents, or null if the window was cancelled.
+    /// </summary>
+    public static List<InventoryItemInstance>? EditPlacementContents(Window owner, ContainerDatabase containers, ContainerData template, IEnumerable<InventoryItemInstance> current,
+        SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources, VariableDatabase variables, StatDatabase stats, CharacterDatabase characters)
+    {
+        var copy = System.Text.Json.JsonSerializer.Deserialize<ContainerData>(System.Text.Json.JsonSerializer.Serialize(template))!;
+        copy.StartingContents = current.Select(c => System.Text.Json.JsonSerializer.Deserialize<InventoryItemInstance>(System.Text.Json.JsonSerializer.Serialize(c))!).ToList();
+        // Every other container stays listed (to put one inside this one); this one is swapped for its copy.
+        var working = new ContainerDatabase { Containers = containers.Containers.Select(c => ReferenceEquals(c, template) ? copy : c).ToList() };
+        var window = new ContainerEditorWindow(working, sprites, books, objects, resources, variables, stats, characters) { Owner = owner };
+        window.ShowPlacementContentsOnly(copy);
+        return window.ShowDialog() == true ? copy.StartingContents : null;
+    }
+
+    /// <summary>Just the Starting Contents tab of this one container, with OK / Cancel.</summary>
+    private void ShowPlacementContentsOnly(ContainerData copy)
+    {
+        Title = $"Contents of this \"{copy.Name}\" on the map [{BuildInfo.CurrentBuild}]";
+        ContainerListBox.SelectedItem = copy;
+        foreach (var tab in MainTabControl.Items.OfType<TabItem>())
+            if (tab.Header as string != "Starting Contents") tab.Visibility = Visibility.Collapsed;
+        MainTabControl.SelectedItem = MainTabControl.Items.OfType<TabItem>().First(t => t.Header as string == "Starting Contents");
+        var root = (DockPanel)Content;
+        root.Children.OfType<ToolBar>().First().Visibility = Visibility.Collapsed; // no New / Delete container
+        var grid = root.Children.OfType<Grid>().First();
+        grid.ColumnDefinitions[0].Width = new GridLength(0); // no container list
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(10) };
+        var note = new TextBlock { Text = "Only this one placement changes - the Container Editor's Starting Contents stay as they are.", Opacity = 0.7, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 12, 0) };
+        var ok = new Button { Content = "OK", Width = 80, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
+        ok.Click += (_, _) => DialogResult = true;
+        var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
+        buttons.Children.Add(note);
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        DockPanel.SetDock(buttons, Dock.Bottom);
+        root.Children.Insert(0, buttons);
+        Height = 720;
+        Width = 760;
+    }
+
     private void RefreshContainerList()
     {
         ContainerListBox.ItemsSource = null;

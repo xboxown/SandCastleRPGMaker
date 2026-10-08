@@ -178,6 +178,18 @@ public class PlacedItemInstance : IHasContainerContents
     /// </summary>
     public int OffsetX { get; set; } = 0;
     public int OffsetY { get; set; } = 0;
+
+    /// <summary>Put underneath (Map Editor, Free Placement): see ObjectInstance.LiesUnder.</summary>
+    public bool LiesUnder { get; set; }
+
+    /// <summary>
+    /// A container's own contents for THIS placement, set in the Map Editor
+    /// (Ctrl + double-click it). Null: it starts with the Container Editor's
+    /// Starting Contents, as always. Set: it starts with exactly these instead
+    /// (a copy made from the Starting Contents and then edited) - the
+    /// Container Editor's own list is never changed by it.
+    /// </summary>
+    public List<InventoryItemInstance>? OwnContents { get; set; }
 }
 
 /// <summary>One character placed on a map: which character, which cell, and the pose and facing it starts in (PoseId -1 = Idle).</summary>

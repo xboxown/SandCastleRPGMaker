@@ -61,7 +61,8 @@ public partial class MainWindow
             {
                 if (list.SelectedItem is not ObjectPaletteEntry entry) return;
                 _selectedObjectId = entry.WorldObject.Id;
-                if (_editMode != EditMode.Object) EnterObjectMode();
+                _freeItemPick = null;
+                if (_editMode is not (EditMode.Object or EditMode.Free)) EnterObjectMode();
                 StatusText.Text = $"Placing \"{entry.Name}\" ({ObjectTypes.Name(entry.WorldObject.Type)}) - click the map.";
             };
             ObjectTypeTabs.Items.Add(new TabItem
@@ -72,6 +73,7 @@ public partial class MainWindow
                     : list
             });
         }
+        AddFreeItemPaletteTabs(); // Books and Containers, for Free Placement
         ObjectTypeTabs.SelectedIndex = Math.Min(keepTab, ObjectTypeTabs.Items.Count - 1);
         _selectedObjectId = -1;
     }
@@ -180,42 +182,7 @@ public partial class MainWindow
         if (existing is not null && obj is not null)
         {
             menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})", IsEnabled = false });
-            if (obj.Type is ObjectType.Chair or ObjectType.Bed)
-            {
-                var facingMenu = new MenuItem { Header = "Facing" };
-                foreach (var direction in Enum.GetValues<SpriteDirection>())
-                {
-                    bool hasLook = obj.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet;
-                    var item = new MenuItem { Header = hasLook ? direction.ToString() : $"{direction} (no sprite)", IsCheckable = true, IsChecked = existing.Facing == direction };
-                    var d = direction;
-                    item.Click += (_, _) => { existing.Facing = d; PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" now faces {d}."; };
-                    facingMenu.Items.Add(item);
-                }
-                menu.Items.Add(facingMenu);
-            }
-            if (obj.Type == ObjectType.Door)
-            {
-                var state = ObjectLooks.StartState(obj, existing);
-                AddStateItem(menu, "Starts open", state.Open, () => { existing.StartsOpen = true; existing.StartsLocked = false; }, existing);
-                AddStateItem(menu, "Starts closed", !state.Open && !state.Locked, () => { existing.StartsOpen = false; existing.StartsLocked = false; }, existing);
-                AddStateItem(menu, "Starts closed and locked", state.Locked, () => { existing.StartsOpen = false; existing.StartsLocked = true; }, existing);
-            }
-            if (obj.Type == ObjectType.LightSource)
-            {
-                bool lit = existing.StartsLit ?? obj.Light.StartsLit;
-                AddStateItem(menu, "Starts lit", lit, () => existing.StartsLit = !lit, existing);
-            }
-            AddNewTypeMenuItems(menu, obj, existing);
-            if (ObjectTypes.IsBundle(obj.Type) || obj.IsStackable)
-            {
-                var quantity = new MenuItem { Header = $"Quantity ({existing.Quantity})..." };
-                quantity.Click += (_, _) =>
-                {
-                    var text = SimpleInputWindow.Show(this, $"How many (1 - {ObjectTypes.MaxQuantity}):", "Quantity", existing.Quantity.ToString());
-                    if (int.TryParse(text, out int n)) { existing.Quantity = Math.Clamp(n, 1, ObjectTypes.MaxQuantity); PlaceObjectVisual(existing); }
-                };
-                menu.Items.Add(quantity);
-            }
+            AddObjectStateMenuItems(menu, obj, existing);
             menu.Items.Add(new Separator());
         }
         var cut = new MenuItem { Header = "Cut", InputGestureText = "Ctrl+X", IsEnabled = existing is not null };
@@ -233,6 +200,47 @@ public partial class MainWindow
         menu.Items.Add(delete);
         menu.PlacementTarget = MapCanvas;
         menu.IsOpen = true;
+    }
+
+    /// <summary>A placed object's own starting state in the right-click menu: Facing (chairs, beds), open / closed / locked (doors), lit (lights), each type's own settings, Quantity.</summary>
+    private void AddObjectStateMenuItems(ContextMenu menu, WorldObject obj, ObjectInstance existing)
+    {
+        if (obj.Type is ObjectType.Chair or ObjectType.Bed)
+        {
+            var facingMenu = new MenuItem { Header = "Facing" };
+            foreach (var direction in Enum.GetValues<SpriteDirection>())
+            {
+                bool hasLook = obj.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet;
+                var item = new MenuItem { Header = hasLook ? direction.ToString() : $"{direction} (no sprite)", IsCheckable = true, IsChecked = existing.Facing == direction };
+                var d = direction;
+                item.Click += (_, _) => { existing.Facing = d; PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" now faces {d}."; };
+                facingMenu.Items.Add(item);
+            }
+            menu.Items.Add(facingMenu);
+        }
+        if (obj.Type == ObjectType.Door)
+        {
+            var state = ObjectLooks.StartState(obj, existing);
+            AddStateItem(menu, "Starts open", state.Open, () => { existing.StartsOpen = true; existing.StartsLocked = false; }, existing);
+            AddStateItem(menu, "Starts closed", !state.Open && !state.Locked, () => { existing.StartsOpen = false; existing.StartsLocked = false; }, existing);
+            AddStateItem(menu, "Starts closed and locked", state.Locked, () => { existing.StartsOpen = false; existing.StartsLocked = true; }, existing);
+        }
+        if (obj.Type == ObjectType.LightSource)
+        {
+            bool lit = existing.StartsLit ?? obj.Light.StartsLit;
+            AddStateItem(menu, "Starts lit", lit, () => existing.StartsLit = !lit, existing);
+        }
+        AddNewTypeMenuItems(menu, obj, existing);
+        if (ObjectTypes.IsBundle(obj.Type) || obj.IsStackable)
+        {
+            var quantity = new MenuItem { Header = $"Quantity ({existing.Quantity})..." };
+            quantity.Click += (_, _) =>
+            {
+                var text = SimpleInputWindow.Show(this, $"How many (1 - {ObjectTypes.MaxQuantity}):", "Quantity", existing.Quantity.ToString());
+                if (int.TryParse(text, out int n)) { existing.Quantity = Math.Clamp(n, 1, ObjectTypes.MaxQuantity); PlaceObjectVisual(existing); }
+            };
+            menu.Items.Add(quantity);
+        }
     }
 
     private void AddStateItem(ContextMenu menu, string header, bool isChecked, Action apply, ObjectInstance instance)
@@ -323,7 +331,7 @@ public partial class MainWindow
         string tip = obj is null ? $"Object #{instance.ObjectId} (deleted)" : $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (instance.Quantity > 1 ? $" x{instance.Quantity}" : "");
         var image = new Image { Source = source, Width = w, Height = h, IsHitTestVisible = false, ToolTip = tip, Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-        PositionQuantizedVisual(image, instance.X, instance.Y, w, h);
+        PositionPlacedVisual(image, instance.X, instance.Y, w, h, instance.OffsetX, instance.OffsetY, instance.Z);
         if (obj is { Type: ObjectType.Door } door && ObjectLooks.StartState(door, instance).Open)
         {
             // An open door hangs from its hinge (Object Editor > Open sprite position).
@@ -335,7 +343,9 @@ public partial class MainWindow
         if (FitToFloor(image, FloorOf(instance)) is null) return; // on a floor above the picked one
         MapCanvas.Children.Add(image);
         _mapObjectVisuals[instance.InstanceId] = image;
+        if (FloorOf(instance) == _currentFloor) ApplyFreeDrawOrder();
         if (_selectedObjectInstance == instance) UpdateObjectSelectionVisual();
+        if (ReferenceEquals(_freeSelected, instance)) UpdateFreeSelectionVisual();
     }
 
     /// <summary>After the Object Editor closes: every placed object redrawn with its (maybe new) look.</summary>
@@ -361,7 +371,7 @@ public partial class MainWindow
         _objectSelectionVisual = new Border { BorderBrush = Brushes.Yellow, BorderThickness = new Thickness(1.5), IsHitTestVisible = false, Width = visual.Width + 4, Height = visual.Height + 4 };
         Canvas.SetLeft(_objectSelectionVisual, Canvas.GetLeft(visual) - 2);
         Canvas.SetTop(_objectSelectionVisual, Canvas.GetTop(visual) - 2);
-        Panel.SetZIndex(_objectSelectionVisual, 17);
+        Panel.SetZIndex(_objectSelectionVisual, SelectionZIndex);
         MapCanvas.Children.Add(_objectSelectionVisual);
         ShowLinksOf(selected);
     }
