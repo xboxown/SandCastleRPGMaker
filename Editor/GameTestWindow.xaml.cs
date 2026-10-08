@@ -1846,9 +1846,10 @@ public partial class GameTestWindow : Window
         if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject)
             return worldObject.Type switch
             {
-                ObjectType.Wall or ObjectType.Window or ObjectType.Roof => true, // always an obstacle (a roof: up at its height)
+                ObjectType.Wall or ObjectType.Window => true,         // always an obstacle
                 ObjectType.Door => obj.IsOpenRuntime != true,         // solid while closed
-                ObjectType.Tile or ObjectType.Trap => false,          // flat, no collision
+                ObjectType.Trap => false,                             // flat, no collision
+                ObjectType.Tile => worldObject.IsSolid,               // a solid tile is a floor or a ceiling slab
                 _ => worldObject.IsSolid
             };
         return false;
@@ -2040,7 +2041,9 @@ public partial class GameTestWindow : Window
         {
             var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId);
             if (worldObject is null) return (false, false, 1, 1, 1);
-            bool flat = worldObject.Type is ObjectType.Tile or ObjectType.Trap; // Exult: a flat shape is 0 lifts high
+            bool flat = worldObject.Type == ObjectType.Trap || (worldObject.Type == ObjectType.Tile && !worldObject.IsSolid); // Exult: a flat shape is 0 lifts high
+            if (worldObject.Type == ObjectType.Tile && worldObject.IsSolid) // a floor slab: things put on it rest on top
+                return (true, true, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), Math.Max(1, worldObject.SizeZ));
             return (worldObject.IsCellStackable || flat, worldObject.AllowCellElevation && !flat, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), flat ? 0 : Math.Max(1, worldObject.SizeZ));
         }
         return (false, false, 1, 1, 1);
@@ -2106,7 +2109,6 @@ public partial class GameTestWindow : Window
         ApplyRestingDrawOrder();
         ApplyWallDrawOrder(); // things near walls, by Exult's compare
         FixFurnitureDrawOrder(); // sitters over chairs, covers over sleepers
-        FixRoofDrawOrder(); // roofs over everything under them
     }
 
     /// <summary>

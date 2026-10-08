@@ -442,7 +442,6 @@ public partial class GameTestWindow
         RefreshObjectLook(door);
     }
 
-    /// <summary>Whether a roof is over this footprint (above this lift) - inside a house.</summary>
-    private bool IsUnderRoof(UnitRect foot, int lift) =>
-        _map.Objects.Any(roof => roof.ContainerInstanceId < 0 && DefinitionOf(roof)?.Type == ObjectType.Roof && BodyOf(null, roof) is var body && body.Z > lift && body.Overlaps(foot));
+    /// <summary>Whether anything solid is over this footprint (Exult's is_roof) - inside a house.</summary>
+    private bool IsUnderRoof(UnitRect foot, int lift) => CeilingOver(foot, lift) is not null;
 }

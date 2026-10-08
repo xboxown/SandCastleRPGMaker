@@ -18,9 +18,10 @@ namespace SandcastleRpgMaker.Editor;
 ///  - Stairs: their footprint cut into steps a lift apart, so walkers climb
 ///    them by Exult's walking rule (a lift at a time, chunks.cc is_blocked).
 ///    Ladders: double-click to climb to their destination.
-///  - Roofs (gamewin.cc / gamerend.cc skip_above): while the player is
-///    under a roof, nothing at its lift or above is drawn - every roof up
-///    there, and whatever stands on them - so the inside shows.
+///  - Inside (gamewin.cc / gamerend.cc skip_above, chunks.cc is_roof): when
+///    anything solid is over the player's head (4 lifts up or more - an
+///    upper floor's tiles, a roof), nothing at that lift or above is drawn,
+///    so the inside shows.
 ///  - Explosives (Ultima VII's powder keg): lit, the fuse burns down; struck,
 ///    at once. The blast hurts everyone in reach, strikes breakable things,
 ///    and sets off other explosives.
@@ -185,17 +186,20 @@ public partial class GameTestWindow
 
     private readonly HashSet<UIElement> _hiddenByRoof = new(ReferenceEqualityComparer.Instance);
 
-    /// <summary>The lift of the lowest roof the player is under, or null if they're out in the open (Exult: is_main_actor_inside).</summary>
-    private int? RoofLiftOverPlayer()
+    /// <summary>The lift of the lowest ceiling over the player, or null if they're out in the open (Exult: is_main_actor_inside).</summary>
+    private int? RoofLiftOverPlayer() => _player is null ? null : CeilingOver(PlayerFootprint(), _playerZ);
+
+    /// <summary>
+    /// Exult's Map_chunk::is_roof: the lowest solid thing over this footprint,
+    /// starting 4 lifts above its feet (get_lowest_blocked(lift + 4)) - an upper
+    /// floor, a roof, anything solid. Characters don't count. Null: open sky.
+    /// </summary>
+    private int? CeilingOver(UnitRect foot, int lift)
     {
-        if (_player is null) return null;
-        var foot = PlayerFootprint();
         int? lowest = null;
-        foreach (var roof in _map.Objects)
+        foreach (var body in WorldBodies())
         {
-            if (roof.ContainerInstanceId >= 0 || DefinitionOf(roof) is not { Type: ObjectType.Roof }) continue;
-            var body = BodyOf(null, roof);
-            if (body.Z <= _playerZ || !body.Overlaps(foot)) continue;
+            if (!body.Solid || body.Entity is PlacedCharacter || body.Z < lift + 4 || !body.Overlaps(foot)) continue;
             lowest = lowest is null ? body.Z : Math.Min(lowest.Value, body.Z);
         }
         return lowest;
@@ -219,17 +223,6 @@ public partial class GameTestWindow
         }
         foreach (var shown in _hiddenByRoof.Where(v => !hide.Contains(v)).ToList()) { shown.Visibility = Visibility.Visible; _hiddenByRoof.Remove(shown); }
         foreach (var hidden in hide.Where(v => !_hiddenByRoof.Contains(v))) { hidden.Visibility = Visibility.Hidden; _hiddenByRoof.Add(hidden); }
-    }
-
-    /// <summary>Roofs are drawn over everything beneath them.</summary>
-    private void FixRoofDrawOrder()
-    {
-        int top = (_map.Width + _map.Height) * 100 + 500;
-        foreach (var roof in _map.Objects)
-        {
-            if (roof.ContainerInstanceId >= 0 || DefinitionOf(roof) is not { Type: ObjectType.Roof }) continue;
-            if (_objectVisuals.GetValueOrDefault(roof) is UIElement visual) Panel.SetZIndex(visual, top + roof.Z);
-        }
     }
 
     // ================= Explosives =================

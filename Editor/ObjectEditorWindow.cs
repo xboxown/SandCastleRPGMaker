@@ -222,7 +222,7 @@ public partial class ObjectEditorWindow : Window
     private static string TypeDescription(ObjectType type) => type switch
     {
         ObjectType.Junk => "Can be picked up, carried and identified. Double-clicking it does nothing unless its Event tab says so - which is how one-off items (a quest artifact, a talking skull) are made.",
-        ObjectType.Tile => "Flat and on the floor, with no collision at all. Its events fire when someone steps on it, stands on it or steps off, uses it, or drops something on it - for floor puzzles, board games, pressure plates.",
+        ObjectType.Tile => "Floors, roofs, rugs, pressure plates. A tile has no gravity: it stays at the height it's placed. Not solid: flat, no collision - its events fire when someone steps on it, stands on it or steps off, uses it, or drops something on it. Solid: a floor or a roof you walk on; standing under one, you're inside (Exult: anything solid overhead) and everything from its height up disappears.",
         ObjectType.Wall => "Always solid and never moved. Drawn in front of or behind whoever walks by it exactly as Exult decides (Game_object::compare), so nobody ever looks as if they were underneath it.",
         ObjectType.Door => "Double-click to open and close. Can be locked: its key (or a lockpick) opens it. NPCs open unlocked doors in their way and close them behind them (Exult). Breakable only without a key - as Exult's doors.",
         ObjectType.LightSource => "Double-click to light it and put it out. Lights up the night as Exult does (brightness falls off with distance). Can burn out - it's then \"Spent ...\" and can't be lit again.",
@@ -444,7 +444,9 @@ public partial class ObjectEditorWindow : Window
     {
         var body = Group("Size and collision");
         var flags = new WrapPanel();
-        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Trap or ObjectType.Door or ObjectType.Window or ObjectType.Stairs))
+        if (obj.Type == ObjectType.Tile)
+            flags.Children.Add(Check("Solid - a floor or a roof: walked on, and over someone's head it means \"inside\"", () => obj.IsSolid, v => { obj.IsSolid = v; if (v) obj.SizeZ = Math.Max(1, obj.SizeZ); ShowCurrent(); }));
+        else if (obj.Type is not (ObjectType.Wall or ObjectType.Trap or ObjectType.Door or ObjectType.Window or ObjectType.Stairs))
             flags.Children.Add(Check("Solid (blocks walking)", () => obj.IsSolid, v => obj.IsSolid = v));
         if (obj.Type != ObjectType.Window) // a window's sight is its shutters' setting (Window, above)
             flags.Children.Add(Check("Occludes (blocks line of sight)", () => obj.Occludes, v => obj.Occludes = v));
@@ -455,12 +457,14 @@ public partial class ObjectEditorWindow : Window
                 v => { obj.AllowCellElevation = v; obj.IsCellStackable = v; },
                 "A chair seat, a table, a crate: something dropped on it stacks on top, raised to its height (the blue Height Z of the box below). Unticked: nothing can be put on it."));
         body.Children.Add(flags);
-        if (obj.Type == ObjectType.Tile) body.Children.Add(Note("A tile is flat (0 lifts high) and never blocks anyone."));
+        if (obj.Type == ObjectType.Tile) body.Children.Add(Note(obj.IsSolid
+            ? "A solid tile is a slab Size Z lifts thick: you walk on it and things put on it rest on top. It never falls - it stays at the height it's placed (an upper floor, a roof). Standing under it, you're inside, as in Exult: it and everything from its height up disappear until you step out."
+            : "A tile that isn't solid is flat (0 lifts high) and never blocks anyone - a rug, a floor pattern, a pressure plate. It never falls either."));
         if (obj.Type == ObjectType.Wall) body.Children.Add(Note("A wall is always solid. Its footprint is what Exult compares to decide who is drawn in front: make a long wall's footprint as long as the wall."));
         if (obj.Type == ObjectType.Door) body.Children.Add(Note("A door is solid while closed and walked through while open."));
         if (obj.Type == ObjectType.Window) body.Children.Add(Note("A window is always solid, and drawn by Exult's wall rule like a wall: make a long window's footprint as long as the window."));
         if (obj.Type == ObjectType.Stairs && obj.Stairs.Kind == StairsKind.Stairs) body.Children.Add(Note($"Height (blue, Size Z) = how many steps up; the footprint is cut into that many steps toward {obj.Stairs.RisesToward}."));
-        if (obj.Type == ObjectType.Roof) body.Children.Add(Note("A roof's footprint is the area it covers; it is 1 lift thick and sits at its Height."));
+
         var size = new SolidSizeEditor { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
         size.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, obj.SpriteGroup, MainSpriteName(obj)), obj.SizeX, obj.SizeY, obj.SizeZ, obj.SolidOffsetX, obj.SolidOffsetY,
             obj.IsSolid || ObjectTypes.IsWallLike(obj.Type));
@@ -468,7 +472,7 @@ public partial class ObjectEditorWindow : Window
         {
             obj.SizeX = size.SizeX;
             obj.SizeY = size.SizeY;
-            obj.SizeZ = obj.Type is ObjectType.Tile or ObjectType.Trap ? 0 : size.SizeZ;
+            obj.SizeZ = obj.Type == ObjectType.Trap || (obj.Type == ObjectType.Tile && !obj.IsSolid) ? 0 : Math.Max(obj.Type == ObjectType.Tile ? 1 : 0, size.SizeZ);
             obj.SolidOffsetX = size.OffsetX;
             obj.SolidOffsetY = size.OffsetY;
         };

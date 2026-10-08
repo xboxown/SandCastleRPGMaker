@@ -9,7 +9,7 @@ public enum ObjectType
 {
     /// <summary>Picked up, carried, identified - does nothing when used, unless its events do.</summary>
     Junk,
-    /// <summary>Flat, on the floor, no collision. Its events fire when someone steps on it, uses it, or drops something on it.</summary>
+    /// <summary>Flat, no gravity (it stays at its height). Not solid: on the floor, no collision; its events fire when someone steps on it, uses it, or drops something on it. Solid: a floor or a ceiling - walked on, and over someone's head it counts as being inside (Exult).</summary>
     Tile,
     /// <summary>Always solid, can't be moved; drawn in front of or behind whoever walks by it exactly as Exult does.</summary>
     Wall,
@@ -58,7 +58,7 @@ public enum ObjectType
     Lever,
     /// <summary>Stairs you walk up a step at a time, or a ladder that takes you up or down to another spot.</summary>
     Stairs,
-    /// <summary>Covers a building; disappears while you're under it (Exult's roofs).</summary>
+    /// <summary>No longer used (build 263): a solid Tile is a floor or a roof, and anything solid overhead counts as being inside, as Exult. Kept only so older projects load - such objects become solid Tiles.</summary>
     Roof,
     /// <summary>Double-click to see the time (Exult's pocketwatch); a sundial only by day.</summary>
     Clock,
@@ -89,7 +89,7 @@ public static class ObjectTypes
         ObjectType.Money, ObjectType.Chair, ObjectType.Bed, ObjectType.Trap, ObjectType.Key, ObjectType.Lockpick,
         ObjectType.Window, ObjectType.Plant, ObjectType.Keychain, ObjectType.Sextant, ObjectType.Map, ObjectType.Food,
         ObjectType.Potion, ObjectType.BreakableGlass, ObjectType.Spellbook, ObjectType.UseableObject, ObjectType.Lever,
-        ObjectType.Stairs, ObjectType.Roof, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
+        ObjectType.Stairs, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
         ObjectType.MusicalInstrument, ObjectType.Explosive, ObjectType.Bedroll, ObjectType.Reagent, ObjectType.Table,
         ObjectType.LiquidContainer
     };

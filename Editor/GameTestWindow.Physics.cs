@@ -114,7 +114,7 @@ public partial class GameTestWindow
         var settled = new List<Body>(order.Count);
         foreach (var body in order)
         {
-            if (body.Entity is ObjectInstance roof && DefinitionOf(roof)?.Type == ObjectType.Roof) { settled.Add(body); continue; } // a roof stays up at its height
+            if (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             int z = body.Elevates ? RestingLift(settled, new UnitRect(body.Left, body.Top, body.Width, body.Depth)) : 0;
             if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);

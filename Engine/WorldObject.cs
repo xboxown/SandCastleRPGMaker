@@ -300,6 +300,7 @@ public class ObjectDatabase
             if (obj.UseAs == ObjectUse.Key) obj.Type = ObjectType.Key;
             else if (obj.UseAs == ObjectUse.Lockpick) obj.Type = ObjectType.Lockpick;
             obj.UseAs = ObjectUse.Nothing; // Type says it now
+            if (obj.Type == ObjectType.Roof) { obj.Type = ObjectType.Tile; obj.IsSolid = true; obj.SizeZ = Math.Max(1, obj.SizeZ); } // build 263: a roof is a solid Tile
             obj.SyncLocalVariableIdAfterLoad();
             while (obj.Bundle.Levels.Count < 8) obj.Bundle.Levels.Add(new SpriteLink());
         }

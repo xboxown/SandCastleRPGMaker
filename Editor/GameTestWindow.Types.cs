@@ -60,9 +60,6 @@ public partial class GameTestWindow
                 case ObjectType.LiquidContainer:
                     instance.LiquidIdRuntime ??= ObjectLooks.StartLiquid(obj, instance);
                     break;
-                case ObjectType.Roof:
-                    instance.Z = Math.Max(1, obj.Roof.HeightLifts); // it sits up over the building
-                    break;
             }
         }
     }
