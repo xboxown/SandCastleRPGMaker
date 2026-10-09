@@ -136,7 +136,7 @@ public partial class ShowTextCommandWindow : Window
         var reply = SelectedReply;
         ReplyTextBox.IsEnabled = ConditionButton.IsEnabled = reply is not null;
         ClearConditionButton.IsEnabled = reply?.Condition is not null;
-        ReplyTextBox.Text = reply?.Text ?? "";
+        if (ReplyTextBox.Text != (reply?.Text ?? "")) ReplyTextBox.Text = reply?.Text ?? ""; // resetting it would jump the cursor to the start
         ConditionSummary.Text = reply is null ? "" : reply.Condition is null ? "Always offered." : DescribeCondition(reply.Condition);
         _updatingReplyEditor = false;
     }
@@ -154,7 +154,11 @@ public partial class ShowTextCommandWindow : Window
         return parts.Count == 0 ? "Always offered." : "Offered only when: " + string.Join(", ", parts) + ".";
     }
 
-    private void RepliesList_SelectionChanged(object sender, SelectionChangedEventArgs e) => UpdateReplyEditor();
+    private void RepliesList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_updatingReplyEditor) return; // the list line is being redrawn while typing - don't touch the text box
+        UpdateReplyEditor();
+    }
 
     private void ReplyTextBox_TextChanged(object sender, TextChangedEventArgs e)
     {
