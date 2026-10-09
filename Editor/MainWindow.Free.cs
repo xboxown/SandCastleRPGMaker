@@ -275,7 +275,11 @@ public partial class MainWindow
             var body = new EditorBody(self ?? new object(), fl, ft, info.SizeX, info.SizeY, floorBase + lift, info.SizeZ, info.Elevates, info.Surface, false, false);
             return (cellX, cellY, ox, oy, RestingZ(others, body));
         }
-        for (int lift = MaxPileLifts; lift > 0; lift--)
+        // Only the lifts of the picked floor are tried: lift 5 above it is the next
+        // floor's base, where anything "rests" by that floor's own clamp - a drop
+        // there sent the thing up to a floor above (out of sight in the editor).
+        int highest = _currentFloor >= MapFloors.MaxFloors ? MaxPileLifts : MapFloors.LiftsPerFloor - 1;
+        for (int lift = highest; lift > 0; lift--)
         {
             var spot = At(lift);
             if (spot.Item5 == floorBase + lift) return spot;

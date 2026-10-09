@@ -51,9 +51,22 @@ public partial class MainWindow
         MapScrollViewer.UpdateLayout();
         MapScrollViewer.ScrollToHorizontalOffset(h);
         MapScrollViewer.ScrollToVerticalOffset(v);
-        StatusText.Text = _currentFloor == 1
+        StatusText.Text = (_currentFloor == 1
             ? "Floor 1 (the ground)."
-            : $"Floor {_currentFloor} (lift {MapFloors.BaseLift(_currentFloor)}): tiles painted here are floor slabs you walk on - and a ceiling for whoever is below. The floors below show darkened.";
+            : $"Floor {_currentFloor} (lift {MapFloors.BaseLift(_currentFloor)}): tiles painted here are floor slabs you walk on - and a ceiling for whoever is below. The floors below show darkened.")
+            + ThingsOnOtherFloorsNote();
+    }
+
+    /// <summary>"Also placed: floor 3 (2 things), floor 9 (3 things)" - so nothing on a floor out of view gets lost.</summary>
+    private string ThingsOnOtherFloorsNote()
+    {
+        if (_map is null) return "";
+        var counts = _map.Objects.Where(o => o.ContainerInstanceId < 0).Select(FloorOf)
+            .Concat(_map.Items.Select(FloorOf))
+            .Where(f => f != _currentFloor && f != 1)
+            .GroupBy(f => f).OrderBy(g => g.Key)
+            .Select(g => $"floor {g.Key} ({g.Count()} thing{(g.Count() == 1 ? "" : "s")})").ToList();
+        return counts.Count == 0 ? "" : "   Also placed on: " + string.Join(", ", counts) + ".";
     }
 
     /// <summary>The picked floor's tile layer (made when first painted on).</summary>
