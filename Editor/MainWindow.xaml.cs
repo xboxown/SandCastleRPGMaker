@@ -1366,6 +1366,9 @@ public partial class MainWindow : Window
     {
         if (_map is null || _tileset is null)
             return;
+        // Placed objects sharing a number would hide one another here: each gets its own.
+        if (_map.EnsureUniqueInstanceIds() is int renumbered and > 0)
+            Dispatcher.BeginInvoke(() => StatusText.Text = $"{renumbered} placed object{(renumbered == 1 ? "" : "s")} shared a number with another and {(renumbered == 1 ? "was" : "were")} hidden here - now shown. Save the map to keep it.");
 
         MapCanvas.Children.Clear();
         foreach (var animator in _mapCellAnimators.Values) animator.Stop();

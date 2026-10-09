@@ -114,6 +114,26 @@ public class MapData
     public int GetNextInstanceId()
         => Objects.Count == 0 ? 1 : Objects.Max(o => o.InstanceId) + 1;
 
+    /// <summary>
+    /// Gives every placed object its own InstanceId: the first one keeps a shared
+    /// (or missing, 0) number, every other one gets a new one. Two objects with
+    /// one number would hide one of them in the Map Editor (its picture is kept
+    /// by number). Returns how many were renumbered.
+    /// </summary>
+    public int EnsureUniqueInstanceIds()
+    {
+        var seen = new HashSet<int>();
+        int next = GetNextInstanceId(), fixedCount = 0;
+        foreach (var instance in Objects)
+        {
+            if (instance.InstanceId > 0 && seen.Add(instance.InstanceId)) continue;
+            instance.InstanceId = next++;
+            seen.Add(instance.InstanceId);
+            fixedCount++;
+        }
+        return fixedCount;
+    }
+
     public int GetNextEventId()
         => Events.Count == 0 ? 1 : Events.Max(ev => ev.Id) + 1;
 
