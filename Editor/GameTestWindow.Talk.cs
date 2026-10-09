@@ -33,7 +33,7 @@ public partial class GameTestWindow
         /// <summary>The replies on offer - the box waits for one to be picked.</summary>
         public List<DialogChoice>? Replies { get; init; }
         public Action<int>? OnChosen { get; init; }
-        /// <summary>Not a box: Close Show Text's "go on" - run when every box before it has been read.</summary>
+        /// <summary>Not a box: Stop Conversation's "go on" - run when every box before it has been read.</summary>
         public Action? AfterRead { get; init; }
         public bool HasReplies => Replies is { Count: > 0 };
     }
@@ -297,7 +297,7 @@ public partial class GameTestWindow
         }
         if (message.AfterRead is { } goOn)
         {
-            // Close Show Text: the boxes before it are read - close, and the commands after it go on.
+            // Stop Conversation: the boxes before it are read - close, and the commands after it go on.
             _currentMessage = null;
             MessageLayer.Visibility = Visibility.Collapsed;
             goOn();

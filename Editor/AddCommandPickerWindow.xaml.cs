@@ -18,9 +18,9 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
-    private void CloseShowText_Click(object sender, RoutedEventArgs e)
+    private void StopConversation_Click(object sender, RoutedEventArgs e)
     {
-        ChosenType = EventCommandType.CloseShowText;
+        ChosenType = EventCommandType.StopConversation;
         DialogResult = true;
     }
 

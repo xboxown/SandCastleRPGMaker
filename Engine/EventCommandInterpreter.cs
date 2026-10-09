@@ -145,19 +145,20 @@ public static class EventCommandInterpreter
                     i++;
                     continue;
 
-                case EventCommandType.CloseShowText:
+                case EventCommandType.StopConversation:
                 {
+                    // No pinned reply brings its box back after this.
+                    returns = Array.Empty<(int, int)>();
                     if (context is IDialogChoiceHost { CanAskChoice: true } waiter)
                     {
                         int next = i + 1;
-                        var returnsHere = returns;
-                        if (waiter.WaitUntilRead(() => Run(commands, context, trace, next, returnsHere)))
+                        if (waiter.WaitUntilRead(() => Run(commands, context, trace, next)))
                         {
-                            trace.Add("Close Show Text - waiting for the box to be read");
+                            trace.Add("Stop Conversation - the box closes once its lines are read");
                             return;
                         }
                     }
-                    trace.Add("Close Show Text");
+                    trace.Add("Stop Conversation");
                     i++;
                     continue;
                 }

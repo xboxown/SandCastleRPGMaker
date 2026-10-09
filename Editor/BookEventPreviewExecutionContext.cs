@@ -41,7 +41,7 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
 
     public bool CanAskChoice => OnAskChoice is not null;
     public bool AskChoice(EventCommand showText, List<DialogChoice> choices, Action<int> chosen) => OnAskChoice?.Invoke(showText, choices, chosen) ?? false;
-    /// <summary>Close Show Text: wait for the boxes up now to be read, then call back.</summary>
+    /// <summary>Stop Conversation: wait for the boxes up now to be read, then call back.</summary>
     public Func<Action, bool>? OnWaitUntilRead { get; set; }
     public bool WaitUntilRead(Action goOn) => OnWaitUntilRead?.Invoke(goOn) ?? false;
     /// <summary>Teleport: (who - "Activator", "Player" or a character id, cell x, cell y).</summary>

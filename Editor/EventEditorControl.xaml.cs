@@ -196,7 +196,7 @@ public partial class EventEditorControl : UserControl
             EventCommandType.EndChoices => "End Replies",
             EventCommandType.GoToLabel => "Jump to Label",
             EventCommandType.End => "Exit Event Processing",
-            EventCommandType.CloseShowText => "Close Show Text",
+            EventCommandType.StopConversation => "Stop Conversation",
             _ => command.Type.ToString()
         };
         block.Inlines.Add(new Run(commandName) { Foreground = IsChoiceLine(command) ? Brushes.MediumBlue : Brushes.Red, FontWeight = FontWeights.Bold });
@@ -312,7 +312,7 @@ public partial class EventEditorControl : UserControl
             if (command.Get("Pinned") == "True")
                 block.Inlines.Add(new Run(" " + ShowTextCommandWindow.PinGlyph + " comes back here") { Foreground = ShowTextCommandWindow.PinBrush, FontFamily = new FontFamily("Segoe UI Symbol") });
         }
-        else if (command.Type is EventCommandType.EndChoices or EventCommandType.End or EventCommandType.CloseShowText)
+        else if (command.Type is EventCommandType.EndChoices or EventCommandType.End or EventCommandType.StopConversation)
         {
         }
         else if (command.Parameters.Count > 0)
@@ -390,7 +390,7 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (type is EventCommandType.End or EventCommandType.CloseShowText)
+        else if (type is EventCommandType.End or EventCommandType.StopConversation)
         {
             CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = type, IndentLevel = indentLevel });
             RenderContentsList();

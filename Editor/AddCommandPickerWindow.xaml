@@ -22,7 +22,7 @@
                         <TextBlock Text="Message" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Show Text..." Margin="0,0,0,4" Click="ShowText_Click"/>
                         <Button Content="Show Text with Replies..." Margin="0,0,0,4" Click="ShowText_Click" ToolTip="Replies (choices) are part of Show Text: add them on its right side"/>
-                        <Button Content="Close Show Text" Margin="0,0,0,4" Click="CloseShowText_Click" ToolTip="The commands after it wait until the dialog boxes up now are read, then go on with the box closed"/>
+                        <Button Content="Stop Conversation" Margin="0,0,0,4" Click="StopConversation_Click" ToolTip="Ends the conversation: pinned replies stop coming back, and the box closes once the lines already up are read. Commands after it still run (e.g. Attack)."/>
                         <Button Content="Input Number..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Select Item..." Margin="0,0,0,12" IsEnabled="False"/>
 

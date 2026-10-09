@@ -103,6 +103,6 @@ public interface IDialogChoiceHost
     /// <summary>Shows the box with its replies. Returns false when no reply is on offer (the box shows as plain text, and the commands go on after the branches).</summary>
     bool AskChoice(EventCommand showText, List<DialogChoice> choices, Action<int> chosen);
 
-    /// <summary>Close Show Text: false when no box is up (the commands just go on). Otherwise <paramref name="goOn"/> is called once the boxes up now have been read and closed.</summary>
+    /// <summary>Stop Conversation: false when no box is up (the commands just go on). Otherwise <paramref name="goOn"/> is called once the boxes up now have been read and closed.</summary>
     bool WaitUntilRead(Action goOn);
 }

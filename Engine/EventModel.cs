@@ -42,8 +42,8 @@ public enum EventCommandType
     WhenChoice,
     /// <summary>The end of a Show Text's reply branches.</summary>
     EndChoices,
-    /// <summary>Close Show Text: the commands wait here until the boxes already up have been read, then go on with the box closed.</summary>
-    CloseShowText
+    /// <summary>Stop Conversation: the conversation ends here - pinned replies no longer bring their box back, and once the lines already up are read the box closes for good. Commands after it still run (with no box up).</summary>
+    StopConversation
 }
 
 /// <summary>

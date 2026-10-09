@@ -45,7 +45,7 @@ public partial class GameTestWindow
         return true;
     }
 
-    /// <summary>Close Show Text: with a box up, the commands after it wait (as whoever is running them) until it and any queued after it are read.</summary>
+    /// <summary>Stop Conversation: with a box up, the commands after it wait (as whoever is running them) until it and any queued after it are read.</summary>
     private bool WaitUntilRead(Action goOn)
     {
         if (!IsShowingMessage) return false;

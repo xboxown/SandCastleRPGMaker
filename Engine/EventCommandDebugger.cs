@@ -210,8 +210,8 @@ public class EventCommandDebugger
                 CurrentIndex++;
                 break;
 
-            case EventCommandType.CloseShowText:
-                LastStepDescription = "Close Show Text";
+            case EventCommandType.StopConversation:
+                LastStepDescription = "Stop Conversation";
                 CurrentIndex++;
                 break;
 

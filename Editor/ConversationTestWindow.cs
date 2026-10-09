@@ -142,7 +142,7 @@ public class ConversationTestWindow : Window
         {
             if (step is AfterReadStep after)
             {
-                Log("Close Show Text - the box closes", Brushes.Gray);
+                Log("Stop Conversation - the box closes", Brushes.Gray);
                 after.GoOn();
                 if (_current is not null) return; // that put up the next box
                 continue;
