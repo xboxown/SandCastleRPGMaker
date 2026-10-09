@@ -355,7 +355,7 @@ public partial class EventEditorControl : UserControl
         int selected = ContentsListBox.SelectedIndex;
         int insertAt = (selected >= 0 && selected < CurrentPage.Commands.Count) ? selected + 1 : CurrentPage.Commands.Count;
         // A Show Text with replies is followed by its branches: a new command goes after them, not between.
-        if (selected >= 0 && selected < CurrentPage.Commands.Count && DialogChoices.FindEndChoices(CurrentPage.Commands, selected) is var blockEnd and >= 0)
+        if (selected >= 0 && selected < CurrentPage.Commands.Count && CurrentPage.Commands[selected].Type == EventCommandType.ShowText && DialogChoices.FindEndChoices(CurrentPage.Commands, selected) is var blockEnd and >= 0)
             insertAt = blockEnd + 1;
         int indentLevel = ComputeInsertIndentLevel(insertAt);
 
