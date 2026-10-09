@@ -1721,7 +1721,7 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.Object)
         {
-            ObjectMode_MouseRightButtonDown(x, y);
+            ObjectMode_MouseRightButtonDown(x, y, e.GetPosition(MapCanvas));
             return;
         }
 

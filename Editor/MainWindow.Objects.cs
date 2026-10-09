@@ -173,9 +173,10 @@ public partial class MainWindow
         return true;
     }
 
-    private void ObjectMode_MouseRightButtonDown(int x, int y)
+    private void ObjectMode_MouseRightButtonDown(int x, int y, Point p)
     {
-        var existing = ObjectAt(x, y);
+        // The object whose picture is under the mouse (a tall one is drawn up into the cell above its own), else the one on this cell.
+        var existing = ThingAtPoint(p, t => t is ObjectInstance) as ObjectInstance ?? ObjectAt(x, y);
         if (existing is not null) SelectObjectInstance(existing);
         var obj = existing is null ? null : _objectDatabase.Objects.FirstOrDefault(o => o.Id == existing.ObjectId);
         var menu = new ContextMenu();
@@ -183,6 +184,8 @@ public partial class MainWindow
         {
             menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})", IsEnabled = false });
             AddObjectStateMenuItems(menu, obj, existing);
+            menu.Items.Add(new Separator());
+            AddHangingMenuItems(menu, existing);
             menu.Items.Add(new Separator());
         }
         var cut = new MenuItem { Header = "Cut", InputGestureText = "Ctrl+X", IsEnabled = existing is not null };

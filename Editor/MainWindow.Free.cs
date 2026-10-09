@@ -549,20 +549,7 @@ public partial class MainWindow
             menu.Items.Add(underneath);
             menu.Items.Add(new Separator());
 
-            bool hanging = IsHanging(hit);
-            var hang = new MenuItem { Header = "Hangs on the wall (stays where it is, never falls)", IsCheckable = true, IsChecked = hanging };
-            hang.Click += (_, _) => SetHanging(hit, !hanging);
-            menu.Items.Add(hang);
-            var height = new MenuItem { Header = "Hanging height", IsEnabled = hanging };
-            int current = RaiseOf(ZOf(hit));
-            for (int lifts = 0; lifts <= MaxHangingLifts; lifts++)
-            {
-                int l = lifts;
-                var choice = new MenuItem { Header = l == 0 ? "On the floor (0px)" : $"{l} lift{(l == 1 ? "" : "s")} up ({l * 4}px)", IsCheckable = true, IsChecked = l == current };
-                choice.Click += (_, _) => SetHangingHeight(hit, l);
-                height.Items.Add(choice);
-            }
-            menu.Items.Add(height);
+            AddHangingMenuItems(menu, hit);
             menu.Items.Add(new Separator());
         }
         var cut = new MenuItem { Header = "Cut", InputGestureText = "Ctrl+X", IsEnabled = hit is not null };
@@ -584,6 +571,25 @@ public partial class MainWindow
 
     private static int ZOf(object entity) => entity switch { ObjectInstance o => o.Z, PlacedItemInstance i => i.Z, _ => 0 };
 
+    /// <summary>"Hangs on the wall" and "Hanging height" in a placed thing's right-click menu (Free Placement and Objects mode).</summary>
+    private void AddHangingMenuItems(ContextMenu menu, object entity)
+    {
+        bool hanging = IsHanging(entity);
+        var hang = new MenuItem { Header = "Hangs on the wall (stays where it is, never falls)", IsCheckable = true, IsChecked = hanging };
+        hang.Click += (_, _) => SetHanging(entity, !hanging);
+        menu.Items.Add(hang);
+        var height = new MenuItem { Header = "Hanging height", IsEnabled = hanging };
+        int current = RaiseOf(ZOf(entity));
+        for (int lifts = 0; lifts <= MaxHangingLifts; lifts++)
+        {
+            int l = lifts;
+            var choice = new MenuItem { Header = l == 0 ? "On the floor (0px)" : $"{l} lift{(l == 1 ? "" : "s")} up ({l * 4}px)", IsCheckable = true, IsChecked = l == current };
+            choice.Click += (_, _) => SetHangingHeight(entity, l);
+            height.Items.Add(choice);
+        }
+        menu.Items.Add(height);
+    }
+
     /// <summary>Hangs it on the wall (it stays exactly where it is, at its height) or takes it down (it falls onto what's under it).</summary>
     private void SetHanging(object entity, bool value)
     {
@@ -592,6 +598,7 @@ public partial class MainWindow
         if (value) SetLiesUnder(entity, false);
         RedrawAfterSettle(entity);
         UpdateFreeSelectionVisual();
+        if (entity is ObjectInstance hungObject && ReferenceEquals(_selectedObjectInstance, hungObject)) UpdateObjectSelectionVisual();
         StatusText.Text = value
             ? $"\"{NameOfThing(entity)}\" hangs on the wall: it stays right here and never falls. Page Up / Page Down raise and lower it."
             : $"\"{NameOfThing(entity)}\" is taken down: it rests on whatever is under it.";
