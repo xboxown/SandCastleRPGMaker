@@ -210,6 +210,11 @@ public class EventCommandDebugger
                 CurrentIndex++;
                 break;
 
+            case EventCommandType.CloseShowText:
+                LastStepDescription = "Close Show Text";
+                CurrentIndex++;
+                break;
+
             default:
             {
                 bool didReal = _context.Execute(cmd);

@@ -55,6 +55,7 @@ public partial class CharacterEditorWindow
             var enginePages = _characterEventEditor.Pages;
             for (int i = 0; i < enginePages.Count && i < _eventCharacter.EventPages.Count; i++) _eventCharacter.EventPages[i].Commands = enginePages[i].Commands;
         };
+        _characterEventEditor.SelfCharacter = character;
         _characterEventEditor.Pages = pages;
         CharacterEventEnginePlaceholder.Content = _characterEventEditor;
 

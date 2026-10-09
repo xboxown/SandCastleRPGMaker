@@ -41,7 +41,9 @@ public enum EventCommandType
     /// <summary>"When [reply]:" - the start of one reply's branch under a Show Text with replies (its commands are one level deeper). Added by the Show Text window, never on its own.</summary>
     WhenChoice,
     /// <summary>The end of a Show Text's reply branches.</summary>
-    EndChoices
+    EndChoices,
+    /// <summary>Close Show Text: the commands wait here until the boxes already up have been read, then go on with the box closed.</summary>
+    CloseShowText
 }
 
 /// <summary>

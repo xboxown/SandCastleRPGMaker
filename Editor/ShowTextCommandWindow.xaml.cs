@@ -116,8 +116,19 @@ public partial class ShowTextCommandWindow : Window
 
     private DialogChoice? SelectedReply => RepliesList.SelectedIndex >= 0 && RepliesList.SelectedIndex < _replies.Count ? _replies[RepliesList.SelectedIndex] : null;
 
-    private static string ReplyLine(DialogChoice reply) =>
-        (string.IsNullOrWhiteSpace(reply.Text) ? "(empty)" : reply.Text) + (reply.Condition is null ? "" : "   [only when...]");
+    /// <summary>A reply's line in the list: a bright red pin when it's pinned, its words, and a note when it has a condition.</summary>
+    private static TextBlock ReplyLine(DialogChoice reply)
+    {
+        var line = new TextBlock();
+        if (reply.Pinned)
+            line.Inlines.Add(new System.Windows.Documents.Run(PinGlyph + " ") { Foreground = PinBrush, FontFamily = new System.Windows.Media.FontFamily("Segoe UI Symbol") });
+        line.Inlines.Add(new System.Windows.Documents.Run(string.IsNullOrWhiteSpace(reply.Text) ? "(empty)" : reply.Text));
+        if (reply.Condition is not null) line.Inlines.Add(new System.Windows.Documents.Run("   [only when...]") { Foreground = System.Windows.Media.Brushes.Gray });
+        return line;
+    }
+
+    internal const string PinGlyph = "\U0001F4CC";
+    internal static readonly System.Windows.Media.Brush PinBrush = new System.Windows.Media.SolidColorBrush(System.Windows.Media.Color.FromRgb(255, 0, 0));
 
     private void RefreshReplies(int select = -1)
     {
@@ -134,7 +145,8 @@ public partial class ShowTextCommandWindow : Window
     {
         _updatingReplyEditor = true;
         var reply = SelectedReply;
-        ReplyTextBox.IsEnabled = ConditionButton.IsEnabled = reply is not null;
+        ReplyTextBox.IsEnabled = ConditionButton.IsEnabled = PinButton.IsEnabled = reply is not null;
+        PinButton.IsChecked = reply?.Pinned == true;
         ClearConditionButton.IsEnabled = reply?.Condition is not null;
         if (ReplyTextBox.Text != (reply?.Text ?? "")) ReplyTextBox.Text = reply?.Text ?? ""; // resetting it would jump the cursor to the start
         ConditionSummary.Text = reply is null ? "" : reply.Condition is null ? "Always offered." : DescribeCondition(reply.Condition);
@@ -240,6 +252,13 @@ public partial class ShowTextCommandWindow : Window
         window.Content = root;
         if (window.ShowDialog() != true) return;
         reply.Condition = working;
+        RefreshReplies(RepliesList.SelectedIndex);
+    }
+
+    private void PinButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (SelectedReply is not { } reply) return;
+        reply.Pinned = PinButton.IsChecked == true;
         RefreshReplies(RepliesList.SelectedIndex);
     }
 

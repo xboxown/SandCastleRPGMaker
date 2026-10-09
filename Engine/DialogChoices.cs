@@ -18,6 +18,8 @@ public class DialogChoice
     public string Text { get; set; } = string.Empty;
     /// <summary>null = always offered. Otherwise it's only offered while these conditions pass (Trigger = the party having / not having an item; Cycle counts how many times it was picked: Once = gone after it's picked).</summary>
     public BookEventConditions? Condition { get; set; }
+    /// <summary>Pinned: when this reply's branch runs out, the conversation comes back to the same box and its replies instead of ending (Ultima VII's answers that stay).</summary>
+    public bool Pinned { get; set; }
 }
 
 /// <summary>Reads and writes a Show Text command's replies (kept as JSON in its "Choices" parameter, so the command keeps its generic shape).</summary>
@@ -67,6 +69,15 @@ public static class DialogChoices
         return -1;
     }
 
+    /// <summary>Where the branch starting at the WhenChoice <paramref name="whenIndex"/> ends: the next WhenChoice or the EndChoices.</summary>
+    public static int FindBranchEnd(List<EventCommand> commands, int whenIndex)
+    {
+        int indent = commands[whenIndex].IndentLevel;
+        for (int j = whenIndex + 1; j < commands.Count; j++)
+            if (commands[j].IndentLevel == indent && commands[j].Type is EventCommandType.WhenChoice or EventCommandType.EndChoices) return j;
+        return commands.Count;
+    }
+
     /// <summary>From a WhenChoice (or anywhere inside the branches), the matching EndChoices at this indent.</summary>
     public static int FindEndChoicesFrom(List<EventCommand> commands, int fromIndex)
     {
@@ -91,4 +102,7 @@ public interface IDialogChoiceHost
 
     /// <summary>Shows the box with its replies. Returns false when no reply is on offer (the box shows as plain text, and the commands go on after the branches).</summary>
     bool AskChoice(EventCommand showText, List<DialogChoice> choices, Action<int> chosen);
+
+    /// <summary>Close Show Text: false when no box is up (the commands just go on). Otherwise <paramref name="goOn"/> is called once the boxes up now have been read and closed.</summary>
+    bool WaitUntilRead(Action goOn);
 }

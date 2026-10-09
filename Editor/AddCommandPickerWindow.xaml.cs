@@ -18,6 +18,12 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void CloseShowText_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.CloseShowText;
+        DialogResult = true;
+    }
+
     private void Label_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.Label;

@@ -196,6 +196,7 @@ public partial class EventEditorControl : UserControl
             EventCommandType.EndChoices => "End Replies",
             EventCommandType.GoToLabel => "Jump to Label",
             EventCommandType.End => "Exit Event Processing",
+            EventCommandType.CloseShowText => "Close Show Text",
             _ => command.Type.ToString()
         };
         block.Inlines.Add(new Run(commandName) { Foreground = IsChoiceLine(command) ? Brushes.MediumBlue : Brushes.Red, FontWeight = FontWeights.Bold });
@@ -296,13 +297,22 @@ public partial class EventEditorControl : UserControl
             block.Inlines.Add(new Run($" : {(title.Length > 0 ? "[" + title + "] " : "")}{(speaker.Length > 0 ? speaker + ": " : "")}{Truncate(command.Get("Text"), 50)}"));
             var replies = DialogChoices.Read(command);
             if (replies.Count > 0)
-                block.Inlines.Add(new Run($"   Replies: {Truncate(string.Join(", ", replies.Select(r => r.Text + (r.Condition is null ? "" : "*"))), 60)}") { Foreground = Brushes.MediumBlue });
+            {
+                block.Inlines.Add(new Run("   Replies: ") { Foreground = Brushes.MediumBlue });
+                for (int r = 0; r < replies.Count; r++)
+                {
+                    if (replies[r].Pinned) block.Inlines.Add(new Run(ShowTextCommandWindow.PinGlyph) { Foreground = ShowTextCommandWindow.PinBrush, FontFamily = new FontFamily("Segoe UI Symbol") });
+                    block.Inlines.Add(new Run(replies[r].Text + (replies[r].Condition is null ? "" : "*") + (r < replies.Count - 1 ? ", " : "")) { Foreground = Brushes.MediumBlue });
+                }
+            }
         }
         else if (command.Type == EventCommandType.WhenChoice)
         {
             block.Inlines.Add(new Run($" \"{command.Get("Text")}\" :") { Foreground = Brushes.MediumBlue });
+            if (command.Get("Pinned") == "True")
+                block.Inlines.Add(new Run(" " + ShowTextCommandWindow.PinGlyph + " comes back here") { Foreground = ShowTextCommandWindow.PinBrush, FontFamily = new FontFamily("Segoe UI Symbol") });
         }
-        else if (command.Type is EventCommandType.EndChoices or EventCommandType.End)
+        else if (command.Type is EventCommandType.EndChoices or EventCommandType.End or EventCommandType.CloseShowText)
         {
         }
         else if (command.Parameters.Count > 0)
@@ -380,9 +390,9 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
-        else if (type == EventCommandType.End)
+        else if (type is EventCommandType.End or EventCommandType.CloseShowText)
         {
-            CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = EventCommandType.End, IndentLevel = indentLevel });
+            CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = type, IndentLevel = indentLevel });
             RenderContentsList();
             ContentChanged?.Invoke();
         }

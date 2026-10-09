@@ -15,6 +15,8 @@
         <ToolBar DockPanel.Dock="Top">
             <Button x:Name="AddCommandButton" Content="Add Command..." Click="AddCommandButton_Click" Padding="6,2" Margin="2"/>
             <Button x:Name="DeleteCommandButton" Content="Delete Command" Click="DeleteCommandButton_Click" Padding="6,2" Margin="2"/>
+            <Button x:Name="TestConversationButton" Content="Test Conversation..." Click="TestConversationButton_Click" Padding="6,2" Margin="2"
+                    ToolTip="Run this page's commands here: the dialog boxes show on a copy of the game screen and you pick the replies"/>
             <Separator/>
             <ToggleButton x:Name="EditAsTextToggle" Content="Edit As Text" Click="EditAsTextToggle_Click" Padding="6,2" Margin="2"/>
             <Button x:Name="CompileButton" Content="Compile / Validate" Click="CompileButton_Click" Padding="6,2" Margin="2" IsEnabled="False"/>

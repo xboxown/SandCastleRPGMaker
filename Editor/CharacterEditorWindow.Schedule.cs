@@ -150,6 +150,7 @@ public partial class CharacterEditorWindow
             Containers = ProjectSession.ContainersProvider?.Invoke(),
             Sprites = _sprites
         };
+        editor.SelfCharacter = character;
         editor.Pages = new System.Collections.ObjectModel.ObservableCollection<EventCommandPage> { page };
         editor.ContentChanged += () => character.TalkCommands = page.Commands; // the command list may be replaced wholesale (typed in and compiled)
         TalkEditorHost.Content = editor;

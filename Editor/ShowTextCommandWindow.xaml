@@ -101,7 +101,15 @@
                     <StackPanel Orientation="Horizontal">
                         <Button x:Name="ConditionButton" Content="Show only when..." Padding="8,3" Click="ConditionButton_Click"
                                 ToolTip="A condition for this reply to be offered: variables, stats, the party having or not having an item, or only once."/>
-                        <Button x:Name="ClearConditionButton" Content="Always show it" Padding="8,3" Margin="6,0,0,0" Click="ClearConditionButton_Click"/>
+                        <Button x:Name="ClearConditionButton" Content="Remove condition" Padding="8,3" Margin="6,0,0,0" Click="ClearConditionButton_Click"
+                                ToolTip="Take this reply's condition away: it's always offered again"/>
+                        <ToggleButton x:Name="PinButton" Padding="8,3" Margin="6,0,0,0" Click="PinButton_Click"
+                                      ToolTip="Pinned: after this reply's commands, the conversation comes back to this box and its replies instead of ending (Name, Job... stay; leave Bye unpinned so it ends)">
+                            <StackPanel Orientation="Horizontal">
+                                <TextBlock Text="&#x1F4CC;" Foreground="#FF0000" FontFamily="Segoe UI Symbol" Margin="0,0,4,0"/>
+                                <TextBlock Text="Pin (come back here)"/>
+                            </StackPanel>
+                        </ToggleButton>
                     </StackPanel>
                     <TextBlock x:Name="ConditionSummary" TextWrapping="Wrap" Opacity="0.8" Margin="0,4,0,0"/>
                 </StackPanel>

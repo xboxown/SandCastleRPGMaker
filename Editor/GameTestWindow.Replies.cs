@@ -45,6 +45,22 @@ public partial class GameTestWindow
         return true;
     }
 
+    /// <summary>Close Show Text: with a box up, the commands after it wait (as whoever is running them) until it and any queued after it are read.</summary>
+    private bool WaitUntilRead(Action goOn)
+    {
+        if (!IsShowingMessage) return false;
+        var (activator, byStepping, selfBookId) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
+        void GoOn()
+        {
+            var (previous, previousStep, previousSelf) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
+            (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (activator, byStepping, selfBookId);
+            try { goOn(); }
+            finally { (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (previous, previousStep, previousSelf); }
+        }
+        _messages.Enqueue(new GameMessage("", null, "", false) { AfterRead = GoOn });
+        return true;
+    }
+
     /// <summary>Whether this reply is on offer right now: its condition, checked live.</summary>
     private bool ReplyOffered(EventCommand showText, DialogChoice reply)
     {

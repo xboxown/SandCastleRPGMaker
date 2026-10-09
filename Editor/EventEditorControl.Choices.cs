@@ -91,6 +91,7 @@ public partial class EventEditorControl
                     Type = EventCommandType.WhenChoice, IndentLevel = indent,
                     Parameters = { [DialogChoices.ChoiceIdKey] = reply.Id.ToString(), ["Text"] = reply.Text }
                 });
+                if (reply.Pinned) lines[^1].Parameters["Pinned"] = "True";
                 if (branches.TryGetValue(reply.Id, out var body)) lines.AddRange(body);
             }
             lines.Add(new EventCommand { Type = EventCommandType.EndChoices, IndentLevel = indent });
@@ -124,6 +125,20 @@ public partial class EventEditorControl
         RenderContentsList();
         ContentChanged?.Invoke();
         return true;
+    }
+
+    /// <summary>Who "Self" is in Test Conversation (the character whose Talk or Event this is), or null.</summary>
+    public CharacterDefinition? SelfCharacter { get; set; }
+
+    private void TestConversationButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (CurrentPage is null) return;
+        if (CurrentPage.Commands.Count == 0)
+        {
+            MessageBox.Show(Window.GetWindow(this), "This page has no commands yet.", "Test Conversation", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        new ConversationTestWindow(CurrentPage.Commands, SelfCharacter, ResourceDatabase) { Owner = Window.GetWindow(this) }.Show();
     }
 
     /// <summary>Label / Jump to Label: just a name.</summary>

@@ -35,9 +35,11 @@ public static class EventCommandInterpreter
     private const int MaxSteps = 5000; // safety valve - nothing in a real command list should ever need this many steps; a runaway loop (once GoToLabel is real) would otherwise hang forever
 
     /// <param name="start">Where to begin - a reply's branch, when the player has just picked it.</param>
-    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start = 0)
+    /// <param name="returns">Pinned replies being answered: reaching StopAt (the end of that reply's branch) goes back to ResumeAt (its Show Text). Innermost last.</param>
+    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start = 0, IReadOnlyList<(int StopAt, int ResumeAt)>? returns = null)
     {
         int i = start;
+        returns ??= Array.Empty<(int, int)>();
         int guard = 0;
 
         while (i < commands.Count)
@@ -46,6 +48,16 @@ public static class EventCommandInterpreter
             {
                 trace.Add("(stopped - exceeded max command steps, likely a runaway loop)");
                 return;
+            }
+
+            // The end of a pinned reply's branch: back to its Show Text.
+            int pin = LastIndexOf(returns, i);
+            if (pin >= 0)
+            {
+                trace.Add("End of a pinned reply - back to its box");
+                i = returns[pin].ResumeAt;
+                returns = returns.Take(pin).ToList();
+                continue;
             }
 
             var cmd = commands[i];
@@ -97,10 +109,15 @@ public static class EventCommandInterpreter
                     if (context is IDialogChoiceHost { CanAskChoice: true } host)
                     {
                         // The game: the box goes up with its replies and everything waits for the player's pick.
+                        var returnsHere = returns;
                         bool waiting = host.AskChoice(cmd, choices, id =>
                         {
                             int when = DialogChoices.FindWhen(commands, at, id);
-                            Run(commands, context, trace, when >= 0 ? when + 1 : afterBranches);
+                            if (when < 0) { Run(commands, context, trace, afterBranches, returnsHere); return; }
+                            var next = returnsHere;
+                            if (choices.FirstOrDefault(c => c.Id == id) is { Pinned: true })
+                                next = returnsHere.Append((DialogChoices.FindBranchEnd(commands, when), at)).ToList();
+                            Run(commands, context, trace, when + 1, next);
                         });
                         if (waiting)
                         {
@@ -128,6 +145,23 @@ public static class EventCommandInterpreter
                     i++;
                     continue;
 
+                case EventCommandType.CloseShowText:
+                {
+                    if (context is IDialogChoiceHost { CanAskChoice: true } waiter)
+                    {
+                        int next = i + 1;
+                        var returnsHere = returns;
+                        if (waiter.WaitUntilRead(() => Run(commands, context, trace, next, returnsHere)))
+                        {
+                            trace.Add("Close Show Text - waiting for the box to be read");
+                            return;
+                        }
+                    }
+                    trace.Add("Close Show Text");
+                    i++;
+                    continue;
+                }
+
                 default:
                 {
                     bool didReal = context.Execute(cmd);
@@ -137,6 +171,13 @@ public static class EventCommandInterpreter
                 }
             }
         }
+    }
+
+    private static int LastIndexOf(IReadOnlyList<(int StopAt, int ResumeAt)> returns, int index)
+    {
+        for (int r = returns.Count - 1; r >= 0; r--)
+            if (returns[r].StopAt == index) return r;
+        return -1;
     }
 
     internal static bool EvaluateBranch(EventCommand cmd, IEventExecutionContext context)
