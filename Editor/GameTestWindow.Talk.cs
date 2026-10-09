@@ -240,6 +240,9 @@ public partial class GameTestWindow
             case "Player":
                 speaker = _player;
                 break;
+            case var id when _player is not null && _player.Id.ToString() == id:
+                speaker = _player; // the main player picked by name: always here, not one of the placed characters
+                break;
             default:
                 speakerOnMap = _mapCharacters.FirstOrDefault(mc => mc.Character.Id.ToString() == key);
                 speaker = speakerOnMap?.Character;
