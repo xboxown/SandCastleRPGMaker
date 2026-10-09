@@ -419,7 +419,11 @@ public partial class GameTestWindow
         foreach (var body in bodies)
         {
             if (VisualOf(body.Entity) is not { } visual) continue;
-            int zIndex = Panel.GetZIndex(visual);
+            // A floor tile (type Tile) is a flat: Exult paints flats first, under everything standing on its floor,
+            // so the tile a row in front never covers the feet of a rat standing on the floor behind it.
+            int zIndex = body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile
+                ? FloorBand(body.Z) + 1 + body.Z % MapFloors.LiftsPerFloor
+                : Panel.GetZIndex(visual);
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
             foreach (var below in bodies)
             {
