@@ -274,7 +274,8 @@ public partial class MainWindow
         ObjectId = source.ObjectId, Quantity = source.Quantity, Facing = source.Facing, ContainerInstanceId = -1,
         StartsOpen = source.StartsOpen, StartsLocked = source.StartsLocked, StartsLit = source.StartsLit, OffsetX = source.OffsetX, OffsetY = source.OffsetY,
         StartStage = source.StartStage, StartsFullOfId = source.StartsFullOfId, LinkedInstanceIds = source.LinkedInstanceIds.ToList(),
-        DestinationX = source.DestinationX, DestinationY = source.DestinationY, DestinationLift = source.DestinationLift
+        DestinationX = source.DestinationX, DestinationY = source.DestinationY, DestinationLift = source.DestinationLift,
+        HangsOnWall = source.HangsOnWall
     };
 
     private void CopyObjectInstance(ObjectInstance source)

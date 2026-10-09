@@ -219,6 +219,16 @@ public class ObjectInstance
     /// <summary>Put underneath (Map Editor, Free Placement): it lies on the floor under whatever is over it (under a table), holds nothing up, and is drawn below what it's under. Picked up and put down again in play, it's an ordinary thing again.</summary>
     public bool LiesUnder { get; set; }
 
+    /// <summary>
+    /// Hangs on the wall (Map Editor, Free Placement - this placed copy only, off
+    /// by default): a shield, a painting, a wall torch. It stays exactly where it
+    /// was put, at its height, never falls, holds nothing up and doesn't block the
+    /// way - as in Exult, where things stay at the lift they were placed at. It's
+    /// still the same object: picked up, a hung shield is a shield to wear, and
+    /// put down again it's an ordinary thing.
+    /// </summary>
+    public bool HangsOnWall { get; set; }
+
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
 

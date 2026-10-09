@@ -155,8 +155,17 @@ public partial class MainWindow
             _ => (0, 0, 0, 0, 0, false)
         };
         var (left, top) = FootprintCorner(x, y, ox + info.SolidX, oy + info.SolidY, info.SizeX, info.SizeY);
+        if (IsHanging(entity)) return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, false, false, false, false); // on the wall: holds nothing up
         return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, info.Elevates, info.Surface, info.IsTile && info.Surface, under);
     }
+
+    private static bool IsHanging(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };
+
+    /// <summary>How many lifts above its floor something is.</summary>
+    private static int RaiseOf(int z) => z - MapFloors.BaseLift(MapFloors.FloorOfLift(Math.Max(0, z)));
+
+    /// <summary>How high a hung thing can go above its floor (the floor above starts at 5).</summary>
+    private const int MaxHangingLifts = MapFloors.LiftsPerFloor - 1;
 
     /// <summary>Upper floors' painted tiles: a slab one lift thick under each floor (GameTestWindow.Floors.cs).</summary>
     private IEnumerable<EditorBody> FloorSlabBodies()
@@ -207,6 +216,7 @@ public partial class MainWindow
         foreach (var body in things)
         {
             if (body.Entity is ObjectInstance tile && _objectDatabase.Objects.FirstOrDefault(o => o.Id == tile.ObjectId)?.Type == ObjectType.Tile) { settled.Add(body); continue; } // tiles have no gravity
+            if (IsHanging(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
             int z = RestingZ(settled, body);
             if (z != body.Z) { SetZOf(body.Entity, z); changed.Add(body.Entity); }
             settled.Add(body with { Z = z });
@@ -282,6 +292,7 @@ public partial class MainWindow
         {
             var instance = objectTemplate is not null ? CopyOf(objectTemplate) : new ObjectInstance { ObjectId = id, Quantity = 1, ContainerInstanceId = -1 };
             (instance.X, instance.Y, instance.OffsetX, instance.OffsetY, instance.Z) = (x, y, ox, oy, z);
+            if (instance.HangsOnWall) instance.Z = MapFloors.BaseLift(_currentFloor) + RaiseOf(objectTemplate!.Z); // a pasted hung thing hangs at the same height
             instance.InstanceId = _map.GetNextInstanceId();
             _map.Objects.Add(instance);
             entity = instance;
@@ -290,6 +301,7 @@ public partial class MainWindow
         {
             var item = itemTemplate is not null ? CopyOfItem(itemTemplate) : new PlacedItemInstance { Category = category, ItemId = id };
             (item.X, item.Y, item.OffsetX, item.OffsetY, item.Z) = (x, y, ox, oy, z);
+            if (item.HangsOnWall) item.Z = MapFloors.BaseLift(_currentFloor) + RaiseOf(itemTemplate!.Z);
             _map.Items.Add(item);
             entity = item;
         }
@@ -304,7 +316,7 @@ public partial class MainWindow
 
     private static PlacedItemInstance CopyOfItem(PlacedItemInstance source) => new()
     {
-        Category = source.Category, ItemId = source.ItemId, OffsetX = source.OffsetX, OffsetY = source.OffsetY, IsLockedRuntime = source.IsLockedRuntime,
+        Category = source.Category, ItemId = source.ItemId, OffsetX = source.OffsetX, OffsetY = source.OffsetY, IsLockedRuntime = source.IsLockedRuntime, HangsOnWall = source.HangsOnWall,
         OwnContents = source.OwnContents?.Select(c => new InventoryItemInstance { InstanceId = c.InstanceId, Category = c.Category, ItemId = c.ItemId, Quantity = c.Quantity, ContainerX = c.ContainerX, ContainerY = c.ContainerY }).ToList()
     };
 
@@ -388,6 +400,16 @@ public partial class MainWindow
             foreach (var over in bodies)
                 if (!ReferenceEquals(over.Entity, body.Entity) && !over.Under && over.Overlaps(body))
                     order[body.Entity] = Math.Min(order[body.Entity], order[over.Entity] - 1);
+        // Hung on the wall: on the face of whatever its picture is over.
+        foreach (var body in bodies.Where(b => IsHanging(b.Entity)))
+        {
+            if (VisualOfThing(body.Entity) is not { } hungVisual) continue;
+            var picture = new Rect(Canvas.GetLeft(hungVisual), Canvas.GetTop(hungVisual), hungVisual.Width, hungVisual.Height);
+            foreach (var other in bodies)
+                if (!ReferenceEquals(other.Entity, body.Entity) && !IsHanging(other.Entity) && VisualOfThing(other.Entity) is { } otherVisual
+                    && picture.IntersectsWith(new Rect(Canvas.GetLeft(otherVisual), Canvas.GetTop(otherVisual), otherVisual.Width, otherVisual.Height)))
+                    order[body.Entity] = Math.Max(order[body.Entity], order[other.Entity] + 1);
+        }
         foreach (var (entity, index) in order)
             if (VisualOfThing(entity) is { } visual) Panel.SetZIndex(visual, Math.Clamp(1000 + index, 1, CharacterZIndex - 1));
     }
@@ -479,7 +501,11 @@ public partial class MainWindow
         _freeDragging = null;
         if (VisualOfThing(dragged) is not { } visual) return true;
         var (category, id) = IdentityOf(dragged);
-        var (x, y, ox, oy, z) = ResolveFreeSpot(category, id, p.X - _freeDragGrab.X, p.Y - _freeDragGrab.Y, visual.Width, visual.Height, dragged);
+        bool hanging = IsHanging(dragged);
+        int raise = RaiseOf(dragged switch { ObjectInstance d => d.Z, PlacedItemInstance d => d.Z, _ => 0 });
+        // A hung thing is moved by where its picture is now, at the same height on the wall.
+        var (x, y, ox, oy, z) = ResolveFreeSpot(category, id, p.X - _freeDragGrab.X + (hanging ? raise * 4 : 0), p.Y - _freeDragGrab.Y + (hanging ? raise * 4 : 0), visual.Width, visual.Height, dragged);
+        if (hanging) z = MapFloors.BaseLift(_currentFloor) + raise;
         switch (dragged)
         {
             case ObjectInstance o: (o.X, o.Y, o.OffsetX, o.OffsetY, o.Z, o.LiesUnder) = (x, y, ox, oy, z, false); break;
@@ -522,6 +548,22 @@ public partial class MainWindow
             menu.Items.Add(onTop);
             menu.Items.Add(underneath);
             menu.Items.Add(new Separator());
+
+            bool hanging = IsHanging(hit);
+            var hang = new MenuItem { Header = "Hangs on the wall (stays where it is, never falls)", IsCheckable = true, IsChecked = hanging };
+            hang.Click += (_, _) => SetHanging(hit, !hanging);
+            menu.Items.Add(hang);
+            var height = new MenuItem { Header = "Hanging height", IsEnabled = hanging };
+            int current = RaiseOf(ZOf(hit));
+            for (int lifts = 0; lifts <= MaxHangingLifts; lifts++)
+            {
+                int l = lifts;
+                var choice = new MenuItem { Header = l == 0 ? "On the floor (0px)" : $"{l} lift{(l == 1 ? "" : "s")} up ({l * 4}px)", IsCheckable = true, IsChecked = l == current };
+                choice.Click += (_, _) => SetHangingHeight(hit, l);
+                height.Items.Add(choice);
+            }
+            menu.Items.Add(height);
+            menu.Items.Add(new Separator());
         }
         var cut = new MenuItem { Header = "Cut", InputGestureText = "Ctrl+X", IsEnabled = hit is not null };
         cut.Click += (_, _) => { if (hit is not null) { _freeCopied = hit; DeleteFreeThing(hit); } };
@@ -538,6 +580,33 @@ public partial class MainWindow
         menu.Items.Add(delete);
         menu.PlacementTarget = MapCanvas;
         menu.IsOpen = true;
+    }
+
+    private static int ZOf(object entity) => entity switch { ObjectInstance o => o.Z, PlacedItemInstance i => i.Z, _ => 0 };
+
+    /// <summary>Hangs it on the wall (it stays exactly where it is, at its height) or takes it down (it falls onto what's under it).</summary>
+    private void SetHanging(object entity, bool value)
+    {
+        if (entity is ObjectInstance o) o.HangsOnWall = value;
+        else if (entity is PlacedItemInstance i) i.HangsOnWall = value;
+        if (value) SetLiesUnder(entity, false);
+        RedrawAfterSettle(entity);
+        UpdateFreeSelectionVisual();
+        StatusText.Text = value
+            ? $"\"{NameOfThing(entity)}\" hangs on the wall: it stays right here and never falls. Page Up / Page Down raise and lower it."
+            : $"\"{NameOfThing(entity)}\" is taken down: it rests on whatever is under it.";
+    }
+
+    /// <summary>A hung thing's height above its floor (0 to 4 lifts, 4px each - drawn up and left, as the game draws it).</summary>
+    private void SetHangingHeight(object entity, int lifts)
+    {
+        lifts = Math.Clamp(lifts, 0, MaxHangingLifts);
+        int z = MapFloors.BaseLift(MapFloors.FloorOfLift(Math.Max(0, ZOf(entity)))) + lifts;
+        if (entity is ObjectInstance o) (o.HangsOnWall, o.Z) = (true, z);
+        else if (entity is PlacedItemInstance i) (i.HangsOnWall, i.Z) = (true, z);
+        RedrawAfterSettle(entity);
+        UpdateFreeSelectionVisual();
+        StatusText.Text = $"\"{NameOfThing(entity)}\" hangs {lifts} lift{(lifts == 1 ? "" : "s")} ({lifts * 4}px) up the wall.";
     }
 
     private static void SetLiesUnder(object entity, bool value)
@@ -572,6 +641,13 @@ public partial class MainWindow
         if (ctrl && e.Key == Key.C && _freeSelected is { } toCopy) { CopyFreeThing(toCopy); return true; }
         if (ctrl && e.Key == Key.V && _freeCopied is not null) { PasteFreeThing(_lastFreeMouse); return true; }
         if (e.Key == Key.Delete && _freeSelected is { } toDelete) { DeleteFreeThing(toDelete); return true; }
+        // Page Up / Page Down: hang the selected thing higher or lower on the wall (Page Up hangs it if it wasn't).
+        if (e.Key is Key.PageUp or Key.PageDown && _freeSelected is { } toRaise)
+        {
+            int lifts = IsHanging(toRaise) ? RaiseOf(ZOf(toRaise)) : RaiseOf(ZOf(toRaise)) - 1;
+            SetHangingHeight(toRaise, lifts + (e.Key == Key.PageUp ? 1 : -1));
+            return true;
+        }
         return false;
     }
 

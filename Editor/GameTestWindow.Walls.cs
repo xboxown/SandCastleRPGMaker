@@ -131,6 +131,16 @@ public partial class GameTestWindow
         {
             var body = entity is PlacedItemInstance item ? BodyOf(item, null) : BodyOf(null, (ObjectInstance)entity);
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
+            if (HangsOnWall(entity))
+            {
+                // On the wall's face: drawn over every wall its picture is over.
+                var screen = ScreenRectOf(visual);
+                int z = Panel.GetZIndex(visual);
+                foreach (var (_, _, wallVisual, _) in walls)
+                    if (ScreenRectOf(wallVisual).IntersectsWith(screen)) z = Math.Max(z, Panel.GetZIndex(wallVisual) + 1);
+                Panel.SetZIndex(visual, z);
+                return;
+            }
             Panel.SetZIndex(visual, OrderAmongWalls(foot, body.Z, body.Height, ScreenRectOf(visual), Panel.GetZIndex(visual)));
         }
         foreach (var (item, visual) in _itemVisuals.ToList()) Order(item, visual);

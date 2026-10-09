@@ -182,6 +182,9 @@ public class PlacedItemInstance : IHasContainerContents
     /// <summary>Put underneath (Map Editor, Free Placement): see ObjectInstance.LiesUnder.</summary>
     public bool LiesUnder { get; set; }
 
+    /// <summary>Hangs on the wall (Map Editor, Free Placement): see ObjectInstance.HangsOnWall.</summary>
+    public bool HangsOnWall { get; set; }
+
     /// <summary>
     /// A container's own contents for THIS placement, set in the Map Editor
     /// (Ctrl + double-click it). Null: it starts with the Container Editor's

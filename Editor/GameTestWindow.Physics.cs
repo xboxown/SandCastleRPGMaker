@@ -77,8 +77,13 @@ public partial class GameTestWindow
         int x = item?.X ?? obj!.X, y = item?.Y ?? obj!.Y;
         int offsetX = item?.OffsetX ?? obj!.OffsetX, offsetY = item?.OffsetY ?? obj!.OffsetY;
         var foot = FootprintAt(x, y, offsetX + solidOffsetX, offsetY + solidOffsetY, sizeX, sizeY);
+        if (item?.HangsOnWall == true || obj?.HangsOnWall == true)
+            return new Body((object?)item ?? obj!, foot.Left, foot.Top, foot.Width, foot.Depth, item?.Z ?? obj!.Z, sizeZ, Solid: false, Elevates: false, Stackable: false); // on the wall: in nobody's way, holds nothing up
         return new Body((object?)item ?? obj!, foot.Left, foot.Top, foot.Width, foot.Depth, item?.Z ?? obj!.Z, sizeZ, IsSolidAt(item, obj), elevates, stackable);
     }
+
+    /// <summary>Hung on the wall in the Map Editor (ObjectInstance / PlacedItemInstance.HangsOnWall).</summary>
+    private static bool HangsOnWall(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };
 
     /// <summary>Where the item's solid box sits relative to its sprite (set by moving the box in the size editor), in 8px units - added on top of where the item itself stands.</summary>
     private (int X, int Y) ResolveSolidOffset(PlacedItemInstance? item, ObjectInstance? obj)
@@ -116,9 +121,10 @@ public partial class GameTestWindow
         foreach (var body in order)
         {
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
+            if (HangsOnWall(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
             int floorBase = HomeFloorBase(body);
-            var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity) // never held up by the floor above (its slab is the ceiling), nor by something put underneath
+            var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity) && !HangsOnWall(b.Entity) // never held up by the floor above (its slab is the ceiling), nor by something put underneath or hung on the wall
                 && b.Z >= floorBase - 1).ToList(); // nor by a floor below: on floor 2 only floor 2's slab and what's on floor 2 hold things up
             int z = LiesUnder(body.Entity) ? FloorTop(supports, rect) // put underneath: on the floor itself, under the table
                 : body.Elevates ? RestingLift(supports, rect) : SurfaceTop(supports, rect); // lying flat: on the floor - a table top is a floor
