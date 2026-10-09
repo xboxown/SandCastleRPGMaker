@@ -16,7 +16,7 @@ namespace SandcastleRpgMaker.Editor;
 /// its own visuals. A caller with no callback set just gets a no-op,
 /// exactly like every other optional dependency in this project.
 /// </summary>
-public class BookEventPreviewExecutionContext : IEventExecutionContext
+public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost
 {
     private readonly ResourceDatabase _resources;
     private readonly Dictionary<string, bool> _switches = new();
@@ -36,6 +36,11 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext
     public Func<string, int, bool>? OnChangeFaction { get; set; }
     /// <summary>Show Text as a real dialog box (speaker's face, position, background) - when set, used instead of OnShowText. False when it couldn't be shown (speaker out of sight).</summary>
     public Func<EventCommand, bool>? OnShowMessage { get; set; }
+    /// <summary>Show Text with replies: put the box up and call back with the picked reply's Id. Only a running game can ask; without it the first reply is taken.</summary>
+    public Func<EventCommand, List<DialogChoice>, Action<int>, bool>? OnAskChoice { get; set; }
+
+    public bool CanAskChoice => OnAskChoice is not null;
+    public bool AskChoice(EventCommand showText, List<DialogChoice> choices, Action<int> chosen) => OnAskChoice?.Invoke(showText, choices, chosen) ?? false;
     /// <summary>Teleport: (who - "Activator", "Player" or a character id, cell x, cell y).</summary>
     public Func<string, int, int, bool>? OnTeleport { get; set; }
     /// <summary>Change Behavior: (character - "Activator" or an id, a schedule activity name or "Resume").</summary>

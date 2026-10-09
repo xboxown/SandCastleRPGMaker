@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Event Commands" Height="640" Width="600" MinHeight="300" MinWidth="420" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <DockPanel Margin="12">
-        <TextBlock DockPanel.Dock="Top" Text="Show Text, Control Switches/Variables, Conditional Branch, Play Sound/Music, Shake Screen, Change Day/Night, Apply Palette Color, and both Change Book Content commands are built so far - everything else is shown to prove the category structure, and will light up as each is built."
+        <TextBlock DockPanel.Dock="Top" Text="Show Text (with replies), Label / Jump to Label, Control Switches/Variables, Conditional Branch, Play Sound/Music, Shake Screen, Change Day/Night, Apply Palette Color, and both Change Book Content commands are built so far - everything else is shown to prove the category structure, and will light up as each is built."
                    TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
@@ -21,7 +21,7 @@
                     <StackPanel Grid.Column="0" Margin="0,0,10,0">
                         <TextBlock Text="Message" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Show Text..." Margin="0,0,0,4" Click="ShowText_Click"/>
-                        <Button Content="Show Choices..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Show Text with Replies..." Margin="0,0,0,4" Click="ShowText_Click" ToolTip="Replies (choices) are part of Show Text: add them on its right side"/>
                         <Button Content="Input Number..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Select Item..." Margin="0,0,0,12" IsEnabled="False"/>
 
@@ -32,7 +32,9 @@
 
                         <TextBlock Text="Flow Control" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Conditional Branch..." Margin="0,0,0,4" Click="ConditionalBranch_Click"/>
-                        <Button Content="Label / Jump to Label..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Label..." Margin="0,0,0,4" Click="Label_Click"/>
+                        <Button Content="Jump to Label..." Margin="0,0,0,4" Click="JumpToLabel_Click"/>
+                        <Button Content="Exit Event Processing" Margin="0,0,0,4" Click="ExitEvent_Click" ToolTip="Stops the commands right here - ends a conversation too"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1">

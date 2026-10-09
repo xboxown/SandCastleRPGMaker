@@ -47,6 +47,11 @@
                                     <Setter Property="Foreground" Value="Red"/>
                                     <Setter Property="FontWeight" Value="Bold"/>
                                 </DataTrigger>
+                                <!-- Value="DialogFrame" must match SpriteDatabase.DialogFrameGroupName. -->
+                                <DataTrigger Binding="{Binding Name}" Value="DialogFrame">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
                                 <!-- Value="Blood" must match SpriteDatabase.BloodGroupName. -->
                                 <DataTrigger Binding="{Binding Name}" Value="Blood">
                                     <Setter Property="Foreground" Value="Red"/>

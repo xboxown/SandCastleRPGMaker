@@ -74,6 +74,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Keychain group is hardcoded and can't be deleted - Keychain objects take their look (a frame for each number of keys) from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName)
+        {
+            MessageBox.Show("The DialogFrame group is hardcoded and can't be deleted - Show Text takes its dialog box frames from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         Database.Groups.Remove(_currentGroup);
         _currentGroup = null;
         RefreshGroups();
@@ -97,6 +102,7 @@ public partial class SpriteEditorWindow : Window
         // Ammo / Money: how bundle pictures work, before the first one is made.
         if (SpriteDatabase.IsBundleGroup(_currentGroup.Name)) new BundleGuideWindow(_currentGroup.Name) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.KeychainGroupName) new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName) new DialogFrameGuideWindow { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 

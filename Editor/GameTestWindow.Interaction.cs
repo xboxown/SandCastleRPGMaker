@@ -132,7 +132,7 @@ public partial class GameTestWindow
     {
         if (_currentMessage is not null)
         {
-            AdvanceMessage(); // a dialog box is up: a click anywhere goes on
+            MessageClicked(e); // a dialog box is up: a click goes on, or picks the reply under it
             e.Handled = true;
             return;
         }
@@ -166,6 +166,7 @@ public partial class GameTestWindow
 
     private void Interaction_PreviewMouseMove(object sender, MouseEventArgs e)
     {
+        if (_currentMessage is not null) MessageMouseMoved(e); // the reply under the mouse lights up
         if (_pointer is not { } session) return;
         if (e.LeftButton != MouseButtonState.Pressed) { CancelPointer(); return; } // released somewhere we never heard about - abandon cleanly
 

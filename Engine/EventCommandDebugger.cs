@@ -174,9 +174,39 @@ public class EventCommandDebugger
                 CurrentIndex++;
                 break;
 
-            case EventCommandType.GoToLabel:
             case EventCommandType.Label:
-                LastStepDescription = $"(not implemented yet: {cmd.Type})";
+                LastStepDescription = $"Label \"{cmd.Get("LabelName")}\"";
+                CurrentIndex++;
+                break;
+
+            case EventCommandType.GoToLabel:
+            {
+                string name = cmd.Get("LabelName");
+                int target = _commands.FindIndex(c => c.Type == EventCommandType.Label && string.Equals(c.Get("LabelName"), name, StringComparison.OrdinalIgnoreCase));
+                LastStepDescription = target >= 0 ? $"Jump to Label \"{name}\"" : $"Jump to Label \"{name}\" - no such label";
+                CurrentIndex = target >= 0 ? target + 1 : CurrentIndex + 1;
+                break;
+            }
+
+            case EventCommandType.ShowText when DialogChoices.HasChoices(cmd):
+            {
+                // Nobody to pick in the debugger: show the text and take the first reply.
+                _context.Execute(cmd);
+                var choices = DialogChoices.Read(cmd);
+                int end = DialogChoices.FindEndChoices(_commands, CurrentIndex);
+                int first = choices.Count > 0 ? DialogChoices.FindWhen(_commands, CurrentIndex, choices[0].Id) : -1;
+                LastStepDescription = first >= 0 ? $"Show Text with replies - taking the first: \"{choices[0].Text}\"" : "Show Text with replies";
+                CurrentIndex = first >= 0 ? first + 1 : end >= 0 ? end + 1 : CurrentIndex + 1;
+                break;
+            }
+
+            case EventCommandType.WhenChoice:
+                LastStepDescription = "End of the reply's branch";
+                CurrentIndex = DialogChoices.FindEndChoicesFrom(_commands, CurrentIndex) + 1;
+                break;
+
+            case EventCommandType.EndChoices:
+                LastStepDescription = "End Replies";
                 CurrentIndex++;
                 break;
 

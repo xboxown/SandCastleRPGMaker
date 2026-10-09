@@ -24,10 +24,21 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 public partial class GameTestWindow
 {
-    private sealed record GameMessage(string Text, CharacterDefinition? Speaker, string Position, string Background, bool FaceRight);
+    private sealed record GameMessage(string Text, CharacterDefinition? Speaker, string Position, bool FaceRight)
+    {
+        public string Title { get; init; } = "";
+        /// <summary>The DialogFrame sprite, or null for no box.</summary>
+        public SpriteEntry? Frame { get; init; }
+        public bool Dim { get; init; }
+        /// <summary>The replies on offer - the box waits for one to be picked.</summary>
+        public List<DialogChoice>? Replies { get; init; }
+        public Action<int>? OnChosen { get; init; }
+        public bool HasReplies => Replies is { Count: > 0 };
+    }
 
     private readonly Queue<GameMessage> _messages = new();
     private GameMessage? _currentMessage;
+    private DialogBoxDrawing? _messageDrawing;
 
     /// <summary>The character whose action is running the current commands (stepped on an event, is being talked to); null = the player.</summary>
     private MapCharacter? _activator;
@@ -39,6 +50,7 @@ public partial class GameTestWindow
     private void InitializeTalk()
     {
         _execContext.OnShowMessage = QueueMessage;
+        _execContext.OnAskChoice = AskChoice;
         _execContext.OnTeleport = TeleportCommand;
         _execContext.OnChangeBehavior = ChangeBehaviorCommand;
     }
@@ -200,15 +212,25 @@ public partial class GameTestWindow
 
     private bool QueueMessage(EventCommand command)
     {
+        if (BuildMessage(command) is not { } message) return false;
+        _messages.Enqueue(message);
+        if (_currentMessage is null) ShowNextMessage();
+        return true;
+    }
+
+    /// <summary>A Show Text's box, or null when it isn't shown (no text and no replies, narration for a character walking past, a speaker out of sight).</summary>
+    private GameMessage? BuildMessage(EventCommand command, List<DialogChoice>? replies = null, Action<int>? onChosen = null)
+    {
         string text = command.Get("Text");
-        if (string.IsNullOrEmpty(text)) return false;
+        string title = command.Get(DialogBoxBuilder.TitleKey);
+        if (string.IsNullOrEmpty(text) && string.IsNullOrEmpty(title) && (replies is null || replies.Count == 0)) return null;
         string key = command.Get("SpeakerId");
         CharacterDefinition? speaker;
         MapCharacter? speakerOnMap = null;
         switch (key)
         {
             case "":
-                if (_activatedByCharacterStep) return false; // narration is for the player, not for a character walking past
+                if (_activatedByCharacterStep) return null; // narration is for the player, not for a character walking past
                 speaker = null;
                 break;
             case "Self":
@@ -224,18 +246,24 @@ public partial class GameTestWindow
                 if (speaker is null)
                 {
                     StatusText.Text = "That speaker isn't on this map - their line isn't shown.";
-                    return false;
+                    return null;
                 }
                 break;
         }
         if (speakerOnMap is not null && !IsInSight(speakerOnMap))
         {
             StatusText.Text = $"{speakerOnMap.Character.Name} isn't in sight - their line isn't shown.";
-            return false;
+            return null;
         }
-        _messages.Enqueue(new GameMessage(text, speaker, command.Get("Position"), command.Get("Background"), command.Get("FaceSide") == "Right"));
-        if (_currentMessage is null) ShowNextMessage();
-        return true;
+        var (frame, dim) = DialogBoxBuilder.LookOf(command);
+        return new GameMessage(text, speaker, command.Get("Position"), command.Get("FaceSide") == "Right")
+        {
+            Title = title,
+            Frame = _sprites.FindDialogFrame(frame),
+            Dim = dim,
+            Replies = replies,
+            OnChosen = onChosen
+        };
     }
 
     /// <summary>In sight: on the visible screen itself.</summary>
@@ -245,12 +273,15 @@ public partial class GameTestWindow
 
     private void AdvanceMessage()
     {
+        if (_currentMessage is { HasReplies: true }) return; // a reply has to be picked
         _currentMessage = null;
         ShowNextMessage();
     }
 
     private void ShowNextMessage()
     {
+        _messageDrawing?.Stop();
+        _messageDrawing = null;
         MessageLayer.Children.Clear();
         if (!_messages.TryDequeue(out var message))
         {
@@ -259,69 +290,14 @@ public partial class GameTestWindow
             return;
         }
         _currentMessage = message;
+        _replyCursor = -1;
         MessageLayer.Visibility = Visibility.Visible;
 
-        const double margin = 4, padding = 4, faceMax = 48;
-        double boxWidth = ViewportWidth - 2 * margin;
-
-        // The speaker's face, at most 48px, crisp.
-        Image? face = null;
-        if (message.Speaker is { } speaker && FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName) is { } faceSprite && FirstFrameOf(faceSprite) is { } faceBitmap)
-        {
-            double scale = Math.Min(1, Math.Min(faceMax / faceBitmap.PixelWidth, faceMax / faceBitmap.PixelHeight));
-            face = new Image { Source = faceBitmap, Width = faceBitmap.PixelWidth * scale, Height = faceBitmap.PixelHeight * scale, Stretch = Stretch.Fill };
-            RenderOptions.SetBitmapScalingMode(face, BitmapScalingMode.NearestNeighbor);
-        }
-        double faceWidth = face is null ? 0 : face.Width + padding;
-        double textWidth = boxWidth - 2 * padding - faceWidth;
-
-        // The text in the DialogFont, or a small system font until that font has letters.
-        FrameworkElement text;
-        if (SpriteFont.For(_sprites, SpriteDatabase.DialogFontName)?.RenderText(message.Text, 1, null, textWidth) is { } textBitmap)
-        {
-            var image = new Image { Source = textBitmap, Width = textBitmap.PixelWidth, Height = textBitmap.PixelHeight, Stretch = Stretch.None };
-            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-            text = image;
-        }
-        else
-        {
-            text = new TextBlock { Text = message.Text, Width = textWidth, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White, FontSize = 8 };
-            text.Measure(new Size(textWidth, double.PositiveInfinity));
-            text.Height = text.DesiredSize.Height;
-        }
-
-        double boxHeight = Math.Min(ViewportHeight - 2 * margin, Math.Max(32, Math.Max(face?.Height ?? 0, text.Height) + 2 * padding));
-        double boxTop = message.Position switch
-        {
-            "Top" => margin,
-            "Middle" => (ViewportHeight - boxHeight) / 2,
-            _ => ViewportHeight - margin - boxHeight
-        };
-
-        if (message.Background == "Dim")
-            MessageLayer.Children.Add(new Border { Width = ViewportWidth, Height = ViewportHeight, Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)) });
-        else if (message.Background != "Transparent")
-        {
-            var box = new Border
-            {
-                Width = boxWidth, Height = boxHeight, CornerRadius = new CornerRadius(2),
-                Background = new SolidColorBrush(Color.FromArgb(224, 16, 16, 48)), BorderBrush = new SolidColorBrush(Color.FromRgb(192, 192, 192)), BorderThickness = new Thickness(1)
-            };
-            Canvas.SetLeft(box, margin);
-            Canvas.SetTop(box, boxTop);
-            MessageLayer.Children.Add(box);
-        }
-
-        double textLeft = margin + padding + (message.FaceRight ? 0 : faceWidth);
-        if (face is not null)
-        {
-            Canvas.SetLeft(face, message.FaceRight ? margin + boxWidth - padding - face.Width : margin + padding);
-            Canvas.SetTop(face, boxTop + padding);
-            MessageLayer.Children.Add(face);
-        }
-        Canvas.SetLeft(text, textLeft);
-        Canvas.SetTop(text, boxTop + padding);
-        MessageLayer.Children.Add(text);
+        BitmapSource? face = null;
+        if (message.Speaker is { } speaker && FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName) is { } faceSprite) face = FirstFrameOf(faceSprite);
+        var content = new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame,
+            message.Replies?.Select(r => r.Text).ToList() ?? new List<string>());
+        _messageDrawing = DialogBoxBuilder.Draw(MessageLayer, content, _sprites, _resources);
     }
 
     private SpriteEntry? FindSprite(string group, string name)

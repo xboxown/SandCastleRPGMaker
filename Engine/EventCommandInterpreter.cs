@@ -34,9 +34,10 @@ public static class EventCommandInterpreter
 {
     private const int MaxSteps = 5000; // safety valve - nothing in a real command list should ever need this many steps; a runaway loop (once GoToLabel is real) would otherwise hang forever
 
-    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace)
+    /// <param name="start">Where to begin - a reply's branch, when the player has just picked it.</param>
+    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start = 0)
     {
-        int i = 0;
+        int i = start;
         int guard = 0;
 
         while (i < commands.Count)
@@ -74,9 +75,56 @@ public static class EventCommandInterpreter
                     i++;
                     continue;
 
-                case EventCommandType.GoToLabel:
                 case EventCommandType.Label:
-                    trace.Add($"(not implemented in preview yet: {cmd.Type})");
+                    i++;
+                    continue;
+
+                case EventCommandType.GoToLabel:
+                {
+                    string name = cmd.Get("LabelName");
+                    int target = commands.FindIndex(c => c.Type == EventCommandType.Label && string.Equals(c.Get("LabelName"), name, StringComparison.OrdinalIgnoreCase));
+                    trace.Add(target >= 0 ? $"Jump to Label \"{name}\"" : $"Jump to Label \"{name}\" - no such label, going on");
+                    i = target >= 0 ? target + 1 : i + 1;
+                    continue;
+                }
+
+                case EventCommandType.ShowText when DialogChoices.HasChoices(cmd):
+                {
+                    var choices = DialogChoices.Read(cmd);
+                    int at = i;
+                    int end = DialogChoices.FindEndChoices(commands, at);
+                    int afterBranches = end >= 0 ? end + 1 : at + 1;
+                    if (context is IDialogChoiceHost { CanAskChoice: true } host)
+                    {
+                        // The game: the box goes up with its replies and everything waits for the player's pick.
+                        bool waiting = host.AskChoice(cmd, choices, id =>
+                        {
+                            int when = DialogChoices.FindWhen(commands, at, id);
+                            Run(commands, context, trace, when >= 0 ? when + 1 : afterBranches);
+                        });
+                        if (waiting)
+                        {
+                            trace.Add($"Show Text with {choices.Count} repl{(choices.Count == 1 ? "y" : "ies")} - waiting for the player's pick");
+                            return;
+                        }
+                        i = afterBranches;
+                        continue;
+                    }
+                    // A preview with nobody to pick: show the text and take the first reply.
+                    bool shown = context.Execute(cmd);
+                    trace.Add(shown ? $"Executed: {Describe(cmd)}" : $"(not implemented in preview yet: {Describe(cmd)})");
+                    int first = choices.Count > 0 ? DialogChoices.FindWhen(commands, at, choices[0].Id) : -1;
+                    if (first >= 0) trace.Add($"(preview takes the first reply: \"{choices[0].Text}\")");
+                    i = first >= 0 ? first + 1 : afterBranches;
+                    continue;
+                }
+
+                case EventCommandType.WhenChoice:
+                    // The end of the picked reply's branch: skip the other replies' branches.
+                    i = DialogChoices.FindEndChoicesFrom(commands, i) + 1;
+                    continue;
+
+                case EventCommandType.EndChoices:
                     i++;
                     continue;
 

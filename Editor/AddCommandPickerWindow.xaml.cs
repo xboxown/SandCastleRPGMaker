@@ -18,6 +18,24 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void Label_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.Label;
+        DialogResult = true;
+    }
+
+    private void JumpToLabel_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.GoToLabel;
+        DialogResult = true;
+    }
+
+    private void ExitEvent_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.End;
+        DialogResult = true;
+    }
+
     private void PlaySound_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.PlaySound;

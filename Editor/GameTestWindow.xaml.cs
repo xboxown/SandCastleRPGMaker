@@ -1477,7 +1477,7 @@ public partial class GameTestWindow : Window
     {
         if (_currentMessage is not null)
         {
-            if (e.Key is Key.Enter or Key.Space or Key.Escape) AdvanceMessage(); // a dialog box is up: these go on, nothing else happens
+            MessageKey(e.Key); // a dialog box is up: Enter/Space/Escape go on, or the keys pick a reply - nothing else happens
             e.Handled = true;
             return;
         }

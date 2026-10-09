@@ -37,7 +37,11 @@ public enum EventCommandType
     ChangeFoodLevel,
     ModifyAilments,
     Attack,
-    End
+    End,
+    /// <summary>"When [reply]:" - the start of one reply's branch under a Show Text with replies (its commands are one level deeper). Added by the Show Text window, never on its own.</summary>
+    WhenChoice,
+    /// <summary>The end of a Show Text's reply branches.</summary>
+    EndChoices
 }
 
 /// <summary>

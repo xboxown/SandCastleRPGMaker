@@ -178,7 +178,24 @@ public class SpriteDatabase
     public const string KeychainGroupName = "Keychain";
     public const int KeychainFrames = 5;
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || IsBundleGroup(name);
+    /// <summary>
+    /// Reserved group for dialog box frames (Show Text): each sprite is one
+    /// look for the box. Ordinary sprites - frames animate and play their
+    /// sounds. With Nine Slice on, the corners stay as drawn and the edges
+    /// and middle stretch to the box's size. Empty group = no frame at all.
+    /// </summary>
+    public const string DialogFrameGroupName = "DialogFrame";
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || IsBundleGroup(name);
+
+    /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
+    public SpriteEntry? FindDialogFrame(string name)
+    {
+        if (name == "None") return null;
+        var frames = Groups.FirstOrDefault(g => g.Name == DialogFrameGroupName)?.Sprites;
+        if (frames is null || frames.Count == 0) return null;
+        return frames.FirstOrDefault(s => s.Name == name) ?? frames[0];
+    }
     public static bool IsFontSprite(string groupName, string spriteName) =>
         groupName == FontsGroupName && (spriteName == InGameFontName || spriteName == DialogFontName);
 
@@ -198,6 +215,7 @@ public class SpriteDatabase
         GetOrCreateGroup(MoneyGroupName);
         GetOrCreateGroup(LockpickGroupName);
         GetOrCreateGroup(KeychainGroupName);
+        GetOrCreateGroup(DialogFrameGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

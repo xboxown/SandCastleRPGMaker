@@ -190,7 +190,15 @@ public partial class EventEditorControl : UserControl
     {
         var block = new TextBlock { Margin = new Thickness(command.IndentLevel * 20, 0, 0, 0) };
         block.Inlines.Add(new Run("\u25C6") { Foreground = Brushes.Red, FontWeight = FontWeights.Bold }); // hollow-style marker, start of command
-        block.Inlines.Add(new Run(command.Type.ToString()) { Foreground = Brushes.Red, FontWeight = FontWeights.Bold });
+        string commandName = command.Type switch
+        {
+            EventCommandType.WhenChoice => "When",
+            EventCommandType.EndChoices => "End Replies",
+            EventCommandType.GoToLabel => "Jump to Label",
+            EventCommandType.End => "Exit Event Processing",
+            _ => command.Type.ToString()
+        };
+        block.Inlines.Add(new Run(commandName) { Foreground = IsChoiceLine(command) ? Brushes.MediumBlue : Brushes.Red, FontWeight = FontWeights.Bold });
 
         if (command.Type == EventCommandType.PlaySound)
         {
@@ -284,7 +292,18 @@ public partial class EventEditorControl : UserControl
         else if (command.Type == EventCommandType.ShowText)
         {
             string speaker = ShowTextSpeakerLabel(command.Get("SpeakerId"));
-            block.Inlines.Add(new Run($" : {(speaker.Length > 0 ? speaker + ": " : "")}{Truncate(command.Get("Text"), 50)}"));
+            string title = command.Get(DialogBoxBuilder.TitleKey);
+            block.Inlines.Add(new Run($" : {(title.Length > 0 ? "[" + title + "] " : "")}{(speaker.Length > 0 ? speaker + ": " : "")}{Truncate(command.Get("Text"), 50)}"));
+            var replies = DialogChoices.Read(command);
+            if (replies.Count > 0)
+                block.Inlines.Add(new Run($"   Replies: {Truncate(string.Join(", ", replies.Select(r => r.Text + (r.Condition is null ? "" : "*"))), 60)}") { Foreground = Brushes.MediumBlue });
+        }
+        else if (command.Type == EventCommandType.WhenChoice)
+        {
+            block.Inlines.Add(new Run($" \"{command.Get("Text")}\" :") { Foreground = Brushes.MediumBlue });
+        }
+        else if (command.Type is EventCommandType.EndChoices or EventCommandType.End)
+        {
         }
         else if (command.Parameters.Count > 0)
         {
@@ -335,6 +354,9 @@ public partial class EventEditorControl : UserControl
         // marker) still means "add at the end", same as before.
         int selected = ContentsListBox.SelectedIndex;
         int insertAt = (selected >= 0 && selected < CurrentPage.Commands.Count) ? selected + 1 : CurrentPage.Commands.Count;
+        // A Show Text with replies is followed by its branches: a new command goes after them, not between.
+        if (selected >= 0 && selected < CurrentPage.Commands.Count && DialogChoices.FindEndChoices(CurrentPage.Commands, selected) is var blockEnd and >= 0)
+            insertAt = blockEnd + 1;
         int indentLevel = ComputeInsertIndentLevel(insertAt);
 
         if (type == EventCommandType.ShowText)
@@ -343,10 +365,26 @@ public partial class EventEditorControl : UserControl
             if (dialog.ShowDialog() == true)
             {
                 dialog.Result.IndentLevel = indentLevel;
-                CurrentPage.Commands.Insert(insertAt, dialog.Result);
+                PlaceShowText(insertAt, dialog.Result, replace: false);
                 RenderContentsList();
                 ContentChanged?.Invoke();
             }
+        }
+        else if (type is EventCommandType.Label or EventCommandType.GoToLabel)
+        {
+            if (AskLabel(type, null) is { } label)
+            {
+                label.IndentLevel = indentLevel;
+                CurrentPage.Commands.Insert(insertAt, label);
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (type == EventCommandType.End)
+        {
+            CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = EventCommandType.End, IndentLevel = indentLevel });
+            RenderContentsList();
+            ContentChanged?.Invoke();
         }
         else if (type == EventCommandType.PlaySound)
         {
@@ -513,7 +551,7 @@ public partial class EventEditorControl : UserControl
     {
         if (CurrentPage is null || insertAt <= 0 || insertAt > CurrentPage.Commands.Count) return 0;
         var previous = CurrentPage.Commands[insertAt - 1];
-        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.Else;
+        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.Else or EventCommandType.WhenChoice;
         return opensBlock ? previous.IndentLevel + 1 : previous.IndentLevel;
     }
 
@@ -522,13 +560,32 @@ public partial class EventEditorControl : UserControl
         if (CurrentPage is null) return;
         var command = CurrentPage.Commands[index];
 
+        if (IsChoiceLine(command))
+        {
+            // A reply's line: its Show Text holds the replies.
+            int owner = OwningShowTextOf(index);
+            if (owner >= 0) EditCommandAt(owner);
+            return;
+        }
         if (command.Type == EventCommandType.ShowText)
         {
             var dialog = new ShowTextCommandWindow(command) { Owner = Window.GetWindow(this) };
             if (dialog.ShowDialog() == true)
             {
                 dialog.Result.IndentLevel = command.IndentLevel; // editing must preserve the existing command's position in the nesting - a fresh object here defaults to 0
-                CurrentPage.Commands[index] = dialog.Result;
+                if (PlaceShowText(index, dialog.Result, replace: true))
+                {
+                    RenderContentsList();
+                    ContentChanged?.Invoke();
+                }
+            }
+        }
+        else if (command.Type is EventCommandType.Label or EventCommandType.GoToLabel)
+        {
+            if (AskLabel(command.Type, command) is { } label)
+            {
+                label.IndentLevel = command.IndentLevel;
+                CurrentPage.Commands[index] = label;
                 RenderContentsList();
                 ContentChanged?.Invoke();
             }
@@ -683,6 +740,7 @@ public partial class EventEditorControl : UserControl
         if (CurrentPage is null) return;
         int index = ContentsListBox.SelectedIndex;
         if (index < 0 || index >= CurrentPage.Commands.Count) return;
+        if (TryDeleteChoiceAware(index)) return;
         CurrentPage.Commands.RemoveAt(index);
         RenderContentsList();
         ContentChanged?.Invoke();

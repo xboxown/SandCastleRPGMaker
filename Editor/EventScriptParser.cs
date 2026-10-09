@@ -22,6 +22,7 @@ internal static class EventScriptParser
         {
             string line = lines[i].Trim();
             if (line.Length == 0) continue;
+            int indent = (lines[i].Length - lines[i].TrimStart(' ').Length) / 4; // 4 spaces per nesting level (If / Else / When branches)
 
             if (!line.EndsWith(";"))
                 return (null, $"Line {i + 1}: missing semicolon ';' at the end of the line.\n\n{line}");
@@ -64,7 +65,7 @@ internal static class EventScriptParser
                 }
             }
 
-            commands.Add(new EventCommand { Type = commandType, Parameters = parameters });
+            commands.Add(new EventCommand { Type = commandType, IndentLevel = indent, Parameters = parameters });
         }
 
         return (commands, null);
@@ -77,7 +78,7 @@ internal static class EventScriptParser
         foreach (var cmd in commands)
         {
             var paramStrs = cmd.Parameters.Select(kv => $"{kv.Key}=\"{kv.Value.Replace("\"", "\\\"")}\"");
-            lines.Add($"{cmd.Type}({string.Join(", ", paramStrs)});");
+            lines.Add($"{new string(' ', cmd.IndentLevel * 4)}{cmd.Type}({string.Join(", ", paramStrs)});");
         }
         return string.Join("\n", lines);
     }

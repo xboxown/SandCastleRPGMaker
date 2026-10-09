@@ -186,6 +186,37 @@ public partial class BookEventConditionsControl : UserControl
         }
     }
 
+    private bool _replyMode;
+
+    /// <summary>
+    /// A Show Text reply's condition (when the reply is offered): Trigger is
+    /// "the party has / doesn't have this item" (checked live), Cycle counts
+    /// how many times the reply was picked, and only the checks that mean
+    /// something in a conversation are shown.
+    /// </summary>
+    public void ApplyReplyChoices()
+    {
+        _replyMode = true;
+        var current = Conditions?.TriggerConditionBased;
+        TriggerConditionBasedCombo.ItemsSource = new List<EnumChoice<BookTriggerConditionBased>>
+        {
+            EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(BookTriggerConditionBased.Always, "Always"),
+            EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(BookTriggerConditionBased.ByHavingAnItem, "The party has this item"),
+            EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(BookTriggerConditionBased.ByNotHavingAnItem, "The party doesn't have this item")
+        };
+        var currentCycle = Conditions?.CycleCondition;
+        CycleConditionCombo.ItemsSource = new List<EnumChoice<CycleConditionType>>
+        {
+            EnumChoice<CycleConditionType>.WithExplicitLabel(CycleConditionType.Always, "Always offered"),
+            EnumChoice<CycleConditionType>.WithExplicitLabel(CycleConditionType.Once, "Once (gone after it's picked)"),
+            EnumChoice<CycleConditionType>.WithExplicitLabel(CycleConditionType.SpecificNumberOfTimes, "Until picked this many times")
+        };
+        foreach (var check in new[] { EventCompletedCheck, CombineItemCheck, DropToSelfCheck, JoinedPartyCheck, DistanceCheck })
+            check.Visibility = Visibility.Collapsed;
+        if (current.HasValue) SelectValue(TriggerConditionBasedCombo, current.Value);
+        if (currentCycle.HasValue) SelectValue(CycleConditionCombo, currentCycle.Value);
+    }
+
     /// <summary>Wires the databases the picker sub-editors need - call once when the control is created.</summary>
     public void SetDatabases(BookDatabase books, ObjectDatabase objects, ContainerDatabase containers, SpriteDatabase sprites, VariableDatabase variables, StatDatabase stats)
     {
@@ -316,8 +347,8 @@ public partial class BookEventConditionsControl : UserControl
     /// </summary>
     private void WarnIfAlwaysFiresWithNoRestriction()
     {
-        if (_conditions is null) return;
-        bool noOtherConditions = !_conditions.ConditionInACondition && !_conditions.ConditionEventTriggerCompleted &&
+        if (_conditions is null || _replyMode) return; // a reply always on offer is normal
+        bool noOtherConditions =!_conditions.ConditionInACondition && !_conditions.ConditionEventTriggerCompleted &&
             !_conditions.ConditionStatCondition && !_conditions.ConditionCombineItem && !_conditions.ConditionDropToSelf &&
             !_conditions.ConditionJoinedParty && !_conditions.ConditionDistance && !_conditions.ConditionComplex;
 
