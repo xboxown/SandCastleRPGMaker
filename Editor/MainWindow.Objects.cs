@@ -173,16 +173,20 @@ public partial class MainWindow
         return true;
     }
 
-    private void ObjectMode_MouseRightButtonDown(int x, int y, Point p)
+    private void ObjectMode_MouseRightButtonDown(int x, int y, Point p) => OpenObjectMenu(x, y, p, null);
+
+    private void OpenObjectMenu(int x, int y, Point p, ObjectInstance? chosen)
     {
         // The object whose picture is under the mouse (a tall one is drawn up into the cell above its own), else the one on this cell.
-        var existing = ThingAtPoint(p, t => t is ObjectInstance) as ObjectInstance ?? ObjectAt(x, y);
+        var here = ThingsAtPoint(p).OfType<ObjectInstance>().Cast<object>().ToList();
+        var existing = chosen ?? here.FirstOrDefault() as ObjectInstance ?? ObjectAt(x, y);
         if (existing is not null) SelectObjectInstance(existing);
         var obj = existing is null ? null : _objectDatabase.Objects.FirstOrDefault(o => o.Id == existing.ObjectId);
         var menu = new ContextMenu();
         if (existing is not null && obj is not null)
         {
-            menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})", IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (existing.HangsOnWall ? $"  (hangs on the wall, {RaiseOf(existing.Z)} lift{(RaiseOf(existing.Z) == 1 ? "" : "s")} up)" : ""), IsEnabled = false });
+            AddOtherThingsHere(menu, existing, here, t => OpenObjectMenu(x, y, p, (ObjectInstance)t));
             AddObjectStateMenuItems(menu, obj, existing);
             menu.Items.Add(new Separator());
             AddHangingMenuItems(menu, existing);

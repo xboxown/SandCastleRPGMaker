@@ -442,6 +442,34 @@ public partial class MainWindow
             .OrderByDescending(t => Panel.GetZIndex(t.Visual!))
             .Select(t => t.Thing).FirstOrDefault();
 
+    /// <summary>Everything whose picture is under this point on the picked floor, top first.</summary>
+    private List<object> ThingsAtPoint(Point p) =>
+        MapThings().Where(OnCurrentFloor)
+            .Select(t => (Thing: t, Visual: VisualOfThing(t)))
+            .Where(t => t.Visual is not null && new Rect(Canvas.GetLeft(t.Visual), Canvas.GetTop(t.Visual), t.Visual.Width, t.Visual.Height).Contains(p))
+            .OrderByDescending(t => Panel.GetZIndex(t.Visual!))
+            .Select(t => t.Thing).ToList();
+
+    /// <summary>The menu's title line: the thing's name, and whether it hangs on the wall.</summary>
+    private string MenuTitleOf(object entity) => NameOfThing(entity) + (IsHanging(entity) ? $"  (hangs on the wall, {RaiseOf(ZOf(entity))} lift{(RaiseOf(ZOf(entity)) == 1 ? "" : "s")} up)" : "");
+
+    /// <summary>"Something else here": the other things under the mouse, to open the menu of the one meant (a picture drawn behind a wall).</summary>
+    private void AddOtherThingsHere(ContextMenu menu, object current, List<object> here, Action<object> openFor)
+    {
+        var others = here.Where(t => !ReferenceEquals(t, current)).ToList();
+        if (others.Count == 0) return;
+        var other = new MenuItem { Header = "Something else here" };
+        foreach (var thing in others)
+        {
+            var choice = new MenuItem { Header = MenuTitleOf(thing) };
+            var t = thing;
+            choice.Click += (_, _) => Dispatcher.BeginInvoke(() => openFor(t)); // after this menu has closed
+            other.Items.Add(choice);
+        }
+        menu.Items.Add(other);
+        menu.Items.Add(new Separator());
+    }
+
     private PlacedItemInstance? ContainerAtPoint(Point p) =>
         ThingAtPoint(p, t => t is PlacedItemInstance { Category: ReferencedItemCategory.Container }) as PlacedItemInstance;
 
@@ -516,15 +544,19 @@ public partial class MainWindow
         return true;
     }
 
-    private void FreeMode_MouseRightButtonDown(Point p)
+    private void FreeMode_MouseRightButtonDown(Point p) => OpenFreeMenu(p, null);
+
+    private void OpenFreeMenu(Point p, object? chosen)
     {
         _lastFreeMouse = p;
-        var hit = ThingAtPoint(p);
+        var here = ThingsAtPoint(p);
+        var hit = chosen ?? here.FirstOrDefault();
         SelectFree(hit);
         var menu = new ContextMenu();
         if (hit is not null)
         {
-            menu.Items.Add(new MenuItem { Header = NameOfThing(hit), IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = MenuTitleOf(hit), IsEnabled = false });
+            AddOtherThingsHere(menu, hit, here, t => OpenFreeMenu(p, t));
             if (hit is ObjectInstance o && _objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId) is { } obj)
                 AddObjectStateMenuItems(menu, obj, o);
             if (hit is PlacedItemInstance { Category: ReferencedItemCategory.Container } chest && _containerDatabase.Containers.FirstOrDefault(c => c.Id == chest.ItemId) is { } data)
@@ -651,8 +683,12 @@ public partial class MainWindow
         // Page Up / Page Down: hang the selected thing higher or lower on the wall (Page Up hangs it if it wasn't).
         if (e.Key is Key.PageUp or Key.PageDown && _freeSelected is { } toRaise)
         {
-            int lifts = IsHanging(toRaise) ? RaiseOf(ZOf(toRaise)) : RaiseOf(ZOf(toRaise)) - 1;
-            SetHangingHeight(toRaise, lifts + (e.Key == Key.PageUp ? 1 : -1));
+            if (!IsHanging(toRaise))
+            {
+                StatusText.Text = $"\"{NameOfThing(toRaise)}\" isn't hung on the wall - Page Up / Page Down only move hung things. To hang it: right-click > Hangs on the wall.";
+                return true;
+            }
+            SetHangingHeight(toRaise, RaiseOf(ZOf(toRaise)) + (e.Key == Key.PageUp ? 1 : -1));
             return true;
         }
         return false;
