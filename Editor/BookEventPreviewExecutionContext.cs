@@ -19,7 +19,6 @@ namespace SandcastleRpgMaker.Editor;
 public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost
 {
     private readonly ResourceDatabase _resources;
-    private readonly Dictionary<string, bool> _switches = new();
     private readonly Dictionary<string, double> _variables = new();
     /// <summary>Runtime-only content overrides, keyed by (which book, which page, which frame). Never touches the book's own authored data - this is exactly the "only during runtime, through the command" storage the spec calls for. Exposed via GetContentOverride for a real future engine to consult; the Book Editor's own Preview deliberately never reads this to change what it shows.</summary>
     private readonly Dictionary<(int BookId, int PageIndex, int FrameId), string> _contentOverrides = new();
@@ -270,8 +269,10 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
             && stored == command.Get("ReplacementXaml");
     }
 
-    public bool GetSwitch(string name) => _switches.TryGetValue(name, out var v) && v;
-    public void SetSwitch(string name, bool value) => _switches[name] = value;
+    // A switch is a Boolean variable (Control Switches picks one): one value, so Control Switches,
+    // Control Variables, Conditional Branch and every "In A Condition" (reply conditions too) agree.
+    public bool GetSwitch(string name) => GetVariable(name) != 0;
+    public void SetSwitch(string name, bool value) => _variables[name] = value ? 1 : 0;
     public double GetVariable(string name) => _variables.TryGetValue(name, out var v) ? v : 0;
     public void SetVariable(string name, double value) => _variables[name] = value;
 }
