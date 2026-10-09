@@ -330,9 +330,9 @@ public partial class MainWindow
         if (_tileset is null) return;
         if (_mapObjectVisuals.Remove(instance.InstanceId, out var old)) MapCanvas.Children.Remove(old);
         var obj = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-        var source = obj is null ? null : ObjectIcon(obj, instance);
+        var source = obj is null ? DeletedObjectPicture() : ObjectIcon(obj, instance);
         (int w, int h) = source is not null ? SpriteSizing.Quantize(source.PixelWidth, source.PixelHeight) : (_tileset.TileWidth, _tileset.TileHeight);
-        string tip = obj is null ? $"Object #{instance.ObjectId} (deleted)" : $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (instance.Quantity > 1 ? $" x{instance.Quantity}" : "");
+        string tip = obj is null ? $"Object #{instance.ObjectId} - deleted in the Object Editor. It's left out of the game: right-click > Delete to remove it." : $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (instance.Quantity > 1 ? $" x{instance.Quantity}" : "");
         var image = new Image { Source = source, Width = w, Height = h, IsHitTestVisible = false, ToolTip = tip, Stretch = Stretch.Uniform };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
         PositionPlacedVisual(image, instance.X, instance.Y, w, h, instance.OffsetX, instance.OffsetY, instance.Z);
@@ -350,6 +350,25 @@ public partial class MainWindow
         if (FloorOf(instance) == _currentFloor) ApplyFreeDrawOrder();
         if (_selectedObjectInstance == instance) UpdateObjectSelectionVisual();
         if (ReferenceEquals(_freeSelected, instance)) UpdateFreeSelectionVisual();
+    }
+
+    private static BitmapSource? _deletedObjectPicture;
+
+    /// <summary>A placed copy of a deleted object: a red "?" so it can be seen and deleted (it used to be drawn as nothing at all).</summary>
+    private static BitmapSource DeletedObjectPicture()
+    {
+        if (_deletedObjectPicture is not null) return _deletedObjectPicture;
+        var box = new Border
+        {
+            Width = 32, Height = 32, Background = new SolidColorBrush(Color.FromArgb(210, 200, 0, 0)), BorderBrush = Brushes.White, BorderThickness = new Thickness(1),
+            Child = new TextBlock { Text = "?", Foreground = Brushes.White, FontWeight = FontWeights.Bold, FontSize = 22, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+        };
+        box.Measure(new Size(32, 32));
+        box.Arrange(new Rect(0, 0, 32, 32));
+        var bitmap = new RenderTargetBitmap(32, 32, 96, 96, PixelFormats.Pbgra32);
+        bitmap.Render(box);
+        bitmap.Freeze();
+        return _deletedObjectPicture = bitmap;
     }
 
     /// <summary>After the Object Editor closes: every placed object redrawn with its (maybe new) look.</summary>

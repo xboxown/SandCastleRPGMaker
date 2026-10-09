@@ -168,6 +168,7 @@ public partial class GameTestWindow : Window
         _tileProperties = tileProperties;
         _variables = variables;
         _stats = stats;
+        LeaveOutDeletedThings();
 
         _execContext = new BookEventPreviewExecutionContext(_resources, selfBookId: -1);
         // Real, confirmed fix, per spec ("Make sure all the commands are LIVE world wide, including maps") - this exact same execution context is what actually runs commands during real, live gameplay (see TryFireEventPages below), not just the isolated debug preview. PlaySound/SetSwitch/SetVariable/Change*BookContent/ChangeBookSettings all execute directly and always worked; ShakeScreen/ShowText/ChangeDayNight/ApplyPaletteColor each genuinely need their own real callback wired in to do anything at all, and until now none of them ever were HERE, in the real game engine - only in the separate debug window fixed in an earlier pass. Wired to real, live, visible effects on the actual game world below.
@@ -235,6 +236,22 @@ public partial class GameTestWindow : Window
     /// is the one line standing between "Game Test is a real, disposable
     /// play session" and "Game Test can silently corrupt your project."
     /// </summary>
+    /// <summary>
+    /// Placed copies of an object, book or container that has since been
+    /// deleted in its editor are nothing any more: they're left out of the game
+    /// (this copy of the map only - the Map Editor shows them as a red "?" to
+    /// delete).
+    /// </summary>
+    private void LeaveOutDeletedThings()
+    {
+        int objects = _map.Objects.RemoveAll(o => _objects.Objects.All(d => d.Id != o.ObjectId));
+        int items = _map.Items.RemoveAll(i =>
+            (i.Category == ReferencedItemCategory.Book && _books.Books.All(b => b.Id != i.ItemId))
+            || (i.Category == ReferencedItemCategory.Container && _containers.Containers.All(c => c.Id != i.ItemId)));
+        if (objects + items > 0)
+            Loaded += (_, _) => StatusText.Text = $"Left out {objects + items} placed thing{(objects + items == 1 ? "" : "s")} whose object, book or container was deleted - they show as a red \"?\" in the Map Editor, to delete.";
+    }
+
     private static MapData CloneMapData(MapData source)
     {
         string json = System.Text.Json.JsonSerializer.Serialize(source);
