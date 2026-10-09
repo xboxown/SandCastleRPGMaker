@@ -135,6 +135,7 @@ public partial class GameTestWindow
             AddMapEntity(placedItem, placedObject);
             SetMapPosition(placedItem, placedObject, container.X, container.Y, 0, 0);
             SetZ(entity, container.Z);
+            ForgetHomeFloor(entity);
         }
         SettleWorld();
         RefreshAfterMove();

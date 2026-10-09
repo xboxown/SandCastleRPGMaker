@@ -179,11 +179,12 @@ public partial class MainWindow
     /// <summary>Where something with these flags comes to rest over this footprint (the game's SettleAll rule), given what's already settled.</summary>
     private static int RestingZ(IEnumerable<EditorBody> settled, EditorBody body)
     {
-        var supports = settled.Where(b => BelowCeiling(b, body.Z) && !b.Under && b.Overlaps(body)).ToList();
-        if (body.Under) return supports.Where(b => b.IsFloor).Select(b => b.TopLift).DefaultIfEmpty(0).Max(); // on the floor itself
-        return body.Elevates
+        int floorBase = MapFloors.BaseLift(MapFloors.FloorOfLift(Math.Max(0, body.Z))); // as the game: never below its own floor, never held up by a floor below
+        var supports = settled.Where(b => BelowCeiling(b, body.Z) && !b.Under && b.Overlaps(body) && b.Z >= floorBase - 1).ToList();
+        if (body.Under) return Math.Max(floorBase, supports.Where(b => b.IsFloor).Select(b => b.TopLift).DefaultIfEmpty(0).Max()); // on the floor itself
+        return Math.Max(floorBase, body.Elevates
             ? supports.Where(b => b.Elevates).Select(b => b.TopLift).DefaultIfEmpty(0).Max()
-            : supports.Where(b => b.Surface).Select(b => b.TopLift).DefaultIfEmpty(0).Max(); // lying flat: on a table top or a floor
+            : supports.Where(b => b.Surface).Select(b => b.TopLift).DefaultIfEmpty(0).Max()); // lying flat: on a table top or a floor
     }
 
     /// <summary>

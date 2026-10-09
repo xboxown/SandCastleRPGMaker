@@ -713,6 +713,7 @@ public partial class GameTestWindow
         }
         SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
         SetZ((object?)item ?? obj!, newZ);
+        ForgetHomeFloor((object?)item ?? obj!); // put down on the floor the player is on
         if (item is not null) item.LiesUnder = false; // put down by hand: no longer tucked underneath anything
         if (obj is not null) obj.LiesUnder = false;
         if (obj is not null) NoteGlassFall(obj, _playerZ, newZ); // glass let go of above a lower floor falls - and maybe shatters

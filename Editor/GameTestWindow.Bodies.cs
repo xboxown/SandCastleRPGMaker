@@ -89,6 +89,7 @@ public partial class GameTestWindow
         AddMapEntity(body, null);
         SetMapPosition(body, null, cellX, cellY, 0, 0);
         SetZ(body, lift);
+        ForgetHomeFloor(body);
         SettleWorld();
         RefreshAfterMove();
     }

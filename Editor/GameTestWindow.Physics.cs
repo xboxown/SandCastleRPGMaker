@@ -117,14 +117,37 @@ public partial class GameTestWindow
         {
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-            var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity)).ToList(); // never held up by the floor above (its slab is the ceiling), nor by something put underneath
+            int floorBase = HomeFloorBase(body);
+            var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity) // never held up by the floor above (its slab is the ceiling), nor by something put underneath
+                && b.Z >= floorBase - 1).ToList(); // nor by a floor below: on floor 2 only floor 2's slab and what's on floor 2 hold things up
             int z = LiesUnder(body.Entity) ? FloorTop(supports, rect) // put underneath: on the floor itself, under the table
                 : body.Elevates ? RestingLift(supports, rect) : SurfaceTop(supports, rect); // lying flat: on the floor - a table top is a floor
+            z = Math.Max(z, floorBase); // never below the floor it was put on: a wall plotted on floor 2 stands at floor 2's height
             if (body.Entity is ObjectInstance fallen && z < body.Z) NoteGlassFall(fallen, body.Z, z); // glass that falls far enough shatters
             SetZ(body.Entity, z);
             settled.Add(body with { Z = z });
         }
     }
+
+    /// <summary>The floor each thing is on (from its lift when the game first sees it, and again whenever it's moved).</summary>
+    private readonly Dictionary<object, int> _homeFloor = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>
+    /// The lowest lift a thing can come to rest at: the base of its floor.
+    /// As in Ultima VII / Exult, something placed on an upper storey stands at
+    /// that storey's height (5 lifts a floor, drawn 20px up-left per floor),
+    /// on that floor's tiles or on what's on that floor - never down on the
+    /// floor below, whatever is or isn't under it. Within a floor, things
+    /// still fall onto whatever is left under them.
+    /// </summary>
+    private int HomeFloorBase(Body body)
+    {
+        if (!_homeFloor.TryGetValue(body.Entity, out int floor)) _homeFloor[body.Entity] = floor = MapFloors.FloorOfLift(Math.Max(0, body.Z));
+        return MapFloors.BaseLift(floor);
+    }
+
+    /// <summary>Something was moved to a new lift (put down, knocked, carried): its floor is wherever it is now.</summary>
+    private void ForgetHomeFloor(object entity) => _homeFloor.Remove(entity);
 
     /// <summary>The lift something with this footprint comes to rest at: the top of the highest elevating thing under any part of it.</summary>
     private static int RestingLift(IEnumerable<Body> candidates, UnitRect foot) =>

@@ -14,8 +14,11 @@ namespace SandcastleRpgMaker.Editor;
 /// below show through, darkened, wherever this floor has no tiles; the
 /// floors above are hidden. Only the picked floor can be clicked.
 ///
-/// Everything on a floor is drawn lined up with the grid here (in the game
-/// it is drawn 4px up and left per lift, so floor 2 sits 20px up-left).
+/// The picked floor is drawn lined up with the grid. The floors below are
+/// drawn where the game puts them relative to it - the game draws each lift
+/// 4px up and left, so a floor 5 lifts lower sits 20px down and right - and
+/// darker the further down they are. So floor 2's tiles and walls line up
+/// with floor 1's walls here exactly as they will in the game.
 /// </summary>
 public partial class MainWindow
 {
@@ -24,6 +27,9 @@ public partial class MainWindow
 
     /// <summary>Draw-order step per floor below: a lower floor's things are all under this floor's.</summary>
     private const int LowerFloorZIndexStep = 1_000_000;
+
+    /// <summary>How far down and right a floor this many floors below the picked one is drawn (the game's 4px per lift).</summary>
+    private static double LowerFloorShift(int floorsDown) => floorsDown * MapFloors.LiftsPerFloor * 4.0;
 
     private void InitFloors()
     {
@@ -69,6 +75,9 @@ public partial class MainWindow
         visual.IsHitTestVisible = false;
         if (visual is FrameworkElement element) element.ToolTip = null;
         Panel.SetZIndex(visual, Panel.GetZIndex(visual) - LowerFloorZIndexStep * (_currentFloor - floor));
+        double shift = LowerFloorShift(_currentFloor - floor); // lower down, as the game draws it
+        Canvas.SetLeft(visual, (double.IsNaN(Canvas.GetLeft(visual)) ? 0 : Canvas.GetLeft(visual)) + shift);
+        Canvas.SetTop(visual, (double.IsNaN(Canvas.GetTop(visual)) ? 0 : Canvas.GetTop(visual)) + shift);
         return false;
     }
 
@@ -93,16 +102,18 @@ public partial class MainWindow
                         Source = new CroppedBitmap(_tilesetBitmap, new Int32Rect(tileIndex % _paletteColumns * _tileset.TileWidth, tileIndex / _paletteColumns * _tileset.TileHeight, _tileset.TileWidth, _tileset.TileHeight))
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-                    Canvas.SetLeft(image, x * _tileset.TileWidth);
-                    Canvas.SetTop(image, y * _tileset.TileHeight);
+                    double shift = LowerFloorShift(_currentFloor - floor);
+                    Canvas.SetLeft(image, x * _tileset.TileWidth + shift);
+                    Canvas.SetTop(image, y * _tileset.TileHeight + shift);
                     Panel.SetZIndex(image, -LowerFloorZIndexStep * (_currentFloor - floor));
                     MapCanvas.Children.Add(image);
                 }
             }
+            // A veil over each floor below: out of focus, and darker the further down.
+            double reach = LowerFloorShift(_currentFloor - 1);
+            var veil = new Rectangle { Width = _map.Width * _tileset.TileWidth + reach, Height = _map.Height * _tileset.TileHeight + reach, Fill = Brushes.Black, Opacity = 0.45, IsHitTestVisible = false };
+            Panel.SetZIndex(veil, -LowerFloorZIndexStep * (_currentFloor - floor) + LowerFloorZIndexStep / 2);
+            MapCanvas.Children.Add(veil);
         }
-        // The veil: everything below this floor reads as "out of focus".
-        var veil = new Rectangle { Width = _map.Width * _tileset.TileWidth, Height = _map.Height * _tileset.TileHeight, Fill = Brushes.Black, Opacity = 0.55, IsHitTestVisible = false };
-        Panel.SetZIndex(veil, -LowerFloorZIndexStep / 2);
-        MapCanvas.Children.Add(veil);
     }
 }
