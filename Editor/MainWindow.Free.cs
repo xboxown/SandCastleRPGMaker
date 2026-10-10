@@ -159,6 +159,9 @@ public partial class MainWindow
         return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, info.Elevates, info.Surface, info.IsTile && info.Surface, under);
     }
 
+    private bool IsTileObject(object entity) =>
+        entity is ObjectInstance o && _objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId)?.Type == ObjectType.Tile;
+
     private static bool IsHanging(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };
 
     /// <summary>How many lifts above its floor something is.</summary>
@@ -394,7 +397,8 @@ public partial class MainWindow
         var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
         foreach (var body in bodies)
         {
-            int index = body.Height == 0 ? 0 : 1 + (body.Left + body.Width + body.Top + body.Depth) * 10 + body.Z % MapFloors.LiftsPerFloor;
+            // Flat things and Tile objects lie under everything on their floor, as the game draws them (ApplyRestingDrawOrder).
+            int index = body.Height == 0 || IsTileObject(body.Entity) ? body.Z % MapFloors.LiftsPerFloor : 10 + (body.Left + body.Width + body.Top + body.Depth) * 10 + body.Z % MapFloors.LiftsPerFloor;
             foreach (var below in bodies)
                 if (!ReferenceEquals(below.Entity, body.Entity) && below.TopLift <= body.Z && below.Overlaps(body) && order.TryGetValue(below.Entity, out int belowIndex))
                     index = Math.Max(index, belowIndex + 1);

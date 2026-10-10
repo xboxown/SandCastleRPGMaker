@@ -154,7 +154,7 @@ public partial class MainWindow
         var obj = _objectDatabase.Objects.FirstOrDefault(o => o.Id == _selectedObjectId);
         var instance = new ObjectInstance { ObjectId = _selectedObjectId, X = x, Y = y, Z = MapFloors.BaseLift(_currentFloor), Quantity = 1, ContainerInstanceId = -1, InstanceId = _map.GetNextInstanceId() };
         _map.Objects.Add(instance);
-        PlaceObjectVisual(instance);
+        RedrawAfterSettle(instance); // comes to rest on what's under it, as the game will start it
         SelectObjectInstance(instance);
         StatusText.Text = $"Placed \"{obj?.Name}\" at ({x}, {y}).";
     }
@@ -167,7 +167,8 @@ public partial class MainWindow
         if ((x, y) == (dragged.X, dragged.Y) || !IsInsideMap(x, y)) return true;
         dragged.X = x;
         dragged.Y = y;
-        PlaceObjectVisual(dragged);
+        if (!dragged.HangsOnWall) { dragged.Z = MapFloors.BaseLift(FloorOf(dragged)); dragged.LiesUnder = false; } // settles anew on its new spot
+        RedrawAfterSettle(dragged);
         SelectObjectInstance(dragged);
         StatusText.Text = $"Moved \"{ObjectName(dragged)}\" to ({x}, {y}).";
         return true;
@@ -309,7 +310,7 @@ public partial class MainWindow
         pasted.Z = MapFloors.BaseLift(_currentFloor);
         pasted.InstanceId = _map.GetNextInstanceId();
         _map.Objects.Add(pasted);
-        PlaceObjectVisual(pasted);
+        RedrawAfterSettle(pasted);
         SelectObjectInstance(pasted);
         StatusText.Text = $"Pasted \"{ObjectName(pasted)}\" at ({x}, {y}).";
     }

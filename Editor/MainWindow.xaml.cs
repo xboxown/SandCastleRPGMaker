@@ -1516,7 +1516,7 @@ public partial class MainWindow : Window
 
             var instance = new PlacedItemInstance { Category = picked.Category, ItemId = picked.ItemId, X = x, Y = y, Z = MapFloors.BaseLift(_currentFloor) };
             _map.Items.Add(instance);
-            PlaceItemVisual(instance);
+            RedrawAfterSettle(instance); // comes to rest on what's under it (a tile, a table), as the game will start it
             StatusText.Text = $"Placed \"{picked.DisplayName}\" at ({x}, {y}).";
             return;
         }
