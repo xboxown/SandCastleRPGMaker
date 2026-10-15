@@ -59,6 +59,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Func<string, bool>? OnSleepOnBed { get; set; }
     /// <summary>Exchange Currency: (from currency id, to currency id, "All" or a number).</summary>
     public Func<int, int, string, bool>? OnExchangeCurrency { get; set; }
+    /// <summary>Change Weather: (kind, intensity 1-100, clouds on / off / unchanged).</summary>
+    public Func<WeatherKind, int, bool?, bool>? OnChangeWeather { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -148,6 +150,10 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 string who = command.Get("Who");
                 return OnChangeFood(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Operation"), amount);
             }
+            case EventCommandType.ChangeWeather:
+                return OnChangeWeather is not null && Enum.TryParse<WeatherKind>(command.Get("Kind"), out var weatherKind)
+                    && OnChangeWeather(weatherKind, int.TryParse(command.Get("Intensity"), out int weatherIntensity) ? weatherIntensity : 50,
+                        command.Get("Clouds") switch { "True" => true, "False" => false, _ => null });
             case EventCommandType.ExchangeCurrency:
                 return OnExchangeCurrency is not null && int.TryParse(command.Get("FromId"), out int fromId) && int.TryParse(command.Get("ToId"), out int toId)
                     && OnExchangeCurrency(fromId, toId, command.Get("Amount"));

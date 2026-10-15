@@ -57,7 +57,6 @@ public partial class GameTestWindow
                 case MagicEffectKind.Invisibility: Inflict(target, Ailment.Invisible); break;
                 case MagicEffectKind.Light:
                     _specialLightMinutes = Math.Max(_specialLightMinutes, amount);
-                    _lightLevel = -1; // looked at again at once
                     _lightCheckMs = 0;
                     break;
                 case MagicEffectKind.Damage:

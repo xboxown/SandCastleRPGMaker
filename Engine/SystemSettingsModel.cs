@@ -149,6 +149,8 @@ public class SystemSettings
     public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
     public CombatSettings Combat { get; set; } = new();
+    /// <summary>The day and night cycle (System Settings > Day &amp; Night).</summary>
+    public DayNightSettings DayNight { get; set; } = new();
     /// <summary>
     /// The Body Container (System Settings > Body Container): how every dead
     /// body looks when opened - its paperdoll picture and the frame its

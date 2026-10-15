@@ -120,6 +120,12 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void ChangeWeather_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.ChangeWeather;
+        DialogResult = true;
+    }
+
     private void ExchangeCurrency_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.ExchangeCurrency;

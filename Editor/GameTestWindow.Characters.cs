@@ -64,6 +64,7 @@ public partial class GameTestWindow
         }
         InitializeVitals(); // health, food, ailments for the player and every character
         StartSchedules(); // Exult: every NPC takes up the schedule for the time of day
+        StartWeather(); // the map's weather (GameTestWindow.Weather.cs)
     }
 
     /// <summary>A separate copy of a character for another placement of it - a deep copy, so nothing it does in play touches the others.</summary>

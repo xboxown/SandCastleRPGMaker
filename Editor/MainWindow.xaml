@@ -19,6 +19,7 @@
                 <MenuItem x:Name="RedoMenuItem" Header="Redo" Click="RedoMenuItem_Click" InputGestureText="Ctrl+Y"/>
                 <Separator/>
                 <MenuItem Header="System Settings..." Click="SystemSettingsMenuItem_Click"/>
+                <MenuItem Header="Map Weather..." Click="MapWeatherMenuItem_Click" ToolTip="This map's weather in play: rain, snow, hail, storms, clouds"/>
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>

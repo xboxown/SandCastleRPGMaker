@@ -65,6 +65,7 @@ public partial class GameTestWindow
         _execContext.OnPaperdoll = PaperdollCommand;
         _execContext.OnSleepOnBed = SleepOnBedCommand;
         _execContext.OnExchangeCurrency = ExchangeCurrencyCommand;
+        _execContext.OnChangeWeather = ChangeWeather;
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)

@@ -1614,11 +1614,9 @@ public partial class GameTestWindow : Window
     private void ApplyRealDayNightPeriod(string period)
     {
         if (!DayNightPeriodColors.TryGetValue(period, out var setting)) return;
-        _nightDarkness = period == "Evening" ? setting.Opacity : 0; // the dark one: light sources lift it (GameTestWindow.Lighting.cs)
-        _lightLevel = -1;
-        LightingOverlay.Fill = new SolidColorBrush(setting.Color);
-        var fade = new DoubleAnimation(setting.Opacity, TimeSpan.FromSeconds(0.6));
-        LightingOverlay.BeginAnimation(UIElement.OpacityProperty, fade);
+        // The sky is set until the next hour; then the clock takes it back (GameTestWindow.Lighting.cs). Light sources lift the night one.
+        SetSkyUntilNextHour(period == "Evening" ? ParseColor(DayNight.NightColor, setting.Color) : period == "Afternoon" ? ParseColor(DayNight.DuskColor, setting.Color) : setting.Color,
+            period == "Evening" ? DayNight.NightStrength : period == "Afternoon" ? DayNight.DuskStrength : 0);
     }
 
     /// <summary>Reuses the exact same LightingOverlay mechanism as day/night - an author-picked color and strength instead of one of the three fixed periods.</summary>

@@ -319,6 +319,10 @@ public partial class ObjectEditorWindow : Window
         var row = new WrapPanel();
         row.Children.Add(Check("Starts lit", () => l.StartsLit, v => l.StartsLit = v));
         row.Children.Add(NumberField("Brightness", () => l.Brightness, v => l.Brightness = (int)Math.Max(0, v), "Exult light_data: a candle is 1, a sconce 5, a lamp 7."));
+        var givesChoices = new[] { ("Exult's light levels (candle, single, many)", LightGives.ExultLevels), ("The dusk look (sunrise / sunset colour)", LightGives.DuskLook), ("Full daylight", LightGives.FullDaylight) };
+        var gives = new ComboBox { Width = 260, ItemsSource = givesChoices.Select(g => g.Item1).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(givesChoices, g => g.Item2 == l.Gives)) };
+        gives.SelectionChanged += (_, _) => l.Gives = givesChoices[Math.Max(0, gives.SelectedIndex)].Item2;
+        row.Children.Add(Labeled("In the dark it gives", gives));
         row.Children.Add(NumberField("Burns (game minutes, 0 = forever)", () => l.BurnMinutes, v => l.BurnMinutes = (int)Math.Max(0, v)));
         body.Children.Add(row);
         var sounds = new WrapPanel();

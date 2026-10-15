@@ -50,6 +50,7 @@ public partial class SystemSettingsWindow : Window
         var tabs = new TabControl();
         tabs.Items.Add(new TabItem { Header = "Mouse Pointers", Content = BuildMousePointersTab() });
         tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
+        tabs.Items.Add(new TabItem { Header = "Day & Night", Content = BuildDayNightTab() });
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });

@@ -284,6 +284,8 @@ public class LightSettings
     public bool StartsLit { get; set; }
     /// <summary>Exult light_data brightness: a candle is 1, a sconce 5, a lamp 7.</summary>
     public int Brightness { get; set; } = 5;
+    /// <summary>What it does in the dark: Exult's light levels, the dusk look, or full daylight.</summary>
+    public LightGives Gives { get; set; } = LightGives.ExultLevels;
     /// <summary>Game minutes it burns before it's spent; 0 = never burns out.</summary>
     public int BurnMinutes { get; set; }
     public int LitSoundResourceId { get; set; } = -1;

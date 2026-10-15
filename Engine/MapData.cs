@@ -130,6 +130,9 @@ public class MapData
     public int GetNextCharacterPlacementId()
         => Characters.Count == 0 ? 1 : Characters.Max(c => c.Id) + 1;
 
+    /// <summary>This map's weather in play (Edit > Map Weather).</summary>
+    public WeatherSettings Weather { get; set; } = new();
+
     /// <summary>Named areas - houses, pubs, hospitals (Map Editor > Mode > Zones); characters' schedules go to them.</summary>
     public List<MapZone> Zones { get; set; } = new();
     public int NextZoneId() => Zones.Count == 0 ? 1 : Zones.Max(z => z.Id) + 1;

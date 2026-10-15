@@ -49,7 +49,9 @@ public enum EventCommandType
     /// <summary>Sleep On Bed: the main character walks to a bed and lies down on it, as double-clicking it does.</summary>
     SleepOnBed,
     /// <summary>Exchange Currency: a money changer changes the party's money of one currency into another (Currency Editor rates).</summary>
-    ExchangeCurrency
+    ExchangeCurrency,
+    /// <summary>Change Weather: rain, snow, hail, a storm or clear, and the clouds (Exult's weather eggs).</summary>
+    ChangeWeather
 }
 
 /// <summary>
