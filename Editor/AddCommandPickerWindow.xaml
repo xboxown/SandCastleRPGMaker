@@ -53,6 +53,7 @@
 
                         <TextBlock Text="Movement / World" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Teleport..." Margin="0,0,0,4" Click="Teleport_Click"/>
+                        <Button Content="Sleep On Bed..." Margin="0,0,0,4" Click="SleepOnBed_Click" ToolTip="The main character walks to a bed and lies down, as double-clicking it does (for a bed's cover)"/>
                         <Button Content="Paperdoll..." Margin="0,0,0,4" Click="Paperdoll_Click" ToolTip="Change a paperdoll's parts, play or stop its sounds, close it, or turn its object into another object"/>
                         <Button Content="Play Sound..." Margin="0,0,0,4" Click="PlaySound_Click"/>
                         <Button Content="Play Music..." Margin="0,0,0,4" Click="PlayMusic_Click"/>

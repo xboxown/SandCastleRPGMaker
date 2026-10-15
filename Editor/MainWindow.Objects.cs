@@ -216,7 +216,7 @@ public partial class MainWindow
     private void AddObjectStateMenuItems(ContextMenu menu, WorldObject obj, ObjectInstance existing)
     {
         var stairDesign = StairLook.DesignOf(obj, _objectDatabase);
-        if (obj.Type is ObjectType.Chair or ObjectType.Bed || stairDesign is not null)
+        if (obj.Type is ObjectType.Chair or ObjectType.Bed or ObjectType.Bedroll || stairDesign is not null)
         {
             var facingMenu = new MenuItem { Header = "Facing" };
             foreach (var direction in Enum.GetValues<SpriteDirection>())

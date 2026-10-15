@@ -63,6 +63,7 @@ public partial class GameTestWindow
         _execContext.OnModifyAilment = ModifyAilmentCommand;
         _execContext.OnAttack = AttackCommand;
         _execContext.OnPaperdoll = PaperdollCommand;
+        _execContext.OnSleepOnBed = SleepOnBedCommand;
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)

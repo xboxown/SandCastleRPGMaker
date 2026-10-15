@@ -40,6 +40,18 @@ public partial class GameTestWindow
             if (target is PlayerTarget || CharacterTargeted(target) == _player) { AddPartyKeys(u); return; }
             if (CharacterTargeted(target) is not null) return;
             var keys = KeysOf(u);
+            // A key: onto the ring (it's gone from where it was).
+            if (KeyItemTargeted(target) is { } keyHit)
+            {
+                if (keyHit.Origin is MapObjectOrigin { Obj: var keyOnMap } && !IsReachable(keyOnMap)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return; }
+                if (!keys.Contains(keyHit.Key.Id)) keys.Add(keyHit.Key.Id);
+                RemoveFromSource(keyHit.Origin);
+                PlaySound(u.Obj.Keychain.AddKeySoundResourceId);
+                RefreshUsed(u);
+                RefreshAfterMove();
+                StatusText.Text = $"\"{keyHit.Key.Name}\" is now on \"{u.Obj.Name}\".";
+                return;
+            }
             string[] barks = { "We don't have that key.", "It's not on the keyring." };
             // A door (KeyInternal: doors and chests alike).
             if (ObjectTargeted(target) is { Obj.Type: ObjectType.Door } door)
@@ -192,11 +204,40 @@ public partial class GameTestWindow
             StatusText.Text = "You can't sleep with enemies in sight.";
             return;
         }
-        int hours = u.Obj.Bedroll.SleepHours;
-        if (u.Obj.Bedroll.WakeAtDawn) hours = (6 - _clock.Hour + 24) % 24 is int untilDawn && untilDawn > 0 ? untilDawn : 24;
-        hours = Math.Clamp(hours, 1, 24);
-        if (u.Placed is { } laid) { laid.IsOpenRuntime = true; RefreshObjectLook(laid); } // laid out
+        // In a pack it's only a bundle: put it down first, then sleep on it as on a bed.
+        if (u.Placed is not { } laid)
+        {
+            AvatarBark("I should put it down first.");
+            StatusText.Text = $"Put \"{u.Obj.Name}\" down on the ground, then double-click it to sleep on it.";
+            return;
+        }
+        laid.IsOpenRuntime = true; // laid out
+        RefreshObjectLook(laid);
+        if (SpotsOf(laid, u.Obj).Count > 0) { LieOn(laid, u.Obj); return; } // its sleeping place (Object Editor): walk there and lie down, as on a bed
+        int hours = BedrollHours(u.Obj);
         ApplyPoseSprite(PoseByName("Sleeping") ?? _idlePose);
+        if (u.Obj.Furniture.AsksSleepHours)
+        {
+            // No sleeping place set: lies where it stands, but still asked how long.
+            var f = u.Obj.Furniture;
+            int most = Math.Clamp(f.SleepMaxHours, 1, SliderSettings.MaxValue);
+            ShowNumberSlider(f.SleepQuestion, 0, most, Math.Max(1, f.SleepStepHours), Math.Clamp(f.SleepDefaultHours, 0, most), chosen =>
+            {
+                if (chosen <= 0)
+                {
+                    if (f.CancelSleepLine.Trim().Length > 0) AvatarBark(f.CancelSleepLine.Trim());
+                    ApplyPoseSprite(_idlePose);
+                    if (_map.Objects.Contains(laid)) { laid.IsOpenRuntime = false; RefreshObjectLook(laid); }
+                    return;
+                }
+                SleepTheHoursAway(Math.Max(chosen, Math.Clamp(f.SleepMinHours, 1, most)), () =>
+                {
+                    ApplyPoseSprite(_idlePose);
+                    if (_map.Objects.Contains(laid)) { laid.IsOpenRuntime = false; RefreshObjectLook(laid); }
+                });
+            });
+            return;
+        }
         SleepTheHoursAway(hours, () =>
         {
             ApplyPoseSprite(_idlePose);
@@ -240,12 +281,20 @@ public partial class GameTestWindow
     private void AskHowLongToSleep(WorldObject bed)
     {
         var f = bed.Furniture;
-        if (!f.AsksSleepHours || _player is null) return;
-        int max = Math.Clamp(f.SleepMaxHours, 1, SliderSettings.MaxValue), min = Math.Clamp(f.SleepMinHours, 1, max);
-        ShowNumberSlider(f.SleepQuestion, min, max, f.SleepStepHours, Math.Clamp(f.SleepDefaultHours, min, max), hours =>
+        if (_player is null) return;
+        if (!f.AsksSleepHours)
         {
+            // A bedroll that doesn't ask: its own hours (or until dawn).
+            if (bed.Type == ObjectType.Bedroll && !FoesInSight()) SleepTheHoursAway(BedrollHours(bed), null);
+            return;
+        }
+        int max = Math.Clamp(f.SleepMaxHours, 1, SliderSettings.MaxValue), min = Math.Clamp(f.SleepMinHours, 1, max);
+        // From 0: 0 is "don't sleep" (the sleeper says so and gets up).
+        ShowNumberSlider(f.SleepQuestion, 0, max, Math.Max(1, f.SleepStepHours), Math.Clamp(f.SleepDefaultHours, min, max), hours =>
+        {
+            if (hours <= 0) { CancelSleep(bed); return; }
             if (FoesInSight()) { AvatarBark("We cannot rest with foes about!"); StatusText.Text = "You can't sleep with enemies in sight."; return; }
-            SleepTheHoursAway(hours, null); // wakes still lying in bed - move to get up
+            SleepTheHoursAway(Math.Max(hours, min), null); // wakes still lying in bed - move to get up
         });
     }
 

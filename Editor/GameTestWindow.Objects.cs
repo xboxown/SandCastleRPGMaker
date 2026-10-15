@@ -177,6 +177,8 @@ public partial class GameTestWindow
         if (obj is null) return;
         if (TryUseLockTool(obj, new MapObjectOrigin(instance))) return;
         if (TryUseDoll(instance, obj, () => FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem))) return; // it opens a paperdoll
+        // A bed's cover lies over the bed: double-clicking it means the bed (unless the cover has events of its own).
+        if (!obj.EventPages.Any(p => p.Commands.Count > 0) && BedUnderCover(instance) is { } coveredBed) { LieDownOn(coveredBed); return; }
         switch (obj.Type)
         {
             case ObjectType.Door: UseDoor(instance, obj); return;
@@ -195,7 +197,17 @@ public partial class GameTestWindow
         if (DefinitionOf(item) is not { } obj) return false;
         if (TryUseLockTool(obj, source)) return true;
         if (TryUseDoll(item, obj, () => TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired."))) return true; // it opens a paperdoll
-        if (obj.Type == ObjectType.LightSource) { UseCarriedLight(item, obj); return true; }
+        if (obj.Type == ObjectType.LightSource)
+        {
+            // Lit in a hand or set down - not inside a container, the pack or a paperdoll.
+            if (source is ContainerOrigin or BackpackOrigin or DollItemOrigin && item.IsLitRuntime != true)
+            {
+                StatusText.Text = $"Take \"{obj.Name}\" out first - hold it in a hand, or set it down, to light it.";
+                return true;
+            }
+            UseCarriedLight(item, obj);
+            return true;
+        }
         if (UseNewTypeCarried(item, obj, source)) return true; // food, potions, keychains, maps, spellbooks... (GameTestWindow.Types.cs)
         if (TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired.")) return true;
         StatusText.Text = $"\"{ObjectDisplayName(obj, item.IsSpentRuntime, item.Quantity)}\" - nothing happens.";

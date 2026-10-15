@@ -188,6 +188,7 @@ public partial class ObjectEditorWindow : Window
             case ObjectType.Lockpick: BuildBundles(obj, SpriteDatabase.LockpickGroupName); break;
             case ObjectType.Chair: BuildFurniture(obj, bed: false); break;
             case ObjectType.Bed: BuildFurniture(obj, bed: true); break;
+            case ObjectType.Bedroll: BuildFurniture(obj, bed: true); BuildNewTypePanel(obj); break; // laid out, it's slept on as a bed
             case ObjectType.Trap: BuildTrap(obj); break;
             default: BuildNewTypePanel(obj); break;
         }
@@ -575,7 +576,7 @@ public partial class ObjectEditorWindow : Window
     private void BuildFurniture(WorldObject obj, bool bed)
     {
         var f = obj.Furniture;
-        var body = Group(bed ? "Bed: looks and sleeping places" : "Chair: looks and seats");
+        var body = Group(obj.Type == ObjectType.Bedroll ? "Bedroll: laid-out looks and sleeping places" : bed ? "Bed: looks and sleeping places" : "Chair: looks and seats");
         body.Children.Add(Note(bed
             ? "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a sleeping place (where the sleeper lies), drag one to move it, right-click to remove it. A double bed has two. In the Map Editor you choose which way each placed bed faces."
             : "Like a character pose: one look per facing. Pick a facing, give it a sprite, then click on the picture to add a seat (where the sitter's feet touch the floor - usually the bottom of the chair, under the seat; the Sit pose art does the sitting, as in Ultima VII), drag a seat to move it, right-click to remove it. A sofa can have three. The sitter faces the chair's direction (Exult). In the Map Editor you choose which way each placed chair faces."));
@@ -618,7 +619,7 @@ public partial class ObjectEditorWindow : Window
         body.Children.Add(block);
         ShowFacing();
 
-        if (bed)
+        if (bed && obj.Type == ObjectType.Bed)
         {
             var covers = new List<object> { new WorldObject { Id = -1, Name = "(No cover)" } };
             covers.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Junk && o.FramesAreStates));
@@ -634,6 +635,7 @@ public partial class ObjectEditorWindow : Window
         sleep.Children.Add(Check("Ask how many hours to sleep (the slider - Edit > Settings > Slider)", () => f.AsksSleepHours, v => { f.AsksSleepHours = v; ShowCurrent(); }));
         if (!f.AsksSleepHours) { sleep.Children.Add(Note("Unticked: lying down is just lying down - no sleep, no time passing.")); return; }
         sleep.Children.Add(TextField("Question", 320, () => f.SleepQuestion, v => f.SleepQuestion = v));
+        sleep.Children.Add(TextField("Choosing 0 hours (don't sleep), the sleeper says", 320, () => f.CancelSleepLine, v => f.CancelSleepLine = v));
         var range = new WrapPanel();
         range.Children.Add(NumberField("Fewest hours", () => f.SleepMinHours, v => f.SleepMinHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
         range.Children.Add(NumberField("Most hours (999 at most)", () => f.SleepMaxHours, v => f.SleepMaxHours = (int)Math.Clamp(v, 1, SliderSettings.MaxValue)));
@@ -642,7 +644,7 @@ public partial class ObjectEditorWindow : Window
         sleep.Children.Add(range);
         sleep.Children.Add(Note("Lying down, the player is asked how long to sleep, within this range. Accepted: the screen fades to black and the hours pass at once, as Exult's rest does - " +
                                "food goes down by the hours slept, health and mana come back, ailments wear off, lights burn down, and everyone moves on to where their schedule puts them. " +
-                               "Then it fades back in, still lying in bed (move to get up). Escape: just lying there. Not with enemies in sight."));
+                               "Then it fades back in, still lying in bed (move to get up). The slider starts at 0: 0 is \"don't sleep\" - the line above is said and the sleeper gets up. Escape: just lying there. Not with enemies in sight."));
     }
 
     /// <summary>The Character Editor's direction wheel: eight dots round a circle (green: has a sprite), the chosen one blue with a line to it. Click a dot to pick that facing.</summary>

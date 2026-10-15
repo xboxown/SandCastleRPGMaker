@@ -915,6 +915,7 @@ public partial class GameTestWindow
             return true;
         }
         var item = DetachAsInventoryItem(origin, data.GetNextContentsInstanceId);
+        PutOutIfLit(item); // a torch put away goes out
         PlaceWithinFrame(item, data, dropTopLeft);
         container.Contents.Add(item); // appended = on top of the pile, as Exult's add() appends to the chain
         if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);

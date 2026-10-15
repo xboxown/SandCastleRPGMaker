@@ -742,6 +742,7 @@ public partial class ContainerEditorWindow : Window
     private void ContentsListBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         _selectedContentsItem = (ContentsListBox.SelectedItem as ContentsRow)?.Instance;
+        ContentsQuantityButton.IsEnabled = StackableObject(_selectedContentsItem) is not null;
         if (ContainerListBox.SelectedItem is ContainerData container) BuildContentsPreview(container);
     }
 
@@ -999,6 +1000,21 @@ public partial class ContainerEditorWindow : Window
             if (ContainerContainsRecursively(db, content.ItemId, searchForContainerId, visited)) return true;
         }
         return false;
+    }
+
+    /// <summary>The object definition of a contents item that stacks (coins, arrows, lockpicks...), or null.</summary>
+    private WorldObject? StackableObject(InventoryItemInstance? item) =>
+        item is { Category: ReferencedItemCategory.Object } && _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) is { IsStackable: true } obj ? obj : null;
+
+    private void ContentsQuantity_Click(object sender, RoutedEventArgs e)
+    {
+        if (ContainerListBox.SelectedItem is not ContainerData container) return;
+        if (ContentsListBox.SelectedItem is not ContentsRow row || StackableObject(row.Instance) is not { } obj) return;
+        int most = obj.MaxStackSize > 0 ? obj.MaxStackSize : 9999;
+        var text = SimpleInputWindow.Show(this, $"How many \"{obj.Name}\"? (1 to {most})", "Quantity", row.Instance.Quantity.ToString());
+        if (text is null || !int.TryParse(text.Trim(), out int quantity)) return;
+        row.Instance.Quantity = Math.Clamp(quantity, 1, most);
+        RefreshContentsList(container);
     }
 
     private void RemoveContents_Click(object sender, RoutedEventArgs e)

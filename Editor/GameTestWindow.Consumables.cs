@@ -168,6 +168,7 @@ public partial class GameTestWindow
                 {
                     if (!empty) { AvatarBark($"The {name} is full."); return; }
                     if (!CanHold(u.Obj, source.Id)) { StatusText.Text = $"\"{u.Obj.Name}\" can't hold {source.Name.ToLowerInvariant()}."; return; }
+                    FireObjectEvent(hit.Instance, hit.Obj, BookTriggerConditionBased.ByTradeItem); // the well's own script first (By Tool Used On It: the rope, the gear...), then it's filled
                     PlaySound(u.Obj.Liquid.FillSoundResourceId);
                     SetLiquid(u, source.Id);
                     StatusText.Text = $"You fill \"{u.Obj.Name}\" with {source.Name.ToLowerInvariant()}.";

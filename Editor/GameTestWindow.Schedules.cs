@@ -530,12 +530,13 @@ public partial class GameTestWindow
     /// a schedule is satisfied within 3 tiles. Null if there's no way there.
     /// </summary>
     /// <param name="allowPartial">No way found (too far to plan in one go, or blocked): a path to the reachable cell nearest the goal instead of null - a leg of a long walk.</param>
-    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false)
+    /// <param name="besideOnly">Heading for a chair or bed: end beside it (never on top of it, never across a corner).</param>
+    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false, bool besideOnly = false)
     {
         var start = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-        if (start == goal) return new List<(int X, int Y)>();
+        if (start == goal && !besideOnly) return new List<(int X, int Y)>();
         var world = WorldBodiesForPathing(mapCharacter); // closed unlocked doors will be opened on the way (Exult paths.cc); hostile ones broken down
-        bool goalFree = CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true);
+        bool goalFree = !besideOnly && CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true);
 
         var open = new PriorityQueue<(int X, int Y), int>();
         var cameFrom = new Dictionary<(int X, int Y), (int X, int Y)>();
@@ -550,7 +551,8 @@ public partial class GameTestWindow
             var current = open.Dequeue();
             int h = Heuristic(current, goal);
             if (h < nearestH) { nearest = current; nearestH = h; }
-            bool done = current == goal || (!goalFree && Math.Max(Math.Abs(current.X - goal.X), Math.Abs(current.Y - goal.Y)) <= 1 && current != start);
+            // A taken goal (someone on it, a chair): right beside it - not across a corner, where a table can be in between.
+            bool done = (current == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1 && (current != start || besideOnly));
             if (done)
             {
                 var path = new List<(int X, int Y)>();
@@ -565,6 +567,7 @@ public partial class GameTestWindow
                 int newCost = cost[current] + 1;
                 if (cost.TryGetValue(next, out int known) && known <= newCost) continue;
                 if (!CanStandAt(mapCharacter, next, liftAt[current], world, out int lift)) continue;
+                if (!CanWalkBetween(mapCharacter, current, next, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
                 cost[next] = newCost;
                 liftAt[next] = lift;
                 cameFrom[next] = current;

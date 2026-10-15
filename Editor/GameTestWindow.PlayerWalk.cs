@@ -15,9 +15,9 @@ public partial class GameTestWindow
     private Action? _playerWalkArrived;
 
     /// <summary>Walks the player to (next to) a cell, then calls <paramref name="arrived"/>. False if there's no way there.</summary>
-    private bool WalkPlayerTo((int X, int Y) goal, Action arrived)
+    private bool WalkPlayerTo((int X, int Y) goal, Action arrived, bool besideOnly = false)
     {
-        var path = FindPlayerPath(goal);
+        var path = FindPlayerPath(goal, besideOnly);
         if (path is null) return false;
         // First to the middle of the cell they're standing in: keyboard walking leaves them anywhere in it, and the path is cell centre to cell centre.
         if (path.Count > 0) path.Insert(0, (_playerX, _playerY));
@@ -68,14 +68,14 @@ public partial class GameTestWindow
     }
 
     /// <summary>A* from the player's cell to the goal (or next to it, if the goal itself is taken - a chair).</summary>
-    private List<(int X, int Y)>? FindPlayerPath((int X, int Y) goal)
+    private List<(int X, int Y)>? FindPlayerPath((int X, int Y) goal, bool besideOnly = false)
     {
         var start = (_playerX, _playerY);
-        if (start == goal) return new List<(int X, int Y)>();
+        if (start == goal && !besideOnly) return new List<(int X, int Y)>();
         var world = WorldBodies();
         bool PlayerCanStand((int X, int Y) cell, int fromLift, out int lift) =>
             TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), fromLift, _playerSize.Z, out lift, out _, null, world);
-        bool goalFree = PlayerCanStand(goal, _playerZ, out _);
+        bool goalFree = !besideOnly && PlayerCanStand(goal, _playerZ, out _); // a chair: beside it, not on it
 
         var open = new PriorityQueue<(int X, int Y), int>();
         var cameFrom = new Dictionary<(int X, int Y), (int X, int Y)>();
@@ -86,7 +86,7 @@ public partial class GameTestWindow
         while (open.Count > 0 && expansions++ < 6000)
         {
             var current = open.Dequeue();
-            bool done = current == goal || (!goalFree && Math.Max(Math.Abs(current.X - goal.X), Math.Abs(current.Y - goal.Y)) <= 1);
+            bool done = (current == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1);
             if (done)
             {
                 var path = new List<(int X, int Y)>();
@@ -101,6 +101,7 @@ public partial class GameTestWindow
                 int newCost = cost[current] + 1;
                 if (cost.TryGetValue(next, out int known) && known <= newCost) continue;
                 if (!PlayerCanStand(next, liftAt[current], out int lift)) continue;
+                if (!PlayerCanWalkBetween(current, next, liftAt[current], world)) continue; // the walk itself, not just where it ends
                 cost[next] = newCost;
                 liftAt[next] = lift;
                 cameFrom[next] = current;

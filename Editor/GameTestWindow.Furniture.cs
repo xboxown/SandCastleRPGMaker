@@ -121,18 +121,15 @@ public partial class GameTestWindow
         int spot = NearestFreeSpot(furniture, obj, _playerPixelX, _playerPixelY + _tileHeight / 2.0, _player);
         if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) { StatusText.Text = $"There's no room on \"{obj.Name}\"."; return; }
         var seatCell = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
-        var (fx, fy) = FacingStep(furniture.Facing);
-        var front = (seatCell.Item1 + fx, seatCell.Item2 + fy);
-        if (!InsideMap(front.Item1, front.Item2)) front = seatCell;
         _pendingSit = new PendingSit
         {
             Furniture = furniture, Obj = obj, Bed = bed,
-            // Right up to the seat: one 8px tile in front of the sitter's spot, on the side the chair faces.
-            TargetX = p.X + fx * SpriteSizing.BaseUnit,
-            TargetY = p.Y + fy * SpriteSizing.BaseUnit - _tileHeight / 2.0
+            // The last steps go up to the seat itself, from whichever side of it can be reached (not always its front: a chair at a table faces the table).
+            TargetX = p.X,
+            TargetY = p.Y - _tileHeight / 2.0
         };
-        if ((_playerX, _playerY) == front) { BeginLastSteps(); return; }
-        if (!WalkPlayerTo(front, BeginLastSteps))
+        if (Math.Abs(_playerX - seatCell.Item1) + Math.Abs(_playerY - seatCell.Item2) <= 1) { BeginLastSteps(); return; }
+        if (!WalkPlayerTo(seatCell, BeginLastSteps, besideOnly: true)) // a cell right beside it, walked round whatever is in the way
         {
             _pendingSit = null;
             StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
@@ -193,7 +190,14 @@ public partial class GameTestWindow
             return;
         }
         _pendingSit = null;
-        if (_map.Objects.Contains(pending.Furniture)) TakeSeatAsPlayer(pending.Furniture, pending.Obj, pending.Bed);
+        if (!_map.Objects.Contains(pending.Furniture)) return;
+        // Not actually beside it (the way was blocked at the last): no jumping onto it from across a table.
+        if (Math.Abs(_playerPixelX - pending.TargetX) > _tileWidth * 1.5 || Math.Abs(_playerPixelY - pending.TargetY) > _tileHeight * 1.5)
+        {
+            StatusText.Text = $"You can't reach \"{pending.Obj.Name}\" from here.";
+            return;
+        }
+        TakeSeatAsPlayer(pending.Furniture, pending.Obj, pending.Bed);
     }
 
     private void CancelPendingSit() => _pendingSit = null;
@@ -242,7 +246,7 @@ public partial class GameTestWindow
             if (spot < 0 || SpotPosition(furniture, obj, spot) is not { } p) continue;
             var goal = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
             var here = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-            var path = here == goal ? new List<(int X, int Y)>() : FindPath(mapCharacter, goal);
+            var path = Math.Abs(here.Item1 - goal.Item1) + Math.Abs(here.Item2 - goal.Item2) <= 1 ? new List<(int X, int Y)>() : FindPath(mapCharacter, goal, besideOnly: true); // beside it, walked round the table
             if (path is null) continue; // not reachable: the next one
             _headingToSeat[me] = (furniture, spot);
             if (path.Count == 0) { ArriveAtFurniture(mapCharacter); return true; }
@@ -286,6 +290,11 @@ public partial class GameTestWindow
         if (!_seats.Remove(who, out var seat)) return;
         var obj = DefinitionOf(seat.Furniture);
         if (seat.Bed && obj is not null && !_seats.Values.Any(s => ReferenceEquals(s.Furniture, seat.Furniture))) SetCover(seat.Furniture, obj, turnedDown: false);
+        if (obj is { Type: ObjectType.Bedroll } && !_seats.Values.Any(s => ReferenceEquals(s.Furniture, seat.Furniture)) && _map.Objects.Contains(seat.Furniture))
+        {
+            seat.Furniture.IsOpenRuntime = false; // rolled up again
+            RefreshObjectLook(seat.Furniture);
+        }
         if (who == _player)
         {
             _playerPixelX = seat.FromX;

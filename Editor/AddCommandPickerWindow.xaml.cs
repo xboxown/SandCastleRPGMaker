@@ -120,6 +120,12 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void SleepOnBed_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.SleepOnBed;
+        DialogResult = true;
+    }
+
     private void Paperdoll_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.Paperdoll;

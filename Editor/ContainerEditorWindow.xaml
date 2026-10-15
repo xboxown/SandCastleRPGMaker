@@ -235,7 +235,10 @@
                                         <Button Content="Down" Click="MoveContentsDown_Click"/>
                                     </StackPanel>
                                 </Grid>
-                                <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Margin="0,8,0,0" Click="RemoveContents_Click"/>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <Button Content="Remove Selected" Width="120" HorizontalAlignment="Left" Click="RemoveContents_Click"/>
+                                    <Button x:Name="ContentsQuantityButton" Content="Quantity..." Width="100" Margin="8,0,0,0" IsEnabled="False" Click="ContentsQuantity_Click" ToolTip="How many of it (only things that stack: coins, arrows, lockpicks...)"/>
+                                </StackPanel>
                             </StackPanel>
                         </ScrollViewer>
                     </TabItem>

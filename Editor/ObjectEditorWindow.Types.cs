@@ -579,7 +579,8 @@ public partial class ObjectEditorWindow
         row.Children.Add(Check("Sleep until 6 in the morning instead", () => b.WakeAtDawn, v => b.WakeAtDawn = v));
         body.Children.Add(row);
         body.Children.Add(SpritePicker("Laid-out sprite (optional - while slept on)", () => (b.LaidOutSprite.SpriteGroup, b.LaidOutSprite.SpriteName), (g, n) => { b.LaidOutSprite.SpriteGroup = g; b.LaidOutSprite.SpriteName = n; }));
-        body.Children.Add(Note("Exult's rest (advanceTimeDueToRest): for each party member not starving (food 10 or more): ailments wear off, health and mana come back by the hours slept, and food goes down by them. Lights burn down. Can't be used with enemies in sight."));
+        body.Children.Add(Note("Carried, it's a bundle: put it down, then double-click it - it's laid out (its looks above, by the way it faces) and the player walks to its sleeping place and lies down, as on a bed. " +
+                               "The hours above are used only when \"Ask how many hours\" is unticked. Exult's rest (advanceTimeDueToRest): for each party member not starving (food 10 or more): ailments wear off, health and mana come back by the hours slept, and food goes down by them. Lights burn down. Can't be used with enemies in sight."));
     }
 
     private void BuildReagent(WorldObject obj)

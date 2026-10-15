@@ -45,7 +45,9 @@ public enum EventCommandType
     /// <summary>Stop Conversation: the conversation ends here - pinned replies no longer bring their box back, and once the lines already up are read the box closes for good. Commands after it still run (with no box up).</summary>
     StopConversation,
     /// <summary>Paperdoll: changes a paperdoll's parts (look, shown, value, lid, what's inside), plays or stops its sounds, closes it, or turns its object into another object (PaperDoll Editor).</summary>
-    Paperdoll
+    Paperdoll,
+    /// <summary>Sleep On Bed: the main character walks to a bed and lies down on it, as double-clicking it does.</summary>
+    SleepOnBed
 }
 
 /// <summary>

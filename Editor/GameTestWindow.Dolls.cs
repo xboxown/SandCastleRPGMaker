@@ -449,7 +449,7 @@ public partial class GameTestWindow
 
     private string DollItemName(InventoryItemInstance item) => item.Category switch
     {
-        ReferencedItemCategory.Object when DefinitionOf(item) is { } obj => ObjectDisplayName(obj, item.IsSpentRuntime, item.Quantity),
+        ReferencedItemCategory.Object when DefinitionOf(item) is { } obj => CarriedObjectName(obj, item),
         ReferencedItemCategory.Book when _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book => EffectiveBookName(book),
         _ => DollLook.ItemName(new ItemReference { Category = item.Category, ItemId = item.ItemId }, _objects, _books, _containers)
     };

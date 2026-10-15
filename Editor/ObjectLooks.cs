@@ -58,7 +58,9 @@ internal static class ObjectLooks
             case ObjectType.CraftingStation:
                 return state.Lit ? Find(sprites, obj.Crafting.WorkingSprite) ?? own : own;
             case ObjectType.Bedroll:
-                return state.Open ? Find(sprites, obj.Bedroll.LaidOutSprite) ?? own : own;
+                // Laid out: its look for the way it faces (as a bed's), else its laid-out sprite.
+                if (!state.Open) return own;
+                return (obj.Furniture.Resolve(state.Facing) is { } laid ? Find(sprites, laid.Sprite) : null) ?? Find(sprites, obj.Bedroll.LaidOutSprite) ?? own;
             case ObjectType.UseableObject:
                 return state.Spent ? Find(sprites, obj.Useable.UsedUpSprite) ?? own : own;
             case ObjectType.LiquidContainer:

@@ -344,6 +344,8 @@ public class FurnitureSettings
     public int SleepMaxHours { get; set; } = 12;
     public int SleepDefaultHours { get; set; } = 8;
     public int SleepStepHours { get; set; } = 1;
+    /// <summary>0 hours on the slider (don't sleep): the sleeper says this and gets up ("" = says nothing).</summary>
+    public string CancelSleepLine { get; set; } = "Perhaps later.";
     /// <summary>Its animation sounds in play, as a character pose's: muted, or at this volume (0-100).</summary>
     public bool Muted { get; set; }
     public int Volume { get; set; } = 100;

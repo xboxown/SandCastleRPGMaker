@@ -1342,7 +1342,7 @@ public partial class GameTestWindow : Window
             && UseCarriedObject(item, new ContainerOrigin(gump.PlacedItem, gump.Data, item))) return; // keys, lockpicks, lights, By Use
         if (!isUse && DefinitionOf(item) is { } containedObject)
         {
-            string objectName = ObjectDisplayName(containedObject, item.IsSpentRuntime, item.Quantity);
+            string objectName = CarriedObjectName(containedObject, item); // "Bucket of water", as on the map
             ShowContainerIdentifyLabel(gump, item, objectName);
             StatusText.Text = objectName;
             return;
@@ -1418,7 +1418,7 @@ public partial class GameTestWindow : Window
             && UseCarriedObject(item, slotKey is not null ? new SlotOrigin(gump.Character, slotKey, item) : new BackpackOrigin(gump.Character, item))) return; // keys, lockpicks, lights, By Use
         if (!isUse && DefinitionOf(item) is { } carriedObject)
         {
-            string objectName = ObjectDisplayName(carriedObject, item.IsSpentRuntime, item.Quantity);
+            string objectName = CarriedObjectName(carriedObject, item); // "Bucket of water", as on the map
             if (slotKey is not null) ShowPaperdollIdentifyLabel(gump, slotKey, objectName);
             StatusText.Text = objectName;
             return;
@@ -1763,6 +1763,7 @@ public partial class GameTestWindow : Window
     {
         // Explicit Count check first, rather than treating FirstOrDefault()'s result as a null-check - Key is a value type (enum), so FirstOrDefault() on an EMPTY set returns Key.None, not a true "nothing held" signal. Key.None wrapped in a nullable is still non-null, so the old "active is { } key" pattern always matched even with nothing held, silently running a (0,0) step every frame and re-triggering the Walking pose the instant it wasn't already active - which is exactly what showed up as "walking animation while standing still."
         if (_heldDirectionKeys.Count == 0) { dx = 0; dy = 0; return false; }
+        if (_pointer is { IsDragging: true }) { dx = 0; dy = 0; return false; } // holding something on the mouse: no walking until it's put down
         Key active = (_lastDirectionKeyPressed is { } last && _heldDirectionKeys.Contains(last)) ? last : _heldDirectionKeys.First();
         (dx, dy) = DirectionFor(active);
         return true;
@@ -1980,7 +1981,10 @@ public partial class GameTestWindow : Window
                 counts[page] = (counts.TryGetValue(page, out var cc) ? cc : 0) + 1;
                 if (page.Commands.Count > 0)
                 {
-                    EventCommandInterpreter.Run(page.Commands, _execContext, trace);
+                    var previousOwner = _firingOwner;
+                    _firingOwner = owner; // whose event this is (Sleep On Bed: "the bed under this")
+                    try { EventCommandInterpreter.Run(page.Commands, _execContext, trace); }
+                    finally { _firingOwner = previousOwner; }
                     StatusText.Text = firedStatusMessage;
                     return true;
                 }
