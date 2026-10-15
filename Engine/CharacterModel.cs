@@ -67,6 +67,8 @@ public class CharacterDefinition
     /// controlled by the person playing, not by AI.
     /// </summary>
     public List<ScheduleEntry> Schedules { get; set; } = new();
+    /// <summary>When... rules (Character Editor > Schedule): needs that take it away from its timetable while they hold - "when hungry, eat at the nearest Pub".</summary>
+    public List<ScheduleRule> ScheduleRules { get; set; } = new();
 
     /// <summary>What happens when the player double-clicks this character (Exult: Actor::activate runs its conversation) - event commands, usually Show Text lines spoken by Self.</summary>
     public List<EventCommand> TalkCommands { get; set; } = new();

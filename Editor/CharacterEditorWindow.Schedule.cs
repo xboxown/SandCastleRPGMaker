@@ -44,6 +44,7 @@ public partial class CharacterEditorWindow
 
         for (int period = 0; period < 8; period++)
             SchedulePanel.Children.Add(BuildScheduleRow(character, period, placed));
+        BuildScheduleRules(character); // When... needs that come before the timetable
     }
 
     private FrameworkElement BuildScheduleRow(CharacterDefinition character, int period, (int X, int Y)? placed)
@@ -59,12 +60,15 @@ public partial class CharacterEditorWindow
         activity.SelectedItem = choices.First(c => c.Type == entry?.Type);
         activity.ToolTip = entry is null ? "Nothing changes at this time" : Schedules.Explain(entry.Type);
         row.Children.Add(activity);
+        Action whereChanged = () => { }; // RefreshButtons, once it exists (below)
+        var (where, syncWhere) = WhereCombo(() => entry, () => whereChanged()); // a cell, a zone, or the nearest zone of a purpose
+        row.Children.Add(where);
 
-        var spot = new TextBlock { Width = 120, VerticalAlignment = VerticalAlignment.Center };
+        var spot = new TextBlock { Width = 150, VerticalAlignment = VerticalAlignment.Center };
         void ShowSpot()
         {
             if (entry is null) { spot.Text = ""; return; }
-            spot.Text = entry.X < 0 ? (placed is { } p ? $"placed spot ({p.X}, {p.Y})" : "placed spot") : $"cell ({entry.X}, {entry.Y})";
+            spot.Text = PlaceText(entry, placed);
         }
         ShowSpot();
 
@@ -76,14 +80,18 @@ public partial class CharacterEditorWindow
         void RefreshButtons()
         {
             bool has = entry is not null;
+            where.IsEnabled = has;
+            syncWhere();
             pick.IsEnabled = has;
-            usePlaced.IsEnabled = has && entry!.X >= 0;
+            usePlaced.IsEnabled = has && (entry!.X >= 0 || entry.ZoneId >= 0 || entry.ZonePurpose.Length > 0);
             custom.Visibility = entry?.Type == ScheduleType.Custom ? Visibility.Visible : Visibility.Collapsed;
             customName.Text = entry?.Type == ScheduleType.Custom
                 ? (string.IsNullOrEmpty(entry.CustomName) ? "" : $"\"{entry.CustomName}\"") + $" {entry.CustomCommands.Count} command{(entry.CustomCommands.Count == 1 ? "" : "s")}"
                 : "";
             ShowSpot();
         }
+
+        whereChanged = RefreshButtons;
 
         activity.SelectionChanged += (_, _) =>
         {
@@ -116,9 +124,9 @@ public partial class CharacterEditorWindow
             }
             var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows,
                 entry.X >= 0 ? (entry.X, entry.Y) : placed, placed) { Owner = this };
-            if (picker.ShowDialog() == true && picker.Picked is { } cell) { entry.X = cell.X; entry.Y = cell.Y; RefreshButtons(); }
+            if (picker.ShowDialog() == true && picker.Picked is { } cell) { entry.X = cell.X; entry.Y = cell.Y; entry.ZoneId = -1; entry.ZonePurpose = ""; RefreshButtons(); }
         };
-        usePlaced.Click += (_, _) => { if (entry is null) return; entry.X = -1; entry.Y = -1; RefreshButtons(); };
+        usePlaced.Click += (_, _) => { if (entry is null) return; entry.X = -1; entry.Y = -1; entry.ZoneId = -1; entry.ZonePurpose = ""; RefreshButtons(); };
         custom.Click += (_, _) =>
         {
             if (entry is null) return;

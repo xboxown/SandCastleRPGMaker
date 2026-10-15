@@ -30,6 +30,7 @@
                 <MenuItem x:Name="StartPositionModeMenuItem" Header="Start Position" IsCheckable="True" Click="StartPositionModeMenuItem_Click"/>
                 <MenuItem x:Name="CharacterModeMenuItem" Header="Characters" IsCheckable="True" Click="CharacterModeMenuItem_Click"/>
                 <MenuItem x:Name="ObjectModeMenuItem" Header="Objects" IsCheckable="True" Click="ObjectModeMenuItem_Click"/>
+                <MenuItem x:Name="ZoneModeMenuItem" Header="Zones (houses, pubs, hospitals...)" IsCheckable="True" Click="ZoneModeMenuItem_Click" ToolTip="Draw named areas of the map with a purpose - characters' schedules can go to them (Character Editor > Schedule)"/>
                 <MenuItem x:Name="FreeModeMenuItem" Header="Free Placement (objects, books, containers)" IsCheckable="True" Click="FreeModeMenuItem_Click" ToolTip="Put things down anywhere in 8px steps, stack them, put them on tables or under them"/>
                 <MenuItem x:Name="ItemModeMenuItem" Header="Item">
                     <MenuItem x:Name="ItemTypeWeaponMenuItem" Header="Weapons" IsCheckable="True" Click="ItemTypeMenuItem_Click"/>

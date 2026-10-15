@@ -1,0 +1,96 @@
+namespace SandcastleRpgMaker.Engine;
+
+/// <summary>
+/// A named area of the map (Map Editor > Mode > Zones) - a house, a pub, a
+/// hospital - covering the cells of its building on one floor. Its Purpose
+/// is what kind of place it is ("Pub", "Hospital", "Home"...), so several
+/// places can share one: a character's schedule can go to one zone, or to
+/// the nearest zone with a purpose ("the nearest Pub").
+/// </summary>
+public class MapZone
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "New Zone";
+    public string Purpose { get; set; } = string.Empty;
+    /// <summary>Its cells: top-left corner and size.</summary>
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Width { get; set; } = 1;
+    public int Height { get; set; } = 1;
+    /// <summary>The floor (1-9) it's on.</summary>
+    public int Floor { get; set; } = 1;
+    /// <summary>Its colour in the Map Editor, #RRGGBB.</summary>
+    public string Color { get; set; } = "#3FA7FF";
+
+    public bool Contains(int x, int y) => x >= X && y >= Y && x < X + Width && y < Y + Height;
+    public (int X, int Y) Center => (X + Width / 2, Y + Height / 2);
+
+    public string Describe() => string.IsNullOrWhiteSpace(Purpose) ? Name : $"{Name} ({Purpose})";
+}
+
+public static class Zones
+{
+    /// <summary>Purposes offered in the editors (any other can be typed).</summary>
+    public static readonly string[] CommonPurposes = { "Home", "Pub", "Inn", "Hospital", "Shop", "Smithy", "Farm", "Temple", "Guard post", "Workplace" };
+
+    /// <summary>Zones of a purpose (any case).</summary>
+    public static IEnumerable<MapZone> WithPurpose(IEnumerable<MapZone> zones, string purpose) =>
+        zones.Where(z => string.Equals(z.Purpose.Trim(), purpose.Trim(), StringComparison.OrdinalIgnoreCase));
+
+    /// <summary>The zone of that purpose whose centre is nearest a cell, or null.</summary>
+    public static MapZone? Nearest(IEnumerable<MapZone> zones, string purpose, int fromX, int fromY) =>
+        WithPurpose(zones, purpose).OrderBy(z => Math.Max(Math.Abs(z.Center.X - fromX), Math.Abs(z.Center.Y - fromY))).FirstOrDefault();
+}
+
+/// <summary>What starts a schedule rule (Character Editor > Schedule > When...).</summary>
+public enum ScheduleRuleCondition
+{
+    /// <summary>Food at or below its Hungry level (Health tab); until it's full.</summary>
+    Hungry,
+    /// <summary>Health at or below a share of its most; until it's back up to another share.</summary>
+    Injured,
+    /// <summary>A variable compared with a value; for as long as that's so.</summary>
+    Variable
+}
+
+/// <summary>
+/// "When hungry, go to the nearest Pub and eat at the inn": while its
+/// condition holds, the character leaves its timetable, goes where the rule
+/// says and does what it says there; when the condition ends it goes back
+/// to its timetable. The first rule in the list that holds wins.
+/// </summary>
+public class ScheduleRule
+{
+    public ScheduleRuleCondition Condition { get; set; } = ScheduleRuleCondition.Hungry;
+    /// <summary>Injured: starts at or below this % of its most health...</summary>
+    public int InjuredAtOrBelowPercent { get; set; } = 50;
+    /// <summary>...and ends at or above this %.</summary>
+    public int HealedAtPercent { get; set; } = 100;
+    /// <summary>Variable: name, comparison, value.</summary>
+    public string VariableName { get; set; } = string.Empty;
+    public ConditionComparisonOperator Comparison { get; set; } = ConditionComparisonOperator.Equal;
+    public double Value { get; set; }
+    /// <summary>Where it goes and what it does there (Period unused).</summary>
+    public ScheduleEntry Do { get; set; } = new() { Type = ScheduleType.EatAtInn, ZonePurpose = "Pub" };
+
+    public string Describe()
+    {
+        string when = Condition switch
+        {
+            ScheduleRuleCondition.Hungry => "hungry",
+            ScheduleRuleCondition.Injured => $"health at or below {InjuredAtOrBelowPercent}%",
+            _ => $"{VariableName} {Comparison} {Value}"
+        };
+        return $"When {when}: {Schedules.Describe(Do.Type)} at {Do.DescribePlace()}";
+    }
+
+    public static bool Compare(double left, ConditionComparisonOperator op, double right) => op switch
+    {
+        ConditionComparisonOperator.Equal => Math.Abs(left - right) < 0.0001,
+        ConditionComparisonOperator.NotEqual => Math.Abs(left - right) >= 0.0001,
+        ConditionComparisonOperator.GreaterThan => left > right,
+        ConditionComparisonOperator.GreaterOrEqual => left >= right,
+        ConditionComparisonOperator.LessThan => left < right,
+        _ => left <= right
+    };
+}

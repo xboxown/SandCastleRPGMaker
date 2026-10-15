@@ -45,6 +45,13 @@ public class ScheduleEntry
     public string CustomName { get; set; } = string.Empty;
     /// <summary>Custom only: the event commands run when the character arrives and starts this activity.</summary>
     public List<EventCommand> CustomCommands { get; set; } = new();
+    /// <summary>Goes to this zone (Map Editor > Mode > Zones) instead of a cell; -1 = none.</summary>
+    public int ZoneId { get; set; } = -1;
+    /// <summary>Goes to the nearest zone with this purpose ("Pub") instead of a cell; "" = none.</summary>
+    public string ZonePurpose { get; set; } = string.Empty;
+
+    public string DescribePlace() =>
+        ZoneId >= 0 ? $"zone #{ZoneId}" : ZonePurpose.Length > 0 ? $"the nearest {ZonePurpose}" : X >= 0 ? $"cell ({X}, {Y})" : "its placed spot";
 }
 
 public static class Schedules

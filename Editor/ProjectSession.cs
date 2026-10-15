@@ -41,6 +41,8 @@ internal static class ProjectSession
     public static Func<(System.Windows.Media.Imaging.BitmapSource Picture, int TileWidth, int TileHeight, int Columns, int Rows)?>? MapSnapshotProvider;
     /// <summary>Where a character (by id) is placed on the open map, or null.</summary>
     public static Func<int, (int X, int Y)?>? PlacedSpotProvider;
+    /// <summary>The zones of the open map (Map Editor > Mode > Zones), or null when no map is open.</summary>
+    public static Func<List<MapZone>?>? ZonesProvider;
 
     public static FactionDatabase Factions => _factions?.Invoke() ?? new FactionDatabase();
     public static CharacterDatabase Characters => _characters?.Invoke() ?? new CharacterDatabase();

@@ -85,6 +85,8 @@ public class SurvivalSettings
     /// <summary>The inn: a cell on the map (-1 = none set).</summary>
     public int InnX { get; set; } = -1;
     public int InnY { get; set; } = -1;
+    /// <summary>With no inn cell: the nearest zone of this purpose ("Pub") is its inn (Map Editor > Mode > Zones).</summary>
+    public string InnZonePurpose { get; set; } = string.Empty;
     /// <summary>Food level the game starts with, 0-31.</summary>
     public int StartingFood { get; set; } = 24;
     /// <summary>Hungry (and complaining) at or below this - Exult: 9.</summary>

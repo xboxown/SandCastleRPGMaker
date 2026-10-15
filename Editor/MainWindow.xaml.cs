@@ -47,7 +47,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -116,6 +116,7 @@ public partial class MainWindow : Window
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
         ProjectSession.PlacedSpotProvider = characterId =>
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
+        ProjectSession.ZonesProvider = () => _map?.Zones;
     }
 
     /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>
@@ -983,6 +984,9 @@ public partial class MainWindow : Window
         CharacterModeMenuItem.IsChecked = false;
         ObjectModeMenuItem.IsChecked = false;
         FreeModeMenuItem.IsChecked = false;
+        ZoneModeMenuItem.IsChecked = false;
+        _selectedZone = null;
+        DrawZones(); // zones show only in Zones mode
         ClearFreeSelection();
         ItemTypeWeaponMenuItem.IsChecked = false;
         ItemTypeArmorMenuItem.IsChecked = false;
@@ -1464,6 +1468,7 @@ public partial class MainWindow : Window
         // numbers, not visual estimation. If the visible grid looks larger
         // than what this reports, that's the concrete proof of a real
         // mismatch rather than a rendering illusion.
+        DrawZones(); // the canvas was rebuilt (a floor picked): the zones go back on top
         StatusText.Text = $"Map built: {_map.Width}x{_map.Height} cells, {_tileset.TileWidth}x{_tileset.TileHeight}px tiles -> canvas {pixelWidth}x{pixelHeight}px. Last valid cell: col {_map.Width - 1}, row {_map.Height - 1}.";
     }
 
@@ -1482,6 +1487,12 @@ public partial class MainWindow : Window
             // The first click of the double-click does nothing (it would otherwise put the picked thing on the chest); drag something onto a container to put it on top.
             if (e.ClickCount >= 2) EditPlacedContainerContents(clickedContainer);
             else StatusText.Text = "Ctrl + double-click a container to fill it. (To put something on top of it, drag it there.)";
+            return;
+        }
+
+        if (_editMode == EditMode.Zone)
+        {
+            ZoneMode_MouseLeftButtonDown(x, y, e.ClickCount);
             return;
         }
 
@@ -1629,6 +1640,7 @@ public partial class MainWindow : Window
 
         if (_editMode == EditMode.Object) { ObjectMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
         if (_editMode == EditMode.Free) { FreeMode_MouseMove(rawPoint, e.LeftButton); return; }
+        if (_editMode == EditMode.Zone) { ZoneMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
 
         if (!_isFreehandPainting) return;
         if (e.LeftButton != MouseButtonState.Pressed)
@@ -1658,6 +1670,7 @@ public partial class MainWindow : Window
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
 
+        if (ZoneMode_MouseLeftButtonUp(x, y)) return;
         if (FreeMode_MouseLeftButtonUp(e.GetPosition(MapCanvas))) return;
         if (CharacterMode_MouseLeftButtonUp(x, y)) return;
         if (ObjectMode_MouseLeftButtonUp(x, y)) return;
@@ -1707,6 +1720,12 @@ public partial class MainWindow : Window
             var existing = _map.Events.FirstOrDefault(ev => ev.X == x && ev.Y == y && ev.Floor == _currentFloor);
             if (existing is not null) _selectedMapEvent = existing;
             ShowMapEventContextMenu(existing, x, y);
+            return;
+        }
+
+        if (_editMode == EditMode.Zone)
+        {
+            ZoneMode_MouseRightButtonDown(x, y);
             return;
         }
 

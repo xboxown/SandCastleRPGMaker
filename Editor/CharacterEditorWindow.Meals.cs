@@ -42,6 +42,7 @@ public partial class CharacterEditorWindow
         innRow.Children.Add(clear);
         ShowInn();
         host.Children.Add(innRow);
+        host.Children.Add(InnZoneRow(s)); // or the nearest Pub (zones)
         host.Children.Add(new TextBlock
         {
             Text = "It tries them in this order and eats until it's full (31), then gets up and goes back to its schedule. Nothing to eat: it carries on and tries again later. " +

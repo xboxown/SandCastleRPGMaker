@@ -43,6 +43,7 @@ public partial class GameTestWindow
     private void CheckHunger(MapCharacter mapCharacter, double elapsedMs)
     {
         var npc = mapCharacter.Npc;
+        if (npc.Rule is not null) return; // following a When... rule (a "when hungry" one feeds it its own way)
         if (npc.Meal != MealStep.None || (npc.MealCheckMs -= elapsedMs) > 0) return;
         npc.MealCheckMs = 2000;
         var me = mapCharacter.Character;
@@ -79,7 +80,7 @@ public partial class GameTestWindow
             npc.WaitMs = 800;
             return true;
         }
-        if (s.GoesToInn && s.InnX >= 0 && InsideMap(s.InnX, s.InnY))
+        if (s.GoesToInn && InnSpotOf(mapCharacter) is not null) // its cell, or the nearest zone of its inn purpose
         {
             BeginMeal(mapCharacter, MealStep.GoingToInn);
             npc.WaitMs = 0;
@@ -150,7 +151,7 @@ public partial class GameTestWindow
             {
                 if (CarriedFood(me) is not { } carried)
                 {
-                    if (me.Survival.GoesToInn && me.Survival.InnX >= 0) { npc.Meal = MealStep.GoingToInn; npc.WaitMs = 0; }
+                    if (me.Survival.GoesToInn && InnSpotOf(mapCharacter) is not null) { npc.Meal = MealStep.GoingToInn; npc.WaitMs = 0; }
                     else FinishMeal(mapCharacter);
                     return;
                 }
@@ -162,7 +163,7 @@ public partial class GameTestWindow
             }
             case MealStep.GoingToInn:
             {
-                var inn = (me.Survival.InnX, me.Survival.InnY);
+                if (InnSpotOf(mapCharacter) is not { } inn) { FinishMeal(mapCharacter); return; } // its inn zone is gone
                 if (TileDistance(mapCharacter, inn) > NearTiles + 1)
                 {
                     if (FindPath(mapCharacter, inn, allowPartial: true) is { Count: > 0 } path) StartPath(mapCharacter, path);

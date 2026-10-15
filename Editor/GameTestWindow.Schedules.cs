@@ -29,6 +29,9 @@ public partial class GameTestWindow
         public ScheduleType? Activity;
         public bool WalkingToSchedule;
         public ScheduleEntry? Entry;
+        /// <summary>The When... rule it's following now, instead of its timetable (GameTestWindow.Zones.cs).</summary>
+        public ScheduleRule? Rule;
+        public double RuleCheckMs = 2000;
         /// <summary>The schedule spot (cell) and the "old_schedule_loc" Exult compares against.</summary>
         public (int X, int Y) Dest;
         public (int X, int Y)? OldScheduleLoc;
@@ -124,7 +127,8 @@ public partial class GameTestWindow
     private void ShowClock() => ClockText.Text = (_player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}") + (_combatMode ? "   |   COMBAT" : "");
 
     private (int X, int Y) SpotOf(MapCharacter mapCharacter, ScheduleEntry entry) =>
-        entry.X >= 0 && entry.Y >= 0 ? (Math.Clamp(entry.X, 0, _map.Width - 1), Math.Clamp(entry.Y, 0, _map.Height - 1)) : mapCharacter.Npc.Home;
+        ZoneSpotOf(mapCharacter, entry) ?? // a zone, or the nearest of a purpose (GameTestWindow.Zones.cs)
+        (entry.X >= 0 && entry.Y >= 0 ? (Math.Clamp(entry.X, 0, _map.Width - 1), Math.Clamp(entry.Y, 0, _map.Height - 1)) : mapCharacter.Npc.Home);
 
     /// <summary>Npc_actor::update_schedule.</summary>
     private void UpdateSchedule(MapCharacter mapCharacter, int period, int delayMs)
@@ -132,6 +136,7 @@ public partial class GameTestWindow
         var schedules = mapCharacter.Character.Schedules;
         if (mapCharacter.Character.IsInParty || mapCharacter.Character.IsTestPlayer || schedules.Count == 0 || IsDead(mapCharacter.Character)) return;
         if (mapCharacter.Npc.Meal != MealStep.None) return; // eating: its schedule waits till it's full
+        if (mapCharacter.Npc.Rule is not null) return; // a When... rule holds: its timetable waits till it's over
         var npc = mapCharacter.Npc;
         var entry = schedules.FirstOrDefault(s => s.Period == period);
         if (entry is null)
@@ -173,6 +178,7 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         if (IsIncapacitated(mapCharacter.Character)) return; // dead, asleep or paralyzed: does nothing at all
+        CheckScheduleRules(mapCharacter, elapsedMs); // its When... rules: hungry, injured... (GameTestWindow.Zones.cs)
         CheckHunger(mapCharacter, elapsedMs); // hungry: off to eat (GameTestWindow.Meals.cs)
         if (npc.Path is not null) { MoveAlongPath(mapCharacter, elapsedMs); return; }
         if (npc.WaitMs < 0) return;
