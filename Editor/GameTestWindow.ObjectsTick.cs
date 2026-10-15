@@ -44,6 +44,7 @@ public partial class GameTestWindow
         CloseDoorsBehindNpcs();
         UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
+        UpdateProjectiles(elapsedMs); // shooting traps, and whatever is flying
     }
 
     // ---------- Tiles and traps ----------
@@ -66,7 +67,7 @@ public partial class GameTestWindow
             foreach (var entered in now.Where(o => !before.Contains(o)).ToList())
             {
                 if (DefinitionOf(entered) is not { } obj) continue;
-                if (obj.Type == ObjectType.Trap) SpringTrap(entered, obj, who);
+                if (obj.Type == ObjectType.Trap) TriggerTrap(entered, obj, who); // ground, shooting or explosive (GameTestWindow.Projectiles.cs)
                 else FireObjectEvent(entered, obj, BookTriggerConditionBased.ByEnter, activator);
             }
             foreach (var left in before.Where(o => !now.Contains(o)).ToList())

@@ -77,7 +77,9 @@ public enum ObjectType
     /// <summary>A table, counter, shelf or altar: solid, and things put on it rest on top.</summary>
     Table,
     /// <summary>A bucket, bottle or cauldron: filled at a source (a well, a trough) and drunk, poured or emptied.</summary>
-    LiquidContainer
+    LiquidContainer,
+    /// <summary>A fireball, a lightning bolt, a dart: a real object flying across the map (shot by a trap) - it hurts whoever it hits; too heavy to pick up.</summary>
+    Projectile
 }
 
 public static class ObjectTypes
@@ -91,7 +93,7 @@ public static class ObjectTypes
         ObjectType.Potion, ObjectType.BreakableGlass, ObjectType.Spellbook, ObjectType.UseableObject, ObjectType.Lever,
         ObjectType.Stairs, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
         ObjectType.MusicalInstrument, ObjectType.Explosive, ObjectType.Bedroll, ObjectType.Reagent, ObjectType.Table,
-        ObjectType.LiquidContainer
+        ObjectType.LiquidContainer, ObjectType.Projectile
     };
 
     public static string Name(ObjectType type) => type switch
@@ -115,7 +117,7 @@ public static class ObjectTypes
     /// <summary>Things that can't be broken by blows (no Durability): plants, food, potions, reagents, keys...</summary>
     public static bool CanBeBroken(ObjectType type) => type is not (ObjectType.Plant or ObjectType.Food or ObjectType.Potion or ObjectType.Reagent
         or ObjectType.Key or ObjectType.Lockpick or ObjectType.Keychain or ObjectType.Ammo or ObjectType.Money or ObjectType.Tile or ObjectType.Wall
-        or ObjectType.Roof or ObjectType.Stairs or ObjectType.Sextant or ObjectType.Map or ObjectType.Spellbook);
+        or ObjectType.Roof or ObjectType.Stairs or ObjectType.Sextant or ObjectType.Map or ObjectType.Spellbook or ObjectType.Projectile);
 
     /// <summary>Always solid and drawn by Exult's wall rule (Game_object::compare): walls, doors and windows.</summary>
     public static bool IsWallLike(ObjectType type) => type is ObjectType.Wall or ObjectType.Door or ObjectType.Window;
@@ -176,6 +178,11 @@ public static class ObjectTypes
             case ObjectType.Trap:
                 obj.IsSolid = false;
                 obj.SizeZ = 0;
+                break;
+            case ObjectType.Projectile:
+                obj.IsPortable = false; // flying: too heavy to pick up
+                obj.IsSolid = false;
+                obj.SizeZ = 1;
                 break;
             case ObjectType.Window:
                 obj.IsPortable = false;
@@ -371,8 +378,29 @@ public class FurnitureSettings
 public enum TrapAilment { None, Poisoned, Asleep, Paralyzed }
 
 /// <summary>Trap settings: what it does to whoever steps on it.</summary>
+/// <summary>What a trap does: hurts whoever steps on it, blows up, or shoots a projectile.</summary>
+public enum TrapKind { Ground, Shooting, Explosive }
+
+/// <summary>What sets a shooting trap off.</summary>
+public enum TrapTrigger { StepOn, LineOfFire }
+
 public class TrapSettings
 {
+    public TrapKind Kind { get; set; } = TrapKind.Ground;
+    // ---- Shooting ----
+    /// <summary>The Projectile object it shoots, the way the placed copy faces.</summary>
+    public int ProjectileObjectId { get; set; } = -1;
+    public TrapTrigger TriggeredBy { get; set; } = TrapTrigger.StepOn;
+    /// <summary>Line of fire: how far ahead it sees someone (Exult tiles, 8px).</summary>
+    public int RangeTiles { get; set; } = 12;
+    // ---- Explosive ----
+    /// <summary>How far the blast reaches (Exult tiles, 8px).</summary>
+    public int RadiusTiles { get; set; } = 3;
+    public SpriteLink ExplosionSprite { get; set; } = new();
+    public int ExplosionSoundResourceId { get; set; } = -1;
+    /// <summary>Gone once it has blown up.</summary>
+    public bool RemovedAfterExplosion { get; set; } = true;
+
     public int DamageMin { get; set; } = 1;
     public int DamageMax { get; set; } = 5;
     public TrapAilment Ailment { get; set; } = TrapAilment.None;
@@ -383,6 +411,28 @@ public class TrapSettings
     /// <summary>Seconds before it can go off again (not one-shot).</summary>
     public double RearmSeconds { get; set; } = 3;
     public int TriggerSoundResourceId { get; set; } = -1;
+}
+
+/// <summary>A projectile's flight and what it does to whoever it hits.</summary>
+public class ProjectileSettings
+{
+    /// <summary>Exult tiles (8px) a second.</summary>
+    public double SpeedTiles { get; set; } = 24;
+    /// <summary>How far it flies before it's gone (Exult tiles).</summary>
+    public int RangeTiles { get; set; } = 24;
+    public int DamageMin { get; set; } = 2;
+    public int DamageMax { get; set; } = 8;
+    public TrapAilment Ailment { get; set; } = TrapAilment.None;
+    /// <summary>Its picture is turned the way it flies (an arrow, a bolt; drawn pointing down/south).</summary>
+    public bool RotatesToDirection { get; set; }
+    /// <summary>Blows up when it hits someone (and, if set, at the end of its flight or against a wall).</summary>
+    public bool Explodes { get; set; }
+    public bool ExplodesAtEnd { get; set; }
+    public int RadiusTiles { get; set; } = 2;
+    public SpriteLink ExplosionSprite { get; set; } = new();
+    public int LaunchSoundResourceId { get; set; } = -1;
+    public int HitSoundResourceId { get; set; } = -1;
+    public int ExplosionSoundResourceId { get; set; } = -1;
 }
 
 /// <summary>A kind of money (Currency Editor): gold coins, silver pieces, gems... worth Value of the base unit each.</summary>

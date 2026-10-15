@@ -388,20 +388,59 @@ public partial class ObjectEditorWindow : Window
     {
         var t = obj.Trap;
         var body = Group("Trap");
+        var kinds = new[] { ("Ground - whoever steps on it is hurt (spikes, broken glass, needles)", TrapKind.Ground),
+                            ("Shooting - it shoots a projectile (a fireball, lightning, darts)", TrapKind.Shooting),
+                            ("Explosive - stepped on, it blows up at once", TrapKind.Explosive) };
+        var kind = new ComboBox { Width = 420, ItemsSource = kinds.Select(k => k.Item1).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(kinds, k => k.Item2 == t.Kind)) };
+        kind.SelectionChanged += (_, _) => { t.Kind = kinds[Math.Max(0, kind.SelectedIndex)].Item2; ShowCurrent(); };
+        body.Children.Add(Labeled("Kind", kind));
         var row = new WrapPanel();
-        row.Children.Add(NumberField("Damage from", () => t.DamageMin, v => t.DamageMin = (int)Math.Max(0, v)));
-        row.Children.Add(NumberField("to", () => t.DamageMax, v => t.DamageMax = (int)Math.Max(0, v)));
-        var ailment = new ComboBox { Width = 120, ItemsSource = Enum.GetValues<TrapAilment>(), SelectedItem = t.Ailment };
-        ailment.SelectionChanged += (_, _) => t.Ailment = (TrapAilment)ailment.SelectedItem;
-        row.Children.Add(Labeled("Also makes them", ailment));
+        if (t.Kind != TrapKind.Shooting)
+        {
+            row.Children.Add(NumberField("Damage from", () => t.DamageMin, v => t.DamageMin = (int)Math.Max(0, v)));
+            row.Children.Add(NumberField("to", () => t.DamageMax, v => t.DamageMax = (int)Math.Max(0, v)));
+        }
+        if (t.Kind == TrapKind.Ground)
+        {
+            var ailment = new ComboBox { Width = 120, ItemsSource = Enum.GetValues<TrapAilment>(), SelectedItem = t.Ailment };
+            ailment.SelectionChanged += (_, _) => t.Ailment = (TrapAilment)ailment.SelectedItem;
+            row.Children.Add(Labeled("Also makes them", ailment));
+        }
+        if (t.Kind == TrapKind.Explosive)
+            row.Children.Add(NumberField("Blast radius (tiles of 8px)", () => t.RadiusTiles, v => t.RadiusTiles = (int)Math.Clamp(v, 1, 64)));
+        if (t.Kind == TrapKind.Shooting)
+        {
+            var projectiles = new List<WorldObject> { new() { Id = -1, Name = "(none - make a Projectile object)" } };
+            projectiles.AddRange(_db.Objects.Where(o => o.Type == ObjectType.Projectile));
+            var shoots = new ComboBox { Width = 240, ItemsSource = projectiles, DisplayMemberPath = nameof(WorldObject.Name), SelectedItem = projectiles.FirstOrDefault(p => p.Id == t.ProjectileObjectId) ?? projectiles[0] };
+            shoots.SelectionChanged += (_, _) => t.ProjectileObjectId = (shoots.SelectedItem as WorldObject)?.Id ?? -1;
+            row.Children.Add(Labeled("Shoots", shoots));
+            var triggers = new[] { ("Someone stepping on it (a pressure plate)", TrapTrigger.StepOn), ("Someone in its line of fire", TrapTrigger.LineOfFire) };
+            var trigger = new ComboBox { Width = 260, ItemsSource = triggers.Select(x => x.Item1).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(triggers, x => x.Item2 == t.TriggeredBy)) };
+            trigger.SelectionChanged += (_, _) => { t.TriggeredBy = triggers[Math.Max(0, trigger.SelectedIndex)].Item2; ShowCurrent(); };
+            row.Children.Add(Labeled("Set off by", trigger));
+            if (t.TriggeredBy == TrapTrigger.LineOfFire)
+                row.Children.Add(NumberField("It sees this far (tiles of 8px)", () => t.RangeTiles, v => t.RangeTiles = (int)Math.Clamp(v, 1, 200)));
+        }
         body.Children.Add(row);
+        if (t.Kind == TrapKind.Explosive)
+        {
+            body.Children.Add(SpritePicker("Blast (played once where it was)", () => (t.ExplosionSprite.SpriteGroup, t.ExplosionSprite.SpriteName), (g, n) => { t.ExplosionSprite.SpriteGroup = g; t.ExplosionSprite.SpriteName = n; }));
+            body.Children.Add(SoundPicker("Blast sound", () => t.ExplosionSoundResourceId, v => t.ExplosionSoundResourceId = v));
+            body.Children.Add(Check("Gone once it has blown up", () => t.RemovedAfterExplosion, v => t.RemovedAfterExplosion = v));
+        }
         var flags = new WrapPanel();
         flags.Children.Add(Check("Hidden until it goes off", () => t.Hidden, v => t.Hidden = v));
         flags.Children.Add(Check("Goes off only once", () => t.OneShot, v => t.OneShot = v));
-        flags.Children.Add(NumberField("Re-arms after (seconds)", () => t.RearmSeconds, v => t.RearmSeconds = Math.Max(0, v)));
+        flags.Children.Add(NumberField(t.Kind == TrapKind.Shooting ? "Shoots again after (seconds)" : "Re-arms after (seconds)", () => t.RearmSeconds, v => t.RearmSeconds = Math.Max(0, v)));
         flags.Children.Add(SoundPicker("Trigger sound", () => t.TriggerSoundResourceId, v => t.TriggerSoundResourceId = v));
         body.Children.Add(flags);
-        body.Children.Add(Note("It goes off when a character steps onto it (its Event tab's By Step On fires too). A trap's trigger animation comes later."));
+        body.Children.Add(Note(t.Kind switch
+        {
+            TrapKind.Shooting => "It shoots the way each placed copy faces (Map Editor: right-click it > Facing). The projectile flies across the map as a real object, hurting the first one it meets (Object Editor > its Projectile settings). Its Event tab's By Step On fires as it shoots.",
+            TrapKind.Explosive => "Stepped on, it blows up at once: everyone within the blast radius is hurt, breakable things nearby break, and powder kegs catch. Its Event tab's By Step On fires first.",
+            _ => "Whoever steps onto it is hurt by it (its Event tab's By Step On fires too)."
+        }));
     }
 
     private void BuildDurability(WorldObject obj)

@@ -39,6 +39,7 @@ public partial class ObjectEditorWindow
             case ObjectType.MusicalInstrument: BuildInstrument(obj); return true;
             case ObjectType.Explosive: BuildExplosive(obj); return true;
             case ObjectType.Bedroll: BuildBedroll(obj); return true;
+            case ObjectType.Projectile: BuildProjectile(obj); return true;
             case ObjectType.Reagent: BuildReagent(obj); return true;
             case ObjectType.Table: BuildTable(obj); return true;
             case ObjectType.LiquidContainer: BuildLiquid(obj); return true;
@@ -71,6 +72,7 @@ public partial class ObjectEditorWindow
         ObjectType.Tool => "Double-click it, then click what to use it on: a plant that needs this tool to harvest, a crafting station whose recipe needs it, or anything whose By Tool Used event wants it (Ultima VII's hammer on an anvil, scythe on wheat).",
         ObjectType.CraftingStation => "An anvil, a millstone, a spinning wheel, an oven. Double-click it (or use a tool on it) and it makes the first recipe the party has the ingredients for: they're used up, the work plays out, and what it makes appears on the station (Exult's millstone).",
         ObjectType.MusicalInstrument => "Double-click to play: one of its tunes plays and notes float up. Carried ones (a lute) can be played from the backpack.",
+        ObjectType.Projectile => "A fireball, a lightning bolt, a dart: shot by a trap, it flies across the map as a real object and hurts the first one it meets (it can explode). Too heavy to pick up.",
         ObjectType.Explosive => "A powder keg. Lit (double-click), it blows up when its fuse burns down; struck, at once. Everyone within its reach is hurt, breakable things are struck, and other explosives go off too.",
         ObjectType.Bedroll => "Double-click to sleep: the party rests for the night (Exult's advanceTimeDueToRest) - time passes, health and mana come back, ailments wear off, everyone gets hungrier, lights burn down. Not with enemies about.",
         ObjectType.Reagent => "Spell ingredients: stack up to 100. A spell uses one of each of its reagents (Exult).",
@@ -571,6 +573,36 @@ public partial class ObjectEditorWindow
         sounds.Children.Add(SoundPicker("Explosion sound", () => e.ExplosionSoundResourceId, v => e.ExplosionSoundResourceId = v));
         body.Children.Add(sounds);
         body.Children.Add(Note("The blast hurts everyone in reach (the player and the party too), strikes breakable things in reach for the same damage, and sets off other explosives. Blowing up what belongs to someone, in sight of their side, is a crime."));
+    }
+
+    private void BuildProjectile(WorldObject obj)
+    {
+        var p = obj.Projectile;
+        var body = Group("Projectile");
+        var row = new WrapPanel();
+        row.Children.Add(NumberField("Speed (tiles of 8px a second)", () => p.SpeedTiles, v => p.SpeedTiles = Math.Clamp(v, 1, 400)));
+        row.Children.Add(NumberField("Flies (tiles of 8px)", () => p.RangeTiles, v => p.RangeTiles = (int)Math.Clamp(v, 1, 1000)));
+        row.Children.Add(NumberField("Damage from", () => p.DamageMin, v => p.DamageMin = (int)Math.Max(0, v)));
+        row.Children.Add(NumberField("to", () => p.DamageMax, v => p.DamageMax = (int)Math.Max(0, v)));
+        var ailment = new ComboBox { Width = 120, ItemsSource = Enum.GetValues<TrapAilment>(), SelectedItem = p.Ailment };
+        ailment.SelectionChanged += (_, _) => p.Ailment = (TrapAilment)ailment.SelectedItem;
+        row.Children.Add(Labeled("Also makes them", ailment));
+        body.Children.Add(row);
+        body.Children.Add(Check("Its picture turns the way it flies (draw it pointing down)", () => p.RotatesToDirection, v => p.RotatesToDirection = v));
+        body.Children.Add(Check("Explodes when it hits someone", () => p.Explodes, v => { p.Explodes = v; ShowCurrent(); }));
+        if (p.Explodes)
+        {
+            body.Children.Add(Check("...and wherever its flight ends (a wall, its range)", () => p.ExplodesAtEnd, v => p.ExplodesAtEnd = v));
+            body.Children.Add(NumberField("Blast radius (tiles of 8px)", () => p.RadiusTiles, v => p.RadiusTiles = (int)Math.Clamp(v, 1, 64)));
+            body.Children.Add(SpritePicker("Blast (played once)", () => (p.ExplosionSprite.SpriteGroup, p.ExplosionSprite.SpriteName), (g, n) => { p.ExplosionSprite.SpriteGroup = g; p.ExplosionSprite.SpriteName = n; }));
+            body.Children.Add(SoundPicker("Blast sound", () => p.ExplosionSoundResourceId, v => p.ExplosionSoundResourceId = v));
+        }
+        var sounds = new WrapPanel();
+        sounds.Children.Add(SoundPicker("Launch sound", () => p.LaunchSoundResourceId, v => p.LaunchSoundResourceId = v));
+        sounds.Children.Add(SoundPicker("Hit sound", () => p.HitSoundResourceId, v => p.HitSoundResourceId = v));
+        body.Children.Add(sounds);
+        body.Children.Add(Note("A real object while it flies, as Ultima VII's fireballs are: pause the game and it hangs in the air - click it to see what it is; it's too heavy to pick up. " +
+                               "It hurts the first character it meets and stops at anything solid. Its By Use event runs on whoever it hits. A shooting trap shoots it (Trap > Shooting)."));
     }
 
     private void BuildBedroll(WorldObject obj)

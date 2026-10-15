@@ -184,16 +184,17 @@ public partial class MainWindow
     private void AddObjectStateMenuItems(ContextMenu menu, WorldObject obj, ObjectInstance existing)
     {
         var stairDesign = StairLook.DesignOf(obj, _objectDatabase);
-        if (obj.Type is ObjectType.Chair or ObjectType.Bed or ObjectType.Bedroll || stairDesign is not null)
+        bool shooter = obj is { Type: ObjectType.Trap, Trap.Kind: TrapKind.Shooting };
+        if (obj.Type is ObjectType.Chair or ObjectType.Bed or ObjectType.Bedroll || stairDesign is not null || shooter)
         {
             var facingMenu = new MenuItem { Header = "Facing" };
             foreach (var direction in Enum.GetValues<SpriteDirection>())
             {
                 // A designed staircase: its four poses (Staircase Designer); one without steps shows another pose.
                 if (stairDesign is not null && direction is not (SpriteDirection.North or SpriteDirection.East or SpriteDirection.South or SpriteDirection.West)) continue;
-                bool hasLook = stairDesign is not null
+                bool hasLook = shooter || (stairDesign is not null
                     ? stairDesign.Poses.Any(p => p.Facing == direction && p.Steps.Count > 0)
-                    : obj.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet;
+                    : obj.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet);
                 var item = new MenuItem { Header = hasLook ? direction.ToString() : stairDesign is not null ? $"{direction} (no steps)" : $"{direction} (no sprite)", IsCheckable = true, IsChecked = existing.Facing == direction };
                 var d = direction;
                 item.Click += (_, _) => { existing.Facing = d; PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" now faces {d}."; };
