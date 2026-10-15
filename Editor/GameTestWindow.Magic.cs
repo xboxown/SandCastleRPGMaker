@@ -60,6 +60,7 @@ public partial class GameTestWindow
             BorderThickness = new Thickness(4), CornerRadius = new CornerRadius(4), MinWidth = 320, MaxHeight = Math.Max(300, ActualHeight - 120),
             Child = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }
         };
+        if (PaperdollSoundIsGlobal) PlaySound(_systemSettings.Sounds.PaperdollOpenSoundId); // a spellbook is a paperdoll too
         ShowObjectOverlay(book, takesClicks: true, scaleLikeViewport: false);
     }
 

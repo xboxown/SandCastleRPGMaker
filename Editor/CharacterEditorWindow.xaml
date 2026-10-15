@@ -109,9 +109,7 @@
                                       Checked="ExitButtonFilterCheck_Checked" Unchecked="ExitButtonFilterCheck_Unchecked"/>
                             <ComboBox x:Name="ExitButtonCombo" SelectionChanged="ExitButtonSprite_Changed" DisplayMemberPath="Name"/>
                         </DockPanel>
-                        <TextBlock Text="Navigate Sound" FontWeight="Bold" Margin="0,8,0,0"/>
-                        <TextBlock Text="Plays once the player releases an item onto a real slot on this paperdoll." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
-                        <ComboBox x:Name="PaperdollNavigateSoundCombo" SelectionChanged="PaperdollNavigateSound_Changed" DisplayMemberPath="Name" Margin="0,0,0,4"/>
+                        <ComboBox x:Name="PaperdollNavigateSoundCombo" SelectionChanged="PaperdollNavigateSound_Changed" DisplayMemberPath="Name" Visibility="Collapsed"/>
                         <TextBlock Text="Open Sound" FontWeight="Bold" Margin="0,8,0,0"/>
                         <TextBlock Text="Plays when this character's paperdoll is opened in the game." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
                         <ComboBox x:Name="PaperdollOpenSoundCombo" SelectionChanged="PaperdollOpenSound_Changed" DisplayMemberPath="Name" Margin="0,0,0,4"/>

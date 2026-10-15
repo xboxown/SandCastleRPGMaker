@@ -553,7 +553,7 @@ public partial class GameTestWindow
             item.ContainerY = Math.Clamp(topLeft.Y - part.Y, 0, Math.Max(0, part.Height - 8));
         }
         runtime.Items.Add(item);
-        PlayDropSound();
+        PlayNavigateSound(); // put into a paperdoll's slot
         StatusText.Text = $"You put \"{name}\" into \"{part.Name}\".";
         RefreshAfterMove();
         if (_openDolls.Contains(gump)) FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByDropItem, $"\"{part.Name}\": \"{name}\" put in.", identity);

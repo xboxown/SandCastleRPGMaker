@@ -233,6 +233,8 @@ public partial class ContainerEditorWindow : Window
         CloseSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         NavigateSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         OpenSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.OpenSoundResourceId) ?? NoneSound;
+        OpenSoundCombo.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
+        OpenSoundCombo.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.CloseSoundResourceId) ?? NoneSound;
         NavigateSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == container.NavigateSoundResourceId) ?? NoneSound;
         DestroyedSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list, like the others

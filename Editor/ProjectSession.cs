@@ -43,6 +43,11 @@ internal static class ProjectSession
     public static Func<int, (int X, int Y)?>? PlacedSpotProvider;
     /// <summary>The zones of the open map (Map Editor > Mode > Zones), or null when no map is open.</summary>
     public static Func<List<MapZone>?>? ZonesProvider;
+    /// <summary>The project's System Settings.</summary>
+    public static Func<SystemSettings>? SettingsProvider;
+    /// <summary>System Settings > Sounds: one opening sound for every paperdoll - each one's own picker is then greyed out.</summary>
+    public static bool PaperdollSoundIsGlobal => SettingsProvider?.Invoke()?.Sounds.PaperdollOpenSoundEnabled == true;
+    public const string PaperdollSoundIsGlobalTip = "System Settings > Sounds > Paperdoll open sound is ticked: every paperdoll uses that one.";
 
     public static FactionDatabase Factions => _factions?.Invoke() ?? new FactionDatabase();
     public static CharacterDatabase Characters => _characters?.Invoke() ?? new CharacterDatabase();

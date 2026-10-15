@@ -41,6 +41,11 @@ public class SoundSettings
 {
     /// <summary>Played whenever anything is put down on the map - an item, an object, a container, a stack, a body. -1 = silent.</summary>
     public int DropOnMapSoundId { get; set; } = -1;
+    /// <summary>Played whenever something is put into a container's window or onto a paperdoll (Exult's gump drop) - every container and paperdoll. -1 = silent (an older project's own per-container sound still plays).</summary>
+    public int NavigateSoundId { get; set; } = -1;
+    /// <summary>One opening sound for every paperdoll - a character's inventory, a book, a spellbook, a map, a container's window, a PaperDoll Editor paperdoll - when ticked; unticked, each uses its own.</summary>
+    public bool PaperdollOpenSoundEnabled { get; set; }
+    public int PaperdollOpenSoundId { get; set; } = -1;
 }
 
 /// <summary>

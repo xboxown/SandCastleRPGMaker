@@ -183,7 +183,10 @@ public partial class ObjectEditorWindow
         inset.Children.Add(NumberField("top", () => m.PictureTop, v => m.PictureTop = (int)Math.Max(0, v)));
         inset.Children.Add(NumberField("width (0 = automatic)", () => m.PictureWidth, v => m.PictureWidth = (int)Math.Max(0, v)));
         inset.Children.Add(NumberField("height", () => m.PictureHeight, v => m.PictureHeight = (int)Math.Max(0, v)));
-        inset.Children.Add(SoundPicker("Open sound", () => m.OpenSoundResourceId, v => m.OpenSoundResourceId = v));
+        var mapOpen = SoundPicker("Open sound", () => m.OpenSoundResourceId, v => m.OpenSoundResourceId = v);
+        mapOpen.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
+        mapOpen.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
+        inset.Children.Add(mapOpen);
         body.Children.Add(inset);
         body.Children.Add(Note("With a paperdoll, the map picture is drawn inside it at the place above, in the paperdoll's own pixels (all 0: a 10% border all round). Without one, the map picture alone fills the screen."));
         var row = new WrapPanel();

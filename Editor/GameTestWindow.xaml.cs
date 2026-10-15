@@ -2424,8 +2424,19 @@ public partial class GameTestWindow : Window
     /// exactly what happened - the sound played, none is set, or why it
     /// couldn't play - so a missing sound is never a silent mystery.
     /// </summary>
+    /// <summary>System Settings > Sounds > Paperdoll open is ticked: every paperdoll opens with that one.</summary>
+    private bool PaperdollSoundIsGlobal => _systemSettings.Sounds.PaperdollOpenSoundEnabled;
+
+    /// <summary>Something put into a container's window or onto a paperdoll: System Settings > Sounds > Drop in a window (an older project's own sound, if that's not set).</summary>
+    private void PlayNavigateSound(int ownSoundId = -1)
+    {
+        int id = _systemSettings.Sounds.NavigateSoundId >= 0 ? _systemSettings.Sounds.NavigateSoundId : ownSoundId;
+        if (id >= 0) SoundPlayback.TryPlay(_resources, id);
+    }
+
     private void PlayOpenSound(int soundId, string what)
     {
+        if (PaperdollSoundIsGlobal) soundId = _systemSettings.Sounds.PaperdollOpenSoundId; // one sound for every paperdoll
         if (soundId < 0)
         {
             StatusText.Text = $"Opened {what} - no Open Sound is set for it.";

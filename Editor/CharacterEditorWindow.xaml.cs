@@ -182,6 +182,8 @@ public partial class CharacterEditorWindow : Window
         var openSoundChoices = new List<ResourceEntry>(navigateSoundChoices);
         PaperdollOpenSoundCombo.ItemsSource = openSoundChoices;
         PaperdollOpenSoundCombo.SelectedItem = openSoundChoices.FirstOrDefault(s => s.Id == character.Paperdoll.OpenSoundResourceId) ?? NoneSound;
+        PaperdollOpenSoundCombo.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
+        PaperdollOpenSoundCombo.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
 
         // Real, confirmed reset - a custom-slot selection belongs to whichever character it was made on; switching characters clears it rather than carrying a stale selection (or its rename box) over to a different character's own paperdoll.
         _selectedCustomSlot = null;

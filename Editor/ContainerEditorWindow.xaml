@@ -215,9 +215,8 @@
                                     <Button Content="Add" Width="60" Click="AddContents_Click"/>
                                 </DockPanel>
 
-                                <TextBlock Text="Navigate Sound" FontWeight="Bold" Margin="0,0,0,2"/>
-                                <TextBlock Text="Plays once the player releases an item onto a real spot inside this container - not when it opens or closes." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
-                                <ComboBox x:Name="NavigateSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+                                <ComboBox x:Name="NavigateSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" Visibility="Collapsed"/>
+                                <TextBlock Text="Putting something in plays System Settings > Sounds > Drop in a window - one sound for every container and paperdoll." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,8"/>
 
                                 <TextBlock Text="Live Preview - this is the real, played-in-engine look, not the frame-drawing editor mode. Select an item below, then drag it here to place it, following the frame's own real boundary. The first item in the list sits at the bottom of the stack; each one after it stacks above the last - use Up/Down to reorder." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                                 <Border BorderBrush="#FF888888" BorderThickness="1" Width="320" Height="240" HorizontalAlignment="Left">

@@ -170,7 +170,7 @@ public partial class GameTestWindow
             }
             else StatusText.Text = "You can't find where you are on this map. (Click to put it away.)";
         }
-        PlaySound(m.OpenSoundResourceId);
+        PlaySound(PaperdollSoundIsGlobal ? _systemSettings.Sounds.PaperdollOpenSoundId : m.OpenSoundResourceId); // a map is a paperdoll too
         ShowObjectOverlay(canvas, takesClicks: false, scaleLikeViewport: true);
     }
 

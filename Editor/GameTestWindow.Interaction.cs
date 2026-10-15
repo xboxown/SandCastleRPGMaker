@@ -591,7 +591,7 @@ public partial class GameTestWindow
             PlaceWithinFrame(sameContainer.Item, gump.Data, dropTopLeft);
             gump.PlacedItem.Contents.Remove(sameContainer.Item);
             gump.PlacedItem.Contents.Add(sameContainer.Item);
-            if (gump.Data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, gump.Data.NavigateSoundResourceId);
+            PlayNavigateSound(gump.Data.NavigateSoundResourceId);
             RefreshContainerGump(gump);
             return true;
         }
@@ -887,7 +887,7 @@ public partial class GameTestWindow
     private void FinishCharacterReceive(CharacterDefinition character, string name)
     {
         // The one place an item lands on a character - fresh pickup or a slot-to-slot move alike - so the paperdoll's own Navigate Sound plays here.
-        if (character.Paperdoll.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, character.Paperdoll.NavigateSoundResourceId);
+        PlayNavigateSound(character.Paperdoll.NavigateSoundResourceId);
         StatusText.Text = $"Picked up \"{name}\".";
         RefreshAfterMove();
         // Inventory possession just changed, so every map event gets its chance to react.
@@ -909,7 +909,7 @@ public partial class GameTestWindow
         if (TryCombineIntoContents(container.Contents, combineCategory, combineId, PayloadQuantity(origin)))
         {
             RemoveFromSource(origin);
-            if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);
+            PlayNavigateSound(data.NavigateSoundResourceId);
             StatusText.Text = $"You put \"{name}\" into \"{data.Name}\".";
             RefreshAfterMove();
             return true;
@@ -918,7 +918,7 @@ public partial class GameTestWindow
         PutOutIfLit(item); // a torch put away goes out
         PlaceWithinFrame(item, data, dropTopLeft);
         container.Contents.Add(item); // appended = on top of the pile, as Exult's add() appends to the chain
-        if (data.NavigateSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, data.NavigateSoundResourceId);
+        PlayNavigateSound(data.NavigateSoundResourceId);
         StatusText.Text = $"You put \"{name}\" into \"{data.Name}\".";
         RefreshAfterMove();
         return true;

@@ -282,6 +282,8 @@ public partial class BookEditorWindow : Window
         FlipSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         DestructibleSoundCombo.ItemsSource = new List<ResourceEntry>(soundChoices); // own list: ComboBoxes sharing one list silently change each other's selection in WPF
         OpenSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.OpenSoundResourceId) ?? NoneSound;
+        OpenSoundCombo.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
+        OpenSoundCombo.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.CloseSoundResourceId) ?? NoneSound;
         FlipSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.PageFlipSoundResourceId) ?? NoneSound;
         DestructibleSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.DestructibleSoundResourceId) ?? NoneSound;

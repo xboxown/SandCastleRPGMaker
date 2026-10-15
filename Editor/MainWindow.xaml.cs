@@ -117,6 +117,7 @@ public partial class MainWindow : Window
         ProjectSession.PlacedSpotProvider = characterId =>
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
         ProjectSession.ZonesProvider = () => _map?.Zones;
+        ProjectSession.SettingsProvider = () => _systemSettings;
     }
 
     /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>

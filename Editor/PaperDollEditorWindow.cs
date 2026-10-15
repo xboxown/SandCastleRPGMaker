@@ -215,7 +215,10 @@ public class PaperDollEditorWindow : Window
         size.Children.Add(IntField("Width (px)", () => design.Width, v => design.Width = Math.Clamp(v, 16, 2000)));
         size.Children.Add(IntField("Height (px)", () => design.Height, v => design.Height = Math.Clamp(v, 16, 2000)));
         _designProps.Children.Add(size);
-        _designProps.Children.Add(SoundPicker("Open sound", () => design.OpenSoundResourceId, v => design.OpenSoundResourceId = v));
+        var openSound = SoundPicker("Open sound", () => design.OpenSoundResourceId, v => design.OpenSoundResourceId = v);
+        openSound.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
+        openSound.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
+        _designProps.Children.Add(openSound);
         _designProps.Children.Add(SoundPicker("Close sound", () => design.CloseSoundResourceId, v => design.CloseSoundResourceId = v));
         var users = _objects.Objects.Where(o => o.DollDesignId == design.Id).Select(o => o.Name).ToList();
         _designProps.Children.Add(Note(users.Count == 0

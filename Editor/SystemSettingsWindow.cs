@@ -110,7 +110,46 @@ public partial class SystemSettingsWindow : Window
                    "No Play Sound event is needed on each object. An object's own By Drop Item event still runs too, so remove any Play Sound you added there or both will play.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
+
+        panel.Children.Add(SoundSettingRow("Drop in a window:", () => sounds.NavigateSoundId, v => sounds.NavigateSoundId = v, out _));
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Plays whenever something is put into a container's window or onto a paperdoll - a character's inventory, a slot, a paperdoll's slot - for every container and paperdoll (it was each one's own Navigate Sound). Different from Drop on map.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+
+        var paperdollRow = SoundSettingRow("Paperdoll open:", () => sounds.PaperdollOpenSoundId, v => sounds.PaperdollOpenSoundId = v, out var paperdollCombo);
+        var useIt = new CheckBox { Content = "Use this one opening sound for every paperdoll", IsChecked = sounds.PaperdollOpenSoundEnabled, Margin = new Thickness(0, 12, 0, 4) };
+        paperdollCombo.IsEnabled = sounds.PaperdollOpenSoundEnabled;
+        useIt.Checked += (_, _) => { sounds.PaperdollOpenSoundEnabled = true; paperdollCombo.IsEnabled = true; };
+        useIt.Unchecked += (_, _) => { sounds.PaperdollOpenSoundEnabled = false; paperdollCombo.IsEnabled = false; };
+        panel.Children.Add(useIt);
+        panel.Children.Add(paperdollRow);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Ticked: every paperdoll plays this when it opens - a character's inventory, a book, a spellbook, a map, a container's window, and paperdolls made in the PaperDoll Editor - and their own Open Sound pickers are greyed out. " +
+                   "Unticked (the default): each uses its own, so a book can flip its pages and a chest can creak.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
         return panel;
+    }
+
+    private FrameworkElement SoundSettingRow(string label, Func<int> get, Action<int> set, out ComboBox combo)
+    {
+        var none = new ResourceEntry { Id = -1, Name = "(None)" };
+        var choices = new List<ResourceEntry> { none };
+        choices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
+        var box = new ComboBox { Width = 220, ItemsSource = choices, DisplayMemberPath = "Name", VerticalAlignment = VerticalAlignment.Center };
+        box.SelectedItem = choices.FirstOrDefault(s => s.Id == get()) ?? none;
+        box.SelectionChanged += (_, _) => set((box.SelectedItem as ResourceEntry)?.Id ?? -1);
+        var play = new Button { Content = "\u25B6", Width = 28, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Hear it" };
+        play.Click += (_, _) => { if (get() >= 0) SoundPlayback.TryPlay(_resources, get()); };
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 12, 0, 6) };
+        row.Children.Add(new TextBlock { Text = label, Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(box);
+        row.Children.Add(play);
+        combo = box;
+        return row;
     }
 
     /// <summary>Exult's game clock: when a new game starts, and how fast time runs (Exult's time rate).</summary>
