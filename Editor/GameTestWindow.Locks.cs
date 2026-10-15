@@ -308,6 +308,7 @@ public partial class GameTestWindow
         SlotOrigin s => s.Character.Inventory.Contains(s.Item),
         BackpackOrigin b => b.Character.Inventory.Contains(b.Item),
         ContainerOrigin c => c.Container.Contents.Contains(c.Item),
+        DollItemOrigin d => DollItemStillThere(d),
         _ => false
     };
 
@@ -320,6 +321,7 @@ public partial class GameTestWindow
             case SlotOrigin { Item.Quantity: > 1 } s: s.Item.Quantity--; break;
             case BackpackOrigin { Item.Quantity: > 1 } b: b.Item.Quantity--; break;
             case ContainerOrigin { Item.Quantity: > 1 } c: c.Item.Quantity--; break;
+            case DollItemOrigin { Item.Quantity: > 1 } d: d.Item.Quantity--; break;
             default: RemoveFromSource(source); break;
         }
         RefreshAfterMove();

@@ -176,6 +176,7 @@ public partial class GameTestWindow
         }
         if (obj is null) return;
         if (TryUseLockTool(obj, new MapObjectOrigin(instance))) return;
+        if (TryUseDoll(instance, obj, () => FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem))) return; // it opens a paperdoll
         switch (obj.Type)
         {
             case ObjectType.Door: UseDoor(instance, obj); return;
@@ -193,6 +194,7 @@ public partial class GameTestWindow
     {
         if (DefinitionOf(item) is not { } obj) return false;
         if (TryUseLockTool(obj, source)) return true;
+        if (TryUseDoll(item, obj, () => TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired."))) return true; // it opens a paperdoll
         if (obj.Type == ObjectType.LightSource) { UseCarriedLight(item, obj); return true; }
         if (UseNewTypeCarried(item, obj, source)) return true; // food, potions, keychains, maps, spellbooks... (GameTestWindow.Types.cs)
         if (TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired.")) return true;

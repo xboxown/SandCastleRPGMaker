@@ -2442,6 +2442,12 @@ public partial class MainWindow : Window
         RefreshAllObjectVisuals();
     }
 
+    private void PaperDollEditorMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // Paperdolls are saved with the project's objects; an object opens one (Object Editor > Opens paperdoll).
+        new PaperDollEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase) { Owner = this }.ShowDialog();
+    }
+
     private void StaircaseDesignerMenuItem_Click(object sender, RoutedEventArgs e)
     {
         // Staircases are saved with the project's objects; a Stairs object links to one (Object Editor).

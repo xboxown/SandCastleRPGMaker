@@ -251,7 +251,8 @@ public partial class GameTestWindow
             {
                 gump = (object?)_openContainers.FirstOrDefault(g => g.GumpBorder == border)
                     ?? (object?)_openPaperdolls.FirstOrDefault(g => g.GumpBorder == border)
-                    ?? _openPaperdolls.Select(g => g.BackpackGump).FirstOrDefault(b => b?.GumpBorder == border);
+                    ?? (object?)_openPaperdolls.Select(g => g.BackpackGump).FirstOrDefault(b => b?.GumpBorder == border)
+                    ?? _openDolls.FirstOrDefault(g => g.GumpBorder == border);
                 break;
             }
             current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
@@ -311,6 +312,8 @@ public partial class GameTestWindow
 
     private void HandleClickRelease(InteractionTarget target)
     {
+        // A paperdoll's buttons, switches, sliders and close buttons act at once, as Exult's gump buttons do.
+        if (target is DollPartTarget dollPart && DollPartClicked(dollPart)) { _lastClickTarget = null; CancelPendingIdentify(); return; }
         long now = Environment.TickCount64;
         if (_lastClickTarget is not null && Equals(_lastClickTarget, target) && now - _lastClickTick < DoubleClickMilliseconds)
         {
@@ -362,6 +365,12 @@ public partial class GameTestWindow
             case ContainerItemTarget ci when _openContainers.Contains(ci.Gump) && ci.Gump.PlacedItem.Contents.Contains(ci.Item):
                 HandleContainerItemClick(ci.Gump, ci.Item, isUse: false);
                 break;
+            case DollPartTarget dollPart:
+                IdentifyDollPart(dollPart);
+                break;
+            case DollItemTarget dollItem when DollItemStillThere(new DollItemOrigin(dollItem.Gump.State, dollItem.PartId, dollItem.Item)):
+                IdentifyDollItem(dollItem);
+                break;
         }
     }
 
@@ -405,6 +414,12 @@ public partial class GameTestWindow
                 break;
             case ContainerItemTarget ci when _openContainers.Contains(ci.Gump) && ci.Gump.PlacedItem.Contents.Contains(ci.Item):
                 HandleContainerItemClick(ci.Gump, ci.Item, isUse: true);
+                break;
+            case DollPartTarget dollPart:
+                UseDollPart(dollPart);
+                break;
+            case DollItemTarget dollItem when DollItemStillThere(new DollItemOrigin(dollItem.Gump.State, dollItem.PartId, dollItem.Item)):
+                UseDollItem(dollItem);
                 break;
         }
     }
@@ -450,6 +465,11 @@ public partial class GameTestWindow
                 if (!IsContainerOwnerReachable(ci.Gump.PlacedItem)) { Refuse(MousePointerKind.OutOfRange, "That's out of reach."); return false; }
                 origin = new ContainerOrigin(ci.Gump.PlacedItem, ci.Gump.Data, ci.Item);
                 source = FindTaggedVisual(ci.Gump.ItemsCanvas, ci);
+                break;
+            case DollItemTarget di when _openDolls.Contains(di.Gump) && DollItemStillThere(new DollItemOrigin(di.Gump.State, di.PartId, di.Item)):
+                if (!CanTakeFromDoll(di.Gump)) return false;
+                origin = new DollItemOrigin(di.Gump.State, di.PartId, di.Item);
+                source = FindTaggedVisual(di.Gump.PartsCanvas, di);
                 break;
         }
         if (origin is null) return false; // the player, or something that vanished since the press
@@ -518,6 +538,7 @@ public partial class GameTestWindow
         try { dropped = TryDrop(session.Origin!, session, screen); }
         finally { EndDragVisuals(session); }
         if (dropped) CheckTheft(session.Origin!); // drag.cc drop: "Check for theft"
+        if (dropped && session.Origin is DollItemOrigin fromDoll) FireDollPartEvent(fromDoll.State, fromDoll.PartId, BookTriggerConditionBased.ByPickupItem); // taken out of a paperdoll's slot
     }
 
     /// <summary>Exult Dragging_info::drop: a gump under the pointer gets the drop (drop_on_gump); otherwise the map does (drop_on_map). False = rejected; nothing has changed anywhere, so the item is simply still at its origin.</summary>
@@ -528,6 +549,7 @@ public partial class GameTestWindow
             return gump switch
             {
                 OpenContainerGump containerGump => DropOnContainerGump(origin, session, containerGump, hitTarget, screen),
+                OpenDollGump dollGump => DropOnDoll(origin, session, dollGump, hitTarget, screen),
                 OpenPaperdollGump paperdollGump => DropOnPaperdoll(origin, paperdollGump, hitTarget, screen),
                 // The backpack list is the character's own general inventory - dropping a backpack item back onto it is a no-op.
                 OpenBackpackGump backpackGump => origin is BackpackOrigin b && b.Character == backpackGump.Owner.Character
@@ -1095,6 +1117,9 @@ public partial class GameTestWindow
             case ContainerOrigin c:
                 c.Container.Contents.Remove(c.Item);
                 break;
+            case DollItemOrigin d:
+                if (d.State.Parts.TryGetValue(d.PartId, out var dollPart)) dollPart.Items.Remove(d.Item);
+                break;
         }
     }
 
@@ -1143,7 +1168,8 @@ public partial class GameTestWindow
                     InstanceId = nextInstanceId(), Category = ReferencedItemCategory.Object, ItemId = o.Obj.ObjectId, Quantity = Math.Max(1, o.Obj.Quantity),
                     FacingRuntime = o.Obj.Facing, IsLitRuntime = o.Obj.IsLitRuntime, BurnLeftRuntime = o.Obj.BurnLeftRuntime,
                     IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime,
-                    KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidIdRuntime = o.Obj.LiquidIdRuntime
+                    KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidIdRuntime = o.Obj.LiquidIdRuntime,
+                    DollRuntime = o.Obj.DollRuntime // its paperdoll as it is (the tape still in the radio)
                 };
             default:
                 var item = (InventoryItemInstance)PayloadObject(origin);
@@ -1191,7 +1217,8 @@ public partial class GameTestWindow
                 ObjectId = item.ItemId, Quantity = Math.Max(1, item.Quantity),
                 Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
                 IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime,
-                KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidIdRuntime = item.LiquidIdRuntime
+                KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidIdRuntime = item.LiquidIdRuntime,
+                DollRuntime = item.DollRuntime
             };
         var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId };
         if (item.Category == ReferencedItemCategory.Container)
@@ -1243,6 +1270,7 @@ public partial class GameTestWindow
         RefreshStackingVisuals();
         foreach (var gump in _openPaperdolls.ToList()) RefreshPaperdollGump(gump);
         foreach (var gump in _openContainers.ToList()) RefreshContainerGump(gump);
+        foreach (var gump in _openDolls.ToList()) RefreshDollGump(gump);
     }
 
     // ================= Map drop position =================
@@ -1268,6 +1296,7 @@ public partial class GameTestWindow
         SlotOrigin s => s.Item,
         BackpackOrigin b => b.Item,
         ContainerOrigin c => c.Item,
+        DollItemOrigin d => d.Item,
         _ => throw new InvalidOperationException($"Unknown drag origin {origin}")
     };
 

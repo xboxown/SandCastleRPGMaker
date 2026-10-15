@@ -413,6 +413,32 @@ public partial class ObjectEditorWindow
         return panel;
     }
 
+    /// <summary>Any object can open a paperdoll (PaperDoll Editor) when double-clicked in play - a radio, a coffin, a sign, a machine with parts missing.</summary>
+    private void BuildPaperdoll(WorldObject obj)
+    {
+        var body = Group("Paperdoll");
+        var none = new DollDesign { Id = -1, Name = "(none)" };
+        var choices = new List<DollDesign> { none };
+        choices.AddRange(_db.DollDesigns);
+        var combo = new ComboBox { Width = 260, ItemsSource = choices, DisplayMemberPath = nameof(DollDesign.Name) };
+        combo.SelectedItem = choices.FirstOrDefault(d => d.Id == obj.DollDesignId) ?? none;
+        combo.SelectionChanged += (_, _) => obj.DollDesignId = (combo.SelectedItem as DollDesign)?.Id ?? -1;
+        var open = new Button { Content = "PaperDoll Editor...", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 0, 4), VerticalAlignment = VerticalAlignment.Bottom };
+        open.Click += (_, _) =>
+        {
+            var editor = new PaperDollEditorWindow(_db, _sprites, _resources, _books, _containers, _variables, _stats, obj.DollDesignId) { Owner = this };
+            editor.ShowDialog();
+            // Opened from an object with no paperdoll yet: it takes the one left showing.
+            if (obj.DollDesignId < 0 || _db.DollDesigns.All(d => d.Id != obj.DollDesignId)) obj.DollDesignId = editor.SelectedDesignId;
+            ShowCurrent();
+        };
+        var row = new WrapPanel();
+        row.Children.Add(Labeled("Opens paperdoll", combo));
+        row.Children.Add(open);
+        body.Children.Add(row);
+        body.Children.Add(Note("Double-clicked in play, it opens this paperdoll (its own By Use event, if it has one that runs, goes first). Each placed copy keeps its own: what's in its slots, its lids and switches."));
+    }
+
     // ================= Roofs, clocks, tools =================
 
     private void BuildRoof(WorldObject obj)

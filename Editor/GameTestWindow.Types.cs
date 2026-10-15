@@ -24,6 +24,7 @@ public partial class GameTestWindow
             SlotOrigin s => s.Item,
             BackpackOrigin b => b.Item,
             ContainerOrigin c => c.Item,
+            DollItemOrigin d => d.Item,
             _ => null
         };
         /// <summary>Who holds it, if a character carries it directly (slot or backpack list).</summary>

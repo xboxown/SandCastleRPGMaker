@@ -195,6 +195,7 @@ public partial class ObjectEditorWindow : Window
             BuildDurability(obj);
         BuildOwnership(obj);
         BuildLiquidSource(obj);
+        BuildPaperdoll(obj);
         BuildBody(obj);
     }
 

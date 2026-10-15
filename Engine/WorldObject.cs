@@ -152,6 +152,9 @@ public class WorldObject
     /// <summary>A liquid source (Exult's well, water trough): a liquid container used on it is filled with this liquid (a liquid Food's id). -1 = not a source.</summary>
     public int LiquidSourceId { get; set; } = -1;
 
+    /// <summary>The paperdoll it opens when double-clicked (PaperDoll Editor; -1 = none), as Exult's objects open their gumps.</summary>
+    public int DollDesignId { get; set; } = -1;
+
     /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
     public List<VariableDefinition> LocalVariables { get; set; } = new();
@@ -185,7 +188,7 @@ public enum ObjectUse
 /// (ObjectInstance) is what lets one "torch" or "goblin" definition be
 /// placed hundreds of times without duplicating its data.
 /// </summary>
-public class ObjectInstance
+public class ObjectInstance : IHasDollState
 {
     public int ObjectId { get; set; }
 
@@ -272,6 +275,8 @@ public class ObjectInstance
     public int ChargesRuntime { get; set; } = -1;
     /// <summary>What a liquid container holds now (a liquid Food's id; -1 = empty; null = not set yet).</summary>
     public int? LiquidIdRuntime { get; set; }
+    /// <summary>Its own paperdoll as it is now (PaperDoll Editor; null = never opened) - every placed copy keeps its own, and it goes with it when carried.</summary>
+    public DollState? DollRuntime { get; set; }
     /// <summary>Seconds left on a lit fuse (-1 = not lit).</summary>
     public double FuseRuntime { get; set; } = -1;
     /// <summary>Who this one belongs to in play, over its Object Editor Belong To (a dish a waiter served: the customer's). -1 = as the Object Editor says.</summary>
@@ -291,6 +296,9 @@ public class ObjectDatabase
     /// <summary>Staircases made in the Staircase Designer; a Stairs object links to one.</summary>
     public List<StairDesign> StairDesigns { get; set; } = new();
     public int NextStairDesignId() => StairDesigns.Count == 0 ? 1 : StairDesigns.Max(s => s.Id) + 1;
+    /// <summary>Paperdolls made in the PaperDoll Editor; an object opens one (WorldObject.DollDesignId).</summary>
+    public List<DollDesign> DollDesigns { get; set; } = new();
+    public int NextDollDesignId() => DollDesigns.Count == 0 ? 1 : DollDesigns.Max(d => d.Id) + 1;
 
     private int _nextId = 1;
 

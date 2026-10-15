@@ -704,6 +704,7 @@ public partial class GameTestWindow : Window
         {
             case OpenPaperdollGump paperdollGump: ClosePaperdollGump(paperdollGump); break;
             case OpenContainerGump containerGump: CloseContainerGump(containerGump); break;
+            case OpenDollGump dollGump: CloseDollGump(dollGump); break;
         }
     }
 
@@ -1652,6 +1653,7 @@ public partial class GameTestWindow : Window
         foreach (var gump in _openPaperdolls) RefreshPaperdollGump(gump);
         // Same exact real principle, per spec ("the same mechanics you used on books for window resizing... should be applied also for the containers") - an item sitting inside an open container is sized by the same ViewportScale multiplication, so it needs the exact same live re-scale the instant the real window size changes, not just at the moment it was last dropped in.
         foreach (var containerGump in _openContainers) RefreshContainerGump(containerGump);
+        foreach (var dollGump in _openDolls) RefreshDollGump(dollGump); // paperdolls too
         // Real, confirmed fix, per spec ("all paperdolls need to follow that rule") - the book reading view's own real paperdoll background gets the exact same live re-scale too, while it's actually open.
         if (BookOverlayBorder.Visibility == Visibility.Visible) RefreshBookOverlayScale();
     }
