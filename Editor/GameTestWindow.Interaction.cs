@@ -547,6 +547,7 @@ public partial class GameTestWindow
     private bool TryDrop(DragOrigin origin, PointerSession session, Point screen)
     {
         if (origin is DollPartOrigin partOrigin) return DropDollPart(partOrigin, screen); // a paperdoll part dragged onto another
+        if (TryCombineOntoObject(origin, screen)) return false; // dropped onto an object whose By Item Combined To It runs: the item stays where it was unless it used it up
         if (HitTestGumpLayer(screen, out var gump, out var hitTarget))
         {
             return gump switch

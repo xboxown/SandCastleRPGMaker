@@ -35,13 +35,20 @@ public enum BookTriggerConditionBased
     /// <summary>An item (from the world, a pack, or the paperdoll itself) was dropped on this part.</summary>
     ByCombineItem,
     /// <summary>Another part of the paperdoll (one that can be dragged) was dropped on this part.</summary>
-    ByCombinePart
+    ByCombinePart,
+
+    // ---- Ammo and projectiles ----
+    /// <summary>It hit its target - a character or an object (BookEventConditions.HitTarget says which).</summary>
+    ByHitTarget
 }
+
+/// <summary>What By Hitting Target waits for.</summary>
+public enum HitTargetKind { Any, Character, Object }
 
 public static class DollTriggers
 {
-    /// <summary>The triggers only a paperdoll part's events use.</summary>
-    public static readonly BookTriggerConditionBased[] All = { BookTriggerConditionBased.ByCombineItem, BookTriggerConditionBased.ByCombinePart };
+    /// <summary>Triggers shown only where an editor names them: a paperdoll part's (combining), an object's (By Item Combined To It, By Hitting Target).</summary>
+    public static readonly BookTriggerConditionBased[] All = { BookTriggerConditionBased.ByCombineItem, BookTriggerConditionBased.ByCombinePart, BookTriggerConditionBased.ByHitTarget };
 
     public static bool IsDollTrigger(BookTriggerConditionBased trigger) => All.Contains(trigger);
 }
@@ -192,6 +199,9 @@ public class BookEventConditions
 
     /// <summary>A paperdoll part's By Combined With A Part: only when this part (by id) is dragged onto it (-1 = any part).</summary>
     public int CombinedPartId { get; set; } = -1;
+
+    /// <summary>By Hitting Target: only when it hits a character, an object, or either.</summary>
+    public HitTargetKind HitTarget { get; set; } = HitTargetKind.Any;
 
     // Checkmark 1: In A Condition
     public bool ConditionInACondition { get; set; }

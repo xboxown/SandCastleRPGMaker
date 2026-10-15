@@ -220,6 +220,7 @@ public partial class GameTestWindow
         {
             if (!body.Solid || ReferenceEquals(body.Entity, flying.Instance) || ReferenceEquals(body.Entity, flying.Shooter) || body.Entity is PlacedCharacter) continue;
             if (flying.Lift < body.Z || flying.Lift >= body.TopLift || !body.Overlaps(foot)) continue;
+            if (body.Entity is ObjectInstance struck) FireHitTarget(flying.Instance, flying.Def, HitTargetKind.Object, null); // By Hitting Target: an object
             EndFlight(flying, null);
             return true;
         }
@@ -240,6 +241,7 @@ public partial class GameTestWindow
             var ailment = p.Ailment switch { TrapAilment.Poisoned => Ailment.Poisoned, TrapAilment.Asleep => Ailment.Asleep, TrapAilment.Paralyzed => Ailment.Paralyzed, _ => (Ailment?)null };
             if (ailment is { } a && !IsDead(victim)) Inflict(victim, a);
             FireObjectEvent(flying.Instance, flying.Def, BookTriggerConditionBased.ByUseItem, MapCharacterOf(victim)); // its own event: what it does to whoever it hits
+            FireHitTarget(flying.Instance, flying.Def, HitTargetKind.Character, MapCharacterOf(victim));
         }
         if (p.Explodes && (victim is not null || p.ExplodesAtEnd))
         {

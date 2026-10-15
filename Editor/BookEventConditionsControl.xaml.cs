@@ -127,11 +127,12 @@ public partial class BookEventConditionsControl : UserControl
     /// events never call this, so their own dropdowns are untouched.
     /// </summary>
     /// <summary>An object type's own names for some triggers (Object Editor > Event): e.g. a tile's By Enter is "By Step On". Character-only triggers are left out, as for books and containers.</summary>
-    public void ApplyTriggerLabels(IReadOnlyDictionary<BookTriggerConditionBased, string> relabels)
+    public void ApplyTriggerLabels(IReadOnlyDictionary<BookTriggerConditionBased, string> relabels, IEnumerable<BookTriggerConditionBased>? excluded = null)
     {
+        var left = excluded?.ToHashSet() ?? new HashSet<BookTriggerConditionBased>();
         var current = Conditions?.TriggerConditionBased;
         TriggerConditionBasedCombo.ItemsSource = Enum.GetValues<BookTriggerConditionBased>()
-            .Where(v => !CharacterTriggers.IsCharacterTrigger(v) && (!DollTriggers.IsDollTrigger(v) || relabels.ContainsKey(v))) // a paperdoll part's window names its own
+            .Where(v => !CharacterTriggers.IsCharacterTrigger(v) && (!DollTriggers.IsDollTrigger(v) || relabels.ContainsKey(v)) && !left.Contains(v)) // a paperdoll part's window names its own; each object type has its own list
             .Select(v => relabels.TryGetValue(v, out string? label) ? EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, label) : new EnumChoice<BookTriggerConditionBased>(v, TriggerInProgressSuffix(v)))
             .ToList();
         if (current.HasValue)

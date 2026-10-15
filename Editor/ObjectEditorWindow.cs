@@ -856,7 +856,18 @@ public partial class ObjectEditorWindow : Window
             Sprites = _sprites,
             CurrentBook = null
         };
-        _eventEditor.PageSelected += index => { if (_conditions is not null) _conditions.Conditions = index >= 0 && index < obj.EventPages.Count ? obj.EventPages[index].Conditions : null; };
+        var hitChoices = new[] { ("A character or an object", HitTargetKind.Any), ("A character", HitTargetKind.Character), ("An object", HitTargetKind.Object) };
+        var hitTarget = new ComboBox { Width = 200, ItemsSource = hitChoices.Select(h => h.Item1).ToList(), Margin = new Thickness(6, 0, 0, 0) };
+        BookEventConditions? shownPage = obj.EventPages[0].Conditions;
+        void ShowHitTarget() => hitTarget.SelectedIndex = Math.Max(0, Array.FindIndex(hitChoices, h => h.Item2 == (shownPage?.HitTarget ?? HitTargetKind.Any)));
+        hitTarget.SelectionChanged += (_, _) => { if (shownPage is not null && hitTarget.SelectedIndex >= 0) shownPage.HitTarget = hitChoices[hitTarget.SelectedIndex].Item2; };
+        ShowHitTarget();
+        _eventEditor.PageSelected += index =>
+        {
+            shownPage = index >= 0 && index < obj.EventPages.Count ? obj.EventPages[index].Conditions : null;
+            if (_conditions is not null) _conditions.Conditions = shownPage;
+            ShowHitTarget();
+        };
         _eventEditor.PageInserted += index => { if (index >= 0 && index <= obj.EventPages.Count) obj.EventPages.Insert(index, new BookEventPage()); };
         _eventEditor.PageRemoved += index => { if (index >= 0 && index < obj.EventPages.Count) obj.EventPages.RemoveAt(index); };
         _eventEditor.ContentChanged += () =>
@@ -869,7 +880,7 @@ public partial class ObjectEditorWindow : Window
         _conditions.CurrentBookId = obj.Id;
         _conditions.CurrentBookLocalVariables = obj.LocalVariables;
         _conditions.SetDatabases(_books, _db, _containers, _sprites, _variables, _stats);
-        _conditions.ApplyTriggerLabels(TriggerLabels(obj.Type));
+        _conditions.ApplyTriggerLabels(TriggerLabels(obj.Type), TriggersLeftOut(obj.Type));
         _conditions.Conditions = obj.EventPages[0].Conditions;
 
         var debug = new Button { Content = "Debug", Padding = new Thickness(10, 4, 10, 4) };
@@ -881,6 +892,11 @@ public partial class ObjectEditorWindow : Window
         };
         var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
         top.Children.Add(debug);
+        if (obj.Type is ObjectType.Ammo or ObjectType.Projectile)
+        {
+            top.Children.Add(new TextBlock { Text = "By Hitting Target - when it hits:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0) });
+            top.Children.Add(hitTarget);
+        }
         top.Children.Add(new TextBlock { Text = TriggerHelp(obj.Type), VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0), Opacity = 0.7, FontSize = 11, TextWrapping = TextWrapping.Wrap, MaxWidth = 760 });
         var grid = new Grid();
         grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(270) });
@@ -901,8 +917,25 @@ public partial class ObjectEditorWindow : Window
     {
         var labels = new Dictionary<BookTriggerConditionBased, string>(BaseTriggerLabels(type));
         labels[BookTriggerConditionBased.ByTradeItem] = "By Tool Used On It";
+        // Every object: something dropped onto it (on the map, in a window) - its event runs first, and can use it up.
+        labels[BookTriggerConditionBased.ByCombineItem] = "By Item Combined To It";
+        if (type is ObjectType.Ammo or ObjectType.Projectile) labels[BookTriggerConditionBased.ByHitTarget] = "By Hitting Target (a character or an object)";
         return labels;
     }
+
+    /// <summary>The triggers that mean nothing for a type, left out of its list.</summary>
+    private static BookTriggerConditionBased[] TriggersLeftOut(ObjectType type) => type switch
+    {
+        ObjectType.Junk => new[] { BookTriggerConditionBased.ByEnter, BookTriggerConditionBased.ByStay, BookTriggerConditionBased.ByAfterReadItem,
+            BookTriggerConditionBased.ByHavingAnItem, BookTriggerConditionBased.ByNotHavingAnItem, BookTriggerConditionBased.ByExit },
+        ObjectType.Tile => new[] { BookTriggerConditionBased.ByAfterReadItem },
+        ObjectType.Door => new[] { BookTriggerConditionBased.ByDropItem, BookTriggerConditionBased.ByPickupItem },
+        ObjectType.LightSource => new[] { BookTriggerConditionBased.ByExit },
+        ObjectType.Ammo => new[] { BookTriggerConditionBased.ByDropItem, BookTriggerConditionBased.ByDestroyItem, BookTriggerConditionBased.ByAfterReadItem,
+            BookTriggerConditionBased.ByPickupItem, BookTriggerConditionBased.ByHavingAnItem, BookTriggerConditionBased.ByNotHavingAnItem,
+            BookTriggerConditionBased.ByEnter, BookTriggerConditionBased.ByStay, BookTriggerConditionBased.ByExit },
+        _ => Array.Empty<BookTriggerConditionBased>()
+    };
 
     private static IReadOnlyDictionary<BookTriggerConditionBased, string> BaseTriggerLabels(ObjectType type) => type switch
     {

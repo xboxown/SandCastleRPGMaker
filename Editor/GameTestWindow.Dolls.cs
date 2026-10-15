@@ -618,6 +618,13 @@ public partial class GameTestWindow
     /// <summary>Paperdoll (event command): acts on the paperdoll of the event that's running (DollCommandWindow lists the actions).</summary>
     private bool PaperdollCommand(EventCommand command)
     {
+        // Use up the item just combined - also for an object's own By Item Combined To It.
+        if (command.Get("Action") == "UseUpCombined" && _dollContext is null && _combinedOrigin is { } combinedOnObject)
+        {
+            if (!CombinedStillThere(combinedOnObject)) return false;
+            UseUpOne(combinedOnObject);
+            return true;
+        }
         var context = _dollContext ?? _lastDollContext;
         if (context is null) { StatusText.Text = "Paperdoll command: no paperdoll here (it runs from a paperdoll part's events, or an object's that opens one)."; return false; }
         var state = context.State;
