@@ -271,6 +271,8 @@ public class StairsSettings
     /// <summary>Stairs: walking this way goes up.</summary>
     public SpriteDirection RisesToward { get; set; } = SpriteDirection.North;
     public int ClimbSoundResourceId { get; set; } = -1;
+    /// <summary>Stairs: the Staircase Designer design it is built from (-1 = none: its own sprite, cut into steps by its footprint).</summary>
+    public int DesignId { get; set; } = -1;
 }
 
 /// <summary>A roof: how high it sits (Exult: a storey is 5 lifts).</summary>

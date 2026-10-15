@@ -2011,13 +2011,14 @@ public partial class GameTestWindow : Window
     /// </summary>
     private (PlacedItemInstance? item, ObjectInstance? obj) HitTestStack(Point pos)
     {
-        DependencyObject? current = TopHitInWorld(pos); // outlines, floating words and hidden roofs never catch the click
+        DependencyObject? hit = TopHitInWorld(pos); // outlines, floating words and hidden roofs never catch the click
+        DependencyObject? current = hit;
         while (current is not null)
         {
             if (current is UIElement element)
             {
                 foreach (var kv in _itemVisuals) if (ReferenceEquals(kv.Value, element)) return (kv.Key, null);
-                foreach (var kv in _objectVisuals) if (ReferenceEquals(kv.Value, element)) return (null, kv.Key);
+                foreach (var kv in _objectVisuals) if (ReferenceEquals(kv.Value, element)) { RememberStairStep(kv.Key, hit, element); return (null, kv.Key); }
             }
             current = VisualTreeHelper.GetParent(current);
         }

@@ -24,6 +24,9 @@ public partial class ObjectEditorWindow : Window
     private readonly ObjectDatabase _db;
     private readonly SpriteDatabase _sprites;
     private readonly ResourceDatabase _resources;
+    /// <summary>The map's cell size (the Staircase Designer and staircase previews draw on it).</summary>
+    public int TileWidth { get; init; } = 32;
+    public int TileHeight { get; init; } = 32;
     private readonly BookDatabase _books;
     private readonly ContainerDatabase _containers;
     private readonly VariableDatabase _variables;
@@ -463,7 +466,7 @@ public partial class ObjectEditorWindow : Window
         if (obj.Type == ObjectType.Wall) body.Children.Add(Note("A wall is always solid. Its footprint is what Exult compares to decide who is drawn in front: make a long wall's footprint as long as the wall."));
         if (obj.Type == ObjectType.Door) body.Children.Add(Note("A door is solid while closed and walked through while open."));
         if (obj.Type == ObjectType.Window) body.Children.Add(Note("A window is always solid, and drawn by Exult's wall rule like a wall: make a long window's footprint as long as the window."));
-        if (obj.Type == ObjectType.Stairs && obj.Stairs.Kind == StairsKind.Stairs) body.Children.Add(Note($"Height (blue, Size Z) = how many steps up; the footprint is cut into that many steps toward {obj.Stairs.RisesToward}."));
+        if (obj.Type == ObjectType.Stairs && obj.Stairs.Kind == StairsKind.Stairs && obj.Stairs.DesignId < 0) body.Children.Add(Note($"Height (blue, Size Z) = how many steps up; the footprint is cut into that many steps toward {obj.Stairs.RisesToward}."));
 
         var size = new SolidSizeEditor { HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 4, 0, 0) };
         size.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, obj.SpriteGroup, MainSpriteName(obj)), obj.SizeX, obj.SizeY, obj.SizeZ, obj.SolidOffsetX, obj.SolidOffsetY,

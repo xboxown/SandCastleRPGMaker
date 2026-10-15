@@ -68,6 +68,8 @@ public partial class GameTestWindow
     private FrameworkElement BuildObjectVisual(ObjectInstance instance, List<SpriteAnimator>? animators)
     {
         var obj = DefinitionOf(instance);
+        if (obj is not null && StairLook.PoseOf(obj, _objects, instance.Facing) is { } stairPose) // a designed staircase: every step its own (animated) picture
+            return StairLook.Visual(stairPose, _sprites, _resources, _tileWidth, _tileHeight, animators);
         if (obj is not null && ObjectLooks.SpriteFor(obj, StateOf(instance), _sprites) is { } sprite && (sprite.Frames.Count > 0 || File.Exists(sprite.FilePath)))
         {
             var (width, height) = QuantizedSpriteSize(sprite);
@@ -152,12 +154,21 @@ public partial class GameTestWindow
 
     // ================= Identify and use =================
 
+    /// <summary>The step of a designed staircase last clicked: identified, a step goes by its own name (the bottom one by the staircase's).</summary>
+    private (ObjectInstance Stairs, int Step)? _clickedStairStep;
+
+    private void RememberStairStep(ObjectInstance instance, DependencyObject? hit, UIElement visual) =>
+        _clickedStairStep = hit is FrameworkElement { Tag: int step } picture && ReferenceEquals(VisualTreeHelper.GetParent(picture), visual) ? (instance, step) : null;
+
     /// <summary>Single click (identify) and double click (use) on a placed object.</summary>
     private void HandleObjectClick(ObjectInstance instance, bool isUse)
     {
         var obj = DefinitionOf(instance);
         string name = obj is null ? $"Object #{instance.ObjectId}" : ObjectDisplayName(obj, instance.IsSpentRuntime, instance.Quantity);
         if (obj is { Type: ObjectType.LiquidContainer } && LiquidFood(instance.LiquidIdRuntime ?? -1) is { } liquid) name = $"{name} of {liquid.Name.ToLowerInvariant()}"; // a bucket of water
+        if (obj is not null && _clickedStairStep is { } clicked && ReferenceEquals(clicked.Stairs, instance)
+            && StairLook.PoseOf(obj, _objects, instance.Facing) is { } stairPose && clicked.Step < stairPose.Steps.Count)
+            name = StairDesign.StepName(stairPose.Steps[clicked.Step], clicked.Step, name); // a designed staircase: each step goes by its own name
         if (!isUse)
         {
             ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);

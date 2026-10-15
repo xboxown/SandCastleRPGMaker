@@ -288,6 +288,9 @@ public class ObjectDatabase
     /// <summary>Custom effects (Object Editor > Add Custom Stat), shared by every potion, food, spell and useable object.</summary>
     public List<CustomEffect> CustomEffects { get; set; } = new();
     public int NextCustomEffectId() => CustomEffects.Count == 0 ? 1 : CustomEffects.Max(c => c.Id) + 1;
+    /// <summary>Staircases made in the Staircase Designer; a Stairs object links to one.</summary>
+    public List<StairDesign> StairDesigns { get; set; } = new();
+    public int NextStairDesignId() => StairDesigns.Count == 0 ? 1 : StairDesigns.Max(s => s.Id) + 1;
 
     private int _nextId = 1;
 

@@ -362,7 +362,7 @@ public partial class ObjectEditorWindow
         var kind = new ComboBox { Width = 110, ItemsSource = Enum.GetValues<StairsKind>(), SelectedItem = s.Kind };
         kind.SelectionChanged += (_, _) => { s.Kind = (StairsKind)kind.SelectedItem; obj.IsSolid = s.Kind == StairsKind.Stairs; ShowCurrent(); };
         row.Children.Add(Labeled("Kind", kind));
-        if (s.Kind == StairsKind.Stairs)
+        if (s.Kind == StairsKind.Stairs && s.DesignId < 0)
         {
             var dirs = new[] { SpriteDirection.North, SpriteDirection.East, SpriteDirection.South, SpriteDirection.West };
             var toward = new ComboBox { Width = 90, ItemsSource = dirs, SelectedItem = dirs.Contains(s.RisesToward) ? s.RisesToward : SpriteDirection.North };
@@ -371,9 +371,46 @@ public partial class ObjectEditorWindow
         }
         row.Children.Add(SoundPicker(s.Kind == StairsKind.Ladder ? "Climb sound" : "Step sound", () => s.ClimbSoundResourceId, v => s.ClimbSoundResourceId = v));
         body.Children.Add(row);
+        if (s.Kind == StairsKind.Stairs) body.Children.Add(StairDesignPicker(obj));
         body.Children.Add(Note(s.Kind == StairsKind.Stairs
-            ? "Its footprint (Size and collision, below) is cut into steps along the way it goes up: its height (Size Z) in lifts, one lift a step, so walkers climb it by Exult's rule (a lift at a time). Make the footprint at least as many tiles long as it is high - 4 lifts high, 4 long."
+            ? s.DesignId >= 0
+                ? "Built from its staircase design: placed on the map as one object, but in play every step is its own piece to stand on, climbed a lift at a time (Exult's walking rule). Its Size and collision below aren't used for walking. Each placed copy picks its pose in the Map Editor (right-click > Facing)."
+                : "Its footprint (Size and collision, below) is cut into steps along the way it goes up: its height (Size Z) in lifts, one lift a step, so walkers climb it by Exult's rule (a lift at a time). Make the footprint at least as many tiles long as it is high - 4 lifts high, 4 long. Or build it step by step: Design, above."
             : "A ladder isn't walked on: double-click it and the player climbs to its destination - set on each placed one in the Map Editor (right-click > Ladder destination...)."));
+    }
+
+    /// <summary>Stairs: the Staircase Designer design they're built from, a button to open the designer, and the whole staircase as a preview.</summary>
+    private FrameworkElement StairDesignPicker(WorldObject obj)
+    {
+        var s = obj.Stairs;
+        var none = new StairDesign { Id = -1, Name = "(none - its own sprite, cut into steps)" };
+        var choices = new List<StairDesign> { none };
+        choices.AddRange(_db.StairDesigns);
+        var combo = new ComboBox { Width = 260, ItemsSource = choices, DisplayMemberPath = nameof(StairDesign.Name) };
+        combo.SelectedItem = choices.FirstOrDefault(d => d.Id == s.DesignId) ?? none;
+        combo.SelectionChanged += (_, _) => { s.DesignId = (combo.SelectedItem as StairDesign)?.Id ?? -1; ShowCurrent(); };
+        var open = new Button { Content = "Staircase Designer...", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 0, 4), VerticalAlignment = VerticalAlignment.Bottom };
+        open.Click += (_, _) =>
+        {
+            var designer = new StaircaseDesignerWindow(_db, _sprites, _resources, TileWidth, TileHeight, s.DesignId) { Owner = this };
+            designer.ShowDialog();
+            // Opened from a staircase with no design yet: it takes the one left showing.
+            if (s.DesignId < 0 || _db.StairDesigns.All(d => d.Id != s.DesignId)) s.DesignId = designer.SelectedDesignId;
+            ShowCurrent();
+        };
+        var row = new WrapPanel();
+        row.Children.Add(Labeled("Design (Staircase Designer)", combo));
+        row.Children.Add(open);
+        var panel = new StackPanel();
+        panel.Children.Add(row);
+        if (StairLook.DesignOf(obj, _db) is { } design && design.Resolve(SpriteDirection.North) is { } pose && StairLook.Bitmap(pose, _sprites, TileWidth, TileHeight) is { } picture)
+        {
+            var image = new Image { Source = picture, Stretch = Stretch.None, LayoutTransform = new ScaleTransform(2, 2) };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            panel.Children.Add(new Border { Background = Brushes.Black, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Padding = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Left, Child = image });
+            panel.Children.Add(Note($"\"{design.Name}\": {pose.Steps.Count} steps, the top one {pose.Steps.Max(st => st.TopLift)} lifts up. Poses: {string.Join(", ", design.Poses.Where(p => p.Steps.Count > 0).Select(p => p.Facing))}."));
+        }
+        return panel;
     }
 
     // ================= Roofs, clocks, tools =================

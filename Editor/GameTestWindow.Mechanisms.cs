@@ -156,6 +156,14 @@ public partial class GameTestWindow
     private IEnumerable<Body> ObjectBodies(ObjectInstance instance)
     {
         var body = BodyOf(null, instance);
+        if (DefinitionOf(instance) is { } designed && StairLook.PoseOf(designed, _objects, instance.Facing) is { } stairPose)
+        {
+            // A designed staircase (Staircase Designer): every step its own piece, from the staircase's foot up to its top lift - as Exult's stairs are separate step shapes.
+            int anchorX = instance.X * UnitsPerTileX + instance.OffsetX, anchorY = instance.Y * UnitsPerTileY + instance.OffsetY;
+            foreach (var step in stairPose.Steps)
+                yield return body with { Left = anchorX + step.FootX, Top = anchorY + step.FootY, Width = Math.Max(1, step.SizeX), Depth = Math.Max(1, step.SizeY), Height = Math.Max(1, step.TopLift) };
+            yield break;
+        }
         if (DefinitionOf(instance) is not { Type: ObjectType.Stairs } obj || obj.Stairs.Kind != StairsKind.Stairs || body.Height <= 1)
         {
             yield return body;

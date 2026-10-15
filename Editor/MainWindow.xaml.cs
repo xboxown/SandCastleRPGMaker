@@ -2434,7 +2434,18 @@ public partial class MainWindow : Window
     private void ObjectDatabaseButton_Click(object sender, RoutedEventArgs e)
     {
         // The Object Editor edits the project's own objects in place - saved with the project.
-        new ObjectEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase) { Owner = this }.ShowDialog();
+        new ObjectEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase)
+        {
+            Owner = this, TileWidth = _tileset?.TileWidth ?? 32, TileHeight = _tileset?.TileHeight ?? 32
+        }.ShowDialog();
+        RefreshObjectPalette();
+        RefreshAllObjectVisuals();
+    }
+
+    private void StaircaseDesignerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // Staircases are saved with the project's objects; a Stairs object links to one (Object Editor).
+        new StaircaseDesignerWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32) { Owner = this }.ShowDialog();
         RefreshObjectPalette();
         RefreshAllObjectVisuals();
     }
