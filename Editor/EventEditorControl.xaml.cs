@@ -237,6 +237,10 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : If {command.Get("VariableName")} {command.Get("Comparison")} {command.Get("Value")}"));
         }
+        else if (command.Type == EventCommandType.AdvancedIf)
+        {
+            block.Inlines.Add(new Run($" : If {AdvanceIfCommandWindow.Describe(command)}"));
+        }
         else if (command.Type == EventCommandType.ShakeScreen)
         {
             string affected = command.Get("AffectsCharacters") == "True" ? ", characters fall" : "";
@@ -471,6 +475,21 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
+        else if (type == EventCommandType.AdvancedIf)
+        {
+            var dialog = new AdvanceIfCommandWindow { Owner = Window.GetWindow(this) };
+            if (dialog.ShowDialog() == true)
+            {
+                foreach (var cmd in dialog.Results)
+                {
+                    cmd.IndentLevel = indentLevel; // the IF, its Else and its End If are siblings, as Conditional Branch's
+                    CurrentPage.Commands.Insert(insertAt, cmd);
+                    insertAt++;
+                }
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
         else if (type == EventCommandType.ShakeScreen)
         {
             var dialog = new ShakeScreenCommandWindow { Owner = Window.GetWindow(this) };
@@ -581,7 +600,7 @@ public partial class EventEditorControl : UserControl
     {
         if (CurrentPage is null || insertAt <= 0 || insertAt > CurrentPage.Commands.Count) return 0;
         var previous = CurrentPage.Commands[insertAt - 1];
-        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.Else or EventCommandType.WhenChoice;
+        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf or EventCommandType.Else or EventCommandType.WhenChoice;
         return opensBlock ? previous.IndentLevel + 1 : previous.IndentLevel;
     }
 
@@ -671,6 +690,17 @@ public partial class EventEditorControl : UserControl
             {
                 dialog.Results[0].IndentLevel = command.IndentLevel; // preserve nesting position, same as every other edit path
                 CurrentPage.Commands[index] = dialog.Results[0]; // editing an existing branch never touches its Else/EndBranch - see the window's own doc comment
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (command.Type == EventCommandType.AdvancedIf)
+        {
+            var dialog = new AdvanceIfCommandWindow(command) { Owner = Window.GetWindow(this) };
+            if (dialog.ShowDialog() == true && dialog.Results.Count > 0)
+            {
+                dialog.Results[0].IndentLevel = command.IndentLevel;
+                CurrentPage.Commands[index] = dialog.Results[0]; // its Else / End If stay as they are
                 RenderContentsList();
                 ContentChanged?.Invoke();
             }

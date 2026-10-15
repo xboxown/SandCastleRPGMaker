@@ -245,6 +245,7 @@ public partial class GameTestWindow
         if (keg.FuseRuntime >= 0) return; // already burning
         keg.FuseRuntime = Math.Max(0.05, obj.Explosive.FuseSeconds);
         keg.IsLitRuntime = true;
+        RecordItem("ignited", ReferencedItemCategory.Object, obj.Id); // Ignited explosive
         if (byPlayer) _fusesLitByPlayer.Add(keg);
         PlaySound(obj.Explosive.FuseSoundResourceId);
         RefreshObjectLook(keg);

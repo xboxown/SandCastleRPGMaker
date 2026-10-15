@@ -16,7 +16,7 @@ namespace SandcastleRpgMaker.Editor;
 /// its own visuals. A caller with no callback set just gets a no-op,
 /// exactly like every other optional dependency in this project.
 /// </summary>
-public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost
+public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext
 {
     private readonly ResourceDatabase _resources;
     private readonly Dictionary<string, double> _variables = new();
@@ -61,6 +61,9 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Func<int, int, string, bool>? OnExchangeCurrency { get; set; }
     /// <summary>Change Weather: (kind, intensity 1-100, clouds on / off / unchanged).</summary>
     public Func<WeatherKind, int, bool?, bool>? OnChangeWeather { get; set; }
+    /// <summary>Advance IF: the game tests the condition (the editor's preview can't: false).</summary>
+    public Func<GameCondition, bool>? OnEvaluateCondition { get; set; }
+    public bool EvaluateGameCondition(GameCondition condition) => OnEvaluateCondition?.Invoke(condition) ?? false;
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain

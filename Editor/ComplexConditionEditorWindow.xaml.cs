@@ -142,6 +142,7 @@ public partial class ComplexConditionEditorWindow : Window
             ComplexSubConditionType.CombineItemCondition => BuildCombineItemEditor(sub),
             ComplexSubConditionType.DropToSelfCondition => BuildDropToSelfEditor(sub),
             ComplexSubConditionType.JoinedPartyCondition => BuildJoinedPartyEditor(sub),
+            ComplexSubConditionType.GameCondition => BuildGameConditionEditor(sub),
             ComplexSubConditionType.Always or ComplexSubConditionType.ByTradeItem or ComplexSubConditionType.ByUseItem or
                 ComplexSubConditionType.ByDropItem or ComplexSubConditionType.ByDestroyItem or ComplexSubConditionType.ByAfterReadItem or
                 ComplexSubConditionType.ByPickupItem or ComplexSubConditionType.ByHavingAnItem or ComplexSubConditionType.ByNotHavingAnItem
@@ -404,6 +405,23 @@ public partial class ComplexConditionEditorWindow : Window
         row.Children.Add(itemLabel);
         row.Children.Add(pickButton);
         return row;
+    }
+
+    /// <summary>Any game condition (the Advance IF list): its kind, then its own settings.</summary>
+    private UIElement BuildGameConditionEditor(ComplexSubCondition sub)
+    {
+        var host = new StackPanel();
+        void Fill()
+        {
+            host.Children.Clear();
+            var kinds = GameConditions.All.Select(k => $"{(int)k}. {GameConditions.Name(k)}").ToList();
+            var kind = new ComboBox { Width = 320, ItemsSource = kinds, SelectedIndex = Array.IndexOf(GameConditions.All, sub.Game.Kind), HorizontalAlignment = HorizontalAlignment.Left };
+            kind.SelectionChanged += (_, _) => { if (kind.SelectedIndex >= 0 && GameConditions.All[kind.SelectedIndex] != sub.Game.Kind) { sub.Game.Kind = GameConditions.All[kind.SelectedIndex]; Fill(); UpdateSummary(); } };
+            host.Children.Add(kind);
+            host.Children.Add(GameConditionFields.Build(sub.Game, this));
+        }
+        Fill();
+        return host;
     }
 
     private UIElement BuildJoinedPartyEditor(ComplexSubCondition sub)

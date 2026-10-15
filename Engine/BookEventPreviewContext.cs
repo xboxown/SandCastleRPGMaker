@@ -37,4 +37,7 @@ public class BookEventPreviewContext
 
     /// <summary>This book's own database Id, needed to check whether a trigger-type sub-condition's Select Item target is "this book itself" rather than some other item this context can't speak to.</summary>
     public int SelfItemId { get; set; } = -1;
+
+    /// <summary>The game tests its game conditions (a Complex Condition's Game Condition); the editor's preview has none (false).</summary>
+    public Func<GameCondition, bool>? GameConditionEvaluator { get; set; }
 }

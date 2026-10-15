@@ -45,6 +45,8 @@ internal static class ProjectSession
     public static Func<List<MapZone>?>? ZonesProvider;
     /// <summary>A painted tile's picture from any of the open map's tilesheets (the game's tiles from a map's second, third... sheet).</summary>
     public static Func<int, System.Windows.Media.Imaging.BitmapSource?>? TileSourceProvider;
+    /// <summary>The names events go by (map events, objects, books, containers, characters) - for "Event executed".</summary>
+    public static Func<List<string>>? EventNamesProvider;
     /// <summary>The project's System Settings.</summary>
     public static Func<SystemSettings>? SettingsProvider;
     /// <summary>System Settings > Sounds: one opening sound for every paperdoll - each one's own picker is then greyed out.</summary>

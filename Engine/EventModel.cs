@@ -51,7 +51,9 @@ public enum EventCommandType
     /// <summary>Exchange Currency: a money changer changes the party's money of one currency into another (Currency Editor rates).</summary>
     ExchangeCurrency,
     /// <summary>Change Weather: rain, snow, hail, a storm or clear, and the clouds (Exult's weather eggs).</summary>
-    ChangeWeather
+    ChangeWeather,
+    /// <summary>Advance IF: a branch on any one game condition (its numbered tab), with Else / End If like Conditional Branch.</summary>
+    AdvancedIf
 }
 
 /// <summary>

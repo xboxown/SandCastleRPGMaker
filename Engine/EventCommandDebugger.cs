@@ -157,6 +157,7 @@ public class EventCommandDebugger
 
             case EventCommandType.ConditionalBranchSwitch:
             case EventCommandType.ConditionalBranchVariable:
+            case EventCommandType.AdvancedIf:
             {
                 bool branchTrue = EventCommandInterpreter.EvaluateBranch(cmd, _context);
                 LastStepDescription = $"{cmd.Type} -> {(branchTrue ? "true" : "false")}";

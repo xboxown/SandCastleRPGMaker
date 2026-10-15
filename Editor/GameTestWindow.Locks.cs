@@ -191,6 +191,7 @@ public partial class GameTestWindow
             PlaySound(UnlockSound(data));
             SetLocked(container, false);
             SayOverContainer(container, "Unlocked");
+            RecordItem("unlockkey", ReferencedItemCategory.Container, data.Id);
             StatusText.Text = $"You unlock \"{data.Name}\".";
             return;
         }
@@ -226,6 +227,7 @@ public partial class GameTestWindow
             SetLocked(container, false);
             PlaySound(UnlockSound(data));
             SayOverContainer(container, "Unlocked");
+            RecordItem("picklocked", ReferencedItemCategory.Container, data.Id);
             StatusText.Text = $"You pick the lock on \"{data.Name}\". ({chance}% chance)";
             return;
         }

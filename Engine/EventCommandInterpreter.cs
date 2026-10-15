@@ -69,6 +69,7 @@ public static class EventCommandInterpreter
 
                 case EventCommandType.ConditionalBranchSwitch:
                 case EventCommandType.ConditionalBranchVariable:
+                case EventCommandType.AdvancedIf:
                 {
                     bool branchTrue = EvaluateBranch(cmd, context);
                     trace.Add($"{cmd.Type} -> {(branchTrue ? "true" : "false")}");
@@ -183,6 +184,8 @@ public static class EventCommandInterpreter
 
     internal static bool EvaluateBranch(EventCommand cmd, IEventExecutionContext context)
     {
+        if (cmd.Type == EventCommandType.AdvancedIf)
+            return context is IGameConditionContext game && GameConditions.FromCommand(cmd) is { } condition && game.EvaluateGameCondition(condition);
         if (cmd.Type == EventCommandType.ConditionalBranchSwitch)
         {
             bool actual = context.GetSwitch(cmd.Get("SwitchName"));
@@ -245,6 +248,7 @@ public static class EventCommandInterpreter
         EventCommandType.ChangeFoodLevel => $"Food Level: {cmd.Get("Who")} {cmd.Get("Operation")} {cmd.Get("Value")}",
         EventCommandType.ModifyAilments => $"Modify Ailments: {cmd.Get("Action")} {cmd.Get("Ailment")} on {cmd.Get("Who")}",
         EventCommandType.Attack => $"Attack: {cmd.Get("Attacker")} attacks {cmd.Get("Target")}",
+        EventCommandType.AdvancedIf => $"Advance IF: {cmd.Get("Summary")}",
         EventCommandType.ChangeWeather => $"Change Weather: {cmd.Get("Kind")} {cmd.Get("Intensity")}%",
         EventCommandType.ExchangeCurrency => $"Exchange Currency: {cmd.Get("Amount")} {cmd.Get("FromName")} into {cmd.Get("ToName")}",
         EventCommandType.SleepOnBed => $"Sleep On Bed: {cmd.Get("Which")}",

@@ -195,6 +195,7 @@ public partial class GameTestWindow
     private bool UseCarriedObject(InventoryItemInstance item, DragOrigin source)
     {
         if (DefinitionOf(item) is not { } obj) return false;
+        RecordItem("used", ReferencedItemCategory.Object, obj.Id); // Used object (GameTestWindow.Conditions.cs)
         if (TryUseLockTool(obj, source)) return true;
         if (TryUseDoll(item, obj, () => TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired."))) return true; // it opens a paperdoll
         if (obj.Type == ObjectType.LightSource)
@@ -217,6 +218,7 @@ public partial class GameTestWindow
     /// <summary>Runs an object's own event pages for a trigger (per placement, as every prefab copy is its own). True if a page with commands ran.</summary>
     private bool FireObjectEvent(ObjectInstance instance, WorldObject obj, BookTriggerConditionBased trigger, MapCharacter? activator = null)
     {
+        RecordObjectHappening(obj, trigger); // destroyed, used, lit, put out, burnt out (GameTestWindow.Conditions.cs)
         if (obj.EventPages.Count == 0) return false;
         var (previous, previousStep) = (_activator, _activatedByCharacterStep);
         _activator = activator;
@@ -293,6 +295,7 @@ public partial class GameTestWindow
             ShowFloatingTextOver(VisualOf(door), "Unlocked");
             StatusText.Text = $"You unlock \"{obj.Name}\".";
             RefreshObjectLook(door);
+            RecordItem("unlockkey", ReferencedItemCategory.Object, obj.Id);
             FireObjectEvent(door, obj, BookTriggerConditionBased.ByStay);
             return;
         }
@@ -318,6 +321,7 @@ public partial class GameTestWindow
             PlaySound(d.UnlockSoundResourceId >= 0 ? d.UnlockSoundResourceId : d.LockSoundResourceId);
             ShowFloatingTextOver(VisualOf(door), "Unlocked");
             StatusText.Text = $"You pick the lock on \"{obj.Name}\". ({chance}% chance)";
+            RecordItem("picklocked", ReferencedItemCategory.Object, obj.Id);
             RefreshObjectLook(door);
             FireObjectEvent(door, obj, BookTriggerConditionBased.ByStay);
             return;

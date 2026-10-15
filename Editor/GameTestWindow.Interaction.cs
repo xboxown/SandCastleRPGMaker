@@ -1134,7 +1134,7 @@ public partial class GameTestWindow
         bool wasEquipped = false;
         foreach (var slot in character.EquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) { character.EquippedSlots.Remove(slot); wasEquipped = true; }
         foreach (var slot in character.CustomEquippedSlots.Where(kv => kv.Value == item.InstanceId).Select(kv => kv.Key).ToList()) { character.CustomEquippedSlots.Remove(slot); wasEquipped = true; }
-        if (wasEquipped) FireCharacterEvent(character, BookTriggerConditionBased.ByUnEquip);
+        if (wasEquipped) { RecordPersonItem("unequip", character, item); FireCharacterEvent(character, BookTriggerConditionBased.ByUnEquip); }
         foreach (var gump in _openPaperdolls.Where(g => g.Character == character && g.SelectedInstanceId == item.InstanceId)) gump.SelectedInstanceId = null;
     }
 

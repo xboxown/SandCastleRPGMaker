@@ -483,7 +483,7 @@ public partial class GameTestWindow
         // An Object Editor object taken from the world: its own Belong To / Faction.
         if (origin is MapObjectOrigin { Obj: var taken } && DefinitionOf(taken) is { } takenObj)
         {
-            if (ObjectOwner(takenObj, taken) is { } objectOwned) Theft(objectOwned.Owner, objectOwned.FactionId); // a served dish is its customer's
+            if (ObjectOwner(takenObj, taken) is { } objectOwned) { RecordItem("stolen", ReferencedItemCategory.Object, takenObj.Id); Theft(objectOwned.Owner, objectOwned.FactionId); } // a served dish is its customer's
             return;
         }
         (ReferencedItemCategory Category, int ItemId)? item = origin switch
@@ -496,7 +496,7 @@ public partial class GameTestWindow
         var ownership = OwnerOf(it.Category, it.ItemId);
         // An item inside an owned container (still in the world) is the container owner's.
         if (ownership is null && origin is ContainerOrigin { Container: PlacedItemInstance holder }) ownership = OwnerOf(holder.Category, holder.ItemId);
-        if (ownership is { } owned) Theft(owned.Owner, owned.FactionId);
+        if (ownership is { } owned) { RecordItem("stolen", it.Category, it.ItemId); Theft(owned.Owner, owned.FactionId); }
     }
 
     /// <summary>Game_window::theft.</summary>

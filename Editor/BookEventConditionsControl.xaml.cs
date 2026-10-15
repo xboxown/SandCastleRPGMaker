@@ -293,6 +293,9 @@ public partial class BookEventConditionsControl : UserControl
     {
         CycleTimesPanel.Visibility = _conditions?.CycleCondition == CycleConditionType.SpecificNumberOfTimes
             ? Visibility.Visible : Visibility.Collapsed;
+        bool until = _conditions?.CycleCondition == CycleConditionType.UntilConditionMet;
+        UntilButton.Visibility = until ? Visibility.Visible : Visibility.Collapsed;
+        if (until) UntilButton.Content = _conditions!.UntilConditions.Count == 0 ? "Until... (set the conditions)" : $"Until... ({_conditions.UntilConditions.Count} condition{(_conditions.UntilConditions.Count == 1 ? "" : "s")})";
     }
 
     private void UpdateConditionPanelsVisibility()
@@ -327,6 +330,13 @@ public partial class BookEventConditionsControl : UserControl
         if (TriggerConditionBasedCombo.SelectedItem is EnumChoice<BookTriggerConditionBased> v) _conditions.TriggerConditionBased = v.Value;
         UpdateSelectItemRowVisibility();
         WarnIfAlwaysFiresWithNoRestriction();
+    }
+
+    private void UntilButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (_conditions is null) return;
+        new GameConditionListWindow(_conditions.UntilConditions, "Until Condition Met") { Owner = Window.GetWindow(this) }.ShowDialog();
+        UpdateVisibility();
     }
 
     private void CycleConditionCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

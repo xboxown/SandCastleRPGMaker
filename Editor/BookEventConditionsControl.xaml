@@ -80,6 +80,7 @@
                 <TextBlock Text="Number of times:" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <TextBox x:Name="CycleTimesBox" Width="60" TextChanged="CycleTimesBox_TextChanged"/>
             </StackPanel>
+            <Button x:Name="UntilButton" Content="Until..." HorizontalAlignment="Left" Padding="8,2" Margin="0,2,0,4" Visibility="Collapsed" Click="UntilButton_Click" ToolTip="The conditions that, once met, stop this page"/>
         </StackPanel>
     </ScrollViewer>
 </UserControl>

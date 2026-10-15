@@ -207,6 +207,7 @@ public static class BookEventConditionEvaluator
                 (sub.CombineItemSlot1.IsSelf || ctx.CombineItemSlot1Present) && (sub.CombineItemSlot2.IsSelf || ctx.CombineItemSlot2Present),
             ComplexSubConditionType.DropToSelfCondition => EvaluateDropToSelfSub(sub, ctx),
             ComplexSubConditionType.JoinedPartyCondition => ctx.SimulatedDistance <= 32.0,
+            ComplexSubConditionType.GameCondition => ctx.GameConditionEvaluator?.Invoke(sub.Game) ?? false,
             _ => EvaluateTriggerTypeSubCondition(sub, ctx)
         };
 

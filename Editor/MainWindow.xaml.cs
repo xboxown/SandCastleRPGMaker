@@ -119,6 +119,10 @@ public partial class MainWindow : Window
         ProjectSession.ZonesProvider = () => _map?.Zones;
         ProjectSession.SettingsProvider = () => _systemSettings;
         ProjectSession.TileSourceProvider = TileSource;
+        ProjectSession.EventNamesProvider = () => (_map?.Events.Select(e => e.Name) ?? Enumerable.Empty<string>())
+            .Concat(_objectDatabase.Objects.Select(o => o.Name)).Concat(_bookDatabase.Books.Select(b => b.Name))
+            .Concat(_containerDatabase.Containers.Select(c => c.Name)).Concat(_characterDatabase.Characters.Select(c => c.Name))
+            .Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().OrderBy(n => n).ToList();
     }
 
     /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>

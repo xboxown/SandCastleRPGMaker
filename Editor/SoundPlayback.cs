@@ -34,6 +34,10 @@ internal static class SoundPlayback
         return Play(entry, entry.Volume, owner, loop);
     }
 
+    /// <summary>A sound (its Sound list id) started, and one finished or was stopped - for the game's "Sound played / stopped" conditions.</summary>
+    public static event Action<int>? Played;
+    public static event Action<int>? Stopped;
+
     /// <summary>Stops every sound that belongs to <paramref name="owner"/> (a Stop button).</summary>
     public static void StopFor(object owner)
     {
@@ -97,6 +101,7 @@ internal static class SoundPlayback
                 lock (Playing) { Playing.Remove(waveOut); Owners.Remove(waveOut); Looping.Remove(waveOut); }
                 waveOut.Dispose();
                 reader.Dispose();
+                Stopped?.Invoke(entry.Id);
             };
             lock (Playing)
             {
@@ -105,6 +110,7 @@ internal static class SoundPlayback
                 if (loop) Looping.Add(waveOut);
             }
             waveOut.Play();
+            Played?.Invoke(entry.Id);
             return true;
         }
         catch (Exception ex)

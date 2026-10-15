@@ -66,6 +66,8 @@ public partial class GameTestWindow
         _execContext.OnSleepOnBed = SleepOnBedCommand;
         _execContext.OnExchangeCurrency = ExchangeCurrencyCommand;
         _execContext.OnChangeWeather = ChangeWeather;
+        _execContext.OnEvaluateCondition = EvaluateGameCondition; // Advance IF (GameTestWindow.Conditions.cs)
+        WatchSounds();
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)
@@ -123,6 +125,8 @@ public partial class GameTestWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
+        Record($"killed:{character.Id}"); // Character killed (GameTestWindow.Conditions.cs)
+        Record("killed:*");
         StandUp(character);
         vitals.Dead = true;
         vitals.Ailments = Ailment.None;

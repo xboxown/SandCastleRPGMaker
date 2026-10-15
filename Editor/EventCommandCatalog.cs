@@ -172,7 +172,7 @@ internal static class EventCommandCatalog
         string indent = new string(' ', command.IndentLevel * 4);
         string prefix = command.Type switch
         {
-            EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable => "If: ",
+            EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf => "If: ",
             EventCommandType.Else => "Else",
             EventCommandType.EndBranch => "End If",
             _ => ""

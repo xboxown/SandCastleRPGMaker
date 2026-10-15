@@ -902,6 +902,7 @@ public partial class GameTestWindow : Window
     {
         if (slotKey is EquipmentSlot builtin) character.EquippedSlots[builtin] = instanceId;
         else if (slotKey is int customId) character.CustomEquippedSlots[customId] = instanceId;
+        if (character.Inventory.FirstOrDefault(i => i.InstanceId == instanceId) is { } putOn) RecordPersonItem("equip", character, putOn);
         FireCharacterEvent(character, BookTriggerConditionBased.ByEquip);
     }
 
@@ -1966,17 +1967,26 @@ public partial class GameTestWindow : Window
         }
 
         _execContext.SelfBookId = selfBookId; // "self" now correctly refers to whichever object is actually firing right now - the whole reason SelfBookId became settable rather than fixed at construction
+        string eventName = EventOwnerName(owner);
+        var previousEventName = _evaluatingEventName;
+        _evaluatingEventName = eventName; // "this event's page N"
+        try
+        {
 
         var trace = new List<string>();
         foreach (var page in pages)
         {
             var context = BuildConditionContext(page.Conditions.TriggerConditionBased, justOccurred, selfBookId, counts.TryGetValue(page, out var c) ? c : 0);
+            context.GameConditionEvaluator = EvaluateGameCondition; // a Complex Condition's Game Condition
+            context.UntilConditionStillMet = UntilStillGoing(page.Conditions); // Until Condition Met: until its conditions are met
 
             if (BookEventConditionEvaluator.Evaluate(page.Conditions, context, trace))
             {
                 counts[page] = (counts.TryGetValue(page, out var cc) ? cc : 0) + 1;
                 if (page.Commands.Count > 0)
                 {
+                    Record($"event:{eventName}"); // Event executed / its page number (GameTestWindow.Conditions.cs)
+                    Record($"eventpage:{eventName}:{pages.IndexOf(page) + 1}");
                     var previousOwner = _firingOwner;
                     _firingOwner = owner; // whose event this is (Sleep On Bed: "the bed under this")
                     try { EventCommandInterpreter.Run(page.Commands, _execContext, trace); }
@@ -1987,6 +1997,8 @@ public partial class GameTestWindow : Window
             }
         }
         return false;
+        }
+        finally { _evaluatingEventName = previousEventName; }
     }
 
     /// <summary>

@@ -125,7 +125,9 @@ public class CombineItemSlot
 public enum ComplexSubConditionType
 {
     InACondition, EventTriggerCompleted, StatCondition, CombineItemCondition, DropToSelfCondition, JoinedPartyCondition,
-    Always, ByTradeItem, ByUseItem, ByDropItem, ByDestroyItem, ByAfterReadItem, ByPickupItem, ByHavingAnItem, ByNotHavingAnItem
+    Always, ByTradeItem, ByUseItem, ByDropItem, ByDestroyItem, ByAfterReadItem, ByPickupItem, ByHavingAnItem, ByNotHavingAnItem,
+    /// <summary>Any of the game conditions (Advance IF's list: variables, items, characters, what has happened...).</summary>
+    GameCondition
 }
 
 /// <summary>And/Or/Xor - Xor added beyond the base spec (true only when exactly one side is true), since it's a natural extra given the other two were already there.</summary>
@@ -161,6 +163,9 @@ public class ComplexSubCondition
 
     /// <summary>Select Item target for the new trigger-type sub-conditions that need one (Trade/Drop/Destroy/Pickup/Having/Not Having) - mirrors BookEventConditions.TriggerItemReference at the top level. Always/Use/After Read don't use this - they're inherently about the book itself.</summary>
     public ItemReference? TriggerItemReference { get; set; }
+
+    /// <summary>Type GameCondition: the condition.</summary>
+    public GameCondition Game { get; set; } = new();
 }
 
 /// <summary>
@@ -246,6 +251,8 @@ public class BookEventConditions
     public List<ComplexConditionGroup> ComplexConditions { get; set; } = new();
 
     public CycleConditionType CycleCondition { get; set; } = CycleConditionType.Once;
+    /// <summary>Until Condition Met: the page keeps going until these (And / Or / Xor) are met.</summary>
+    public List<GameCondition> UntilConditions { get; set; } = new();
     public int CycleSpecificTimes { get; set; } = 1;
 }
 

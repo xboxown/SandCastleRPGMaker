@@ -66,6 +66,12 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
+    private void AdvancedIf_Click(object sender, RoutedEventArgs e)
+    {
+        ChosenType = EventCommandType.AdvancedIf;
+        DialogResult = true;
+    }
+
     private void ConditionalBranch_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.ConditionalBranchSwitch; // exact Switch-vs-Variable choice is made inside ConditionalBranchCommandWindow itself

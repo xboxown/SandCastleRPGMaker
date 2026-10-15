@@ -33,6 +33,7 @@
 
                         <TextBlock Text="Flow Control" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Conditional Branch..." Margin="0,0,0,4" Click="ConditionalBranch_Click"/>
+                        <Button Content="Advance IF..." Margin="0,0,0,4" Click="AdvancedIf_Click" ToolTip="A branch on any game condition: items, characters, what has happened, time, events... (numbered tabs)"/>
                         <Button Content="Label..." Margin="0,0,0,4" Click="Label_Click"/>
                         <Button Content="Jump to Label..." Margin="0,0,0,4" Click="JumpToLabel_Click"/>
                         <Button Content="Exit Event Processing" Margin="0,0,0,4" Click="ExitEvent_Click" ToolTip="Stops the commands right here - ends a conversation too"/>
