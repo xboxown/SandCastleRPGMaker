@@ -309,6 +309,14 @@ public partial class GameTestWindow
         }
         newLift = highest;
         int standLift = highest;
+        // The drop is judged by where the walker will stand (the highest support under its feet), not by every square under
+        // them: going down stairs with steps shallower than the feet, the back of the feet is over a step two lifts lower
+        // while the walker stands on the one just below - a 1-lift step down, as walking down stairs is.
+        if (lift - standLift > ActorMaxDrop)
+        {
+            blockReason = $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {ActorMaxDrop} at a time.";
+            return false;
+        }
         // Standing on the highest support under any part of the footprint, the whole footprint must be clear for the actor's full height.
         if (!IsClear(solids, standLift, height))
         {
@@ -371,9 +379,8 @@ public partial class GameTestWindow
         }
         if (newLift <= lift)
         {
-            // Not going up - see if falling.
+            // Not going up - see if falling. (How far is checked for the whole footprint, in TryStepActor: by where it will stand.)
             newLift = FloorBelow(here, lift);
-            if (lift - newLift > ActorMaxDrop) return false; // won't step off a drop of more than 1 lift
             if (!IsClear(here, newLift, height)) return false;
         }
         return true;
