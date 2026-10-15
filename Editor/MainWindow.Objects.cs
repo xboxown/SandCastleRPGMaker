@@ -46,38 +46,6 @@ public partial class MainWindow
 
     // ---------- Palette ----------
 
-    /// <summary>One tab per object type, each listing that type's objects with the picture they'll have on the map.</summary>
-    private void RefreshObjectPalette()
-    {
-        int keepTab = Math.Max(0, ObjectTypeTabs.SelectedIndex);
-        ObjectTypeTabs.Items.Clear();
-        foreach (var type in ObjectTypes.All)
-        {
-            var objects = _objectDatabase.Objects.Where(o => o.TypeChosen && o.Type == type).ToList();
-            var list = new ListBox { Margin = new Thickness(2) };
-            list.ItemTemplate = PaletteItemTemplate();
-            list.ItemsSource = objects.Select(o => new ObjectPaletteEntry { WorldObject = o, Icon = ObjectIcon(o) }).ToList();
-            list.SelectionChanged += (_, _) =>
-            {
-                if (list.SelectedItem is not ObjectPaletteEntry entry) return;
-                _selectedObjectId = entry.WorldObject.Id;
-                _freeItemPick = null;
-                if (_editMode is not (EditMode.Object or EditMode.Free)) EnterObjectMode();
-                StatusText.Text = $"Placing \"{entry.Name}\" ({ObjectTypes.Name(entry.WorldObject.Type)}) - click the map.";
-            };
-            ObjectTypeTabs.Items.Add(new TabItem
-            {
-                Header = $"{ObjectTypes.Name(type)} ({objects.Count})",
-                Content = objects.Count == 0
-                    ? new TextBlock { Text = $"No {ObjectTypes.Name(type)} objects yet - make one in the Object Editor.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6), Opacity = 0.7 }
-                    : list
-            });
-        }
-        AddFreeItemPaletteTabs(); // Books and Containers, for Free Placement
-        ObjectTypeTabs.SelectedIndex = Math.Min(keepTab, ObjectTypeTabs.Items.Count - 1);
-        _selectedObjectId = -1;
-    }
-
     private static DataTemplate PaletteItemTemplate()
     {
         var panel = new FrameworkElementFactory(typeof(StackPanel));

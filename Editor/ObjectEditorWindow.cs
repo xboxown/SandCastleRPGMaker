@@ -32,7 +32,6 @@ public partial class ObjectEditorWindow : Window
     private readonly VariableDatabase _variables;
     private readonly StatDatabase _stats;
 
-    private readonly ListBox _list = new() { Margin = new Thickness(6) };
     private readonly ComboBox _filter = new() { Width = 140, Margin = new Thickness(4, 0, 0, 0) };
     private readonly StackPanel _props = new() { Margin = new Thickness(8) };
     private readonly TabControl _tabs = new() { Margin = new Thickness(6) };
@@ -86,7 +85,7 @@ public partial class ObjectEditorWindow : Window
         _filter.SelectedIndex = 0;
         _filter.SelectionChanged += (_, _) => RefreshList();
 
-        _list.SelectionChanged += (_, _) => { _current = (_list.SelectedItem as ListEntry)?.Obj; ShowCurrent(); };
+        InitFolders(toolbar); // the list as folders (ObjectEditorWindow.Folders.cs)
 
         _tabs.Items.Add(new TabItem { Header = "Properties", Content = new ScrollViewer { Content = _props, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } });
         _eventTab.Content = _eventHost;
@@ -117,17 +116,6 @@ public partial class ObjectEditorWindow : Window
     }
 
     // ================= The list =================
-
-    private void RefreshList(WorldObject? select = null)
-    {
-        select ??= _current;
-        int filter = _filter.SelectedIndex;
-        var entries = _db.Objects
-            .Where(o => filter <= 0 || (o.TypeChosen && o.Type == ObjectTypes.All[filter - 1]))
-            .Select(o => new ListEntry(o)).ToList();
-        _list.ItemsSource = entries;
-        _list.SelectedItem = entries.FirstOrDefault(e => e.Obj == select);
-    }
 
     private void NewObject()
     {

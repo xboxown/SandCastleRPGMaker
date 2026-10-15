@@ -122,7 +122,15 @@
                 <TabItem x:Name="ObjectsPaletteTab" Header="Objects">
                     <DockPanel LastChildFill="True">
                         <TextBlock DockPanel.Dock="Top" Text="Mode &gt; Objects: pick an object, click the map (hold to place several). Right-click a placed one for more." Margin="6" FontWeight="Bold" TextWrapping="Wrap"/>
-                        <TabControl x:Name="ObjectTypeTabs" Margin="2" TabStripPlacement="Top"/>
+                        <Grid DockPanel.Dock="Top" Margin="4,0,4,4">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <ComboBox x:Name="PaletteTypeFilter" Grid.Column="0" Margin="0,0,4,0" ToolTip="Show one type only"/>
+                            <TextBox x:Name="PaletteSearchBox" Grid.Column="1" ToolTip="Search by name"/>
+                        </Grid>
+                        <TreeView x:Name="ObjectPaletteTree" Margin="2"/>
                     </DockPanel>
                 </TabItem>
                 <TabItem x:Name="CharactersPaletteTab" Header="Characters">

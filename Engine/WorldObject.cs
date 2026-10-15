@@ -155,6 +155,9 @@ public class WorldObject
     /// <summary>The paperdoll it opens when double-clicked (PaperDoll Editor; -1 = none), as Exult's objects open their gumps.</summary>
     public int DollDesignId { get; set; } = -1;
 
+    /// <summary>The Object Editor folder it's kept in (-1 = none) - for finding it only; it works the same anywhere.</summary>
+    public int FolderId { get; set; } = -1;
+
     /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
     public List<VariableDefinition> LocalVariables { get; set; } = new();
@@ -287,9 +290,19 @@ public class ObjectInstance : IHasDollState
 /// The full catalog of object definitions for a project. Dynamic list, no
 /// cap on how many object types you can define.
 /// </summary>
+/// <summary>A folder of the Object Editor's list (and the Map Editor's Objects tab).</summary>
+public class ObjectFolder
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "New Folder";
+}
+
 public class ObjectDatabase
 {
     public List<WorldObject> Objects { get; set; } = new();
+    /// <summary>Folders the objects are kept in (Object Editor > New Folder) - organisation only.</summary>
+    public List<ObjectFolder> Folders { get; set; } = new();
+    public int NextFolderId() => Folders.Count == 0 ? 1 : Folders.Max(f => f.Id) + 1;
     /// <summary>Custom effects (Object Editor > Add Custom Stat), shared by every potion, food, spell and useable object.</summary>
     public List<CustomEffect> CustomEffects { get; set; } = new();
     public int NextCustomEffectId() => CustomEffects.Count == 0 ? 1 : CustomEffects.Max(c => c.Id) + 1;

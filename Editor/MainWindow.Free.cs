@@ -56,6 +56,8 @@ public partial class MainWindow
         public required ReferencedItemCategory Category { get; init; }
         public required int Id { get; init; }
         public BitmapSource? Icon { get; init; }
+        public string SpriteGroup { get; init; } = string.Empty;
+        public string SpriteName { get; init; } = string.Empty;
     }
 
     private void FreeModeMenuItem_Click(object sender, RoutedEventArgs e) => EnterFreeMode();
@@ -67,34 +69,6 @@ public partial class MainWindow
         FreeModeMenuItem.IsChecked = true;
         PaletteTabs.SelectedItem = ObjectsPaletteTab;
         StatusText.Text = "Free Placement: pick an object, book or container in the Objects tab, click anywhere to put it down (8px steps), hold and drag to paint. Drag a placed one to move it; Ctrl+click puts another on top; right-click for its state, the pile order, Cut/Copy/Paste/Delete. Ctrl + double-click a container to fill it.";
-    }
-
-    /// <summary>Books and Containers tabs at the end of the Objects palette - for Free Placement.</summary>
-    private void AddFreeItemPaletteTabs()
-    {
-        AddFreeItemTab("Books", _bookDatabase.Books.Select(b => new FreePaletteEntry { Name = b.Name, Category = ReferencedItemCategory.Book, Id = b.Id, Icon = FirstFrameOf(b.SpriteGroup, b.SpriteName) }).ToList());
-        AddFreeItemTab("Containers", _containerDatabase.Containers.Where(c => !c.IsBodyContainer)
-            .Select(c => new FreePaletteEntry { Name = c.Name, Category = ReferencedItemCategory.Container, Id = c.Id, Icon = FirstFrameOf(c.SpriteGroup, c.SpriteName) }).ToList());
-    }
-
-    private void AddFreeItemTab(string title, List<FreePaletteEntry> entries)
-    {
-        var list = new ListBox { Margin = new Thickness(2), ItemsSource = entries, ItemTemplate = PaletteItemTemplate() };
-        list.SelectionChanged += (_, _) =>
-        {
-            if (list.SelectedItem is not FreePaletteEntry entry) return;
-            _freeItemPick = (entry.Category, entry.Id);
-            _selectedObjectId = -1;
-            if (_editMode != EditMode.Free) EnterFreeMode();
-            StatusText.Text = $"Placing \"{entry.Name}\" - Free Placement: click the map.";
-        };
-        ObjectTypeTabs.Items.Add(new TabItem
-        {
-            Header = $"{title} ({entries.Count})",
-            Content = entries.Count == 0
-                ? new TextBlock { Text = $"No {title.ToLowerInvariant()} yet.", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(6), Opacity = 0.7 }
-                : list
-        });
     }
 
     private BitmapSource? FirstFrameOf(string group, string name)
