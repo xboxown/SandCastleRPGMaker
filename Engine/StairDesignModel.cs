@@ -22,11 +22,16 @@ public class StairStep
     public int SizeY { get; set; } = 1;
     /// <summary>How many lifts (4px each) above the staircase's foot its top is: where you stand on it.</summary>
     public int TopLift { get; set; } = 1;
+    /// <summary>A landing tile: a floor tile at the top, at the floor above's height - a slab like that floor's own tiles (solid only in its top lift), stepped onto off the top step.</summary>
+    public bool IsLanding { get; set; }
+    /// <summary>Which frame of its sprite it shows (a landing's tile: its number in its tilesheet). A step showing one frame doesn't animate.</summary>
+    public int Frame { get; set; }
 
     public StairStep Clone() => new()
     {
         Name = Name, Sprite = new SpriteLink { SpriteGroup = Sprite.SpriteGroup, SpriteName = Sprite.SpriteName },
-        PictureX = PictureX, PictureY = PictureY, FootX = FootX, FootY = FootY, SizeX = SizeX, SizeY = SizeY, TopLift = TopLift
+        PictureX = PictureX, PictureY = PictureY, FootX = FootX, FootY = FootY, SizeX = SizeX, SizeY = SizeY, TopLift = TopLift,
+        IsLanding = IsLanding, Frame = Frame
     };
 }
 

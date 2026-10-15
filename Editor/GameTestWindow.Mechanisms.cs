@@ -161,7 +161,10 @@ public partial class GameTestWindow
             // A designed staircase (Staircase Designer): every step its own piece, from the staircase's foot up to its top lift - as Exult's stairs are separate step shapes.
             int anchorX = instance.X * UnitsPerTileX + instance.OffsetX, anchorY = instance.Y * UnitsPerTileY + instance.OffsetY;
             foreach (var step in stairPose.Steps)
-                yield return body with { Left = anchorX + step.FootX, Top = anchorY + step.FootY, Width = Math.Max(1, step.SizeX), Depth = Math.Max(1, step.SizeY), Height = Math.Max(1, step.TopLift) };
+                yield return step.IsLanding
+                    // A landing tile: a floor slab like the floor above's tiles - solid only in its top lift.
+                    ? body with { Left = anchorX + step.FootX, Top = anchorY + step.FootY, Width = Math.Max(1, step.SizeX), Depth = Math.Max(1, step.SizeY), Z = body.Z + Math.Max(0, step.TopLift - 1), Height = 1 }
+                    : body with { Left = anchorX + step.FootX, Top = anchorY + step.FootY, Width = Math.Max(1, step.SizeX), Depth = Math.Max(1, step.SizeY), Height = Math.Max(1, step.TopLift) };
             yield break;
         }
         if (DefinitionOf(instance) is not { Type: ObjectType.Stairs } obj || obj.Stairs.Kind != StairsKind.Stairs || body.Height <= 1)

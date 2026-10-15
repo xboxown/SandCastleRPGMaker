@@ -32,7 +32,7 @@ internal static class StairLook
     {
         var sprite = SpriteOf(step, sprites);
         if (sprite is null) return null;
-        string path = sprite.Frames.Count > 0 ? sprite.Frames[0].FilePath : sprite.FilePath;
+        string path = sprite.Frames.Count > 0 ? sprite.Frames[Math.Clamp(step.Frame, 0, sprite.Frames.Count - 1)].FilePath : sprite.FilePath; // a landing's tile: its frame
         if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
         try
         {
@@ -107,7 +107,7 @@ internal static class StairLook
             var size = PictureSize(step, sprites, tileWidth, tileHeight);
             var image = new AlphaHitImage { Width = size.Width, Height = size.Height, Tag = index, Source = FirstFrameOf(step, sprites) };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-            if (sprite is not null && sprite.Frames.Count > 1) animators?.Add(new SpriteAnimator(sprite, image, resources));
+            if (sprite is not null && sprite.Frames.Count > 1 && !step.IsLanding && step.Frame == 0) animators?.Add(new SpriteAnimator(sprite, image, resources)); // a landing's tile stays its tile
             Canvas.SetLeft(image, layout.OriginX + step.PictureX);
             Canvas.SetTop(image, layout.OriginY + step.PictureY);
             canvas.Children.Add(image);

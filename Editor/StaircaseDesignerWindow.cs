@@ -17,7 +17,7 @@ namespace SandcastleRpgMaker.Editor;
 /// A design has a pose for each facing (north, east, south, west), picked
 /// per placed copy in the Map Editor as a chair's facing is.
 /// </summary>
-public class StaircaseDesignerWindow : Window
+public partial class StaircaseDesignerWindow : Window
 {
     private static readonly SpriteDirection[] Facings = { SpriteDirection.North, SpriteDirection.East, SpriteDirection.South, SpriteDirection.West };
     private const int AreaTiles = 10; // the drawing area: 10 x 10 cells, the anchor cell at the bottom middle
@@ -121,6 +121,7 @@ public class StaircaseDesignerWindow : Window
         stepButtons.Children.Add(MakeButton("Delete", DeleteStep));
         stepButtons.Children.Add(MakeButton("Move up", () => MoveStep(-1)));
         stepButtons.Children.Add(MakeButton("Move down", () => MoveStep(1)));
+        stepButtons.Children.Add(MakeButton("Add landing tile", AddLanding)); // floor tiles at the top (StaircaseDesignerWindow.Landing.cs)
         right.Children.Add(stepButtons);
         right.Children.Add(_stepList);
         right.Children.Add(_stepProps);
@@ -384,7 +385,7 @@ public class StaircaseDesignerWindow : Window
     {
         _refreshing = true;
         var pose = Pose;
-        _stepList.ItemsSource = pose?.Steps.Select((s, i) => $"{i + 1}. {(i == 0 ? "(the staircase's own name)" : string.IsNullOrWhiteSpace(s.Name) ? $"Step {i + 1}" : s.Name)} - lift {s.TopLift}").ToList();
+        _stepList.ItemsSource = pose?.Steps.Select((s, i) => $"{i + 1}. {(i == 0 ? "(the staircase's own name)" : string.IsNullOrWhiteSpace(s.Name) ? $"Step {i + 1}" : s.Name)} - lift {s.TopLift}{(s.IsLanding ? "  (landing tile)" : "")}").ToList();
         _stepList.SelectedIndex = pose is null ? -1 : Math.Min(_selectedStep, pose.Steps.Count - 1);
         _selectedStep = _stepList.SelectedIndex;
         _refreshing = false;
@@ -400,6 +401,25 @@ public class StaircaseDesignerWindow : Window
             panel.Children.Add(Field("Name in play (empty = \"Step N of ...\")", step.Name, v => { step.Name = v; RefreshStepList(); }, 200));
         else
             panel.Children.Add(Note("The bottom step goes by the staircase object's own name when clicked."));
+        var landing = new CheckBox { Content = "Landing tile - a floor tile of the floor above (you step off the top step onto it)", IsChecked = step.IsLanding, Margin = new Thickness(0, 4, 0, 4) };
+        landing.Checked += (_, _) =>
+        {
+            if (Pose is not { } pose) return;
+            int top = pose.Steps.Where(s => !s.IsLanding && s != step).Select(s => s.TopLift).DefaultIfEmpty(MapFloors.LiftsPerFloor).Max();
+            var cell = LandingCell(step);
+            step.Sprite = new SpriteLink();
+            step.Frame = 0;
+            PlaceLanding(step, cell.X, cell.Y, top);
+            RefreshStepList(); ShowStepProps(); Redraw();
+        };
+        landing.Unchecked += (_, _) => { step.IsLanding = false; step.Frame = 0; step.Sprite = new SpriteLink(); RefreshStepList(); ShowStepProps(); Redraw(); };
+        panel.Children.Add(landing);
+        if (step.IsLanding)
+        {
+            panel.Children.Add(LandingTilePicker(step));
+        }
+        else
+        {
         var choices = SpriteChoices();
         var sprite = new ComboBox { Width = 280, ItemsSource = choices, DisplayMemberPath = "Display" };
         sprite.SelectedItem = choices.FirstOrDefault(c => c.Name == step.Sprite.SpriteName && (c.Group == step.Sprite.SpriteGroup || c.Name.Length == 0)) ?? choices[0];
@@ -411,6 +431,7 @@ public class StaircaseDesignerWindow : Window
         };
         panel.Children.Add(new TextBlock { Text = "Sprite" });
         panel.Children.Add(sprite);
+        }
         var pictureRow = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
         pictureRow.Children.Add(IntField("Picture X (px)", () => step.PictureX, v => step.PictureX = v));
         pictureRow.Children.Add(IntField("Picture Y (px)", () => step.PictureY, v => step.PictureY = v));
@@ -433,7 +454,7 @@ public class StaircaseDesignerWindow : Window
         lines.Add(top % MapFloors.LiftsPerFloor == 0
             ? $"The top step is {top} lifts up: walking off it you are on the floor {top / MapFloors.LiftsPerFloor} storey{(top / MapFloors.LiftsPerFloor == 1 ? "" : "s")} above."
             : $"The top step is {top} lift{(top == 1 ? "" : "s")} up ({top * LiftPixels}px). A storey is {MapFloors.LiftsPerFloor} lifts - make the top step lift {MapFloors.LiftsPerFloor} to reach the floor above.");
-        var byLift = pose.Steps.Select((s, i) => (Step: s, Index: i)).OrderBy(t => t.Step.TopLift).ToList();
+        var byLift = pose.Steps.Select((s, i) => (Step: s, Index: i)).Where(t => !t.Step.IsLanding).OrderBy(t => t.Step.TopLift).ToList(); // landing tiles are floor, not steps
         int previous = 0;
         foreach (var (step, index) in byLift)
         {
@@ -587,13 +608,19 @@ public class StaircaseDesignerWindow : Window
         if (Step is not { } step) return;
         bool ctrl = Keyboard.Modifiers.HasFlag(ModifierKeys.Control), shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
         int dx = e.Key == Key.Left ? -1 : e.Key == Key.Right ? 1 : 0, dy = e.Key == Key.Up ? -1 : e.Key == Key.Down ? 1 : 0;
-        if (dx != 0 || dy != 0)
+        if ((dx != 0 || dy != 0) && step.IsLanding)
+        {
+            // A landing tile moves a whole cell: it sits on the map's cells, as the floor above's tiles do.
+            var cell = LandingCell(step);
+            PlaceLanding(step, cell.X + dx, cell.Y + dy, step.TopLift);
+        }
+        else if (dx != 0 || dy != 0)
         {
             if (ctrl) { step.FootX += dx; step.FootY += dy; }
             else { step.PictureX += dx * (shift ? 4 : 1); step.PictureY += dy * (shift ? 4 : 1); KeepAboveBaseline(step); }
         }
-        else if (e.Key == Key.PageUp) step.TopLift = Math.Min(40, step.TopLift + 1);
-        else if (e.Key == Key.PageDown) step.TopLift = Math.Max(1, step.TopLift - 1);
+        else if (e.Key == Key.PageUp) { step.TopLift = Math.Min(40, step.TopLift + 1); if (step.IsLanding) { var c = LandingCell(step); PlaceLanding(step, c.X, c.Y, step.TopLift); } }
+        else if (e.Key == Key.PageDown) { step.TopLift = Math.Max(1, step.TopLift - 1); if (step.IsLanding) { var c = LandingCell(step); PlaceLanding(step, c.X, c.Y, step.TopLift); } }
         else if (e.Key == Key.Delete) { DeleteStep(); e.Handled = true; return; }
         else return;
         e.Handled = true;
