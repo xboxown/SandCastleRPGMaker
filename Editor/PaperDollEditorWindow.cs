@@ -354,6 +354,8 @@ public class PaperDollEditorWindow : Window
         if (part.Kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slider)
             panel.Children.Add(Note("Width / Height are used only while it has no sprite."));
         panel.Children.Add(Check("Starts visible (events can show / hide it)", () => part.StartsVisible, v => { part.StartsVisible = v; Redraw(); }));
+        if (part.Kind is not (DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text or DollPartKind.Slider))
+            panel.Children.Add(Check("Can be dragged onto other parts (theirs: By Combined With A Part) - it goes back to its place when let go", () => part.Draggable, v => part.Draggable = v));
 
         if (part.Looks.Count > 0) panel.Children.Add(LooksEditor(part));
 

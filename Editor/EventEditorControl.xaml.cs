@@ -282,6 +282,10 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : {FoodLevelCommandWindow.Describe(command)}"));
         }
+        else if (command.Type == EventCommandType.Paperdoll)
+        {
+            block.Inlines.Add(new Run($" : {DollCommandWindow.Describe(command)}"));
+        }
         else if (command.Type == EventCommandType.ModifyAilments)
         {
             block.Inlines.Add(new Run($" : {ModifyAilmentsCommandWindow.Describe(command)}"));
@@ -506,11 +510,12 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll)
         {
             FactionCommandWindowBase dialog = type switch
             {
                 EventCommandType.Attack => new AttackCommandWindow(),
+                EventCommandType.Paperdoll => new DollCommandWindow(),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(),
@@ -706,11 +711,12 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll)
         {
             FactionCommandWindowBase dialog = command.Type switch
             {
                 EventCommandType.Attack => new AttackCommandWindow(command),
+                EventCommandType.Paperdoll => new DollCommandWindow(command),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(command),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(command),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(command),

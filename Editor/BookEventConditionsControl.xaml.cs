@@ -91,7 +91,7 @@ public partial class BookEventConditionsControl : UserControl
     public BookEventConditionsControl()
     {
         InitializeComponent();
-        TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix).Where(c => !CharacterTriggers.IsCharacterTrigger(c.Value)).ToList();
+        TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix).Where(c => !CharacterTriggers.IsCharacterTrigger(c.Value) && !DollTriggers.IsDollTrigger(c.Value)).ToList();
         CycleConditionCombo.ItemsSource = BuildChoices<CycleConditionType>();
         EventCompletedStateCombo.ItemsSource = new[] { "True", "False" };
     }
@@ -107,7 +107,7 @@ public partial class BookEventConditionsControl : UserControl
     {
         var current = Conditions?.TriggerConditionBased;
         TriggerConditionBasedCombo.ItemsSource = BuildChoices<BookTriggerConditionBased>(TriggerInProgressSuffix)
-            .Where(c => !excluded.Contains(c.Value) && !CharacterTriggers.IsCharacterTrigger(c.Value))
+            .Where(c => !excluded.Contains(c.Value) && !CharacterTriggers.IsCharacterTrigger(c.Value) && !DollTriggers.IsDollTrigger(c.Value))
             .ToList();
         if (current.HasValue)
         {
@@ -131,7 +131,7 @@ public partial class BookEventConditionsControl : UserControl
     {
         var current = Conditions?.TriggerConditionBased;
         TriggerConditionBasedCombo.ItemsSource = Enum.GetValues<BookTriggerConditionBased>()
-            .Where(v => !CharacterTriggers.IsCharacterTrigger(v))
+            .Where(v => !CharacterTriggers.IsCharacterTrigger(v) && (!DollTriggers.IsDollTrigger(v) || relabels.ContainsKey(v))) // a paperdoll part's window names its own
             .Select(v => relabels.TryGetValue(v, out string? label) ? EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, label) : new EnumChoice<BookTriggerConditionBased>(v, TriggerInProgressSuffix(v)))
             .ToList();
         if (current.HasValue)
@@ -152,7 +152,7 @@ public partial class BookEventConditionsControl : UserControl
             [BookTriggerConditionBased.ByExit] = "By Failed Picklock Container"
         };
         TriggerConditionBasedCombo.ItemsSource = Enum.GetValues<BookTriggerConditionBased>()
-            .Where(v => !CharacterTriggers.IsCharacterTrigger(v))
+            .Where(v => !CharacterTriggers.IsCharacterTrigger(v) && !DollTriggers.IsDollTrigger(v))
             .Select(v => relabels.TryGetValue(v, out string? label) ? EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, label) : new EnumChoice<BookTriggerConditionBased>(v, TriggerInProgressSuffix(v)))
             .ToList();
         if (current.HasValue)

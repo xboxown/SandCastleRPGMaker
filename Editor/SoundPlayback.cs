@@ -21,12 +21,39 @@ internal static class SoundPlayback
 
     /// <summary>Everything playing right now, so it can all be stopped at once (closing Game Test stops its music and sounds).</summary>
     private static readonly HashSet<WaveOutEvent> Playing = new();
+    /// <summary>Sounds that belong to something (a paperdoll's Play Sound), so that thing can stop them; and the ones looping until then.</summary>
+    private static readonly Dictionary<WaveOutEvent, object> Owners = new();
+    private static readonly HashSet<WaveOutEvent> Looping = new();
+
+    /// <summary>Plays a sound that belongs to <paramref name="owner"/> (it plays on wherever its owner's window is), looping until StopFor if asked.</summary>
+    public static bool TryPlayFor(object owner, ResourceDatabase resources, int resourceId, bool loop)
+    {
+        var entry = resources.Entries.FirstOrDefault(e => e.Id == resourceId);
+        if (entry is null) { LastError = $"sound #{resourceId} is not in the Sound list"; return false; }
+        if (!File.Exists(entry.FilePath)) { LastError = $"file not found: {entry.FilePath}"; return false; }
+        return Play(entry, entry.Volume, owner, loop);
+    }
+
+    /// <summary>Stops every sound that belongs to <paramref name="owner"/> (a Stop button).</summary>
+    public static void StopFor(object owner)
+    {
+        List<WaveOutEvent> owned;
+        lock (Playing)
+        {
+            owned = Owners.Where(kv => ReferenceEquals(kv.Value, owner)).Select(kv => kv.Key).ToList();
+            foreach (var waveOut in owned) Looping.Remove(waveOut);
+        }
+        foreach (var waveOut in owned)
+        {
+            try { waveOut.Stop(); } catch { /* already finishing */ }
+        }
+    }
 
     /// <summary>Stops every sound and piece of music still playing.</summary>
     public static void StopAll()
     {
         List<WaveOutEvent> playing;
-        lock (Playing) playing = Playing.ToList();
+        lock (Playing) { playing = Playing.ToList(); Looping.Clear(); }
         foreach (var waveOut in playing)
         {
             try { waveOut.Stop(); } catch { /* already finishing */ }
@@ -41,7 +68,9 @@ internal static class SoundPlayback
         return TryPlay(entry, volumeOverride ?? entry.Volume);
     }
 
-    public static bool TryPlay(ResourceEntry entry, double volume)
+    public static bool TryPlay(ResourceEntry entry, double volume) => Play(entry, volume, null, false);
+
+    private static bool Play(ResourceEntry entry, double volume, object? owner, bool loop)
     {
         try
         {
@@ -58,11 +87,23 @@ internal static class SoundPlayback
             waveOut.Init(reader);
             waveOut.PlaybackStopped += (_, _) =>
             {
-                lock (Playing) Playing.Remove(waveOut);
+                bool again;
+                lock (Playing) again = Looping.Contains(waveOut);
+                if (again)
+                {
+                    // Looping: from the start again, until its owner stops it.
+                    try { reader.Position = 0; waveOut.Play(); return; } catch { /* fall through and end it */ }
+                }
+                lock (Playing) { Playing.Remove(waveOut); Owners.Remove(waveOut); Looping.Remove(waveOut); }
                 waveOut.Dispose();
                 reader.Dispose();
             };
-            lock (Playing) Playing.Add(waveOut);
+            lock (Playing)
+            {
+                Playing.Add(waveOut);
+                if (owner is not null) Owners[waveOut] = owner;
+                if (loop) Looping.Add(waveOut);
+            }
             waveOut.Play();
             return true;
         }

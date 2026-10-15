@@ -63,6 +63,8 @@ public class DollPart
     public int Width { get; set; } = 32;
     public int Height { get; set; } = 32;
     public bool StartsVisible { get; set; } = true;
+    /// <summary>In play it can be dragged onto other parts (By Combined With A Part on them) - it goes back to its place when let go: a key part onto a keyhole.</summary>
+    public bool Draggable { get; set; }
     /// <summary>Its looks (Button: Normal, Pressed. Switch: one per position. Lid: Closed, Open. Light: Off, On. Slider: Track, Knob. Slot / Item area: a picture behind the items).</summary>
     public List<DollPartLook> Looks { get; set; } = new();
     /// <summary>The look it starts with (a Lid starting open = 1).</summary>
@@ -129,7 +131,7 @@ public class DollPart
 
     public DollPart Clone(int newId) => new()
     {
-        Id = newId, Name = Name, Kind = Kind, X = X, Y = Y, Width = Width, Height = Height, StartsVisible = StartsVisible,
+        Id = newId, Name = Name, Kind = Kind, X = X, Y = Y, Width = Width, Height = Height, StartsVisible = StartsVisible, Draggable = Draggable,
         Looks = Looks.Select(l => new DollPartLook { Name = l.Name, Sprite = new SpriteLink { SpriteGroup = l.Sprite.SpriteGroup, SpriteName = l.Sprite.SpriteName } }).ToList(),
         StartLook = StartLook, Covers = new List<int>(Covers), HidesWhatItCovers = HidesWhatItCovers,
         Accepts = Accepts.Select(a => new DollSlotFit

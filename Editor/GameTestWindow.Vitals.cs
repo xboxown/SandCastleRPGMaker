@@ -62,6 +62,7 @@ public partial class GameTestWindow
         _execContext.OnChangeFood = ChangeFoodCommand;
         _execContext.OnModifyAilment = ModifyAilmentCommand;
         _execContext.OnAttack = AttackCommand;
+        _execContext.OnPaperdoll = PaperdollCommand;
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)

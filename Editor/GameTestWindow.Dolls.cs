@@ -58,15 +58,22 @@ public partial class GameTestWindow
     private bool TryUseDoll(IHasDollState owner, WorldObject obj, Func<bool> fireUseEvent)
     {
         if (DollLook.DesignOf(obj, _objects) is not { } design) return false;
-        if (fireUseEvent()) return true;
+        // The object's own events can act on its paperdoll (Paperdoll command) - a radio's By Use could start it playing.
+        if (WithDoll(new DollContext { State = DollStateOf(owner, design), Design = design, Owner = owner, Obj = obj }, fireUseEvent)) return true;
         OpenDoll(owner, obj, design);
         return true;
     }
 
+    /// <summary>Made from the design the first time this copy is used; kept from then on (a design swapped in the Object Editor starts fresh).</summary>
+    private static DollState DollStateOf(IHasDollState owner, DollDesign design)
+    {
+        if (owner.DollRuntime is not { } state || state.DesignId != design.Id) owner.DollRuntime = state = DollState.StartOf(design);
+        return state;
+    }
+
     private void OpenDoll(IHasDollState owner, WorldObject obj, DollDesign design)
     {
-        // Made from the design the first time this copy is opened; kept from then on (a design swapped in the Object Editor starts fresh).
-        if (owner.DollRuntime is not { } state || state.DesignId != design.Id) owner.DollRuntime = state = DollState.StartOf(design);
+        var state = DollStateOf(owner, design);
         var existing = _openDolls.FirstOrDefault(g => ReferenceEquals(g.State, state));
         if (existing is not null) { BringDollToFront(existing); return; }
 
@@ -288,17 +295,80 @@ public partial class GameTestWindow
 
     // ================= Events =================
 
-    /// <summary>Runs a part's own event pages for a trigger - counted per copy of the object and per part.</summary>
-    private bool FireDollPartEvent(DollState state, DollPart part, BookTriggerConditionBased trigger, string what)
+    /// <summary>The paperdoll a Paperdoll command acts on: the one whose part's event is running, or the paperdoll of the object whose own event is running.</summary>
+    private sealed class DollContext
     {
-        if (part.EventPages.Count == 0) return false;
-        return TryFireEventPages((state, part.Id), part.EventPages, trigger, -1, what);
+        public required DollState State;
+        public required DollDesign Design;
+        public IHasDollState? Owner;
+        public WorldObject? Obj;
+        /// <summary>By Combined With An Item: the item dropped on the part (still where it came from).</summary>
+        public DragOrigin? Combined;
     }
 
-    private void FireDollPartEvent(DollState state, int partId, BookTriggerConditionBased trigger)
+    private DollContext? _dollContext;
+    /// <summary>The last one set: commands after a Show Text run once its box is read, when the event that started them has returned.</summary>
+    private DollContext? _lastDollContext;
+
+    private T WithDoll<T>(DollContext context, Func<T> run)
+    {
+        var previous = _dollContext;
+        _dollContext = _lastDollContext = context;
+        try { return run(); }
+        finally { _dollContext = previous; }
+    }
+
+    /// <summary>
+    /// Runs a part's own event pages for a trigger - counted per copy of the
+    /// object and per part. A page set to an item (Put In, Taken Out,
+    /// Combined With An Item) runs only for that item; one set to a part
+    /// (Combined With A Part) only for that part.
+    /// </summary>
+    private bool FireDollPartEvent(DollState state, DollPart part, BookTriggerConditionBased trigger, string what,
+        ItemReference? item = null, int combinedPartId = -1, DragOrigin? combined = null)
+    {
+        if (part.EventPages.Count == 0) return false;
+        var pages = part.EventPages.Where(page =>
+        {
+            var conditions = page.Conditions;
+            if (conditions.TriggerConditionBased != trigger) return true; // other pages decide by their own conditions
+            if (trigger is BookTriggerConditionBased.ByDropItem or BookTriggerConditionBased.ByPickupItem or BookTriggerConditionBased.ByCombineItem
+                && conditions.TriggerItemReference is { ItemId: >= 0 } wanted && item is not null)
+                return wanted.Category == item.Category && wanted.ItemId == item.ItemId;
+            if (trigger == BookTriggerConditionBased.ByCombinePart && conditions.CombinedPartId >= 0) return conditions.CombinedPartId == combinedPartId;
+            return true;
+        }).ToList();
+        var gump = _openDolls.FirstOrDefault(g => ReferenceEquals(g.State, state));
+        var design = gump?.Design ?? _objects.DollDesigns.FirstOrDefault(d => d.Id == state.DesignId);
+        if (design is null) return false;
+        var context = new DollContext { State = state, Design = design, Owner = HolderOf(state, gump?.Owner), Obj = gump?.Obj, Combined = combined };
+        return WithDoll(context, () => TryFireEventPages((state, part.Id), pages, trigger, -1, what));
+    }
+
+    private bool HasPages(DollPart part, BookTriggerConditionBased trigger) =>
+        part.EventPages.Any(p => p.Conditions.TriggerConditionBased == trigger && p.Commands.Count > 0);
+
+    /// <summary>
+    /// Whatever holds this paperdoll now - it travels with its object, which
+    /// may have been picked up, put in a pack or a chest, or set down again
+    /// since its window opened.
+    /// </summary>
+    private IHasDollState? HolderOf(DollState state, IHasDollState? lastKnown)
+    {
+        if (lastKnown is not null && ReferenceEquals(lastKnown.DollRuntime, state) && (lastKnown is not ObjectInstance placed || _map.Objects.Contains(placed))) return lastKnown;
+        if (_map.Objects.FirstOrDefault(o => ReferenceEquals(o.DollRuntime, state)) is { } onMap) return onMap;
+        IEnumerable<InventoryItemInstance> Within(IEnumerable<InventoryItemInstance> items) =>
+            items.SelectMany(i => new[] { i }.Concat(Within(i.Contents)).Concat(i.DollRuntime is { } inner ? Within(inner.Parts.Values.SelectMany(p => p.Items)) : Enumerable.Empty<InventoryItemInstance>()));
+        var carried = AllLivingCharacters(includeDead: true).SelectMany(c => c.Inventory)
+            .Concat(_map.Items.SelectMany(i => i.Contents))
+            .Concat(_map.Objects.Where(o => o.DollRuntime is not null).SelectMany(o => o.DollRuntime!.Parts.Values.SelectMany(p => p.Items)));
+        return Within(carried).FirstOrDefault(i => ReferenceEquals(i.DollRuntime, state));
+    }
+
+    private void FireDollPartEvent(DollState state, int partId, BookTriggerConditionBased trigger, ItemReference? item)
     {
         if (_objects.DollDesigns.FirstOrDefault(d => d.Id == state.DesignId)?.Part(partId) is { } part)
-            FireDollPartEvent(state, part, trigger, $"\"{part.Name}\" fired ({trigger})");
+            FireDollPartEvent(state, part, trigger, $"\"{part.Name}\" fired ({trigger})", item);
     }
 
     // ================= Clicks =================
@@ -410,7 +480,13 @@ public partial class GameTestWindow
         return true;
     }
 
-    // ================= Dropping in =================
+    // ================= Dropping in, combining =================
+
+    /// <summary>The front-most part under a point of the paperdoll that's shown and in reach (optionally only some kinds, never one part).</summary>
+    private DollPart? DollPartAt(OpenDollGump gump, Point point, Func<DollPart, bool>? only = null, int excludingId = -1) =>
+        gump.Design.Parts.AsEnumerable().Reverse().FirstOrDefault(p =>
+            p.Id != excludingId && (only?.Invoke(p) ?? true) && gump.State.Of(p).Visible && !IsUnderClosedLid(gump, p)
+            && new Rect(new Point(p.X, p.Y), DollLook.SizeOf(p, gump.State.Of(p).Look, _sprites)).Contains(point));
 
     private bool DropOnDoll(DragOrigin origin, PointerSession session, OpenDollGump gump, InteractionTarget? hitTarget, Point screen)
     {
@@ -418,20 +494,29 @@ public partial class GameTestWindow
         var design = gump.Design;
         var point = PaperdollGumpsCanvas.TranslatePoint(screen, gump.PartsCanvas);
         var topLeft = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), gump.PartsCanvas);
-        var part = hitTarget switch
+        var hitPart = hitTarget switch
         {
             DollPartTarget t when ReferenceEquals(t.Gump, gump) => design.Part(t.PartId),
             DollItemTarget t when ReferenceEquals(t.Gump, gump) => design.Part(t.PartId),
             _ => null
         };
-        if (part is not { Kind: DollPartKind.Slot or DollPartKind.ItemArea })
-        {
-            // Dropped near rather than exactly on it: the front-most open slot or area under the point.
-            part = design.Parts.AsEnumerable().Reverse().FirstOrDefault(p =>
-                p.Kind is DollPartKind.Slot or DollPartKind.ItemArea && gump.State.Of(p).Visible && !IsUnderClosedLid(gump, p)
-                && new Rect(p.X, p.Y, Math.Max(4, p.Width), Math.Max(4, p.Height)).Contains(point));
-        }
         string name = PayloadName(origin);
+        var (category, itemId) = PayloadIdentity(origin);
+        var identity = new ItemReference { Category = category, ItemId = itemId };
+
+        // Combining first: a part programmed for "By Combined With An Item" (this item, or any) takes it - a key on a keyhole, a battery on the robot.
+        var combineOn = hitPart ?? DollPartAt(gump, point, p => HasPages(p, BookTriggerConditionBased.ByCombineItem));
+        bool fromThatPart = origin is DollItemOrigin own && ReferenceEquals(own.State, gump.State) && own.PartId == combineOn?.Id;
+        if (combineOn is not null && !fromThatPart && HasPages(combineOn, BookTriggerConditionBased.ByCombineItem)
+            && FireDollPartEvent(gump.State, combineOn, BookTriggerConditionBased.ByCombineItem, $"\"{combineOn.Name}\": \"{name}\" combined.", identity, combined: origin))
+        {
+            // The item stays where it came from unless the event used it up (Paperdoll > Use up the item just combined).
+            RefreshAfterMove();
+            return false;
+        }
+
+        var part = hitPart is { Kind: DollPartKind.Slot or DollPartKind.ItemArea } ? hitPart
+            : DollPartAt(gump, point, p => p.Kind is DollPartKind.Slot or DollPartKind.ItemArea); // dropped near rather than exactly on it
         if (part is null) { Refuse(MousePointerKind.WontFit, $"\"{name}\" doesn't go there."); return false; }
         var runtime = gump.State.Of(part);
 
@@ -451,7 +536,6 @@ public partial class GameTestWindow
             Refuse(MousePointerKind.RedX, $"\"{name}\" can't go inside itself.");
             return false;
         }
-        var (category, itemId) = PayloadIdentity(origin);
         if (part.Kind == DollPartKind.Slot && DollLook.FitFor(part, category, itemId) is null)
         {
             Refuse(MousePointerKind.WontFit, $"\"{name}\" doesn't fit in \"{part.Name}\".");
@@ -472,7 +556,171 @@ public partial class GameTestWindow
         PlayDropSound();
         StatusText.Text = $"You put \"{name}\" into \"{part.Name}\".";
         RefreshAfterMove();
-        if (_openDolls.Contains(gump)) FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByDropItem, $"\"{part.Name}\": \"{name}\" put in.");
+        if (_openDolls.Contains(gump)) FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByDropItem, $"\"{part.Name}\": \"{name}\" put in.", identity);
+        return true;
+    }
+
+    // ================= Dragging a part onto another =================
+
+    /// <summary>A part being dragged onto another (PaperDoll Editor: "Can be dragged onto other parts"). It never leaves its place - it goes back when let go.</summary>
+    private sealed record DollPartOrigin(OpenDollGump Gump, int PartId) : DragOrigin;
+
+    private bool StartDollPartDrag(PointerSession session, DollPartTarget target, DollPart part)
+    {
+        var gump = target.Gump;
+        var runtime = gump.State.Of(part);
+        var sprite = DollLook.LookSprite(part, runtime.Look, _sprites) ?? DollLook.LookSprite(part, 0, _sprites);
+        if (sprite is null) return false; // nothing to see being dragged
+        CancelPendingIdentify();
+        _lastClickTarget = null;
+        var first = DollLook.Frame(sprite);
+        var ghost = new AlphaHitImage { Width = first?.PixelWidth ?? 32, Height = first?.PixelHeight ?? 32, Stretch = Stretch.Fill, IsHitTestVisible = false };
+        RenderOptions.SetBitmapScalingMode(ghost, BitmapScalingMode.NearestNeighbor);
+        session.GhostAnimators.Add(new SpriteAnimator(sprite, ghost, _resources));
+        double scale = DollGumpScale;
+        ghost.RenderTransform = new ScaleTransform(scale, scale);
+        Panel.SetZIndex(ghost, 10000);
+        session.NativeWidth = ghost.Width;
+        session.NativeHeight = ghost.Height;
+        var source = DollPartVisual(gump, part.Id);
+        var grab = new Point(ghost.Width * scale / 2, ghost.Height * scale / 2);
+        if (source is not null && source.IsVisible)
+        {
+            var sourceTopLeft = source.TranslatePoint(new Point(0, 0), PaperdollGumpsCanvas);
+            grab = new Point(Math.Clamp(session.PressPoint.X - sourceTopLeft.X, 0, ghost.Width * scale), Math.Clamp(session.PressPoint.Y - sourceTopLeft.Y, 0, ghost.Height * scale));
+        }
+        session.GrabOffset = grab;
+        PaperdollGumpsCanvas.Children.Add(ghost);
+        session.Ghost = ghost;
+        if (source is not null) { source.Visibility = Visibility.Hidden; session.HiddenSource = source; }
+        session.Origin = new DollPartOrigin(gump, part.Id);
+        CaptureMouse();
+        return true;
+    }
+
+    /// <summary>A part let go over another part of the same paperdoll: that part's By Combined With A Part runs. Always false - the dragged part goes back to its place.</summary>
+    private bool DropDollPart(DollPartOrigin origin, Point screen)
+    {
+        var gump = origin.Gump;
+        if (!_openDolls.Contains(gump) || gump.Design.Part(origin.PartId) is not { } dragged) return false;
+        var point = PaperdollGumpsCanvas.TranslatePoint(screen, gump.PartsCanvas);
+        if (HitTestGumpLayer(screen, out var hitGump, out _) && !ReferenceEquals(hitGump, gump)) return false; // over another window
+        var target = DollPartAt(gump, point, excludingId: dragged.Id);
+        if (target is null) return false;
+        if (!FireDollPartEvent(gump.State, target, BookTriggerConditionBased.ByCombinePart, $"\"{dragged.Name}\" combined with \"{target.Name}\".", combinedPartId: dragged.Id))
+            StatusText.Text = $"\"{dragged.Name}\" and \"{target.Name}\" - nothing happens.";
+        if (_openDolls.Contains(gump)) RefreshDollGump(gump);
+        return false;
+    }
+
+    // ================= The Paperdoll command =================
+
+    /// <summary>Paperdoll (event command): acts on the paperdoll of the event that's running (DollCommandWindow lists the actions).</summary>
+    private bool PaperdollCommand(EventCommand command)
+    {
+        var context = _dollContext ?? _lastDollContext;
+        if (context is null) { StatusText.Text = "Paperdoll command: no paperdoll here (it runs from a paperdoll part's events, or an object's that opens one)."; return false; }
+        var state = context.State;
+        var design = context.Design;
+        var part = int.TryParse(command.Get("PartId"), out int partId) ? design.Part(partId) : null;
+        var runtime = part is null ? null : state.Of(part);
+        string action = command.Get("Action");
+        bool needsPart = action is not ("UseUpCombined" or "PlaySound" or "StopSounds" or "Close" or "TurnInto");
+        if (needsPart && (part is null || runtime is null)) { StatusText.Text = $"Paperdoll command: \"{design.Name}\" has no part \"{command.Get("PartName")}\"."; return false; }
+        int.TryParse(command.Get("Value"), out int value);
+        switch (action)
+        {
+            case "SetLook":
+                runtime!.Look = Math.Clamp(int.TryParse(command.Get("Look"), out int look) ? look : 0, 0, Math.Max(0, part!.Looks.Count - 1));
+                break;
+            case "NextLook":
+                if (part!.Looks.Count > 0) runtime!.Look = (runtime.Look + 1) % part.Looks.Count;
+                break;
+            case "Show": runtime!.Visible = true; break;
+            case "Hide": runtime!.Visible = false; break;
+            case "SetValue": runtime!.Value = Math.Clamp(value, part!.Min, Math.Max(part.Min, part.Max)); break;
+            case "AddValue": runtime!.Value = Math.Clamp(runtime.Value + value, part!.Min, Math.Max(part.Min, part.Max)); break;
+            case "OpenLid": runtime!.Look = 1; break;
+            case "CloseLid": runtime!.Look = 0; break;
+            case "PutItem":
+            {
+                if (!int.TryParse(command.Get("ItemId"), out int itemId) || !Enum.TryParse<ReferencedItemCategory>(command.Get("ItemCategory"), out var category)) return false;
+                if (runtime!.Items.Count >= Math.Max(1, part!.Capacity)) { StatusText.Text = $"\"{part.Name}\" is full."; return false; }
+                runtime.Items.Add(new InventoryItemInstance { InstanceId = state.NextItemInstanceId++, Category = category, ItemId = itemId, Quantity = 1, ContainerX = UnplacedSpot, ContainerY = UnplacedSpot });
+                break;
+            }
+            case "UseUpItems": runtime!.Items.Clear(); break;
+            case "UseUpCombined":
+            {
+                if (context.Combined is not { } combined || !CombinedStillThere(combined)) return false;
+                UseUpOne(combined); // one of a stack; the last one is gone
+                break;
+            }
+            case "ToVariable":
+            {
+                string name = command.Get("VariableName");
+                if (string.IsNullOrEmpty(name)) return false;
+                double result = command.Get("State") switch
+                {
+                    "Look" => runtime!.Look + 1,
+                    "Value" => runtime!.Value,
+                    "Items" => runtime!.Items.Count,
+                    _ => runtime!.Visible ? 1 : 0
+                };
+                _execContext.SetVariable(name, result);
+                break;
+            }
+            case "PlaySound":
+                // Owned by this copy's paperdoll, not its window: it plays on after the paperdoll closes, until a Stop.
+                if (!int.TryParse(command.Get("SoundResourceId"), out int soundId)) return false;
+                SoundPlayback.TryPlayFor(state, _resources, soundId, command.Get("Loop") == "True");
+                break;
+            case "StopSounds":
+                SoundPlayback.StopFor(state);
+                break;
+            case "Close":
+                foreach (var open in _openDolls.Where(g => ReferenceEquals(g.State, state)).ToList()) CloseDollGump(open);
+                return true;
+            case "TurnInto":
+                return TurnDollOwnerInto(context, command);
+            default:
+                return false;
+        }
+        foreach (var open in _openDolls.Where(g => ReferenceEquals(g.State, state)).ToList()) RefreshDollGump(open);
+        return true;
+    }
+
+    private bool CombinedStillThere(DragOrigin origin) => origin switch
+    {
+        MapItemOrigin m => _map.Items.Contains(m.Item),
+        DollItemOrigin d => DollItemStillThere(d),
+        _ => ToolStillThere(origin)
+    };
+
+    /// <summary>Turn the object into another object: this copy becomes it where it is (on the map or carried) - the machine with every part fitted becomes the finished machine. Its paperdoll closes; the new object starts with its own.</summary>
+    private bool TurnDollOwnerInto(DollContext context, EventCommand command)
+    {
+        if (!int.TryParse(command.Get("ObjectId"), out int objectId) || _objects.Objects.FirstOrDefault(o => o.Id == objectId) is not { } becomes) return false;
+        var holder = HolderOf(context.State, context.Owner);
+        foreach (var open in _openDolls.Where(g => ReferenceEquals(g.State, context.State)).ToList()) CloseDollGump(open);
+        SoundPlayback.StopFor(context.State);
+        string was = context.Obj?.Name ?? "It";
+        switch (holder)
+        {
+            case ObjectInstance placed:
+                placed.ObjectId = becomes.Id;
+                placed.DollRuntime = null;
+                RefreshObjectLook(placed);
+                break;
+            case InventoryItemInstance carried:
+                carried.ItemId = becomes.Id;
+                carried.DollRuntime = null;
+                RefreshAfterMove();
+                break;
+            default:
+                return false;
+        }
+        StatusText.Text = $"\"{was}\" becomes \"{becomes.Name}\".";
         return true;
     }
 }

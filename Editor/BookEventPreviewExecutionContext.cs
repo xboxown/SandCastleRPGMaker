@@ -53,6 +53,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Func<string, string, bool, bool>? OnModifyAilment { get; set; }
     /// <summary>Attack: (attacker, target) - each "Activator", "Player" or a character id.</summary>
     public Func<string, string, bool>? OnAttack { get; set; }
+    /// <summary>Paperdoll: the whole command (the game knows which paperdoll is running it).</summary>
+    public Func<EventCommand, bool>? OnPaperdoll { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -142,6 +144,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 string who = command.Get("Who");
                 return OnChangeFood(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Operation"), amount);
             }
+            case EventCommandType.Paperdoll:
+                return OnPaperdoll is not null && OnPaperdoll(command);
             case EventCommandType.ModifyAilments:
             {
                 if (OnModifyAilment is null) return false;

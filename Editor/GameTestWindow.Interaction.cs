@@ -466,6 +466,8 @@ public partial class GameTestWindow
                 origin = new ContainerOrigin(ci.Gump.PlacedItem, ci.Gump.Data, ci.Item);
                 source = FindTaggedVisual(ci.Gump.ItemsCanvas, ci);
                 break;
+            case DollPartTarget dp when _openDolls.Contains(dp.Gump) && dp.Gump.Design.Part(dp.PartId) is { Draggable: true } draggedPart && !IsUnderClosedLid(dp.Gump, draggedPart):
+                return StartDollPartDrag(session, dp, draggedPart); // a key part onto a keyhole: it goes back when let go
             case DollItemTarget di when _openDolls.Contains(di.Gump) && DollItemStillThere(new DollItemOrigin(di.Gump.State, di.PartId, di.Item)):
                 if (!CanTakeFromDoll(di.Gump)) return false;
                 origin = new DollItemOrigin(di.Gump.State, di.PartId, di.Item);
@@ -538,12 +540,13 @@ public partial class GameTestWindow
         try { dropped = TryDrop(session.Origin!, session, screen); }
         finally { EndDragVisuals(session); }
         if (dropped) CheckTheft(session.Origin!); // drag.cc drop: "Check for theft"
-        if (dropped && session.Origin is DollItemOrigin fromDoll) FireDollPartEvent(fromDoll.State, fromDoll.PartId, BookTriggerConditionBased.ByPickupItem); // taken out of a paperdoll's slot
+        if (dropped && session.Origin is DollItemOrigin fromDoll) FireDollPartEvent(fromDoll.State, fromDoll.PartId, BookTriggerConditionBased.ByPickupItem, new ItemReference { Category = fromDoll.Item.Category, ItemId = fromDoll.Item.ItemId }); // taken out of a paperdoll's slot
     }
 
     /// <summary>Exult Dragging_info::drop: a gump under the pointer gets the drop (drop_on_gump); otherwise the map does (drop_on_map). False = rejected; nothing has changed anywhere, so the item is simply still at its origin.</summary>
     private bool TryDrop(DragOrigin origin, PointerSession session, Point screen)
     {
+        if (origin is DollPartOrigin partOrigin) return DropDollPart(partOrigin, screen); // a paperdoll part dragged onto another
         if (HitTestGumpLayer(screen, out var gump, out var hitTarget))
         {
             return gump switch

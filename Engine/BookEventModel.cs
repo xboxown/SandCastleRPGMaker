@@ -29,7 +29,21 @@ public enum BookTriggerConditionBased
     /// <summary>This character caught an ailment (poisoned, asleep, paralyzed, charmed, cursed).</summary>
     ByAilmentEffect,
     /// <summary>This character died.</summary>
-    ByDeath
+    ByDeath,
+
+    // ---- Paperdoll parts only (PaperDoll Editor > a part's events) ----
+    /// <summary>An item (from the world, a pack, or the paperdoll itself) was dropped on this part.</summary>
+    ByCombineItem,
+    /// <summary>Another part of the paperdoll (one that can be dragged) was dropped on this part.</summary>
+    ByCombinePart
+}
+
+public static class DollTriggers
+{
+    /// <summary>The triggers only a paperdoll part's events use.</summary>
+    public static readonly BookTriggerConditionBased[] All = { BookTriggerConditionBased.ByCombineItem, BookTriggerConditionBased.ByCombinePart };
+
+    public static bool IsDollTrigger(BookTriggerConditionBased trigger) => All.Contains(trigger);
 }
 
 public static class CharacterTriggers
@@ -175,6 +189,9 @@ public class BookEventConditions
 
     /// <summary>Which specific item this trigger targets - only relevant/visible when TriggerConditionBased isn't Always.</summary>
     public ItemReference? TriggerItemReference { get; set; }
+
+    /// <summary>A paperdoll part's By Combined With A Part: only when this part (by id) is dragged onto it (-1 = any part).</summary>
+    public int CombinedPartId { get; set; } = -1;
 
     // Checkmark 1: In A Condition
     public bool ConditionInACondition { get; set; }
