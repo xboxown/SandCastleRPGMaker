@@ -41,6 +41,7 @@
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Party / Item" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Give Item..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Exchange Currency..." Margin="0,0,0,4" Click="ExchangeCurrency_Click" ToolTip="A money changer: the party's money of one currency into another, at the Currency Editor's rate"/>
                         <Button Content="Remove Item..." Margin="0,0,0,12" IsEnabled="False"/>
 
                         <TextBlock Text="Actor" FontWeight="Bold" Margin="0,0,0,4"/>

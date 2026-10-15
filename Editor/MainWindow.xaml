@@ -69,9 +69,6 @@
 
         <!-- Toolbar -->
         <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" IsEnabled="False">
-            <TextBlock Text="Tileset:" VerticalAlignment="Center" Margin="4,0,2,0"/>
-            <ComboBox x:Name="TilesetCombo" Width="160" DisplayMemberPath="Name" SelectionChanged="TilesetCombo_SelectionChanged"/>
-            <Separator/>
             <TextBlock Text="Tile W:" VerticalAlignment="Center" Margin="4,0,2,0"/>
             <TextBox x:Name="TileWidthBox" Text="32" Width="40" IsReadOnly="True"/>
             <TextBlock Text="Tile H:" VerticalAlignment="Center" Margin="4,0,2,0"/>
@@ -112,6 +109,10 @@
             <TabControl x:Name="PaletteTabs" Grid.Column="0">
                 <TabItem Header="Tileset">
                     <DockPanel LastChildFill="True">
+                        <DockPanel DockPanel.Dock="Top" Margin="6,6,6,0">
+                            <TextBlock Text="Tilesheet(s):" VerticalAlignment="Center" Margin="0,0,4,0"/>
+                            <ComboBox x:Name="TilesetCombo" DisplayMemberPath="Name" SelectionChanged="TilesetCombo_SelectionChanged" ToolTip="Every tilesheet of the Sprite Editor's Tileset group. A map can use any number of them: pick one to paint with its tiles - the tiles already painted keep theirs. Made, renamed and deleted in the Sprite Editor."/>
+                        </DockPanel>
                         <TextBlock DockPanel.Dock="Top" Text="Click a tile to select it" Margin="6" FontWeight="Bold"/>
                         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Auto">
                             <Canvas x:Name="PaletteCanvas" Background="#FF2B2B2B"/>

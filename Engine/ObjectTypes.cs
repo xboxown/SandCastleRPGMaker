@@ -394,8 +394,30 @@ public class Currency
     public double Value { get; set; } = 1;
 }
 
+/// <summary>What one of a currency buys of another at a money changer (the land's own rate), and the changer's cut.</summary>
+public class ExchangeRate
+{
+    public int FromId { get; set; }
+    public int ToId { get; set; }
+    /// <summary>How many of the other one 1 of this buys.</summary>
+    public double Rate { get; set; } = 1;
+    /// <summary>The money changer keeps this much (0-100%).</summary>
+    public double CutPercent { get; set; }
+}
+
 public class CurrencyDatabase
 {
     public List<Currency> Currencies { get; set; } = new();
+    /// <summary>Exchange rates between currencies (Currency Editor); a pair with none set changes by the currencies' values.</summary>
+    public List<ExchangeRate> Rates { get; set; } = new();
     public int GetNextId() => Currencies.Count == 0 ? 1 : Currencies.Max(c => c.Id) + 1;
+
+    /// <summary>How many of "to" one "from" buys, and the changer's cut: its own rate, else the other way round's, else by value.</summary>
+    public (double Rate, double CutPercent) RateOf(int fromId, int toId)
+    {
+        if (Rates.FirstOrDefault(r => r.FromId == fromId && r.ToId == toId) is { Rate: > 0 } own) return (own.Rate, Math.Clamp(own.CutPercent, 0, 100));
+        if (Rates.FirstOrDefault(r => r.FromId == toId && r.ToId == fromId) is { Rate: > 0 } back) return (1 / back.Rate, Math.Clamp(back.CutPercent, 0, 100));
+        double from = Currencies.FirstOrDefault(c => c.Id == fromId)?.Value ?? 1, to = Currencies.FirstOrDefault(c => c.Id == toId)?.Value ?? 1;
+        return (to > 0 ? from / to : 1, 0);
+    }
 }

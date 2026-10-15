@@ -43,6 +43,8 @@ internal static class ProjectSession
     public static Func<int, (int X, int Y)?>? PlacedSpotProvider;
     /// <summary>The zones of the open map (Map Editor > Mode > Zones), or null when no map is open.</summary>
     public static Func<List<MapZone>?>? ZonesProvider;
+    /// <summary>A painted tile's picture from any of the open map's tilesheets (the game's tiles from a map's second, third... sheet).</summary>
+    public static Func<int, System.Windows.Media.Imaging.BitmapSource?>? TileSourceProvider;
     /// <summary>The project's System Settings.</summary>
     public static Func<SystemSettings>? SettingsProvider;
     /// <summary>System Settings > Sounds: one opening sound for every paperdoll - each one's own picker is then greyed out.</summary>

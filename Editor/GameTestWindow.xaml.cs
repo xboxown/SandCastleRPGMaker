@@ -308,14 +308,12 @@ public partial class GameTestWindow : Window
                 int tileIndex = ground.GetTile(x, y, _map.Width);
                 if (tileIndex < 0) continue;
 
-                int col = tileIndex % _columns;
-                int row = tileIndex / _columns;
                 var image = new Image
                 {
                     Width = _tileWidth,
                     Height = _tileHeight,
                     IsHitTestVisible = false,
-                    Source = new CroppedBitmap(_tilesetBitmap, new Int32Rect(col * _tileWidth, row * _tileHeight, _tileWidth, _tileHeight))
+                    Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
                 };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                 Canvas.SetLeft(image, x * _tileWidth);
@@ -2432,6 +2430,22 @@ public partial class GameTestWindow : Window
     {
         int id = _systemSettings.Sounds.NavigateSoundId >= 0 ? _systemSettings.Sounds.NavigateSoundId : ownSoundId;
         if (id >= 0) SoundPlayback.TryPlay(_resources, id);
+    }
+
+    /// <summary>A painted tile's picture: the map's first sheet here; its other sheets through the editor.</summary>
+    private System.Windows.Media.Imaging.BitmapSource? TileSource(int tileIndex)
+    {
+        if (TileSheets.Slot(tileIndex) > 0) return ProjectSession.TileSourceProvider?.Invoke(tileIndex);
+        int col = tileIndex % _columns, row = tileIndex / _columns;
+        if ((col + 1) * _tileWidth > _tilesetBitmap.PixelWidth || (row + 1) * _tileHeight > _tilesetBitmap.PixelHeight) return null;
+        return new CroppedBitmap(_tilesetBitmap, new Int32Rect(col * _tileWidth, row * _tileHeight, _tileWidth, _tileHeight));
+    }
+
+    /// <summary>A painted tile's properties, from its own sheet.</summary>
+    private TileTypeProperties TilePropertiesOf(int tileIndex)
+    {
+        string sheet = _map.Tileset.SheetNameOf(tileIndex);
+        return _tileProperties.GetOrCreate(sheet.Length > 0 ? sheet : _tilesetSpriteName, TileSheets.Local(tileIndex));
     }
 
     private void PlayOpenSound(int soundId, string what)

@@ -395,7 +395,7 @@ public partial class GameTestWindow
             for (int x = foot.Left; x < foot.Right; x++)
             {
                 int tileIndex = _map.Layers[0].GetTile(x / UnitsPerTileX, y / UnitsPerTileY, _map.Width);
-                if (tileIndex >= 0 && !_tileProperties.GetOrCreate(_tilesetSpriteName, tileIndex).Walkable) return false;
+                if (tileIndex >= 0 && !TilePropertiesOf(tileIndex).Walkable) return false;
             }
         }
         return true;

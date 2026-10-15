@@ -19,6 +19,25 @@ public class TilesetDefinition
     /// the old direct-image-file path (pre-existing maps, or a fallback).
     /// </summary>
     public string TilesetSpriteName { get; set; } = string.Empty;
+
+    /// <summary>More tilesheets painted on this map (Tileset tab > Tilesheet(s)) - sheet 2, 3... A tile from one of them is numbered sheet x TileSheets.Block + its number in its sheet; the first sheet's tiles keep their own numbers.</summary>
+    public List<string> ExtraSheetNames { get; set; } = new();
+
+    /// <summary>The tilesheet a painted tile comes from ("" if that sheet is gone).</summary>
+    public string SheetNameOf(int tileIndex)
+    {
+        int slot = TileSheets.Slot(tileIndex);
+        return slot == 0 ? TilesetSpriteName : slot - 1 < ExtraSheetNames.Count ? ExtraSheetNames[slot - 1] : string.Empty;
+    }
+}
+
+/// <summary>Tile numbers across a map's tilesheets: sheet x Block + the tile's number in its sheet (sheet 0 = the map's first).</summary>
+public static class TileSheets
+{
+    public const int Block = 100000;
+    public static int Slot(int tileIndex) => tileIndex < 0 ? 0 : tileIndex / Block;
+    public static int Local(int tileIndex) => tileIndex < 0 ? tileIndex : tileIndex % Block;
+    public static int Make(int slot, int local) => slot * Block + local;
 }
 
 /// <summary>

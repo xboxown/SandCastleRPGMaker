@@ -47,7 +47,9 @@ public enum EventCommandType
     /// <summary>Paperdoll: changes a paperdoll's parts (look, shown, value, lid, what's inside), plays or stops its sounds, closes it, or turns its object into another object (PaperDoll Editor).</summary>
     Paperdoll,
     /// <summary>Sleep On Bed: the main character walks to a bed and lies down on it, as double-clicking it does.</summary>
-    SleepOnBed
+    SleepOnBed,
+    /// <summary>Exchange Currency: a money changer changes the party's money of one currency into another (Currency Editor rates).</summary>
+    ExchangeCurrency
 }
 
 /// <summary>

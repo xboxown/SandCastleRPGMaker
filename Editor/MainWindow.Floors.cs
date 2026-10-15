@@ -112,7 +112,7 @@ public partial class MainWindow
                         Width = _tileset.TileWidth,
                         Height = _tileset.TileHeight,
                         IsHitTestVisible = false,
-                        Source = new CroppedBitmap(_tilesetBitmap, new Int32Rect(tileIndex % _paletteColumns * _tileset.TileWidth, tileIndex / _paletteColumns * _tileset.TileHeight, _tileset.TileWidth, _tileset.TileHeight))
+                        Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                     double shift = LowerFloorShift(_currentFloor - floor);

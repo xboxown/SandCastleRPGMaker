@@ -282,6 +282,10 @@ public partial class EventEditorControl : UserControl
         {
             block.Inlines.Add(new Run($" : {FoodLevelCommandWindow.Describe(command)}"));
         }
+        else if (command.Type == EventCommandType.ExchangeCurrency)
+        {
+            block.Inlines.Add(new Run($" : {ExchangeCurrencyCommandWindow.Describe(command)}"));
+        }
         else if (command.Type == EventCommandType.SleepOnBed)
         {
             block.Inlines.Add(new Run($" : {SleepOnBedCommandWindow.Describe(command)}"));
@@ -514,13 +518,14 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll or EventCommandType.SleepOnBed)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll or EventCommandType.SleepOnBed or EventCommandType.ExchangeCurrency)
         {
             FactionCommandWindowBase dialog = type switch
             {
                 EventCommandType.Attack => new AttackCommandWindow(),
                 EventCommandType.Paperdoll => new DollCommandWindow(),
                 EventCommandType.SleepOnBed => new SleepOnBedCommandWindow(),
+                EventCommandType.ExchangeCurrency => new ExchangeCurrencyCommandWindow(),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(),
@@ -716,13 +721,14 @@ public partial class EventEditorControl : UserControl
             }
         }
         else if (command.Type is EventCommandType.ChangeFactionRelationship or EventCommandType.ChangeFaction or EventCommandType.Teleport or EventCommandType.ChangeBehavior
-                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll or EventCommandType.SleepOnBed)
+                 or EventCommandType.ChangeFoodLevel or EventCommandType.ModifyAilments or EventCommandType.Attack or EventCommandType.Paperdoll or EventCommandType.SleepOnBed or EventCommandType.ExchangeCurrency)
         {
             FactionCommandWindowBase dialog = command.Type switch
             {
                 EventCommandType.Attack => new AttackCommandWindow(command),
                 EventCommandType.Paperdoll => new DollCommandWindow(command),
                 EventCommandType.SleepOnBed => new SleepOnBedCommandWindow(command),
+                EventCommandType.ExchangeCurrency => new ExchangeCurrencyCommandWindow(command),
                 EventCommandType.ChangeFoodLevel => new FoodLevelCommandWindow(command),
                 EventCommandType.ModifyAilments => new ModifyAilmentsCommandWindow(command),
                 EventCommandType.ChangeFaction => new ChangeFactionCommandWindow(command),

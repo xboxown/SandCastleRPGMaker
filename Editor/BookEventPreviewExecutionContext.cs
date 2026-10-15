@@ -57,6 +57,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Func<EventCommand, bool>? OnPaperdoll { get; set; }
     /// <summary>Sleep On Bed: ("Under" or "Nearest").</summary>
     public Func<string, bool>? OnSleepOnBed { get; set; }
+    /// <summary>Exchange Currency: (from currency id, to currency id, "All" or a number).</summary>
+    public Func<int, int, string, bool>? OnExchangeCurrency { get; set; }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -146,6 +148,9 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 string who = command.Get("Who");
                 return OnChangeFood(string.IsNullOrEmpty(who) ? "Activator" : who, command.Get("Operation"), amount);
             }
+            case EventCommandType.ExchangeCurrency:
+                return OnExchangeCurrency is not null && int.TryParse(command.Get("FromId"), out int fromId) && int.TryParse(command.Get("ToId"), out int toId)
+                    && OnExchangeCurrency(fromId, toId, command.Get("Amount"));
             case EventCommandType.SleepOnBed:
                 return OnSleepOnBed is not null && OnSleepOnBed(command.Get("Which"));
             case EventCommandType.Paperdoll:

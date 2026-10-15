@@ -118,6 +118,7 @@ public partial class MainWindow : Window
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
         ProjectSession.ZonesProvider = () => _map?.Zones;
         ProjectSession.SettingsProvider = () => _systemSettings;
+        ProjectSession.TileSourceProvider = TileSource;
     }
 
     /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>
@@ -164,6 +165,18 @@ public partial class MainWindow : Window
                 "Empty Tileset", MessageBoxButton.OK, MessageBoxImage.Warning);
             return;
         }
+        // A map already painted: this sheet is added to it (or shown again) to paint with - never swapped in under the painted tiles.
+        if (_map is not null && _tileset is not null && (_map.Layers.Any(l => l.TileIndices.Any(t => t >= 0))
+            || string.Equals(_map.Tileset.TilesetSpriteName, sprite.Name, StringComparison.Ordinal) && _tilesetBitmap is not null))
+        {
+            if (!ShowSheetInPalette(sprite))
+            {
+                TilesetCombo.SelectionChanged -= TilesetCombo_SelectionChanged;
+                TilesetCombo.SelectedItem = TilesheetSprite(_paletteSheetName.Length > 0 ? _paletteSheetName : _map.Tileset.TilesetSpriteName);
+                TilesetCombo.SelectionChanged += TilesetCombo_SelectionChanged;
+            }
+            return;
+        }
 
         var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(sprite);
         if (bitmap is null)
@@ -196,8 +209,13 @@ public partial class MainWindow : Window
         {
             TileWidth = tileWidth,
             TileHeight = tileHeight,
-            TilesetSpriteName = sprite.Name
+            TilesetSpriteName = sprite.Name,
+            ExtraSheetNames = _map?.Tileset.ExtraSheetNames ?? new List<string>() // the map's other sheets stay
         };
+        _sheetCache.Clear();
+        _sheetCache[sprite.Name] = (bitmap, columns, rows);
+        _paletteSheetName = sprite.Name;
+        _paletteSlot = 0;
         _paletteColumns = columns;
         _paletteRows = rows;
         TileWidthBox.Text = tileWidth.ToString();
@@ -511,7 +529,8 @@ public partial class MainWindow : Window
     {
         if (_tileset is null) return null;
         var group = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.TilesetGroupName);
-        return group?.Sprites.FirstOrDefault(s => s.Name == _tileset.TilesetSpriteName);
+        // The sheet shown in the palette (any of the map's sheets).
+        return group?.Sprites.FirstOrDefault(s => s.Name == (_paletteSheetName.Length > 0 ? _paletteSheetName : _tileset.TilesetSpriteName));
     }
 
     /// <summary>The right-click tile menu from the design document: Edit Tile Image, Rename, Duplicate, Delete, a Properties quick-preset submenu, Custom... (the full TilePropertiesWindow), and Animation (new) - links this one tile cell to its own dedicated animation sprite.</summary>
@@ -689,6 +708,7 @@ public partial class MainWindow : Window
         if (sprite is null || sprite.Frames.Count == 0) return;
         var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(sprite);
         if (bitmap is null || _tileset is null) return;
+        _sheetCache[sprite.Name] = (bitmap, columns, rows); // its edited tiles, for the map too
         _tilesetBitmap = bitmap;
         _tileset.TileWidth = tileWidth;
         _tileset.TileHeight = tileHeight;
@@ -843,6 +863,10 @@ public partial class MainWindow : Window
                         var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(tilesetSprite);
                         if (bitmap is not null)
                         {
+                            _sheetCache.Clear();
+                            _sheetCache[tilesetSprite.Name] = (bitmap, columns, rows);
+                            _paletteSheetName = tilesetSprite.Name;
+                            _paletteSlot = 0;
                             _tilesetBitmap = bitmap;
                             _tileset.TileWidth = tileWidth;
                             _tileset.TileHeight = tileHeight;
@@ -1246,7 +1270,7 @@ public partial class MainWindow : Window
             MessageBox.Show("This game has no map to play.", _currentProjectName ?? "Game", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
-        var game = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
+        var game = new GameTestWindow(_map, PrimarySheet()?.Bitmap ?? _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
             _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         {
@@ -1272,7 +1296,7 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new GameTestWindow(_map, _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, _paletteColumns,
+        var window = new GameTestWindow(_map, PrimarySheet()?.Bitmap ?? _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
             _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         { Owner = this };
@@ -1592,8 +1616,8 @@ public partial class MainWindow : Window
 
         if (_drawShape == DrawShape.Single)
         {
-            CurrentFloorLayer.SetTile(x, y, _map.Width, _selectedTileIndex);
-            PaintCellVisual(x, y, _selectedTileIndex);
+            CurrentFloorLayer.SetTile(x, y, _map.Width, PaintTileIndex);
+            PaintCellVisual(x, y, PaintTileIndex);
             _isFreehandPainting = true; // per spec: click-and-drag paints continuously like a normal pencil tool, no modifier key needed
         }
         else
@@ -1654,8 +1678,8 @@ public partial class MainWindow : Window
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
 
-        CurrentFloorLayer.SetTile(x, y, _map.Width, _selectedTileIndex);
-        PaintCellVisual(x, y, _selectedTileIndex);
+        CurrentFloorLayer.SetTile(x, y, _map.Width, PaintTileIndex);
+        PaintCellVisual(x, y, PaintTileIndex);
     }
 
     private void MapCanvas_MouseLeave(object sender, MouseEventArgs e)
@@ -1701,8 +1725,8 @@ public partial class MainWindow : Window
             foreach (var (cx, cy) in cells)
             {
                 if (!IsInsideMap(cx, cy)) continue;
-                CurrentFloorLayer.SetTile(cx, cy, _map.Width, _selectedTileIndex);
-                PaintCellVisual(cx, cy, _selectedTileIndex);
+                CurrentFloorLayer.SetTile(cx, cy, _map.Width, PaintTileIndex);
+                PaintCellVisual(cx, cy, PaintTileIndex);
             }
         }
         _shapeStartCell = null;
@@ -2014,18 +2038,14 @@ public partial class MainWindow : Window
             _mapCellVisuals[(x, y)] = image;
         }
 
-        var animationSprite = GetLinkedAnimationSprite(tileIndex);
+        var animationSprite = LinkedAnimationOfMapTile(tileIndex); // its own sheet's tile animation
         if (animationSprite is not null && animationSprite.Frames.Count > 0)
         {
             _mapCellAnimators[(x, y)] = new SpriteAnimator(animationSprite, image, _resourceDatabase);
             return;
         }
 
-        int col = tileIndex % _paletteColumns;
-        int row = tileIndex / _paletteColumns;
-        image.Source = new CroppedBitmap(_tilesetBitmap, new Int32Rect(
-            col * _tileset.TileWidth, row * _tileset.TileHeight,
-            _tileset.TileWidth, _tileset.TileHeight));
+        image.Source = TileSource(tileIndex); // from whichever of the map's tilesheets it's from
     }
 
     /// <summary>
@@ -2514,6 +2534,10 @@ public partial class MainWindow : Window
             var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(tilesetSprite);
             if (bitmap is not null)
             {
+                _sheetCache.Clear();
+                _sheetCache[tilesetSprite.Name] = (bitmap, columns, rows);
+                _paletteSheetName = tilesetSprite.Name;
+                _paletteSlot = 0;
                 _tilesetBitmap = bitmap;
                 _tileset.TileWidth = tileWidth;
                 _tileset.TileHeight = tileHeight;

@@ -64,6 +64,7 @@ public partial class GameTestWindow
         _execContext.OnAttack = AttackCommand;
         _execContext.OnPaperdoll = PaperdollCommand;
         _execContext.OnSleepOnBed = SleepOnBedCommand;
+        _execContext.OnExchangeCurrency = ExchangeCurrencyCommand;
     }
 
     private IEnumerable<CharacterDefinition> AllLivingCharacters(bool includeDead = false)
@@ -361,7 +362,7 @@ public partial class GameTestWindow
         {
             int tile = layer.GetTile(cell.X, cell.Y, _map.Width);
             // Looked up without creating an entry: only customized tiles have effects.
-            if (tile >= 0 && _tileProperties.ByTileKey.TryGetValue($"{_tilesetSpriteName}:{tile}", out var props)) effects.AddRange(props.CustomEffects);
+            if (tile >= 0 && _tileProperties.ByTileKey.TryGetValue($"{(_map.Tileset.SheetNameOf(tile) is { Length: > 0 } sheet ? sheet : _tilesetSpriteName)}:{TileSheets.Local(tile)}", out var props)) effects.AddRange(props.CustomEffects);
         }
         return effects;
     }

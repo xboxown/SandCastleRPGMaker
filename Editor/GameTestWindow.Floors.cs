@@ -78,7 +78,7 @@ public partial class GameTestWindow
                         Width = _tileWidth,
                         Height = _tileHeight,
                         IsHitTestVisible = false,
-                        Source = new CroppedBitmap(_tilesetBitmap, new Int32Rect(tileIndex % _columns * _tileWidth, tileIndex / _columns * _tileHeight, _tileWidth, _tileHeight))
+                        Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                     Canvas.SetLeft(image, x * _tileWidth - lift * LiftPixelShift);
