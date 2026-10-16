@@ -226,7 +226,8 @@ public partial class GameTestWindow
         if (skipAbove is int lift)
         {
             // At the ceiling's own lift only the solid things go (the ceiling itself, a roof) - something small lying on a table top as high as that stays.
-            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && IsSolidAt(null, o)))))
+            // A Floor tile is the floor itself: it goes with its floor (gamerend.cc: nothing at skip_lift or above is painted).
+            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && (IsSolidAt(null, o) || DefinitionOf(o) is { Type: ObjectType.Tile, IsFloorTile: true })))))
                 if (_objectVisuals.GetValueOrDefault(instance) is UIElement v) hide.Add(v);
             foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && IsSolidAt(i, null))))
                 if (_itemVisuals.GetValueOrDefault(item) is UIElement v) hide.Add(v);
