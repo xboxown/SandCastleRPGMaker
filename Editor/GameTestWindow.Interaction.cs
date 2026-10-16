@@ -603,7 +603,7 @@ public partial class GameTestWindow
         return TryPutIntoContainer(origin, gump.Data, gump.PlacedItem, dropTopLeft);
     }
 
-    /// <summary>Exult Paperdoll_gump::add, in order: a container under the drop point takes it; else the closest free slot to the drop point readies it (find_closest); else the character's general add rules (DropOnCharacter). A failure at one step falls through to the next, as in Exult.</summary>
+    /// <summary>Exult Paperdoll_gump::add, in order: a container under the drop point takes it; else the closest free slot to the drop point readies it (find_closest); else the character's general add rules (DropOnCharacter). One difference, at the designer's request: a container in the slot under the drop point that refuses it (a body, locked, full) ends the drop there - the item goes back where it came from instead of on to another slot.</summary>
     private bool DropOnPaperdoll(DragOrigin origin, OpenPaperdollGump gump, InteractionTarget? hitTarget, Point screen)
     {
         var character = gump.Character;
@@ -611,9 +611,8 @@ public partial class GameTestWindow
             && TryGetEquippedInstanceId(character, hitSlotKey, out int occupantId)
             && character.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { Category: ReferencedItemCategory.Container } occupant
             && !ReferenceEquals(occupant, PayloadObject(origin))
-            && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData
-            && TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null))
-            return true;
+            && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData)
+            return TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null); // refused: it stays where it was
 
         if (FindClosestFreeSlot(gump, PaperdollGumpsCanvas.TranslatePoint(screen, gump.BodyCanvas), origin) is { } slotKey)
         {
@@ -628,14 +627,14 @@ public partial class GameTestWindow
     private const double SlotDropRadius = 32;
 
     /// <summary>Exult Paperdoll_gump::find_closest(mx, my, only_empty): the free slot nearest the drop point. A slot whose item is the one being dragged counts as free - its icon is hidden, and dropping it back there must work.</summary>
-    private static object? FindClosestFreeSlot(OpenPaperdollGump gump, Point pointInBody, DragOrigin origin)
+    private object? FindClosestFreeSlot(OpenPaperdollGump gump, Point pointInBody, DragOrigin origin)
     {
         var character = gump.Character;
         object? closest = null;
         double closestDistanceSquared = SlotDropRadius * SlotDropRadius;
         void Consider(object slotKey, double centerX, double centerY)
         {
-            if (!IsSlotFree(character, slotKey, origin)) return;
+            if (!IsSlotFree(character, slotKey, origin) || !FitsInSlot(origin, character, slotKey)) return; // only a slot it can go in (fits_in_spot)
             double dx = pointInBody.X - centerX, dy = pointInBody.Y - centerY;
             double distanceSquared = dx * dx + dy * dy;
             if (distanceSquared < closestDistanceSquared) { closestDistanceSquared = distanceSquared; closest = slotKey; }
@@ -853,17 +852,9 @@ public partial class GameTestWindow
     private bool TryEquipInSlot(DragOrigin origin, CharacterDefinition character, object slotKey)
     {
         if (!CheckWeight(origin, character)) return false; // drag.cc Check_weight
-        var (category, itemId) = PayloadIdentity(origin);
-        if (category == ReferencedItemCategory.Container && !IsContainerSlotAllowed(itemId, character, slotKey))
+        if (!FitsInSlot(origin, character, slotKey))
         {
-            StatusText.Text = "A container only fits in its own slot or a hand.";
-            return false;
-        }
-        // Exult's ready types: a weapon or a piece of armor goes in its own slot - or a hand, which holds anything.
-        if (category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Weapon or ObjectType.Armor } gear
-            && slotKey is not (EquipmentSlot.RightHand or EquipmentSlot.LeftHand) && !Equals(OwnSlotFor(gear, character), slotKey))
-        {
-            StatusText.Text = $"\"{gear.Name}\" isn't worn there.";
+            StatusText.Text = $"\"{PayloadName(origin)}\" doesn't go there - only in a hand, or its own slot.";
             return false;
         }
         bool isTwoHanded = PayloadIsTwoHanded(origin);
@@ -1090,6 +1081,22 @@ public partial class GameTestWindow
         if (containerData?.PreferredCustomSlotName is { } customName)
             return character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == customName)?.Id;
         return null;
+    }
+
+    /// <summary>
+    /// Actor::fits_in_spot: a hand holds anything; every other slot takes only
+    /// what belongs there (Exult's ready type, is_object_allowed) - a container
+    /// its Location slot, a weapon or armor its own slot, ammo its ammo slot.
+    /// Anything else (a chair, a candle, a book, food...) goes only in a hand.
+    /// </summary>
+    private bool FitsInSlot(DragOrigin origin, CharacterDefinition character, object slotKey)
+    {
+        if (slotKey is EquipmentSlot.RightHand or EquipmentSlot.LeftHand) return true;
+        var (category, itemId) = PayloadIdentity(origin);
+        if (category == ReferencedItemCategory.Container) return IsContainerSlotAllowed(itemId, character, slotKey);
+        if (category != ReferencedItemCategory.Object || _objects.Objects.FirstOrDefault(o => o.Id == itemId) is not { } def) return false;
+        object? own = def.Type == ObjectType.Ammo ? AmmoSlotFor(def, character) : OwnSlotFor(def, character);
+        return own is not null && Equals(own, slotKey);
     }
 
     /// <summary>A container may only be equipped in its own Location slot or in either hand.</summary>
