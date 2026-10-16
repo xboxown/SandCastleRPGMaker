@@ -124,6 +124,7 @@
                                     MouseLeftButtonDown="PaperdollCanvas_MouseLeftButtonDown" MouseMove="PaperdollCanvas_MouseMove" MouseLeftButtonUp="PaperdollCanvas_MouseLeftButtonUp"
                                     KeyDown="PaperdollCanvas_KeyDown"/>
                         </Border>
+                        <Button Content="Expand... (big, as in the game: slots on/off, weight)" HorizontalAlignment="Left" Padding="8,3" Margin="0,6,0,0" Click="ExpandPaperdollButton_Click"/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1">

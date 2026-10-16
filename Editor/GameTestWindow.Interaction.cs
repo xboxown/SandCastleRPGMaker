@@ -261,7 +261,7 @@ public partial class GameTestWindow
         if (target is null && gump is OpenPaperdollGump paperdoll)
         {
             var inBody = PaperdollGumpsCanvas.TranslatePoint(screen, paperdoll.BodyCanvas);
-            foreach (var slot in Enum.GetValues<EquipmentSlot>())
+            foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(paperdoll.Character.Paperdoll.IsSlotShown))
             {
                 if (TryGetEquippedInstanceId(paperdoll.Character, slot, out _)) continue;
                 if (!paperdoll.Character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };
@@ -639,7 +639,7 @@ public partial class GameTestWindow
             if (distanceSquared < closestDistanceSquared) { closestDistanceSquared = distanceSquared; closest = slotKey; }
         }
         // Centers match the rendered hit regions: a built-in slot's 40x40 region at (X-4, Y-4), a custom slot's 60x22 region at (X, Y).
-        foreach (var slot in Enum.GetValues<EquipmentSlot>())
+        foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(character.Paperdoll.IsSlotShown))
         {
             if (!character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };
             Consider(slot, pos.X + 16, pos.Y + 16);
@@ -1097,7 +1097,8 @@ public partial class GameTestWindow
 
     /// <summary>A slot counts as free if it's empty, or if what's in it is the very item being dragged out of it.</summary>
     private static bool IsSlotFree(CharacterDefinition character, object slotKey, DragOrigin origin) =>
-        !TryGetEquippedInstanceId(character, slotKey, out _)
+        !(slotKey is EquipmentSlot builtin && !character.Paperdoll.IsSlotShown(builtin)) // a slot turned off (Character Editor) isn't there at all
+        && !TryGetEquippedInstanceId(character, slotKey, out _)
         || (origin is SlotOrigin slotOrigin && slotOrigin.Character == character && Equals(slotOrigin.SlotKey, slotKey));
 
     private bool IsLeftHandLockedIgnoring(CharacterDefinition character, DragOrigin origin) =>

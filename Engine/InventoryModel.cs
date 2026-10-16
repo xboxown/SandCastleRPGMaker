@@ -140,6 +140,17 @@ public class PaperdollDefinition
     /// <summary>Real, confirmed new feature, per spec ("Add a feature for custom slots and the ability to delete custom slots by selecting one and pressing Delete... Custom slots are colored green") - designer-defined slots beyond the fixed built-in list, each with its own real name and its own real, draggable position, exactly like a built-in slot.</summary>
     public List<CustomEquipmentSlot> CustomSlots { get; set; } = new();
 
+    /// <summary>Built-in slots this paperdoll doesn't have (one ring, no pouch...): not drawn, nothing goes in them. They can be turned back on, never deleted.</summary>
+    public List<EquipmentSlot> DisabledSlots { get; set; } = new();
+
+    public bool IsSlotShown(EquipmentSlot slot) => !DisabledSlots.Contains(slot);
+
+    /// <summary>What this character carries (stones), and the most they can (2 x Strength) - numbers drawn on the paperdoll in a font.</summary>
+    public PaperdollReadout WeightCurrent { get; set; } = new() { X = 170, Y = 330, Align = ReadoutAlign.Right };
+    public PaperdollReadout WeightMax { get; set; } = new() { X = 180, Y = 330 };
+    /// <summary>The same as a bar, a pie, or the frames of a sprite (empty to full).</summary>
+    public PaperdollGauge WeightGauge { get; set; } = new() { X = 120, Y = 360 };
+
     private int _nextCustomSlotId = 1;
     /// <summary>Never serialized (a plain field, not a property) - resynced after load the same real way every other per-instance id counter in this project already is, from whatever the highest existing id actually is.</summary>
     public int GetNextCustomSlotId() => _nextCustomSlotId++;
@@ -153,4 +164,37 @@ public class PaperdollDefinition
             layout[slots[i]] = new PaperdollSlotPosition { X = 140, Y = 10 + i * 28 };
         return layout;
     }
+}
+
+public enum ReadoutAlign { Left, Center, Right }
+
+/// <summary>A number drawn on a paperdoll (carried stones, the most they can carry): where, in which font (Sprite Editor > Fonts), how big, tinted how.</summary>
+public class PaperdollReadout
+{
+    public bool Enabled { get; set; }
+    /// <summary>Where it's drawn, in the paperdoll's 320x400 layout: its left edge, centre or right edge (Align), and its top.</summary>
+    public double X { get; set; }
+    public double Y { get; set; }
+    public ReadoutAlign Align { get; set; } = ReadoutAlign.Left;
+    /// <summary>A font of the Sprite Editor's Fonts group; empty = the in-game font.</summary>
+    public string FontName { get; set; } = string.Empty;
+    public int Scale { get; set; } = 1;
+    /// <summary>#RRGGBB, or empty for the font's own colours.</summary>
+    public string Tint { get; set; } = string.Empty;
+}
+
+public enum GaugeKind { Bar, Pie, SpriteFrames }
+
+/// <summary>An amount shown as a picture (how full the pack is): a bar filling left to right, a pie, or a sprite whose frames go from empty (first) to full (last) - like the bundle pictures of gold and arrows.</summary>
+public class PaperdollGauge
+{
+    public bool Enabled { get; set; }
+    public double X { get; set; }
+    public double Y { get; set; }
+    public GaugeKind Kind { get; set; } = GaugeKind.Bar;
+    public double Width { get; set; } = 80;
+    public double Height { get; set; } = 10;
+    public string FillColor { get; set; } = "#C8A040";
+    public string BackColor { get; set; } = "#402818";
+    public SpriteLink Sprite { get; set; } = new();
 }

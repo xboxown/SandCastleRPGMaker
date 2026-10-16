@@ -132,7 +132,7 @@ public static class StartingInventoryRules
 
     private static bool IsFree(CharacterDefinition character, object slot) => slot switch
     {
-        EquipmentSlot builtin => !character.EquippedSlots.ContainsKey(builtin),
+        EquipmentSlot builtin => character.Paperdoll.IsSlotShown(builtin) && !character.EquippedSlots.ContainsKey(builtin), // a slot turned off isn't there
         int customId => !character.CustomEquippedSlots.ContainsKey(customId),
         _ => false
     };

@@ -888,7 +888,7 @@ public partial class CharacterEditorWindow : Window
             }
         }
 
-        foreach (var slot in Enum.GetValues<EquipmentSlot>())
+        foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(character.Paperdoll.IsSlotShown)) // turned off: not on this paperdoll (Expand...)
         {
             if (!character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos))
             {
@@ -1042,6 +1042,14 @@ public partial class CharacterEditorWindow : Window
         {
             if (child is Border b && ReferenceEquals(b.Tag, slot) && b.Child is TextBlock tb) { tb.Text = slot.Name; break; }
         }
+    }
+
+    /// <summary>Expand...: the paperdoll big, as the game draws it (PaperdollLayoutWindow) - slots with the starting items in them, slots on/off, the weight readouts.</summary>
+    private void ExpandPaperdollButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        new PaperdollLayoutWindow(character) { Owner = this }.ShowDialog();
+        BuildPaperdollCanvas(character);
     }
 
     private void AddCustomSlotButton_Click(object sender, RoutedEventArgs e)

@@ -805,7 +805,7 @@ public partial class GameTestWindow : Window
             gump.BodyCanvas.Background = new SolidColorBrush(Color.FromArgb(238, 26, 26, 26));
         }
 
-        foreach (var slot in Enum.GetValues<EquipmentSlot>())
+        foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(character.Paperdoll.IsSlotShown)) // a slot turned off isn't drawn
         {
             if (!character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };
             bool isLockedLeftHand = slot == EquipmentSlot.LeftHand && leftHandLocked;
@@ -868,6 +868,16 @@ public partial class GameTestWindow : Window
                 Panel.SetZIndex(customClickRegion, 10);
                 gump.BodyCanvas.Children.Add(customClickRegion);
             }
+        }
+
+        // Weight (stones): what they carry and the most they can (2 x Strength), as numbers and/or a gauge (Character Editor > Paperdoll > Expand).
+        {
+            var pd = character.Paperdoll;
+            double carried = ItemWeights.Carried(character, _containers, _books, _objects);
+            double max = ItemWeights.MaxCarry(Stat(character, BuiltInStatKind.Strength, 10));
+            if (pd.WeightCurrent.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightCurrent, $"{Math.Round(carried):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
+            if (pd.WeightMax.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightMax, $"{Math.Round(max):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
+            if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
         }
 
         // The real exit button, per spec - a genuine 2-frame sprite, not a text glyph, positioned top-right of the body. Its own MouseLeftButtonDown/Up already mark themselves Handled (see BuildExitButton), so it never also triggers the body's drag handler.

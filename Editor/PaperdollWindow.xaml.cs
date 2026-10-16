@@ -196,7 +196,7 @@ public partial class PaperdollWindow : Window
         }
 
         bool leftHandLocked = IsLeftHandLocked();
-        foreach (var slot in Enum.GetValues<EquipmentSlot>())
+        foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(_current.Paperdoll.IsSlotShown))
         {
             if (!_current.Paperdoll.SlotPositions.TryGetValue(slot, out var pos))
                 pos = new PaperdollSlotPosition { X = 140, Y = 10 };
