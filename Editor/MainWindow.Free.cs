@@ -99,7 +99,7 @@ public partial class MainWindow
             return (container.AllowElevation, false, false, Math.Max(1, container.SizeX), Math.Max(1, container.SizeY), Math.Max(1, container.SizeZ), container.SolidOffsetX, container.SolidOffsetY);
         if (category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { } obj)
         {
-            if (obj is { Type: ObjectType.Tile, IsFloorTile: true }) return (false, false, true, Math.Max(1, obj.SizeX), Math.Max(1, obj.SizeY), 0, obj.SolidOffsetX, obj.SolidOffsetY); // part of the floor: flat, holds nothing up
+            if (obj is { Type: ObjectType.Tile, IsFloorTile: true, IsSolid: false }) return (false, false, true, Math.Max(1, obj.SizeX), Math.Max(1, obj.SizeY), 0, obj.SolidOffsetX, obj.SolidOffsetY); // part of the floor: flat, holds nothing up
             bool solidTile = obj.Type == ObjectType.Tile && obj.IsSolid;
             bool flat = obj.Type == ObjectType.Trap || (obj.Type == ObjectType.Tile && !obj.IsSolid); // Exult: a flat shape is 0 lifts high
             return (solidTile || (obj.AllowCellElevation && !flat), solidTile || obj.Type == ObjectType.Table, obj.Type == ObjectType.Tile,
