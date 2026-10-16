@@ -130,6 +130,40 @@ public sealed class PaperdollLayoutWindow : Window
         _settings.Children.Add(row);
     }
 
+    private FrameworkElement SpritePicker(string label, Func<SpriteLink> get, Action<SpriteLink> set)
+    {
+        var sprites = _sprites.Groups.Where(x => x.Name != SpriteDatabase.TilesetGroupName && x.Name != SpriteDatabase.FontsGroupName)
+            .SelectMany(x => x.Sprites.Select(s => (Group: x.Name, s.Name))).ToList();
+        var labels = new List<string> { "(none)" };
+        labels.AddRange(sprites.Select(s => $"{s.Name}   ({s.Group})"));
+        var current = get();
+        var combo = new ComboBox { Width = 220, ItemsSource = labels, SelectedIndex = Math.Max(0, sprites.FindIndex(s => s.Group == current.SpriteGroup && s.Name == current.SpriteName) + 1) };
+        combo.SelectionChanged += (_, _) =>
+        {
+            set(combo.SelectedIndex <= 0 ? new SpriteLink() : new SpriteLink { SpriteGroup = sprites[combo.SelectedIndex - 1].Group, SpriteName = sprites[combo.SelectedIndex - 1].Name });
+            Redraw();
+        };
+        return Labeled(label, combo);
+    }
+
+    private void ButtonSettings(string title, PaperdollButton button)
+    {
+        _settings.Children.Add(Check(title, () => button.Enabled, v => button.Enabled = v));
+        var row = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        row.Children.Add(SpritePicker("Sprite", () => button.Sprite, v => button.Sprite = v));
+        _settings.Children.Add(row);
+    }
+
+    private IEnumerable<(PaperdollButton Button, string Name)> Buttons()
+    {
+        var pd = _character.Paperdoll;
+        yield return (pd.CombatButton, "combat");
+        yield return (pd.CombatModeButton, "combat behavior");
+        yield return (pd.StatsButton, "heart (stats)");
+        yield return (pd.DiskButton, "disk (save / load)");
+        yield return (pd.HaloButton, "halo (protect)");
+    }
+
     private void BuildSettings()
     {
         _settings.Children.Clear();
@@ -183,6 +217,17 @@ public sealed class PaperdollLayoutWindow : Window
             gauge.Children.Add(TextBoxField("Empty colour", 80, () => g.BackColor, v => g.BackColor = v));
         }
         _settings.Children.Add(gauge);
+
+        _settings.Children.Add(Heading("Buttons (Exult's paperdoll)"));
+        _settings.Children.Add(Note("Each is a sprite whose frames are its states. Combat and the disk show on the player's paperdoll only, as in Exult."));
+        ButtonSettings("Combat on / off - frames: peace, war", pd.CombatButton);
+        ButtonSettings("Combat behavior - 10 frames: Nearest, Weakest, Strongest, Berserk, Protect, Defend, Flank, Flee, Random, Manual (the player's only)", pd.CombatModeButton);
+        ButtonSettings("Heart - opens the stats paperdoll - frames: up, pressed", pd.StatsButton);
+        ButtonSettings("Disk - save / load - frames: up, pressed", pd.DiskButton);
+        ButtonSettings("Halo - the party protects this one - frames: off, on", pd.HaloButton);
+        var stats = new Button { Content = "Stats paperdoll...", Padding = new Thickness(8, 3, 8, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
+        stats.Click += (_, _) => new StatsDollEditorWindow(_character) { Owner = this }.ShowDialog();
+        _settings.Children.Add(stats);
     }
 
     // ================= Drawing =================
@@ -324,6 +369,22 @@ public sealed class PaperdollLayoutWindow : Window
             var (w, h) = SizeOf(element);
             AddHandle(tag, Canvas.GetLeft(element), Canvas.GetTop(element), w, h, Brushes.Orange, label);
         }
+        foreach (var (button, name) in Buttons())
+        {
+            if (!button.Enabled) continue;
+            var sprite = ObjectLooks.Find(_sprites, button.Sprite.SpriteGroup, button.Sprite.SpriteName);
+            if (FirstFrame(sprite) is { } picture)
+            {
+                var image = new Image { Source = picture, Width = picture.PixelWidth * ItemScale, Height = picture.PixelHeight * ItemScale, Stretch = Stretch.Fill, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                Canvas.SetLeft(image, button.X);
+                Canvas.SetTop(image, button.Y);
+                Panel.SetZIndex(image, 20);
+                _canvas.Children.Add(image);
+                AddHandle(button, button.X, button.Y, image.Width, image.Height, Brushes.Violet, name);
+            }
+            else AddHandle(button, button.X, button.Y, 24, 24, Brushes.Violet, name + " (no sprite)");
+        }
         Readout("WeightCurrent", pd.WeightCurrent, $"{Math.Round(carried):0}", "carried");
         Readout("WeightMax", pd.WeightMax, $"{Math.Round(max):0}", "max");
         if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, ItemScale) is { } gauge)
@@ -347,6 +408,7 @@ public sealed class PaperdollLayoutWindow : Window
             "WeightCurrent" => new Point(pd.WeightCurrent.X, pd.WeightCurrent.Y),
             "WeightMax" => new Point(pd.WeightMax.X, pd.WeightMax.Y),
             "WeightGauge" => new Point(pd.WeightGauge.X, pd.WeightGauge.Y),
+            PaperdollButton b => new Point(b.X, b.Y),
             _ => default
         };
     }
@@ -363,6 +425,7 @@ public sealed class PaperdollLayoutWindow : Window
             case "WeightCurrent": pd.WeightCurrent.X = x; pd.WeightCurrent.Y = y; break;
             case "WeightMax": pd.WeightMax.X = x; pd.WeightMax.Y = y; break;
             case "WeightGauge": pd.WeightGauge.X = x; pd.WeightGauge.Y = y; break;
+            case PaperdollButton b: b.X = x; b.Y = y; break;
         }
     }
 

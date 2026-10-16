@@ -151,6 +151,16 @@ public class PaperdollDefinition
     /// <summary>The same as a bar, a pie, or the frames of a sprite (empty to full).</summary>
     public PaperdollGauge WeightGauge { get; set; } = new() { X = 120, Y = 360 };
 
+    /// <summary>Exult's Actor_gump buttons: combat on/off and the disk (save / load) are the player's only; the heart (stats), the halo (protect this one) and the combat behavior are on everyone's.</summary>
+    public PaperdollButton CombatButton { get; set; } = new() { X = 230, Y = 360 };
+    public PaperdollButton CombatModeButton { get; set; } = new() { X = 60, Y = 360 };
+    public PaperdollButton StatsButton { get; set; } = new() { X = 140, Y = 360 };
+    public PaperdollButton DiskButton { get; set; } = new() { X = 260, Y = 360 };
+    public PaperdollButton HaloButton { get; set; } = new() { X = 260, Y = 300 };
+
+    /// <summary>The stats paperdoll (Z, or the heart).</summary>
+    public StatsDollDefinition StatsDoll { get; set; } = new();
+
     private int _nextCustomSlotId = 1;
     /// <summary>Never serialized (a plain field, not a property) - resynced after load the same real way every other per-instance id counter in this project already is, from whatever the highest existing id actually is.</summary>
     public int GetNextCustomSlotId() => _nextCustomSlotId++;

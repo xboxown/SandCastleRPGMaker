@@ -880,6 +880,8 @@ public partial class GameTestWindow : Window
             if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
         }
 
+        AddPaperdollButtons(gump, paperdollItemCounterScale); // combat, combat behavior, heart, disk, halo (GameTestWindow.PaperdollButtons.cs)
+
         // The real exit button, per spec - a genuine 2-frame sprite, not a text glyph, positioned top-right of the body. Its own MouseLeftButtonDown/Up already mark themselves Handled (see BuildExitButton), so it never also triggers the body's drag handler.
         var exitButton = BuildExitButton(character, () => ClosePaperdollGump(gump));
         Canvas.SetLeft(exitButton, 320 - 28);
@@ -1525,6 +1527,7 @@ public partial class GameTestWindow : Window
         if (_isReadingBook) return;
         if (e.Key == Key.F6) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
         if (e.Key == Key.C) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
+        if (e.Key == Key.Z) { OpenStatsDoll(_player); e.Handled = true; return; } // Exult: Z shows the player's stats
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
         // Escape mid-drag cancels the drag (the item never left its origin, so it's simply still there) instead of closing a gump out from under it - Exult likewise refuses Escape while dragging.

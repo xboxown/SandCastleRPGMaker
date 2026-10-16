@@ -1052,6 +1052,13 @@ public partial class CharacterEditorWindow : Window
         BuildPaperdollCanvas(character);
     }
 
+    /// <summary>Stats paperdoll...: the character's stats window (StatsDollEditorWindow) - Z or the heart in the game.</summary>
+    private void StatsDollButton_Click(object sender, RoutedEventArgs e)
+    {
+        if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        new StatsDollEditorWindow(character) { Owner = this }.ShowDialog();
+    }
+
     private void AddCustomSlotButton_Click(object sender, RoutedEventArgs e)
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;

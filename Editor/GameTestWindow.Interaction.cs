@@ -241,8 +241,10 @@ public partial class GameTestWindow
 
         ListBoxItem? row = null;
         DependencyObject? current = hit;
+        bool onButton = false;
         while (current is not null && !ReferenceEquals(current, PaperdollGumpsCanvas))
         {
+            if (current is FrameworkElement { Tag: PaperdollButtonTag }) onButton = true; // a paperdoll button: its own click, never the slot under it
             if (target is null && current is FrameworkElement { Tag: InteractionTarget tagged }) target = tagged;
             if (row is null && current is ListBoxItem listBoxItem) row = listBoxItem;
             if (target is null && current is ListBox { Tag: OpenPaperdollGump owner } && row?.DataContext is PaperdollBackpackRow backpackRow)
@@ -258,7 +260,7 @@ public partial class GameTestWindow
             current = current is Visual ? VisualTreeHelper.GetParent(current) : LogicalTreeHelper.GetParent(current);
         }
         // A press on a paperdoll's visible body art over an EMPTY built-in slot (its 40x40 area) is that slot - empty slots have no hit squares of their own, so nothing invisible is ever clickable.
-        if (target is null && gump is OpenPaperdollGump paperdoll)
+        if (target is null && !onButton && gump is OpenPaperdollGump paperdoll)
         {
             var inBody = PaperdollGumpsCanvas.TranslatePoint(screen, paperdoll.BodyCanvas);
             foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(paperdoll.Character.Paperdoll.IsSlotShown))

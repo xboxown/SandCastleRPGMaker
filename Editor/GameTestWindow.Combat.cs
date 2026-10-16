@@ -229,8 +229,8 @@ public partial class GameTestWindow
         }
         var target = npc.Target;
 
-        // Time to run? (approach_foe: below 3 HP, unless it can't die)
-        if ((GetHp(me) ?? 99) < 3)
+        // Time to run? (approach_foe: in Flee mode, or below 3 HP - unless Berserk)
+        if (me.AttackMode == AttackMode.Flee || (me.AttackMode != AttackMode.Berserk && (GetHp(me) ?? 99) < 3))
         {
             npc.Fleeing = true;
             npc.FleeFrom = target;
@@ -318,16 +318,18 @@ public partial class GameTestWindow
         return true;
     }
 
-    /// <summary>find_foe (nearest mode): the nearest one this character would attack, or who is attacking it or its allies.</summary>
-    private CharacterDefinition? FindFoe(MapCharacter mapCharacter)
+    /// <summary>find_foe: of those this character would attack (or who attack it or its allies), the one its attack mode picks (PickFoe).</summary>
+    private CharacterDefinition? FindFoe(MapCharacter mapCharacter) => FindFoeFor(mapCharacter.Character);
+
+    private CharacterDefinition? FindFoeFor(CharacterDefinition me)
     {
-        var me = mapCharacter.Character;
-        return AwakeFirst(LivingCombatants()
+        var foes = AwakeFirst(LivingCombatants()
             .Where(other => other != me && CanSee(me, other)
                 && (Attitude(me, other) == FactionBehavior.Attack
                     || (TargetOf(other) is { } victim && (victim == me || Attitude(me, victim) == FactionBehavior.Ally) && !SameSide(me, other)))))
             .OrderBy(other => TilesBetween(me, other))
-            .FirstOrDefault();
+            .ToList();
+        return PickFoe(me, foes);
     }
 
     /// <summary>Combat_schedule::run_away: off 8-15 tiles in a random diagonal direction.</summary>
@@ -368,6 +370,9 @@ public partial class GameTestWindow
     private void UpdatePlayerAttack(double elapsedMs)
     {
         if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0) ApplyPoseSprite(_idlePose);
+        // Not Manual (the paperdoll's combat behavior): in combat mode the player picks a foe by its mode, as Exult's Avatar does (find_foe).
+        if (_combatMode && _player is not null && _playerTarget is null && _playerTargetThing is null && _player.AttackMode != AttackMode.Manual
+            && FindFoeFor(_player) is { } autoFoe && !IsUnconscious(autoFoe)) _playerTarget = autoFoe;
         if (!_combatMode || _player is null || (_playerTarget is null && _playerTargetThing is null)) return;
         if (_playerTarget is not null && (IsDead(_playerTarget) || IsUnconscious(_playerTarget))) { _playerTarget = null; return; } // the Avatar never attacks the unconscious
         if (_playerTargetThing is not null && !ThingStillThere(_playerTargetThing)) { _playerTargetThing = null; return; }

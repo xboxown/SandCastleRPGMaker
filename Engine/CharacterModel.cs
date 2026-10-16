@@ -108,6 +108,11 @@ public class CharacterDefinition
     /// <summary>Whether this character is a member of the active party (distinct from IsTestPlayer, which is who you directly walk around as) - confirmed from Exult's own real model, where you can open ANY party member's own inventory/paperdoll (number keys 1-8), not just the one you're controlling.</summary>
     public bool IsInParty { get; set; }
 
+    /// <summary>How it fights (Exult's attack mode - the combat behavior button on its paperdoll).</summary>
+    public AttackMode AttackMode { get; set; } = AttackMode.Nearest;
+    /// <summary>Exult's combat_protected (the halo on its paperdoll): the party's Protect fighters go after whoever attacks it. One at a time.</summary>
+    public bool CombatProtected { get; set; }
+
     /// <summary>Real, persistent inventory - items carried, whether currently equipped in a slot or just sitting in the backpack. One list is the single source of truth for both; EquippedSlots below only records which slot (if any) each instance is assigned to.</summary>
     public List<InventoryItemInstance> Inventory { get; set; } = new();
 
