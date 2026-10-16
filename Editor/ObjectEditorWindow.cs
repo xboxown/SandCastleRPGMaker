@@ -481,7 +481,10 @@ public partial class ObjectEditorWindow : Window
         var body = Group("Size and collision");
         var flags = new WrapPanel();
         if (obj.Type == ObjectType.Tile)
-            flags.Children.Add(Check("Solid - a floor or a roof: walked on, and over someone's head it means \"inside\"", () => obj.IsSolid, v => { obj.IsSolid = v; if (v) obj.SizeZ = Math.Max(1, obj.SizeZ); ShowCurrent(); }));
+            flags.Children.Add(Check("Solid - a floor or a roof: walked on, and over someone's head it means \"inside\"", () => obj.IsSolid, v => { obj.IsSolid = v; if (v) { obj.SizeZ = Math.Max(1, obj.SizeZ); obj.IsFloorTile = false; } ShowCurrent(); }));
+        if (obj.Type == ObjectType.Tile)
+            flags.Children.Add(Check("Floor - part of the ground: lies under everything on its floor, walls included", () => obj.IsFloorTile, v => { obj.IsFloorTile = v; if (v) { obj.IsSolid = false; obj.SizeZ = 0; } ShowCurrent(); },
+                "Like the map's own tiles (Exult's terrain): always at its floor's height, drawn before everything else on that floor, so it can go under a wall, a table or a bed without covering them. It never blocks or holds anything up; its step-on events still fire."));
         else if (obj.Type is not (ObjectType.Wall or ObjectType.Trap or ObjectType.Door or ObjectType.Window or ObjectType.Stairs))
             flags.Children.Add(Check("Solid (blocks walking)", () => obj.IsSolid, v => obj.IsSolid = v));
         if (obj.Type != ObjectType.Window) // a window's sight is its shutters' setting (Window, above)

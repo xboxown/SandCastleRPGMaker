@@ -99,6 +99,7 @@ public partial class MainWindow
             return (container.AllowElevation, false, false, Math.Max(1, container.SizeX), Math.Max(1, container.SizeY), Math.Max(1, container.SizeZ), container.SolidOffsetX, container.SolidOffsetY);
         if (category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { } obj)
         {
+            if (obj is { Type: ObjectType.Tile, IsFloorTile: true }) return (false, false, true, Math.Max(1, obj.SizeX), Math.Max(1, obj.SizeY), 0, obj.SolidOffsetX, obj.SolidOffsetY); // part of the floor: flat, holds nothing up
             bool solidTile = obj.Type == ObjectType.Tile && obj.IsSolid;
             bool flat = obj.Type == ObjectType.Trap || (obj.Type == ObjectType.Tile && !obj.IsSolid); // Exult: a flat shape is 0 lifts high
             return (solidTile || (obj.AllowCellElevation && !flat), solidTile || obj.Type == ObjectType.Table, obj.Type == ObjectType.Tile,
@@ -135,6 +136,9 @@ public partial class MainWindow
 
     private bool IsTileObject(object entity) =>
         entity is ObjectInstance o && _objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId)?.Type == ObjectType.Tile;
+
+    private bool IsFloorTileObject(object entity) =>
+        entity is ObjectInstance o && _objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId) is { Type: ObjectType.Tile, IsFloorTile: true };
 
     private static bool IsHanging(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };
 
@@ -255,6 +259,11 @@ public partial class MainWindow
         // Only the lifts of the picked floor are tried: lift 5 above it is the next
         // floor's base, where anything "rests" by that floor's own clamp - a drop
         // there sent the thing up to a floor above (out of sight in the editor).
+        if (category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { Type: ObjectType.Tile, IsFloorTile: true })
+        {
+            var ground = At(0); // part of the floor: always at the floor's own height, whatever stands there
+            return (ground.Item1, ground.Item2, ground.Item3, ground.Item4, floorBase);
+        }
         int highest = _currentFloor >= MapFloors.MaxFloors ? MaxPileLifts : MapFloors.LiftsPerFloor - 1;
         for (int lift = highest; lift > 0; lift--)
         {
@@ -372,7 +381,8 @@ public partial class MainWindow
         foreach (var body in bodies)
         {
             // Flat things and Tile objects lie under everything on their floor, as the game draws them (ApplyRestingDrawOrder).
-            int index = body.Height == 0 || IsTileObject(body.Entity) ? body.Z % MapFloors.LiftsPerFloor : 10 + (body.Left + body.Width + body.Top + body.Depth) * 10 + body.Z % MapFloors.LiftsPerFloor;
+            int index = IsFloorTileObject(body.Entity) ? -1 // part of the floor: under everything on it, other tiles too
+                : body.Height == 0 || IsTileObject(body.Entity) ? body.Z % MapFloors.LiftsPerFloor : 10 + (body.Left + body.Width + body.Top + body.Depth) * 10 + body.Z % MapFloors.LiftsPerFloor;
             foreach (var below in bodies)
                 if (!ReferenceEquals(below.Entity, body.Entity) && below.TopLift <= body.Z && below.Overlaps(body) && order.TryGetValue(below.Entity, out int belowIndex))
                     index = Math.Max(index, belowIndex + 1);

@@ -85,6 +85,9 @@ public class WorldObject
     /// <summary>Real collision, confirmed directly from Exult's own shape data as a genuinely separate flag from Occludes (is_solid(), distinct from occludes_flag) - blocks an actor from walking ONTO this object's tile at all, independent of whether it blocks sight. A locked gate can occlude sight without being solid, and a low hedge can be solid (blocking movement) without occluding sight.</summary>
     public bool IsSolid { get; set; } = false;
 
+    /// <summary>A Tile that is part of the floor itself (Exult's terrain: painted before every object): always lies at its floor's own height, is drawn under everything on that floor - walls included - and never holds anything up or blocks anyone.</summary>
+    public bool IsFloorTile { get; set; } = false;
+
     /// <summary>Real two-handed requirement, confirmed directly from Exult's own real ChangeLog ("make sure non-party members equip a shield if they have one and aren't using a two handed weapon") plus forum-documented ranged-weapon behavior (a sling needs a free hand to reload, so it's two-handed too, even though it isn't melee). When equipped in RightHand, this makes LeftHand unavailable while it's worn - see PaperdollWindow, not a separate "both hands" slot pretending to be two slots.</summary>
     public bool IsTwoHanded { get; set; } = false;
 

@@ -434,7 +434,9 @@ public partial class GameTestWindow
             if (VisualOf(body.Entity) is not { } visual) continue;
             // A floor tile (type Tile) is a flat: Exult paints flats first, under everything standing on its floor,
             // so the tile a row in front never covers the feet of a rat standing on the floor behind it.
-            int zIndex = body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile
+            int zIndex = body.Entity is ObjectInstance floorTile && DefinitionOf(floorTile) is { Type: ObjectType.Tile, IsFloorTile: true }
+                ? FloorBand(body.Z) // part of the floor (Exult's terrain): painted before everything on its floor, walls included
+                : body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile
                 ? FloorBand(body.Z) + 1 + body.Z % MapFloors.LiftsPerFloor
                 : Panel.GetZIndex(visual);
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
