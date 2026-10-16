@@ -637,8 +637,17 @@ public partial class GameTestWindow : Window
     private Image BuildExitButton(CharacterDefinition character, Action onClosed)
     {
         var image = new AlphaHitImage { Width = 24, Height = 24, Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Source = LoadExitButtonFrame(character, pressed: false) };
-        image.MouseLeftButtonDown += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: true); e.Handled = true; };
-        image.MouseLeftButtonUp += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: false); onClosed(); e.Handled = true; };
+        bool held = false;
+        image.MouseLeftButtonDown += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: true); held = true; image.CaptureMouse(); e.Handled = true; };
+        image.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (!held) return; // Exult Gump_button: a release that only ends over the button (pressed elsewhere) doesn't click it
+            held = false;
+            image.ReleaseMouseCapture();
+            image.Source = LoadExitButtonFrame(character, pressed: false);
+            if (ReleasedOver(image, e)) onClosed();
+        };
         return image;
     }
 
@@ -703,6 +712,7 @@ public partial class GameTestWindow : Window
             case OpenPaperdollGump paperdollGump: ClosePaperdollGump(paperdollGump); break;
             case OpenContainerGump containerGump: CloseContainerGump(containerGump); break;
             case OpenDollGump dollGump: CloseDollGump(dollGump); break;
+            case OpenStatsGump statsGump: CloseStatsDoll(statsGump); break;
         }
     }
 

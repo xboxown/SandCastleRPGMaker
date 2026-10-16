@@ -34,6 +34,13 @@ public partial class GameTestWindow
         return sprite.Frames.Count > 0 ? LoadStaticFrame(sprite.Frames[Math.Clamp(frame, 0, sprite.Frames.Count - 1)].FilePath) : LoadStaticFrame(sprite.FilePath);
     }
 
+    /// <summary>The release happened inside the element's own box (Gump_button::mouse_up's on_button check).</summary>
+    private static bool ReleasedOver(FrameworkElement element, MouseEventArgs e)
+    {
+        var p = e.GetPosition(element);
+        return p.X >= 0 && p.Y >= 0 && p.X < element.ActualWidth && p.Y < element.ActualHeight;
+    }
+
     private IEnumerable<CharacterDefinition> PartyAndPlayer() =>
         (_player is null ? Enumerable.Empty<CharacterDefinition>() : new[] { _player }).Concat(AllLivingCharacters().Where(c => c.IsInParty && c != _player)).Distinct();
 
@@ -48,15 +55,23 @@ public partial class GameTestWindow
             if (!button.Enabled || FrameOf(button.Sprite, frame()) is not { } up) return;
             var image = new AlphaHitImage { Source = up, Width = up.PixelWidth * counterScale, Height = up.PixelHeight * counterScale, Stretch = Stretch.Fill, Cursor = Cursors.Hand, Tag = new PaperdollButtonTag(button) };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            bool pressed = false;
             image.MouseLeftButtonDown += (_, e) =>
             {
                 // Heart and disk show their pressed frame while held; the others show their state.
                 if (button == pd.StatsButton || button == pd.DiskButton) image.Source = FrameOf(button.Sprite, 1) ?? up;
+                pressed = true;
+                image.CaptureMouse();
                 e.Handled = true;
             };
             image.MouseLeftButtonUp += (_, e) =>
             {
                 e.Handled = true;
+                if (!pressed) return; // Exult Gump_button: only a press that started on the button clicks it - never a release that merely ends over it
+                pressed = false;
+                image.ReleaseMouseCapture();
+                image.Source = up;
+                if (!ReleasedOver(image, e)) return; // dragged off before letting go: no click (Gump_button::mouse_up)
                 PlaySound(button.ClickSoundResourceId);
                 click();
                 RefreshAllPaperdolls();
@@ -98,6 +113,7 @@ public partial class GameTestWindow
         public required CharacterDefinition Character;
         public required Border GumpBorder;
         public required Canvas Body;
+        public Image? Close;
     }
 
     private readonly List<OpenStatsGump> _openStatsDolls = new();
@@ -114,25 +130,35 @@ public partial class GameTestWindow
             StatusText.Text = $"{character.Name} has no stats paperdoll yet (Character Editor > Inventory / Paperdoll > Stats paperdoll...).";
             return;
         }
-        PlaySound(doll.OpenSoundResourceId);
+        // A gump like any paperdoll: its own Open Sound, else the character's paperdoll Open Sound (System Settings' one sound for every paperdoll wins, as everywhere).
+        PlayOpenSound(doll.OpenSoundResourceId >= 0 ? doll.OpenSoundResourceId : character.Paperdoll.OpenSoundResourceId, $"{character.Name}'s stats");
         var body = new Canvas { Background = null };
         var border = new Border { Child = body };
         var gump = new OpenStatsGump { Character = character, GumpBorder = border, Body = body };
         Canvas.SetLeft(border, 60 + _openStatsDolls.Count * 24);
         Canvas.SetTop(border, 40 + _openStatsDolls.Count * 20);
-        Point? grab = null;
-        body.MouseLeftButtonDown += (_, e) => { grab = e.GetPosition(border); body.CaptureMouse(); e.Handled = true; };
+        // Dragged by its body like every gump (Gump_manager drag): it moves exactly as far as the mouse does, from where it was grabbed.
+        Point? grabMouse = null;
+        Point grabAt = default;
+        body.MouseLeftButtonDown += (_, e) =>
+        {
+            BringStatsDollToFront(gump);
+            grabMouse = e.GetPosition(PaperdollGumpsCanvas);
+            grabAt = new Point(Canvas.GetLeft(border), Canvas.GetTop(border));
+            body.CaptureMouse();
+            e.Handled = true;
+        };
         body.MouseMove += (_, e) =>
         {
-            if (grab is not { } g || e.LeftButton != MouseButtonState.Pressed) return;
+            if (grabMouse is not { } start || e.LeftButton != MouseButtonState.Pressed) return;
             var p = e.GetPosition(PaperdollGumpsCanvas);
-            Canvas.SetLeft(border, p.X - g.X * ViewportScale.ScaleX);
-            Canvas.SetTop(border, p.Y - g.Y * ViewportScale.ScaleY);
+            Canvas.SetLeft(border, grabAt.X + (p.X - start.X));
+            Canvas.SetTop(border, grabAt.Y + (p.Y - start.Y));
         };
-        body.MouseLeftButtonUp += (_, _) => { grab = null; body.ReleaseMouseCapture(); };
+        body.MouseLeftButtonUp += (_, e) => { grabMouse = null; body.ReleaseMouseCapture(); e.Handled = true; };
         PaperdollGumpsCanvas.Children.Add(border);
-        Panel.SetZIndex(border, 300);
         _openStatsDolls.Add(gump);
+        BringStatsDollToFront(gump);
         RefreshStatsDoll(gump);
         if (_statsTimer is null)
         {
@@ -142,10 +168,19 @@ public partial class GameTestWindow
         _statsTimer.Start();
     }
 
+    private void BringStatsDollToFront(OpenStatsGump gump)
+    {
+        _openStatsDolls.Remove(gump);
+        _openStatsDolls.Add(gump);
+        for (int i = 0; i < _openStatsDolls.Count; i++) Panel.SetZIndex(_openStatsDolls[i].GumpBorder, 300 + i);
+        TrackGumpFocus(gump); // Escape closes it like any other gump
+    }
+
     private void CloseStatsDoll(OpenStatsGump gump)
     {
         PaperdollGumpsCanvas.Children.Remove(gump.GumpBorder);
         _openStatsDolls.Remove(gump);
+        UntrackGumpFocus(gump);
         if (_openStatsDolls.Count == 0) _statsTimer?.Stop();
     }
 
@@ -160,7 +195,8 @@ public partial class GameTestWindow
     {
         var character = gump.Character;
         var doll = character.Paperdoll.StatsDoll;
-        gump.Body.Children.Clear();
+        // Everything but the close button is redrawn; the button stays, so holding it down across a redraw still closes it.
+        foreach (var old in gump.Body.Children.OfType<UIElement>().Where(c => c != gump.Close).ToList()) gump.Body.Children.Remove(old);
         gump.Body.LayoutTransform = new ScaleTransform(ViewportScale.ScaleX, ViewportScale.ScaleY); // drawn at its own pixels, scaled like the world
         var background = FrameOf(doll.Background, 0);
         gump.Body.Width = background?.PixelWidth ?? 160;
@@ -184,16 +220,26 @@ public partial class GameTestWindow
             visual.IsHitTestVisible = false;
             gump.Body.Children.Add(visual);
         }
-        if (FrameOf(doll.CloseButton, 0) is { } up)
+        if (gump.Close is null && FrameOf(doll.CloseButton, 0) is { } up)
         {
             var close = new AlphaHitImage { Source = up, Width = up.PixelWidth, Height = up.PixelHeight, Stretch = Stretch.Fill, Cursor = Cursors.Hand };
             RenderOptions.SetBitmapScalingMode(close, BitmapScalingMode.NearestNeighbor);
-            close.MouseLeftButtonDown += (_, e) => { close.Source = FrameOf(doll.CloseButton, 1) ?? up; e.Handled = true; };
-            close.MouseLeftButtonUp += (_, e) => { e.Handled = true; CloseStatsDoll(gump); };
+            bool pressed = false;
+            close.MouseLeftButtonDown += (_, e) => { close.Source = FrameOf(doll.CloseButton, 1) ?? up; pressed = true; close.CaptureMouse(); e.Handled = true; };
+            close.MouseLeftButtonUp += (_, e) =>
+            {
+                e.Handled = true;
+                if (!pressed) return; // only a press that started on it
+                pressed = false;
+                close.ReleaseMouseCapture();
+                close.Source = up;
+                if (ReleasedOver(close, e)) CloseStatsDoll(gump);
+            };
             Canvas.SetLeft(close, doll.CloseX);
             Canvas.SetTop(close, doll.CloseY);
             Panel.SetZIndex(close, 10);
             gump.Body.Children.Add(close);
+            gump.Close = close;
         }
     }
 
