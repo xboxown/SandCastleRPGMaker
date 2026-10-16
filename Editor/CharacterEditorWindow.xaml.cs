@@ -19,14 +19,19 @@ public partial class CharacterEditorWindow : Window
         private readonly int _statId;
         private readonly bool _hasMinimum;
         public string Label { get; }
+        public BuiltInStatKind Kind { get; }
+        /// <summary>After the value is typed in (Strength sets Hits to match).</summary>
+        public Action<StatRow>? Changed;
         public string Value
         {
             get => _character.StatValues.TryGetValue(_statId, out var v) ? v : string.Empty;
             set
             {
-                // Built-in Integer stats are never blank or below 1; the box shows the corrected value right away.
-                _character.StatValues[_statId] = _hasMinimum ? StatDatabase.ClampBuiltIn(value) : value;
+                // Integer stats are never blank or below 0 (no upper limit); the box shows the corrected value right away.
+                _character.StatValues.TryGetValue(_statId, out var previous);
+                _character.StatValues[_statId] = _hasMinimum ? StatDatabase.ClampBuiltIn(value, previous) : value;
                 PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(Value)));
+                Changed?.Invoke(this);
             }
         }
 
@@ -37,6 +42,7 @@ public partial class CharacterEditorWindow : Window
             _character = character;
             _statId = stat.Id;
             _hasMinimum = StatDatabase.HasMinimum(stat);
+            Kind = stat.Kind;
             Label = $"{stat.Name} ({stat.Type})";
         }
     }
@@ -161,8 +167,13 @@ public partial class CharacterEditorWindow : Window
         FaceFilterCheck.IsChecked = _faceFilterGroup is not null;
         PopulateFaceChoices(character.FaceSpriteGroup, character.FaceSpriteName);
 
-        _stats.EnsureBuiltInMinimums(character); // blank built-in stats start at 1
-        StatsItemsControl.ItemsSource = _stats.Stats.Select(s => new StatRow(character, s)).ToList();
+        _stats.EnsureBuiltInMinimums(character); // blank stats start at 0 (Hits at Strength)
+        var statRows = _stats.Stats.Select(s => new StatRow(character, s)).ToList();
+        // Typing a Strength sets Hits to match (full health); Hits can still be changed by hand afterwards.
+        if (statRows.FirstOrDefault(r => r.Kind == BuiltInStatKind.Hits) is { } hitsRow)
+            foreach (var strengthRow in statRows.Where(r => r.Kind == BuiltInStatKind.Strength))
+                strengthRow.Changed = row => hitsRow.Value = row.Value;
+        StatsItemsControl.ItemsSource = statRows;
         BuildPosesPanel(character);
 
         _paperdollBodyFilterGroup = string.IsNullOrEmpty(character.Paperdoll.BodySpriteGroup) ? null : character.Paperdoll.BodySpriteGroup;

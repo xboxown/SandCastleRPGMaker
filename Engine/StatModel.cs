@@ -53,22 +53,28 @@ public class StatDatabase
         _nextId = Stats.Count == 0 ? 1 : Stats.Max(s => s.Id) + 1;
     }
 
-    /// <summary>The lowest value a built-in Integer stat can hold in the editor; blank or anything lower becomes this.</summary>
-    public const int BuiltInMinimum = 1;
+    /// <summary>The lowest value an Integer stat can hold (Exult allows 0: most people have no Magic, Mana, Exp or Training). There is no highest - unlike Exult's 30, a project may go as high as it likes.</summary>
+    public const int BuiltInMinimum = 0;
 
-    /// <summary>True for the built-in Integer stats, which can never be blank or below <see cref="BuiltInMinimum"/>.</summary>
-    public static bool HasMinimum(StatDefinition stat) => stat.IsBuiltIn && stat.Type == VariableValueType.Integer;
+    /// <summary>True for every Integer stat, built-in or added: never blank, never below <see cref="BuiltInMinimum"/>, no upper limit.</summary>
+    public static bool HasMinimum(StatDefinition stat) => stat.Type == VariableValueType.Integer;
 
-    /// <summary>A built-in Integer stat's value, made valid: blank, non-numeric or below the minimum gives the minimum.</summary>
-    public static string ClampBuiltIn(string? text) =>
-        int.TryParse(text?.Trim(), out int value) && value >= BuiltInMinimum ? value.ToString() : BuiltInMinimum.ToString();
+    /// <summary>An Integer stat's value, made valid: blank gives 0, below 0 gives 0, and something that isn't a number keeps the previous value (or 0).</summary>
+    public static string ClampBuiltIn(string? text, string? previous = null)
+    {
+        if (int.TryParse(text?.Trim(), out int value)) return Math.Max(BuiltInMinimum, value).ToString();
+        if (!string.IsNullOrWhiteSpace(text) && int.TryParse(previous?.Trim(), out int old)) return Math.Max(BuiltInMinimum, old).ToString();
+        return BuiltInMinimum.ToString();
+    }
 
-    /// <summary>Fills in or fixes every built-in Integer stat on the character (blank or below 1 becomes 1).</summary>
+    /// <summary>Fills in or fixes every Integer stat on the character: a blank Hits becomes the character's Strength (full health), any other blank becomes 0.</summary>
     public void EnsureBuiltInMinimums(CharacterDefinition character)
     {
-        foreach (var stat in Stats.Where(HasMinimum))
+        var strength = Stats.FirstOrDefault(s => s.Kind == BuiltInStatKind.Strength);
+        foreach (var stat in Stats.Where(HasMinimum).OrderBy(s => s.Kind == BuiltInStatKind.Hits)) // Strength settled before Hits copies it
         {
             character.StatValues.TryGetValue(stat.Id, out var text);
+            if (stat.Kind == BuiltInStatKind.Hits && string.IsNullOrWhiteSpace(text) && strength is not null && character.StatValues.TryGetValue(strength.Id, out var str)) text = str;
             character.StatValues[stat.Id] = ClampBuiltIn(text);
         }
     }

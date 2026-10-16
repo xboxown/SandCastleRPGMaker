@@ -55,8 +55,8 @@ public partial class GameTestWindow
         foreach (var character in AllLivingCharacters(includeDead: true))
         {
             _vitals[character] = new Vitals { Food = Math.Clamp(character.Survival.StartingFood, 0, SurvivalSettings.MaxFood) };
-            // A character with no health set yet starts at full health (its Strength), or 10 - never dead on arrival.
-            if (HitsStat() is not null && (GetHp(character) is not int hp || hp <= 0)) SetHp(character, MaxHp(character) > 0 ? MaxHp(character) : 10);
+            // A character with no health set at all starts at full health (its Strength), or 10. A Hits of 0 typed in is 0: knocked out from the start.
+            if (HitsStat() is not null && GetHp(character) is not int) SetHp(character, MaxHp(character) > 0 ? MaxHp(character) : 10);
         }
         _lastClockMinute = TotalMinutes();
         _execContext.OnChangeFood = ChangeFoodCommand;
