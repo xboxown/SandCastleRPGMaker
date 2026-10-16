@@ -106,6 +106,28 @@ public partial class GameTestWindow
         foreach (var open in _openPaperdolls.ToList()) RefreshPaperdollGump(open);
     }
 
+    // ================= Text and numbers on the paperdoll =================
+
+    private DispatcherTimer? _labelTimer;
+
+    private string PaperdollLabelText(PaperdollLabel label) => PaperdollReadouts.LabelText(label, _variables, _execContext.GetVariable);
+
+    private string LabelsSignature(CharacterDefinition character) =>
+        string.Join("\u0001", character.Paperdoll.Labels.Where(l => l.Kind == PaperdollLabelKind.Number).Select(PaperdollLabelText));
+
+    /// <summary>Twice a second: an open paperdoll whose variable numbers changed is redrawn.</summary>
+    private void WatchPaperdollLabels()
+    {
+        if (_labelTimer is not null) return;
+        _labelTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+        _labelTimer.Tick += (_, _) =>
+        {
+            foreach (var open in _openPaperdolls.ToList())
+                if (open.Character.Paperdoll.Labels.Count > 0 && LabelsSignature(open.Character) != open.LabelsShown) RefreshPaperdollGump(open);
+        };
+        _labelTimer.Start();
+    }
+
     // ================= The stats paperdoll =================
 
     private sealed class OpenStatsGump

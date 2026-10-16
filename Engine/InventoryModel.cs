@@ -151,6 +151,9 @@ public class PaperdollDefinition
     /// <summary>The same as a bar, a pie, or the frames of a sprite (empty to full).</summary>
     public PaperdollGauge WeightGauge { get; set; } = new() { X = 120, Y = 360 };
 
+    /// <summary>Free labels anywhere on the paperdoll: typed text, or the value of a global variable (Paperdoll layout > Text and numbers).</summary>
+    public List<PaperdollLabel> Labels { get; set; } = new();
+
     /// <summary>Exult's Actor_gump buttons: combat on/off and the disk (save / load) are the player's only; the heart (stats), the halo (protect this one) and the combat behavior are on everyone's.</summary>
     public PaperdollButton CombatButton { get; set; } = new() { X = 230, Y = 360 };
     public PaperdollButton CombatModeButton { get; set; } = new() { X = 60, Y = 360 };
@@ -191,6 +194,17 @@ public class PaperdollReadout
     public int Scale { get; set; } = 1;
     /// <summary>#RRGGBB, or empty for the font's own colours.</summary>
     public string Tint { get; set; } = string.Empty;
+}
+
+public enum PaperdollLabelKind { Text, Number }
+
+/// <summary>A label placed on the paperdoll, drawn like the weight numbers (font, size, tint, alignment): text typed in, or a global variable's value, kept up to date in play.</summary>
+public class PaperdollLabel : PaperdollReadout
+{
+    public PaperdollLabelKind Kind { get; set; } = PaperdollLabelKind.Text;
+    public string Text { get; set; } = "Text";
+    /// <summary>Number: the global variable shown (Variables), by id; -1 none.</summary>
+    public int VariableId { get; set; } = -1;
 }
 
 public enum GaugeKind { Bar, Pie, SpriteFrames }

@@ -564,6 +564,8 @@ public partial class GameTestWindow : Window
         public OpenBackpackGump? BackpackGump;
         /// <summary>Same real fix, same real reason, as OpenContainerGump's own ItemAnimators - RefreshPaperdollGump rebuilds this gump's whole body/icon visual tree too (on equip, unequip, and every real viewport resize), and every discarded animator's own DispatcherTimer would otherwise just keep running forever, orphaned.</summary>
         public readonly List<SpriteAnimator> ItemAnimators = new();
+        /// <summary>What its number labels showed when last drawn - redrawn when a variable changes it.</summary>
+        public string LabelsShown = "";
     }
 
     /// <summary>The separate backpack-contents gump a paperdoll's Backpack slot opens, per spec and per real Exult ("double-click the backpack and it opens as a gump").</summary>
@@ -690,6 +692,7 @@ public partial class GameTestWindow : Window
         _openPaperdolls.Add(gump);
         BringPaperdollToFront(gump);
         RefreshPaperdollGump(gump);
+        WatchPaperdollLabels();
     }
 
     /// <summary>Real, unified focus order, per spec - a container gump is just as real a "topmost" candidate for Escape as a character's own paperdoll, so both kinds share this one list instead of Escape only ever knowing about paperdolls. Bringing a gump to front (of either kind) moves it to the end here; closing a gump (of either kind, whether by its own exit control or by Escape) removes it here too.</summary>
@@ -888,6 +891,9 @@ public partial class GameTestWindow : Window
             if (pd.WeightCurrent.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightCurrent, $"{Math.Round(carried):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             if (pd.WeightMax.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightMax, $"{Math.Round(max):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
+            // Free text and variable numbers (Paperdoll layout > Text and numbers).
+            foreach (var label in pd.Labels) { var e = PaperdollReadouts.Readout(label, PaperdollLabelText(label), _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
+            gump.LabelsShown = LabelsSignature(character);
         }
 
         AddPaperdollButtons(gump, paperdollItemCounterScale); // combat, combat behavior, heart, disk, halo (GameTestWindow.PaperdollButtons.cs)

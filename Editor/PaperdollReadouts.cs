@@ -73,6 +73,20 @@ internal static class PaperdollReadouts
         return element;
     }
 
+    /// <summary>What a label shows: its text, or its variable's value (whole for an Integer, up to 2 decimals otherwise; "?" if the variable is gone).</summary>
+    public static string LabelText(PaperdollLabel label, VariableDatabase? variables, Func<string, double> valueOf)
+    {
+        if (label.Kind == PaperdollLabelKind.Text) return label.Text;
+        if (variables?.Variables.FirstOrDefault(v => v.Id == label.VariableId) is not { } variable) return "?";
+        double value = valueOf(variable.Name);
+        return variable.Type switch
+        {
+            VariableValueType.Integer => Math.Round(value).ToString("0"),
+            VariableValueType.Boolean => value != 0 ? "1" : "0",
+            _ => value.ToString("0.##")
+        };
+    }
+
     /// <summary>A gauge at a fraction (0 empty .. 1 full).</summary>
     public static FrameworkElement? Gauge(PaperdollGauge g, double fraction, SpriteDatabase sprites, double counterScale)
     {

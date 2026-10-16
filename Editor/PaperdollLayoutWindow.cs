@@ -30,8 +30,13 @@ public sealed class PaperdollLayoutWindow : Window
     private readonly Canvas _canvas = new() { Width = LayoutWidth, Height = LayoutHeight, Background = new SolidColorBrush(Color.FromRgb(42, 42, 42)), ClipToBounds = true };
     private readonly ScaleTransform _zoom = new(2, 2);
     private readonly StackPanel _settings = new() { Margin = new Thickness(8) };
+    private readonly VariableDatabase _variables = ProjectSession.VariablesProvider?.Invoke() ?? new VariableDatabase();
     private object? _dragging, _selected;
     private Point _dragStart, _dragFrom;
+
+    /// <summary>The corner grip of the picked label: dragging it changes its size (Size x), since a sprite font only draws at whole sizes.</summary>
+    private sealed record ResizeGrip(PaperdollLabel Label, double HeightPerSize);
+    private int _resizeFromScale;
 
     public PaperdollLayoutWindow(CharacterDefinition character)
     {
@@ -43,7 +48,17 @@ public sealed class PaperdollLayoutWindow : Window
         _canvas.LayoutTransform = _zoom;
         _canvas.MouseLeftButtonDown += Canvas_Down;
         _canvas.MouseMove += Canvas_Move;
-        _canvas.MouseLeftButtonUp += (_, _) => { _dragging = null; _canvas.ReleaseMouseCapture(); };
+        _canvas.MouseLeftButtonUp += (_, _) => { if (_dragging is ResizeGrip) BuildSettings(); _dragging = null; _canvas.ReleaseMouseCapture(); };
+        PreviewKeyDown += (_, e) =>
+        {
+            // Delete: the picked label goes (not while typing in a box).
+            if (e.Key != Key.Delete || _selected is not PaperdollLabel label || Keyboard.FocusedElement is TextBox) return;
+            _character.Paperdoll.Labels.Remove(label);
+            _selected = null;
+            BuildSettings();
+            Redraw();
+            e.Handled = true;
+        };
 
         var root = new DockPanel();
         var left = new ScrollViewer { Width = 360, VerticalScrollBarVisibility = ScrollBarVisibility.Auto, Content = _settings };
@@ -128,6 +143,38 @@ public sealed class PaperdollLayoutWindow : Window
         row.Children.Add(TextBoxField("Tint (#RRGGBB)", 80, () => r.Tint, v => r.Tint = v));
         row.Children.Add(EnumCombo("Lined up by its", () => r.Align, v => r.Align = v, 80));
         _settings.Children.Add(row);
+    }
+
+    private void LabelSettings(PaperdollLabel label, int number)
+    {
+        var panel = new StackPanel();
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 2) };
+        var delete = new Button { Content = "Delete", Padding = new Thickness(6, 0, 6, 0), FontSize = 11 };
+        delete.Click += (_, _) => { _character.Paperdoll.Labels.Remove(label); if (Equals(_selected, label)) _selected = null; BuildSettings(); Redraw(); };
+        DockPanel.SetDock(delete, Dock.Right);
+        header.Children.Add(delete);
+        header.Children.Add(new TextBlock { Text = $"{(label.Kind == PaperdollLabelKind.Text ? "Text" : "Number")} {number}", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(header);
+        if (label.Kind == PaperdollLabelKind.Text)
+        {
+            var box = new TextBox { Width = 300, Text = label.Text, HorizontalAlignment = HorizontalAlignment.Left };
+            box.TextChanged += (_, _) => { label.Text = box.Text; Redraw(); };
+            panel.Children.Add(Labeled("Text", box));
+        }
+        else
+        {
+            var names = _variables.Variables.Select(v => v.Name).ToList();
+            var combo = new ComboBox { Width = 220, ItemsSource = names, SelectedIndex = _variables.Variables.FindIndex(v => v.Id == label.VariableId), HorizontalAlignment = HorizontalAlignment.Left };
+            combo.SelectionChanged += (_, _) => { if (combo.SelectedIndex >= 0) { label.VariableId = _variables.Variables[combo.SelectedIndex].Id; Redraw(); } };
+            panel.Children.Add(Labeled(names.Count == 0 ? "Global variable (none yet - add them in the Variable Editor)" : "Global variable", combo));
+        }
+        var row = new WrapPanel();
+        row.Children.Add(FontPicker(label));
+        row.Children.Add(NumberBox("Size x", () => label.Scale, v => label.Scale = (int)Math.Clamp(v, 1, 8)));
+        row.Children.Add(TextBoxField("Tint (#RRGGBB)", 80, () => label.Tint, v => label.Tint = v));
+        row.Children.Add(EnumCombo("Lined up by its", () => label.Align, v => label.Align = v, 80));
+        panel.Children.Add(row);
+        _settings.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Padding = new Thickness(6), Margin = new Thickness(0, 2, 0, 4), Child = panel });
     }
 
     private FrameworkElement SpritePicker(string label, Func<SpriteLink> get, Action<SpriteLink> set)
@@ -217,6 +264,22 @@ public sealed class PaperdollLayoutWindow : Window
             gauge.Children.Add(TextBoxField("Empty colour", 80, () => g.BackColor, v => g.BackColor = v));
         }
         _settings.Children.Add(gauge);
+
+        _settings.Children.Add(Heading("Text and numbers"));
+        _settings.Children.Add(Note("Put any text on the paperdoll, or a number that shows a global variable's value (kept up to date in the game). Drag one to move it, drag its yellow corner to resize it, Delete removes the picked one."));
+        var addRow = new WrapPanel();
+        void AddLabel(PaperdollLabelKind kind)
+        {
+            var label = new PaperdollLabel { Enabled = true, Kind = kind, X = 140, Y = 200, VariableId = kind == PaperdollLabelKind.Number ? _variables.Variables.FirstOrDefault()?.Id ?? -1 : -1 };
+            pd.Labels.Add(label);
+            _selected = label;
+            BuildSettings();
+            Redraw();
+        }
+        addRow.Children.Add(new Button { Content = "+ Text", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLabel(PaperdollLabelKind.Text)));
+        addRow.Children.Add(new Button { Content = "+ Number", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLabel(PaperdollLabelKind.Number)));
+        _settings.Children.Add(addRow);
+        for (int i = 0; i < pd.Labels.Count; i++) LabelSettings(pd.Labels[i], i + 1);
 
         _settings.Children.Add(Heading("Buttons (Exult's paperdoll)"));
         _settings.Children.Add(Note("Each is a sprite whose frames are its states. Combat and the disk show on the player's paperdoll only, as in Exult."));
@@ -385,6 +448,24 @@ public sealed class PaperdollLayoutWindow : Window
             }
             else AddHandle(button, button.X, button.Y, 24, 24, Brushes.Violet, name + " (no sprite)");
         }
+        foreach (var label in pd.Labels)
+        {
+            // In the editor a number shows 0 (its value comes from play); the handle names its variable.
+            string text = PaperdollReadouts.LabelText(label, _variables, _ => 0);
+            var element = PaperdollReadouts.Readout(label, text, _sprites, ItemScale);
+            Panel.SetZIndex(element, 20);
+            _canvas.Children.Add(element);
+            var (w, h) = SizeOf(element);
+            double x = Canvas.GetLeft(element), y = Canvas.GetTop(element);
+            string name = label.Kind == PaperdollLabelKind.Text ? "text" : _variables.Variables.FirstOrDefault(v => v.Id == label.VariableId)?.Name ?? "(no variable)";
+            AddHandle(label, x, y, w, h, Brushes.Gold, name);
+            if (!Equals(_selected, label)) continue;
+            var grip = new Rectangle { Width = 5, Height = 5, Fill = Brushes.Yellow, Stroke = Brushes.Black, StrokeThickness = 0.5, Cursor = Cursors.SizeNWSE, Tag = new ResizeGrip(label, Math.Max(1, h / Math.Max(1, label.Scale))) };
+            Canvas.SetLeft(grip, x + w - 2.5);
+            Canvas.SetTop(grip, y + h - 2.5);
+            Panel.SetZIndex(grip, 60);
+            _canvas.Children.Add(grip);
+        }
         Readout("WeightCurrent", pd.WeightCurrent, $"{Math.Round(carried):0}", "carried");
         Readout("WeightMax", pd.WeightMax, $"{Math.Round(max):0}", "max");
         if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, ItemScale) is { } gauge)
@@ -409,6 +490,7 @@ public sealed class PaperdollLayoutWindow : Window
             "WeightMax" => new Point(pd.WeightMax.X, pd.WeightMax.Y),
             "WeightGauge" => new Point(pd.WeightGauge.X, pd.WeightGauge.Y),
             PaperdollButton b => new Point(b.X, b.Y),
+            PaperdollLabel l => new Point(l.X, l.Y),
             _ => default
         };
     }
@@ -426,12 +508,21 @@ public sealed class PaperdollLayoutWindow : Window
             case "WeightMax": pd.WeightMax.X = x; pd.WeightMax.Y = y; break;
             case "WeightGauge": pd.WeightGauge.X = x; pd.WeightGauge.Y = y; break;
             case PaperdollButton b: b.X = x; b.Y = y; break;
+            case PaperdollLabel l: l.X = x; l.Y = y; break;
         }
     }
 
     private void Canvas_Down(object sender, MouseButtonEventArgs e)
     {
         var hit = _canvas.InputHitTest(e.GetPosition(_canvas)) as FrameworkElement;
+        if (hit?.Tag is ResizeGrip grip)
+        {
+            _dragging = grip;
+            _dragStart = e.GetPosition(_canvas);
+            _resizeFromScale = Math.Max(1, grip.Label.Scale);
+            _canvas.CaptureMouse();
+            return;
+        }
         _selected = hit?.Tag;
         if (_selected is null) { Redraw(); return; }
         _dragging = _selected;
@@ -445,6 +536,13 @@ public sealed class PaperdollLayoutWindow : Window
     {
         if (_dragging is null || e.LeftButton != MouseButtonState.Pressed) return;
         var p = e.GetPosition(_canvas);
+        if (_dragging is ResizeGrip grip)
+        {
+            // Taller by one size's height = one size up; a sprite font only draws at whole sizes.
+            int scale = (int)Math.Clamp(Math.Round(_resizeFromScale + (p.Y - _dragStart.Y) / grip.HeightPerSize), 1, 8);
+            if (scale != grip.Label.Scale) { grip.Label.Scale = scale; Redraw(); }
+            return;
+        }
         MoveTo(_dragging, _dragFrom.X + p.X - _dragStart.X, _dragFrom.Y + p.Y - _dragStart.Y);
         Redraw();
     }
