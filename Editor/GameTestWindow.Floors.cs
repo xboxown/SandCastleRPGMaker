@@ -63,6 +63,7 @@ public partial class GameTestWindow
     private void BuildUpperFloorVisuals()
     {
         _floorTileVisuals.Clear();
+        BuildLandingVisuals();
         if (_tilesetBitmap is null) return;
         foreach (var layer in _map.UpperFloorLayers)
         {
@@ -87,6 +88,31 @@ public partial class GameTestWindow
                     GameCanvas.Children.Add(image);
                     _floorTileVisuals.Add((MapFloors.SlabLift(layer.Floor), image));
                 }
+            }
+        }
+    }
+
+    /// <summary>
+    /// Staircases' landing tiles: each drawn on its own, at its own lift and in
+    /// its floor's draw band, and hidden under a roof with that floor's tiles -
+    /// as Exult paints and skips every object by its own lift (gamerend.cc
+    /// skip_lift), so a landing at the top of the stairs is part of the floor
+    /// above, not of the ground-floor staircase.
+    /// </summary>
+    private void BuildLandingVisuals()
+    {
+        foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0))
+        {
+            if (DefinitionOf(instance) is not { } obj || StairLook.PoseOf(obj, _objects, instance.Facing) is not { } pose) continue;
+            foreach (var landing in pose.Steps.Where(s => s.IsLanding))
+            {
+                if (StairLook.LandingImage(landing, _sprites) is not { } image) continue;
+                // Where the staircase's own picture would have put it: the anchor cell, the step's picture offset (which carries its lift), the staircase's own lift.
+                Canvas.SetLeft(image, instance.X * _tileWidth + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX - instance.Z * LiftPixelShift);
+                Canvas.SetTop(image, instance.Y * _tileHeight + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY - instance.Z * LiftPixelShift);
+                Panel.SetZIndex(image, (StairLook.LandingFloor(landing, instance.Z) - 1) * FloorZIndexBand); // with the floor's tiles: under everything standing on it
+                GameCanvas.Children.Add(image);
+                _floorTileVisuals.Add((instance.Z + Math.Max(0, landing.TopLift - 1), image)); // its slab's lift: hidden under a roof as the floor's tiles are
             }
         }
     }

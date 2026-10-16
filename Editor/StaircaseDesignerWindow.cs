@@ -297,7 +297,6 @@ public partial class StaircaseDesignerWindow : Window
         var toward = new ComboBox { Width = 80, ItemsSource = Facings, SelectedIndex = 0 };
         var across = new TextBox { Width = 50, Text = Math.Max(1, _tileW / SpriteSizing.BaseUnit).ToString() };
         var depth = new TextBox { Width = 50, Text = "1" };
-        var raise = new TextBox { Width = 50, Text = LiftPixels.ToString() };
         body.Children.Add(new TextBlock { Text = "Step sprite" });
         body.Children.Add(sprite);
         var row = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
@@ -305,19 +304,19 @@ public partial class StaircaseDesignerWindow : Window
         row.Children.Add(Labeled("Goes up toward", toward));
         row.Children.Add(Labeled("Width (units)", across));
         row.Children.Add(Labeled("Depth (units)", depth));
-        row.Children.Add(Labeled("Picture raise / step (px)", raise));
         body.Children.Add(row);
         body.Children.Add(Note("Lays out the steps of the pose shown: each one a step further toward that side and one lift (4px) higher - Exult's walking rule climbs a lift a step, so 5 steps reach the floor above. " +
-                               "Each picture is drawn up-left by the raise (4px = one lift, as the game draws heights). A unit is 8px."));
+                               "Each picture is drawn 4px up-left per lift - its real height, as the game draws everything - so the top step's picture is exactly where floor 2 is drawn. A unit is 8px."));
         body.Children.Add(MakeButton("Build steps", () =>
         {
             if (!int.TryParse(count.Text, out int n) || n < 1 || n > 40) { _check.Text = "Steps: 1 to 40."; return; }
             if (!int.TryParse(across.Text, out int w) || w < 1) w = 4;
             if (!int.TryParse(depth.Text, out int dep) || dep < 1) dep = 1;
-            if (!int.TryParse(raise.Text, out int r)) r = LiftPixels;
             var choice = sprite.SelectedItem as SpriteChoice;
-            QuickBuild(n, (SpriteDirection)toward.SelectedItem, w, dep, r, choice?.Group ?? "", choice?.Name ?? "");
+            QuickBuild(n, (SpriteDirection)toward.SelectedItem, w, dep, LiftPixels, choice?.Group ?? "", choice?.Name ?? "");
         }));
+        body.Children.Add(MakeButton("Match pictures to heights", MatchPicturesToHeights));
+        body.Children.Add(Note("Puts every step's picture at its real height (4px up-left per lift), keeping the bottom step where it is: in the game you then stand exactly on the picture, and the top step meets the floor above."));
         return new GroupBox { Header = "Quick build", Padding = new Thickness(6), Margin = new Thickness(0, 8, 0, 0), Content = body };
     }
 
@@ -442,7 +441,7 @@ public partial class StaircaseDesignerWindow : Window
         footRow.Children.Add(IntField("Width", () => step.SizeX, v => step.SizeX = Math.Max(1, v)));
         footRow.Children.Add(IntField("Depth", () => step.SizeY, v => step.SizeY = Math.Max(1, v)));
         panel.Children.Add(footRow);
-        panel.Children.Add(IntField("Top lift (where you stand on it; 4px each)", () => step.TopLift, v => step.TopLift = Math.Clamp(v, 1, 40)));
+        panel.Children.Add(IntField("Top lift (where you stand on it; 4px each)", () => step.TopLift, v => SetTopLift(step, v)));
         _stepProps.Children.Add(new GroupBox { Header = $"Step {_selectedStep + 1}", Padding = new Thickness(6), Content = panel });
     }
 
@@ -461,7 +460,57 @@ public partial class StaircaseDesignerWindow : Window
             if (step.TopLift - previous > 1) lines.Add($"Step {index + 1} is {step.TopLift - previous} lifts above the one below it - walkers only step up 1 lift (4px) at a time, so it can't be climbed.");
             previous = step.TopLift;
         }
+        if (PictureHeightErrors(pose).Where(t => Math.Abs(t.Error) > 1).OrderByDescending(t => Math.Abs(t.Error)).FirstOrDefault() is { Step: not null } off)
+            lines.Add($"Step {pose.Steps.IndexOf(off.Step) + 1}'s picture is drawn {Math.Abs(off.Error)}px {(off.Error > 0 ? "higher" : "lower")} than its real height (lift {off.Step.TopLift}) - in the game you would stand {Math.Abs(off.Error)}px {(off.Error > 0 ? "below" : "above")} it, and the stairs would not meet the floor above. Click Match pictures to heights.");
         _check.Text = string.Join("  ", lines);
+    }
+
+    /// <summary>Where a step's picture goes at its real height: bottom-centre under where it stands, 4px up-left per lift above the bottom step's (Exult draws every lift 4px up-left, gamewin.cc).</summary>
+    private (int X, int Y) RealPicturePosition(StairStep step)
+    {
+        var size = StairLook.PictureSize(step, _sprites, _tileW, _tileH);
+        int raise = (step.TopLift - 1) * LiftPixels;
+        return ((int)Math.Round(step.FootX * SpriteSizing.BaseUnit + step.SizeX * SpriteSizing.BaseUnit / 2.0 - size.Width / 2.0) - raise,
+                (int)Math.Round((double)(step.FootY + step.SizeY) * SpriteSizing.BaseUnit - size.Height) - raise);
+    }
+
+    /// <summary>How far each step's picture is drawn above its real height (px, + = too high), measured against the bottom step.</summary>
+    private List<(StairStep Step, int Error)> PictureHeightErrors(StairPose pose)
+    {
+        var steps = pose.Steps.Where(s => !s.IsLanding).ToList();
+        if (steps.Count < 2) return new();
+        var bottom = steps.MinBy(s => s.TopLift)!;
+        var b = RealPicturePosition(bottom);
+        int baseY = bottom.PictureY - b.Y;
+        return steps.Select(s => (s, baseY - (s.PictureY - RealPicturePosition(s).Y))).ToList();
+    }
+
+    /// <summary>Match pictures to heights: every step's picture at its real height, the bottom step's left where it is.</summary>
+    private void MatchPicturesToHeights()
+    {
+        if (Pose is not { } pose) return;
+        var steps = pose.Steps.Where(s => !s.IsLanding).ToList();
+        if (steps.Count == 0) return;
+        var bottom = steps.MinBy(s => s.TopLift)!;
+        var b = RealPicturePosition(bottom);
+        int dx = bottom.PictureX - b.X, dy = bottom.PictureY - b.Y;
+        foreach (var step in steps)
+        {
+            var real = RealPicturePosition(step);
+            step.PictureX = real.X + dx;
+            step.PictureY = real.Y + dy;
+        }
+        RefreshAll();
+    }
+
+    /// <summary>A step's height changes: its picture goes with it, 4px up-left per lift (a landing tile stays on its floor's cells).</summary>
+    private void SetTopLift(StairStep step, int value)
+    {
+        int lift = Math.Clamp(value, 1, 40), by = lift - step.TopLift;
+        if (step.IsLanding) { var c = LandingCell(step); PlaceLanding(step, c.X, c.Y, lift); return; }
+        step.TopLift = lift;
+        step.PictureX -= by * LiftPixels;
+        step.PictureY -= by * LiftPixels;
     }
 
     private void Redraw()
@@ -619,8 +668,8 @@ public partial class StaircaseDesignerWindow : Window
             if (ctrl) { step.FootX += dx; step.FootY += dy; }
             else { step.PictureX += dx * (shift ? 4 : 1); step.PictureY += dy * (shift ? 4 : 1); KeepAboveBaseline(step); }
         }
-        else if (e.Key == Key.PageUp) { step.TopLift = Math.Min(40, step.TopLift + 1); if (step.IsLanding) { var c = LandingCell(step); PlaceLanding(step, c.X, c.Y, step.TopLift); } }
-        else if (e.Key == Key.PageDown) { step.TopLift = Math.Max(1, step.TopLift - 1); if (step.IsLanding) { var c = LandingCell(step); PlaceLanding(step, c.X, c.Y, step.TopLift); } }
+        else if (e.Key == Key.PageUp) SetTopLift(step, step.TopLift + 1);
+        else if (e.Key == Key.PageDown) SetTopLift(step, step.TopLift - 1);
         else if (e.Key == Key.Delete) { DeleteStep(); e.Handled = true; return; }
         else return;
         e.Handled = true;

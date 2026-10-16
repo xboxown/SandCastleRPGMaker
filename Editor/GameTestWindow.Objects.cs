@@ -69,7 +69,7 @@ public partial class GameTestWindow
     {
         var obj = DefinitionOf(instance);
         if (obj is not null && StairLook.PoseOf(obj, _objects, instance.Facing) is { } stairPose) // a designed staircase: every step its own (animated) picture
-            return StairLook.Visual(stairPose, _sprites, _resources, _tileWidth, _tileHeight, animators);
+            return StairLook.Visual(stairPose, _sprites, _resources, _tileWidth, _tileHeight, animators, landings: false); // landing tiles: drawn with their floor (BuildLandingVisuals)
         if (obj is not null && ObjectLooks.SpriteFor(obj, StateOf(instance), _sprites) is { } sprite && (sprite.Frames.Count > 0 || File.Exists(sprite.FilePath)))
         {
             var (width, height) = QuantizedSpriteSize(sprite);

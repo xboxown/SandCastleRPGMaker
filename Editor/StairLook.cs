@@ -52,10 +52,10 @@ internal static class StairLook
     public static Size PictureSize(StairStep step, SpriteDatabase sprites, int tileWidth, int tileHeight) =>
         FirstFrameOf(step, sprites) is { } bitmap ? new Size(bitmap.PixelWidth, bitmap.PixelHeight) : new Size(tileWidth, tileHeight);
 
-    public static Layout LayoutOf(StairPose pose, SpriteDatabase sprites, int tileWidth, int tileHeight)
+    public static Layout LayoutOf(StairPose pose, SpriteDatabase sprites, int tileWidth, int tileHeight, bool landings = true)
     {
         double minX = 0, maxX = tileWidth, minY = 0;
-        foreach (var step in pose.Steps)
+        foreach (var step in pose.Steps.Where(s => landings || !s.IsLanding))
         {
             var size = PictureSize(step, sprites, tileWidth, tileHeight);
             minX = Math.Min(minX, step.PictureX);
@@ -70,20 +70,21 @@ internal static class StairLook
     }
 
     /// <summary>The steps in paint order: the ones further back first (Exult paints what is behind first), lower before higher.</summary>
-    public static IEnumerable<(StairStep Step, int Index)> PaintOrder(StairPose pose) =>
-        pose.Steps.Select((step, index) => (step, index))
+    /// <param name="landings">False: leave the landing tiles out - in a map and in play they are drawn on their own floor, with that floor's tiles (Exult hides each thing by its own lift, gamerend.cc skip_lift).</param>
+    public static IEnumerable<(StairStep Step, int Index)> PaintOrder(StairPose pose, bool landings = true) =>
+        pose.Steps.Select((step, index) => (step, index)).Where(t => landings || !t.step.IsLanding)
             .OrderBy(t => t.step.FootY + t.step.SizeY + t.step.FootX + t.step.SizeX)
             .ThenBy(t => t.step.TopLift);
 
     /// <summary>All the steps as one still picture (Map Editor, Object Editor, palettes).</summary>
-    public static BitmapSource? Bitmap(StairPose pose, SpriteDatabase sprites, int tileWidth, int tileHeight)
+    public static BitmapSource? Bitmap(StairPose pose, SpriteDatabase sprites, int tileWidth, int tileHeight, bool landings = true)
     {
-        if (pose.Steps.Count == 0) return null;
-        var layout = LayoutOf(pose, sprites, tileWidth, tileHeight);
+        if (!pose.Steps.Any(s => landings || !s.IsLanding)) return null;
+        var layout = LayoutOf(pose, sprites, tileWidth, tileHeight, landings);
         var drawing = new DrawingVisual();
         using (var dc = drawing.RenderOpen())
         {
-            foreach (var (step, _) in PaintOrder(pose))
+            foreach (var (step, _) in PaintOrder(pose, landings))
             {
                 if (FirstFrameOf(step, sprites) is not { } frame) continue;
                 dc.DrawImage(frame, new Rect(layout.OriginX + step.PictureX, layout.OriginY + step.PictureY, frame.PixelWidth, frame.PixelHeight));
@@ -97,11 +98,11 @@ internal static class StairLook
     }
 
     /// <summary>All the steps as live pictures (the game): each animates and plays its sounds as any sprite does; each picture's Tag is its step's index.</summary>
-    public static Canvas Visual(StairPose pose, SpriteDatabase sprites, ResourceDatabase resources, int tileWidth, int tileHeight, List<SpriteAnimator>? animators)
+    public static Canvas Visual(StairPose pose, SpriteDatabase sprites, ResourceDatabase resources, int tileWidth, int tileHeight, List<SpriteAnimator>? animators, bool landings = true)
     {
-        var layout = LayoutOf(pose, sprites, tileWidth, tileHeight);
+        var layout = LayoutOf(pose, sprites, tileWidth, tileHeight, landings);
         var canvas = new Canvas { Width = layout.Width, Height = layout.Height, Background = null, IsHitTestVisible = true };
-        foreach (var (step, index) in PaintOrder(pose))
+        foreach (var (step, index) in PaintOrder(pose, landings))
         {
             var sprite = SpriteOf(step, sprites);
             var size = PictureSize(step, sprites, tileWidth, tileHeight);
@@ -113,6 +114,18 @@ internal static class StairLook
             canvas.Children.Add(image);
         }
         return canvas;
+    }
+
+    /// <summary>The floor a landing tile belongs to: the one whose walkers stand on its top (floor 2 for a landing at lift 5 over a ground-floor staircase).</summary>
+    public static int LandingFloor(StairStep landing, int stairsZ) => MapFloors.FloorOfLift(Math.Max(0, stairsZ + landing.TopLift));
+
+    /// <summary>A landing tile as an image of its own (its tile), not animated.</summary>
+    public static Image? LandingImage(StairStep landing, SpriteDatabase sprites)
+    {
+        if (FirstFrameOf(landing, sprites) is not { } frame) return null;
+        var image = new Image { Source = frame, Width = frame.PixelWidth, Height = frame.PixelHeight, IsHitTestVisible = false };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        return image;
     }
 
     /// <summary>The step whose picture is under this point of the staircase's picture (the front-most), or -1.</summary>

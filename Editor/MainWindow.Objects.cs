@@ -70,7 +70,7 @@ public partial class MainWindow
     {
         var state = instance is null ? ObjectLooks.DefaultState(obj) : ObjectLooks.StartState(obj, instance);
         if (StairLook.PoseOf(obj, _objectDatabase, state.Facing) is { } stairPose) // a designed staircase: all its steps, for this copy's pose
-            return StairLook.Bitmap(stairPose, _spriteDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32);
+            return StairLook.Bitmap(stairPose, _spriteDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32, landings: false); // landing tiles: drawn with their floor (PlaceLandingVisuals)
         var sprite = ObjectLooks.SpriteFor(obj, state, _spriteDatabase);
         if (sprite is not null)
         {
@@ -296,6 +296,7 @@ public partial class MainWindow
         if (_map is null) return;
         _map.Objects.Remove(target);
         if (_mapObjectVisuals.Remove(target.InstanceId, out var visual)) MapCanvas.Children.Remove(visual);
+        RemoveLandingVisuals(target.InstanceId);
         if (_selectedObjectInstance == target) SelectObjectInstance(null);
         if (announce) StatusText.Text = $"Deleted \"{ObjectName(target)}\" from the map.";
     }
@@ -310,7 +311,9 @@ public partial class MainWindow
     {
         if (_tileset is null) return;
         if (_mapObjectVisuals.Remove(instance.InstanceId, out var old)) MapCanvas.Children.Remove(old);
+        RemoveLandingVisuals(instance.InstanceId);
         var obj = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
+        if (obj is not null) PlaceLandingVisuals(instance, obj);
         var source = obj is null ? DeletedObjectPicture() : ObjectIcon(obj, instance);
         (int w, int h) = source is not null ? SpriteSizing.Quantize(source.PixelWidth, source.PixelHeight) : (_tileset.TileWidth, _tileset.TileHeight);
         string tip = obj is null ? $"Object #{instance.ObjectId} - deleted in the Object Editor. It's left out of the game: right-click > Delete to remove it." : $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (instance.Quantity > 1 ? $" x{instance.Quantity}" : "");
@@ -331,6 +334,42 @@ public partial class MainWindow
         if (FloorOf(instance) == _currentFloor) ApplyFreeDrawOrder();
         if (_selectedObjectInstance == instance) UpdateObjectSelectionVisual();
         if (ReferenceEquals(_freeSelected, instance)) UpdateFreeSelectionVisual();
+    }
+
+    /// <summary>Each placed staircase's landing tiles (Staircase Designer), drawn apart from it on their own floor.</summary>
+    private readonly Dictionary<int, List<Image>> _landingVisuals = new();
+
+    private void RemoveLandingVisuals(int instanceId)
+    {
+        if (!_landingVisuals.Remove(instanceId, out var images)) return;
+        foreach (var image in images) MapCanvas.Children.Remove(image);
+    }
+
+    /// <summary>
+    /// A staircase's landing tiles belong to the floor above (the floor whose
+    /// walkers stand on them), as its own tiles do: shown lined up with that
+    /// floor's grid when it is picked, dimmed under any floor picked above it,
+    /// and not at all while a floor below it is picked - so on floor 1 only the
+    /// steps show, as in the game under the roof.
+    /// </summary>
+    private void PlaceLandingVisuals(ObjectInstance instance, WorldObject obj)
+    {
+        if (_tileset is null || StairLook.PoseOf(obj, _objectDatabase, ObjectLooks.StartState(obj, instance).Facing) is not { } pose) return;
+        var images = new List<Image>();
+        foreach (var landing in pose.Steps.Where(s => s.IsLanding))
+        {
+            int floor = StairLook.LandingFloor(landing, instance.Z);
+            if (StairLook.LandingImage(landing, _spriteDatabase) is not { } image) continue;
+            // The game's spot for it (anchor cell + picture offset, which carries its lift, - the staircase's lift), seen from its own floor.
+            int shift = (MapFloors.BaseLift(floor) - instance.Z) * 4;
+            Canvas.SetLeft(image, instance.X * _tileset.TileWidth + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX + shift);
+            Canvas.SetTop(image, instance.Y * _tileset.TileHeight + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY + shift);
+            Panel.SetZIndex(image, 9); // a floor tile: under everything standing on its floor
+            if (FitToFloor(image, floor) is null) continue; // a floor above the picked one
+            MapCanvas.Children.Add(image);
+            images.Add(image);
+        }
+        if (images.Count > 0) _landingVisuals[instance.InstanceId] = images;
     }
 
     private static BitmapSource? _deletedObjectPicture;

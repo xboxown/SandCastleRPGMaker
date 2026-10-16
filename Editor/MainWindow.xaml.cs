@@ -1408,6 +1408,7 @@ public partial class MainWindow : Window
         _mapCellAnimators.Clear();
         _mapCellVisuals.Clear();
         _mapObjectVisuals.Clear();
+        _landingVisuals.Clear();
         _mapEventVisuals.Clear();
         _startPositionVisual = null;
         _hoverCursorVisual = null;
