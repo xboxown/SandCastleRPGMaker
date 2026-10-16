@@ -84,7 +84,7 @@ public partial class GameTestWindow
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                     Canvas.SetLeft(image, x * _tileWidth - lift * LiftPixelShift);
                     Canvas.SetTop(image, y * _tileHeight - lift * LiftPixelShift);
-                    Panel.SetZIndex(image, (layer.Floor - 1) * FloorZIndexBand); // the floor of its band: under everything standing on it
+                    Panel.SetZIndex(image, SlabZIndex(layer.Floor, MapFloors.SlabLift(layer.Floor))); // under everything standing on it, over the floors below - except what stands in front of it (GameTestWindow.UpperFloorOrder.cs)
                     GameCanvas.Children.Add(image);
                     _floorTileVisuals.Add((MapFloors.SlabLift(layer.Floor), image));
                 }
@@ -110,7 +110,7 @@ public partial class GameTestWindow
                 // Where the staircase's own picture would have put it: the anchor cell, the step's picture offset (which carries its lift), the staircase's own lift.
                 Canvas.SetLeft(image, instance.X * _tileWidth + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX - instance.Z * LiftPixelShift);
                 Canvas.SetTop(image, instance.Y * _tileHeight + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY - instance.Z * LiftPixelShift);
-                Panel.SetZIndex(image, (StairLook.LandingFloor(landing, instance.Z) - 1) * FloorZIndexBand); // with the floor's tiles: under everything standing on it
+                Panel.SetZIndex(image, SlabZIndex(StairLook.LandingFloor(landing, instance.Z), instance.Z + Math.Max(0, landing.TopLift - 1))); // with the floor's tiles
                 GameCanvas.Children.Add(image);
                 _floorTileVisuals.Add((instance.Z + Math.Max(0, landing.TopLift - 1), image)); // its slab's lift: hidden under a roof as the floor's tiles are
             }

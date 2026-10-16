@@ -316,7 +316,7 @@ public partial class GameTestWindow
         double bottom = at is null ? _playerPixelY : Canvas.GetTop(at) + at.Height;
         Canvas.SetLeft(image, left - width / 2.0);
         Canvas.SetTop(image, bottom - height);
-        Panel.SetZIndex(image, FloorBand(_playerZ) + (_map.Width + _map.Height) * 100 + 400); // over everything on the player's floor
+        Panel.SetZIndex(image, Math.Max(FloorBand(_playerZ) + (_map.Width + _map.Height) * 100 + 400, Panel.GetZIndex(_playerImage) + 1)); // over everything on the player's floor
         GameCanvas.Children.Add(image);
         var animator = new SpriteAnimator(sprite, image, _resources);
         RegisterWorldAnimator(image, animator);

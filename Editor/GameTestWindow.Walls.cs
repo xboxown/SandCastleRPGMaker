@@ -113,18 +113,26 @@ public partial class GameTestWindow
 
     /// <summary>The player's paint order, walls taken into account.</summary>
     private int PlayerOrderAmongWalls(int zIndex) =>
-        OrderAmongWalls(PlayerFootprint(), _playerZ, _playerSize.Z, ScreenRectOf(_playerImage), zIndex);
+        OrderAmongWalls(PlayerFootprint(), _playerZ, _playerSize.Z, ScreenRectOf(_playerImage),
+            OverUpperFloorsInFront(PlayerFootprint(), _playerZ, ScreenRectOf(_playerImage), zIndex)); // in front of an upper floor's tiles: over them
 
     /// <summary>A placed character's paint order, walls taken into account.</summary>
     private void OrderCharacterAmongWalls(MapCharacter mapCharacter)
     {
         if (mapCharacter.Visual is not { } visual) return;
-        Panel.SetZIndex(visual, OrderAmongWalls(CharacterFootprint(mapCharacter), mapCharacter.Lift, mapCharacter.Size.Z, ScreenRectOf(visual), Panel.GetZIndex(visual)));
+        var foot = CharacterFootprint(mapCharacter);
+        int zIndex = OverUpperFloorsInFront(foot, mapCharacter.Lift, ScreenRectOf(visual), Panel.GetZIndex(visual)); // in front of an upper floor's tiles: over them
+        Panel.SetZIndex(visual, OrderAmongWalls(foot, mapCharacter.Lift, mapCharacter.Size.Z, ScreenRectOf(visual), zIndex));
     }
 
     /// <summary>Items and objects lying near walls (after every stacking refresh).</summary>
     private void ApplyWallDrawOrder()
     {
+        // Upper floors' tiles first: whatever stands wholly in front of them is drawn over them (GameTestWindow.UpperFloorOrder.cs).
+        _upperSlabs = null;
+        foreach (var (item, visual) in _itemVisuals.ToList()) Panel.SetZIndex(visual, OverUpperFloorsInFront(item, visual));
+        foreach (var (obj, visual) in _objectVisuals.ToList())
+            if (!IsUpperFloorTile(obj)) Panel.SetZIndex(visual, OverUpperFloorsInFront(obj, visual));
         var walls = WallBoxes().ToList();
         if (walls.Count == 0) return;
         void Order(object entity, UIElement visual)
