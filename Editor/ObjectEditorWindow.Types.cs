@@ -73,6 +73,8 @@ public partial class ObjectEditorWindow
         ObjectType.CraftingStation => "An anvil, a millstone, a spinning wheel, an oven. Double-click it (or use a tool on it) and it makes the first recipe the party has the ingredients for: they're used up, the work plays out, and what it makes appears on the station (Exult's millstone).",
         ObjectType.MusicalInstrument => "Double-click to play: one of its tunes plays and notes float up. Carried ones (a lute) can be played from the backpack.",
         ObjectType.Projectile => "A fireball, a lightning bolt, a dart: shot by a trap, it flies across the map as a real object and hurts the first one it meets (it can explode). Too heavy to pick up.",
+        ObjectType.Weapon => "A sword, a bow, a magic staff: wielded in its slot (or a hand) to fight, as Exult's weapons - hand to hand, thrown or ranged; firing ammo, using up charges, or thrown itself; with a damage type, powers (sleep, poison...) and the way its wielder strikes.",
+        ObjectType.Armor => "A helm, a breastplate, a shield, a ring: worn in its slot, its armor points soften every blow, and it can make its wearer immune to a damage type (Exult's armor).",
         ObjectType.Explosive => "A powder keg. Lit (double-click), it blows up when its fuse burns down; struck, at once. Everyone within its reach is hurt, breakable things are struck, and other explosives go off too.",
         ObjectType.Bedroll => "Double-click to sleep: the party rests for the night (Exult's advanceTimeDueToRest) - time passes, health and mana come back, ailments wear off, everyone gets hungrier, lights burn down. Not with enemies about.",
         ObjectType.Reagent => "Spell ingredients: stack up to 100. A spell uses one of each of its reagents (Exult).",

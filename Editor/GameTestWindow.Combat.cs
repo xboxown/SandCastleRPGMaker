@@ -246,8 +246,27 @@ public partial class GameTestWindow
             return;
         }
 
+        // A weapon that shoots or is thrown at this distance (combat.cc not_in_melee_range): fire it, if there's a clear line.
+        var npcWeapon = WieldedWeapon(me);
+        bool npcInReach = InReach(me, target);
+        if (npcWeapon is { } held && Shoots(held.Def, npcInReach, TilesBetween(me, target)))
+        {
+            var (sx, sy) = PixelOf(me);
+            var (fx, fy) = PixelOf(target);
+            if (HasLineOfSight(sx, sy, LiftOf(me), fx, fy))
+            {
+                SetCharacterPose(mapCharacter, StrikePose(me, held.Def, true, FacingTowards(sx, sy, fx, fy)), FacingTowards(sx, sy, fx, fy));
+                if (Shoot(me, target, held.Item, held.Def))
+                {
+                    npc.DexPoints -= DexToAttack;
+                    npc.WaitMs = StrikeMs(held.Def.Weapon.ShootSwing) + StdDelay;
+                    return;
+                }
+            }
+        }
+
         // start_strike: out of reach -> approach_foe, walking the whole way (Approach_actor_action), not a few steps at a time.
-        if (!InReach(me, target))
+        if (!npcInReach)
         {
             var (tx, ty) = CellOf(target);
             var path = FindPath(mapCharacter, (tx, ty));
@@ -270,9 +289,10 @@ public partial class GameTestWindow
         npc.DexPoints -= DexToAttack;
         var (mx, my) = PixelOf(me);
         var (ox, oy) = PixelOf(target);
-        SetCharacterPose(mapCharacter, "Attacking Melee", FacingTowards(mx, my, ox, oy));
+        var strikeWith = npcWeapon?.Def;
+        SetCharacterPose(mapCharacter, StrikePose(me, strikeWith, false, FacingTowards(mx, my, ox, oy)), FacingTowards(mx, my, ox, oy));
         Strike(me, target);
-        npc.WaitMs = 2 * StdDelay; // the swing, then back to ready
+        npc.WaitMs = strikeWith is null ? 2 * StdDelay : StrikeMs(strikeWith.Weapon.Swing); // the swing (its weapon's strike style), then back to ready
     }
 
     /// <summary>
@@ -371,12 +391,25 @@ public partial class GameTestWindow
             StrikeThing(thing);
             return;
         }
-        if (_playerTarget is null || !InReach(_player, _playerTarget)) return;
-        _playerDexPoints -= DexToAttack;
+        if (_playerTarget is null) return;
+        var weapon = WieldedWeapon(_player);
+        bool inReach = InReach(_player, _playerTarget);
         var (tx, ty) = PixelOf(_playerTarget);
+        if (weapon is { } held && Shoots(held.Def, inReach, TilesBetween(_player, _playerTarget)))
+        {
+            // Shoot or throw (combat.cc not_in_melee_range).
+            _playerFacing = FacingTowards(_playerPixelX, _playerPixelY, tx, ty);
+            if (!Shoot(_player, _playerTarget, held.Item, held.Def)) return;
+            _playerDexPoints -= DexToAttack;
+            ApplyPoseSprite(PoseByName(StrikePose(_player, held.Def, true, _playerFacing)) ?? _idlePose);
+            _playerPoseResetMs = StrikeMs(held.Def.Weapon.ShootSwing);
+            return;
+        }
+        if (!inReach) return;
+        _playerDexPoints -= DexToAttack;
         _playerFacing = FacingTowards(_playerPixelX, _playerPixelY, tx, ty);
-        ApplyPoseSprite(PoseByName("Attacking Melee") ?? _idlePose);
-        _playerPoseResetMs = 2 * StdDelay;
+        ApplyPoseSprite(PoseByName(StrikePose(_player, weapon?.Def, false, _playerFacing)) ?? _idlePose);
+        _playerPoseResetMs = weapon is null ? 2 * StdDelay : StrikeMs(weapon.Value.Def.Weapon.Swing);
         Strike(_player, _playerTarget);
     }
 
@@ -385,24 +418,18 @@ public partial class GameTestWindow
     private void Strike(CharacterDefinition attacker, CharacterDefinition defender)
     {
         if (IsDead(defender)) return;
-        int attval = Stat(attacker, BuiltInStatKind.Combat, 10);
+        var weapon = WieldedWeapon(attacker)?.Def; // Actor::get_weapon (bare hands: none)
+        PlaySound(weapon?.Weapon.AttackSoundResourceId ?? -1);
+        int attval = Stat(attacker, BuiltInStatKind.Combat, 10) + (weapon?.Weapon.Lucky == true ? 3 : 0); // lucky: +3
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
-        bool hit = RollToWin(attval, defval);
+        bool hit = weapon?.Weapon.AutoHit == true || RollToWin(attval, defval);
         FightBack(defender, attacker);
         if (!hit)
         {
             if (ShowHitNumbers) ShowFloatingText(defender, "miss");
             return;
         }
-        int damage = ApplyDamage(attacker, defender);
-        if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
-        if (damage <= 0) return;
-        bool willDie = (GetHp(defender) ?? 99) - damage <= 0;
-        if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
-        MaybeStartBleeding(defender, damage); // reduce_health: normal damage may start it bleeding (death stops it again)
-        Damage(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
-        if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
-        if (!IsDead(defender)) FireCharacterEvent(defender, BookTriggerConditionBased.ByHit); // a blow that landed (a killing blow sets off By Death instead)
+        LandBlow(attacker, defender, weapon, null); // damage, armor, powers (GameTestWindow.Weapons.cs)
     }
 
     /// <summary>Actor::roll_to_win: a 30-sided die; 0 always loses, 29 always wins, otherwise roll + attacker - defender must reach 14.</summary>
@@ -413,16 +440,6 @@ public partial class GameTestWindow
         if (roll == 0) return false;
         if (roll == sides - 1) return true;
         return roll + attacker - defender >= sides / 2 - 1;
-    }
-
-    /// <summary>Actor::apply_damage with no weapon (1 point) and no armour: 1..Strength/3 plus 1.</summary>
-    private int ApplyDamage(CharacterDefinition attacker, CharacterDefinition defender)
-    {
-        int str = Stat(attacker, BuiltInStatKind.Strength, 10) / 3;
-        int damage = 0;
-        if (str > 0) damage += 1 + Rng.Next(str);
-        damage += 1; // wpoints = 1: "give at least one, but only if there's no weapon"
-        return damage;
     }
 
     /// <summary>Actor::fight_back, with the faction's memory of it.</summary>

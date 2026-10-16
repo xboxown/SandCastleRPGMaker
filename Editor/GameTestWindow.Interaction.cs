@@ -441,6 +441,7 @@ public partial class GameTestWindow
                 source = _itemVisuals.GetValueOrDefault(item);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
+                if (_flying.Any(f => ReferenceEquals(f.Instance, obj))) { Refuse(MousePointerKind.TooHeavy, "It's flying - you can't catch it."); return false; } // an arrow or a thrown weapon in flight
                 if (!IsMovable(obj)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to move."); return false; } // Dragging_info::start: "Don't want to move walls" - !is_dragable -> "too heavy"
                 // Not Exult (which lets you): a chair or bed someone is sitting or lying on is too heavy to move.
                 if (_seats.Values.Any(s => ReferenceEquals(s.Furniture, obj)) || _headingToSeat.Values.Any(h => ReferenceEquals(h.Furniture, obj)))
@@ -854,6 +855,13 @@ public partial class GameTestWindow
         if (category == ReferencedItemCategory.Container && !IsContainerSlotAllowed(itemId, character, slotKey))
         {
             StatusText.Text = "A container only fits in its own slot or a hand.";
+            return false;
+        }
+        // Exult's ready types: a weapon or a piece of armor goes in its own slot - or a hand, which holds anything.
+        if (category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Weapon or ObjectType.Armor } gear
+            && slotKey is not (EquipmentSlot.RightHand or EquipmentSlot.LeftHand) && !Equals(OwnSlotFor(gear, character), slotKey))
+        {
+            StatusText.Text = $"\"{gear.Name}\" isn't worn there.";
             return false;
         }
         bool isTwoHanded = PayloadIsTwoHanded(origin);

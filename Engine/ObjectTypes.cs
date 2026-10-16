@@ -79,7 +79,14 @@ public enum ObjectType
     /// <summary>A bucket, bottle or cauldron: filled at a source (a well, a trough) and drunk, poured or emptied.</summary>
     LiquidContainer,
     /// <summary>A fireball, a lightning bolt, a dart: a real object flying across the map (shot by a trap) - it hurts whoever it hits; too heavy to pick up.</summary>
-    Projectile
+    Projectile,
+
+    // ---- Added in build 308 ----
+
+    /// <summary>Wielded to fight (Exult's Weapon_info): hand to hand, thrown or ranged; ammo, charges (a magic staff) or itself thrown; damage, damage type and powers.</summary>
+    Weapon,
+    /// <summary>Worn in its slot (Exult's Armor_info): armor points that soften every blow, and damage types it makes its wearer immune to.</summary>
+    Armor
 }
 
 public static class ObjectTypes
@@ -93,7 +100,7 @@ public static class ObjectTypes
         ObjectType.Potion, ObjectType.BreakableGlass, ObjectType.Spellbook, ObjectType.UseableObject, ObjectType.Lever,
         ObjectType.Stairs, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
         ObjectType.MusicalInstrument, ObjectType.Explosive, ObjectType.Bedroll, ObjectType.Reagent, ObjectType.Table,
-        ObjectType.LiquidContainer, ObjectType.Projectile
+        ObjectType.LiquidContainer, ObjectType.Projectile, ObjectType.Weapon, ObjectType.Armor
     };
 
     public static string Name(ObjectType type) => type switch

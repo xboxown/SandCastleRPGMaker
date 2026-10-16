@@ -128,6 +128,8 @@ public class WorldObject
     public LightSettings Light { get; set; } = new();
     public BundleSettings Bundle { get; set; } = new();
     public AmmoSettings Ammo { get; set; } = new();
+    public WeaponSettings Weapon { get; set; } = new();
+    public ArmorSettings Armor { get; set; } = new();
     public MoneySettings Money { get; set; } = new();
     public FurnitureSettings Furniture { get; set; } = new();
     public TrapSettings Trap { get; set; } = new();

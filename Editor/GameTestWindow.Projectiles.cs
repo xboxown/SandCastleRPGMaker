@@ -31,6 +31,10 @@ public partial class GameTestWindow
         public int Lift;
         /// <summary>What shot it (never hit by its own shot): a trap, or a character.</summary>
         public object? Shooter;
+        /// <summary>A weapon's shot: the hit is rolled on arrival and the weapon's damage done (GameTestWindow.Weapons.cs). Null: a trap's projectile, with its own damage.</summary>
+        public WeaponShot? Shot;
+        /// <summary>How far it flies (tiles of 8px); 0 = its own range.</summary>
+        public int MaxTiles;
     }
 
     private readonly List<Flying> _flying = new();
@@ -144,9 +148,13 @@ public partial class GameTestWindow
     // ================= Projectiles =================
 
     /// <summary>A projectile sets off from a point (map pixels) heading one way.</summary>
-    private void Launch(WorldObject projectile, double x, double y, int dx, int dy, int lift, object? shooter)
+    private void Launch(WorldObject projectile, double x, double y, int dx, int dy, int lift, object? shooter) =>
+        LaunchToward(projectile, x, y, dx, dy, lift, shooter, 0, null);
+
+    /// <summary>A projectile (or arrow, or thrown weapon) sets off from a point (map pixels) toward a direction - a weapon's shot carries how it was fired.</summary>
+    private void LaunchToward(WorldObject projectile, double x, double y, double dx, double dy, int lift, object? shooter, int maxTiles, WeaponShot? shot)
     {
-        if (dx == 0 && dy == 0) dy = 1;
+        if (Math.Abs(dx) < 0.001 && Math.Abs(dy) < 0.001) dy = 1;
         double length = Math.Sqrt(dx * dx + dy * dy);
         double speed = Math.Max(1, projectile.Projectile.SpeedTiles) * SpriteSizing.BaseUnit;
         var instance = new ObjectInstance
@@ -156,14 +164,14 @@ public partial class GameTestWindow
             Facing = dx > 0 ? SpriteDirection.East : dx < 0 ? SpriteDirection.West : dy < 0 ? SpriteDirection.North : SpriteDirection.South
         };
         AddMapEntity(null, instance);
-        var flying = new Flying { Instance = instance, Def = projectile, X = x, Y = y, VX = dx / length * speed, VY = dy / length * speed, Lift = lift, Shooter = shooter };
+        var flying = new Flying { Instance = instance, Def = projectile, X = x, Y = y, VX = dx / length * speed, VY = dy / length * speed, Lift = lift, Shooter = shooter, Shot = shot, MaxTiles = maxTiles };
         _flying.Add(flying);
         if (projectile.Projectile.RotatesToDirection && VisualOf(instance) is FrameworkElement visual)
         {
             visual.RenderTransformOrigin = new Point(0.5, 0.5);
             visual.RenderTransform = new RotateTransform(Math.Atan2(dy, dx) * 180 / Math.PI - 90); // its art points down (south)
         }
-        PlaySound(projectile.Projectile.LaunchSoundResourceId);
+        if (projectile.Type == ObjectType.Projectile) PlaySound(projectile.Projectile.LaunchSoundResourceId);
         PlaceFlying(flying);
     }
 
@@ -195,7 +203,7 @@ public partial class GameTestWindow
                 flying.Y += flying.VY * seconds / parts;
                 flying.Traveled += step / parts;
                 if (CheckHit(flying)) break;
-                if (flying.Traveled / SpriteSizing.BaseUnit >= Math.Max(1, flying.Def.Projectile.RangeTiles)) { EndFlight(flying, null); break; }
+                if (flying.Traveled / SpriteSizing.BaseUnit >= Math.Max(1, flying.MaxTiles > 0 ? flying.MaxTiles : flying.Def.Projectile.RangeTiles)) { EndFlight(flying, null); break; }
                 if (flying.X < 0 || flying.Y < 0 || flying.X >= _map.Width * _tileWidth || flying.Y >= _map.Height * _tileHeight) { EndFlight(flying, null); break; }
             }
             if (_flying.Contains(flying)) PlaceFlying(flying);
@@ -232,6 +240,24 @@ public partial class GameTestWindow
     {
         var p = flying.Def.Projectile;
         _flying.Remove(flying);
+        if (flying.Shot is { } shot)
+        {
+            // A weapon's shot: the weapon's hit and damage; a projectile it fires (a fireball) still explodes as it's set to.
+            if (victim is not null) { ShotArrives(shot, victim); FireHitTarget(flying.Instance, flying.Def, HitTargetKind.Character, MapCharacterOf(victim)); }
+            if (flying.Def.Type == ObjectType.Projectile && p.Explodes && (victim is not null || p.ExplodesAtEnd))
+            {
+                PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement);
+                PlaySound(p.ExplosionSoundResourceId);
+                Blast(flying.X / SpriteSizing.BaseUnit, flying.Y / SpriteSizing.BaseUnit, p.RadiusTiles, p.DamageMin, p.DamageMax, $"a {flying.Def.Name.ToLowerInvariant()}", flying.Instance);
+            }
+            var landed = flying.Instance;
+            RemoveMapObject(flying.Instance);
+            if (shot.Thrown is { } thrownWeapon) // a thrown weapon lands where its flight ended (Exult drops it there)
+                AddMapEntity(null, new ObjectInstance { ObjectId = thrownWeapon.Id, InstanceId = _map.GetNextInstanceId(), ContainerInstanceId = -1, X = landed.X, Y = landed.Y, Z = Math.Max(0, LiftOf(shot.Attacker)) });
+            SettleWorld();
+            RefreshAfterMove();
+            return;
+        }
         if (victim is not null)
         {
             int low = Math.Min(p.DamageMin, p.DamageMax), high = Math.Max(p.DamageMin, p.DamageMax);

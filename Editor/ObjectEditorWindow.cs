@@ -178,6 +178,8 @@ public partial class ObjectEditorWindow : Window
             case ObjectType.Bed: BuildFurniture(obj, bed: true); break;
             case ObjectType.Bedroll: BuildFurniture(obj, bed: true); BuildNewTypePanel(obj); break; // laid out, it's slept on as a bed
             case ObjectType.Trap: BuildTrap(obj); break;
+            case ObjectType.Weapon: BuildWeapon(obj); break; // ObjectEditorWindow.Weapons.cs
+            case ObjectType.Armor: BuildArmor(obj); break;
             default: BuildNewTypePanel(obj); break;
         }
         if (HasDurability(obj.Type))
