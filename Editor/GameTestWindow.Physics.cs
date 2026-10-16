@@ -79,8 +79,15 @@ public partial class GameTestWindow
         var foot = FootprintAt(x, y, offsetX + solidOffsetX, offsetY + solidOffsetY, sizeX, sizeY);
         if (item?.HangsOnWall == true || obj?.HangsOnWall == true)
             return new Body((object?)item ?? obj!, foot.Left, foot.Top, foot.Width, foot.Depth, item?.Z ?? obj!.Z, sizeZ, Solid: false, Elevates: false, Stackable: false); // on the wall: in nobody's way, holds nothing up
+        if (obj is not null && IsUpperFloorSlabTile(obj))
+            return new Body(obj, foot.Left, foot.Top, foot.Width, foot.Depth, obj.Z - 1, 1, Solid: true, Elevates: true, Stackable: true); // the floor itself: a slab just under its floor's height, as its painted tiles are
         return new Body((object?)item ?? obj!, foot.Left, foot.Top, foot.Width, foot.Depth, item?.Z ?? obj!.Z, sizeZ, IsSolidAt(item, obj), elevates, stackable);
     }
+
+    /// <summary>A Floor + Solid tile on an upper floor: the same as that floor's painted tiles - a slab one lift thick under the floor's height, so people and things stand at the floor's own height and anything under it is inside.</summary>
+    private bool IsUpperFloorSlabTile(ObjectInstance instance) =>
+        instance.Z >= MapFloors.BaseLift(2) && instance.Z == MapFloors.BaseLift(MapFloors.FloorOfLift(instance.Z))
+        && DefinitionOf(instance) is { Type: ObjectType.Tile, IsSolid: true, IsFloorTile: true };
 
     /// <summary>Hung on the wall in the Map Editor (ObjectInstance / PlacedItemInstance.HangsOnWall).</summary>
     private static bool HangsOnWall(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };

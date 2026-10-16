@@ -231,7 +231,7 @@ public partial class GameTestWindow
                 if (_objectVisuals.GetValueOrDefault(instance) is UIElement v) hide.Add(v);
             foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && IsSolidAt(i, null))))
                 if (_itemVisuals.GetValueOrDefault(item) is UIElement v) hide.Add(v);
-            foreach (var (slabLift, v) in _floorTileVisuals.Where(t => t.SlabLift >= lift)) hide.Add(v); // the floors overhead
+            foreach (var (slabLift, v) in _floorTileVisuals.Where(t => t.SlabLift + 1 >= lift)) hide.Add(v); // the floors overhead: a floor whose height (its slab's top) is at the ceiling's lift or above - under a wall of floor 2, floor 2 goes too
             foreach (var mapCharacter in _mapCharacters.Where(mc => mc.Lift >= lift))
                 if (mapCharacter.Visual is { } v) hide.Add(v);
         }

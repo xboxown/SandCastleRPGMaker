@@ -131,6 +131,9 @@ public partial class MainWindow
         };
         var (left, top) = FootprintCorner(x, y, ox + info.SolidX, oy + info.SolidY, info.SizeX, info.SizeY);
         if (IsHanging(entity)) return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, false, false, false, false); // on the wall: holds nothing up
+        if (entity is ObjectInstance slabTile && z >= MapFloors.BaseLift(2) && z == MapFloors.BaseLift(MapFloors.FloorOfLift(z))
+            && _objectDatabase.Objects.FirstOrDefault(d => d.Id == slabTile.ObjectId) is { Type: ObjectType.Tile, IsSolid: true, IsFloorTile: true })
+            return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z - 1, 1, true, true, true, under); // the floor itself: a slab under its floor's height, as the game has it
         return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, info.Elevates, info.Surface, info.IsTile && info.Surface, under);
     }
 
