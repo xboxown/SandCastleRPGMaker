@@ -55,7 +55,15 @@ public enum EventCommandType
     /// <summary>Advance IF: a branch on any one game condition (its numbered tab), with Else / End If like Conditional Branch.</summary>
     AdvancedIf,
     /// <summary>Stop Sound: stops a sound that is playing (a looping Play Sound, say), or every sound.</summary>
-    StopSound
+    StopSound,
+    /// <summary>Change Stat: set, raise or lower one stat of someone - for ever, or for some game minutes / hours.</summary>
+    ChangeStat,
+    /// <summary>Reset Stat: takes back every Change Stat on a stat (or all stats); training and levels are kept.</summary>
+    ResetStat,
+    /// <summary>Train: a trainer raises stats for training points and money (Ultima 7's trainers).</summary>
+    Train,
+    /// <summary>Kill Character: a fatal blow 0.05 s later - the hit flash - and death.</summary>
+    KillCharacter
 }
 
 /// <summary>

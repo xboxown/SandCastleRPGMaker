@@ -255,6 +255,11 @@ public static class EventCommandInterpreter
         EventCommandType.SleepOnBed => $"Sleep On Bed: {cmd.Get("Which")}",
         EventCommandType.Paperdoll => $"Paperdoll: {cmd.Get("Action")} {cmd.Get("PartName")}",
         EventCommandType.ChangeFaction => $"Change Faction: character {cmd.Get("CharacterId")} joins faction #{cmd.Get("FactionId")}",
+        EventCommandType.GiveItem => $"Give Item: {cmd.Get("Quantity")} of {cmd.Get("Category")} #{cmd.Get("ItemId")} from {cmd.Get("Giver")} to {cmd.Get("Receiver")}",
+        EventCommandType.ChangeStat => $"Change Stat: {cmd.Get("Who")} stat #{cmd.Get("StatId")} {cmd.Get("Operation")} {cmd.Get("Value")}{(cmd.Get("Temporary") == "True" ? $" for {cmd.Get("Duration")} {cmd.Get("Unit")}" : "")}",
+        EventCommandType.ResetStat => $"Reset Stat: {cmd.Get("Who")} stat {cmd.Get("StatId")}",
+        EventCommandType.Train => $"Train: {cmd.Get("Trainee")} for {cmd.Get("Points")} training points, {cmd.Get("Price")} money",
+        EventCommandType.KillCharacter => $"Kill Character: {cmd.Get("Who")}",
         _ => cmd.Type.ToString()
     };
 }

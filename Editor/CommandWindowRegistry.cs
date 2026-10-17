@@ -17,6 +17,11 @@ internal static class CommandWindowRegistry
     public static readonly Dictionary<EventCommandType, Entry> All = new()
     {
         [EventCommandType.StopSound] = new("Stop Sound", c => new StopSoundCommandWindow(c), StopSoundCommandWindow.Describe),
+        [EventCommandType.GiveItem] = new("Give Item", c => new GiveItemCommandWindow(c), GiveItemCommandWindow.Describe),
+        [EventCommandType.ChangeStat] = new("Change Stat", c => new ChangeStatCommandWindow(c), ChangeStatCommandWindow.Describe),
+        [EventCommandType.ResetStat] = new("Reset Stat", c => new ResetStatCommandWindow(c), ResetStatCommandWindow.Describe),
+        [EventCommandType.Train] = new("Train", c => new TrainCommandWindow(c), TrainCommandWindow.Describe),
+        [EventCommandType.KillCharacter] = new("Kill Character", c => new KillCharacterCommandWindow(c), KillCharacterCommandWindow.Describe),
     };
 }
 

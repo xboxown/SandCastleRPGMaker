@@ -78,7 +78,8 @@ public partial class GameTestWindow
     private void Refuse(MousePointerKind pointer, string message)
     {
         StatusText.Text = message;
-        FlashPointer(pointer);
+        if (!_quietRefusals) FlashPointer(pointer); // an event's hand-over: nobody dragged anything
+
     }
 
     private void ShowPointer(MousePointerKind kind)

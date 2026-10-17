@@ -40,12 +40,16 @@
 
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Party / Item" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <Button Content="Give Item..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Give Item..." Margin="0,0,0,4" Click="Registered_Click" Tag="GiveItem" ToolTip="One character gives an item to another - from what they really have, or not; someone who can't carry it gets help from the party, or it's put down at their feet"/>
                         <Button Content="Exchange Currency..." Margin="0,0,0,4" Click="ExchangeCurrency_Click" ToolTip="A money changer: the party's money of one currency into another, at the Currency Editor's rate"/>
                         <Button Content="Remove Item..." Margin="0,0,0,12" IsEnabled="False"/>
 
                         <TextBlock Text="Actor" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Change HP..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Change Stat..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangeStat" ToolTip="Set, raise or lower a stat - for ever, or for some game minutes or hours"/>
+                        <Button Content="Reset Stat..." Margin="0,0,0,4" Click="Registered_Click" Tag="ResetStat" ToolTip="Takes back every Change Stat on a stat (or all of them); training is kept"/>
+                        <Button Content="Train..." Margin="0,0,0,4" Click="Registered_Click" Tag="Train" ToolTip="A trainer raises stats for training points and money"/>
+                        <Button Content="Kill Character..." Margin="0,0,0,4" Click="Registered_Click" Tag="KillCharacter" ToolTip="A fatal blow (the hit flash) and they die"/>
                         <Button Content="Food Level..." Margin="0,0,0,4" Click="ChangeFoodLevel_Click"/>
                         <Button Content="Modify Ailments..." Margin="0,0,0,4" Click="ModifyAilments_Click"/>
                         <Button Content="Attack..." Margin="0,0,0,4" Click="Attack_Click"/>

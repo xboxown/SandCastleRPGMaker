@@ -64,6 +64,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     /// <summary>Advance IF: the game tests the condition (the editor's preview can't: false).</summary>
     public Func<GameCondition, bool>? OnEvaluateCondition { get; set; }
     public bool EvaluateGameCondition(GameCondition condition) => OnEvaluateCondition?.Invoke(condition) ?? false;
+    /// <summary>The commands only a running game can do (Give Item, Change Stat, Train...): the game puts its own handler here for each; without one (the editor's preview) they're logged as not done.</summary>
+    public Dictionary<EventCommandType, Func<EventCommand, bool>> GameHandlers { get; } = new();
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -250,7 +252,7 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 return appliedAny;
             }
             default:
-                return false;
+                return GameHandlers.TryGetValue(command.Type, out var handler) && handler(command);
         }
     }
 

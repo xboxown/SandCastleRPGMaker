@@ -12,6 +12,14 @@ public partial class AddCommandPickerWindow : Window
         InitializeComponent();
     }
 
+    /// <summary>A command from CommandWindowRegistry: its button's Tag is its EventCommandType name.</summary>
+    private void Registered_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is not FrameworkElement { Tag: string name } || !Enum.TryParse<EventCommandType>(name, out var type)) return;
+        ChosenType = type;
+        DialogResult = true;
+    }
+
     private void ShowText_Click(object sender, RoutedEventArgs e)
     {
         ChosenType = EventCommandType.ShowText;

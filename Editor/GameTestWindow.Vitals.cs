@@ -67,6 +67,7 @@ public partial class GameTestWindow
         _execContext.OnExchangeCurrency = ExchangeCurrencyCommand;
         _execContext.OnChangeWeather = ChangeWeather;
         _execContext.OnEvaluateCondition = EvaluateGameCondition; // Advance IF (GameTestWindow.Conditions.cs)
+        InitializeEventCommands(); // Give Item, Change Stat, Train... (GameTestWindow.EventCommands.cs)
         WatchSounds();
     }
 
@@ -171,6 +172,7 @@ public partial class GameTestWindow
         {
             _lastClockMinute = minute;
             foreach (var character in AllLivingCharacters().ToList()) HungerMinute(character);
+            ExpireStatChanges(minute); // temporary Change Stats wearing off
         }
 
         foreach (var character in AllLivingCharacters().ToList())
