@@ -164,8 +164,8 @@ public partial class BookEventConditionsControl : UserControl
     }
 
     /// <summary>
-    /// The Character Editor's own trigger list, and nothing else: By Equip,
-    /// By UnEquip, By Hit, By Ailment Effect, By Death. Book, container, map
+    /// The Character Editor's own trigger list, and nothing else: Always, By
+    /// Equip, By UnEquip, By Hit, By Ailment Effect, By Death. Book, container, map
     /// and tile events never call this, so their lists are unchanged.
     /// </summary>
     public void ApplyCharacterTriggerChoices()
@@ -179,7 +179,9 @@ public partial class BookEventConditionsControl : UserControl
             [BookTriggerConditionBased.ByAilmentEffect] = "By Ailment Effect",
             [BookTriggerConditionBased.ByDeath] = "By Death"
         };
-        TriggerConditionBasedCombo.ItemsSource = CharacterTriggers.All.Select(v => EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, labels[v])).ToList();
+        // Always first: a page that doesn't wait for one trigger - it runs whenever any of them happens (and its other conditions hold), as Always does for every other event.
+        TriggerConditionBasedCombo.ItemsSource = new[] { EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(BookTriggerConditionBased.Always, "Always") }
+            .Concat(CharacterTriggers.All.Select(v => EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, labels[v]))).ToList();
         if (current.HasValue)
         {
             foreach (EnumChoice<BookTriggerConditionBased> item in TriggerConditionBasedCombo.Items)
