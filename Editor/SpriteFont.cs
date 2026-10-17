@@ -227,6 +227,9 @@ internal sealed class SpriteFont
         }
     }
 
+    /// <summary>How many lines the text wraps to at maxWidth.</summary>
+    public int LineCount(string text, double maxWidth) => string.IsNullOrEmpty(text) ? 0 : Wrap(Plain(text), maxWidth).Count;
+
     /// <summary>The height a block of text takes when wrapped to maxWidth.</summary>
     public double Measure(IReadOnlyList<StyledChar> chars, double maxWidth) => Wrap(chars, maxWidth).Sum(l => l.Height);
 

@@ -39,6 +39,8 @@ public partial class GameTestWindow
     }
 
     private readonly Queue<GameMessage> _messages = new();
+    /// <summary>The pages still to come of the box being read (Exult: four lines at a time, a click for the next).</summary>
+    private readonly Queue<GameMessage> _messagePages = new();
     private GameMessage? _currentMessage;
     private DialogBoxDrawing? _messageDrawing;
 
@@ -47,7 +49,7 @@ public partial class GameTestWindow
     /// <summary>True while the commands running were set off by a character walking over an event, not by the player.</summary>
     private bool _activatedByCharacterStep;
 
-    private bool IsShowingMessage => _currentMessage is not null || _messages.Count > 0;
+    private bool IsShowingMessage => _currentMessage is not null || _messagePages.Count > 0 || _messages.Count > 0;
 
     private void InitializeTalk()
     {
@@ -289,7 +291,8 @@ public partial class GameTestWindow
         _messageDrawing?.Stop();
         _messageDrawing = null;
         MessageLayer.Children.Clear();
-        if (!_messages.TryDequeue(out var message))
+        bool isPage = _messagePages.TryDequeue(out var message);
+        if (!isPage && !_messages.TryDequeue(out message))
         {
             _currentMessage = null;
             MessageLayer.Visibility = Visibility.Collapsed;
@@ -304,12 +307,24 @@ public partial class GameTestWindow
             if (_currentMessage is null) ShowNextMessage();
             return;
         }
+        BitmapSource? face = null;
+        if (message!.Speaker is { } speaker && FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName) is { } faceSprite) face = FirstFrameOf(faceSprite);
+        if (!isPage)
+        {
+            // Too long for one box: four lines at a time, each a click (Enter) for the next - the replies come with the last page.
+            var pages = DialogBoxBuilder.Pages(new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame, Array.Empty<string>()), _sprites);
+            if (pages.Count > 1)
+            {
+                for (int i = 1; i < pages.Count; i++)
+                    _messagePages.Enqueue(i == pages.Count - 1 ? message with { Text = pages[i] } : message with { Text = pages[i], Replies = null, OnChosen = null });
+                message = message with { Text = pages[0], Replies = null, OnChosen = null };
+            }
+            else if (pages[0] != message.Text.Trim()) message = message with { Text = pages[0] }; // a '*' taken out
+        }
         _currentMessage = message;
         _replyCursor = -1;
         MessageLayer.Visibility = Visibility.Visible;
 
-        BitmapSource? face = null;
-        if (message.Speaker is { } speaker && FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName) is { } faceSprite) face = FirstFrameOf(faceSprite);
         var content = new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame,
             message.Replies?.Select(r => r.Text).ToList() ?? new List<string>());
         _messageDrawing = DialogBoxBuilder.Draw(MessageLayer, content, _sprites, _resources);

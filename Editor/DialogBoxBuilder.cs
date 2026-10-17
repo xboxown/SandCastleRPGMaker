@@ -38,6 +38,83 @@ internal static class DialogBoxBuilder
     public const string DimKey = "Dim";
     public const string TitleKey = "Title";
 
+    /// <summary>Exult's NPC text box is four lines tall (Conversation::set_face_rect: 4 * text_height); more waits for a click.</summary>
+    public const int LinesPerPage = 4;
+    /// <summary>The system font's line height while the DialogFont has no letters.</summary>
+    private const double FallbackLineHeight = 10;
+
+    private static double FaceWidth(BitmapSource? faceBitmap)
+    {
+        if (faceBitmap is null) return 0;
+        double scale = Math.Min(1, Math.Min(DialogBoxMetrics.FaceMax / faceBitmap.PixelWidth, DialogBoxMetrics.FaceMax / faceBitmap.PixelHeight));
+        return faceBitmap.PixelWidth * scale;
+    }
+
+    private static double TextWidth(DialogBoxContent content)
+    {
+        double face = content.Face is null ? 0 : FaceWidth(content.Face) + DialogBoxMetrics.Padding;
+        var inset = DialogBoxMetrics.Inset(content.Frame);
+        return Math.Max(16, DialogBoxMetrics.Width - inset.Left - inset.Right - face);
+    }
+
+    private static TextBlock FallbackBlock(string text, double width, bool bold = false) => new()
+    {
+        Text = text, Width = width, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White, FontSize = 8,
+        FontWeight = bold ? FontWeights.Bold : FontWeights.Normal,
+        LineHeight = FallbackLineHeight, LineStackingStrategy = LineStackingStrategy.BlockLineHeight
+    };
+
+    /// <summary>
+    /// The box's text cut into pages of four lines, as Exult's
+    /// Conversation::show_npc_message pages an NPC's text through
+    /// Font::paint_text_box: a page that can't hold the rest ends after the
+    /// last word on it ending in . ? ! , or " (or, with none, after its
+    /// fourth line), the next page starts at the next word, and a word
+    /// starting with * begins a new page. One page when it all fits.
+    /// </summary>
+    public static List<string> Pages(DialogBoxContent content, SpriteDatabase sprites)
+    {
+        var pages = new List<string>();
+        string text = content.Text.Replace("\r\n", "\n");
+        if (text.Trim().Length == 0) { pages.Add(content.Text); return pages; }
+        double width = TextWidth(content);
+        var font = SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
+        int Lines(string s)
+        {
+            if (font is not null) return font.LineCount(s, width);
+            var block = FallbackBlock(s, width);
+            block.Measure(new Size(width, double.PositiveInfinity));
+            return (int)Math.Round(block.DesiredSize.Height / FallbackLineHeight);
+        }
+
+        // "*word": a page of its own from here (Exult skips the '*' and ends the page there).
+        var parts = System.Text.RegularExpressions.Regex.Split(text, @"(?<=^|\s)\*");
+        foreach (string part in parts)
+        {
+            string rest = part.Trim();
+            while (rest.Length > 0)
+            {
+                if (Lines(rest) <= LinesPerPage) { pages.Add(rest); break; }
+                // The word ends that still fit on the page; the last of them ending in punctuation is where Exult cuts.
+                int fits = -1, punct = -1;
+                for (int k = 1; k <= rest.Length; k++)
+                {
+                    bool wordEnd = !char.IsWhiteSpace(rest[k - 1]) && (k == rest.Length || char.IsWhiteSpace(rest[k]));
+                    if (!wordEnd) continue;
+                    if (Lines(rest[..k]) > LinesPerPage) break;
+                    fits = k;
+                    if (rest[k - 1] is '.' or '?' or '!' or ',' or '"') punct = k;
+                }
+                int cut = punct > 0 ? punct : fits;
+                if (cut <= 0) { pages.Add(rest); break; } // one word longer than a whole page: it goes as it is
+                pages.Add(rest[..cut].TrimEnd());
+                rest = rest[cut..].TrimStart();
+            }
+        }
+        if (pages.Count == 0) pages.Add("");
+        return pages;
+    }
+
     /// <summary>A Show Text's frame ("" default, "None", or a sprite name) and dimming - older commands kept these in "Background" (Window / Dim / Transparent).</summary>
     public static (string Frame, bool Dim) LookOf(EventCommand command)
     {
@@ -60,12 +137,12 @@ internal static class DialogBoxBuilder
         Image? face = null;
         if (content.Face is { } faceBitmap)
         {
-            double scale = Math.Min(1, Math.Min(DialogBoxMetrics.FaceMax / faceBitmap.PixelWidth, DialogBoxMetrics.FaceMax / faceBitmap.PixelHeight));
-            face = new Image { Source = faceBitmap, Width = faceBitmap.PixelWidth * scale, Height = faceBitmap.PixelHeight * scale, Stretch = Stretch.Fill };
+            double faceW = FaceWidth(faceBitmap);
+            face = new Image { Source = faceBitmap, Width = faceW, Height = faceBitmap.PixelHeight * (faceW / faceBitmap.PixelWidth), Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(face, BitmapScalingMode.NearestNeighbor);
         }
         double faceWidth = face is null ? 0 : face.Width + padding;
-        double textWidth = Math.Max(16, boxWidth - inset.Left - inset.Right - faceWidth);
+        double textWidth = TextWidth(content);
 
         var font = SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
         FrameworkElement Words(string text, bool bold = false)
@@ -77,7 +154,7 @@ internal static class DialogBoxBuilder
                 return image;
             }
             // A small system font until the DialogFont has letters.
-            var block = new TextBlock { Text = text, Width = textWidth, TextWrapping = TextWrapping.Wrap, Foreground = Brushes.White, FontSize = 8, FontWeight = bold ? FontWeights.Bold : FontWeights.Normal };
+            var block = FallbackBlock(text, textWidth, bold);
             block.Measure(new Size(textWidth, double.PositiveInfinity));
             block.Height = block.DesiredSize.Height;
             return block;
