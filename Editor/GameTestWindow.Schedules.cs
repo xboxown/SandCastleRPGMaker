@@ -71,6 +71,8 @@ public partial class GameTestWindow
     private GameClock _clock = new();
     private static readonly Random Rng = new();
     private const int StdDelay = GameClock.StdDelayMs;
+    /// <summary>How long a character stands still at least each time it stops walking (so it can be clicked on).</summary>
+    private const int StopPauseMs = 3500;
 
     // ---------- Clock ----------
 
@@ -188,7 +190,15 @@ public partial class GameTestWindow
         }
         CheckScheduleRules(mapCharacter, elapsedMs); // its When... rules: hungry, injured... (GameTestWindow.Zones.cs)
         CheckHunger(mapCharacter, elapsedMs); // hungry: off to eat (GameTestWindow.Meals.cs)
-        if (npc.Path is not null) { MoveAlongPath(mapCharacter, elapsedMs); return; }
+        if (npc.Path is not null)
+        {
+            MoveAlongPath(mapCharacter, elapsedMs);
+            // Stopped walking (there, or blocked): it stands a moment before going on, long enough to be clicked or
+            // double-clicked - not in a fight, running away or hounding someone.
+            if (npc.Path is null && npc.WaitMs >= 0 && !npc.InCombat && !npc.Fleeing && !npc.Hounding && !IsScripted(mapCharacter.Character))
+                npc.WaitMs = Math.Max(npc.WaitMs, StopPauseMs);
+            return;
+        }
         if (npc.WaitMs < 0) return;
         npc.WaitMs -= elapsedMs;
         if (npc.WaitMs > 0) return;
