@@ -46,10 +46,10 @@ internal sealed class MapThingField
             MessageBox.Show(_owner, "Open or create a map in the Map Editor first.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, _cell, null) { Owner = _owner };
+        var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, _cell, null, _accepts) { Owner = _owner };
         if (picker.ShowDialog() != true || picker.Picked is not { } cell) return;
         _cell = cell;
-        Fill(null, null);
+        Fill(picker.PickedThingKey, null); // the very thing clicked on
         if (_things.Items.Count == 0) MessageBox.Show(_owner, $"There's no {_what} on that cell - pick the cell the {_what} stands on.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
     }
 

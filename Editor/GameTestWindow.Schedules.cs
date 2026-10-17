@@ -84,6 +84,7 @@ public partial class GameTestWindow
         foreach (var character in AllLivingCharacters().ToList()) UpdateUnconscious(character, elapsedMs); // the knocked out mend and get up
         UpdateObjects(elapsedMs); // lights burning, tiles and traps underfoot, doors closed behind NPCs
         UpdateScriptActions(elapsedMs); // event commands being carried out: walking there, sitting, picking a lock (GameTestWindow.Actions.cs)
+        UpdateAlwaysPages(elapsedMs); // characters' Always pages, run on their own (GameTestWindow.AlwaysPages.cs)
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
