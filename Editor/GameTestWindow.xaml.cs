@@ -1316,7 +1316,10 @@ public partial class GameTestWindow : Window
                 var sprite = inner is null ? null : ContainerSprite(inner, item); // its Locked Sprite while locked
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
-                    var img = new AlphaHitImage { Width = 32 * containerItemCounterScale, Height = 32 * containerItemCounterScale, Stretch = Stretch.Uniform };
+                    // Its own size, as a book or an object inside is drawn (it was always 32x32, blowing a small pouch up to twice its size).
+                    var frameBitmap = LoadStaticFrame(sprite.Frames[0].FilePath);
+                    (int iw, int ih) = frameBitmap is not null ? SpriteSizing.Quantize(frameBitmap.PixelWidth, frameBitmap.PixelHeight) : (32, 32);
+                    var img = new AlphaHitImage { Width = iw * containerItemCounterScale, Height = ih * containerItemCounterScale, Stretch = Stretch.Uniform };
                     gump.ItemAnimators.Add(new SpriteAnimator(sprite, img, _resources));
                     visual = img;
                 }
