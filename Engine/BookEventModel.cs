@@ -202,6 +202,9 @@ public class BookEventConditions
     /// <summary>Which specific item this trigger targets - only relevant/visible when TriggerConditionBased isn't Always.</summary>
     public ItemReference? TriggerItemReference { get; set; }
 
+    /// <summary>By Enter / By Stay / By Exit: who stepping on it sets it off - "" anyone, "Player" the main character only, "Party" anyone in the party, or a character's id.</summary>
+    public string SteppedOnBy { get; set; } = "";
+
     /// <summary>A paperdoll part's By Combined With A Part: only when this part (by id) is dragged onto it (-1 = any part).</summary>
     public int CombinedPartId { get; set; } = -1;
 

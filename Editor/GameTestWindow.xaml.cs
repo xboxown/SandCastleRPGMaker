@@ -1991,6 +1991,22 @@ public partial class GameTestWindow : Window
             TryFireEventPages(mapEvent, mapEvent.EventPages, trigger, selfBookId: -1, $"\"{mapEvent.Name}\" fired ({trigger}).");
     }
 
+    /// <summary>A map event's or a floor tile's By Enter / Stay / Exit page set to "Stepped on by" someone: only they set it off.</summary>
+    private bool SteppedOnByAllowed(object owner, BookEventConditions conditions, BookTriggerConditionBased justOccurred)
+    {
+        if (conditions.SteppedOnBy is not { Length: > 0 } wanted) return true;
+        if (justOccurred is not (BookTriggerConditionBased.ByEnter or BookTriggerConditionBased.ByStay or BookTriggerConditionBased.ByExit) || conditions.TriggerConditionBased != justOccurred) return true;
+        if (owner is not GameEvent && !(owner is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) return true;
+        var stepper = _activatedByCharacterStep ? _activator?.Character : _player;
+        if (stepper is null) return false;
+        return wanted switch
+        {
+            "Player" => stepper == _player,
+            "Party" => GetPartyList().Contains(stepper),
+            _ => stepper.Id.ToString() == wanted
+        };
+    }
+
     private bool TryFireEventPages(object owner, List<BookEventPage> pages, BookTriggerConditionBased justOccurred, int selfBookId, string firedStatusMessage)
     {
         if (!_firedCounts.TryGetValue(owner, out var counts))
@@ -2009,6 +2025,7 @@ public partial class GameTestWindow : Window
         var trace = new List<string>();
         foreach (var page in pages)
         {
+            if (!SteppedOnByAllowed(owner, page.Conditions, justOccurred)) continue; // By Enter / Stay / Exit: not someone this page answers to
             var context = BuildConditionContext(page.Conditions.TriggerConditionBased, justOccurred, selfBookId, counts.TryGetValue(page, out var c) ? c : 0);
             context.GameConditionEvaluator = EvaluateGameCondition; // a Complex Condition's Game Condition
             context.UntilConditionStillMet = UntilStillGoing(page.Conditions); // Until Condition Met: until its conditions are met

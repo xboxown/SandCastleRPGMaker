@@ -413,9 +413,39 @@ public partial class BookEventConditionsControl : UserControl
             : "Select Item: (none)";
     }
 
+    private sealed record SteppedByChoice(string Key, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private static bool IsStepTrigger(BookTriggerConditionBased trigger) => trigger is BookTriggerConditionBased.ByEnter or BookTriggerConditionBased.ByStay or BookTriggerConditionBased.ByExit;
+
+    /// <summary>By Enter / Stay / Exit: who stepping on it sets it off (instead of Select Item, which they don't use).</summary>
+    private void RebuildSteppedByCombo()
+    {
+        bool was = _suppress;
+        _suppress = true;
+        var choices = new List<SteppedByChoice> { new("", "Anyone"), new("Player", "Main character only"), new("Party", "Anyone in the party") };
+        choices.AddRange(ProjectSession.Characters.Characters.Select(c => new SteppedByChoice(c.Id.ToString(), c.Name)));
+        string key = _conditions?.SteppedOnBy ?? "";
+        if (choices.All(c => c.Key != key)) choices.Add(new SteppedByChoice(key, $"character #{key} (deleted)"));
+        SteppedByCombo.ItemsSource = choices;
+        SteppedByCombo.SelectedItem = choices.First(c => c.Key == key);
+        _suppress = was;
+    }
+
+    private void SteppedByCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (_suppress || _conditions is null || SteppedByCombo.SelectedItem is not SteppedByChoice choice) return;
+        _conditions.SteppedOnBy = choice.Key;
+    }
+
     private void UpdateSelectItemRowVisibility()
     {
-        bool show = _conditions is not null && _conditions.TriggerConditionBased != BookTriggerConditionBased.Always;
+        bool steps = _conditions is not null && IsStepTrigger(_conditions.TriggerConditionBased);
+        SteppedByRow.Visibility = steps ? Visibility.Visible : Visibility.Collapsed;
+        if (steps) RebuildSteppedByCombo();
+        bool show = _conditions is not null && _conditions.TriggerConditionBased != BookTriggerConditionBased.Always && !steps;
         SelectedItemLabel.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
         SelectItemButton.Visibility = show ? Visibility.Visible : Visibility.Collapsed;
     }

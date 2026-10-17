@@ -11,6 +11,11 @@
                 <TextBlock x:Name="SelectedItemLabel" Text="Select Item: (none)" VerticalAlignment="Center" Margin="0,0,6,0"/>
                 <Button x:Name="SelectItemButton" Content="..." Width="30" Click="SelectItemButton_Click"/>
             </StackPanel>
+            <StackPanel x:Name="SteppedByRow" Orientation="Horizontal" Margin="0,0,0,10" Visibility="Collapsed">
+                <TextBlock Text="Stepped on by:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                <ComboBox x:Name="SteppedByCombo" Width="200" SelectionChanged="SteppedByCombo_SelectionChanged"
+                          ToolTip="Who stepping on it sets it off: anyone, only the main character, anyone in the party, or one character"/>
+            </StackPanel>
 
             <TextBlock Text="Condition Trigger Type (any combination)" FontWeight="SemiBold" Margin="0,0,0,4"/>
 
