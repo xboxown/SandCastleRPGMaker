@@ -114,6 +114,8 @@ public partial class MainWindow : Window
         ProjectSession.ContainersProvider = () => _containerDatabase;
         ProjectSession.StatsProvider = () => _statDatabase;
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
+        ProjectSession.MapFloorPictureProvider = (floor, seeInside) => RenderMapPicture(floor, seeInside);
+        ProjectSession.MapEditorFloorProvider = () => _currentFloor;
         ProjectSession.PlacedSpotProvider = characterId =>
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
         ProjectSession.ZonesProvider = () => _map?.Zones;
@@ -137,28 +139,9 @@ public partial class MainWindow : Window
             .Where(n => !string.IsNullOrWhiteSpace(n)).Distinct().OrderBy(n => n).ToList();
     }
 
-    /// <summary>A picture of the map as the Map Editor shows it, for picking a cell from other windows (schedule spots).</summary>
-    private (System.Windows.Media.Imaging.BitmapSource, int, int, int, int)? SnapshotOpenMap()
-    {
-        if (_map is null || _tileset is null) return null;
-        int width = _map.Width * _tileset.TileWidth, height = _map.Height * _tileset.TileHeight;
-        if (width <= 0 || height <= 0) return null;
-        // Through a VisualBrush, so the canvas's own position inside the window doesn't shift the picture.
-        var drawing = new System.Windows.Media.DrawingVisual();
-        using (var dc = drawing.RenderOpen())
-        {
-            var brush = new System.Windows.Media.VisualBrush(MapCanvas)
-            {
-                Viewbox = new Rect(0, 0, width, height), ViewboxUnits = System.Windows.Media.BrushMappingMode.Absolute, Stretch = System.Windows.Media.Stretch.None,
-                AlignmentX = System.Windows.Media.AlignmentX.Left, AlignmentY = System.Windows.Media.AlignmentY.Top
-            };
-            dc.DrawRectangle(brush, null, new Rect(0, 0, width, height));
-        }
-        var picture = new System.Windows.Media.Imaging.RenderTargetBitmap(width, height, 96, 96, System.Windows.Media.PixelFormats.Pbgra32);
-        picture.Render(drawing);
-        picture.Freeze();
-        return (picture, _tileset.TileWidth, _tileset.TileHeight, _map.Width, _map.Height);
-    }
+    /// <summary>A picture of the whole map on the Map Editor's floor, seen inside, for picking a cell from other windows (MainWindow.MapPicture.cs).</summary>
+    private (System.Windows.Media.Imaging.BitmapSource, int, int, int, int)? SnapshotOpenMap() =>
+        RenderMapPicture(_currentFloor, seeInside: true) is { } p ? (p.Picture, p.TileWidth, p.TileHeight, p.Columns, p.Rows) : null;
 
     // ---------- Tileset loading ----------
 

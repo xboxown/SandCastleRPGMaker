@@ -39,6 +39,10 @@ internal static class ProjectSession
     public static Func<StatDatabase>? StatsProvider;
     /// <summary>A picture of the map open in the Map Editor and its cell size, or null when no map is open.</summary>
     public static Func<(System.Windows.Media.Imaging.BitmapSource Picture, int TileWidth, int TileHeight, int Columns, int Rows)?>? MapSnapshotProvider;
+    /// <summary>The whole open map on one floor (1-9), optionally seen inside (roofs and what's overhead left out), for the cell pickers.</summary>
+    public static Func<int, bool, (System.Windows.Media.Imaging.BitmapSource Picture, int TileWidth, int TileHeight, int Columns, int Rows)?>? MapFloorPictureProvider;
+    /// <summary>The floor the Map Editor is showing.</summary>
+    public static Func<int>? MapEditorFloorProvider;
     /// <summary>The things placed on a cell of the open map (Map Editor): each one's key ("Object:{instance id}" or "Item:{category}:{item id}") and its name. Empty when no map is open.</summary>
     public static Func<int, int, List<(string Key, string Name)>>? MapThingsProvider;
     /// <summary>Where a character (by id) is placed on the open map, or null.</summary>
