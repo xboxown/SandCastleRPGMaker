@@ -16,7 +16,7 @@ namespace SandcastleRpgMaker.Editor;
 /// its own visuals. A caller with no callback set just gets a no-op,
 /// exactly like every other optional dependency in this project.
 /// </summary>
-public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext
+public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext, IActionCommandHost
 {
     private readonly ResourceDatabase _resources;
     private readonly Dictionary<string, double> _variables = new();
@@ -66,6 +66,25 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public bool EvaluateGameCondition(GameCondition condition) => OnEvaluateCondition?.Invoke(condition) ?? false;
     /// <summary>The commands only a running game can do (Give Item, Change Stat, Train...): the game puts its own handler here for each; without one (the editor's preview) they're logged as not done.</summary>
     public Dictionary<EventCommandType, Func<EventCommand, bool>> GameHandlers { get; } = new();
+    /// <summary>The commands that take time (Walk To Location, Sit, Pickup Item...): the game starts one and calls back when it's done. Returns false if it failed at once.</summary>
+    public Dictionary<EventCommandType, Func<EventCommand, Action<bool>, bool>> GameActions { get; } = new();
+    /// <summary>Whether the last command that can fail worked (Advance IF > Last command succeeded).</summary>
+    public bool LastResult { get; set; } = true;
+
+    public bool TryBegin(EventCommand command, Action<bool> done)
+    {
+        if (!GameActions.TryGetValue(command.Type, out var start)) return false;
+        bool once = false;
+        void Finish(bool ok)
+        {
+            if (once) return;
+            once = true;
+            LastResult = ok;
+            done(ok);
+        }
+        if (!start(command, Finish)) Finish(false);
+        return true;
+    }
 
     /// <summary>
     /// Which book "self" refers to for ChangeSelfBookContent - a plain
@@ -252,7 +271,9 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 return appliedAny;
             }
             default:
-                return GameHandlers.TryGetValue(command.Type, out var handler) && handler(command);
+                if (!GameHandlers.TryGetValue(command.Type, out var handler)) return false;
+                LastResult = handler(command);
+                return LastResult;
         }
     }
 

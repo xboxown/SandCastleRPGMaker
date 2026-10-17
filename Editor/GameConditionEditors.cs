@@ -158,6 +158,9 @@ internal static class GameConditionFields
             case GameConditionKind.LightBurnedOut: Item("Light"); Happened("Burnt out"); break;
             case GameConditionKind.LightPutOut: Item("Light"); Happened("Put out"); break;
             case GameConditionKind.LightLit: Item("Light"); Happened("Lit"); break;
+            case GameConditionKind.LastCommandSucceeded:
+                panel.Children.Add(Note("True when the last command that can fail worked: Walk To Location got there, Pickup Item picked it up, Open Door opened it, Give Item gave it, Train trained... False when it was cancelled (no way there, too heavy, locked, not enough money). Put it straight after that command."));
+                break;
             case GameConditionKind.SeesCharacter:
             {
                 Who("Who");

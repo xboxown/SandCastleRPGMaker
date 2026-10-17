@@ -44,7 +44,10 @@ public enum GameConditionKind
     MagicallyUnlocked,
     LightBurnedOut,
     LightPutOut,
-    LightLit
+    LightLit,
+    // ---- Commands ----
+    /// <summary>Whether the last command that can fail (Walk To Location, Pickup Item, Give Item, Train...) worked.</summary>
+    LastCommandSucceeded
 }
 
 /// <summary>One test, with whichever of its settings its kind uses.</summary>
@@ -117,6 +120,7 @@ public static class GameConditions
         GameConditionKind.LightBurnedOut => "Light burnt out",
         GameConditionKind.LightPutOut => "Light put out",
         GameConditionKind.LightLit => "Light lit",
+        GameConditionKind.LastCommandSucceeded => "Last command succeeded (walked there, picked it up...)",
         _ => kind.ToString()
     };
 

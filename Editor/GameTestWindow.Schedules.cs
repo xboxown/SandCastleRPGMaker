@@ -83,6 +83,7 @@ public partial class GameTestWindow
         UpdateBleeding(elapsedMs); // drips from whoever is bleeding, and temporary puddles far away cleared
         foreach (var character in AllLivingCharacters().ToList()) UpdateUnconscious(character, elapsedMs); // the knocked out mend and get up
         UpdateObjects(elapsedMs); // lights burning, tiles and traps underfoot, doors closed behind NPCs
+        UpdateScriptActions(elapsedMs); // event commands being carried out: walking there, sitting, picking a lock (GameTestWindow.Actions.cs)
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
@@ -178,6 +179,12 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         if (IsIncapacitated(mapCharacter.Character)) return; // dead, asleep or paralyzed: does nothing at all
+        if (IsScripted(mapCharacter.Character))
+        {
+            // Carrying out an event command: its schedule, hunger and rules wait; only its walking goes on.
+            if (npc.Path is not null) MoveAlongPath(mapCharacter, elapsedMs);
+            return;
+        }
         CheckScheduleRules(mapCharacter, elapsedMs); // its When... rules: hungry, injured... (GameTestWindow.Zones.cs)
         CheckHunger(mapCharacter, elapsedMs); // hungry: off to eat (GameTestWindow.Meals.cs)
         if (npc.Path is not null) { MoveAlongPath(mapCharacter, elapsedMs); return; }

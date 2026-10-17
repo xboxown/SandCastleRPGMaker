@@ -173,6 +173,7 @@ public partial class GameTestWindow
             case GameConditionKind.LightBurnedOut: return HappenedTo("burnedout", c.Item, c);
             case GameConditionKind.LightPutOut: return HappenedTo("putout", c.Item, c);
             case GameConditionKind.LightLit: return HappenedTo("lit", c.Item, c);
+            case GameConditionKind.LastCommandSucceeded: return _execContext.LastResult;
             case GameConditionKind.SeesCharacter:
             {
                 if (who is null || _player is null || IsDead(who)) return false;

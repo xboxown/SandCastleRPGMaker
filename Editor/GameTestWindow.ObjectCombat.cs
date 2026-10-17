@@ -66,15 +66,17 @@ public partial class GameTestWindow
         _ => false
     };
 
-    /// <summary>One blow at a thing (Game_object::attacked): always hits.</summary>
-    private void StrikeThing(object entity)
+    /// <summary>One blow at a thing (Game_object::attacked): always hits. By the main character unless <paramref name="striker"/> says who (an Attack Object command) - only the main character's blows are a crime.</summary>
+    private void StrikeThing(object entity, CharacterDefinition? striker = null)
     {
-        if (_player is null) return;
+        striker ??= _player;
+        if (striker is null) return;
+        bool byPlayer = striker == _player;
         var visual = VisualOf(entity);
         if (entity is ObjectInstance placedObject && DefinitionOf(placedObject) is { } objectDefinition)
         {
-            int str3 = Stat(_player, BuiltInStatKind.Strength, 10) / 3;
-            StrikeObject(placedObject, objectDefinition, (str3 > 0 ? 1 + Rng.Next(str3) : 0) + 1); // doors, junk, chairs...
+            int str3 = Stat(striker, BuiltInStatKind.Strength, 10) / 3;
+            StrikeObject(placedObject, objectDefinition, (str3 > 0 ? 1 + Rng.Next(str3) : 0) + 1, byPlayer ? null : MapCharacterOf(striker), byPlayer); // doors, junk, chairs...
             return;
         }
         // Exult effective_hps: a locked chest with a key of its own can't be broken (only quality 0 has hit points).
@@ -86,7 +88,7 @@ public partial class GameTestWindow
             return;
         }
 
-        int str = Stat(_player, BuiltInStatKind.Strength, 10) / 3;
+        int str = Stat(striker, BuiltInStatKind.Strength, 10) / 3;
         int damage = (str > 0 ? 1 + Rng.Next(str) : 0) + 1; // + 1: bare hands, until weapons exist
         if (data.Defense > 0) damage -= 1 + Rng.Next(data.Defense);
         if (damage <= 0)
@@ -101,7 +103,7 @@ public partial class GameTestWindow
         if (ShowHitNumbers) ShowFloatingTextOver(visual, $"-{damage}"); // "no effect" always shows; the numbers only with Show hit numbers
 
         // Someone's property: a crime if anyone sympathetic is watching (once per container, and again when it breaks).
-        var owner = OwnerOf(ReferencedItemCategory.Container, container.ItemId);
+        var owner = byPlayer ? OwnerOf(ReferencedItemCategory.Container, container.ItemId) : null;
         if (owner is { } owned && _struckOwnedContainers.Add(container)) Theft(owned.Owner, owned.FactionId);
 
         if (hp > 0) return;

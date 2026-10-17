@@ -117,6 +117,18 @@ public partial class MainWindow : Window
         ProjectSession.PlacedSpotProvider = characterId =>
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
         ProjectSession.ZonesProvider = () => _map?.Zones;
+        ProjectSession.MapThingsProvider = (x, y) =>
+        {
+            var things = new List<(string Key, string Name)>();
+            if (_map is null) return things;
+            foreach (var o in _map.Objects.Where(o => o.ContainerInstanceId < 0 && o.X == x && o.Y == y))
+                things.Add(($"Object:{o.InstanceId}:{o.ObjectId}", _objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId)?.Name ?? "object"));
+            foreach (var i in _map.Items.Where(i => i.X == x && i.Y == y))
+                things.Add(($"Item:{i.Category}:{i.ItemId}", i.Category == ReferencedItemCategory.Book
+                    ? _bookDatabase.Books.FirstOrDefault(b => b.Id == i.ItemId)?.Name ?? "book"
+                    : _containerDatabase.Containers.FirstOrDefault(c => c.Id == i.ItemId)?.Name ?? "container"));
+            return things;
+        };
         ProjectSession.SettingsProvider = () => _systemSettings;
         ProjectSession.TileSourceProvider = TileSource;
         ProjectSession.EventNamesProvider = () => (_map?.Events.Select(e => e.Name) ?? Enumerable.Empty<string>())

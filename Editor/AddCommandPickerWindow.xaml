@@ -98,6 +98,40 @@
                 </Grid>
                 </ScrollViewer>
             </TabItem>
+            <TabItem Header="Actions">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                <Grid Margin="0,10,8,0">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <StackPanel Grid.Column="0" Margin="0,0,10,0">
+                        <TextBlock Text="Items &amp; Equipment" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <Button Content="Pickup Item..." Margin="0,0,0,4" Click="Registered_Click" Tag="PickupItem" ToolTip="Walks to a thing on the map and picks it up"/>
+                        <Button Content="Drop Item..." Margin="0,0,0,4" Click="Registered_Click" Tag="DropItem" ToolTip="Puts something they carry down - at their feet or at a spot"/>
+                        <Button Content="Pick Item From Container..." Margin="0,0,0,4" Click="Registered_Click" Tag="TakeFromContainer" ToolTip="Walks to an unlocked container and takes things out of it"/>
+                        <Button Content="Equip Equipment..." Margin="0,0,0,4" Click="Registered_Click" Tag="EquipItem" ToolTip="Readies a weapon or armor they carry"/>
+                        <Button Content="Unequip Equipment..." Margin="0,0,0,12" Click="Registered_Click" Tag="UnequipItem" ToolTip="Takes it off into their pack (or drops it)"/>
+
+                        <TextBlock Text="Doors &amp; Fighting" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <Button Content="Open Door..." Margin="0,0,0,4" Click="Registered_Click" Tag="OpenDoor" ToolTip="Walks to a door and opens it - with their key if it's locked"/>
+                        <Button Content="Picklock Door..." Margin="0,0,0,4" Click="Registered_Click" Tag="PicklockDoor" ToolTip="Walks to a locked door and picks the lock"/>
+                        <Button Content="Attack Object..." Margin="0,0,0,4" Click="Registered_Click" Tag="AttackObject" ToolTip="Walks to a thing and strikes it until it breaks"/>
+                    </StackPanel>
+
+                    <StackPanel Grid.Column="1">
+                        <TextBlock Text="Moving &amp; Poses" FontWeight="Bold" Margin="0,0,0,4"/>
+                        <Button Content="Walk To Location..." Margin="0,0,0,4" Click="Registered_Click" Tag="WalkToLocation" ToolTip="Walks to a spot, round whatever is in the way"/>
+                        <Button Content="Sit..." Margin="0,0,0,4" Click="Registered_Click" Tag="Sit" ToolTip="Walks to a chair and sits on it"/>
+                        <Button Content="Stand" Margin="0,0,0,4" Click="Registered_Click" Tag="Stand" ToolTip="Gets up from a chair or bed"/>
+                        <Button Content="Play Pose..." Margin="0,0,0,4" Click="Registered_Click" Tag="PlayPose" ToolTip="A pose for a while, or until its animation has played"/>
+                        <Button Content="Change Pose..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangePose" ToolTip="Shows a pose and keeps it"/>
+                        <Button Content="Play Animation..." Margin="0,0,0,4" Click="Registered_Click" Tag="PlayAnimation" ToolTip="A sprite's animation and sounds at a spot or over someone"/>
+                    </StackPanel>
+                </Grid>
+                </ScrollViewer>
+            </TabItem>
         </TabControl>
     </DockPanel>
 </Window>

@@ -21,6 +21,18 @@ public interface IEventExecutionContext
 }
 
 /// <summary>
+/// A host whose characters can carry out commands that take time (walk
+/// somewhere, sit, pick a lock). The interpreter hands it the command and
+/// stops; <c>done</c> is called - with whether it worked - once it has
+/// finished or been cancelled, and the commands go on from the next one.
+/// </summary>
+public interface IActionCommandHost
+{
+    /// <summary>False: not a timed command here (run it as usual). True: started (or failed at once) - <paramref name="done"/> is called exactly once.</summary>
+    bool TryBegin(EventCommand command, Action<bool> done);
+}
+
+/// <summary>
 /// Walks one command list for real. ConditionalBranchSwitch/Variable,
 /// Else, EndBranch, and End are genuinely interpreted here (not stubbed) -
 /// this is the same loop the actual game engine will eventually run
@@ -166,6 +178,24 @@ public static class EventCommandInterpreter
 
                 default:
                 {
+                    if (context is IActionCommandHost actions)
+                    {
+                        // A command that takes time: everything after it waits till it's done.
+                        int next = i + 1;
+                        var returnsHere = returns;
+                        bool ranOn = false;
+                        if (actions.TryBegin(cmd, ok =>
+                            {
+                                if (ranOn) return;
+                                ranOn = true;
+                                trace.Add($"{(ok ? "Done" : "Cancelled")}: {Describe(cmd)}");
+                                Run(commands, context, trace, next, returnsHere);
+                            }))
+                        {
+                            if (!ranOn) trace.Add($"Started: {Describe(cmd)} - waiting till it's done");
+                            return;
+                        }
+                    }
                     bool didReal = context.Execute(cmd);
                     trace.Add(didReal ? $"Executed: {Describe(cmd)}" : $"(not implemented in preview yet: {Describe(cmd)})");
                     i++;
@@ -260,6 +290,20 @@ public static class EventCommandInterpreter
         EventCommandType.ResetStat => $"Reset Stat: {cmd.Get("Who")} stat {cmd.Get("StatId")}",
         EventCommandType.Train => $"Train: {cmd.Get("Trainee")} for {cmd.Get("Points")} training points, {cmd.Get("Price")} money",
         EventCommandType.KillCharacter => $"Kill Character: {cmd.Get("Who")}",
+        EventCommandType.PickupItem => $"Pickup Item: {cmd.Get("Who")} picks up {cmd.Get("Thing")}",
+        EventCommandType.DropItem => $"Drop Item: {cmd.Get("Who")} drops {cmd.Get("Category")} #{cmd.Get("ItemId")}",
+        EventCommandType.EquipItem => $"Equip: {cmd.Get("Who")} readies {cmd.Get("Category")} #{cmd.Get("ItemId")}",
+        EventCommandType.UnequipItem => $"Unequip: {cmd.Get("Who")} takes off {cmd.Get("Category")} #{cmd.Get("ItemId")}",
+        EventCommandType.PlayPose => $"Play Pose: {cmd.Get("Who")} {cmd.Get("Pose")}",
+        EventCommandType.WalkToLocation => $"Walk To Location: {cmd.Get("Who")} to ({cmd.Get("X")}, {cmd.Get("Y")})",
+        EventCommandType.ChangePose => $"Change Pose: {cmd.Get("Who")} {cmd.Get("Pose")}",
+        EventCommandType.AttackObject => $"Attack Object: {cmd.Get("Who")} attacks {cmd.Get("Thing")}",
+        EventCommandType.PlayAnimation => $"Play Animation: {cmd.Get("SpriteGroup")}/{cmd.Get("SpriteName")}",
+        EventCommandType.Sit => $"Sit: {cmd.Get("Who")} on {cmd.Get("Thing")}",
+        EventCommandType.Stand => $"Stand: {cmd.Get("Who")}",
+        EventCommandType.OpenDoor => $"Open Door: {cmd.Get("Who")} opens {cmd.Get("Thing")}",
+        EventCommandType.PicklockDoor => $"Picklock Door: {cmd.Get("Who")} picks {cmd.Get("Thing")}",
+        EventCommandType.TakeFromContainer => $"Pick Item From Container: {cmd.Get("Who")} from {cmd.Get("Thing")}",
         _ => cmd.Type.ToString()
     };
 }

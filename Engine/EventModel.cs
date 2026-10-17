@@ -63,7 +63,36 @@ public enum EventCommandType
     /// <summary>Train: a trainer raises stats for training points and money (Ultima 7's trainers).</summary>
     Train,
     /// <summary>Kill Character: a fatal blow 0.05 s later - the hit flash - and death.</summary>
-    KillCharacter
+    KillCharacter,
+    // ---- Actions: they take time; the commands after them wait till they're done (or cancelled) ----
+    /// <summary>Pickup Item: walks to a thing on the map and picks it up (as if dragged onto them).</summary>
+    PickupItem,
+    /// <summary>Drop Item: puts something they carry (or wear) down at their feet, or at a spot.</summary>
+    DropItem,
+    /// <summary>Equip Equipment: readies a weapon or armor they carry in its slot.</summary>
+    EquipItem,
+    /// <summary>Unequip Equipment: takes it off into their pack (or drops it).</summary>
+    UnequipItem,
+    /// <summary>Play Pose: shows a pose for a time, or until its animation has played once.</summary>
+    PlayPose,
+    /// <summary>Walk To Location: walks to a cell, round whatever is in the way.</summary>
+    WalkToLocation,
+    /// <summary>Change Pose: shows a pose (and facing) and keeps it.</summary>
+    ChangePose,
+    /// <summary>Attack Object: walks to a thing and strikes it until it breaks (gives up after a minute).</summary>
+    AttackObject,
+    /// <summary>Play Animation: a sprite (its animation and sounds) played at a spot.</summary>
+    PlayAnimation,
+    /// <summary>Sit: walks to a chair and sits on it.</summary>
+    Sit,
+    /// <summary>Stand: gets up from a chair or bed.</summary>
+    Stand,
+    /// <summary>Open Door: walks to a door and opens it - unlocking it first with their key.</summary>
+    OpenDoor,
+    /// <summary>Picklock Door: walks to a locked door and picks the lock, lockpick after lockpick.</summary>
+    PicklockDoor,
+    /// <summary>Pick Item From Container: walks to an unlocked container and takes things out of it.</summary>
+    TakeFromContainer
 }
 
 /// <summary>

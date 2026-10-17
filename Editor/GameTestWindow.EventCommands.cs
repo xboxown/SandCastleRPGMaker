@@ -109,10 +109,10 @@ public partial class GameTestWindow
         finally { _quietRefusals = false; }
     }
 
-    /// <summary>Put down where they stand (resting on whatever is there), as a spill is.</summary>
-    private void PutDownAt(InventoryItemInstance gift, CharacterDefinition at)
+    /// <summary>Put down where they stand - or at a cell - resting on whatever is there (a table top), on their floor.</summary>
+    private void PutDownAt(InventoryItemInstance gift, CharacterDefinition at, (int X, int Y)? cell = null)
     {
-        var (x, y) = CellOf(at);
+        var (x, y) = cell ?? CellOf(at);
         if (!InsideMap(x, y)) (x, y) = (_playerX, _playerY);
         var entity = CreateMapEntityFor(gift);
         var placedItem = entity as PlacedItemInstance;
@@ -120,7 +120,8 @@ public partial class GameTestWindow
         if (placedObject is not null) { placedObject.ContainerInstanceId = -1; placedObject.InstanceId = _map.GetNextInstanceId(); }
         AddMapEntity(placedItem, placedObject);
         SetMapPosition(placedItem, placedObject, x, y, 0, 0);
-        SetZ(entity, LiftOf(at));
+        var body = BodyOf(placedItem, placedObject);
+        SetZ(entity, StandingLiftOnFloor(new UnitRect(body.Left, body.Top, body.Width, body.Depth), MapFloors.FloorOfLift(LiftOf(at)), entity));
         ForgetHomeFloor(entity);
         SettleWorld();
         StatusText.Text = $"\"{DollLook.ItemName(new ItemReference { Category = gift.Category, ItemId = gift.ItemId }, _objects, _books, _containers)}\" is put down at {at.Name}'s feet.";

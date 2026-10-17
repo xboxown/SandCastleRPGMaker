@@ -22,6 +22,20 @@ internal static class CommandWindowRegistry
         [EventCommandType.ResetStat] = new("Reset Stat", c => new ResetStatCommandWindow(c), ResetStatCommandWindow.Describe),
         [EventCommandType.Train] = new("Train", c => new TrainCommandWindow(c), TrainCommandWindow.Describe),
         [EventCommandType.KillCharacter] = new("Kill Character", c => new KillCharacterCommandWindow(c), KillCharacterCommandWindow.Describe),
+        [EventCommandType.PickupItem] = new("Pickup Item", c => new PickupItemCommandWindow(c), PickupItemCommandWindow.Describe),
+        [EventCommandType.DropItem] = new("Drop Item", c => new DropItemCommandWindow(c), DropItemCommandWindow.Describe),
+        [EventCommandType.EquipItem] = new("Equip Equipment", c => new EquipItemCommandWindow(c), EquipItemCommandWindow.Describe),
+        [EventCommandType.UnequipItem] = new("Unequip Equipment", c => new UnequipItemCommandWindow(c), UnequipItemCommandWindow.Describe),
+        [EventCommandType.PlayPose] = new("Play Pose", c => new PlayPoseCommandWindow(c), PlayPoseCommandWindow.Describe),
+        [EventCommandType.ChangePose] = new("Change Pose", c => new ChangePoseCommandWindow(c), ChangePoseCommandWindow.Describe),
+        [EventCommandType.WalkToLocation] = new("Walk To Location", c => new WalkToLocationCommandWindow(c), WalkToLocationCommandWindow.Describe),
+        [EventCommandType.AttackObject] = new("Attack Object", c => new AttackObjectCommandWindow(c), AttackObjectCommandWindow.Describe),
+        [EventCommandType.PlayAnimation] = new("Play Animation", c => new PlayAnimationCommandWindow(c), PlayAnimationCommandWindow.Describe),
+        [EventCommandType.Sit] = new("Sit", c => new SitCommandWindow(c), SitCommandWindow.Describe),
+        [EventCommandType.Stand] = new("Stand", c => new StandCommandWindow(c), StandCommandWindow.Describe),
+        [EventCommandType.OpenDoor] = new("Open Door", c => new OpenDoorCommandWindow(c), OpenDoorCommandWindow.Describe),
+        [EventCommandType.PicklockDoor] = new("Picklock Door", c => new PicklockDoorCommandWindow(c), PicklockDoorCommandWindow.Describe),
+        [EventCommandType.TakeFromContainer] = new("Pick Item From Container", c => new TakeFromContainerCommandWindow(c), TakeFromContainerCommandWindow.Describe),
     };
 }
 
