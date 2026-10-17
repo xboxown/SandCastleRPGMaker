@@ -20,6 +20,30 @@ public partial class GameTestWindow
     private readonly Dictionary<(EventCommand ShowText, int ReplyId), int> _replyCounts = new();
     /// <summary>The reply Up/Down has moved to (-1 = none).</summary>
     private int _replyCursor = -1;
+    /// <summary>The page of replies showing (More / Previous).</summary>
+    private int _replyPage;
+
+    /// <summary>A reply spot on the box picked: More / Previous turn the page, a reply is answered.</summary>
+    private void PickReplySlot(int slot)
+    {
+        if (_messageDrawing is not { } drawing || slot < 0 || slot >= drawing.ReplySlots.Count) return;
+        switch (drawing.ReplySlots[slot])
+        {
+            case DialogBoxDrawing.More:
+                _replyPage++;
+                _replyCursor = -1;
+                DrawCurrentMessage();
+                break;
+            case DialogBoxDrawing.Previous:
+                _replyPage--;
+                _replyCursor = -1;
+                DrawCurrentMessage();
+                break;
+            case int reply:
+                PickReply(reply);
+                break;
+        }
+    }
 
     private bool AskChoice(EventCommand showText, List<DialogChoice> choices, Action<int> chosen)
     {
@@ -102,7 +126,7 @@ public partial class GameTestWindow
     {
         if (_currentMessage is { HasReplies: true })
         {
-            if (_messageDrawing?.ReplyAt(e.GetPosition(MessageLayer)) is int index and >= 0) PickReply(index);
+            if (_messageDrawing?.ReplyAt(e.GetPosition(MessageLayer)) is int index and >= 0) PickReplySlot(index);
             return;
         }
         AdvanceMessage();
@@ -120,25 +144,39 @@ public partial class GameTestWindow
     /// <summary>Keys while a box is up: with replies, 1-9 pick one and Up/Down + Enter/Space choose; without, Enter, Space or Escape go on.</summary>
     private void MessageKey(Key key)
     {
-        if (_currentMessage is not { HasReplies: true, Replies: { } replies })
+        if (_currentMessage is not { HasReplies: true } || _messageDrawing is not { ReplySlots.Count: > 0 } drawing)
         {
             if (key is Key.Enter or Key.Space or Key.Escape) AdvanceMessage();
             return;
         }
+        // The spots on the box now (this page's replies, More / Previous), in reading order.
+        int count = drawing.ReplySlots.Count;
         int number = key is >= Key.D1 and <= Key.D9 ? key - Key.D1 : key is >= Key.NumPad1 and <= Key.NumPad9 ? key - Key.NumPad1 : -1;
-        if (number >= 0) { PickReply(number); return; }
+        if (number >= 0)
+        {
+            // 1-9: this page's replies, counted without More / Previous.
+            var replySpots = Enumerable.Range(0, count).Where(i => drawing.ReplySlots[i] >= 0).ToList();
+            if (number < replySpots.Count) PickReplySlot(replySpots[number]);
+            return;
+        }
         switch (key)
         {
             case Key.Up or Key.Left:
-                _replyCursor = _replyCursor <= 0 ? replies.Count - 1 : _replyCursor - 1;
-                _messageDrawing?.Highlight(_replyCursor);
+                _replyCursor = _replyCursor <= 0 ? count - 1 : _replyCursor - 1;
+                drawing.Highlight(_replyCursor);
                 break;
             case Key.Down or Key.Right or Key.Tab:
-                _replyCursor = (_replyCursor + 1) % replies.Count;
-                _messageDrawing?.Highlight(_replyCursor);
+                _replyCursor = (_replyCursor + 1) % count;
+                drawing.Highlight(_replyCursor);
+                break;
+            case Key.PageDown when drawing.ReplyPage < drawing.ReplyPageCount - 1:
+                PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.More));
+                break;
+            case Key.PageUp when drawing.ReplyPage > 0:
+                PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.Previous));
                 break;
             case Key.Enter or Key.Space:
-                if (_replyCursor >= 0) PickReply(_replyCursor);
+                if (_replyCursor >= 0) PickReplySlot(_replyCursor);
                 break;
         }
     }

@@ -197,7 +197,7 @@ public class ConversationTestWindow : Window
     {
         if (_current?.Replies is not null)
         {
-            if (_drawing?.ReplyAt(p) is int index and >= 0) Pick(index);
+            if (_drawing?.ReplyAt(p) is int index and >= 0 && _drawing.ReplySlots[index] >= 0) Pick(_drawing.ReplySlots[index]);
             return;
         }
         GoOn();

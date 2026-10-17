@@ -323,11 +323,24 @@ public partial class GameTestWindow
         }
         _currentMessage = message;
         _replyCursor = -1;
+        _replyPage = 0;
+        _messageFace = face;
         MessageLayer.Visibility = Visibility.Visible;
+        DrawCurrentMessage();
+    }
 
-        var content = new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame,
-            message.Replies?.Select(r => r.Text).ToList() ?? new List<string>());
+    private BitmapSource? _messageFace;
+
+    /// <summary>(Re)draws the box up now - again when More / Previous turns the page of replies.</summary>
+    private void DrawCurrentMessage()
+    {
+        if (_currentMessage is not { } message) return;
+        _messageDrawing?.Stop();
+        MessageLayer.Children.Clear();
+        var content = new DialogBoxContent(message.Title, message.Text, _messageFace, message.FaceRight, message.Position, message.Dim, message.Frame,
+            message.Replies?.Select(r => r.Text).ToList() ?? new List<string>()) { ReplyPage = _replyPage };
         _messageDrawing = DialogBoxBuilder.Draw(MessageLayer, content, _sprites, _resources);
+        _replyPage = _messageDrawing.ReplyPage;
     }
 
     private SpriteEntry? FindSprite(string group, string name)
