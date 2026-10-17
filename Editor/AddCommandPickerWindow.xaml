@@ -63,7 +63,7 @@
                         <Button Content="Play Sound..." Margin="0,0,0,4" Click="PlaySound_Click" ToolTip="Plays a sound once or looping, at a volume you choose"/>
                         <Button Content="Stop Sound..." Margin="0,0,0,4" Click="StopSound_Click" ToolTip="Stops a sound that is playing (a looping one, say), or every sound"/>
                         <Button Content="Change Tile..." Margin="0,0,0,4" IsEnabled="False"/>
-                        <Button Content="Wait..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Wait..." Margin="0,0,0,4" Tag="Wait" Click="Registered_Click" ToolTip="Pauses the event for some seconds, game minutes or game hours before its next command"/>
                     </StackPanel>
                 </Grid>
                 </ScrollViewer>

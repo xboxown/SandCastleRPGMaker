@@ -37,6 +37,8 @@ public partial class GameTestWindow
 
     private readonly Dictionary<CharacterDefinition, ScriptAction> _scriptActions = new(ReferenceEqualityComparer.Instance);
     private readonly List<ScriptEffect> _scriptEffects = new();
+    /// <summary>Wait commands counting down: the event goes on when one is over.</summary>
+    private readonly List<(Func<double, bool?> Tick, Action<bool> Done)> _scriptWaits = new();
 
     private void InitializeActionCommands()
     {
@@ -51,6 +53,7 @@ public partial class GameTestWindow
         a[EventCommandType.OpenDoor] = OpenDoorCommand;
         a[EventCommandType.PicklockDoor] = PicklockDoorCommand;
         a[EventCommandType.TakeFromContainer] = TakeFromContainerCommand;
+        a[EventCommandType.Wait] = WaitCommand;
         var h = _execContext.GameHandlers;
         h[EventCommandType.EquipItem] = EquipItemCommand;
         h[EventCommandType.UnequipItem] = UnequipItemCommand;
@@ -82,6 +85,12 @@ public partial class GameTestWindow
             // Back to its schedule (Exult: the usecode's actions done, the schedule's now_what again).
             if (MapCharacterOf(action.Who) is { } mapCharacter && !IsScripted(action.Who) && mapCharacter.Npc.Path is null) mapCharacter.Npc.WaitMs = StdDelay;
             action.Done?.Invoke(ok);
+        }
+        foreach (var wait in _scriptWaits.ToList())
+        {
+            if (wait.Tick(elapsedMs) is not true) continue;
+            _scriptWaits.Remove(wait);
+            wait.Done(true);
         }
         foreach (var effect in _scriptEffects.ToList())
         {
@@ -475,6 +484,16 @@ public partial class GameTestWindow
     }
 
     // ================= Poses =================
+
+    /// <summary>Wait: nobody does anything - the event's next command just comes that much later (real seconds, or game minutes / hours by the clock).</summary>
+    private bool WaitCommand(EventCommand command, Action<bool> done)
+    {
+        string unit = command.Get("Unit") is { Length: > 0 } u ? u : "Seconds";
+        string text = command.Get("Duration") is { Length: > 0 } d ? d : command.Get("Seconds");
+        double amount = double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) || double.TryParse(text, out v) ? Math.Max(0, v) : 1;
+        _scriptWaits.Add((Lasting(unit, amount, 0), done));
+        return true;
+    }
 
     private bool PlayPoseCommand(EventCommand command, Action<bool> done)
     {

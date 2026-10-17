@@ -693,3 +693,46 @@ public class TakeFromContainerCommandWindow : ActionCommandWindowBase
     public static string Describe(EventCommand command) =>
         $"{Who(command)} takes {(command.Get("ItemId") is { Length: > 0 } id && id != "-1" ? CommandFields.ItemName(command) + (command.Get("Quantity") is { Length: > 0 } q && q != "1" ? " x" + q : "") : "everything")} from {MapThingField.Describe(command)}";
 }
+
+public class WaitCommandWindow : ActionCommandWindowBase
+{
+    private static readonly (string Key, string Label)[] Units = { ("Seconds", "seconds"), ("Minutes", "game minutes"), ("Hours", "game hours") };
+    private readonly TextBox _amount;
+    private readonly ComboBox _unit = new() { Width = 160, Margin = new Thickness(6, 0, 0, 0) };
+
+    public WaitCommandWindow(EventCommand? existing = null) : base("Wait", existing, withWho: false)
+    {
+        AddLabel("Wait for");
+        var row = CommandFields.Row(Rows);
+        _amount = CommandFields.Number(row, existing?.Get("Duration") is { Length: > 0 } d ? d : existing?.Get("Seconds"), "1");
+        foreach (var (_, label) in Units) _unit.Items.Add(label);
+        _unit.SelectedIndex = Math.Max(0, Array.FindIndex(Units, u => u.Key == existing?.Get("Unit")));
+        row.Children.Add(_unit);
+        AddLabel("The commands after this one wait that long (a pause between poses, lines, walks...). Seconds are real seconds; game minutes and hours go by the game clock. The game goes on meanwhile, and the time doesn't count while it is paused.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        if (!double.TryParse(_amount.Text.Trim(), out double amount) || amount <= 0)
+        {
+            MessageBox.Show(this, "How long must be a number above 0.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        var command = NewCommand(EventCommandType.Wait);
+        command.Parameters["Duration"] = _amount.Text.Trim();
+        command.Parameters["Unit"] = Units[Math.Max(0, _unit.SelectedIndex)].Key;
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command)
+    {
+        string amount = command.Get("Duration") is { Length: > 0 } d ? d : command.Get("Seconds") is { Length: > 0 } s ? s : "1";
+        return command.Get("Unit") switch
+        {
+            "Minutes" => $"{amount} game minute{(amount == "1" ? "" : "s")}",
+            "Hours" => $"{amount} game hour{(amount == "1" ? "" : "s")}",
+            _ => $"{amount} second{(amount == "1" ? "" : "s")}"
+        };
+    }
+}

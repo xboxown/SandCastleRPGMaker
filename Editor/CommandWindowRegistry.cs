@@ -35,6 +35,7 @@ internal static class CommandWindowRegistry
         [EventCommandType.Stand] = new("Stand", c => new StandCommandWindow(c), StandCommandWindow.Describe),
         [EventCommandType.OpenDoor] = new("Open Door", c => new OpenDoorCommandWindow(c), OpenDoorCommandWindow.Describe),
         [EventCommandType.PicklockDoor] = new("Picklock Door", c => new PicklockDoorCommandWindow(c), PicklockDoorCommandWindow.Describe),
+        [EventCommandType.Wait] = new("Wait", c => new WaitCommandWindow(c), WaitCommandWindow.Describe),
         [EventCommandType.TakeFromContainer] = new("Pick Item From Container", c => new TakeFromContainerCommandWindow(c), TakeFromContainerCommandWindow.Describe),
     };
 }
