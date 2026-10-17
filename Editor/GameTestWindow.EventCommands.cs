@@ -124,6 +124,7 @@ public partial class GameTestWindow
         SetZ(entity, StandingLiftOnFloor(new UnitRect(body.Left, body.Top, body.Width, body.Depth), MapFloors.FloorOfLift(LiftOf(at)), entity));
         ForgetHomeFloor(entity);
         SettleWorld();
+        TilesUnderDropped(placedItem, placedObject); // By Item Dropped On It, as when the player puts something down
         StatusText.Text = $"\"{DollLook.ItemName(new ItemReference { Category = gift.Category, ItemId = gift.ItemId }, _objects, _books, _containers)}\" is put down at {at.Name}'s feet.";
     }
 

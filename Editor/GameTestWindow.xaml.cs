@@ -2026,6 +2026,7 @@ public partial class GameTestWindow : Window
         foreach (var page in pages)
         {
             if (!SteppedOnByAllowed(owner, page.Conditions, justOccurred)) continue; // By Enter / Stay / Exit: not someone this page answers to
+            if (!DroppedThingAllowed(page.Conditions, justOccurred)) continue; // By Item Dropped On It: not the item this page waits for
             var context = BuildConditionContext(page.Conditions.TriggerConditionBased, justOccurred, selfBookId, counts.TryGetValue(page, out var c) ? c : 0);
             context.GameConditionEvaluator = EvaluateGameCondition; // a Complex Condition's Game Condition
             context.UntilConditionStillMet = UntilStillGoing(page.Conditions); // Until Condition Met: until its conditions are met

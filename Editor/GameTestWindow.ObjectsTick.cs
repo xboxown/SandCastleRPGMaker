@@ -104,14 +104,44 @@ public partial class GameTestWindow
                 visual.Visibility = Visibility.Hidden;
     }
 
-    /// <summary>Something put down on the map: tiles under it fire By Item Dropped On It.</summary>
+    /// <summary>What was just put down while its By Item Dropped On It pages run - only pages for that item (or for any item) answer.</summary>
+    private (ReferencedItemCategory Category, int ItemId)? _droppedThing;
+
+    /// <summary>
+    /// Something put down on the map (by the player, or a Drop Item / Give Item
+    /// command): By Item Dropped On It fires on the tiles under it, on every
+    /// object it now rests on (a table, a pedestal, a chest - any type), and on
+    /// the map event on its cell. It stays where it was put; a page with a
+    /// Select Item only answers to that item.
+    /// </summary>
     private void TilesUnderDropped(PlacedItemInstance? item, ObjectInstance? obj)
     {
         var body = BodyOf(item, obj);
         var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-        foreach (var tile in _map.Objects.Where(o => !ReferenceEquals(o, obj) && o.ContainerInstanceId < 0).ToList())
-            if (DefinitionOf(tile) is { Type: ObjectType.Tile } def && BodyOf(null, tile).Overlaps(foot))
-                FireObjectEvent(tile, def, BookTriggerConditionBased.ByDropItem);
+        var previous = _droppedThing;
+        _droppedThing = item is not null ? (item.Category, item.ItemId) : (ReferencedItemCategory.Object, obj!.ObjectId);
+        try
+        {
+            foreach (var under in _map.Objects.Where(o => !ReferenceEquals(o, obj) && o.ContainerInstanceId < 0).ToList())
+            {
+                if (DefinitionOf(under) is not { } def || !def.EventPages.Any(p => p.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByDropItem)) continue;
+                bool hit = def.Type == ObjectType.Tile
+                    ? BodyOf(null, under).Overlaps(foot) // a tile: anything over it
+                    : ObjectBodies(under).Any(b => b.Overlaps(foot) && b.TopLift == body.Z); // anything else: resting right on top of it
+                if (hit) FireObjectEvent(under, def, BookTriggerConditionBased.ByDropItem);
+            }
+            int x = item?.X ?? obj!.X, y = item?.Y ?? obj!.Y;
+            if (EventAt(x, y, body.Z) is { } gameEvent)
+                TryFireEventPages(gameEvent, gameEvent.EventPages, BookTriggerConditionBased.ByDropItem, selfBookId: -1, $"\"{gameEvent.Name}\" fired (By Drop Item)");
+        }
+        finally { _droppedThing = previous; }
+    }
+
+    /// <summary>By Item Dropped On It with a Select Item: only that item sets the page off.</summary>
+    private bool DroppedThingAllowed(BookEventConditions conditions, BookTriggerConditionBased justOccurred)
+    {
+        if (_droppedThing is not { } dropped || justOccurred != BookTriggerConditionBased.ByDropItem || conditions.TriggerConditionBased != BookTriggerConditionBased.ByDropItem) return true;
+        return conditions.TriggerItemReference is not { ItemId: >= 0 } wanted || (wanted.Category == dropped.Category && wanted.ItemId == dropped.ItemId);
     }
 
     // ---------- NPCs and doors ----------

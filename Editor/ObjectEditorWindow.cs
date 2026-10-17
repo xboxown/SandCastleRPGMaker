@@ -924,6 +924,8 @@ public partial class ObjectEditorWindow : Window
         labels[BookTriggerConditionBased.ByTradeItem] = "By Tool Used On It";
         // Every object: something dropped onto it (on the map, in a window) - its event runs first, and can use it up.
         labels[BookTriggerConditionBased.ByCombineItem] = "By Item Combined To It";
+        // Every object: something put down on top of it (or, a tile, on it) stays there and its event runs - a page can wait for one item only (Select Item).
+        labels[BookTriggerConditionBased.ByDropItem] = type == ObjectType.Tile ? "By Item Dropped On It" : "By Item Dropped On It (put on top)";
         if (type is ObjectType.Ammo or ObjectType.Projectile) labels[BookTriggerConditionBased.ByHitTarget] = "By Hitting Target (a character or an object)";
         return labels;
     }
@@ -934,9 +936,9 @@ public partial class ObjectEditorWindow : Window
         ObjectType.Junk => new[] { BookTriggerConditionBased.ByEnter, BookTriggerConditionBased.ByStay, BookTriggerConditionBased.ByAfterReadItem,
             BookTriggerConditionBased.ByHavingAnItem, BookTriggerConditionBased.ByNotHavingAnItem, BookTriggerConditionBased.ByExit },
         ObjectType.Tile => new[] { BookTriggerConditionBased.ByAfterReadItem },
-        ObjectType.Door => new[] { BookTriggerConditionBased.ByDropItem, BookTriggerConditionBased.ByPickupItem },
+        ObjectType.Door => new[] { BookTriggerConditionBased.ByPickupItem },
         ObjectType.LightSource => new[] { BookTriggerConditionBased.ByExit },
-        ObjectType.Ammo => new[] { BookTriggerConditionBased.ByDropItem, BookTriggerConditionBased.ByDestroyItem, BookTriggerConditionBased.ByAfterReadItem,
+        ObjectType.Ammo => new[] { BookTriggerConditionBased.ByDestroyItem, BookTriggerConditionBased.ByAfterReadItem,
             BookTriggerConditionBased.ByPickupItem, BookTriggerConditionBased.ByHavingAnItem, BookTriggerConditionBased.ByNotHavingAnItem,
             BookTriggerConditionBased.ByEnter, BookTriggerConditionBased.ByStay, BookTriggerConditionBased.ByExit },
         _ => Array.Empty<BookTriggerConditionBased>()

@@ -751,7 +751,7 @@ public partial class GameTestWindow
 
         StatusText.Text = $"Moved to ({newCellX}, {newCellY}), sub-position ({newOffsetX}, {newOffsetY}).";
         PlayDropSound();
-        TilesUnderDropped(item, obj); // a tile's By Item Dropped On It
+        TilesUnderDropped(item, obj); // By Item Dropped On It: the tiles under it, what it rests on, the map event there
         var (category, itemId) = PayloadIdentity(origin);
         FireDragTrigger(category, itemId, BookTriggerConditionBased.ByDropItem);
         // Only something that genuinely left a character's own inventory is a "no longer having it" transition - a map-to-map move never was "had".
