@@ -218,18 +218,26 @@ public partial class GameTestWindow
 
     private bool PlayerUnderRoof => RoofLiftOverPlayer() is not null;
 
+    /// <summary>Whether a floor above (its painted tiles or a Floor + Solid tile up there) is what's at this lift over the footprint.</summary>
+    private bool IsFloorSlabAt(UnitRect foot, int lift) =>
+        WorldBodies().Any(b => b.Z == lift && b.Overlaps(foot) && (b.Entity is FloorSlab || b.Entity is ObjectInstance o && IsUpperFloorSlabTile(o)));
+
     /// <summary>skip_above: under a roof, everything at its lift or above goes; out in the open, it all comes back.</summary>
     private void UpdateRoofs()
     {
         int? skipAbove = RoofLiftOverPlayer();
+        // The ceiling is the floor above (its slab, one lift under that floor's height): what lies at the slab's own lift - a book on a
+        // tall table - is still on this floor, under it. Only that floor and up go (everything from its height).
+        bool underFloor = skipAbove is int ceilingLift && _player is not null && IsFloorSlabAt(PlayerFootprint(), ceilingLift);
+        if (underFloor) skipAbove++;
         var hide = new HashSet<UIElement>(ReferenceEqualityComparer.Instance);
         if (skipAbove is int lift)
         {
             // At the ceiling's own lift only the solid things go (the ceiling itself, a roof) - something small lying on a table top as high as that stays.
             // A Floor tile is the floor itself: it goes with its floor (gamerend.cc: nothing at skip_lift or above is painted).
-            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && (IsSolidAt(null, o) || DefinitionOf(o) is { Type: ObjectType.Tile, IsFloorTile: true })))))
+            foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && (underFloor || IsSolidAt(null, o) || DefinitionOf(o) is { Type: ObjectType.Tile, IsFloorTile: true })))))
                 if (_objectVisuals.GetValueOrDefault(instance) is UIElement v) hide.Add(v);
-            foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && IsSolidAt(i, null))))
+            foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && (underFloor || IsSolidAt(i, null)))))
                 if (_itemVisuals.GetValueOrDefault(item) is UIElement v) hide.Add(v);
             foreach (var (slabLift, v) in _floorTileVisuals.Where(t => t.SlabLift + 1 >= lift)) hide.Add(v); // the floors overhead: a floor whose height (its slab's top) is at the ceiling's lift or above - under a wall of floor 2, floor 2 goes too
             foreach (var mapCharacter in _mapCharacters.Where(mc => mc.Lift >= lift))
