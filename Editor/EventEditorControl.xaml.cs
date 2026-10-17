@@ -197,6 +197,7 @@ public partial class EventEditorControl : UserControl
             EventCommandType.GoToLabel => "Jump to Label",
             EventCommandType.End => "Exit Event Processing",
             EventCommandType.StopConversation => "Stop Conversation",
+            _ when CommandWindowRegistry.All.TryGetValue(command.Type, out var registered) => registered.Name,
             _ => command.Type.ToString()
         };
         block.Inlines.Add(new Run(commandName) { Foreground = IsChoiceLine(command) ? Brushes.MediumBlue : Brushes.Red, FontWeight = FontWeights.Bold });
@@ -209,7 +210,12 @@ public partial class EventEditorControl : UserControl
                 var entry = ResourceDatabase?.Entries.FirstOrDefault(e => e.Id == id);
                 if (entry is not null) soundName = entry.Name;
             }
-            block.Inlines.Add(new Run($" : {soundName} (Vol {command.Get("Volume")})"));
+            string volume = double.TryParse(command.Get("Volume"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? $"{v * 100:0}%" : command.Get("Volume");
+            block.Inlines.Add(new Run($" : {soundName} (Vol {volume}{(command.Get("Loop") == "True" ? ", looping" : "")})"));
+        }
+        else if (CommandWindowRegistry.All.TryGetValue(command.Type, out var registeredLine))
+        {
+            block.Inlines.Add(new Run($" : {registeredLine.Describe(command)}"));
         }
         else if (command.Type == EventCommandType.PlayMusic)
         {
@@ -389,7 +395,19 @@ public partial class EventEditorControl : UserControl
             insertAt = blockEnd + 1;
         int indentLevel = ComputeInsertIndentLevel(insertAt);
 
-        if (type == EventCommandType.ShowText)
+        if (CommandWindowRegistry.All.TryGetValue(type, out var registered))
+        {
+            var dialog = registered.Open(null);
+            dialog.Owner = Window.GetWindow(this);
+            if (dialog.ShowDialog() == true)
+            {
+                dialog.Result.IndentLevel = indentLevel;
+                CurrentPage.Commands.Insert(insertAt, dialog.Result);
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (type == EventCommandType.ShowText)
         {
             var dialog = new ShowTextCommandWindow { Owner = Window.GetWindow(this) };
             if (dialog.ShowDialog() == true)
@@ -616,7 +634,19 @@ public partial class EventEditorControl : UserControl
             if (owner >= 0) EditCommandAt(owner);
             return;
         }
-        if (command.Type == EventCommandType.ShowText)
+        if (CommandWindowRegistry.All.TryGetValue(command.Type, out var registered))
+        {
+            var dialog = registered.Open(command);
+            dialog.Owner = Window.GetWindow(this);
+            if (dialog.ShowDialog() == true)
+            {
+                dialog.Result.IndentLevel = command.IndentLevel;
+                CurrentPage.Commands[index] = dialog.Result;
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (command.Type == EventCommandType.ShowText)
         {
             var dialog = new ShowTextCommandWindow(command) { Owner = Window.GetWindow(this) };
             if (dialog.ShowDialog() == true)

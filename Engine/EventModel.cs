@@ -53,7 +53,9 @@ public enum EventCommandType
     /// <summary>Change Weather: rain, snow, hail, a storm or clear, and the clouds (Exult's weather eggs).</summary>
     ChangeWeather,
     /// <summary>Advance IF: a branch on any one game condition (its numbered tab), with Else / End If like Conditional Branch.</summary>
-    AdvancedIf
+    AdvancedIf,
+    /// <summary>Stop Sound: stops a sound that is playing (a looping Play Sound, say), or every sound.</summary>
+    StopSound
 }
 
 /// <summary>

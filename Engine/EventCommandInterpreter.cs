@@ -231,7 +231,8 @@ public static class EventCommandInterpreter
 
     private static string Describe(EventCommand cmd) => cmd.Type switch
     {
-        EventCommandType.PlaySound => $"Play Sound (resource #{cmd.Get("SoundResourceId")})",
+        EventCommandType.PlaySound => $"Play Sound (resource #{cmd.Get("SoundResourceId")}{(cmd.Get("Loop") == "True" ? ", looping" : "")})",
+        EventCommandType.StopSound => $"Stop Sound ({(cmd.Get("SoundResourceId") == "All" ? "every sound" : "resource #" + cmd.Get("SoundResourceId"))})",
         EventCommandType.PlayMusic => $"Play Music (resource #{cmd.Get("MusicResourceId")})",
         EventCommandType.ShowText => $"Show Text: \"{cmd.Get("Text")}\"",
         EventCommandType.SetSwitch => $"Control Switches: {cmd.Get("SwitchName")} = {cmd.Get("Value")}",

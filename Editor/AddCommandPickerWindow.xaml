@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Event Commands" Height="640" Width="600" MinHeight="300" MinWidth="420" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <DockPanel Margin="12">
-        <TextBlock DockPanel.Dock="Top" Text="Show Text (with replies), Label / Jump to Label, Control Switches/Variables, Conditional Branch, Play Sound/Music, Shake Screen, Change Day/Night, Apply Palette Color, and both Change Book Content commands are built so far - everything else is shown to prove the category structure, and will light up as each is built."
+        <TextBlock DockPanel.Dock="Top" Text="Greyed-out commands aren't built yet."
                    TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
@@ -20,8 +20,7 @@
 
                     <StackPanel Grid.Column="0" Margin="0,0,10,0">
                         <TextBlock Text="Message" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <Button Content="Show Text..." Margin="0,0,0,4" Click="ShowText_Click"/>
-                        <Button Content="Show Text with Replies..." Margin="0,0,0,4" Click="ShowText_Click" ToolTip="Replies (choices) are part of Show Text: add them on its right side"/>
+                        <Button Content="Show Text..." Margin="0,0,0,4" Click="ShowText_Click" ToolTip="A line of text - with replies (choices) if you add them on its right side"/>
                         <Button Content="Stop Conversation" Margin="0,0,0,4" Click="StopConversation_Click" ToolTip="Ends the conversation: pinned replies stop coming back, and the box closes once the lines already up are read. Commands after it still run (e.g. Attack)."/>
                         <Button Content="Input Number..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Select Item..." Margin="0,0,0,12" IsEnabled="False"/>
@@ -57,8 +56,8 @@
                         <Button Content="Teleport..." Margin="0,0,0,4" Click="Teleport_Click"/>
                         <Button Content="Sleep On Bed..." Margin="0,0,0,4" Click="SleepOnBed_Click" ToolTip="The main character walks to a bed and lies down, as double-clicking it does (for a bed's cover)"/>
                         <Button Content="Paperdoll..." Margin="0,0,0,4" Click="Paperdoll_Click" ToolTip="Change a paperdoll's parts, play or stop its sounds, close it, or turn its object into another object"/>
-                        <Button Content="Play Sound..." Margin="0,0,0,4" Click="PlaySound_Click"/>
-                        <Button Content="Play Music..." Margin="0,0,0,4" Click="PlayMusic_Click"/>
+                        <Button Content="Play Sound..." Margin="0,0,0,4" Click="PlaySound_Click" ToolTip="Plays a sound once or looping, at a volume you choose"/>
+                        <Button Content="Stop Sound..." Margin="0,0,0,4" Click="StopSound_Click" ToolTip="Stops a sound that is playing (a looping one, say), or every sound"/>
                         <Button Content="Change Tile..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Wait..." Margin="0,0,0,4" IsEnabled="False"/>
                     </StackPanel>

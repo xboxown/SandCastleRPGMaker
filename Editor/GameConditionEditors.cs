@@ -118,7 +118,7 @@ internal static class GameConditionFields
                 Compare("Is", numberValue: false);
                 var value = new TextBox { Width = 120, Text = c.Value, HorizontalAlignment = HorizontalAlignment.Left };
                 value.LostFocus += (_, _) => c.Value = value.Text.Trim();
-                panel.Children.Add(Label("Value (a number, or True / False for a switch)"));
+                panel.Children.Add(Label("Value (a number for Integer / Float / Decimal, True / False for Boolean - String variables can't be tested yet)"));
                 panel.Children.Add(value);
                 break;
             }
@@ -226,16 +226,18 @@ internal static class GameConditionFields
 /// </summary>
 public class AdvanceIfCommandWindow : Window
 {
-    private readonly TabControl _tabs = new() { Margin = new Thickness(8) };
-    private readonly Dictionary<TabItem, GameCondition> _byTab = new();
+    // The conditions by name ("1. Variable", "2. Equipped"...) down the left - 33 named tabs wouldn't fit across the top.
+    private readonly ListBox _tabs = new() { Margin = new Thickness(8, 8, 0, 8), Width = 250 };
+    private readonly ContentControl _page = new() { Margin = new Thickness(8) };
+    private readonly Dictionary<ListBoxItem, GameCondition> _byTab = new();
     private readonly CheckBox _else = new() { Content = "Set what to do when it isn't so (an Else branch)", Margin = new Thickness(8, 0, 8, 0) };
     public List<EventCommand> Results { get; private set; } = new();
 
     public AdvanceIfCommandWindow(EventCommand? existing = null)
     {
         Title = "Advance IF";
-        Width = 760;
-        Height = 620;
+        Width = 900;
+        Height = 640;
         WindowStartupLocation = WindowStartupLocation.CenterOwner;
         var current = existing is null ? null : GameConditions.FromCommand(existing);
         foreach (var kind in GameConditions.All)
@@ -245,18 +247,22 @@ public class AdvanceIfCommandWindow : Window
             var body = new StackPanel { Margin = new Thickness(10) };
             body.Children.Add(new TextBlock { Text = $"{(int)kind}. {GameConditions.Name(kind)}", FontWeight = FontWeights.Bold, FontSize = 14 });
             body.Children.Add(GameConditionFields.Build(condition, this));
-            var tab = new TabItem { Header = ((int)kind).ToString(), ToolTip = GameConditions.Name(kind), Content = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto } };
+            var tab = new ListBoxItem { Content = $"{(int)kind}. {GameConditions.Name(kind)}", Tag = new ScrollViewer { Content = body, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, Padding = new Thickness(4, 2, 4, 2) };
             _byTab[tab] = condition;
             _tabs.Items.Add(tab);
             if (current?.Kind == kind) _tabs.SelectedItem = tab;
         }
+        _tabs.SelectionChanged += (_, _) => _page.Content = (_tabs.SelectedItem as ListBoxItem)?.Tag;
+        if (_tabs.SelectedItem is null && _tabs.Items.Count > 0) _tabs.SelectedIndex = 0;
+        _page.Content = (_tabs.SelectedItem as ListBoxItem)?.Tag;
+        Loaded += (_, _) => _tabs.ScrollIntoView(_tabs.SelectedItem);
         _else.Visibility = existing is null ? Visibility.Visible : Visibility.Collapsed;
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(8) };
         var ok = new Button { Content = "OK", Width = 80, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
         var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
         ok.Click += (_, _) =>
         {
-            if (_tabs.SelectedItem is not TabItem tab) return;
+            if (_tabs.SelectedItem is not ListBoxItem tab) return;
             var command = new EventCommand { Type = EventCommandType.AdvancedIf };
             GameConditions.ToCommand(command, _byTab[tab]);
             command.Parameters["Summary"] = GameConditionFields.Describe(_byTab[tab]);
@@ -277,9 +283,11 @@ public class AdvanceIfCommandWindow : Window
         var root = new DockPanel();
         DockPanel.SetDock(bottom, Dock.Bottom);
         root.Children.Add(bottom);
-        root.Children.Add(new TextBlock { Text = "Pick the condition's tab (hover a number for its name), set it, and OK: the commands under the IF run when it's so.", Margin = new Thickness(10, 8, 10, 0), Opacity = 0.75 });
+        root.Children.Add(new TextBlock { Text = "Pick the condition on the left, set it, and OK: the commands under the IF run when it's so.", Margin = new Thickness(10, 8, 10, 0), Opacity = 0.75 });
         DockPanel.SetDock(root.Children[1], Dock.Top);
+        DockPanel.SetDock(_tabs, Dock.Left);
         root.Children.Add(_tabs);
+        root.Children.Add(new Border { BorderBrush = System.Windows.Media.Brushes.Gray, BorderThickness = new Thickness(1), Margin = new Thickness(0, 8, 8, 8), Child = _page });
         Content = root;
     }
 

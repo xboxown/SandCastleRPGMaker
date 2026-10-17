@@ -1,18 +1,25 @@
 <Window x:Class="SandcastleRpgMaker.Editor.PlaySoundCommandWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Play Sound" Height="230" Width="420" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="Play Sound" SizeToContent="Height" Width="420" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <DockPanel Margin="12">
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="OK" Width="70" Margin="4" Click="OkButton_Click" IsDefault="True"/>
             <Button Content="Cancel" Width="70" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
         </StackPanel>
 
-        <TextBlock DockPanel.Dock="Top" Text="Sound:" FontWeight="Bold" Margin="0,0,0,4"/>
-        <ComboBox x:Name="SoundCombo" DockPanel.Dock="Top" Margin="0,0,0,4"/>
-        <TextBlock x:Name="EmptyListNote" DockPanel.Dock="Top" Text="No sounds yet - add one in the Sound Editor first." Opacity="0.7" FontSize="11" Margin="0,0,0,10" Visibility="Collapsed"/>
+        <StackPanel>
+            <TextBlock Text="Sound:" FontWeight="Bold" Margin="0,0,0,4"/>
+            <ComboBox x:Name="SoundCombo" Margin="0,0,0,4"/>
+            <TextBlock x:Name="EmptyListNote" Text="No sounds yet - add one in the Sound Editor first." Opacity="0.7" FontSize="11" Margin="0,0,0,10" Visibility="Collapsed"/>
 
-        <TextBlock DockPanel.Dock="Top" Text="Volume (0.0 - 1.0):" FontWeight="Bold" Margin="0,0,0,4"/>
-        <TextBox x:Name="VolumeBox" DockPanel.Dock="Top"/>
+            <TextBlock Text="Volume:" FontWeight="Bold" Margin="0,6,0,4"/>
+            <DockPanel>
+                <TextBlock x:Name="VolumeText" DockPanel.Dock="Right" Width="45" TextAlignment="Right" VerticalAlignment="Center"/>
+                <Slider x:Name="VolumeSlider" Minimum="0" Maximum="100" SmallChange="1" LargeChange="10" IsSnapToTickEnabled="True" TickFrequency="1" ValueChanged="VolumeSlider_ValueChanged"/>
+            </DockPanel>
+
+            <CheckBox x:Name="LoopBox" Content="Loop it (plays over and over until a Stop Sound command stops it)" Margin="0,10,0,0"/>
+        </StackPanel>
     </DockPanel>
 </Window>

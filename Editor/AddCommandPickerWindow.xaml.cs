@@ -48,9 +48,9 @@ public partial class AddCommandPickerWindow : Window
         DialogResult = true;
     }
 
-    private void PlayMusic_Click(object sender, RoutedEventArgs e)
+    private void StopSound_Click(object sender, RoutedEventArgs e)
     {
-        ChosenType = EventCommandType.PlayMusic;
+        ChosenType = EventCommandType.StopSound;
         DialogResult = true;
     }
 

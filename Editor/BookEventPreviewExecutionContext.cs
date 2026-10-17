@@ -89,8 +89,17 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
             case EventCommandType.PlaySound:
             {
                 if (!int.TryParse(command.Get("SoundResourceId"), out int id)) return false;
-                double? volumeOverride = double.TryParse(command.Get("Volume"), out double v) ? v : null;
-                return SoundPlayback.TryPlay(_resources, id, volumeOverride);
+                double? volumeOverride = double.TryParse(command.Get("Volume"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v)
+                    || double.TryParse(command.Get("Volume"), out v) ? Math.Clamp(v, 0, 1) : null;
+                return SoundPlayback.TryPlay(_resources, id, volumeOverride, loop: command.Get("Loop") == "True");
+            }
+            case EventCommandType.StopSound:
+            {
+                // "All" stops every sound playing; otherwise one sound (every copy of it, looping ones too).
+                if (command.Get("SoundResourceId") == "All") { SoundPlayback.StopAll(); return true; }
+                if (!int.TryParse(command.Get("SoundResourceId"), out int id)) return false;
+                SoundPlayback.StopSound(id);
+                return true;
             }
             case EventCommandType.PlayMusic:
             {
