@@ -19,10 +19,11 @@ public partial class CharacterEditorWindow
     private void BuildEventTab(CharacterDefinition character)
     {
         _eventCharacter = character;
-        // Never headless: a character's events always have at least one page, and every page a character trigger.
+        // Never headless: a character's events always have at least one page, and every page a character trigger (or Always).
         if (character.EventPages.Count == 0) character.EventPages.Add(NewCharacterEventPage());
         foreach (var page in character.EventPages)
-            if (!CharacterTriggers.IsCharacterTrigger(page.Conditions.TriggerConditionBased)) page.Conditions.TriggerConditionBased = BookTriggerConditionBased.ByEquip;
+            if (page.Conditions.TriggerConditionBased != BookTriggerConditionBased.Always && !CharacterTriggers.IsCharacterTrigger(page.Conditions.TriggerConditionBased))
+                page.Conditions.TriggerConditionBased = BookTriggerConditionBased.ByEquip;
 
         var pages = new ObservableCollection<EventCommandPage>(character.EventPages.Select((p, i) => new EventCommandPage { Label = (i + 1).ToString(), Commands = p.Commands }));
         _characterEventEditor = new EventEditorControl
