@@ -1540,6 +1540,7 @@ public partial class GameTestWindow : Window
             e.Handled = true;
             return;
         }
+        if (InCinema) { e.Handled = true; return; } // Cinema Mode: no keys till it ends (only the boxes, above)
         if (_restingNow) { e.Handled = true; return; } // the party is asleep
         if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
         if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens

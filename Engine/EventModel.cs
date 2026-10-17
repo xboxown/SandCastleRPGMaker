@@ -92,7 +92,11 @@ public enum EventCommandType
     /// <summary>Picklock Door: walks to a locked door and picks the lock, lockpick after lockpick.</summary>
     PicklockDoor,
     /// <summary>Pick Item From Container: walks to an unlocked container and takes things out of it.</summary>
-    TakeFromContainer
+    TakeFromContainer,
+    /// <summary>Cinema Mode: from here to its End Cinema Mode the player can't move or click anything in the world - only read the boxes and pick replies.</summary>
+    CinemaMode,
+    /// <summary>The end of a Cinema Mode: the player has control again (so does the event's end, wherever it ends).</summary>
+    EndCinemaMode
 }
 
 /// <summary>

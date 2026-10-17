@@ -175,6 +175,8 @@ internal static class EventCommandCatalog
             EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf => "If: ",
             EventCommandType.Else => "Else",
             EventCommandType.EndBranch => "End If",
+            EventCommandType.CinemaMode => "Cinema Mode",
+            EventCommandType.EndCinemaMode => "End Cinema Mode",
             _ => ""
         };
 

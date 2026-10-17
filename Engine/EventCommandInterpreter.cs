@@ -33,6 +33,17 @@ public interface IActionCommandHost
 }
 
 /// <summary>
+/// A host that can take the controls away from the player for a while
+/// (Cinema Mode). Each running command list is its own key: the controls
+/// come back when every list that took them has ended its cinema.
+/// </summary>
+public interface ICinemaHost
+{
+    void BeginCinema(object run);
+    void EndCinema(object run);
+}
+
+/// <summary>
 /// Walks one command list for real. ConditionalBranchSwitch/Variable,
 /// Else, EndBranch, and End are genuinely interpreted here (not stubbed) -
 /// this is the same loop the actual game engine will eventually run
@@ -59,6 +70,7 @@ public static class EventCommandInterpreter
             if (++guard > MaxSteps)
             {
                 trace.Add("(stopped - exceeded max command steps, likely a runaway loop)");
+                (context as ICinemaHost)?.EndCinema(commands);
                 return;
             }
 
@@ -77,7 +89,20 @@ public static class EventCommandInterpreter
             {
                 case EventCommandType.End:
                     trace.Add("End - command list stopped.");
+                    (context as ICinemaHost)?.EndCinema(commands); // the event is over: a cinema still on ends with it
                     return;
+
+                case EventCommandType.CinemaMode:
+                    (context as ICinemaHost)?.BeginCinema(commands);
+                    trace.Add("Cinema Mode - the player can't move or click till End Cinema Mode");
+                    i++;
+                    continue;
+
+                case EventCommandType.EndCinemaMode:
+                    (context as ICinemaHost)?.EndCinema(commands);
+                    trace.Add("End Cinema Mode - the player has control again");
+                    i++;
+                    continue;
 
                 case EventCommandType.ConditionalBranchSwitch:
                 case EventCommandType.ConditionalBranchVariable:
@@ -203,6 +228,7 @@ public static class EventCommandInterpreter
                 }
             }
         }
+        (context as ICinemaHost)?.EndCinema(commands); // the last line done: a cinema still on ends with the event
     }
 
     private static int LastIndexOf(IReadOnlyList<(int StopAt, int ResumeAt)> returns, int index)

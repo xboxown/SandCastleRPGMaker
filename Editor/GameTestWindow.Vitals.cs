@@ -69,6 +69,7 @@ public partial class GameTestWindow
         _execContext.OnEvaluateCondition = EvaluateGameCondition; // Advance IF (GameTestWindow.Conditions.cs)
         InitializeEventCommands(); // Give Item, Change Stat, Train... (GameTestWindow.EventCommands.cs)
         InitializeActionCommands(); // Walk To Location, Sit, Open Door... (GameTestWindow.Actions.cs)
+        _execContext.OnCinema = (run, on) => { if (on) BeginCinema(run); else EndCinema(run); }; // GameTestWindow.Cinema.cs
         WatchSounds();
     }
 

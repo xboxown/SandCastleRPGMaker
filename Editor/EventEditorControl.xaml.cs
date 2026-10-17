@@ -197,6 +197,8 @@ public partial class EventEditorControl : UserControl
             EventCommandType.GoToLabel => "Jump to Label",
             EventCommandType.End => "Exit Event Processing",
             EventCommandType.StopConversation => "Stop Conversation",
+            EventCommandType.CinemaMode => "Cinema Mode",
+            EventCommandType.EndCinemaMode => "End Cinema Mode",
             _ when CommandWindowRegistry.All.TryGetValue(command.Type, out var registered) => registered.Name,
             _ => command.Type.ToString()
         };
@@ -428,6 +430,14 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
+        else if (type is EventCommandType.CinemaMode or EventCommandType.EndCinemaMode)
+        {
+            // Always as a pair, like an If and its End If: what goes between them is one level deeper.
+            CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = EventCommandType.CinemaMode, IndentLevel = indentLevel });
+            CurrentPage.Commands.Insert(insertAt + 1, new EventCommand { Type = EventCommandType.EndCinemaMode, IndentLevel = indentLevel });
+            RenderContentsList();
+            ContentChanged?.Invoke();
+        }
         else if (type is EventCommandType.End or EventCommandType.StopConversation)
         {
             CurrentPage.Commands.Insert(insertAt, new EventCommand { Type = type, IndentLevel = indentLevel });
@@ -618,7 +628,7 @@ public partial class EventEditorControl : UserControl
     {
         if (CurrentPage is null || insertAt <= 0 || insertAt > CurrentPage.Commands.Count) return 0;
         var previous = CurrentPage.Commands[insertAt - 1];
-        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf or EventCommandType.Else or EventCommandType.WhenChoice;
+        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf or EventCommandType.Else or EventCommandType.WhenChoice or EventCommandType.CinemaMode;
         return opensBlock ? previous.IndentLevel + 1 : previous.IndentLevel;
     }
 
@@ -835,9 +845,40 @@ public partial class EventEditorControl : UserControl
         int index = ContentsListBox.SelectedIndex;
         if (index < 0 || index >= CurrentPage.Commands.Count) return;
         if (TryDeleteChoiceAware(index)) return;
+        if (TryDeleteCinema(index)) return;
         CurrentPage.Commands.RemoveAt(index);
         RenderContentsList();
         ContentChanged?.Invoke();
+    }
+
+    /// <summary>Delete on a Cinema Mode or its End Cinema Mode: both lines go, and the commands between them stay (back one level). True when handled here.</summary>
+    private bool TryDeleteCinema(int index)
+    {
+        if (CurrentPage is null) return false;
+        var commands = CurrentPage.Commands;
+        var command = commands[index];
+        int start, end;
+        if (command.Type == EventCommandType.CinemaMode)
+        {
+            start = index;
+            end = commands.FindIndex(index + 1, c => c.Type == EventCommandType.EndCinemaMode && c.IndentLevel == command.IndentLevel);
+        }
+        else if (command.Type == EventCommandType.EndCinemaMode)
+        {
+            end = index;
+            start = commands.FindLastIndex(index, c => c.Type == EventCommandType.CinemaMode && c.IndentLevel == command.IndentLevel);
+        }
+        else return false;
+        if (start >= 0 && end > start)
+        {
+            for (int i = start + 1; i < end; i++) commands[i].IndentLevel = Math.Max(0, commands[i].IndentLevel - 1);
+            commands.RemoveAt(end);
+            commands.RemoveAt(start);
+        }
+        else commands.RemoveAt(index); // its partner is gone already
+        RenderContentsList();
+        ContentChanged?.Invoke();
+        return true;
     }
 
     // ---------- Manual typing (text view) + Compile/Validate ----------

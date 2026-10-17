@@ -16,7 +16,7 @@ namespace SandcastleRpgMaker.Editor;
 /// its own visuals. A caller with no callback set just gets a no-op,
 /// exactly like every other optional dependency in this project.
 /// </summary>
-public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext, IActionCommandHost
+public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext, IActionCommandHost, ICinemaHost
 {
     private readonly ResourceDatabase _resources;
     private readonly Dictionary<string, double> _variables = new();
@@ -70,6 +70,11 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Dictionary<EventCommandType, Func<EventCommand, Action<bool>, bool>> GameActions { get; } = new();
     /// <summary>Whether the last command that can fail worked (Advance IF > Last command succeeded).</summary>
     public bool LastResult { get; set; } = true;
+
+    /// <summary>Cinema Mode: (the running list, true = begin / false = end). Only a running game has controls to take.</summary>
+    public Action<object, bool>? OnCinema { get; set; }
+    public void BeginCinema(object run) => OnCinema?.Invoke(run, true);
+    public void EndCinema(object run) => OnCinema?.Invoke(run, false);
 
     public bool TryBegin(EventCommand command, Action<bool> done)
     {

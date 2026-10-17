@@ -36,6 +36,7 @@
                         <Button Content="Label..." Margin="0,0,0,4" Click="Label_Click"/>
                         <Button Content="Jump to Label..." Margin="0,0,0,4" Click="JumpToLabel_Click"/>
                         <Button Content="Exit Event Processing" Margin="0,0,0,4" Click="ExitEvent_Click" ToolTip="Stops the commands right here - ends a conversation too"/>
+                        <Button Content="Cinema Mode" Margin="0,0,0,4" Tag="CinemaMode" Click="Registered_Click" ToolTip="Adds Cinema Mode and End Cinema Mode: while the commands between them run, the player can't move or click anything (only read the boxes and pick replies). The event ending ends it too."/>
                     </StackPanel>
 
                     <StackPanel Grid.Column="1">
