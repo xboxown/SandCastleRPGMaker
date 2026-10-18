@@ -80,8 +80,6 @@ public partial class GameTestWindow
     /// <summary>Set when a save was loaded: the window that carries on the game (this one has closed).</summary>
     public GameTestWindow? ReplacedBy { get; private set; }
 
-    /// <summary>A save can't be made while something is under way - a cutscene, a box, a command, a video (Exult refuses mid-script too).</summary>
-    private bool SomethingIsHappening => InCinema || IsShowingMessage || _scriptActions.Count > 0 || _scriptWaits.Count > 0 || IsPlayingVideo || _gameOver;
 
     // ================= Opening =================
 
@@ -393,10 +391,10 @@ public partial class GameTestWindow
     private void SaveFromScreen(SaveScreen screen, DollPart? button)
     {
         int slot = screen.PickedSlot;
-        if (slot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) { StatusText.Text = "Click a slot to save into first."; return; }
+        if (slot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) { SaveScreenSay(screen, "Click a slot to save into first.", button); return; }
         string name = screen.Name.Trim();
-        if (name.Length == 0) { StatusText.Text = "Type a name for the save first."; return; }
-        if (SomethingIsHappening) { StatusText.Text = "You can't save while something is happening."; return; }
+        if (name.Length == 0) { SaveScreenSay(screen, "Type a name for the save first.", button); return; }
+        if (WhatIsHappening() is { } happening) { SaveScreenSay(screen, $"You can't save now: {happening}.", button); return; }
         var existing = slot > 0 ? screen.InSlot(slot) // a slot is written over whatever its save was called
             : screen.Saves.FirstOrDefault(s => s.Slot == 0 && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null && !Confirmed(screen, DollPartKind.SaveButton, existing.Folder, button, $"Write over \"{existing.Name}\"? Press Save again.")) return;
@@ -405,21 +403,38 @@ public partial class GameTestWindow
             var data = CaptureSave();
             var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
             GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
-            screen.Saves = GameSaveStore.List(screen.ProjectId);
-            screen.Picked = screen.Saves.FindIndex(s => s.Folder == info.Folder);
-            screen.Scroll = Math.Min(screen.Scroll, Math.Max(0, screen.Picked));
-            RefreshDollGump(screen.Gump);
-            StatusText.Text = $"Game saved: \"{name}\".";
+            SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
+            CloseDollGump(screen.Gump); // saved: back to the game
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"The game couldn't be saved: {ex.Message}";
+            SaveScreenSay(screen, $"The game couldn't be saved: {ex.Message}", button);
         }
+    }
+
+    /// <summary>Why a save can't be made right now, or null.</summary>
+    private string? WhatIsHappening() =>
+        InCinema ? "a cutscene is playing"
+        : IsShowingMessage ? "a message is showing"
+        : _scriptActions.Count > 0 ? $"{string.Join(", ", _scriptActions.Keys.Select(c => c.Name))} {(_scriptActions.Count == 1 ? "is" : "are")} still doing an event's command"
+        : _scriptWaits.Count > 0 ? "an event is waiting"
+        : IsPlayingVideo ? "a video is playing"
+        : _gameOver ? "the game is over"
+        : null;
+
+    /// <summary>Tells the player on the Save/Load screen itself (by the button or the picked slot) and in the status bar.</summary>
+    private void SaveScreenSay(SaveScreen screen, string text, DollPart? near)
+    {
+        StatusText.Text = text;
+        var part = near
+            ?? screen.Gump.Design.Parts.FirstOrDefault(p => p.Kind == DollPartKind.SaveName && DollPart.SlotNumber(screen.Gump.Design, p) == screen.PickedSlot)
+            ?? screen.Gump.Design.Parts.FirstOrDefault(p => p.Kind == DollPartKind.SaveButton);
+        ShowGumpLabel(screen.Gump.PartsCanvas, text, part?.X ?? 8, part?.Y ?? 8);
     }
 
     private void LoadFromScreen(SaveScreen screen)
     {
-        if (screen.PickedSave is not { } save) { StatusText.Text = screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to load."; return; }
+        if (screen.PickedSave is not { } save) { SaveScreenSay(screen, screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to load.", null); return; }
         GameSaveData data;
         try { data = GameSaveStore.Read(screen.ProjectId, save); }
         catch (Exception ex)
@@ -432,7 +447,7 @@ public partial class GameTestWindow
 
     private void DeleteFromScreen(SaveScreen screen, DollPart part)
     {
-        if (screen.PickedSave is not { } save) { StatusText.Text = screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to delete."; return; }
+        if (screen.PickedSave is not { } save) { SaveScreenSay(screen, screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to delete.", part); return; }
         if (!Confirmed(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.")) return;
         try { GameSaveStore.Delete(save); }
         catch (Exception ex)
