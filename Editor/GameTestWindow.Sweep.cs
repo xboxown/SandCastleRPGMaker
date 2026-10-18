@@ -41,12 +41,19 @@ public partial class GameTestWindow
     }
 
     /// <summary>A character's walk from one cell (or, leaving where it stands, its own spot) to the middle of the next.</summary>
-    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, List<Body> world) =>
+    /// <param name="lift">The lift it stands at in the end - walked there step by step, so stairs (several lifts a cell, 1 a step) are climbed and gone down.</param>
+    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, List<Body> world, out int lift) =>
         CanSweep((px, py) => ActorFootprintAt(px, py, mapCharacter.Size),
             fromWhereItStands ? mapCharacter.PixelX : CellCenterX(from.X), fromWhereItStands ? mapCharacter.PixelY : CellCenterY(from.Y),
-            CellCenterX(to.X), CellCenterY(to.Y), fromLift, mapCharacter.Size.Z, mapCharacter.Placement, world, out _);
+            CellCenterX(to.X), CellCenterY(to.Y), fromLift, mapCharacter.Size.Z, mapCharacter.Placement, world, out lift);
 
-    /// <summary>The player's walk from one cell's middle to the next.</summary>
+    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, List<Body> world) =>
+        CanWalkBetween(mapCharacter, from, to, fromWhereItStands, fromLift, world, out _);
+
+    /// <summary>The player's walk from one cell's middle to the next (and the lift they end at).</summary>
+    private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, List<Body> world, out int lift) =>
+        CanSweep(PlayerFootprintAt, CellCenterX(from.X), CellCenterY(from.Y), CellCenterX(to.X), CellCenterY(to.Y), fromLift, _playerSize.Z, null, world, out lift);
+
     private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, List<Body> world) =>
-        CanSweep(PlayerFootprintAt, CellCenterX(from.X), CellCenterY(from.Y), CellCenterX(to.X), CellCenterY(to.Y), fromLift, _playerSize.Z, null, world, out _);
+        PlayerCanWalkBetween(from, to, fromLift, world, out _);
 }

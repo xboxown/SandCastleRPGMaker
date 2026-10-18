@@ -108,8 +108,17 @@ public partial class GameTestWindow
                 var cell = (current.X + dx, current.Y + dy);
                 if (!InsideMap(cell.Item1, cell.Item2)) continue;
                 if (goalFloor is null && cost.TryGetValue((cell.Item1, cell.Item2, 0), out int reached) && reached <= cost[current] + 1) continue; // no floor asked for: one place per cell
-                if (!PlayerCanStand(cell, liftAt[current], out int lift)) continue;
-                if (!PlayerCanWalkBetween((current.X, current.Y), cell, liftAt[current], world)) continue; // the walk itself, not just where it ends
+                int lift;
+                if (goalFloor is not null)
+                {
+                    // To another floor: only the walk itself, step by step, gets up or down the stairs (several lifts a cell, 1 a step).
+                    if (!PlayerCanWalkBetween((current.X, current.Y), cell, liftAt[current], world, out lift)) continue;
+                }
+                else
+                {
+                    if (!PlayerCanStand(cell, liftAt[current], out lift)) continue;
+                    if (!PlayerCanWalkBetween((current.X, current.Y), cell, liftAt[current], world)) continue; // the walk itself, not just where it ends
+                }
                 var next = (cell.Item1, cell.Item2, FloorKey(lift));
                 int newCost = cost[current] + 1;
                 if (cost.TryGetValue(next, out int known) && known <= newCost) continue;
