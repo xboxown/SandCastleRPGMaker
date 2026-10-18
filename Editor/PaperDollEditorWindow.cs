@@ -166,11 +166,11 @@ public class PaperDollEditorWindow : Window
         DollPartKind.Hotspot => "An invisible clickable area over part of a picture: a keyhole, a crack.",
         DollPartKind.CloseButton => "Closes the paperdoll when clicked.",
         DollPartKind.SaveList => "Save/Load screen: the saved games, newest first, in its font. Click picks one, double-click loads it, the mouse wheel scrolls. Its \"Picked row\" look is drawn behind the picked one.",
-        DollPartKind.SaveName => "Save/Load screen: the player types the save's name here. Picking a save in the list puts its name here.",
+        DollPartKind.SaveName => "Save/Load screen: one saved game, as Exult's slots - add as many as you like, each holds its own save (its slot number). Click it to pick it, type the save's name in it, then Save, Load or Delete; double-click loads it.",
         DollPartKind.SaveScreenshot => "Save/Load screen: the picked save's screenshot, fitted into this area (its Frame look is drawn over it).",
         DollPartKind.SaveDetails => "Save/Load screen: the picked save's name, the game's day and time, and when it was saved, in its font.",
-        DollPartKind.SaveButton => "Save/Load screen: saves under the typed name - over the picked save when the name is the same, after asking.",
-        DollPartKind.LoadButton => "Save/Load screen: loads the picked save (double-clicking it in the list does too).",
+        DollPartKind.SaveButton => "Save/Load screen: saves into the picked Save slot under its typed name (asking first when the slot holds a save). With a Save list and no slot picked: a new save, or over the one with the same name.",
+        DollPartKind.LoadButton => "Save/Load screen: loads the picked save (double-clicking it does too).",
         DollPartKind.DeleteSaveButton => "Save/Load screen: deletes the picked save, after asking.",
         _ => ""
     };
@@ -277,6 +277,8 @@ public class PaperDollEditorWindow : Window
             case DollPartKind.SaveName:
                 part.Width = 160;
                 part.Height = 14;
+                part.SaveSlot = NextSaveSlot(design);
+                part.Name = $"Save slot {part.SaveSlot}";
                 break;
             case DollPartKind.SaveScreenshot:
                 part.Width = 96;
@@ -297,6 +299,15 @@ public class PaperDollEditorWindow : Window
         _status.Text = KindHelp(kind);
     }
 
+    /// <summary>The first slot number none of the paperdoll's Save slots holds yet.</summary>
+    private static int NextSaveSlot(DollDesign design)
+    {
+        var taken = design.Parts.Where(p => p.Kind == DollPartKind.SaveName).Select(p => DollPart.SlotNumber(design, p)).ToHashSet();
+        int slot = 1;
+        while (taken.Contains(slot)) slot++;
+        return slot;
+    }
+
     private void DuplicatePart()
     {
         if (Design is not { } design || Part is not { } part) return;
@@ -304,6 +315,7 @@ public class PaperDollEditorWindow : Window
         copy.Name = part.Name + " copy";
         copy.X += 8;
         copy.Y += 8;
+        if (copy.Kind == DollPartKind.SaveName) copy.SaveSlot = NextSaveSlot(design); // a copied slot holds a save of its own
         design.Parts.Insert(design.Parts.IndexOf(part) + 1, copy);
         _selectedPartId = copy.Id;
         RefreshAll();
@@ -369,6 +381,8 @@ public class PaperDollEditorWindow : Window
         _partProps.Children.Clear();
         if (Design is not { } design) return;
         if (Part is not { } part) { _partProps.Children.Add(Note("No part picked: add one from the toolbox above the canvas.")); return; }
+        if (part.Kind == DollPartKind.SaveName && part.Looks.Count < 2) // made as a "Save name" (b336): it gains the Picked slot look
+            part.Looks.Add(new DollPartLook { Name = "Picked slot" });
         var panel = new StackPanel();
         panel.Children.Add(Note(KindHelp(part.Kind)));
         panel.Children.Add(Field("Name (shown when it's clicked in play)", part.Name, v => { part.Name = v; RefreshPartList(); Redraw(); }, 250));
@@ -401,7 +415,13 @@ public class PaperDollEditorWindow : Window
             case DollPartKind.Text: panel.Children.Add(TextEditor(part)); break;
             case DollPartKind.Slider: panel.Children.Add(RangeEditor(part, "Starts at")); break;
             case DollPartKind.Display: panel.Children.Add(DisplayEditor(design, part)); break;
-            case DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveDetails:
+            case DollPartKind.SaveName:
+                panel.Children.Add(IntField("Slot number (each slot holds its own save)", () => DollPart.SlotNumber(design, part), v => part.SaveSlot = Math.Clamp(v, 1, 999)));
+                if (design.Parts.Any(p => p != part && p.Kind == DollPartKind.SaveName && DollPart.SlotNumber(design, p) == DollPart.SlotNumber(design, part)))
+                    panel.Children.Add(Note("Another Save slot has the same number - both would show the same save."));
+                panel.Children.Add(new GroupBox { Header = "Font", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = FontRow(part) });
+                break;
+            case DollPartKind.SaveList or DollPartKind.SaveDetails:
                 panel.Children.Add(new GroupBox { Header = "Font", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = FontRow(part) });
                 break;
         }

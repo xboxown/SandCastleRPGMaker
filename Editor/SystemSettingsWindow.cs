@@ -91,8 +91,8 @@ public partial class SystemSettingsWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = "The paperdoll the player saves and loads the game with. Make it in the PaperDoll Editor like any paperdoll - its look is all yours - with these parts from its toolbox:\n" +
-                   "  Save list - the saved games (click picks, double-click loads, wheel scrolls)\n" +
-                   "  Save name - where the name is typed\n" +
+                   "  Save slot - one saved game each, as Exult's slots: add as many as you like (click one, type its name, Save)\n" +
+                   "  Save list - or all the saved games in one scrolling list (click picks, double-click loads, wheel scrolls)\n" +
                    "  Save screenshot, Save details - the picked save's picture and day / time\n" +
                    "  Save button, Load button, Delete save button - and a Close button.\n\n" +
                    "In the game the S key opens it (as in Exult). It opens with the paperdoll opening sound and the game is paused while it's open. " +

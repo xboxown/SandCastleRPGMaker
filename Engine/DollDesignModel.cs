@@ -114,6 +114,10 @@ public class DollPart
     /// <summary>Display: the slider whose value it shows (-1 = its own value, set by events).</summary>
     public int ShowsPartId { get; set; } = -1;
 
+    // ---- Save slot ----
+    /// <summary>Which saved game it holds (1, 2, 3...); 0 = by its place among the paperdoll's Save slots.</summary>
+    public int SaveSlot { get; set; }
+
     /// <summary>What it does when used (PaperDoll Editor: double-click the part).</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
 
@@ -124,7 +128,7 @@ public class DollPart
         DollPartKind.Lid => "Lid / door / hatch",
         DollPartKind.Slider => "Dial / slider",
         DollPartKind.SaveList => "Save list",
-        DollPartKind.SaveName => "Save name",
+        DollPartKind.SaveName => "Save slot",
         DollPartKind.SaveScreenshot => "Save screenshot",
         DollPartKind.SaveDetails => "Save details",
         DollPartKind.SaveButton => "Save button",
@@ -139,7 +143,7 @@ public class DollPart
         DollPartKind.Picture => new[] { "Picture" },
         DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton => new[] { "Normal", "Pressed" },
         DollPartKind.SaveList => new[] { "Behind the list", "Picked row" },
-        DollPartKind.SaveName => new[] { "Behind the name" },
+        DollPartKind.SaveName => new[] { "Slot", "Picked slot" },
         DollPartKind.SaveScreenshot => new[] { "Frame (drawn over the screenshot)" },
         DollPartKind.SaveDetails => new[] { "Behind the details" },
         DollPartKind.Switch => new[] { "Off", "On" },
@@ -162,6 +166,10 @@ public class DollPart
     /// <summary>Kinds whose list of looks can grow (a switch with three positions).</summary>
     public static bool LooksCanGrow(DollPartKind kind) => kind is DollPartKind.Switch;
 
+    /// <summary>The saved game a Save slot holds: its own number, or (none set) its place among the paperdoll's Save slots.</summary>
+    public static int SlotNumber(DollDesign design, DollPart part) =>
+        part.SaveSlot > 0 ? part.SaveSlot : design.Parts.Where(p => p.Kind == DollPartKind.SaveName).ToList().IndexOf(part) + 1;
+
     public DollPart Clone(int newId) => new()
     {
         Id = newId, Name = Name, Kind = Kind, X = X, Y = Y, Width = Width, Height = Height, StartsVisible = StartsVisible, Draggable = Draggable,
@@ -176,7 +184,7 @@ public class DollPart
         Capacity = Capacity,
         StartsWith = StartsWith.Select(s => new ItemReference { Category = s.Category, ItemId = s.ItemId, DisplayName = s.DisplayName }).ToList(),
         Text = Text, FontName = FontName, TextScale = TextScale, TextColor = TextColor,
-        Min = Min, Max = Max, StartValue = StartValue, Vertical = Vertical, ShowsPartId = ShowsPartId
+        Min = Min, Max = Max, StartValue = StartValue, Vertical = Vertical, ShowsPartId = ShowsPartId, SaveSlot = SaveSlot
         // Event pages are not copied: a duplicate starts with no behaviour of its own.
     };
 }

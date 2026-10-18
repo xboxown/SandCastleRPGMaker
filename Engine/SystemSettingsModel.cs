@@ -142,7 +142,7 @@ public class CustomSliderDesign
     public int ChangeSoundResourceId { get; set; } = -1;
 }
 
-/// <summary>The in-game Save/Load screen (System Settings > Save / Load): a paperdoll made in the PaperDoll Editor with the Save list, Save name, Save / Load / Delete buttons... parts.</summary>
+/// <summary>The in-game Save/Load screen (System Settings > Save / Load): a paperdoll made in the PaperDoll Editor with the Save slots / Save list, Save / Load / Delete buttons... parts.</summary>
 public class SaveLoadSettings
 {
     /// <summary>The PaperDoll Editor paperdoll that is the Save/Load screen (-1 = none: the game can't be saved).</summary>

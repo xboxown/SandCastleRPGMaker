@@ -13,9 +13,10 @@ namespace SandcastleRpgMaker.Editor;
 /// Saving and loading in play - Exult's File gump (Newfile_gump), as a
 /// paperdoll the game's maker designs (System Settings > Save / Load). The S
 /// key opens it, as in Exult; it opens with the paperdoll opening sound and,
-/// like every paperdoll, pauses the game. Its built-in parts: the Save list
-/// (newest first; click picks, double-click loads, the wheel scrolls), the
-/// Save name the player types, the picked save's screenshot and details, and
+/// like every paperdoll, pauses the game. Its built-in parts: Save slots
+/// (Exult's own: each holds one save by its number - click one, type its
+/// name, Save), the Save list (every save, newest first; click picks,
+/// double-click loads, the wheel scrolls), the picked save's screenshot and details, and
 /// the Save, Load and Delete save buttons. Writing over a save or deleting
 /// one asks first (press the button again). The screenshot is taken as the
 /// screen opens, before it covers the game (Exult's create_mini_screenshot).
@@ -37,13 +38,39 @@ public partial class GameTestWindow
         public required OpenDollGump Gump;
         public required Guid ProjectId;
         public List<SaveSlotInfo> Saves = new();
+        /// <summary>The save picked in the Save list (its row), or -1.</summary>
         public int Picked = -1;
+        /// <summary>The Save slot picked (its number), or 0.</summary>
+        public int PickedSlot;
         public int Scroll;
+        /// <summary>The name being typed - into the picked Save slot (or, with only a Save list, the new save's).</summary>
         public string Name = string.Empty;
         public byte[]? Screenshot;
         /// <summary>A button pressed once to write over or delete a save: pressed again in time, it's done.</summary>
         public (DollPartKind Kind, string Folder, DateTime Until)? Confirming;
-        public SaveSlotInfo? PickedSave => Picked >= 0 && Picked < Saves.Count ? Saves[Picked] : null;
+        public SaveSlotInfo? InSlot(int slot) => Saves.FirstOrDefault(s => s.Slot == slot);
+        public SaveSlotInfo? PickedSave => PickedSlot > 0 ? InSlot(PickedSlot) : Picked >= 0 && Picked < Saves.Count ? Saves[Picked] : null;
+        /// <summary>The paperdoll's Save slots' numbers, in order.</summary>
+        public List<int> Slots => Gump.Design.Parts.Where(p => p.Kind == DollPartKind.SaveName).Select(p => DollPart.SlotNumber(Gump.Design, p)).Distinct().Order().ToList();
+
+        /// <summary>Picks a Save slot: its save's name is ready to keep or type over, and the list (if any) shows its save.</summary>
+        public void PickSlot(int slot)
+        {
+            PickedSlot = slot;
+            var save = InSlot(slot);
+            Name = save?.Name ?? string.Empty;
+            Picked = save is null ? -1 : Saves.IndexOf(save);
+            Confirming = null;
+        }
+
+        /// <summary>Picks a row of the Save list (a save in a slot picks that slot too).</summary>
+        public void PickRow(int row)
+        {
+            Picked = row;
+            PickedSlot = Saves[row].Slot > 0 && Slots.Contains(Saves[row].Slot) ? Saves[row].Slot : 0;
+            Name = Saves[row].Name;
+            Confirming = null;
+        }
     }
 
     private readonly SaveLoadOwner _saveLoadOwner = new();
@@ -77,7 +104,8 @@ public partial class GameTestWindow
         if (_openDolls.LastOrDefault(g => ReferenceEquals(g.Owner, _saveLoadOwner)) is not { } gump) return;
         _saveScreen = new SaveScreen { Gump = gump, ProjectId = projectId, Saves = GameSaveStore.List(projectId), Screenshot = shot };
         RefreshDollGump(gump);
-        StatusText.Text = _saveScreen.Saves.Count == 0 ? "No saved games yet - type a name and press Save." : "Pick a save, or type a new name.";
+        StatusText.Text = _saveScreen.Slots.Count > 0 ? "Click a slot: type a name and Save, or Load what it holds."
+            : _saveScreen.Saves.Count == 0 ? "No saved games yet - type a name and press Save." : "Pick a save, or type a new name.";
     }
 
     /// <summary>The Save/Load screen closing (Close button, Escape): it forgets its list.</summary>
@@ -149,8 +177,23 @@ public partial class GameTestWindow
                 break;
             }
             case DollPartKind.SaveName:
-                if (screen is not null) AddText(holder, part, screen.Name + "_", 2, Math.Max(0, (size.Height - SaveRowHeight(part)) / 2) + 1);
+            {
+                if (screen is null) break;
+                int slot = DollPart.SlotNumber(gump.Design, part);
+                bool picked = screen.PickedSlot == slot;
+                if (picked)
+                {
+                    FrameworkElement mark = DollLook.LookSprite(part, 1, _sprites) is { } pickedLook ? AnimatedLook(gump, pickedLook)
+                        : new Border { Width = size.Width, Height = size.Height, Background = new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)) };
+                    mark.IsHitTestVisible = false;
+                    holder.Children.Add(mark);
+                }
+                else if (look is null) // no sprite of its own: a faint outline, so an empty slot can still be found
+                    holder.Children.Add(new Border { Width = size.Width, Height = size.Height, BorderBrush = new SolidColorBrush(Color.FromArgb(70, 255, 255, 255)), BorderThickness = new Thickness(1), IsHitTestVisible = false });
+                string text = picked ? screen.Name + "_" : screen.InSlot(slot)?.Name ?? string.Empty; // an empty slot is blank, as in Exult
+                AddText(holder, part, text, 2, Math.Max(0, (size.Height - SaveRowHeight(part)) / 2) + 1);
                 break;
+            }
             case DollPartKind.SaveScreenshot:
             {
                 if (screen?.PickedSave is { } save && LoadScreenshot(save.ScreenshotPath) is { } shot)
@@ -231,16 +274,22 @@ public partial class GameTestWindow
                 int row = screen.Scroll + (int)(Mouse.GetPosition(visual).Y / SaveRowHeight(part));
                 if (row >= 0 && row < screen.Saves.Count)
                 {
-                    screen.Picked = row;
-                    screen.Name = screen.Saves[row].Name;
-                    screen.Confirming = null;
+                    screen.PickRow(row);
                     RefreshDollGump(gump);
                 }
                 return true;
             }
             case DollPartKind.SaveName:
-                StatusText.Text = "Type the save's name.";
+            {
+                int slot = DollPart.SlotNumber(gump.Design, part);
+                if (screen.PickedSlot != slot)
+                {
+                    screen.PickSlot(slot);
+                    RefreshDollGump(gump);
+                }
+                StatusText.Text = screen.InSlot(slot) is { } save ? $"Slot {slot}: \"{save.Name}\" - Load it, or type a new name and Save over it." : $"Slot {slot} is empty - type a name and press Save.";
                 return true;
+            }
             case DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton:
                 PressDollButton(gump, runtime);
                 switch (part.Kind)
@@ -270,10 +319,10 @@ public partial class GameTestWindow
         timer.Start();
     }
 
-    /// <summary>Double-clicking a save in the list loads it.</summary>
+    /// <summary>Double-clicking a save in the list, or a Save slot holding one, loads it.</summary>
     private bool SaveScreenPartUsed(OpenDollGump gump, DollPart part)
     {
-        if (part.Kind != DollPartKind.SaveList || _saveScreen is not { } screen || screen.Gump != gump) return false;
+        if (part.Kind is not (DollPartKind.SaveList or DollPartKind.SaveName) || _saveScreen is not { } screen || screen.Gump != gump) return false;
         if (screen.PickedSave is not null) LoadFromScreen(screen);
         return true;
     }
@@ -291,11 +340,20 @@ public partial class GameTestWindow
                 SaveFromScreen(screen, null);
                 return true;
             case Key.Up or Key.Down:
+            {
+                int step = key == Key.Up ? -1 : 1;
+                var slots = screen.Slots;
+                if (slots.Count > 0 && (screen.PickedSlot > 0 || !HasPart(screen, DollPartKind.SaveList))) // from slot to slot
+                {
+                    int at = slots.IndexOf(screen.PickedSlot);
+                    screen.PickSlot(slots[at < 0 ? 0 : Math.Clamp(at + step, 0, slots.Count - 1)]);
+                    break;
+                }
                 if (screen.Saves.Count == 0) return true;
-                screen.Picked = Math.Clamp(screen.Picked + (key == Key.Up ? -1 : 1), 0, screen.Saves.Count - 1);
-                screen.Name = screen.Saves[screen.Picked].Name;
+                screen.PickRow(Math.Clamp(screen.Picked + step, 0, screen.Saves.Count - 1));
                 if (screen.Picked < screen.Scroll) screen.Scroll = screen.Picked;
                 break;
+            }
             default:
                 return false; // typed letters arrive as text (SaveScreenText); Escape closes it as any paperdoll
         }
@@ -330,17 +388,22 @@ public partial class GameTestWindow
 
     // ================= Save, load, delete =================
 
+    private static bool HasPart(SaveScreen screen, DollPartKind kind) => screen.Gump.Design.Parts.Any(p => p.Kind == kind);
+
     private void SaveFromScreen(SaveScreen screen, DollPart? button)
     {
+        int slot = screen.PickedSlot;
+        if (slot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) { StatusText.Text = "Click a slot to save into first."; return; }
         string name = screen.Name.Trim();
         if (name.Length == 0) { StatusText.Text = "Type a name for the save first."; return; }
         if (SomethingIsHappening) { StatusText.Text = "You can't save while something is happening."; return; }
-        var existing = screen.Saves.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        var existing = slot > 0 ? screen.InSlot(slot) // a slot is written over whatever its save was called
+            : screen.Saves.FirstOrDefault(s => s.Slot == 0 && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing is not null && !Confirmed(screen, DollPartKind.SaveButton, existing.Folder, button, $"Write over \"{existing.Name}\"? Press Save again.")) return;
         try
         {
             var data = CaptureSave();
-            var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty };
+            var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
             GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
             screen.Saves = GameSaveStore.List(screen.ProjectId);
             screen.Picked = screen.Saves.FindIndex(s => s.Folder == info.Folder);
@@ -356,7 +419,7 @@ public partial class GameTestWindow
 
     private void LoadFromScreen(SaveScreen screen)
     {
-        if (screen.PickedSave is not { } save) { StatusText.Text = "Pick a save to load."; return; }
+        if (screen.PickedSave is not { } save) { StatusText.Text = screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to load."; return; }
         GameSaveData data;
         try { data = GameSaveStore.Read(screen.ProjectId, save); }
         catch (Exception ex)
@@ -369,7 +432,7 @@ public partial class GameTestWindow
 
     private void DeleteFromScreen(SaveScreen screen, DollPart part)
     {
-        if (screen.PickedSave is not { } save) { StatusText.Text = "Pick a save to delete."; return; }
+        if (screen.PickedSave is not { } save) { StatusText.Text = screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to delete."; return; }
         if (!Confirmed(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.")) return;
         try { GameSaveStore.Delete(save); }
         catch (Exception ex)
@@ -378,8 +441,12 @@ public partial class GameTestWindow
             return;
         }
         screen.Saves = GameSaveStore.List(screen.ProjectId);
-        screen.Picked = Math.Min(screen.Picked, screen.Saves.Count - 1);
-        screen.Name = screen.PickedSave?.Name ?? string.Empty;
+        if (screen.PickedSlot > 0) screen.PickSlot(screen.PickedSlot); // the slot stays picked, empty now
+        else
+        {
+            screen.Picked = Math.Min(screen.Picked, screen.Saves.Count - 1);
+            screen.Name = screen.PickedSave?.Name ?? string.Empty;
+        }
         RefreshDollGump(screen.Gump);
         StatusText.Text = $"Deleted \"{save.Name}\".";
     }

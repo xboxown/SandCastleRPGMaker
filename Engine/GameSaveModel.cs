@@ -98,6 +98,8 @@ public class SaveSlotInfo
     /// <summary>The game's own time ("Day 3, 9:15 AM").</summary>
     public string GameTime { get; set; } = string.Empty;
     public string PlayerName { get; set; } = string.Empty;
+    /// <summary>The Save slot it was saved into (1, 2, 3...), or 0 for one saved from a Save list.</summary>
+    public int Slot { get; set; }
     public string ScreenshotPath => Path.Combine(Folder, GameSaveStore.ScreenshotFileName);
 }
 
