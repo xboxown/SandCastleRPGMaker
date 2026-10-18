@@ -123,7 +123,12 @@ public class CharacterDefinition
     public Dictionary<int, int> CustomEquippedSlots { get; set; } = new();
 
     private int _nextInventoryInstanceId = 1;
-    public int GetNextInventoryInstanceId() => _nextInventoryInstanceId++;
+    /// <summary>Never below the highest id already held: the counter isn't serialized, so after a load it would otherwise restart at 1 and hand out an id an item already has (two items then both show as in the same slot).</summary>
+    public int GetNextInventoryInstanceId()
+    {
+        if (Inventory.Count > 0) _nextInventoryInstanceId = Math.Max(_nextInventoryInstanceId, Inventory.Max(i => i.InstanceId) + 1);
+        return _nextInventoryInstanceId++;
+    }
     public void SyncNextInventoryInstanceIdAfterLoad()
     {
         _nextInventoryInstanceId = Inventory.Count == 0 ? 1 : Inventory.Max(i => i.InstanceId) + 1;

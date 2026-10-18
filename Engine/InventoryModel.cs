@@ -166,7 +166,11 @@ public class PaperdollDefinition
 
     private int _nextCustomSlotId = 1;
     /// <summary>Never serialized (a plain field, not a property) - resynced after load the same real way every other per-instance id counter in this project already is, from whatever the highest existing id actually is.</summary>
-    public int GetNextCustomSlotId() => _nextCustomSlotId++;
+    public int GetNextCustomSlotId()
+    {
+        if (CustomSlots.Count > 0) _nextCustomSlotId = Math.Max(_nextCustomSlotId, CustomSlots.Max(s => s.Id) + 1); // never reuse an id after a load
+        return _nextCustomSlotId++;
+    }
     public void SyncNextCustomSlotIdAfterLoad() => _nextCustomSlotId = CustomSlots.Count == 0 ? 1 : CustomSlots.Max(s => s.Id) + 1;
 
     private static Dictionary<EquipmentSlot, PaperdollSlotPosition> DefaultLayout()
