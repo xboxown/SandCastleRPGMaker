@@ -224,7 +224,7 @@ public partial class GameTestWindow : Window
         };
         _stayTimer.Start();
 
-        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); SoundPlayback.StopAll(); }; // the game's music and sounds end with it
+        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); SoundPlayback.StopAll(); StopVideo(); }; // the game's music and sounds end with it
     }
 
     /// <summary>
@@ -1523,6 +1523,7 @@ public partial class GameTestWindow : Window
 
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (GameTestWindow.Video.cs)
         if (_currentMessage is not null)
         {
             MessageKey(e.Key); // a dialog box is up: Enter/Space/Escape go on, or the keys pick a reply - nothing else happens

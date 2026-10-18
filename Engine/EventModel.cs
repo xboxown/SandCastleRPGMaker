@@ -98,7 +98,9 @@ public enum EventCommandType
     /// <summary>The end of a Cinema Mode: the player has control again (so does the event's end, wherever it ends).</summary>
     EndCinemaMode,
     /// <summary>Walk To Floor Location: walks to a cell on a given floor - up or down the stairs to it, round whatever is in the way.</summary>
-    WalkToFloorLocation
+    WalkToFloorLocation,
+    /// <summary>Play Video: plays a video from the Video Library over the whole game, the game paused till it ends (or is skipped).</summary>
+    PlayVideo
 }
 
 /// <summary>

@@ -118,7 +118,7 @@ public static class ProjectContainer
         }
     }
 
-    private static byte[] DeriveKey(Guid projectId)
+    internal static byte[] DeriveKey(Guid projectId)
     {
         using var sha = SHA256.Create();
         byte[] salted = Encoding.UTF8.GetBytes("SandcastleRpgMaker.ProjectKey.v1:" + projectId);

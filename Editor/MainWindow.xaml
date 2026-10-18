@@ -59,6 +59,7 @@
                 <MenuItem Header="Container Editor..." Click="ContainerEditorMenuItem_Click"/>
                 <MenuItem Header="Sound Editor..." Click="SoundEditorMenuItem_Click"/>
                 <MenuItem Header="Sound Mixer..." Click="SoundMixerMenuItem_Click"/>
+                <MenuItem Header="Video Library..." Click="VideoLibraryMenuItem_Click"/>
                 <MenuItem Header="Variable Editor..." Click="VariableEditorMenuItem_Click"/>
                 <MenuItem Header="Stat Editor..." Click="StatEditorMenuItem_Click"/>
                 <MenuItem Header="Character Editor..." Click="CharacterEditorMenuItem_Click"/>

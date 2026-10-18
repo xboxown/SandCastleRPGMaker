@@ -48,6 +48,8 @@ public class ManifestPayload
     public CurrencyDatabase Currencies { get; set; } = new();
     /// <summary>Project-wide system settings (mouse pointers today). Older projects without it load with defaults.</summary>
     public SystemSettings Settings { get; set; } = new();
+    /// <summary>The Video Library's videos (names, codecs); their bytes are in videos.sdbx. Older projects load with none.</summary>
+    public VideoDatabase Videos { get; set; } = new();
 }
 
 /// <summary>

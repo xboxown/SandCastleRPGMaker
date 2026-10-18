@@ -28,6 +28,8 @@ internal static class ProjectSession
 
     /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
     public static Func<ResourceDatabase>? ResourcesProvider;
+    public static Func<VideoDatabase>? VideosProvider;
+    public static VideoDatabase Videos => VideosProvider?.Invoke() ?? new VideoDatabase();
     public static Func<VariableDatabase>? VariablesProvider;
     public static Func<BookDatabase>? BooksProvider;
     public static Func<ObjectDatabase>? ObjectsProvider;

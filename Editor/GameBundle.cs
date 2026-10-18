@@ -23,7 +23,10 @@ public static class GameBundle
     private sealed record Entry(string Name, long Offset, long Length);
 
     /// <summary>The project files that make up a game, in the order they're stored.</summary>
-    public static string[] ProjectFileNames(string msrpFileName) => new[] { msrpFileName, "shapes.sdbx", "audios.sdbx", "objects.sdbx" };
+    public static string[] ProjectFileNames(string msrpFileName) => new[] { msrpFileName, "shapes.sdbx", "audios.sdbx", "objects.sdbx", VideosFileName };
+
+    /// <summary>The videos (Video Library) - the one file a project may not have (saved before videos existed): left out then.</summary>
+    private const string VideosFileName = "videos.sdbx";
 
     /// <summary>
     /// Copies the engine's program files (everything in the editor's own
@@ -53,10 +56,14 @@ public static class GameBundle
         foreach (var name in ProjectFileNames(msrpFileName))
         {
             string path = Path.Combine(projectFolder, name);
-            if (!File.Exists(path)) throw new FileNotFoundException($"The project file \"{name}\" is missing - save the project and try again.", path);
-            byte[] bytes = File.ReadAllBytes(path);
-            index.Add(new Entry(name, exe.Position, bytes.Length));
-            exe.Write(bytes);
+            if (!File.Exists(path))
+            {
+                if (name == VideosFileName) continue;
+                throw new FileNotFoundException($"The project file \"{name}\" is missing - save the project and try again.", path);
+            }
+            using var source = File.OpenRead(path); // streamed: videos can be bigger than any one array
+            index.Add(new Entry(name, exe.Position, source.Length));
+            source.CopyTo(exe);
         }
         byte[] indexBytes = JsonSerializer.SerializeToUtf8Bytes(index);
         exe.Write(indexBytes);
@@ -96,9 +103,15 @@ public static class GameBundle
         foreach (var entry in index)
         {
             exe.Seek(entry.Offset, SeekOrigin.Begin);
-            var bytes = new byte[entry.Length];
-            exe.ReadExactly(bytes);
-            File.WriteAllBytes(Path.Combine(folder, Path.GetFileName(entry.Name)), bytes);
+            using var output = new FileStream(Path.Combine(folder, Path.GetFileName(entry.Name)), FileMode.Create, FileAccess.Write);
+            var buffer = new byte[1 << 20];
+            for (long left = entry.Length; left > 0;)
+            {
+                int count = (int)Math.Min(buffer.Length, left);
+                exe.ReadExactly(buffer, 0, count);
+                output.Write(buffer, 0, count);
+                left -= count;
+            }
         }
         msrpPath = Path.Combine(folder, Path.GetFileName(index[0].Name));
         return true;

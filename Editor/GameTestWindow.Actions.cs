@@ -45,6 +45,7 @@ public partial class GameTestWindow
         var a = _execContext.GameActions;
         a[EventCommandType.WalkToLocation] = WalkToLocationCommand;
         a[EventCommandType.WalkToFloorLocation] = WalkToFloorLocationCommand;
+        a[EventCommandType.PlayVideo] = PlayVideoCommand;
         a[EventCommandType.PickupItem] = PickupItemCommand;
         a[EventCommandType.DropItem] = DropItemCommand;
         a[EventCommandType.PlayPose] = PlayPoseCommand;

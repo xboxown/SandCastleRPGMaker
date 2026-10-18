@@ -16,6 +16,7 @@ internal static class CommandWindowRegistry
 
     public static readonly Dictionary<EventCommandType, Entry> All = new()
     {
+        [EventCommandType.PlayVideo] = new("Play Video", c => new PlayVideoCommandWindow(c), PlayVideoCommandWindow.Describe),
         [EventCommandType.StopSound] = new("Stop Sound", c => new StopSoundCommandWindow(c), StopSoundCommandWindow.Describe),
         [EventCommandType.GiveItem] = new("Give Item", c => new GiveItemCommandWindow(c), GiveItemCommandWindow.Describe),
         [EventCommandType.ChangeStat] = new("Change Stat", c => new ChangeStatCommandWindow(c), ChangeStatCommandWindow.Describe),
@@ -76,5 +77,58 @@ public class StopSoundCommandWindow : FactionCommandWindowBase
         string key = command.Get("SoundResourceId");
         if (key == "All") return "every sound";
         return int.TryParse(key, out int id) && ProjectSession.ResourcesProvider?.Invoke()?.Entries.FirstOrDefault(r => r.Id == id) is { } entry ? entry.Name : $"sound #{key}";
+    }
+}
+
+/// <summary>Play Video: a video from the Video Library over the whole game, the game paused till it ends - an intro, a cutscene, an ending.</summary>
+public class PlayVideoCommandWindow : FactionCommandWindowBase
+{
+    private sealed record VideoChoice(int Id, string Label)
+    {
+        public override string ToString() => Label;
+    }
+
+    private readonly ComboBox _video;
+    private readonly CheckBox _skippable = new() { Content = "The player can skip it (a click, Escape, Space or Enter)", IsChecked = true, Margin = new Thickness(0, 6, 0, 0) };
+    private readonly Slider _volume = new() { Minimum = 0, Maximum = 100, Width = 200, IsSnapToTickEnabled = true, TickFrequency = 5 };
+
+    public PlayVideoCommandWindow(EventCommand? existing = null) : base("Play Video")
+    {
+        AddLabel("Video (Tools > Video Library)");
+        var choices = ProjectSession.Videos.Videos.Select(v => new VideoChoice(v.Id, $"{v.Name}  ({v.Codec})")).ToList();
+        _video = new ComboBox { ItemsSource = choices };
+        _video.SelectedItem = choices.FirstOrDefault(c => c.Id.ToString() == existing?.Get("VideoId")) ?? choices.FirstOrDefault();
+        Rows.Children.Add(_video);
+        Rows.Children.Add(_skippable);
+        if (existing?.Get("Skippable") == "False") _skippable.IsChecked = false;
+        AddLabel("Volume");
+        var volumeRow = CommandFields.Row(Rows);
+        var volumeText = new TextBlock { Width = 40, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) };
+        _volume.ValueChanged += (_, _) => volumeText.Text = $"{_volume.Value:0}%";
+        _volume.Value = double.TryParse(existing?.Get("Volume"), out double volume) ? Math.Clamp(volume, 0, 100) : 100;
+        volumeRow.Children.Add(_volume);
+        volumeRow.Children.Add(volumeText);
+        AddLabel("It fills the game's screen (black bars keep its shape) and the game is paused while it plays, as for a paperdoll. The commands after this one wait till it ends or is skipped. A video this PC can't play (H.265 without Microsoft's HEVC extension) is skipped.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        if (_video.SelectedItem is not VideoChoice choice)
+        {
+            MessageBox.Show(this, "Pick a video - add one in Tools > Video Library first.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        var command = new EventCommand { Type = EventCommandType.PlayVideo };
+        command.Parameters["VideoId"] = choice.Id.ToString();
+        command.Parameters["Skippable"] = _skippable.IsChecked == true ? "True" : "False";
+        command.Parameters["Volume"] = _volume.Value.ToString("0");
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command)
+    {
+        string name = int.TryParse(command.Get("VideoId"), out int id) && ProjectSession.Videos.Videos.FirstOrDefault(v => v.Id == id) is { } video ? video.Name : $"video #{command.Get("VideoId")}";
+        return command.Get("Skippable") == "False" ? $"{name} (can't be skipped)" : name;
     }
 }

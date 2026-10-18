@@ -37,6 +37,7 @@ public partial class MainWindow : Window
     private string? _tilePropertiesPath;
 
     private ResourceDatabase _resourceDatabase = new();
+    private VideoDatabase _videoDatabase = new();
     private FactionDatabase _factionDatabase = new();
     private CharacterDatabase _characterDatabase = new();
     private SpriteDatabase _spriteDatabase = new();
@@ -106,6 +107,7 @@ public partial class MainWindow : Window
             PlaceAllCharacterVisualsIfMapShown();
         });
         ProjectSession.ResourcesProvider = () => _resourceDatabase;
+        ProjectSession.VideosProvider = () => _videoDatabase;
         ProjectSession.VariablesProvider = () => _variableDatabase;
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
@@ -788,6 +790,7 @@ public partial class MainWindow : Window
         _containerDatabase = new ContainerDatabase();
         _systemSettings = new SystemSettings();
         _resourceDatabase = new ResourceDatabase();
+        _videoDatabase = new VideoDatabase();
         _factionDatabase = new FactionDatabase();
         _characterDatabase = new CharacterDatabase();
         _variableDatabase = new VariableDatabase();
@@ -843,6 +846,8 @@ public partial class MainWindow : Window
             _poseDatabase.EnsureBuiltInPoses(); // repairs a project saved by an earlier build whose PoseDatabase predates the full 11-pose set
             _tilePropertiesDatabase = payload.TileProperties;
             _currencyDatabase = payload.Currencies;
+            _videoDatabase = payload.Videos ?? new VideoDatabase();
+            VideoStore.Load(System.IO.Path.Combine(folder, "videos.sdbx"), manifest.ProjectId, _videoDatabase, System.IO.Path.Combine(extractRoot, "videos")); // none before videos existed
             _objectDatabase = payload.Objects;
             // A project saved before objects lived in it: its map may still point at an .objdb.json - bring those in once (the next Save keeps them in the project).
             if (_objectDatabase.Objects.Count == 0 && payload.Map is { ObjectDatabasePath.Length: > 0 } oldMap && File.Exists(oldMap.ObjectDatabasePath))
@@ -917,6 +922,7 @@ public partial class MainWindow : Window
             ProjectFiles.SaveShapeSdbx(shapePath, _currentProjectId.Value, _spriteDatabase);
             ProjectFiles.SaveObjectsSdbx(objectsPath, _currentProjectId.Value, _bookDatabase);
             ProjectFiles.SaveAudiosSdbx(audiosPath, _currentProjectId.Value, _resourceDatabase);
+            VideoStore.Save(System.IO.Path.Combine(_currentProjectFolder, "videos.sdbx"), _currentProjectId.Value, _videoDatabase);
 
             // .msrp is re-saved every time too now, not written once and
             // left alone - it's a real, growing data file (factions,
@@ -935,6 +941,7 @@ public partial class MainWindow : Window
                 Containers = _containerDatabase,
                 Objects = _objectDatabase,
                 Currencies = _currencyDatabase,
+                Videos = _videoDatabase,
                 Settings = _systemSettings,
                 Variables = _variableDatabase,
                 Stats = _statDatabase,
@@ -1137,6 +1144,12 @@ public partial class MainWindow : Window
     private void SoundEditorMenuItem_Click(object sender, RoutedEventArgs e)
     {
         var window = new SoundListWindow(_resourceDatabase) { Owner = this };
+        window.ShowDialog();
+    }
+
+    private void VideoLibraryMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new VideoLibraryWindow(_videoDatabase) { Owner = this };
         window.ShowDialog();
     }
 
