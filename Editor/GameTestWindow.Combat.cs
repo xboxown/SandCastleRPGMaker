@@ -436,6 +436,11 @@ public partial class GameTestWindow
 
     // ---------- A blow (attack_target -> try_to_hit -> figure_hit_points -> apply_damage) ----------
 
+    /// <summary>Knocked out, asleep (a spell or in bed) or paralyzed: every blow on it lands (not Exult - nobody misses a body lying still).</summary>
+    private bool IsMotionless(CharacterDefinition character) =>
+        IsUnconscious(character) || Has(character, Ailment.Asleep) || Has(character, Ailment.Paralyzed)
+        || _mapCharacters.FirstOrDefault(mc => mc.Character == character)?.Npc.Activity == ScheduleType.Sleep;
+
     private void Strike(CharacterDefinition attacker, CharacterDefinition defender)
     {
         if (IsDead(defender)) return;
@@ -443,7 +448,7 @@ public partial class GameTestWindow
         PlaySound(weapon?.Weapon.AttackSoundResourceId ?? -1);
         int attval = Stat(attacker, BuiltInStatKind.Combat, 10) + (weapon?.Weapon.Lucky == true ? 3 : 0); // lucky: +3
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
-        bool hit = weapon?.Weapon.AutoHit == true || IsUnconscious(defender) || RollToWin(attval, defval); // lying knocked out, it can't ward off a blow
+        bool hit = weapon?.Weapon.AutoHit == true || IsMotionless(defender) || RollToWin(attval, defval); // lying still, it can't ward off a blow
         FightBack(defender, attacker);
         if (!hit)
         {
