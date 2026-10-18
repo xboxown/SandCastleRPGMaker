@@ -363,6 +363,8 @@ public partial class GameTestWindow
     private void SaveScreenText(object sender, TextCompositionEventArgs e)
     {
         if (_saveScreen is not { } screen || string.IsNullOrEmpty(e.Text)) return;
+        e.Handled = true;
+        if (screen.PickedSlot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) return; // no slot picked: the letters go nowhere (Exult)
         foreach (char c in e.Text)
             if (!char.IsControl(c) && screen.Name.Length < MaxSaveNameLength && !Path.GetInvalidFileNameChars().Contains(c)) screen.Name += c;
         screen.Confirming = null;
@@ -404,7 +406,13 @@ public partial class GameTestWindow
             var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
             GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
             SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
-            CloseDollGump(screen.Gump); // saved: back to the game
+            // Exult's Newfile_gump::save: the screen stays open, nothing is picked any more (selected = -3) and the slot shows its new save
+            screen.Saves = GameSaveStore.List(screen.ProjectId);
+            screen.PickedSlot = 0;
+            screen.Picked = -1;
+            screen.Name = string.Empty;
+            screen.Confirming = null;
+            RefreshDollGump(screen.Gump);
         }
         catch (Exception ex)
         {
