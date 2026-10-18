@@ -322,6 +322,7 @@ public static class EventCommandInterpreter
         EventCommandType.UnequipItem => $"Unequip: {cmd.Get("Who")} takes off {cmd.Get("Category")} #{cmd.Get("ItemId")}",
         EventCommandType.PlayPose => $"Play Pose: {cmd.Get("Who")} {cmd.Get("Pose")}",
         EventCommandType.WalkToLocation => $"Walk To Location: {cmd.Get("Who")} to ({cmd.Get("X")}, {cmd.Get("Y")})",
+        EventCommandType.WalkToFloorLocation => $"Walk To Floor Location: {cmd.Get("Who")} to floor {cmd.Get("Floor")} ({cmd.Get("X")}, {cmd.Get("Y")})",
         EventCommandType.Wait => $"Wait: {(cmd.Get("Duration") is { Length: > 0 } d ? d : cmd.Get("Seconds"))} {(cmd.Get("Unit") is { Length: > 0 } u ? u.ToLowerInvariant() : "seconds")}",
         EventCommandType.ChangePose => $"Change Pose: {cmd.Get("Who")} {cmd.Get("Pose")}",
         EventCommandType.AttackObject => $"Attack Object: {cmd.Get("Who")} attacks {cmd.Get("Thing")}",

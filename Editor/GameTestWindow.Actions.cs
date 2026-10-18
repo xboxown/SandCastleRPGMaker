@@ -44,6 +44,7 @@ public partial class GameTestWindow
     {
         var a = _execContext.GameActions;
         a[EventCommandType.WalkToLocation] = WalkToLocationCommand;
+        a[EventCommandType.WalkToFloorLocation] = WalkToFloorLocationCommand;
         a[EventCommandType.PickupItem] = PickupItemCommand;
         a[EventCommandType.DropItem] = DropItemCommand;
         a[EventCommandType.PlayPose] = PlayPoseCommand;
@@ -135,12 +136,16 @@ public partial class GameTestWindow
     // ================= Walking there =================
 
     /// <summary>Walks someone to a cell (or right beside it): null if they aren't on this map.</summary>
-    private Func<double, bool?>? WalkTo(CharacterDefinition who, (int X, int Y) goal, bool beside)
+    /// <param name="floor">The floor the cell is on (up or down the stairs to it); null: the floor they're on.</param>
+    private Func<double, bool?>? WalkTo(CharacterDefinition who, (int X, int Y) goal, bool beside, int? floor = null)
     {
         if (!InsideMap(goal.X, goal.Y)) return null;
-        if (who == _player) return PlayerWalkStep(goal, beside);
-        return MapCharacterOf(who) is { } mapCharacter ? NpcWalkStep(mapCharacter, goal, beside) : null;
+        if (who == _player) return PlayerWalkStep(goal, beside, floor);
+        return MapCharacterOf(who) is { } mapCharacter ? NpcWalkStep(mapCharacter, goal, beside, floor) : null;
     }
+
+    /// <summary>Lifts at least between this lift's floor and the goal floor (a floor is 5 lifts, each step climbs at most 1): 0 when no floor is asked for.</summary>
+    private static int FloorSteps(int lift, int? floor) => floor is { } f ? Math.Abs(MapFloors.FloorOfLift(lift) - f) * MapFloors.LiftsPerFloor : 0;
 
     private static bool Arrived((int X, int Y) here, (int X, int Y) goal, bool beside, Func<(int X, int Y), bool> canStand)
     {
@@ -155,22 +160,25 @@ public partial class GameTestWindow
     /// gets no nearer counts as a try. Only after 5 such tries is there truly no
     /// way, and the command is cancelled (where the schedule would jump there).
     /// </summary>
-    private Func<double, bool?> NpcWalkStep(MapCharacter mapCharacter, (int X, int Y) goal, bool beside)
+    private Func<double, bool?> NpcWalkStep(MapCharacter mapCharacter, (int X, int Y) goal, bool beside, int? floor = null)
     {
         int retries = 0, best = int.MaxValue;
         double wait = 0;
         StandUp(mapCharacter.Character);
+        bool CanStandThere((int X, int Y) cell) => floor is { } f
+            ? CanStandAt(mapCharacter, cell, MapFloors.BaseLift(f), null, out int lift) && MapFloors.FloorOfLift(lift) == f
+            : CanStandAt(mapCharacter, cell, mapCharacter.Lift, null, out _, anyLift: true);
         return elapsedMs =>
         {
             var npc = mapCharacter.Npc;
             if (npc.Path is not null) return null; // walking a leg (MoveAlongPath, from UpdateNpc)
             var here = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-            if (Arrived(here, goal, beside, cell => CanStandAt(mapCharacter, cell, mapCharacter.Lift, null, out _, anyLift: true))) return true;
+            if (FloorSteps(mapCharacter.Lift, floor) == 0 && Arrived(here, goal, beside, CanStandThere)) return true;
             if ((wait -= elapsedMs) > 0) return null;
-            int distance = Heuristic(here, goal);
+            int distance = Heuristic(here, goal) + FloorSteps(mapCharacter.Lift, floor);
             if (distance < best) { best = distance; retries = 0; }
             else if (++retries >= 5) return false;
-            var path = FindPath(mapCharacter, goal, allowPartial: true, besideOnly: beside);
+            var path = FindPath(mapCharacter, goal, allowPartial: true, besideOnly: beside, goalFloor: floor);
             if (path is not { Count: > 0 }) { wait = 500 + 500 * retries; return null; } // someone in the way: shortly again
             StartPath(mapCharacter, path);
             return null;
@@ -178,19 +186,22 @@ public partial class GameTestWindow
     }
 
     /// <summary>The main character walking there on their own (as to a chair); pressing a direction key takes over - cancelled.</summary>
-    private Func<double, bool?> PlayerWalkStep((int X, int Y) goal, bool beside)
+    private Func<double, bool?> PlayerWalkStep((int X, int Y) goal, bool beside, int? floor = null)
     {
         int tries = 0;
         double wait = 0;
         if (_player is not null) StandUpIfSeated(_player);
+        bool CanStandThere((int X, int Y) cell) => floor is { } f
+            ? TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), MapFloors.BaseLift(f), _playerSize.Z, out int lift, out _, null, WorldBodies()) && MapFloors.FloorOfLift(lift) == f
+            : PlayerCanStandAt(cell);
         return elapsedMs =>
         {
             if (_heldDirectionKeys.Count > 0) { CancelPlayerWalk(); return false; }
             if (_playerWalkPath is not null) return null;
-            if (Arrived((_playerX, _playerY), goal, beside, PlayerCanStandAt)) return true;
+            if (FloorSteps(_playerZ, floor) == 0 && Arrived((_playerX, _playerY), goal, beside, CanStandThere)) return true;
             if ((wait -= elapsedMs) > 0) return null;
             if (++tries > 5) return false;
-            if (!WalkPlayerTo(goal, () => { }, besideOnly: beside)) wait = 700; // no way just now (someone in it): again shortly
+            if (!WalkPlayerTo(goal, () => { }, besideOnly: beside, goalFloor: floor)) wait = 700; // no way just now (someone in it): again shortly
             return null;
         };
     }
@@ -331,6 +342,24 @@ public partial class GameTestWindow
         {
             var result = walk(elapsed);
             if (result == false) StatusText.Text = $"{who.Name} can't find a way to ({x}, {y}).";
+            return result;
+        }, done);
+        return true;
+    }
+
+    // ================= Walk To Floor Location =================
+
+    /// <summary>As Walk To Location, but to the cell on the floor the command names - up or down the stairs to it.</summary>
+    private bool WalkToFloorLocationCommand(EventCommand command, Action<bool> done)
+    {
+        if (CharacterDefinitionFor(command.Get("Who")) is not { } who || IsDead(who)) return false;
+        if (!int.TryParse(command.Get("X"), out int x) || !int.TryParse(command.Get("Y"), out int y)) return false;
+        int floor = int.TryParse(command.Get("Floor"), out int f) ? Math.Clamp(f, 1, MapFloors.MaxFloors) : 1;
+        if (WalkTo(who, (x, y), beside: false, floor) is not { } walk) return false;
+        BeginScriptAction(who, elapsed =>
+        {
+            var result = walk(elapsed);
+            if (result == false) StatusText.Text = $"{who.Name} can't find a way to ({x}, {y}) on floor {floor}.";
             return result;
         }, done);
         return true;

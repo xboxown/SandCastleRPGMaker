@@ -103,13 +103,19 @@ internal sealed class MapCellField
 {
     private readonly Window _owner;
     private readonly TextBlock _text = new() { Width = 150, VerticalAlignment = VerticalAlignment.Center };
+    private readonly bool _withFloor;
     public (int X, int Y)? Cell { get; private set; }
+    /// <summary>The floor it was picked on (saved only when the field keeps a floor).</summary>
+    public int Floor { get; private set; } = 1;
     public StackPanel Row { get; } = new() { Orientation = Orientation.Horizontal };
 
-    public MapCellField(Window owner, StackPanel rows, EventCommand? existing, string prefix = "")
+    /// <param name="withFloor">Also keeps the floor the spot was picked on, saved as Floor.</param>
+    public MapCellField(Window owner, StackPanel rows, EventCommand? existing, string prefix = "", bool withFloor = false)
     {
         _owner = owner;
+        _withFloor = withFloor;
         if (int.TryParse(existing?.Get(prefix + "X"), out int x) && int.TryParse(existing?.Get(prefix + "Y"), out int y)) Cell = (x, y);
+        if (int.TryParse(existing?.Get(prefix + "Floor"), out int floor)) Floor = Math.Clamp(floor, 1, MapFloors.MaxFloors);
         var pick = new Button { Content = "Pick on Map...", Padding = new Thickness(8, 1, 8, 1) };
         pick.Click += (_, _) =>
         {
@@ -118,8 +124,8 @@ internal sealed class MapCellField
                 MessageBox.Show(_owner, "Open or create a map in the Map Editor first.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, Cell, null) { Owner = _owner };
-            if (picker.ShowDialog() == true && picker.Picked is { } cell) { Cell = cell; Show(); }
+            var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, Cell, null, startFloor: _withFloor && Cell is not null ? Floor : null) { Owner = _owner };
+            if (picker.ShowDialog() == true && picker.Picked is { } cell) { Cell = cell; Floor = picker.PickedFloor; Show(); }
         };
         Row.Children.Add(_text);
         Row.Children.Add(pick);
@@ -127,7 +133,7 @@ internal sealed class MapCellField
         Show();
     }
 
-    private void Show() => _text.Text = Cell is { } c ? $"cell ({c.X}, {c.Y})" : "(no spot chosen)";
+    private void Show() => _text.Text = Cell is not { } c ? "(no spot chosen)" : _withFloor ? $"floor {Floor}, cell ({c.X}, {c.Y})" : $"cell ({c.X}, {c.Y})";
 
     public bool Validate()
     {
@@ -141,6 +147,7 @@ internal sealed class MapCellField
         if (Cell is not { } cell) return;
         command.Parameters[prefix + "X"] = cell.X.ToString();
         command.Parameters[prefix + "Y"] = cell.Y.ToString();
+        if (_withFloor) command.Parameters[prefix + "Floor"] = Floor.ToString();
     }
 }
 
@@ -472,6 +479,29 @@ public class WalkToLocationCommandWindow : ActionCommandWindowBase
     }
 
     public static string Describe(EventCommand command) => $"{Who(command)} to ({command.Get("X")}, {command.Get("Y")})";
+}
+
+public class WalkToFloorLocationCommandWindow : ActionCommandWindowBase
+{
+    private readonly MapCellField _spot;
+
+    public WalkToFloorLocationCommandWindow(EventCommand? existing = null) : base("Walk To Floor Location", existing)
+    {
+        AddLabel("To (pick the floor in the map picker, then the cell)");
+        _spot = new MapCellField(this, Rows, existing, withFloor: true);
+        AddWaitNote("They walk to that cell on that floor - up or down the stairs to it, doors opened on the way, round whatever is in the way, leg by leg. Only when there truly is no way (5 tries getting no nearer) is it cancelled. Someone standing on the spot: right beside it will do.");
+    }
+
+    protected override bool TryBuild()
+    {
+        if (!_spot.Validate()) return false;
+        var command = NewCommand(EventCommandType.WalkToFloorLocation);
+        _spot.Save(command);
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command) => $"{Who(command)} to floor {command.Get("Floor")} ({command.Get("X")}, {command.Get("Y")})";
 }
 
 public class AttackObjectCommandWindow : ActionCommandWindowBase

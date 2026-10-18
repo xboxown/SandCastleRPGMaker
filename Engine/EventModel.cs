@@ -96,7 +96,9 @@ public enum EventCommandType
     /// <summary>Cinema Mode: from here to its End Cinema Mode the player can't move or click anything in the world - only read the boxes and pick replies.</summary>
     CinemaMode,
     /// <summary>The end of a Cinema Mode: the player has control again (so does the event's end, wherever it ends).</summary>
-    EndCinemaMode
+    EndCinemaMode,
+    /// <summary>Walk To Floor Location: walks to a cell on a given floor - up or down the stairs to it, round whatever is in the way.</summary>
+    WalkToFloorLocation
 }
 
 /// <summary>

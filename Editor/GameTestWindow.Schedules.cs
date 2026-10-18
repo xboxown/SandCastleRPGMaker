@@ -550,54 +550,61 @@ public partial class GameTestWindow
     /// </summary>
     /// <param name="allowPartial">No way found (too far to plan in one go, or blocked): a path to the reachable cell nearest the goal instead of null - a leg of a long walk.</param>
     /// <param name="besideOnly">Heading for a chair or bed: end beside it (never on top of it, never across a corner).</param>
-    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false, bool besideOnly = false)
+    /// <param name="goalFloor">The goal is on this floor: a cell under an upper floor and the same cell on it are different places (Exult paths in 3D, Tile_coord with its lift), and the way there goes up or down the stairs. Null: the goal cell on whatever floor it's reached at.</param>
+    private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false, bool besideOnly = false, int? goalFloor = null)
     {
-        var start = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-        if (start == goal && !besideOnly) return new List<(int X, int Y)>();
+        int FloorKey(int lift) => goalFloor is null ? 0 : MapFloors.FloorOfLift(lift); // floors told apart only when one is asked for
+        int wantFloor = goalFloor ?? 0;
+        (int X, int Y, int F) start = (mapCharacter.Placement.X, mapCharacter.Placement.Y, FloorKey(mapCharacter.Lift));
+        if ((start.X, start.Y) == goal && start.F == wantFloor && !besideOnly) return new List<(int X, int Y)>();
         var world = WorldBodiesForPathing(mapCharacter); // closed unlocked doors will be opened on the way (Exult paths.cc); hostile ones broken down
-        bool goalFree = !besideOnly && CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true);
+        bool goalFree = !besideOnly && (goalFloor is { } gf
+            ? CanStandAt(mapCharacter, goal, MapFloors.BaseLift(gf), world, out int goalLift) && MapFloors.FloorOfLift(goalLift) == gf
+            : CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true));
+        int H((int X, int Y, int F) node) => Heuristic((node.X, node.Y), goal) + (goalFloor is null ? 0 : Math.Abs(node.F - wantFloor) * MapFloors.LiftsPerFloor);
 
-        var open = new PriorityQueue<(int X, int Y), int>();
-        var cameFrom = new Dictionary<(int X, int Y), (int X, int Y)>();
-        var cost = new Dictionary<(int X, int Y), int> { [start] = 0 };
-        var liftAt = new Dictionary<(int X, int Y), int> { [start] = mapCharacter.Lift };
-        open.Enqueue(start, Heuristic(start, goal));
+        var open = new PriorityQueue<(int X, int Y, int F), int>();
+        var cameFrom = new Dictionary<(int X, int Y, int F), (int X, int Y, int F)>();
+        var cost = new Dictionary<(int X, int Y, int F), int> { [start] = 0 };
+        var liftAt = new Dictionary<(int X, int Y, int F), int> { [start] = mapCharacter.Lift };
+        open.Enqueue(start, H(start));
         int expansions = 0;
         var nearest = start;
-        int nearestH = Heuristic(start, goal);
+        int nearestH = H(start);
+        List<(int X, int Y)> PathTo((int X, int Y, int F) end)
+        {
+            var path = new List<(int X, int Y)>();
+            for (var step = end; step != start; step = cameFrom[step]) path.Add((step.X, step.Y));
+            path.Reverse();
+            return path;
+        }
         while (open.Count > 0 && expansions++ < 6000)
         {
             var current = open.Dequeue();
-            int h = Heuristic(current, goal);
+            int h = H(current);
             if (h < nearestH) { nearest = current; nearestH = h; }
             // A taken goal (someone on it, a chair): right beside it - not across a corner, where a table can be in between.
-            bool done = (current == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1 && (current != start || besideOnly));
-            if (done)
-            {
-                var path = new List<(int X, int Y)>();
-                for (var step = current; step != start; step = cameFrom[step]) path.Add(step);
-                path.Reverse();
-                return path;
-            }
+            bool done = current.F == wantFloor
+                && (((current.X, current.Y) == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1 && (current != start || besideOnly)));
+            if (done) return PathTo(current);
             foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
             {
-                var next = (current.X + dx, current.Y + dy);
-                if (!InsideMap(next.Item1, next.Item2)) continue;
+                var cell = (current.X + dx, current.Y + dy);
+                if (!InsideMap(cell.Item1, cell.Item2)) continue;
+                if (goalFloor is null && cost.TryGetValue((cell.Item1, cell.Item2, 0), out int reached) && reached <= cost[current] + 1) continue; // no floor asked for: one place per cell, so skip the walking rules for a cell already reached as cheaply
+                if (!CanStandAt(mapCharacter, cell, liftAt[current], world, out int lift)) continue;
+                if (!CanWalkBetween(mapCharacter, (current.X, current.Y), cell, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
+                var next = (cell.Item1, cell.Item2, FloorKey(lift));
                 int newCost = cost[current] + 1;
                 if (cost.TryGetValue(next, out int known) && known <= newCost) continue;
-                if (!CanStandAt(mapCharacter, next, liftAt[current], world, out int lift)) continue;
-                if (!CanWalkBetween(mapCharacter, current, next, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
                 cost[next] = newCost;
                 liftAt[next] = lift;
                 cameFrom[next] = current;
-                open.Enqueue(next, newCost + Heuristic(next, goal));
+                open.Enqueue(next, newCost + H(next));
             }
         }
         if (!allowPartial || nearest == start) return null;
-        var partial = new List<(int X, int Y)>();
-        for (var step = nearest; step != start; step = cameFrom[step]) partial.Add(step);
-        partial.Reverse();
-        return partial;
+        return PathTo(nearest);
     }
 
     private static int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);

@@ -29,6 +29,7 @@ internal static class CommandWindowRegistry
         [EventCommandType.PlayPose] = new("Play Pose", c => new PlayPoseCommandWindow(c), PlayPoseCommandWindow.Describe),
         [EventCommandType.ChangePose] = new("Change Pose", c => new ChangePoseCommandWindow(c), ChangePoseCommandWindow.Describe),
         [EventCommandType.WalkToLocation] = new("Walk To Location", c => new WalkToLocationCommandWindow(c), WalkToLocationCommandWindow.Describe),
+        [EventCommandType.WalkToFloorLocation] = new("Walk To Floor Location", c => new WalkToFloorLocationCommandWindow(c), WalkToFloorLocationCommandWindow.Describe),
         [EventCommandType.AttackObject] = new("Attack Object", c => new AttackObjectCommandWindow(c), AttackObjectCommandWindow.Describe),
         [EventCommandType.PlayAnimation] = new("Play Animation", c => new PlayAnimationCommandWindow(c), PlayAnimationCommandWindow.Describe),
         [EventCommandType.Sit] = new("Sit", c => new SitCommandWindow(c), SitCommandWindow.Describe),

@@ -41,7 +41,8 @@ public class MapCellPickerWindow : Window
     private double _scale = 1;
 
     /// <param name="selectThings">Picking a thing: which keys can be picked (a door, a chair...). Null: any object shown can be clicked to take its cell.</param>
-    public MapCellPickerWindow(BitmapSource map, int tileWidth, int tileHeight, int columns, int rows, (int X, int Y)? current, (int X, int Y)? placedSpot, Func<string, bool>? selectThings = null)
+    /// <param name="startFloor">The floor to open on (the current spot's); null: the Map Editor's floor.</param>
+    public MapCellPickerWindow(BitmapSource map, int tileWidth, int tileHeight, int columns, int rows, (int X, int Y)? current, (int X, int Y)? placedSpot, Func<string, bool>? selectThings = null, int? startFloor = null)
     {
         Title = selectThings is null ? "Pick the spot on the map" : "Pick it on the map";
         (_tileWidth, _tileHeight, _columns, _rows) = (tileWidth, tileHeight, columns, rows);
@@ -142,7 +143,7 @@ public class MapCellPickerWindow : Window
             var floors = new ComboBox { Width = 80, ItemsSource = Enumerable.Range(1, MapFloors.MaxFloors).Select(f => $"Floor {f}").ToList(), ToolTip = "Which floor to see and pick on (the Map Editor's floors 1-9)." };
             var inside = new CheckBox { Content = "See inside", IsChecked = true, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(10, 0, 0, 0),
                 ToolTip = "Leaves out the roofs, so the inside of houses shows - as in the game when you walk in." };
-            PickedFloor = Math.Clamp(ProjectSession.MapEditorFloorProvider?.Invoke() ?? 1, 1, MapFloors.MaxFloors);
+            PickedFloor = Math.Clamp(startFloor ?? ProjectSession.MapEditorFloorProvider?.Invoke() ?? 1, 1, MapFloors.MaxFloors);
             floors.SelectedIndex = PickedFloor - 1;
             void Redraw()
             {

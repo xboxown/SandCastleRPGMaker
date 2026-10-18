@@ -123,7 +123,8 @@
 
                     <StackPanel Grid.Column="1">
                         <TextBlock Text="Moving &amp; Poses" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <Button Content="Walk To Location..." Margin="0,0,0,4" Click="Registered_Click" Tag="WalkToLocation" ToolTip="Walks to a spot, round whatever is in the way"/>
+                        <Button Content="Walk To Location..." Margin="0,0,0,4" Click="Registered_Click" Tag="WalkToLocation" ToolTip="Walks to a spot on the floor they're on, round whatever is in the way"/>
+                        <Button Content="Walk To Floor Location..." Margin="0,0,0,4" Click="Registered_Click" Tag="WalkToFloorLocation" ToolTip="Walks to a spot on a chosen floor - up or down the stairs to it"/>
                         <Button Content="Sit..." Margin="0,0,0,4" Click="Registered_Click" Tag="Sit" ToolTip="Walks to a chair and sits on it"/>
                         <Button Content="Stand" Margin="0,0,0,4" Click="Registered_Click" Tag="Stand" ToolTip="Gets up from a chair or bed"/>
                         <Button Content="Play Pose..." Margin="0,0,0,4" Click="Registered_Click" Tag="PlayPose" ToolTip="A pose for a while, or until its animation has played"/>
