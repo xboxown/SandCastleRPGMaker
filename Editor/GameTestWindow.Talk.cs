@@ -80,6 +80,12 @@ public partial class GameTestWindow
             StatusText.Text = $"{character.Name} can't answer right now ({DescribeVitals(character)}).";
             return;
         }
+        // Actor::activate: "Asleep (but not awakened)?" - on its Sleep schedule and lying asleep (in bed or on the floor): nothing happens.
+        if (mapCharacter.Npc.Activity == ScheduleType.Sleep && mapCharacter.PoseName == "Sleeping" && !character.IsInParty)
+        {
+            StatusText.Text = $"{character.Name} is asleep.";
+            return;
+        }
         if (mapCharacter.Npc.InCombat && !character.IsInParty) return; // Actor::activate: "Too busy fighting." - nothing happens
         if (character.IsInParty && IsGamePaused)
         {

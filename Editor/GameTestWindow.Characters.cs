@@ -30,6 +30,8 @@ public partial class GameTestWindow
         public SpriteDirection Facing;
         /// <summary>The sprite now showing ("group/name"), so a pose that resolves to the same sprite doesn't restart its animation.</summary>
         public string? ShownSprite;
+        /// <summary>The pose it's in now ("Sleeping", "Sit"...) - Exult's frame check (asleep in bed: the sleep frame).</summary>
+        public string PoseName = "Idle";
         public NpcState Npc = new();
     }
 
@@ -121,6 +123,7 @@ public partial class GameTestWindow
     private void SetCharacterPose(MapCharacter mapCharacter, string poseName, SpriteDirection facing)
     {
         mapCharacter.Facing = facing;
+        mapCharacter.PoseName = poseName;
         if (mapCharacter.Visual is not Image image) return; // the no-art marker has no poses to show
         var sprite = ResolveCharacterSprite(mapCharacter.Character, PoseByName(poseName), facing, out double volume, out string? key)
                      ?? ResolveCharacterSprite(mapCharacter.Character, PoseByName("Idle"), facing, out volume, out key);
