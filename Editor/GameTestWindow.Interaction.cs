@@ -149,7 +149,8 @@ public partial class GameTestWindow
             if (!_objectOverlayTakesClicks) { CloseObjectOverlay(); e.Handled = true; }
             return;
         }
-        if (_gameOver) { e.Handled = true; return; } // the main character is dead: nothing can be clicked (only a dialog box, above)
+        // The main character is dead: nothing can be clicked (only a dialog box, above) - but the Save/Load screen (and a prompt over it), to load a game.
+        if (_gameOver && !(_saveScreen is not null && HitTestGumpLayer(e.GetPosition(PaperdollGumpsCanvas), out var deadGump, out _) && deadGump is OpenDollGump)) { e.Handled = true; return; }
         if (InCinema) { e.Handled = true; return; } // Cinema Mode: nothing in the world can be clicked till it ends
         if (TryChooseTarget(e)) return; // a key or lockpick is waiting for its target (Get_click)
         if (_pointer is { IsDragging: true }) { e.Handled = true; return; }

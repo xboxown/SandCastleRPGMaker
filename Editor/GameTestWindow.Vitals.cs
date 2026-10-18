@@ -144,6 +144,7 @@ public partial class GameTestWindow
             _choosingTarget = null;
             _playerTarget = null;
             _playerTargetThing = null;
+            if (_combatMode) ToggleCombatMode(); // out of combat: the plain pointer, for the Save/Load screen
             _gameOver = true;
             ShowPointer(RestingPointer);
             StatusText.Text = $"You have died ({cause}).";
