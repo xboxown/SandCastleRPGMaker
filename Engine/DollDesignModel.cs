@@ -31,7 +31,21 @@ public enum DollPartKind
     /// <summary>An invisible clickable area over part of a picture: a keyhole, a crack.</summary>
     Hotspot,
     /// <summary>Closes the paperdoll when clicked.</summary>
-    CloseButton
+    CloseButton,
+    /// <summary>Save/Load screen: the list of saved games, newest first - click picks one, double-click loads it, the mouse wheel scrolls.</summary>
+    SaveList,
+    /// <summary>Save/Load screen: where the player types the save's name (picking a save puts its name here).</summary>
+    SaveName,
+    /// <summary>Save/Load screen: the picked save's screenshot, fitted into its area.</summary>
+    SaveScreenshot,
+    /// <summary>Save/Load screen: the picked save's details - its name, the game's day and time, when it was saved.</summary>
+    SaveDetails,
+    /// <summary>Save/Load screen: saves the game under the typed name (over the picked save, after asking).</summary>
+    SaveButton,
+    /// <summary>Save/Load screen: loads the picked save.</summary>
+    LoadButton,
+    /// <summary>Save/Load screen: deletes the picked save, after asking.</summary>
+    DeleteSaveButton
 }
 
 /// <summary>One look (state) of a part: its name and its sprite.</summary>
@@ -109,6 +123,13 @@ public class DollPart
         DollPartKind.CloseButton => "Close button",
         DollPartKind.Lid => "Lid / door / hatch",
         DollPartKind.Slider => "Dial / slider",
+        DollPartKind.SaveList => "Save list",
+        DollPartKind.SaveName => "Save name",
+        DollPartKind.SaveScreenshot => "Save screenshot",
+        DollPartKind.SaveDetails => "Save details",
+        DollPartKind.SaveButton => "Save button",
+        DollPartKind.LoadButton => "Load button",
+        DollPartKind.DeleteSaveButton => "Delete save button",
         _ => kind.ToString()
     };
 
@@ -116,7 +137,11 @@ public class DollPart
     public static string[] DefaultLooks(DollPartKind kind) => kind switch
     {
         DollPartKind.Picture => new[] { "Picture" },
-        DollPartKind.Button or DollPartKind.CloseButton => new[] { "Normal", "Pressed" },
+        DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton => new[] { "Normal", "Pressed" },
+        DollPartKind.SaveList => new[] { "Behind the list", "Picked row" },
+        DollPartKind.SaveName => new[] { "Behind the name" },
+        DollPartKind.SaveScreenshot => new[] { "Frame (drawn over the screenshot)" },
+        DollPartKind.SaveDetails => new[] { "Behind the details" },
         DollPartKind.Switch => new[] { "Off", "On" },
         DollPartKind.Lid => new[] { "Closed", "Open" },
         DollPartKind.Light => new[] { "Off", "On" },
@@ -125,6 +150,14 @@ public class DollPart
         DollPartKind.Slot or DollPartKind.ItemArea => new[] { "Behind the items" },
         _ => Array.Empty<string>()
     };
+
+    /// <summary>The Save/Load screen's own parts (System Settings > Save / Load): they work only on that paperdoll.</summary>
+    public static bool IsSaveLoadKind(DollPartKind kind) => kind >= DollPartKind.SaveList;
+
+    /// <summary>Parts drawn as an area of their own Width x Height, whatever their sprite (a list, a name box, a screenshot).</summary>
+    public static bool IsAreaKind(DollPartKind kind) =>
+        kind is DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text
+            or DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveScreenshot or DollPartKind.SaveDetails;
 
     /// <summary>Kinds whose list of looks can grow (a switch with three positions).</summary>
     public static bool LooksCanGrow(DollPartKind kind) => kind is DollPartKind.Switch;

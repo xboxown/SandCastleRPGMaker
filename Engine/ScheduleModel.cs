@@ -157,6 +157,16 @@ public class GameClock
         return hoursPassed;
     }
 
+    /// <summary>A saved game's time, put back on loading it.</summary>
+    public void Restore(int day, int hour, int minute, int ticks)
+    {
+        Day = Math.Max(0, day);
+        Hour = Math.Clamp(hour, 0, 23);
+        Minute = Math.Clamp(minute, 0, 59);
+        Ticks = Math.Clamp(ticks, 0, TicksPerMinute - 1);
+        _msAccumulated = 0;
+    }
+
     /// <summary>Exult's fake_next_period: jump to the start of the next 3-hour period.</summary>
     public void SkipToNextPeriod()
     {

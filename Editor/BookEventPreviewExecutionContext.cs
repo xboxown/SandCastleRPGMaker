@@ -25,6 +25,25 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     /// <summary>Runtime-only book SETTING overrides for Change Book Settings - keyed by (which book, which field name: "Name", "Weight", "IsStackable", etc), storing the new value as text. Same principle as _contentOverrides: never touches the book's own saved PlaceableItemBase fields, and there is no save-game system yet for this to persist into, so it resets whenever a new Game Test session starts.</summary>
     private readonly Dictionary<(int BookId, string Field), string> _bookSettingOverrides = new();
 
+    /// <summary>A saved game: the variables, switches and book overrides as they are now.</summary>
+    public void SaveState(GameSaveData save)
+    {
+        save.Variables = new Dictionary<string, double>(_variables);
+        save.BookContents = _contentOverrides.Select(kv => new SavedBookContent { BookId = kv.Key.BookId, PageIndex = kv.Key.PageIndex, FrameId = kv.Key.FrameId, Text = kv.Value }).ToList();
+        save.BookSettings = _bookSettingOverrides.Select(kv => new SavedBookSetting { BookId = kv.Key.BookId, Field = kv.Key.Field, Value = kv.Value }).ToList();
+    }
+
+    /// <summary>A saved game being loaded: its variables, switches and book overrides back.</summary>
+    public void LoadState(GameSaveData save)
+    {
+        _variables.Clear();
+        foreach (var (name, value) in save.Variables) _variables[name] = value;
+        _contentOverrides.Clear();
+        foreach (var c in save.BookContents) _contentOverrides[(c.BookId, c.PageIndex, c.FrameId)] = c.Text;
+        _bookSettingOverrides.Clear();
+        foreach (var s in save.BookSettings) _bookSettingOverrides[(s.BookId, s.Field)] = s.Value;
+    }
+
     public Action<int, double, bool>? OnShakeScreen { get; set; }
     public Action<string>? OnChangeDayNight { get; set; }
     public Action<string, double>? OnApplyPaletteColor { get; set; }

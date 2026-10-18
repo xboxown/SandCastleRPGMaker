@@ -108,6 +108,7 @@ public partial class GameTestWindow
         gump.Animators.Clear();
         PaperdollGumpsCanvas.Children.Remove(gump.GumpBorder);
         _openDolls.Remove(gump);
+        SaveScreenClosed(gump);
         UntrackGumpFocus(gump);
         if (_openPaperdolls.Count == 0 && _openContainers.Count == 0 && _openDolls.Count == 0) GameCanvas.Focus();
     }
@@ -117,6 +118,7 @@ public partial class GameTestWindow
     private static bool IsClickable(DollPart part) =>
         part.Kind is DollPartKind.Button or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slot or DollPartKind.ItemArea
             or DollPartKind.Slider or DollPartKind.Hotspot or DollPartKind.CloseButton
+            or DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
         || part.EventPages.Any(p => p.Commands.Count > 0); // a picture, light, text or display with its own events
 
     private (int Look, bool Visible) DollStateOf(OpenDollGump gump, DollPart part)
@@ -216,6 +218,8 @@ public partial class GameTestWindow
                 }
                 return new TextBlock { Text = value.ToString(), Foreground = Brushes.White, FontSize = 10 };
             }
+            case DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveScreenshot or DollPartKind.SaveDetails:
+                return SaveScreenPartVisual(gump, part, size); // GameTestWindow.SaveLoad.cs
             case DollPartKind.Slot:
             case DollPartKind.ItemArea:
             {
@@ -379,6 +383,7 @@ public partial class GameTestWindow
         if (!_openDolls.Contains(target.Gump) || target.Gump.Design.Part(target.PartId) is not { } part) return false;
         var gump = target.Gump;
         var runtime = gump.State.Of(part);
+        if (SaveScreenPartClicked(gump, part, runtime)) return true; // the Save/Load screen's own parts
         switch (part.Kind)
         {
             case DollPartKind.Button:
@@ -435,6 +440,7 @@ public partial class GameTestWindow
         if (!_openDolls.Contains(target.Gump) || target.Gump.Design.Part(target.PartId) is not { } part) return;
         var gump = target.Gump;
         var runtime = gump.State.Of(part);
+        if (SaveScreenPartUsed(gump, part)) return; // double-clicking a save loads it
         if (part.Kind == DollPartKind.Lid)
         {
             runtime.Look = runtime.Look == 0 ? 1 : 0;

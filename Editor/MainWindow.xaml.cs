@@ -108,6 +108,7 @@ public partial class MainWindow : Window
         });
         ProjectSession.ResourcesProvider = () => _resourceDatabase;
         ProjectSession.VideosProvider = () => _videoDatabase;
+        ProjectSession.ProjectIdProvider = () => _currentProjectId;
         ProjectSession.VariablesProvider = () => _variableDatabase;
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
@@ -1289,10 +1290,20 @@ public partial class MainWindow : Window
             Title = _currentProjectName is { Length: > 0 } name ? name : "Game",
             WindowStartupLocation = WindowStartupLocation.CenterScreen
         };
-        game.Closed += (_, _) => Application.Current.Shutdown();
+        RunStandalone(game);
+        return true;
+    }
+
+    /// <summary>A built game's window: closing it ends the program - unless a loaded save carries on in a new one (GameTestWindow.SaveLoad.cs).</summary>
+    private static void RunStandalone(GameTestWindow game)
+    {
+        game.Closed += (_, _) =>
+        {
+            if (game.ReplacedBy is { } next) RunStandalone(next);
+            else Application.Current.Shutdown();
+        };
         Application.Current.MainWindow = game;
         game.Show();
-        return true;
     }
 
     private void LaunchGameTest()
@@ -1312,7 +1323,12 @@ public partial class MainWindow : Window
             _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
             _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         { Owner = this };
-        window.ShowDialog();
+        // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs).
+        for (GameTestWindow? game = window; game is not null; game = game.ReplacedBy)
+        {
+            game.Owner = this;
+            game.ShowDialog();
+        }
     }
 
     private void SaveTilePropertiesMenuItem_Click(object sender, RoutedEventArgs e)

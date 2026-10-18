@@ -46,7 +46,7 @@ internal static class DollLook
     /// <summary>A part's size for a look: its sprite's, else its own Width x Height.</summary>
     public static Size SizeOf(DollPart part, int look, SpriteDatabase sprites)
     {
-        if (part.Kind is DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text)
+        if (DollPart.IsAreaKind(part.Kind))
             return new Size(Math.Max(4, part.Width), Math.Max(4, part.Height));
         if (part.Kind == DollPartKind.Slider) look = 0; // the track
         return Frame(LookSprite(part, look, sprites)) is { } bitmap ? new Size(bitmap.PixelWidth, bitmap.PixelHeight) : new Size(Math.Max(4, part.Width), Math.Max(4, part.Height));
@@ -78,14 +78,17 @@ internal static class DollLook
         design.Parts.FirstOrDefault(lid => lid.Kind == DollPartKind.Lid && lid.Covers.Contains(part.Id) && stateOf(lid) is { Look: 0, Visible: true });
 
     /// <summary>A Text part's words as a picture, in its font (the in-game font when none is picked), tinted; null when there's no font with glyphs.</summary>
-    public static BitmapSource? TextPicture(DollPart part, SpriteDatabase sprites)
+    public static BitmapSource? TextPicture(DollPart part, SpriteDatabase sprites) => TextPicture(part, part.Text, sprites);
+
+    /// <summary>Any words in a part's font, size and tint (a save list's rows): null without a font or words.</summary>
+    public static BitmapSource? TextPicture(DollPart part, string text, SpriteDatabase sprites)
     {
         var font = SpriteFont.For(sprites, string.IsNullOrEmpty(part.FontName) ? SpriteDatabase.InGameFontName : part.FontName);
-        if (font is null || string.IsNullOrEmpty(part.Text)) return null;
+        if (font is null || string.IsNullOrEmpty(text)) return null;
         Brush? tint = null;
         if (!string.IsNullOrWhiteSpace(part.TextColor))
             try { tint = new SolidColorBrush((Color)ColorConverter.ConvertFromString(part.TextColor)); } catch { tint = null; }
-        return font.RenderText(part.Text, Math.Max(1, part.TextScale), tint, Math.Max(8, part.Width));
+        return font.RenderText(text, Math.Max(1, part.TextScale), tint, Math.Max(8, part.Width));
     }
 
     /// <summary>What an item reference is called, from the databases.</summary>

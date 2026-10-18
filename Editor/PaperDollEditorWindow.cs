@@ -165,6 +165,13 @@ public class PaperDollEditorWindow : Window
         DollPartKind.Light => "Off / on; not clickable - switched by events: a power light.",
         DollPartKind.Hotspot => "An invisible clickable area over part of a picture: a keyhole, a crack.",
         DollPartKind.CloseButton => "Closes the paperdoll when clicked.",
+        DollPartKind.SaveList => "Save/Load screen: the saved games, newest first, in its font. Click picks one, double-click loads it, the mouse wheel scrolls. Its \"Picked row\" look is drawn behind the picked one.",
+        DollPartKind.SaveName => "Save/Load screen: the player types the save's name here. Picking a save in the list puts its name here.",
+        DollPartKind.SaveScreenshot => "Save/Load screen: the picked save's screenshot, fitted into this area (its Frame look is drawn over it).",
+        DollPartKind.SaveDetails => "Save/Load screen: the picked save's name, the game's day and time, and when it was saved, in its font.",
+        DollPartKind.SaveButton => "Save/Load screen: saves under the typed name - over the picked save when the name is the same, after asking.",
+        DollPartKind.LoadButton => "Save/Load screen: loads the picked save (double-clicking it in the list does too).",
+        DollPartKind.DeleteSaveButton => "Save/Load screen: deletes the picked save, after asking.",
         _ => ""
     };
 
@@ -263,6 +270,26 @@ public class PaperDollEditorWindow : Window
             case DollPartKind.Lid:
                 // A new lid covers whatever its area overlaps that's already there (adjust in its list).
                 break;
+            case DollPartKind.SaveList:
+                part.Width = 160;
+                part.Height = 100;
+                break;
+            case DollPartKind.SaveName:
+                part.Width = 160;
+                part.Height = 14;
+                break;
+            case DollPartKind.SaveScreenshot:
+                part.Width = 96;
+                part.Height = 60;
+                break;
+            case DollPartKind.SaveDetails:
+                part.Width = 160;
+                part.Height = 36;
+                break;
+            case DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton:
+                part.Width = 40;
+                part.Height = 14;
+                break;
         }
         design.Parts.Add(part);
         _selectedPartId = part.Id;
@@ -348,16 +375,20 @@ public class PaperDollEditorWindow : Window
         var place = new WrapPanel();
         place.Children.Add(IntField("X", () => part.X, v => part.X = v));
         place.Children.Add(IntField("Y", () => part.Y, v => part.Y = v));
-        if (part.Kind is DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text or DollPartKind.Slider or DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid)
+        if (DollPart.IsAreaKind(part.Kind) || part.Kind is DollPartKind.Slider or DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid
+            or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton)
         {
             place.Children.Add(IntField(part.Kind == DollPartKind.Text ? "Wrap width" : "Width", () => part.Width, v => part.Width = Math.Max(4, v)));
             if (part.Kind != DollPartKind.Text) place.Children.Add(IntField("Height", () => part.Height, v => part.Height = Math.Max(4, v)));
         }
         panel.Children.Add(place);
-        if (part.Kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slider)
+        if (part.Kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slider
+            or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton)
             panel.Children.Add(Note("Width / Height are used only while it has no sprite."));
+        if (DollPart.IsSaveLoadKind(part.Kind))
+            panel.Children.Add(Note("Works on the paperdoll picked as the Save/Load screen (System Settings > Save / Load)."));
         panel.Children.Add(Check("Starts visible (events can show / hide it)", () => part.StartsVisible, v => { part.StartsVisible = v; Redraw(); }));
-        if (part.Kind is not (DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text or DollPartKind.Slider))
+        if (!DollPart.IsAreaKind(part.Kind) && part.Kind is not DollPartKind.Slider && !DollPart.IsSaveLoadKind(part.Kind))
             panel.Children.Add(Check("Can be dragged onto other parts (theirs: By Combined With A Part) - it goes back to its place when let go", () => part.Draggable, v => part.Draggable = v));
 
         if (part.Looks.Count > 0) panel.Children.Add(LooksEditor(part));
@@ -370,6 +401,9 @@ public class PaperDollEditorWindow : Window
             case DollPartKind.Text: panel.Children.Add(TextEditor(part)); break;
             case DollPartKind.Slider: panel.Children.Add(RangeEditor(part, "Starts at")); break;
             case DollPartKind.Display: panel.Children.Add(DisplayEditor(design, part)); break;
+            case DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveDetails:
+                panel.Children.Add(new GroupBox { Header = "Font", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = FontRow(part) });
+                break;
         }
 
         int programmed = part.EventPages.Sum(p => p.Commands.Count);
@@ -511,6 +545,13 @@ public class PaperDollEditorWindow : Window
         text.TextChanged += (_, _) => { part.Text = text.Text; Redraw(); };
         body.Children.Add(new TextBlock { Text = "Text", FontSize = 11 });
         body.Children.Add(text);
+        body.Children.Add(FontRow(part));
+        return new GroupBox { Header = "Text", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
+    }
+
+    /// <summary>A part's font, its size and tint.</summary>
+    private UIElement FontRow(DollPart part)
+    {
         var fonts = new List<string> { "(in-game font)" };
         fonts.AddRange(_sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.FontsGroupName)?.Sprites.Select(s => s.Name) ?? Enumerable.Empty<string>());
         var font = new ComboBox { Width = 180, ItemsSource = fonts, SelectedItem = string.IsNullOrEmpty(part.FontName) ? fonts[0] : fonts.Contains(part.FontName) ? part.FontName : fonts[0] };
@@ -519,8 +560,7 @@ public class PaperDollEditorWindow : Window
         row.Children.Add(Labeled("Font (Sprite Editor > Fonts)", font));
         row.Children.Add(IntField("Size x", () => part.TextScale, v => part.TextScale = Math.Clamp(v, 1, 8)));
         row.Children.Add(Field("Tint (#RRGGBB, empty = none)", part.TextColor, v => { part.TextColor = v; Redraw(); }, 90));
-        body.Children.Add(row);
-        return new GroupBox { Header = "Text", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
+        return row;
     }
 
     private UIElement RangeEditor(DollPart part, string startLabel)

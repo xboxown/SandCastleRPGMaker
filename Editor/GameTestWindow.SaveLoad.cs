@@ -1,0 +1,540 @@
+using System.IO;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
+using System.Windows.Threading;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// Saving and loading in play - Exult's File gump (Newfile_gump), as a
+/// paperdoll the game's maker designs (System Settings > Save / Load). The S
+/// key opens it, as in Exult; it opens with the paperdoll opening sound and,
+/// like every paperdoll, pauses the game. Its built-in parts: the Save list
+/// (newest first; click picks, double-click loads, the wheel scrolls), the
+/// Save name the player types, the picked save's screenshot and details, and
+/// the Save, Load and Delete save buttons. Writing over a save or deleting
+/// one asks first (press the button again). The screenshot is taken as the
+/// screen opens, before it covers the game (Exult's create_mini_screenshot).
+///
+/// A save holds everything the game has changed (GameSaveData); loading
+/// builds a new game window from it, as a new game is built from the
+/// project, and the old window closes - the editor's Game Test and a built
+/// game both carry on with the new one (ReplacedBy).
+/// </summary>
+public partial class GameTestWindow
+{
+    private sealed class SaveLoadOwner : IHasDollState
+    {
+        public DollState? DollRuntime { get; set; }
+    }
+
+    private sealed class SaveScreen
+    {
+        public required OpenDollGump Gump;
+        public required Guid ProjectId;
+        public List<SaveSlotInfo> Saves = new();
+        public int Picked = -1;
+        public int Scroll;
+        public string Name = string.Empty;
+        public byte[]? Screenshot;
+        /// <summary>A button pressed once to write over or delete a save: pressed again in time, it's done.</summary>
+        public (DollPartKind Kind, string Folder, DateTime Until)? Confirming;
+        public SaveSlotInfo? PickedSave => Picked >= 0 && Picked < Saves.Count ? Saves[Picked] : null;
+    }
+
+    private readonly SaveLoadOwner _saveLoadOwner = new();
+    private SaveScreen? _saveScreen;
+    private const int MaxSaveNameLength = 40;
+
+    /// <summary>Set when a save was loaded: the window that carries on the game (this one has closed).</summary>
+    public GameTestWindow? ReplacedBy { get; private set; }
+
+    /// <summary>A save can't be made while something is under way - a cutscene, a box, a command, a video (Exult refuses mid-script too).</summary>
+    private bool SomethingIsHappening => InCinema || IsShowingMessage || _scriptActions.Count > 0 || _scriptWaits.Count > 0 || IsPlayingVideo || _gameOver;
+
+    // ================= Opening =================
+
+    private void OpenSaveLoad()
+    {
+        if (_saveScreen is not null) { BringDollToFront(_saveScreen.Gump); return; }
+        if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.DollDesignId) is not { } design)
+        {
+            StatusText.Text = "This game has no Save/Load screen yet (System Settings > Save / Load).";
+            return;
+        }
+        if (ProjectSession.ProjectIdProvider?.Invoke() is not { } projectId)
+        {
+            StatusText.Text = "Saving needs the project to be saved once first.";
+            return;
+        }
+        byte[]? shot = TakeScreenshot(); // before the screen covers the game
+        _saveLoadOwner.DollRuntime = null; // it opens as designed every time
+        OpenDoll(_saveLoadOwner, new WorldObject { Name = "Save / Load" }, design);
+        if (_openDolls.LastOrDefault(g => ReferenceEquals(g.Owner, _saveLoadOwner)) is not { } gump) return;
+        _saveScreen = new SaveScreen { Gump = gump, ProjectId = projectId, Saves = GameSaveStore.List(projectId), Screenshot = shot };
+        RefreshDollGump(gump);
+        StatusText.Text = _saveScreen.Saves.Count == 0 ? "No saved games yet - type a name and press Save." : "Pick a save, or type a new name.";
+    }
+
+    /// <summary>The Save/Load screen closing (Close button, Escape): it forgets its list.</summary>
+    private void SaveScreenClosed(OpenDollGump gump)
+    {
+        if (_saveScreen?.Gump == gump) _saveScreen = null;
+    }
+
+    private bool IsSaveScreen(OpenDollGump gump) => _saveScreen?.Gump == gump;
+
+    /// <summary>The game's view as it is now, as a small PNG (the viewport's own size).</summary>
+    private byte[]? TakeScreenshot()
+    {
+        try
+        {
+            if (ViewportBorder.ActualWidth <= 0 || ViewportBorder.ActualHeight <= 0) return null;
+            var drawing = new DrawingVisual();
+            using (var dc = drawing.RenderOpen())
+                dc.DrawRectangle(new VisualBrush(ViewportBorder) { Stretch = Stretch.Fill }, null, new Rect(0, 0, ViewportWidth, ViewportHeight));
+            var bitmap = new RenderTargetBitmap((int)ViewportWidth, (int)ViewportHeight, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(drawing);
+            var encoder = new PngBitmapEncoder();
+            encoder.Frames.Add(BitmapFrame.Create(bitmap));
+            using var stream = new MemoryStream();
+            encoder.Save(stream);
+            return stream.ToArray();
+        }
+        catch { return null; } // no screenshot: the save is still made
+    }
+
+    // ================= Drawing =================
+
+    /// <summary>A Save list, name, screenshot or details part: its area, its look behind (the screenshot's frame over), what it shows.</summary>
+    private FrameworkElement SaveScreenPartVisual(OpenDollGump gump, DollPart part, Size size)
+    {
+        var holder = new Canvas { Width = size.Width, Height = size.Height, Background = Brushes.Transparent, ClipToBounds = true };
+        var look = DollLook.LookSprite(part, 0, _sprites);
+        if (look is not null && part.Kind != DollPartKind.SaveScreenshot) holder.Children.Add(AnimatedLook(gump, look));
+        var screen = IsSaveScreen(gump) ? _saveScreen : null;
+        switch (part.Kind)
+        {
+            case DollPartKind.SaveList:
+            {
+                if (screen is null) break;
+                double rowHeight = SaveRowHeight(part);
+                int rows = Math.Max(1, (int)(size.Height / rowHeight));
+                screen.Scroll = Math.Clamp(screen.Scroll, 0, Math.Max(0, screen.Saves.Count - rows));
+                if (screen.Saves.Count == 0) AddText(holder, part, "(no saved games)", 2, 1, 0.6);
+                for (int i = screen.Scroll; i < Math.Min(screen.Saves.Count, screen.Scroll + rows); i++)
+                {
+                    double y = (i - screen.Scroll) * rowHeight;
+                    if (i == screen.Picked)
+                    {
+                        FrameworkElement mark = DollLook.LookSprite(part, 1, _sprites) is { } picked ? AnimatedLook(gump, picked)
+                            : new Border { Width = size.Width, Height = rowHeight, Background = new SolidColorBrush(Color.FromArgb(90, 255, 255, 255)) };
+                        Canvas.SetTop(mark, y);
+                        mark.IsHitTestVisible = false;
+                        holder.Children.Add(mark);
+                    }
+                    AddText(holder, part, screen.Saves[i].Name, 2, y + 1);
+                }
+                holder.MouseWheel += (_, e) =>
+                {
+                    if (_saveScreen is not { } s) return;
+                    s.Scroll += e.Delta > 0 ? -1 : 1;
+                    RefreshDollGump(gump);
+                    e.Handled = true;
+                };
+                break;
+            }
+            case DollPartKind.SaveName:
+                if (screen is not null) AddText(holder, part, screen.Name + "_", 2, Math.Max(0, (size.Height - SaveRowHeight(part)) / 2) + 1);
+                break;
+            case DollPartKind.SaveScreenshot:
+            {
+                if (screen?.PickedSave is { } save && LoadScreenshot(save.ScreenshotPath) is { } shot)
+                    holder.Children.Add(new Image { Source = shot, Width = size.Width, Height = size.Height, Stretch = Stretch.Uniform, IsHitTestVisible = false });
+                if (look is not null) holder.Children.Add(AnimatedLook(gump, look)); // its frame, over the picture
+                break;
+            }
+            case DollPartKind.SaveDetails:
+            {
+                if (screen?.PickedSave is not { } save) break;
+                double y = 1;
+                foreach (var line in new[] { save.Name, save.GameTime, $"Saved {save.SavedAtUtc.ToLocalTime():g}" })
+                {
+                    if (string.IsNullOrEmpty(line)) continue;
+                    AddText(holder, part, line, 2, y);
+                    y += SaveRowHeight(part);
+                }
+                break;
+            }
+        }
+        return holder;
+    }
+
+    /// <summary>Words in the part's font (or a plain one, with no font in the project).</summary>
+    private void AddText(Canvas holder, DollPart part, string text, double x, double y, double opacity = 1)
+    {
+        FrameworkElement words;
+        if (DollLook.TextPicture(part, text, _sprites) is { } picture)
+        {
+            var image = new Image { Source = picture, Width = picture.PixelWidth, Height = picture.PixelHeight, Stretch = Stretch.None };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            words = image;
+        }
+        else words = new TextBlock { Text = text, Foreground = Brushes.White, FontSize = 8 * Math.Max(1, part.TextScale) };
+        words.IsHitTestVisible = false;
+        words.Opacity = opacity;
+        Canvas.SetLeft(words, x);
+        Canvas.SetTop(words, y);
+        holder.Children.Add(words);
+    }
+
+    /// <summary>One row of a save list: its font's line, and a little room.</summary>
+    private double SaveRowHeight(DollPart part) =>
+        (DollLook.TextPicture(part, "Ag", _sprites)?.PixelHeight ?? 10 * Math.Max(1, part.TextScale)) + 2;
+
+    private static BitmapImage? LoadScreenshot(string path)
+    {
+        if (!File.Exists(path)) return null;
+        try
+        {
+            var image = new BitmapImage();
+            image.BeginInit();
+            image.CacheOption = BitmapCacheOption.OnLoad; // not kept open: the save can be written over or deleted
+            image.UriSource = new Uri(path);
+            image.EndInit();
+            image.Freeze();
+            return image;
+        }
+        catch { return null; }
+    }
+
+    // ================= Clicks and keys =================
+
+    /// <summary>A click on one of the Save/Load screen's own parts. True = handled.</summary>
+    private bool SaveScreenPartClicked(OpenDollGump gump, DollPart part, DollPartRuntime runtime)
+    {
+        if (!DollPart.IsSaveLoadKind(part.Kind)) return false;
+        if (_saveScreen is not { } screen || screen.Gump != gump)
+        {
+            StatusText.Text = $"\"{part.Name}\" works on the Save/Load screen (System Settings > Save / Load).";
+            return true;
+        }
+        switch (part.Kind)
+        {
+            case DollPartKind.SaveList:
+            {
+                if (DollPartVisual(gump, part.Id) is not { } visual) return true;
+                int row = screen.Scroll + (int)(Mouse.GetPosition(visual).Y / SaveRowHeight(part));
+                if (row >= 0 && row < screen.Saves.Count)
+                {
+                    screen.Picked = row;
+                    screen.Name = screen.Saves[row].Name;
+                    screen.Confirming = null;
+                    RefreshDollGump(gump);
+                }
+                return true;
+            }
+            case DollPartKind.SaveName:
+                StatusText.Text = "Type the save's name.";
+                return true;
+            case DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton:
+                PressDollButton(gump, runtime);
+                switch (part.Kind)
+                {
+                    case DollPartKind.SaveButton: SaveFromScreen(screen, part); break;
+                    case DollPartKind.LoadButton: LoadFromScreen(screen); break;
+                    default: DeleteFromScreen(screen, part); break;
+                }
+                if (_openDolls.Contains(gump)) FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByUseItem, $"\"{part.Name}\" pressed.");
+                return true;
+        }
+        return true;
+    }
+
+    /// <summary>A button's Pressed look for a moment.</summary>
+    private void PressDollButton(OpenDollGump gump, DollPartRuntime runtime)
+    {
+        runtime.Look = 1;
+        RefreshDollGump(gump);
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(160) };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            runtime.Look = 0;
+            if (_openDolls.Contains(gump)) RefreshDollGump(gump);
+        };
+        timer.Start();
+    }
+
+    /// <summary>Double-clicking a save in the list loads it.</summary>
+    private bool SaveScreenPartUsed(OpenDollGump gump, DollPart part)
+    {
+        if (part.Kind != DollPartKind.SaveList || _saveScreen is not { } screen || screen.Gump != gump) return false;
+        if (screen.PickedSave is not null) LoadFromScreen(screen);
+        return true;
+    }
+
+    /// <summary>Keys while the Save/Load screen is open: typing the name, Backspace, Enter saves, Up / Down pick. True = handled.</summary>
+    private bool SaveScreenKey(Key key)
+    {
+        if (_saveScreen is not { } screen) return false;
+        switch (key)
+        {
+            case Key.Back:
+                if (screen.Name.Length > 0) screen.Name = screen.Name[..^1];
+                break;
+            case Key.Enter:
+                SaveFromScreen(screen, null);
+                return true;
+            case Key.Up or Key.Down:
+                if (screen.Saves.Count == 0) return true;
+                screen.Picked = Math.Clamp(screen.Picked + (key == Key.Up ? -1 : 1), 0, screen.Saves.Count - 1);
+                screen.Name = screen.Saves[screen.Picked].Name;
+                if (screen.Picked < screen.Scroll) screen.Scroll = screen.Picked;
+                break;
+            default:
+                return false; // typed letters arrive as text (SaveScreenText); Escape closes it as any paperdoll
+        }
+        screen.Confirming = null;
+        RefreshDollGump(screen.Gump);
+        return true;
+    }
+
+    private void SaveScreenText(object sender, TextCompositionEventArgs e)
+    {
+        if (_saveScreen is not { } screen || string.IsNullOrEmpty(e.Text)) return;
+        foreach (char c in e.Text)
+            if (!char.IsControl(c) && screen.Name.Length < MaxSaveNameLength && !Path.GetInvalidFileNameChars().Contains(c)) screen.Name += c;
+        screen.Confirming = null;
+        RefreshDollGump(screen.Gump);
+        e.Handled = true;
+    }
+
+    /// <summary>A second press of the same button on the same save within 4 seconds confirms it; the first one asks.</summary>
+    private bool Confirmed(SaveScreen screen, DollPartKind kind, string folder, DollPart? part, string question)
+    {
+        if (screen.Confirming is { } pending && pending.Kind == kind && pending.Folder == folder && DateTime.Now <= pending.Until)
+        {
+            screen.Confirming = null;
+            return true;
+        }
+        screen.Confirming = (kind, folder, DateTime.Now.AddSeconds(4));
+        StatusText.Text = question;
+        if (part is not null) ShowGumpLabel(screen.Gump.PartsCanvas, question, part.X, part.Y);
+        return false;
+    }
+
+    // ================= Save, load, delete =================
+
+    private void SaveFromScreen(SaveScreen screen, DollPart? button)
+    {
+        string name = screen.Name.Trim();
+        if (name.Length == 0) { StatusText.Text = "Type a name for the save first."; return; }
+        if (SomethingIsHappening) { StatusText.Text = "You can't save while something is happening."; return; }
+        var existing = screen.Saves.FirstOrDefault(s => string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (existing is not null && !Confirmed(screen, DollPartKind.SaveButton, existing.Folder, button, $"Write over \"{existing.Name}\"? Press Save again.")) return;
+        try
+        {
+            var data = CaptureSave();
+            var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty };
+            GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
+            screen.Saves = GameSaveStore.List(screen.ProjectId);
+            screen.Picked = screen.Saves.FindIndex(s => s.Folder == info.Folder);
+            screen.Scroll = Math.Min(screen.Scroll, Math.Max(0, screen.Picked));
+            RefreshDollGump(screen.Gump);
+            StatusText.Text = $"Game saved: \"{name}\".";
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"The game couldn't be saved: {ex.Message}";
+        }
+    }
+
+    private void LoadFromScreen(SaveScreen screen)
+    {
+        if (screen.PickedSave is not { } save) { StatusText.Text = "Pick a save to load."; return; }
+        GameSaveData data;
+        try { data = GameSaveStore.Read(screen.ProjectId, save); }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"\"{save.Name}\" couldn't be loaded: {ex.Message}";
+            return;
+        }
+        LoadGame(data, $"Loaded \"{save.Name}\".");
+    }
+
+    private void DeleteFromScreen(SaveScreen screen, DollPart part)
+    {
+        if (screen.PickedSave is not { } save) { StatusText.Text = "Pick a save to delete."; return; }
+        if (!Confirmed(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.")) return;
+        try { GameSaveStore.Delete(save); }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"\"{save.Name}\" couldn't be deleted: {ex.Message}";
+            return;
+        }
+        screen.Saves = GameSaveStore.List(screen.ProjectId);
+        screen.Picked = Math.Min(screen.Picked, screen.Saves.Count - 1);
+        screen.Name = screen.PickedSave?.Name ?? string.Empty;
+        RefreshDollGump(screen.Gump);
+        StatusText.Text = $"Deleted \"{save.Name}\".";
+    }
+
+    // ================= What a save holds =================
+
+    private static T JsonCopy<T>(T source) =>
+        System.Text.Json.JsonSerializer.Deserialize<T>(System.Text.Json.JsonSerializer.Serialize(source))
+        ?? throw new InvalidOperationException($"Couldn't copy the game's {typeof(T).Name}.");
+
+    private GameSaveData CaptureSave()
+    {
+        var map = JsonCopy(_map);
+        map.StartX = _playerX;
+        map.StartY = _playerY;
+        map.StartFloor = MapFloors.FloorOfLift(Math.Max(0, _playerZ));
+        foreach (var mapCharacter in _mapCharacters) // the floor each character is on now, by its own placement
+            if (map.Characters.FirstOrDefault(c => c.Id == mapCharacter.Placement.Id) is { } placed)
+                placed.Floor = MapFloors.FloorOfLift(Math.Max(0, mapCharacter.Lift));
+
+        var save = new GameSaveData
+        {
+            Map = map,
+            Characters = JsonCopy(_characters ?? new CharacterDatabase()),
+            Containers = JsonCopy(_containers),
+            Factions = JsonCopy(_factions),
+            Day = _clock.Day, Hour = _clock.Hour, Minute = _clock.Minute, Ticks = _clock.Ticks,
+            PlayerPixelX = _playerPixelX, PlayerPixelY = _playerPixelY, PlayerLift = _playerZ, PlayerFacing = _playerFacing,
+            CombatMode = _combatMode,
+            ReadBooks = _hasBeenReadBooks.ToList(),
+            Weather = JsonCopy(_weather)
+        };
+        _execContext.SaveState(save);
+        foreach (var (character, vitals) in _vitals)
+            save.Vitals.Add(new SavedVitals
+            {
+                CharacterId = character.Id, Food = vitals.Food, Ailments = (int)vitals.Ailments,
+                PoisonRemainingMs = vitals.PoisonRemainingMs, SleepRemainingMs = vitals.SleepRemainingMs, ParalyzeRemainingMs = vitals.ParalyzeRemainingMs,
+                CharmRemainingMs = vitals.CharmRemainingMs, CurseRemainingMs = vitals.CurseRemainingMs, InvisibleRemainingMs = vitals.InvisibleRemainingMs,
+                ProtectedRemainingMs = vitals.ProtectedRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
+            });
+        foreach (var (owner, counts) in _firedCounts)
+        {
+            if (OwnerKey(owner) is not { } key || PagesOf(owner) is not { } pages) continue;
+            foreach (var (page, count) in counts)
+                if (pages.IndexOf(page) is >= 0 and var index && count > 0)
+                    save.FiredPages.Add(new SavedFiredPage { Owner = key, PageIndex = index, Count = count });
+        }
+        return save;
+    }
+
+    /// <summary>An event owner as a save names it - only those a save can find again (map events, characters, books, containers, placed objects).</summary>
+    private static string? OwnerKey(object owner) => owner switch
+    {
+        GameEvent e => $"Event:{e.Id}",
+        CharacterDefinition c => $"Character:{c.Id}",
+        BookData b => $"Book:{b.Id}",
+        ContainerData c => $"Container:{c.Id}",
+        ObjectInstance o => $"Object:{o.InstanceId}",
+        _ => null
+    };
+
+    private List<BookEventPage>? PagesOf(object owner) => owner switch
+    {
+        GameEvent e => e.EventPages,
+        CharacterDefinition c => c.EventPages,
+        BookData b => b.EventPages,
+        ContainerData c => c.EventPages,
+        ObjectInstance o => DefinitionOf(o)?.EventPages,
+        _ => null
+    };
+
+    private object? OwnerOf(string key)
+    {
+        var parts = key.Split(':');
+        if (parts.Length != 2 || !int.TryParse(parts[1], out int id)) return null;
+        return parts[0] switch
+        {
+            "Event" => _map.Events.FirstOrDefault(e => e.Id == id),
+            "Character" => _characters?.Characters.FirstOrDefault(c => c.Id == id),
+            "Book" => _books.Books.FirstOrDefault(b => b.Id == id),
+            "Container" => _containers.Containers.FirstOrDefault(c => c.Id == id),
+            "Object" => _map.Objects.FirstOrDefault(o => o.InstanceId == id),
+            _ => null
+        };
+    }
+
+    /// <summary>Builds the game anew from a save (as a new game is built from the project) and hands over to it; this window closes.</summary>
+    private void LoadGame(GameSaveData data, string status)
+    {
+        GameTestWindow next;
+        try
+        {
+            next = new GameTestWindow(data.Map, _tilesetBitmap, _tileWidth, _tileHeight, _columns, _tilesetSpriteName, _resources, _sprites, _books, _objects,
+                data.Characters, _poseDatabase, _tileProperties, _variables, _stats, data.Containers, _systemSettings, data.Factions);
+            next.ApplySave(data);
+        }
+        catch (Exception ex)
+        {
+            StatusText.Text = $"The save couldn't be loaded: {ex.Message}";
+            return;
+        }
+        next.Title = Title;
+        next.WindowStartupLocation = WindowStartupLocation.Manual;
+        next.Left = Left;
+        next.Top = Top;
+        next.Width = Width;
+        next.Height = Height;
+        next.WindowState = WindowState;
+        next.Loaded += (_, _) => next.StatusText.Text = status;
+        ReplacedBy = next;
+        Close(); // whoever opened this window shows the next one (MainWindow)
+    }
+
+    /// <summary>A save's own state on top of the freshly built game: the clock, the main character's exact spot, variables, hunger and ailments, fired events, weather.</summary>
+    private void ApplySave(GameSaveData data)
+    {
+        _clock.Restore(data.Day, data.Hour, data.Minute, data.Ticks);
+        _lastClockMinute = TotalMinutes(); // hunger and the rest go on from the saved time, not from the new game's
+        _playerPixelX = data.PlayerPixelX;
+        _playerPixelY = data.PlayerPixelY;
+        _playerX = (int)Math.Floor(_playerPixelX / _tileWidth);
+        _playerY = (int)Math.Floor(_playerPixelY / _tileHeight);
+        _playerZ = data.PlayerLift;
+        _playerVisualLiftZ = data.PlayerLift;
+        _playerFacing = data.PlayerFacing;
+        _combatMode = data.CombatMode;
+        if (_idlePose is not null) ApplyPoseSprite(_idlePose);
+        SnapPlayerPosition();
+        UpdateCamera();
+
+        _execContext.LoadState(data);
+        foreach (int book in data.ReadBooks) _hasBeenReadBooks.Add(book);
+        foreach (var saved in data.Vitals)
+        {
+            if (_characters?.Characters.FirstOrDefault(c => c.Id == saved.CharacterId) is not { } character) continue;
+            var vitals = VitalsOf(character);
+            vitals.Food = saved.Food;
+            vitals.Ailments = (Ailment)saved.Ailments;
+            vitals.PoisonRemainingMs = saved.PoisonRemainingMs;
+            vitals.SleepRemainingMs = saved.SleepRemainingMs;
+            vitals.ParalyzeRemainingMs = saved.ParalyzeRemainingMs;
+            vitals.CharmRemainingMs = saved.CharmRemainingMs;
+            vitals.CurseRemainingMs = saved.CurseRemainingMs;
+            vitals.InvisibleRemainingMs = saved.InvisibleRemainingMs;
+            vitals.ProtectedRemainingMs = saved.ProtectedRemainingMs;
+            vitals.Dead = saved.Dead;
+            vitals.Unconscious = saved.Unconscious;
+        }
+        foreach (var fired in data.FiredPages)
+        {
+            if (OwnerOf(fired.Owner) is not { } owner || PagesOf(owner) is not { } pages || fired.PageIndex < 0 || fired.PageIndex >= pages.Count) continue;
+            if (!_firedCounts.TryGetValue(owner, out var counts)) _firedCounts[owner] = counts = new Dictionary<BookEventPage, int>();
+            counts[pages[fired.PageIndex]] = fired.Count;
+        }
+        if (data.Weather is not null) _weather = data.Weather;
+    }
+}

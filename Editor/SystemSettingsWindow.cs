@@ -54,6 +54,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
+        tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
@@ -67,6 +68,38 @@ public partial class SystemSettingsWindow : Window
 
         Closed += (_, _) => AnimationPreviewButton.StopAll();
         LoadSizes();
+    }
+
+    private sealed record DollChoice(int Id, string Name)
+    {
+        public override string ToString() => Name;
+    }
+
+    /// <summary>Which PaperDoll Editor paperdoll is the in-game Save/Load screen.</summary>
+    private UIElement BuildSaveLoadTab()
+    {
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var choices = new List<DollChoice> { new(-1, "(None - the game can't be saved)") };
+        choices.AddRange((ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)));
+        var combo = new ComboBox { Width = 260, ItemsSource = choices };
+        combo.SelectedItem = choices.FirstOrDefault(c => c.Id == _settings.SaveLoad.DollDesignId) ?? choices[0];
+        combo.SelectionChanged += (_, _) => _settings.SaveLoad.DollDesignId = (combo.SelectedItem as DollChoice)?.Id ?? -1;
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        row.Children.Add(new TextBlock { Text = "Save/Load screen:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(combo);
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "The paperdoll the player saves and loads the game with. Make it in the PaperDoll Editor like any paperdoll - its look is all yours - with these parts from its toolbox:\n" +
+                   "  Save list - the saved games (click picks, double-click loads, wheel scrolls)\n" +
+                   "  Save name - where the name is typed\n" +
+                   "  Save screenshot, Save details - the picked save's picture and day / time\n" +
+                   "  Save button, Load button, Delete save button - and a Close button.\n\n" +
+                   "In the game the S key opens it (as in Exult). It opens with the paperdoll opening sound and the game is paused while it's open. " +
+                   "Saves are kept per game on the player's PC, as many as they like.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+        return panel;
     }
 
     /// <summary>How combat shows: Exult's "show hits" option.</summary>

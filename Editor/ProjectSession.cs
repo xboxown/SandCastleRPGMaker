@@ -29,6 +29,8 @@ internal static class ProjectSession
     /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
     public static Func<ResourceDatabase>? ResourcesProvider;
     public static Func<VideoDatabase>? VideosProvider;
+    /// <summary>The open project's id (saved games are kept per project); null with none open.</summary>
+    public static Func<Guid?>? ProjectIdProvider;
     public static VideoDatabase Videos => VideosProvider?.Invoke() ?? new VideoDatabase();
     public static Func<VariableDatabase>? VariablesProvider;
     public static Func<BookDatabase>? BooksProvider;
