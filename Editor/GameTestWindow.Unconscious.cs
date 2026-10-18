@@ -12,8 +12,10 @@ namespace SandcastleRpgMaker.Editor;
 ///  - Health below -(Strength / 3): dead (-10 at Strength 30, -5 at 15).
 ///  - Enemies go for opponents who are awake first; only when none are left
 ///    do they turn on the unconscious - so a party still standing draws the
-///    attack, and someone alone keeps being beaten. The player never attacks
-///    the unconscious.
+///    attack, and someone alone keeps being beaten. The player stops
+///    attacking one knocked out; double-clicked again with a weapon in hand,
+///    it's finished off (not Exult: a game without a party can still kill
+///    its monsters).
 ///  - While at 0 HP or below: a 1 in 6 chance every half minute to mend
 ///    (about 1 HP every 3 minutes); healing of any kind counts. Back at 1 HP
 ///    or more, it gets up and carries on.
@@ -43,7 +45,7 @@ public partial class GameTestWindow
 
         // Everyone attacking it stops and looks for someone else.
         foreach (var mapCharacter in _mapCharacters.Where(mc => mc.Npc.Target == character)) mapCharacter.Npc.Target = null;
-        if (_playerTarget == character) _playerTarget = null;
+        if (_playerTarget == character) { _playerTarget = null; _playerFinishesOff = false; } // it waits for the player to choose it again
 
         if (character == _player)
         {

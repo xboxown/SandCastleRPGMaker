@@ -40,6 +40,8 @@ public partial class GameTestWindow
 
     private bool _combatMode;
     private CharacterDefinition? _playerTarget;
+    /// <summary>The player chose (double-clicked) a foe already knocked out, weapon in hand: it's finished off (not Exult - there the Avatar never attacks the unconscious).</summary>
+    private bool _playerFinishesOff;
     private int _playerDexPoints;
     private double _playerStrikeMs, _playerPoseResetMs = -1;
     private double _sightScanMs;
@@ -361,9 +363,17 @@ public partial class GameTestWindow
     private void SetPlayerTarget(CharacterDefinition target)
     {
         if (IsDead(target)) return;
+        // Knocked out: only with a weapon - bare hands leave it to the party (a game without a party can still kill its monsters).
+        bool finishing = IsUnconscious(target);
+        if (finishing && (_player is null || WieldedWeapon(_player) is null))
+        {
+            StatusText.Text = $"{target.Name} is unconscious - you need a weapon in hand to finish them off.";
+            return;
+        }
         _playerTarget = target;
         _playerTargetThing = null;
-        StatusText.Text = $"Attacking {target.Name}.";
+        _playerFinishesOff = finishing;
+        StatusText.Text = finishing ? $"Finishing off {target.Name}." : $"Attacking {target.Name}.";
     }
 
     /// <summary>In combat mode, the player builds up Dexterity points every standard delay and strikes the target whenever it's in reach.</summary>
@@ -374,7 +384,13 @@ public partial class GameTestWindow
         if (_combatMode && _player is not null && _playerTarget is null && _playerTargetThing is null && _player.AttackMode != AttackMode.Manual
             && FindFoeFor(_player) is { } autoFoe && !IsUnconscious(autoFoe)) _playerTarget = autoFoe;
         if (!_combatMode || _player is null || (_playerTarget is null && _playerTargetThing is null)) return;
-        if (_playerTarget is not null && (IsDead(_playerTarget) || IsUnconscious(_playerTarget))) { _playerTarget = null; return; } // the Avatar never attacks the unconscious
+        // The Avatar stops when its foe is knocked out (Exult) - unless the player chose to finish it off, and still holds a weapon.
+        if (_playerTarget is not null && (IsDead(_playerTarget) || (IsUnconscious(_playerTarget) && !(_playerFinishesOff && WieldedWeapon(_player) is not null))))
+        {
+            _playerTarget = null;
+            _playerFinishesOff = false;
+            return;
+        }
         if (_playerTargetThing is not null && !ThingStillThere(_playerTargetThing)) { _playerTargetThing = null; return; }
         if (IsIncapacitated(_player)) return;
         _playerStrikeMs -= elapsedMs;
@@ -427,7 +443,7 @@ public partial class GameTestWindow
         PlaySound(weapon?.Weapon.AttackSoundResourceId ?? -1);
         int attval = Stat(attacker, BuiltInStatKind.Combat, 10) + (weapon?.Weapon.Lucky == true ? 3 : 0); // lucky: +3
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
-        bool hit = weapon?.Weapon.AutoHit == true || RollToWin(attval, defval);
+        bool hit = weapon?.Weapon.AutoHit == true || IsUnconscious(defender) || RollToWin(attval, defval); // lying knocked out, it can't ward off a blow
         FightBack(defender, attacker);
         if (!hit)
         {
