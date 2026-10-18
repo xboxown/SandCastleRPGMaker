@@ -101,6 +101,7 @@ public partial class GameTestWindow
         OpenDoll(_saveLoadOwner, new WorldObject { Name = "Save / Load" }, design);
         if (_openDolls.LastOrDefault(g => ReferenceEquals(g.Owner, _saveLoadOwner)) is not { } gump) return;
         _saveScreen = new SaveScreen { Gump = gump, ProjectId = projectId, Saves = GameSaveStore.List(projectId), Screenshot = shot };
+        SaveScreenOpenedMusic(); // the death music ends
         RefreshDollGump(gump);
         StatusText.Text = _saveScreen.Slots.Count > 0 ? "Click a slot: type a name and Save, or Load what it holds."
             : _saveScreen.Saves.Count == 0 ? "No saved games yet - type a name and press Save." : "Pick a save, or type a new name.";

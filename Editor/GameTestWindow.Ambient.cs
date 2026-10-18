@@ -15,6 +15,7 @@ public partial class GameTestWindow
 
     private void UpdateAmbient()
     {
+        if (AmbientSilencedByCombat()) { SilenceAmbient(); return; } // combat music, or a battle (GameTestWindow.CombatMusic.cs) - weather plays on
         var a = _map.Ambient;
         var d = DayNight;
         double hour = _clock.Hour + _clock.Minute / 60.0;
@@ -26,5 +27,13 @@ public partial class GameTestWindow
         _ambientPlaying = sound;
         SoundPlayback.StopFor(_ambientSoundOwner);
         if (sound >= 0) SoundPlayback.TryPlayFor(_ambientSoundOwner, _resources, sound, loop: true);
+    }
+
+    /// <summary>Stops the ambient sound; it starts again the next time it's allowed.</summary>
+    private void SilenceAmbient()
+    {
+        if (_ambientPlaying == -2) return;
+        SoundPlayback.StopFor(_ambientSoundOwner);
+        _ambientPlaying = -2;
     }
 }

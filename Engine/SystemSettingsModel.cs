@@ -34,6 +34,42 @@ public class CombatSettings
 {
     /// <summary>Exult's "show hits" option (Combat::show_hits, off by default): the numbers over whoever is hit ("-4", "miss"). Hits always flash a red outline, as in Exult; this only adds the numbers.</summary>
     public bool ShowHitNumbers { get; set; }
+    /// <summary>The music the engine plays by itself around fights (System Settings > Combat).</summary>
+    public CombatMusicSettings Music { get; set; } = new();
+}
+
+/// <summary>One piece of combat music: a Sound list entry (-1 = none: nothing changes), and whether it plays over and over.</summary>
+public class CombatMusicCue
+{
+    public int MusicId { get; set; } = -1;
+    public bool Loop { get; set; }
+}
+
+/// <summary>
+/// Exult's combat music (combat.cc Combat_schedule::start_music_combat). Exult
+/// plays every one of these once, never looping (continuous = false), and the
+/// map's own music comes back when it ends. Near death and Death are not in
+/// Exult and loop by default.
+/// </summary>
+public class CombatMusicSettings
+{
+    /// <summary>CSDanger: an enemy close by is fighting, and the main character is not in combat mode.</summary>
+    public CombatMusicCue Danger { get; set; } = new();
+    /// <summary>CSAttacked1 / CSAttacked2: the battle begins (one of the two picked at random; at most once every 30 seconds).</summary>
+    public CombatMusicCue Battle { get; set; } = new();
+    public CombatMusicCue Battle2 { get; set; } = new();
+    /// <summary>CSRun_Away: combat mode is turned off with a foe still close by.</summary>
+    public CombatMusicCue RunAway { get; set; } = new();
+    /// <summary>CSHidden_Danger: the enemies were left behind (out of sight) while danger or battle music played.</summary>
+    public CombatMusicCue Escaped { get; set; } = new();
+    /// <summary>CSVictory: the last enemy around dies.</summary>
+    public CombatMusicCue Victory { get; set; } = new();
+    /// <summary>CSBattle_Over: the last enemy dies after a long fight (more than 15 seconds, more likely the longer it went).</summary>
+    public CombatMusicCue BattleOver { get; set; } = new();
+    /// <summary>Not Exult: the main character is below a quarter of its health with an enemy around.</summary>
+    public CombatMusicCue NearDeath { get; set; } = new() { Loop = true };
+    /// <summary>The main character died (Exult's CSAvatar_died is never played): until the Save/Load screen opens or a game is loaded.</summary>
+    public CombatMusicCue Death { get; set; } = new() { Loop = true };
 }
 
 /// <summary>Sounds the engine itself plays, project-wide (System Settings > Sounds).</summary>

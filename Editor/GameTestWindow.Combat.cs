@@ -353,6 +353,7 @@ public partial class GameTestWindow
     {
         _combatMode = !_combatMode;
         if (!_combatMode) { _playerTarget = null; _playerTargetThing = null; }
+        CombatModeChangedMusic(); // running from a foe close by (GameTestWindow.CombatMusic.cs)
         ShowPointer(RestingPointer); // the attack pointer while in combat mode
         StatusText.Text = _combatMode
             ? "Combat mode: double-click someone to attack them; you strike whenever they're in reach. C to stop."

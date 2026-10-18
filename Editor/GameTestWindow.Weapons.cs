@@ -99,6 +99,7 @@ public partial class GameTestWindow
     /// <summary>A blow (or a shot) that has landed: damage, then its powers (none if it did no damage, unless it's a no-damage weapon).</summary>
     private void LandBlow(CharacterDefinition attacker, CharacterDefinition defender, WorldObject? weapon, WorldObject? ammo)
     {
+        PartyHitMusic(defender); // from the danger music to the battle music (GameTestWindow.CombatMusic.cs)
         int points = weapon?.Weapon.Damage ?? 1; // bare hands: 1
         var type = weapon?.Weapon.DamageType ?? DamageType.Normal;
         var powers = weapon?.Weapon.Powers ?? WeaponPowers.None;

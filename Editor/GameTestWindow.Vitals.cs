@@ -146,6 +146,7 @@ public partial class GameTestWindow
             _playerTargetThing = null;
             if (_combatMode) ToggleCombatMode(); // out of combat: the plain pointer, for the Save/Load screen
             _gameOver = true;
+            DeathMusic(); // until the Save/Load screen opens or a game is loaded
             ShowPointer(RestingPointer);
             StatusText.Text = $"You have died ({cause}).";
             FireCharacterEvent(character, BookTriggerConditionBased.ByDeath);
@@ -154,6 +155,7 @@ public partial class GameTestWindow
         FireCharacterEvent(character, BookTriggerConditionBased.ByDeath); // its own By Death events, while it's still where it fell
         var mapCharacter = _mapCharacters.FirstOrDefault(mc => mc.Character == character);
         if (mapCharacter is null) return;
+        EnemyKilledMusic(character, mapCharacter.Npc.Oppressor); // the last enemy: victory music
         StopWalking(mapCharacter);
         mapCharacter.Npc.WalkingToSchedule = false;
         mapCharacter.Npc.Activity = null;
@@ -168,6 +170,7 @@ public partial class GameTestWindow
     {
         UpdateAmbient(); // the sound of the time of day (GameTestWindow.Ambient.cs)
         if (_gameOver) return;
+        UpdateCombatMusic(elapsedMs); // danger, battle, near death (GameTestWindow.CombatMusic.cs)
         if (hourChanges > 0)
             foreach (var character in AllLivingCharacters().ToList()) { MendWounds(character); UseFood(character); }
 

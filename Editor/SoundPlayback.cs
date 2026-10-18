@@ -55,6 +55,12 @@ internal static class SoundPlayback
     public static event Action<int>? Played;
     public static event Action<int>? Stopped;
 
+    /// <summary>Whether anything that belongs to <paramref name="owner"/> is still playing.</summary>
+    public static bool IsPlayingFor(object owner)
+    {
+        lock (Playing) return Owners.Values.Any(o => ReferenceEquals(o, owner));
+    }
+
     /// <summary>Stops every sound that belongs to <paramref name="owner"/> (a Stop button).</summary>
     public static void StopFor(object owner)
     {

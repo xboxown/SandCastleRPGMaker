@@ -66,7 +66,7 @@ public partial class SystemSettingsWindow : Window
         root.Children.Add(tabs);
         Content = root;
 
-        Closed += (_, _) => AnimationPreviewButton.StopAll();
+        Closed += (_, _) => { AnimationPreviewButton.StopAll(); SoundPlayback.StopFor(this); }; // a combat music preview ends with the window
         LoadSizes();
     }
 
@@ -174,7 +174,54 @@ public partial class SystemSettingsWindow : Window
                    "Unticked (the default): each uses its own, so a book can flip its pages and a chest can creak.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
-        return panel;
+
+        // Combat music (GameTestWindow.CombatMusic.cs)
+        var music = _settings.Combat.Music;
+        panel.Children.Add(new TextBlock { Text = "Combat music", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 16, 0, 2) });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Played by the engine itself, as in Exult. Exult plays each piece once and never loops it (Loop unticked); then the map's own sound comes back. " +
+                   "While combat music plays, or while the main character battles in combat mode, the map's ambient sound (birds, crickets) is silent; rain, thunder and other weather sounds play on. (None) = that moment changes nothing.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+        panel.Children.Add(CombatMusicRow("Danger:", music.Danger, "An enemy close by is fighting, and you're not in combat mode (Exult checks every second). A blow landing on you or the party switches to Battle."));
+        panel.Children.Add(CombatMusicRow("Battle:", music.Battle, "Your battle begins in combat mode - at most once every 30 seconds, so Danger can be heard."));
+        panel.Children.Add(CombatMusicRow("Battle (2nd):", music.Battle2, "Optional: Exult picks one of its two battle pieces at random each time."));
+        panel.Children.Add(CombatMusicRow("Run away:", music.RunAway, "Combat mode turned off (C) while a foe is still close by."));
+        panel.Children.Add(CombatMusicRow("Escaped:", music.Escaped, "Exult's \"hidden danger\": the enemies are out of sight while Danger or Battle plays."));
+        panel.Children.Add(CombatMusicRow("Victory:", music.Victory, "You or the party kill an enemy, and no enemy is left close by."));
+        panel.Children.Add(CombatMusicRow("Battle over:", music.BattleOver, "Instead of Victory after a long fight (over 15 seconds - the longer, the likelier)."));
+        panel.Children.Add(CombatMusicRow("Near death:", music.NearDeath, "Not in Exult: you're below a quarter of your health with an enemy around. Stops when you recover or the danger is gone."));
+        panel.Children.Add(CombatMusicRow("Death:", music.Death, "Not in Exult: you died. Plays until the Save/Load screen opens (double-click your body, or S) or a game is loaded."));
+        return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    /// <summary>One piece of combat music: the track, hear it, loop it, and when it plays.</summary>
+    private FrameworkElement CombatMusicRow(string label, CombatMusicCue cue, string when)
+    {
+        var none = new ResourceEntry { Id = -1, Name = "(None)" };
+        var choices = new List<ResourceEntry> { none };
+        choices.AddRange(_resources.Entries.Where(r => r.Kind is ResourceKind.Music or ResourceKind.Sound));
+        var box = new ComboBox { Width = 220, ItemsSource = choices, DisplayMemberPath = "Name", VerticalAlignment = VerticalAlignment.Center };
+        box.SelectedItem = choices.FirstOrDefault(s => s.Id == cue.MusicId) ?? none;
+        box.SelectionChanged += (_, _) => cue.MusicId = (box.SelectedItem as ResourceEntry)?.Id ?? -1;
+        var play = new Button { Content = "▶", Width = 28, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Hear it" };
+        play.Click += (_, _) => { SoundPlayback.StopFor(this); if (cue.MusicId >= 0) SoundPlayback.TryPlayFor(this, _resources, cue.MusicId, false); };
+        var stop = new Button { Content = "■", Width = 28, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Stop" };
+        stop.Click += (_, _) => SoundPlayback.StopFor(this);
+        var loop = new CheckBox { Content = "Loop", IsChecked = cue.Loop, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        loop.Checked += (_, _) => cue.Loop = true;
+        loop.Unchecked += (_, _) => cue.Loop = false;
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(new TextBlock { Text = label, Width = 120, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(box);
+        row.Children.Add(play);
+        row.Children.Add(stop);
+        row.Children.Add(loop);
+        var block = new StackPanel { Margin = new Thickness(0, 10, 0, 0) };
+        block.Children.Add(row);
+        block.Children.Add(new TextBlock { Text = when, TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(120, 2, 0, 0) });
+        return block;
     }
 
     private FrameworkElement SoundSettingRow(string label, Func<int> get, Action<int> set, out ComboBox combo)

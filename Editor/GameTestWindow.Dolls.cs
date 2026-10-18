@@ -159,6 +159,7 @@ public partial class GameTestWindow
             z += 10;
             var runtime = gump.State.Of(part);
             if (!runtime.Visible) continue;
+            if (_gameOver && part.Kind == DollPartKind.SaveButton && IsSaveScreen(gump)) continue; // dead: load only, no Save button
             var lid = DollLook.ClosedLidOver(part, design, p => DollStateOf(gump, p));
             if (lid is { HidesWhatItCovers: true }) continue;
             bool reachable = lid is null;
