@@ -36,6 +36,12 @@ public partial class GameTestWindow
         public required Border GumpBorder;
         public required Canvas PartsCanvas;
         public readonly List<SpriteAnimator> Animators = new();
+        /// <summary>Modal (above everything, nothing under it reachable): its layer; 0 = not modal.</summary>
+        public int ModalLayer;
+        /// <summary>A modal paperdoll's cover over the game and every other window.</summary>
+        public Border? Blocker;
+        /// <summary>Whoever opened it to ask (a save prompt, Open Paperdoll): hears yes (Yes / OK) or no.</summary>
+        public Action<bool>? Answered;
     }
 
     private readonly List<OpenDollGump> _openDolls = new();
@@ -77,7 +83,8 @@ public partial class GameTestWindow
         var existing = _openDolls.FirstOrDefault(g => ReferenceEquals(g.State, state));
         if (existing is not null) { BringDollToFront(existing); return; }
 
-        PlayOpenSound(design.OpenSoundResourceId, $"\"{obj.Name}\"");
+        // Every PaperDoll Editor paperdoll opens with System Settings > Sounds > Paperdoll open (none set = silent).
+        PlaySound(_systemSettings.Sounds.PaperdollOpenSoundId);
         var canvas = new Canvas(); // no background: only its parts are part of it (pixel-precise), as a container's art
         var border = new Border { Child = canvas };
         var gump = new OpenDollGump { State = state, Design = design, Obj = obj, Owner = owner, GumpBorder = border, PartsCanvas = canvas };
@@ -90,6 +97,7 @@ public partial class GameTestWindow
         canvas.MouseLeftButtonUp += (_, _) => PaperdollTitleBar_MouseLeftButtonUp(canvas);
         PaperdollGumpsCanvas.Children.Add(border);
         _openDolls.Add(gump);
+        ReadControlVariables(gump); // controls kept in variables show them (GameTestWindow.DollControls.cs)
         BringDollToFront(gump);
         RefreshDollGump(gump);
         StatusText.Text = $"You open \"{obj.Name}\".";
@@ -97,7 +105,7 @@ public partial class GameTestWindow
 
     private void BringDollToFront(OpenDollGump gump)
     {
-        Panel.SetZIndex(gump.GumpBorder, 200);
+        Panel.SetZIndex(gump.GumpBorder, gump.ModalLayer > 0 ? gump.ModalLayer + 1 : 200);
         TrackGumpFocus(gump);
     }
 
@@ -110,6 +118,7 @@ public partial class GameTestWindow
         _openDolls.Remove(gump);
         SaveScreenClosed(gump);
         UntrackGumpFocus(gump);
+        DollControlsClosed(gump); // last: an unanswered question hears no once it's gone
         if (_openPaperdolls.Count == 0 && _openContainers.Count == 0 && _openDolls.Count == 0) GameCanvas.Focus();
     }
 
@@ -119,6 +128,8 @@ public partial class GameTestWindow
         part.Kind is DollPartKind.Button or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slot or DollPartKind.ItemArea
             or DollPartKind.Slider or DollPartKind.Hotspot or DollPartKind.CloseButton
             or DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
+            or DollPartKind.ConfirmButton or DollPartKind.CancelButton or DollPartKind.TextBox or DollPartKind.CheckBox or DollPartKind.RadioButton
+            or DollPartKind.DropDown or DollPartKind.ListBox
         || part.EventPages.Any(p => p.Commands.Count > 0); // a picture, light, text or display with its own events
 
     private (int Look, bool Visible) DollStateOf(OpenDollGump gump, DollPart part)
@@ -154,7 +165,7 @@ public partial class GameTestWindow
             var visual = BuildDollPartVisual(gump, part, runtime);
             Canvas.SetLeft(visual, part.X);
             Canvas.SetTop(visual, part.Y);
-            Panel.SetZIndex(visual, z);
+            Panel.SetZIndex(visual, IsOpenDropDown(gump, part) ? int.MaxValue / 2 : z); // an open list over everything
             if (reachable && IsClickable(part))
             {
                 visual.Tag = new DollPartTarget(gump, part.Id); // tagged, not wired - the one mouse pipeline handles it
@@ -177,6 +188,7 @@ public partial class GameTestWindow
 
     private FrameworkElement BuildDollPartVisual(OpenDollGump gump, DollPart part, DollPartRuntime runtime)
     {
+        if (DollPart.IsControlKind(part.Kind)) return DollControlVisual(gump, part, runtime); // buttons with captions, boxes, lists (DollControls)
         var size = DollLook.SizeOf(part, runtime.Look, _sprites);
         switch (part.Kind)
         {
@@ -383,6 +395,8 @@ public partial class GameTestWindow
         if (!_openDolls.Contains(target.Gump) || target.Gump.Design.Part(target.PartId) is not { } part) return false;
         var gump = target.Gump;
         var runtime = gump.State.Of(part);
+        PlayControlClick(part); // every click: System Settings > Sounds > Drop in a window
+        if (DollControlClicked(gump, part, runtime)) return true; // form controls (GameTestWindow.DollControls.cs)
         if (SaveScreenPartClicked(gump, part, runtime)) return true; // the Save/Load screen's own parts
         switch (part.Kind)
         {
@@ -414,6 +428,7 @@ public partial class GameTestWindow
                 int value = DollLook.ValueAt(part, Mouse.GetPosition(visual), size);
                 if (value == runtime.Value) return true;
                 runtime.Value = value;
+                WriteControlVariable(part, runtime);
                 RefreshDollGump(gump);
                 if (!FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByUseItem, $"\"{part.Name}\" set to {value}.")) StatusText.Text = $"\"{part.Name}\": {value}";
                 return true;
@@ -699,6 +714,7 @@ public partial class GameTestWindow
             default:
                 return false;
         }
+        if (part is not null && runtime is not null) WriteControlVariable(part, runtime); // a control kept in a variable
         foreach (var open in _openDolls.Where(g => ReferenceEquals(g.State, state)).ToList()) RefreshDollGump(open);
         return true;
     }

@@ -88,16 +88,26 @@ public class PaperDollEditorWindow : Window
         // ---- Toolbox and canvas ----
         var middle = new DockPanel();
         var top = new StackPanel();
-        var toolbox = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
-        toolbox.Children.Add(new TextBlock { Text = "Add:", FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        foreach (var kind in Enum.GetValues<DollPartKind>())
+        // The toolbox, as a form designer's: the paperdoll's own parts, the form controls, the Save/Load screen's parts.
+        var kinds = Enum.GetValues<DollPartKind>();
+        foreach (var (label, group) in new[]
         {
-            var k = kind;
-            var button = MakeButton(DollPart.KindName(kind), () => AddPart(k));
-            button.ToolTip = KindHelp(kind);
-            toolbox.Children.Add(button);
+            ("Parts:", kinds.Where(k => !DollPart.IsSaveLoadKind(k) && !(DollPart.IsControlKind(k) && k is not (DollPartKind.Button or DollPartKind.CloseButton)))),
+            ("Controls:", kinds.Where(k => DollPart.IsControlKind(k) && !DollPart.IsSaveLoadKind(k) && k is not (DollPartKind.Button or DollPartKind.CloseButton))),
+            ("Save / Load:", kinds.Where(DollPart.IsSaveLoadKind))
+        })
+        {
+            var toolbox = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
+            toolbox.Children.Add(new TextBlock { Text = label, Width = 78, FontWeight = FontWeights.Bold, VerticalAlignment = VerticalAlignment.Center });
+            foreach (var kind in group)
+            {
+                var k = kind;
+                var button = MakeButton(DollPart.KindName(kind), () => AddPart(k));
+                button.ToolTip = KindHelp(kind);
+                toolbox.Children.Add(button);
+            }
+            top.Children.Add(toolbox);
         }
-        top.Children.Add(toolbox);
         var tools = new WrapPanel { Margin = new Thickness(0, 0, 0, 4) };
         tools.Children.Add(new TextBlock { Text = "Zoom", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
         tools.Children.Add(_zoomBox);
@@ -172,6 +182,14 @@ public class PaperDollEditorWindow : Window
         DollPartKind.SaveButton => "Save/Load screen: saves into the picked Save slot under its typed name (asking first when the slot holds a save). With a Save list and no slot picked: a new save, or over the one with the same name.",
         DollPartKind.LoadButton => "Save/Load screen: loads the picked save (double-clicking it does too).",
         DollPartKind.DeleteSaveButton => "Save/Load screen: deletes the picked save, after asking.",
+        DollPartKind.ConfirmButton => "Yes / OK: closes its paperdoll answering yes. On the \"Are you sure?\" save prompt (System Settings > Save / Load) the save goes ahead; opened by Open Paperdoll, its answer (1) goes into a variable. Its caption can be words or its sprite.",
+        DollPartKind.CancelButton => "No / Cancel: closes its paperdoll answering no, back to the paperdoll behind it. Caption it OK for a message that only needs closing.",
+        DollPartKind.TextBox => "A box the player clicks and types in (Enter ends it). Numbers only: its number goes into its variable.",
+        DollPartKind.CheckBox => "Ticked / unticked by a click, its words beside it: 1 / 0 in its variable.",
+        DollPartKind.RadioButton => "One choice of a group (same Radio group): picking it unpicks the others. 1 / 0 in its variable.",
+        DollPartKind.DropDown => "A box that opens its list of choices when clicked; the picked one (1, 2, 3...) goes into its variable.",
+        DollPartKind.ListBox => "A list of choices always shown; a click picks one (1, 2, 3...) - into its variable.",
+        DollPartKind.ProgressBar => "A bar filled up to its value between Min and Max - its own (set by events or its variable) or a slider's. Not clickable: health, loading.",
         _ => ""
     };
 
@@ -222,10 +240,7 @@ public class PaperDollEditorWindow : Window
         size.Children.Add(IntField("Width (px)", () => design.Width, v => design.Width = Math.Clamp(v, 16, 2000)));
         size.Children.Add(IntField("Height (px)", () => design.Height, v => design.Height = Math.Clamp(v, 16, 2000)));
         _designProps.Children.Add(size);
-        var openSound = SoundPicker("Open sound", () => design.OpenSoundResourceId, v => design.OpenSoundResourceId = v);
-        openSound.IsEnabled = !ProjectSession.PaperdollSoundIsGlobal;
-        openSound.ToolTip = ProjectSession.PaperdollSoundIsGlobal ? ProjectSession.PaperdollSoundIsGlobalTip : null;
-        _designProps.Children.Add(openSound);
+        _designProps.Children.Add(Note("Opening sound: System Settings > Sounds > Paperdoll open. Every click on a button, box, slot or list: System Settings > Sounds > Drop in a window. (None set there = silent.)"));
         _designProps.Children.Add(SoundPicker("Close sound", () => design.CloseSoundResourceId, v => design.CloseSoundResourceId = v));
         var users = _objects.Objects.Where(o => o.DollDesignId == design.Id).Select(o => o.Name).ToList();
         _designProps.Children.Add(Note(users.Count == 0
@@ -291,6 +306,36 @@ public class PaperDollEditorWindow : Window
             case DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton:
                 part.Width = 40;
                 part.Height = 14;
+                part.Text = kind switch { DollPartKind.SaveButton => "Save", DollPartKind.LoadButton => "Load", _ => "Delete" };
+                break;
+            case DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.ConfirmButton or DollPartKind.CancelButton:
+                part.Width = 48;
+                part.Height = 16;
+                part.Text = kind switch { DollPartKind.ConfirmButton => "Yes", DollPartKind.CancelButton => "No", DollPartKind.CloseButton => "Close", _ => "" };
+                break;
+            case DollPartKind.TextBox or DollPartKind.DropDown:
+                part.Width = 100;
+                part.Height = 14;
+                part.Text = "";
+                if (kind == DollPartKind.DropDown) { part.Options.AddRange(new[] { "First", "Second", "Third" }); part.StartValue = 1; }
+                break;
+            case DollPartKind.ListBox:
+                part.Width = 100;
+                part.Height = 48;
+                part.Options.AddRange(new[] { "First", "Second", "Third" });
+                part.StartValue = 1;
+                break;
+            case DollPartKind.CheckBox or DollPartKind.RadioButton:
+                part.Text = kind == DollPartKind.CheckBox ? "Check box" : "Choice";
+                part.RadioGroup = kind == DollPartKind.RadioButton ? "Group 1" : "";
+                if (kind == DollPartKind.RadioButton && !design.Parts.Any(p => p.Kind == DollPartKind.RadioButton && p.RadioGroup == "Group 1")) part.StartValue = 1; // the first of a group starts picked
+                break;
+            case DollPartKind.ProgressBar:
+                part.Width = 80;
+                part.Height = 8;
+                part.Min = 0;
+                part.Max = 100;
+                part.StartValue = 50;
                 break;
         }
         design.Parts.Add(part);
@@ -389,16 +434,14 @@ public class PaperDollEditorWindow : Window
         var place = new WrapPanel();
         place.Children.Add(IntField("X", () => part.X, v => part.X = v));
         place.Children.Add(IntField("Y", () => part.Y, v => part.Y = v));
-        if (DollPart.IsAreaKind(part.Kind) || part.Kind is DollPartKind.Slider or DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid
-            or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton)
+        if (DollPart.IsAreaKind(part.Kind) || DollPart.IsButtonKind(part.Kind) || part.Kind is DollPartKind.Slider or DollPartKind.Switch or DollPartKind.Lid)
         {
             place.Children.Add(IntField(part.Kind == DollPartKind.Text ? "Wrap width" : "Width", () => part.Width, v => part.Width = Math.Max(4, v)));
             if (part.Kind != DollPartKind.Text) place.Children.Add(IntField("Height", () => part.Height, v => part.Height = Math.Max(4, v)));
         }
         panel.Children.Add(place);
-        if (part.Kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slider
-            or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton)
-            panel.Children.Add(Note("Width / Height are used only while it has no sprite."));
+        if (DollPart.IsButtonKind(part.Kind) || part.Kind is DollPartKind.Switch or DollPartKind.Lid or DollPartKind.Slider)
+            panel.Children.Add(Note("Width / Height are used only while it has no sprite (a button without one is drawn plain, its caption on it)."));
         if (DollPart.IsSaveLoadKind(part.Kind))
             panel.Children.Add(Note("Works on the paperdoll picked as the Save/Load screen (System Settings > Save / Load)."));
         panel.Children.Add(Check("Starts visible (events can show / hide it)", () => part.StartsVisible, v => { part.StartsVisible = v; Redraw(); }));
@@ -423,6 +466,9 @@ public class PaperDollEditorWindow : Window
                 break;
             case DollPartKind.SaveList or DollPartKind.SaveDetails:
                 panel.Children.Add(new GroupBox { Header = "Font", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = FontRow(part) });
+                break;
+            case var kind when DollPart.IsControlKind(kind):
+                panel.Children.Add(ControlEditor(design, part));
                 break;
         }
 
@@ -569,6 +615,84 @@ public class PaperDollEditorWindow : Window
         return new GroupBox { Header = "Text", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
     }
 
+    /// <summary>A form control's own settings: its caption / words and font, its choices, its variable, its group.</summary>
+    private UIElement ControlEditor(DollDesign design, DollPart part)
+    {
+        var body = new StackPanel();
+        if (part.Kind != DollPartKind.ProgressBar)
+        {
+            string label = part.Kind switch
+            {
+                DollPartKind.TextBox => "Starts with (typed text)",
+                DollPartKind.CheckBox or DollPartKind.RadioButton => "Words beside it",
+                DollPartKind.DropDown or DollPartKind.ListBox => "",
+                _ => "Caption (words on it; empty = only its sprite)"
+            };
+            if (label.Length > 0)
+            {
+                var text = new TextBox { Text = part.Text, Width = 330 };
+                text.TextChanged += (_, _) => { part.Text = text.Text; Redraw(); };
+                body.Children.Add(Labeled(label, text));
+            }
+            body.Children.Add(FontRow(part));
+        }
+        switch (part.Kind)
+        {
+            case DollPartKind.DropDown or DollPartKind.ListBox:
+            {
+                var options = new TextBox { Text = string.Join("\n", part.Options), AcceptsReturn = true, Height = 80, Width = 330, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+                options.TextChanged += (_, _) =>
+                {
+                    part.Options = options.Text.Replace("\r", "").Split('\n').Select(o => o.Trim()).Where(o => o.Length > 0).ToList();
+                    Redraw();
+                };
+                body.Children.Add(Labeled("Choices (one per line)", options));
+                body.Children.Add(IntField("Starts picked (1, 2, 3... 0 = none)", () => part.StartValue, v => part.StartValue = Math.Clamp(v, 0, part.Options.Count)));
+                break;
+            }
+            case DollPartKind.TextBox:
+                body.Children.Add(Check("Numbers only (its number goes into its variable)", () => part.NumbersOnly, v => part.NumbersOnly = v));
+                body.Children.Add(IntField("Longest (letters)", () => part.MaxLength, v => part.MaxLength = Math.Clamp(v, 1, 200)));
+                break;
+            case DollPartKind.CheckBox:
+                body.Children.Add(Check("Starts ticked", () => part.StartValue != 0, v => { part.StartValue = v ? 1 : 0; Redraw(); }));
+                break;
+            case DollPartKind.RadioButton:
+                body.Children.Add(Field("Radio group (the same name = one choice)", part.RadioGroup, v => part.RadioGroup = v, 160));
+                body.Children.Add(Check("Starts picked", () => part.StartValue != 0, v =>
+                {
+                    part.StartValue = v ? 1 : 0;
+                    if (v) foreach (var other in design.Parts.Where(o => o != part && o.Kind == DollPartKind.RadioButton && o.RadioGroup == part.RadioGroup)) other.StartValue = 0;
+                    Redraw();
+                }));
+                break;
+            case DollPartKind.ProgressBar:
+                body.Children.Add(DisplayEditor(design, part));
+                body.Children.Add(Check("Upright (fills from the bottom up)", () => part.Vertical, v => { part.Vertical = v; Redraw(); }));
+                break;
+        }
+        if (DollPart.HasVariable(part.Kind))
+        {
+            var variables = ProjectSession.VariablesProvider?.Invoke()?.Variables.Select(x => x.Name).ToList() ?? new List<string>();
+            var variable = new ComboBox { ItemsSource = variables, IsEditable = true, Text = part.VariableName, Width = 200 };
+            void Set() => part.VariableName = variable.Text.Trim();
+            variable.LostFocus += (_, _) => Set();
+            variable.SelectionChanged += (_, _) => { if (variable.SelectedItem is string picked) part.VariableName = picked; };
+            body.Children.Add(Labeled("Kept in the variable (empty = none)", variable));
+            body.Children.Add(Note(part.Kind switch
+            {
+                DollPartKind.CheckBox or DollPartKind.RadioButton => "1 = ticked / picked, 0 = not. Read when the paperdoll opens, written on every click - events read and set it as any variable.",
+                DollPartKind.DropDown or DollPartKind.ListBox => "The picked choice's number (1 = the first, 0 = none). Read when the paperdoll opens, written on every pick.",
+                DollPartKind.TextBox => "The typed number (Numbers only), written when Enter ends the typing. Read when the paperdoll opens.",
+                _ => "Its value. Read when the paperdoll opens, written when it changes."
+            }));
+        }
+        body.Children.Add(Note(DollPart.IsButtonKind(part.Kind) || part.Kind == DollPartKind.ProgressBar
+            ? "Without sprites it's drawn plain, so a paperdoll works before its art is made. Its events: Events... (By Use = pressed)."
+            : "Without sprites it's drawn plain, so a paperdoll works before its art is made. Its events (Events..., By Use) run whenever the player changes it."));
+        return new GroupBox { Header = DollPart.KindName(part.Kind), Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
+    }
+
     /// <summary>A part's font, its size and tint.</summary>
     private UIElement FontRow(DollPart part)
     {
@@ -662,6 +786,13 @@ public class PaperDollEditorWindow : Window
     /// <summary>One part as it starts, at this zoom.</summary>
     private FrameworkElement PartVisual(DollDesign design, DollPart part, double z)
     {
+        if (DollPart.IsControlKind(part.Kind)) // drawn as in play (DollControls), still frames, at this zoom
+        {
+            int? bar = part.Kind == DollPartKind.ProgressBar && part.ShowsPartId >= 0 && design.Part(part.ShowsPartId) is { } source ? source.StartValue : null;
+            var control = DollControls.Build(part, DollControls.StartOf(part), _sprites, sprite => DollLook.Frame(sprite) is { } frame ? Pixel(frame, frame.PixelWidth, frame.PixelHeight, 1) : new Border(), bar);
+            control.LayoutTransform = new ScaleTransform(z, z);
+            return control;
+        }
         var size = DollLook.SizeOf(part, part.StartLook, _sprites);
         var holder = new Canvas { Width = size.Width * z, Height = size.Height * z };
         switch (part.Kind)

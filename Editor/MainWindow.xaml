@@ -20,6 +20,7 @@
                 <Separator/>
                 <MenuItem Header="System Settings..." Click="SystemSettingsMenuItem_Click"/>
                 <MenuItem Header="Map Weather..." Click="MapWeatherMenuItem_Click" ToolTip="This map's weather in play: rain, snow, hail, storms, clouds"/>
+                <MenuItem Header="Map Ambient Sounds..." Click="MapAmbientMenuItem_Click" ToolTip="A looping sound for dawn, day, dusk and night: birds, wind, crickets"/>
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>

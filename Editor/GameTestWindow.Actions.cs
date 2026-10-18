@@ -46,6 +46,7 @@ public partial class GameTestWindow
         a[EventCommandType.WalkToLocation] = WalkToLocationCommand;
         a[EventCommandType.WalkToFloorLocation] = WalkToFloorLocationCommand;
         a[EventCommandType.PlayVideo] = PlayVideoCommand;
+        a[EventCommandType.OpenPaperdoll] = OpenPaperdollCommand;
         a[EventCommandType.PickupItem] = PickupItemCommand;
         a[EventCommandType.DropItem] = DropItemCommand;
         a[EventCommandType.PlayPose] = PlayPoseCommand;

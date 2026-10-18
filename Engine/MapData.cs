@@ -133,6 +133,9 @@ public class MapData
     /// <summary>This map's weather in play (Edit > Map Weather).</summary>
     public WeatherSettings Weather { get; set; } = new();
 
+    /// <summary>This map's sounds of the time of day - birds at dawn, crickets at night (Edit > Map Ambient Sounds).</summary>
+    public AmbientSounds Ambient { get; set; } = new();
+
     /// <summary>Named areas - houses, pubs, hospitals (Map Editor > Mode > Zones); characters' schedules go to them.</summary>
     public List<MapZone> Zones { get; set; } = new();
     public int NextZoneId() => Zones.Count == 0 ? 1 : Zones.Max(z => z.Id) + 1;

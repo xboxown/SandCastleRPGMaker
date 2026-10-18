@@ -17,6 +17,7 @@ internal static class CommandWindowRegistry
     public static readonly Dictionary<EventCommandType, Entry> All = new()
     {
         [EventCommandType.PlayVideo] = new("Play Video", c => new PlayVideoCommandWindow(c), PlayVideoCommandWindow.Describe),
+        [EventCommandType.OpenPaperdoll] = new("Open Paperdoll", c => new OpenPaperdollCommandWindow(c), OpenPaperdollCommandWindow.Describe),
         [EventCommandType.StopSound] = new("Stop Sound", c => new StopSoundCommandWindow(c), StopSoundCommandWindow.Describe),
         [EventCommandType.GiveItem] = new("Give Item", c => new GiveItemCommandWindow(c), GiveItemCommandWindow.Describe),
         [EventCommandType.ChangeStat] = new("Change Stat", c => new ChangeStatCommandWindow(c), ChangeStatCommandWindow.Describe),
@@ -81,6 +82,68 @@ public class StopSoundCommandWindow : FactionCommandWindowBase
 }
 
 /// <summary>Play Video: a video from the Video Library over the whole game, the game paused till it ends - an intro, a cutscene, an ending.</summary>
+public class OpenPaperdollCommandWindow : FactionCommandWindowBase
+{
+    private sealed record DesignChoice(int Id, string Name)
+    {
+        public override string ToString() => Name;
+    }
+
+    private readonly ComboBox _design;
+    private readonly CheckBox _modal = new() { Content = "Modal - nothing else can be clicked or typed in till it closes", Margin = new Thickness(0, 6, 0, 0) };
+    private readonly CheckBox _wait = new() { Content = "The commands after this one wait till it closes", Margin = new Thickness(0, 4, 0, 0) };
+    private readonly CheckBox _fresh = new() { Content = "Opens as designed each time (else as it was left)", Margin = new Thickness(0, 4, 0, 0) };
+    private readonly ComboBox _answer;
+
+    public OpenPaperdollCommandWindow(EventCommand? existing = null) : base("Open Paperdoll")
+    {
+        AddLabel("Paperdoll (PaperDoll Editor)");
+        var choices = (ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DesignChoice(d.Id, d.Name)).ToList();
+        _design = new ComboBox { ItemsSource = choices };
+        _design.SelectedItem = choices.FirstOrDefault(c => c.Id.ToString() == existing?.Get("DesignId")) ?? choices.FirstOrDefault();
+        Rows.Children.Add(_design);
+        Rows.Children.Add(_modal);
+        Rows.Children.Add(_wait);
+        Rows.Children.Add(_fresh);
+        _modal.IsChecked = existing is null || existing.Get("Modal") == "True";
+        _wait.IsChecked = existing?.Get("Wait") == "True";
+        _fresh.IsChecked = existing?.Get("Fresh") == "True";
+        AddLabel("Its answer into the variable (Yes / OK button = 1, No / Cancel, Escape or closed = 0)");
+        var variables = ProjectSession.VariablesProvider?.Invoke()?.Variables.Select(x => x.Name).ToList() ?? new List<string>();
+        _answer = new ComboBox { ItemsSource = variables, IsEditable = true, Text = existing?.Get("AnswerVariable") ?? "" };
+        Rows.Children.Add(_answer);
+        AddLabel("A paperdoll opened over another one: it's on top, and closing it goes back to the one behind. Its controls keep their values in their own variables; its parts' own events (a button's) run as they do on any paperdoll.", bold: false);
+    }
+
+    protected override bool TryBuild()
+    {
+        if (_design.SelectedItem is not DesignChoice choice)
+        {
+            MessageBox.Show(this, "Pick a paperdoll - make one in the PaperDoll Editor first.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        var command = new EventCommand { Type = EventCommandType.OpenPaperdoll };
+        command.Parameters["DesignId"] = choice.Id.ToString();
+        command.Parameters["DesignName"] = choice.Name;
+        command.Parameters["Modal"] = _modal.IsChecked == true ? "True" : "False";
+        command.Parameters["Wait"] = _wait.IsChecked == true ? "True" : "False";
+        command.Parameters["Fresh"] = _fresh.IsChecked == true ? "True" : "False";
+        command.Parameters["AnswerVariable"] = _answer.Text.Trim();
+        Result = command;
+        return true;
+    }
+
+    public static string Describe(EventCommand command)
+    {
+        string name = int.TryParse(command.Get("DesignId"), out int id) && ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns.FirstOrDefault(d => d.Id == id) is { } design ? design.Name : command.Get("DesignName");
+        var notes = new List<string>();
+        if (command.Get("Modal") == "True") notes.Add("modal");
+        if (command.Get("Wait") == "True") notes.Add("waits");
+        if (!string.IsNullOrEmpty(command.Get("AnswerVariable"))) notes.Add($"answer into {command.Get("AnswerVariable")}");
+        return notes.Count == 0 ? name : $"{name} ({string.Join(", ", notes)})";
+    }
+}
+
 public class PlayVideoCommandWindow : FactionCommandWindowBase
 {
     private sealed record VideoChoice(int Id, string Label)

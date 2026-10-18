@@ -46,6 +46,8 @@ internal static class DollLook
     /// <summary>A part's size for a look: its sprite's, else its own Width x Height.</summary>
     public static Size SizeOf(DollPart part, int look, SpriteDatabase sprites)
     {
+        if (part.Kind is DollPartKind.CheckBox or DollPartKind.RadioButton) // its box and the words beside it
+            return DollControls.SizeOf(part, DollControls.StartOf(part) with { Look = look }, sprites);
         if (DollPart.IsAreaKind(part.Kind))
             return new Size(Math.Max(4, part.Width), Math.Max(4, part.Height));
         if (part.Kind == DollPartKind.Slider) look = 0; // the track

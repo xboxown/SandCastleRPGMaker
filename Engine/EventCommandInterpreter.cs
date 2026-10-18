@@ -288,6 +288,7 @@ public static class EventCommandInterpreter
     private static string Describe(EventCommand cmd) => cmd.Type switch
     {
         EventCommandType.PlaySound => $"Play Sound (resource #{cmd.Get("SoundResourceId")}{(cmd.Get("Loop") == "True" ? ", looping" : "")})",
+        EventCommandType.OpenPaperdoll => $"Open Paperdoll ({cmd.Get("DesignName")}{(cmd.Get("Modal") == "True" ? ", modal" : "")}{(cmd.Get("Wait") == "True" ? ", waits" : "")})",
         EventCommandType.PlayVideo => $"Play Video (video #{cmd.Get("VideoId")}{(cmd.Get("Skippable") == "False" ? ", can't be skipped" : "")})",
         EventCommandType.StopSound => $"Stop Sound ({(cmd.Get("SoundResourceId") == "All" ? "every sound" : "resource #" + cmd.Get("SoundResourceId"))})",
         EventCommandType.PlayMusic => $"Play Music (resource #{cmd.Get("MusicResourceId")})",

@@ -100,7 +100,9 @@ public enum EventCommandType
     /// <summary>Walk To Floor Location: walks to a cell on a given floor - up or down the stairs to it, round whatever is in the way.</summary>
     WalkToFloorLocation,
     /// <summary>Play Video: plays a video from the Video Library over the whole game, the game paused till it ends (or is skipped).</summary>
-    PlayVideo
+    PlayVideo,
+    /// <summary>Open Paperdoll: opens a PaperDoll Editor paperdoll - modal or not, waiting for it to close or not, its answer (Yes / OK = 1, else 0) into a variable.</summary>
+    OpenPaperdoll
 }
 
 /// <summary>

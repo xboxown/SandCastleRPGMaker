@@ -353,4 +353,6 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public void SetSwitch(string name, bool value) => _variables[name] = value ? 1 : 0;
     public double GetVariable(string name) => _variables.TryGetValue(name, out var v) ? v : 0;
     public void SetVariable(string name, double value) => _variables[name] = value;
+    /// <summary>Whether anything has set this variable yet (a paperdoll control then shows it, rather than its own start).</summary>
+    public bool HasVariable(string name) => _variables.ContainsKey(name);
 }

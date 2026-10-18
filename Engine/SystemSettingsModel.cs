@@ -147,6 +147,10 @@ public class SaveLoadSettings
 {
     /// <summary>The PaperDoll Editor paperdoll that is the Save/Load screen (-1 = none: the game can't be saved).</summary>
     public int DollDesignId { get; set; } = -1;
+    /// <summary>The "Are you sure?" paperdoll opened before writing over or deleting a save - its Yes / OK button goes ahead, No / Cancel doesn't (-1 = none: press the button again).</summary>
+    public int ConfirmDollDesignId { get; set; } = -1;
+    /// <summary>The paperdoll shown once a game is saved, closed by its own button (-1 = none: a "Game saved" label).</summary>
+    public int SavedDollDesignId { get; set; } = -1;
 }
 
 public class SystemSettings

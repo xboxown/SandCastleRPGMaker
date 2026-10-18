@@ -79,15 +79,22 @@ public partial class SystemSettingsWindow : Window
     private UIElement BuildSaveLoadTab()
     {
         var panel = new StackPanel { Margin = new Thickness(10) };
-        var choices = new List<DollChoice> { new(-1, "(None - the game can't be saved)") };
-        choices.AddRange((ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)));
-        var combo = new ComboBox { Width = 260, ItemsSource = choices };
-        combo.SelectedItem = choices.FirstOrDefault(c => c.Id == _settings.SaveLoad.DollDesignId) ?? choices[0];
-        combo.SelectionChanged += (_, _) => _settings.SaveLoad.DollDesignId = (combo.SelectedItem as DollChoice)?.Id ?? -1;
-        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
-        row.Children.Add(new TextBlock { Text = "Save/Load screen:", Width = 120, VerticalAlignment = VerticalAlignment.Center });
-        row.Children.Add(combo);
-        panel.Children.Add(row);
+        var designs = (ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)).ToList();
+        void Row(string label, string none, Func<int> get, Action<int> set)
+        {
+            var choices = new List<DollChoice> { new(-1, none) };
+            choices.AddRange(designs);
+            var combo = new ComboBox { Width = 260, ItemsSource = choices };
+            combo.SelectedItem = choices.FirstOrDefault(c => c.Id == get()) ?? choices[0];
+            combo.SelectionChanged += (_, _) => set((combo.SelectedItem as DollChoice)?.Id ?? -1);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            row.Children.Add(new TextBlock { Text = label, Width = 170, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(combo);
+            panel.Children.Add(row);
+        }
+        Row("Save/Load screen:", "(None - the game can't be saved)", () => _settings.SaveLoad.DollDesignId, v => _settings.SaveLoad.DollDesignId = v);
+        Row("\"Are you sure?\" prompt:", "(None - press the button again)", () => _settings.SaveLoad.ConfirmDollDesignId, v => _settings.SaveLoad.ConfirmDollDesignId = v);
+        Row("\"Game saved\" message:", "(None - a \"Game saved\" label)", () => _settings.SaveLoad.SavedDollDesignId, v => _settings.SaveLoad.SavedDollDesignId = v);
         panel.Children.Add(new TextBlock
         {
             Text = "The paperdoll the player saves and loads the game with. Make it in the PaperDoll Editor like any paperdoll - its look is all yours - with these parts from its toolbox:\n" +
@@ -96,7 +103,9 @@ public partial class SystemSettingsWindow : Window
                    "  Save screenshot, Save details - the picked save's picture and day / time\n" +
                    "  Save button, Load button, Delete save button - and a Close button.\n\n" +
                    "In the game the S key opens it (as in Exult). It opens with the paperdoll opening sound and the game is paused while it's open. " +
-                   "Saves are kept per game on the player's PC, as many as they like.",
+                   "Saves are kept per game on the player's PC, as many as they like.\n\n" +
+                   "The \"Are you sure?\" prompt opens over the Save/Load screen before a save is written over or deleted: make it like any paperdoll - a Text part (\"Are you sure?\"), a Yes / OK button (it goes ahead) and a No / Cancel button (it closes the prompt, back to the Save/Load screen). " +
+                   "The \"Game saved\" message opens once the game is saved: your words, and a No / Cancel button captioned OK to close it. Both are modal - nothing else can be clicked till they close.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
         return panel;

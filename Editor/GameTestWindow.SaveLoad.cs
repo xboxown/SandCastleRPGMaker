@@ -327,6 +327,15 @@ public partial class GameTestWindow
         timer.Start();
     }
 
+    private InteractionTarget? _lastDollPartClick;
+    private long _lastDollPartClickTick;
+
+    /// <summary>A part acted on at once, clicked twice in time: only a save (in the list or a slot) does more - it loads.</summary>
+    private void DollPartDoubleClicked(DollPartTarget target)
+    {
+        if (_openDolls.Contains(target.Gump) && target.Gump.Design.Part(target.PartId) is { } part) SaveScreenPartUsed(target.Gump, part);
+    }
+
     /// <summary>Double-clicking a save in the list, or a Save slot holding one, loads it.</summary>
     private bool SaveScreenPartUsed(OpenDollGump gump, DollPart part)
     {
@@ -372,7 +381,7 @@ public partial class GameTestWindow
 
     private void SaveScreenText(object sender, TextCompositionEventArgs e)
     {
-        if (_saveScreen is not { } screen || string.IsNullOrEmpty(e.Text)) return;
+        if (e.Handled || _saveScreen is not { } screen || string.IsNullOrEmpty(e.Text) || TopModalDoll is not null) return;
         e.Handled = true;
         if (screen.PickedSlot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) return; // no slot picked: the letters go nowhere (Exult)
         foreach (char c in e.Text)
@@ -409,13 +418,42 @@ public partial class GameTestWindow
         if (WhatIsHappening() is { } happening) { SaveScreenSay(screen, $"You can't save now: {happening}.", button); return; }
         var existing = slot > 0 ? screen.InSlot(slot) // a slot is written over whatever its save was called
             : screen.Saves.FirstOrDefault(s => s.Slot == 0 && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (existing is not null && !Confirmed(screen, DollPartKind.SaveButton, existing.Folder, button, $"Write over \"{existing.Name}\"? Press Save again.")) return;
+        if (existing is null) WriteSave(screen, slot, name, null, button);
+        else AskThenDo(screen, DollPartKind.SaveButton, existing.Folder, button, $"Write over \"{existing.Name}\"? Press Save again.",
+            () => WriteSave(screen, slot, name, existing, button));
+    }
+
+    /// <summary>
+    /// Writing over or deleting a save asks first: the "Are you sure?"
+    /// paperdoll (System Settings > Save / Load) when there is one - its Yes /
+    /// OK goes ahead, its No / Cancel closes it, back to the Save/Load screen
+    /// - else the same button pressed again.
+    /// </summary>
+    private void AskThenDo(SaveScreen screen, DollPartKind kind, string folder, DollPart? part, string question, Action go)
+    {
+        if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.ConfirmDollDesignId) is { } prompt)
+        {
+            StatusText.Text = question.Replace(" Press Save again.", "").Replace(" Press Delete again.", "");
+            OpenForm(prompt, modal: true, answered: yes => { if (yes && _saveScreen == screen) go(); }, fresh: true);
+            return;
+        }
+        if (Confirmed(screen, kind, folder, part, question)) go();
+    }
+
+    private void WriteSave(SaveScreen screen, int slot, string name, SaveSlotInfo? existing, DollPart? button)
+    {
+        if (WhatIsHappening() is { } happening) { SaveScreenSay(screen, $"You can't save now: {happening}.", button); return; }
         try
         {
             var data = CaptureSave();
             var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
             GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
-            SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
+            if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.SavedDollDesignId) is { } saved)
+            {
+                StatusText.Text = $"Game saved: \"{name}\".";
+                OpenForm(saved, modal: true, answered: null, fresh: true); // the maker's own "Game saved" paperdoll, closed by its own button
+            }
+            else SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
             // Exult's Newfile_gump::save: the screen stays open, nothing is picked any more (selected = -3) and the slot shows its new save
             screen.Saves = GameSaveStore.List(screen.ProjectId);
             screen.PickedSlot = 0;
@@ -466,7 +504,11 @@ public partial class GameTestWindow
     private void DeleteFromScreen(SaveScreen screen, DollPart part)
     {
         if (screen.PickedSave is not { } save) { SaveScreenSay(screen, screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to delete.", part); return; }
-        if (!Confirmed(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.")) return;
+        AskThenDo(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.", () => DeleteSave(screen, save));
+    }
+
+    private void DeleteSave(SaveScreen screen, SaveSlotInfo save)
+    {
         try { GameSaveStore.Delete(save); }
         catch (Exception ex)
         {

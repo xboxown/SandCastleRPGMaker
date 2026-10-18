@@ -165,6 +165,7 @@ public partial class GameTestWindow
 
     private void UpdateVitals(double elapsedMs, int hourChanges)
     {
+        UpdateAmbient(); // the sound of the time of day (GameTestWindow.Ambient.cs)
         if (_gameOver) return;
         if (hourChanges > 0)
             foreach (var character in AllLivingCharacters().ToList()) { MendWounds(character); UseFood(character); }

@@ -63,6 +63,7 @@
                         <Button Content="Paperdoll..." Margin="0,0,0,4" Click="Paperdoll_Click" ToolTip="Change a paperdoll's parts, play or stop its sounds, close it, or turn its object into another object"/>
                         <Button Content="Play Sound..." Margin="0,0,0,4" Click="PlaySound_Click" ToolTip="Plays a sound once or looping, at a volume you choose"/>
                         <Button Content="Stop Sound..." Margin="0,0,0,4" Click="StopSound_Click" ToolTip="Stops a sound that is playing (a looping one, say), or every sound"/>
+                        <Button Content="Open Paperdoll..." Margin="0,0,0,4" Click="Registered_Click" Tag="OpenPaperdoll" ToolTip="Opens a PaperDoll Editor paperdoll - modal or not, its Yes / No answer into a variable"/>
                         <Button Content="Play Video..." Margin="0,0,0,4" Click="Registered_Click" Tag="PlayVideo" ToolTip="Plays a video from the Video Library over the whole game - the game waits till it ends"/>
                         <Button Content="Change Tile..." Margin="0,0,0,4" IsEnabled="False"/>
                         <Button Content="Wait..." Margin="0,0,0,4" Tag="Wait" Click="Registered_Click" ToolTip="Pauses the event for some seconds, game minutes or game hours before its next command"/>

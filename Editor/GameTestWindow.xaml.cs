@@ -198,6 +198,7 @@ public partial class GameTestWindow : Window
         GameCanvas.Focus();
         GameCanvas.PreviewKeyDown += GameCanvas_PreviewKeyDown;
         GameCanvas.PreviewKeyUp += GameCanvas_PreviewKeyUp;
+        GameCanvas.PreviewTextInput += DollTypingText; // a paperdoll's text box being typed in (first: it takes the letters)
         GameCanvas.PreviewTextInput += SaveScreenText; // a save's name typed on the Save/Load screen
         InitializeInteraction(); // the one and only place mouse interaction is wired up - see GameTestWindow.Interaction.cs
         InitializePointer(systemSettings); // the engine's own Exult-style mouse pointer - see GameTestWindow.Pointer.cs
@@ -1531,6 +1532,8 @@ public partial class GameTestWindow : Window
             e.Handled = true;
             return;
         }
+        if (_typing is not null) { DollTypingKey(e.Key); e.Handled = true; return; } // a paperdoll's text box takes the keys (Escape / Enter end the typing)
+        if (TopModalDoll is { } modal) { ModalDollKey(modal, e.Key); e.Handled = true; return; } // a modal paperdoll: only Escape (no) and Enter (yes)
         if (_saveScreen is not null && e.Key != Key.Escape) { if (SaveScreenKey(e.Key)) e.Handled = true; return; } // the Save/Load screen takes the keys - its name is typed (GameTestWindow.SaveLoad.cs)
         if (e.Key == Key.S && !InCinema && !PlayerKnockedOut) { OpenSaveLoad(); e.Handled = true; return; } // Exult: S opens the Save/Load screen - even after dying, to load
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything

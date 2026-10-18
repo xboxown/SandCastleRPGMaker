@@ -23,6 +23,20 @@ public class WeatherSettings
 }
 
 /// <summary>
+/// A map's ambient sounds (Edit > Map Ambient Sounds): one sound looping for
+/// each part of the day - birds chirping at dawn, wind by day, crickets at
+/// night. The parts of the day are System Settings > Day & Night's hours.
+/// A part with no sound is quiet. The whole game is one map - one world.
+/// </summary>
+public class AmbientSounds
+{
+    public int DawnSoundId { get; set; } = -1;
+    public int DaySoundId { get; set; } = -1;
+    public int DuskSoundId { get; set; } = -1;
+    public int NightSoundId { get; set; } = -1;
+}
+
+/// <summary>
 /// The day and night cycle (System Settings > Day & Night), Exult's
 /// time-of-day palettes: night, the dawn and dusk colour on either side of
 /// it, and day. The colours start as the ones taken from Ultima VII's own

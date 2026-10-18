@@ -45,7 +45,23 @@ public enum DollPartKind
     /// <summary>Save/Load screen: loads the picked save.</summary>
     LoadButton,
     /// <summary>Save/Load screen: deletes the picked save, after asking.</summary>
-    DeleteSaveButton
+    DeleteSaveButton,
+    /// <summary>Yes / OK: answers yes and closes its paperdoll - on the save prompt (System Settings > Save / Load), the save goes ahead.</summary>
+    ConfirmButton,
+    /// <summary>No / Cancel: answers no and closes its paperdoll, back to the one behind it.</summary>
+    CancelButton,
+    /// <summary>A box the player types in (click it, type, Enter): a name, a number - kept in a variable.</summary>
+    TextBox,
+    /// <summary>Ticked / unticked by a click, with its words beside it - 1 / 0 in a variable.</summary>
+    CheckBox,
+    /// <summary>One of a group (same Radio group): picking it unpicks the others - 1 / 0 in a variable.</summary>
+    RadioButton,
+    /// <summary>A box that opens a list of choices when clicked; the picked one shows in the box - its number (1, 2, 3...) in a variable.</summary>
+    DropDown,
+    /// <summary>A list of choices always shown; click picks one - its number (1, 2, 3...) in a variable.</summary>
+    ListBox,
+    /// <summary>A bar filled by its value between Min and Max (or a slider's), not clickable: health, a loading bar.</summary>
+    ProgressBar
 }
 
 /// <summary>One look (state) of a part: its name and its sprite.</summary>
@@ -118,6 +134,18 @@ public class DollPart
     /// <summary>Which saved game it holds (1, 2, 3...); 0 = by its place among the paperdoll's Save slots.</summary>
     public int SaveSlot { get; set; }
 
+    // ---- Form controls (a button's caption is its Text) ----
+    /// <summary>Drop-down / List box: the choices, in order.</summary>
+    public List<string> Options { get; set; } = new();
+    /// <summary>The variable the control's value is kept in (read when the paperdoll opens, written when it changes); "" = none.</summary>
+    public string VariableName { get; set; } = string.Empty;
+    /// <summary>Radio button: the ones with the same group name are one choice.</summary>
+    public string RadioGroup { get; set; } = string.Empty;
+    /// <summary>Text box: only digits (and one minus) can be typed - its number goes into its variable.</summary>
+    public bool NumbersOnly { get; set; }
+    /// <summary>Text box: the longest it can be.</summary>
+    public int MaxLength { get; set; } = 20;
+
     /// <summary>What it does when used (PaperDoll Editor: double-click the part).</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
 
@@ -134,6 +162,14 @@ public class DollPart
         DollPartKind.SaveButton => "Save button",
         DollPartKind.LoadButton => "Load button",
         DollPartKind.DeleteSaveButton => "Delete save button",
+        DollPartKind.ConfirmButton => "Yes / OK button",
+        DollPartKind.CancelButton => "No / Cancel button",
+        DollPartKind.TextBox => "Text box",
+        DollPartKind.CheckBox => "Check box",
+        DollPartKind.RadioButton => "Radio button",
+        DollPartKind.DropDown => "Drop-down list",
+        DollPartKind.ListBox => "List box",
+        DollPartKind.ProgressBar => "Progress bar",
         _ => kind.ToString()
     };
 
@@ -141,7 +177,14 @@ public class DollPart
     public static string[] DefaultLooks(DollPartKind kind) => kind switch
     {
         DollPartKind.Picture => new[] { "Picture" },
-        DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton => new[] { "Normal", "Pressed" },
+        DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
+            or DollPartKind.ConfirmButton or DollPartKind.CancelButton => new[] { "Normal", "Pressed" },
+        DollPartKind.TextBox => new[] { "Box", "Box while typing" },
+        DollPartKind.CheckBox => new[] { "Unticked", "Ticked" },
+        DollPartKind.RadioButton => new[] { "Not picked", "Picked" },
+        DollPartKind.DropDown => new[] { "Box", "Open list (behind the choices)", "Picked row" },
+        DollPartKind.ListBox => new[] { "Behind the list", "Picked row" },
+        DollPartKind.ProgressBar => new[] { "Empty bar", "Full bar (shown up to the value)" },
         DollPartKind.SaveList => new[] { "Behind the list", "Picked row" },
         DollPartKind.SaveName => new[] { "Slot", "Picked slot" },
         DollPartKind.SaveScreenshot => new[] { "Frame (drawn over the screenshot)" },
@@ -156,11 +199,26 @@ public class DollPart
     };
 
     /// <summary>The Save/Load screen's own parts (System Settings > Save / Load): they work only on that paperdoll.</summary>
-    public static bool IsSaveLoadKind(DollPartKind kind) => kind >= DollPartKind.SaveList;
+    public static bool IsSaveLoadKind(DollPartKind kind) => kind is >= DollPartKind.SaveList and <= DollPartKind.DeleteSaveButton;
+
+    /// <summary>Pressed like a button: its Pressed look for a moment, its caption (Text) drawn on it.</summary>
+    public static bool IsButtonKind(DollPartKind kind) =>
+        kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
+            or DollPartKind.ConfirmButton or DollPartKind.CancelButton;
+
+    /// <summary>The form controls drawn by DollControls (a plain look of their own when they have no sprites).</summary>
+    public static bool IsControlKind(DollPartKind kind) =>
+        IsButtonKind(kind) || kind is DollPartKind.TextBox or DollPartKind.CheckBox or DollPartKind.RadioButton or DollPartKind.DropDown or DollPartKind.ListBox or DollPartKind.ProgressBar;
+
+    /// <summary>Kinds whose value can be kept in a variable.</summary>
+    public static bool HasVariable(DollPartKind kind) =>
+        kind is DollPartKind.TextBox or DollPartKind.CheckBox or DollPartKind.RadioButton or DollPartKind.DropDown or DollPartKind.ListBox
+            or DollPartKind.ProgressBar or DollPartKind.Slider or DollPartKind.Display;
 
     /// <summary>Parts drawn as an area of their own Width x Height, whatever their sprite (a list, a name box, a screenshot).</summary>
     public static bool IsAreaKind(DollPartKind kind) =>
         kind is DollPartKind.Slot or DollPartKind.ItemArea or DollPartKind.Hotspot or DollPartKind.Text
+            or DollPartKind.TextBox or DollPartKind.DropDown or DollPartKind.ListBox or DollPartKind.ProgressBar
             or DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveScreenshot or DollPartKind.SaveDetails;
 
     /// <summary>Kinds whose list of looks can grow (a switch with three positions).</summary>
@@ -184,7 +242,8 @@ public class DollPart
         Capacity = Capacity,
         StartsWith = StartsWith.Select(s => new ItemReference { Category = s.Category, ItemId = s.ItemId, DisplayName = s.DisplayName }).ToList(),
         Text = Text, FontName = FontName, TextScale = TextScale, TextColor = TextColor,
-        Min = Min, Max = Max, StartValue = StartValue, Vertical = Vertical, ShowsPartId = ShowsPartId, SaveSlot = SaveSlot
+        Min = Min, Max = Max, StartValue = StartValue, Vertical = Vertical, ShowsPartId = ShowsPartId, SaveSlot = SaveSlot,
+        Options = new List<string>(Options), VariableName = VariableName, RadioGroup = RadioGroup, NumbersOnly = NumbersOnly, MaxLength = MaxLength
         // Event pages are not copied: a duplicate starts with no behaviour of its own.
     };
 }
@@ -212,6 +271,8 @@ public class DollPartRuntime
     public bool Visible { get; set; } = true;
     public int Value { get; set; }
     public List<InventoryItemInstance> Items { get; set; } = new();
+    /// <summary>Text box: what's typed in it.</summary>
+    public string Text { get; set; } = string.Empty;
 }
 
 /// <summary>
@@ -234,7 +295,9 @@ public class DollState
         if (!Parts.TryGetValue(part.Id, out var runtime))
         {
             // A part added in the PaperDoll Editor after this copy was first opened starts as designed.
-            runtime = new DollPartRuntime { Look = part.StartLook, Visible = part.StartsVisible, Value = Math.Clamp(part.StartValue, part.Min, Math.Max(part.Min, part.Max)) };
+            int value = part.Kind is DollPartKind.Slider or DollPartKind.Display or DollPartKind.ProgressBar ? Math.Clamp(part.StartValue, part.Min, Math.Max(part.Min, part.Max)) : part.StartValue;
+            runtime = new DollPartRuntime { Look = part.StartLook, Visible = part.StartsVisible, Value = value, Text = part.Kind == DollPartKind.TextBox ? part.Text : string.Empty };
+            if (part.Kind is DollPartKind.CheckBox or DollPartKind.RadioButton) runtime.Look = value != 0 ? 1 : 0;
             Parts[part.Id] = runtime;
         }
         return runtime;

@@ -316,8 +316,20 @@ public partial class GameTestWindow
     private void HandleClickRelease(InteractionTarget target)
     {
         // A paperdoll's buttons, switches, sliders and close buttons act at once, as Exult's gump buttons do.
-        if (target is DollPartTarget dollPart && DollPartClicked(dollPart)) { _lastClickTarget = null; CancelPendingIdentify(); return; }
         long now = Environment.TickCount64;
+        if (target is DollPartTarget dollPart)
+        {
+            bool twice = Equals(_lastDollPartClick, target) && now - _lastDollPartClickTick < DoubleClickMilliseconds;
+            if (DollPartClicked(dollPart))
+            {
+                _lastClickTarget = null;
+                CancelPendingIdentify();
+                // Acted on at once, and a second click in time is a double click too: a save in the list or a slot loads.
+                if (twice) { _lastDollPartClick = null; DollPartDoubleClicked(dollPart); }
+                else { _lastDollPartClick = target; _lastDollPartClickTick = now; }
+                return;
+            }
+        }
         if (_lastClickTarget is not null && Equals(_lastClickTarget, target) && now - _lastClickTick < DoubleClickMilliseconds)
         {
             // Exult: "Last click within .5 secs?" -> double_clicked(), and the pending identify is dropped.
