@@ -77,9 +77,13 @@ public partial class ObjectEditorWindow
     {
         if (folder is null) { MessageBox.Show(this, "Click a folder first.", "Delete Folder"); return; }
         int inside = _db.Objects.Count(o => o.FolderId == folder.Id);
-        if (MessageBox.Show(this, $"Delete the folder \"{folder.Name}\"?" + (inside > 0 ? $" Its {inside} object{(inside == 1 ? "" : "s")} stay, out of any folder." : ""),
-                "Delete Folder", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
-        foreach (var obj in _db.Objects.Where(o => o.FolderId == folder.Id)) obj.FolderId = -1;
+        if (inside > 0) // a folder with anything in it is kept (shown purple) - empty it first
+        {
+            MessageBox.Show(this, $"\"{folder.Name}\" still holds {inside} object{(inside == 1 ? "" : "s")} - move or delete {(inside == 1 ? "it" : "them")} first. Only an empty folder can be deleted.",
+                "Delete Folder", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
+        if (MessageBox.Show(this, $"Delete the empty folder \"{folder.Name}\"?", "Delete Folder", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         _db.Folders.Remove(folder);
         _selectedFolder = null;
         RefreshList();
@@ -120,6 +124,12 @@ public partial class ObjectEditorWindow
     private TreeViewItem FolderNode(ObjectFolder folder, int count)
     {
         var node = new TreeViewItem { Header = $"\U0001F4C1 {folder.Name}  ({count})", Tag = folder, AllowDrop = true, FontWeight = FontWeights.SemiBold };
+        bool holdsAny = _db.Objects.Any(o => o.FolderId == folder.Id);
+        if (holdsAny) // purple: it holds objects, so it can't be deleted until it's empty
+        {
+            node.Header = new TextBlock { Text = $"\U0001F4C1 {folder.Name}  ({count})", Foreground = System.Windows.Media.Brushes.MediumPurple }; // the folder's name only, not its objects
+            node.ToolTip = "Holds objects - it can't be deleted until it's empty.";
+        }
         node.Expanded += (_, e) => { if (ReferenceEquals(e.OriginalSource, node)) _expandedFolders.Add(folder.Id); };
         node.Collapsed += (_, e) => { if (ReferenceEquals(e.OriginalSource, node)) _expandedFolders.Remove(folder.Id); };
         node.Drop += (_, e) =>
@@ -133,7 +143,7 @@ public partial class ObjectEditorWindow
         var menu = new ContextMenu();
         var rename = new MenuItem { Header = "Rename folder..." };
         rename.Click += (_, _) => RenameFolder(folder);
-        var delete = new MenuItem { Header = "Delete folder" };
+        var delete = new MenuItem { Header = holdsAny ? "Delete folder (empty it first)" : "Delete folder", IsEnabled = !holdsAny };
         delete.Click += (_, _) => DeleteFolder(folder);
         menu.Items.Add(rename);
         menu.Items.Add(delete);

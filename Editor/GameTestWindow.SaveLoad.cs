@@ -293,7 +293,9 @@ public partial class GameTestWindow
                 switch (part.Kind)
                 {
                     case DollPartKind.SaveButton: SaveFromScreen(screen, part); break;
-                    case DollPartKind.LoadButton: LoadFromScreen(screen); break;
+                    case DollPartKind.LoadButton: // its Pressed look shows first, then the game loads
+                        AfterPress(() => { if (_saveScreen == screen) LoadFromScreen(screen); });
+                        break;
                     default: DeleteFromScreen(screen, part); break;
                 }
                 if (_openDolls.Contains(gump)) FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByUseItem, $"\"{part.Name}\" pressed.");
@@ -314,6 +316,14 @@ public partial class GameTestWindow
             runtime.Look = 0;
             if (_openDolls.Contains(gump)) RefreshDollGump(gump);
         };
+        timer.Start();
+    }
+
+    /// <summary>Runs once a pressed button has shown its Pressed look (and been drawn).</summary>
+    private static void AfterPress(Action action)
+    {
+        var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(200) };
+        timer.Tick += (_, _) => { timer.Stop(); action(); };
         timer.Start();
     }
 

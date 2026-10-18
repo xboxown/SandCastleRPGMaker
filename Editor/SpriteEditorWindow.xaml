@@ -47,6 +47,15 @@
                                     <Setter Property="Foreground" Value="Red"/>
                                     <Setter Property="FontWeight" Value="Bold"/>
                                 </DataTrigger>
+                                <!-- Value="Lockpick" / "Keychain" must match SpriteDatabase.LockpickGroupName / KeychainGroupName. -->
+                                <DataTrigger Binding="{Binding Name}" Value="Lockpick">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding Name}" Value="Keychain">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </DataTrigger>
                                 <!-- Value="DialogFrame" must match SpriteDatabase.DialogFrameGroupName. -->
                                 <DataTrigger Binding="{Binding Name}" Value="DialogFrame">
                                     <Setter Property="Foreground" Value="Red"/>
