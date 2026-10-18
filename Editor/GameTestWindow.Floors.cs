@@ -78,7 +78,7 @@ public partial class GameTestWindow
                     {
                         Width = _tileWidth,
                         Height = _tileHeight,
-                        IsHitTestVisible = false,
+                        IsHitTestVisible = true, // it catches clicks: what's under the floor (the room below) can't be identified or used through it
                         Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
@@ -107,6 +107,7 @@ public partial class GameTestWindow
             foreach (var landing in pose.Steps.Where(s => s.IsLanding))
             {
                 if (StairLook.LandingImage(landing, _sprites) is not { } image) continue;
+                image.IsHitTestVisible = true; // as the floor's tiles: nothing under it is clicked through it
                 // Where the staircase's own picture would have put it: the anchor cell, the step's picture offset (which carries its lift), the staircase's own lift.
                 Canvas.SetLeft(image, instance.X * _tileWidth + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX - instance.Z * LiftPixelShift);
                 Canvas.SetTop(image, instance.Y * _tileHeight + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY - instance.Z * LiftPixelShift);
