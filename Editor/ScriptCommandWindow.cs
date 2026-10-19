@@ -162,12 +162,31 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 AddLabel(field.Label);
                 string prefix = field.Key.EndsWith("X") ? field.Key[..^1] : field.Key;
                 var spot = new MapCellField(this, Rows, existing, prefix, withFloor: true);
-                bool optional = _spec.Type is EventCommandType.MoveCamera or EventCommandType.PlaceCharacter;
+                bool optional = _spec.Type is EventCommandType.MoveCamera or EventCommandType.PlaceCharacter or EventCommandType.ChangeMap;
                 _savers.Add(c =>
                 {
                     if (optional && spot.Cell is null) return true;
                     if (!spot.Validate()) return false;
                     spot.Save(c, prefix);
+                    return true;
+                });
+                break;
+            }
+            case ScriptFieldKind.World:
+            {
+                AddLabel(field.Label);
+                var choices = new List<KeyValuePair<int, string>> { new(-1, "(This world - the one the party is in)") };
+                choices.AddRange((ProjectSession.WorldsProvider?.Invoke() ?? new List<MapData>()).Select(w => new KeyValuePair<int, string>(w.Id, w.MapName)));
+                var combo = new ComboBox { ItemsSource = choices, DisplayMemberPath = "Value" };
+                combo.SelectedItem = choices.FirstOrDefault(w => w.Key.ToString() == Existing("World", "-1"));
+                if (combo.SelectedItem is null) combo.SelectedIndex = 0;
+                Rows.Children.Add(combo);
+                Rows.Children.Add(new TextBlock { Text = "To pick a spot in another world, open that world in the Maps tab first.", Opacity = 0.7, FontSize = 11, TextWrapping = TextWrapping.Wrap });
+                _savers.Add(c =>
+                {
+                    var picked = combo.SelectedItem is KeyValuePair<int, string> w ? w : choices[0];
+                    c.Parameters["World"] = picked.Key.ToString();
+                    c.Parameters["WorldName"] = picked.Key < 0 ? "" : picked.Value;
                     return true;
                 });
                 break;

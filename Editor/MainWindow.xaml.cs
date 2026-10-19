@@ -136,6 +136,9 @@ public partial class MainWindow : Window
         };
         ProjectSession.SettingsProvider = () => _systemSettings;
         ProjectSession.TileSourceProvider = TileSource;
+        ProjectSession.WorldsProvider = () => _worlds;
+        ProjectSession.WorldTileProvider = TileSourceFor;
+        ProjectSession.SheetProvider = name => Sheet(name) is { } sheet ? (sheet.Bitmap, sheet.Columns) : null;
         ProjectSession.EventNamesProvider = () => (_map?.Events.Select(e => e.Name) ?? Enumerable.Empty<string>())
             .Concat(_objectDatabase.Objects.Select(o => o.Name)).Concat(_bookDatabase.Books.Select(b => b.Name))
             .Concat(_containerDatabase.Containers.Select(c => c.Name)).Concat(_characterDatabase.Characters.Select(c => c.Name))
@@ -1293,13 +1296,17 @@ public partial class MainWindow : Window
     }
 
     /// <summary>A fresh game from the project as it is (never a game already played): at its Title Screen or straight in; a built game's or Game Test's.</summary>
-    private GameTestWindow NewGameWindow(bool atTitle, bool shipped) =>
-        new(_map!, PrimarySheet()?.Bitmap ?? _tilesetBitmap!, _tileset!.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
-            _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
+    private GameTestWindow NewGameWindow(bool atTitle, bool shipped) => NewGameWindow(_worlds.FirstOrDefault() ?? _map!, atTitle, shipped);
+
+    private GameTestWindow NewGameWindow(MapData start, bool atTitle, bool shipped) =>
+        new(start, Sheet(start.Tileset.TilesetSpriteName)?.Bitmap ?? PrimarySheet()?.Bitmap ?? _tilesetBitmap!, start.Tileset.TileWidth, start.Tileset.TileHeight,
+            Sheet(start.Tileset.TilesetSpriteName)?.Columns ?? PrimarySheet()?.Columns ?? _paletteColumns,
+            start.Tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
             _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         {
             StartAtTitle = atTitle,
             IsShippedGame = shipped,
+            Worlds = _worlds,
             Title = shipped ? (_currentProjectName is { Length: > 0 } name ? name : "Game") : "Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)",
             WindowStartupLocation = shipped ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner
         };

@@ -42,7 +42,9 @@ public enum ScriptFieldKind
     /// <summary>A faction (its id).</summary>
     Faction,
     /// <summary>Words as typed (no quotes needed) - or, switched to Formula, a formula. Its mode is kept as key + "Mode" ("Words" / "Formula"; none = Formula, as commands made before it).</summary>
-    Words
+    Words,
+    /// <summary>A world (Maps tab) - keys World (its id; -1 = the one the party is in), WorldName.</summary>
+    World
 }
 
 public sealed record ScriptField(string Key, string Label, ScriptFieldKind Kind, string Default = "", string[]? Options = null, string Help = "");
@@ -276,8 +278,8 @@ public static class ScriptCommands
             new[] { F("Number", "Picture number (0 = all)", def: "1") }, "#{Number}"),
         new(EventCommandType.SetTime, "Set Time / Advance Time", Game, "Time", "Jumps the game clock to an hour, or forward by minutes or hours.",
             new[] { Choice("Value", "Do", "Set the time to", "Advance by minutes", "Advance by hours"), F("Hour", "Hour (0-23) or how many", def: "8"), F("Minute", "Minute (for Set)", def: "0") }, "{Value} {Hour}"),
-        new(EventCommandType.ChangeMap, "Change Map", Game, "Time", "Goes to another spot of the world. (One map is the whole world in this engine - this is a teleport of the party, with a fade.)",
-            new[] { new("X", "To", ScriptFieldKind.Spot), Check("Fade", "Fade out and in", true) }, "to ({X}, {Y})"),
+        new(EventCommandType.ChangeMap, "Change Map", Game, "Time", "Takes the party to a spot of this world, or to another world (Maps tab: one map is one world - a portal to a dark world, say). Another world without a spot: its Start Position. The world left is remembered as it was. Commands after going to another world don't run - put them in that world's events.",
+            new[] { new("World", "World", ScriptFieldKind.World), new("X", "To (empty = the world's Start Position)", ScriptFieldKind.Spot), Check("Fade", "Fade out and in", true) }, "{WorldName} ({X}, {Y})"),
 
         // ---- 10. Sound and music ----
         new(EventCommandType.StopMusic, "Stop / Fade Music", Game, "Sound & Music", "Stops the music (Play Music) - at once or fading out over a time.",

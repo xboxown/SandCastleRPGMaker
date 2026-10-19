@@ -54,6 +54,16 @@ public partial class MainWindow
         return new CroppedBitmap(sheet.Bitmap, new Int32Rect(col * w, row * h, w, h));
     }
 
+    /// <summary>A tile's picture by a given world's tileset (another world in the game may use other sheets than the one open here).</summary>
+    private BitmapSource? TileSourceFor(TilesetDefinition tileset, int tileIndex)
+    {
+        if (tileIndex < 0 || Sheet(tileset.SheetNameOf(tileIndex)) is not { } sheet) return null;
+        int local = TileSheets.Local(tileIndex), w = tileset.TileWidth, h = tileset.TileHeight;
+        int col = local % sheet.Columns, row = local / sheet.Columns;
+        if ((col + 1) * w > sheet.Bitmap.PixelWidth || (row + 1) * h > sheet.Bitmap.PixelHeight) return null;
+        return new CroppedBitmap(sheet.Bitmap, new Int32Rect(col * w, row * h, w, h));
+    }
+
     /// <summary>A painted tile's animation (Tile properties > Animation of its own sheet's tile).</summary>
     private SpriteEntry? LinkedAnimationOfMapTile(int tileIndex)
     {

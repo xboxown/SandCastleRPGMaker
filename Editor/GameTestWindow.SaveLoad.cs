@@ -554,7 +554,8 @@ public partial class GameTestWindow
             PlayerPixelX = _playerPixelX, PlayerPixelY = _playerPixelY, PlayerLift = _playerZ, PlayerFacing = _playerFacing,
             CombatMode = _combatMode,
             ReadBooks = _hasBeenReadBooks.ToList(),
-            Weather = JsonCopy(_weather)
+            Weather = JsonCopy(_weather),
+            WorldStates = _worldStates.ToDictionary(kv => kv.Key, kv => JsonCopy(kv.Value)) // the other worlds as they were left
         };
         _execContext.SaveState(save);
         foreach (var (character, vitals) in _vitals)
@@ -617,8 +618,9 @@ public partial class GameTestWindow
         GameTestWindow next;
         try
         {
-            next = new GameTestWindow(data.Map, _tilesetBitmap, _tileWidth, _tileHeight, _columns, _tilesetSpriteName, _resources, _sprites, _books, _objects,
-                data.Characters, _poseDatabase, _tileProperties, _variables, _stats, data.Containers, _systemSettings, data.Factions) { IsShippedGame = IsShippedGame };
+            var (bitmap, tileWidth, tileHeight, columns) = TilesetFor(data.Map);
+            next = new GameTestWindow(data.Map, bitmap, tileWidth, tileHeight, columns, data.Map.Tileset.TilesetSpriteName, _resources, _sprites, _books, _objects,
+                data.Characters, _poseDatabase, _tileProperties, _variables, _stats, data.Containers, _systemSettings, data.Factions) { IsShippedGame = IsShippedGame, Worlds = Worlds };
             next.ApplySave(data);
         }
         catch (Exception ex)
@@ -680,5 +682,6 @@ public partial class GameTestWindow
             counts[pages[fired.PageIndex]] = fired.Count;
         }
         if (data.Weather is not null) _weather = data.Weather;
+        _worldStates = data.WorldStates.ToDictionary(kv => kv.Key, kv => kv.Value);
     }
 }

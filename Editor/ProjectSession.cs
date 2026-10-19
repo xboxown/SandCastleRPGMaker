@@ -55,6 +55,12 @@ internal static class ProjectSession
     public static Func<List<MapZone>?>? ZonesProvider;
     /// <summary>A painted tile's picture from any of the open map's tilesheets (the game's tiles from a map's second, third... sheet).</summary>
     public static Func<int, System.Windows.Media.Imaging.BitmapSource?>? TileSourceProvider;
+    /// <summary>The project's worlds (Maps tab), the starting world first.</summary>
+    public static Func<List<MapData>>? WorldsProvider;
+    /// <summary>A tile's picture by a given world's tileset (worlds can use different sheets).</summary>
+    public static Func<TilesetDefinition, int, System.Windows.Media.Imaging.BitmapSource?>? WorldTileProvider;
+    /// <summary>A tilesheet's whole picture and columns, by its name.</summary>
+    public static Func<string, (System.Windows.Media.Imaging.BitmapSource Bitmap, int Columns)?>? SheetProvider;
     /// <summary>The names events go by (map events, objects, books, containers, characters) - for "Event executed".</summary>
     public static Func<List<string>>? EventNamesProvider;
     /// <summary>The project's System Settings.</summary>

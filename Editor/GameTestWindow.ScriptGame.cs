@@ -245,6 +245,11 @@ public partial class GameTestWindow
 
     private bool ChangeMapCommand(EventCommand command, Action<bool> done)
     {
+        if (int.TryParse(command.Get("World"), out int worldId) && worldId > 0 && worldId != _map.Id)
+        {
+            (int, int, int)? to = int.TryParse(command.Get("X"), out int wx) && int.TryParse(command.Get("Y"), out int wy) ? (wx, wy, int.TryParse(command.Get("Floor"), out int wf) ? wf : 1) : null;
+            return TravelToWorld(worldId, to, command.Get("Fade") == "True", done);
+        }
         if (!int.TryParse(command.Get("X"), out int x) || !int.TryParse(command.Get("Y"), out int y) || !InsideMap(x, y)) return false;
         int floor = int.TryParse(command.Get("Floor"), out int f) ? f : 1;
         void Arrive()

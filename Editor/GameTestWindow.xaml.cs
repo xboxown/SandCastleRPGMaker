@@ -214,7 +214,7 @@ public partial class GameTestWindow : Window
         Height = ViewportHeight * DefaultScale + StatusBarAllowance;
 
         ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); PlaceTitle(); };
-        Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
+        Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
 
@@ -2506,7 +2506,7 @@ public partial class GameTestWindow : Window
     /// <summary>A painted tile's picture: the map's first sheet here; its other sheets through the editor.</summary>
     private System.Windows.Media.Imaging.BitmapSource? TileSource(int tileIndex)
     {
-        if (TileSheets.Slot(tileIndex) > 0) return ProjectSession.TileSourceProvider?.Invoke(tileIndex);
+        if (TileSheets.Slot(tileIndex) > 0) return ProjectSession.WorldTileProvider?.Invoke(_map.Tileset, tileIndex) ?? ProjectSession.TileSourceProvider?.Invoke(tileIndex);
         int col = tileIndex % _columns, row = tileIndex / _columns;
         if ((col + 1) * _tileWidth > _tilesetBitmap.PixelWidth || (row + 1) * _tileHeight > _tilesetBitmap.PixelHeight) return null;
         return new CroppedBitmap(_tilesetBitmap, new Int32Rect(col * _tileWidth, row * _tileHeight, _tileWidth, _tileHeight));

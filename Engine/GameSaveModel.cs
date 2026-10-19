@@ -48,6 +48,8 @@ public class GameSaveData
 
     public List<SavedVitals> Vitals { get; set; } = new();
     public List<SavedFiredPage> FiredPages { get; set; } = new();
+    /// <summary>The other worlds visited, as they were left (by world id) - Map is the world the party is in. Older saves have none.</summary>
+    public Dictionary<int, MapData> WorldStates { get; set; } = new();
     public WeatherSettings? Weather { get; set; }
 }
 
