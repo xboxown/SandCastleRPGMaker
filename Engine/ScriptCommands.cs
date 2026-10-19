@@ -302,6 +302,8 @@ public static class ScriptCommands
             new[] { Choice("What", "What", "Combat mode", "Keys", "Player control"), Choice("Value", "Is", "Forbidden", "Allowed") }, "{What} {Value}"),
         new(EventCommandType.GameOver, "Game Over", Game, "The Game", "The game ends: the death music (System Settings > Combat), and only loading a save or quitting is left.", Array.Empty<ScriptField>(), "", HasWindow: false),
         new(EventCommandType.ReturnToTitle, "Return To Title", Game, "The Game", "Back to the Title Screen (Tools > Title Screen).", Array.Empty<ScriptField>(), "", HasWindow: false),
+        new(EventCommandType.ShowError, "Show Error", Game, "The Game", "Shows an error by its number in the error paperdoll (System Settings > Errors): the engine's numbers, or your own added there. Detail fills %errdetail (and the words of a number not in the list). The event goes on once it's closed.",
+            new[] { F("Number", "Error number (formula)", def: "1000"), new("Detail", "Detail (fills %errdetail)", ScriptFieldKind.Words) }, "#{Number} {Detail}"),
         new(EventCommandType.QuitGame, "Quit Game", Game, "The Game", "Closes the game at once (no question - use the Quit paperdoll for that).", Array.Empty<ScriptField>(), "", HasWindow: false),
         new(EventCommandType.LearnSpell, "Learn Spell", Game, "The Game", "Puts a spell into a character's spellbook (the spellbook item they carry): the spell's name as written in the book.",
             new[] { Who(), F("Value", "Spell name (formula)", def: "\"\"") }, "{Who}: {Value}"),

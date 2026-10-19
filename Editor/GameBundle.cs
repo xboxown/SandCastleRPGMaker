@@ -1,4 +1,5 @@
 using System.IO;
+using SandcastleRpgMaker.Engine;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
@@ -171,9 +172,9 @@ public static class GameBundle
         {
             string path = Path.Combine(dataFolder, entry.Name);
             if (!File.Exists(path))
-                throw new GameDataException($"The game's data file \"{index.DataFolder}\\{entry.Name}\" is missing. Keep the \"{index.DataFolder}\" folder next to the game's .exe, as it was built.");
+                throw new GameDataException(GameErrors.DataMissing, msrpPath, $"The game's data file \"{index.DataFolder}\\{entry.Name}\" is missing. Keep the \"{index.DataFolder}\" folder next to the game's .exe, as it was built.");
             if (new FileInfo(path).Length != entry.Length || Fingerprint(path) != entry.Fingerprint)
-                throw new GameDataException($"The game's data file \"{index.DataFolder}\\{entry.Name}\" isn't this game's own (it was changed, or comes from another game). Copy the game's folder again as it was built.");
+                throw new GameDataException(GameErrors.DataNotOwn, msrpPath, $"The game's data file \"{index.DataFolder}\\{entry.Name}\" isn't this game's own (it was changed, or comes from another game). Copy the game's folder again as it was built.");
         }
         return true;
     }
@@ -182,5 +183,30 @@ public static class GameBundle
 /// <summary>A built game's data files are missing or aren't its own - the message is for the player.</summary>
 public class GameDataException : Exception
 {
-    public GameDataException(string message) : base(message) { }
+    /// <summary>Its error number (System Settings > Errors).</summary>
+    public int Number { get; }
+    /// <summary>The game's project, already taken out of the .exe - its error words are read from it.</summary>
+    public string MsrpPath { get; }
+
+    public GameDataException(int number, string msrpPath, string message) : base(message)
+    {
+        Number = number;
+        MsrpPath = msrpPath;
+    }
+
+    public GameDataException(string message) : this(GameErrors.DataDamaged, "", message) { }
+
+    /// <summary>
+    /// An error before the game can draw anything (its data files missing,
+    /// damaged): the error number and the game's own words for it in a plain
+    /// box - the error paperdoll can't be drawn without the data.
+    /// </summary>
+    public static void ShowPlain(int number, string detail, string? msrpPath, string title)
+    {
+        ErrorSettings? errors = null;
+        try { if (!string.IsNullOrEmpty(msrpPath) && File.Exists(msrpPath)) errors = ProjectFiles.LoadManifest(msrpPath).Settings?.Errors; }
+        catch { /* the project itself can't be read: the engine's own words */ }
+        System.Windows.MessageBox.Show($"Error {number}: {GameErrors.Describe(errors, number, detail)}", title,
+            System.Windows.MessageBoxButton.OK, System.Windows.MessageBoxImage.Error);
+    }
 }

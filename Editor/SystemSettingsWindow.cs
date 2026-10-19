@@ -55,6 +55,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
         tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
+        tabs.Items.Add(new TabItem { Header = "Errors", Content = BuildErrorsTab() });
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
@@ -112,6 +113,64 @@ public partial class SystemSettingsWindow : Window
                    "The \"Game saved\" message opens once the game is saved: your words, and a No / Cancel button captioned OK to close it. Both are modal - nothing else can be clicked till they close.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
+        return panel;
+    }
+
+    /// <summary>The game's errors: the paperdoll they show in, and their words by number (editable; numbers of your own for Show Error).</summary>
+    private UIElement BuildErrorsTab()
+    {
+        var errors = _settings.Errors;
+        // Every engine error is listed, so its words can be changed; the maker's own stay as they are.
+        foreach (var engine in GameErrors.Defaults)
+            if (errors.Messages.All(m => m.Number != engine.Number))
+                errors.Messages.Add(new GameErrorMessage { Number = engine.Number, Description = engine.Description });
+        errors.Messages.Sort((a, b) => a.Number.CompareTo(b.Number));
+
+        var panel = new DockPanel { Margin = new Thickness(10) };
+        var designs = (ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)).ToList();
+        var choices = new List<DollChoice> { new(-1, "(None - the message shows where it happened)") };
+        choices.AddRange(designs);
+        var doll = new ComboBox { Width = 280, ItemsSource = choices };
+        doll.SelectedItem = choices.FirstOrDefault(c => c.Id == errors.DollDesignId) ?? choices[0];
+        doll.SelectionChanged += (_, _) => errors.DollDesignId = (doll.SelectedItem as DollChoice)?.Id ?? -1;
+        var top = LabeledRow("Error paperdoll:", doll);
+        DockPanel.SetDock(top, Dock.Top);
+        panel.Children.Add(top);
+
+        var note = new TextBlock
+        {
+            Text = "Every error the game can show has a number and its words. Make the error paperdoll in the PaperDoll Editor like any paperdoll: a Text part with your words, and a No / Cancel button captioned OK to close it. " +
+                   "In its text and captions, %errnum is the error's number and %errdescrp its words below - or write your own message around them (\"Oops! Error %errnum - %errdescrp\"). " +
+                   "It opens modal, over everything, with the paperdoll opening sound.\n\n" +
+                   "In the words, %errdetail is what the engine knows of it (what's going on, the file, Windows' own reason). An error whose number isn't listed shows %errdetail as its words. " +
+                   "Add numbers of your own (1000 and up, say) and show them with the Show Error event command. Errors before the game can draw anything (its data files missing) show the same number and words in a plain box.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 4, 0, 8)
+        };
+        DockPanel.SetDock(note, Dock.Top);
+        panel.Children.Add(note);
+
+        var grid = new DataGrid
+        {
+            ItemsSource = errors.Messages, AutoGenerateColumns = false, CanUserAddRows = true, CanUserDeleteRows = true,
+            HeadersVisibility = DataGridHeadersVisibility.Column, MinHeight = 200
+        };
+        grid.Columns.Add(new DataGridTextColumn { Header = "Error #", Binding = new System.Windows.Data.Binding(nameof(GameErrorMessage.Number)), Width = 70 });
+        grid.Columns.Add(new DataGridTextColumn
+        {
+            Header = "Description (%errdetail = the engine's detail)", Binding = new System.Windows.Data.Binding(nameof(GameErrorMessage.Description)),
+            Width = new DataGridLength(1, DataGridLengthUnitType.Star)
+        });
+
+        var reset = new Button { Content = "Engine's words back for the selected error", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 6, 0, 0), HorizontalAlignment = HorizontalAlignment.Left };
+        reset.Click += (_, _) =>
+        {
+            if (grid.SelectedItem is not GameErrorMessage picked || GameErrors.Defaults.FirstOrDefault(d => d.Number == picked.Number) is not { } engine) return;
+            picked.Description = engine.Description;
+            grid.Items.Refresh();
+        };
+        DockPanel.SetDock(reset, Dock.Bottom);
+        panel.Children.Add(reset);
+        panel.Children.Add(grid);
         return panel;
     }
 

@@ -227,6 +227,8 @@ public class SystemSettings
     /// <summary>Common Events (Tools > Common Events): command lists made once, run from anywhere with Call Common Event.</summary>
     public List<CommonEventDefinition> CommonEvents { get; set; } = new();
     public SaveLoadSettings SaveLoad { get; set; } = new();
+    /// <summary>The game's errors: their paperdoll and their words by number (System Settings > Errors).</summary>
+    public ErrorSettings Errors { get; set; } = new();
     public SliderSettings Slider { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();
     public SoundSettings Sounds { get; set; } = new();

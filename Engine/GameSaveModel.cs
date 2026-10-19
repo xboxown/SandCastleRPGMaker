@@ -167,7 +167,7 @@ public static class GameSaveStore
         var data = JsonSerializer.Deserialize<GameSaveData>(json, JsonOptions)
                    ?? throw new ProjectFileException($"The save \"{save.Name}\" couldn't be read.");
         if (data.Format > GameSaveData.CurrentFormat)
-            throw new ProjectFileException($"The save \"{save.Name}\" was made by a newer version of this game.");
+            throw new SaveTooNewException($"The save \"{save.Name}\" was made by a newer version of this game.");
         return data;
     }
 

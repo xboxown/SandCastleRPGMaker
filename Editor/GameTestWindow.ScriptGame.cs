@@ -65,6 +65,7 @@ public partial class GameTestWindow
         };
         h[EventCommandType.SetTime] = SetTimeCommand;
         a[EventCommandType.ChangeMap] = ChangeMapCommand;
+        a[EventCommandType.ShowError] = ShowErrorCommand;
 
         h[EventCommandType.StopMusic] = c => { SoundPlayback.Fade(BookEventPreviewExecutionContext.MusicOwner, Math.Max(0, FormulaNumber(c, "Seconds")), fadeIn: false); return true; };
         h[EventCommandType.FadeMusicIn] = c =>
@@ -305,7 +306,7 @@ public partial class GameTestWindow
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"The game couldn't be saved: {ex.Message}";
+            GameError(ex, GameErrors.SaveFailed); // the disk full, read-only... - the player is told, whatever the event does next
             return false;
         }
     }
@@ -317,7 +318,7 @@ public partial class GameTestWindow
         if (GameSaveStore.List(projectId).FirstOrDefault(s => s.Slot == slot) is not { } save) { StatusText.Text = $"Slot {slot} is empty."; return false; }
         GameSaveData data;
         try { data = GameSaveStore.Read(projectId, save); }
-        catch (Exception ex) { StatusText.Text = $"\"{save.Name}\" couldn't be loaded: {ex.Message}"; return false; }
+        catch (Exception ex) { GameError(GameErrors.ClassifyLoad(ex), ex.Message); return false; }
         Dispatcher.BeginInvoke(new Action(() => LoadGame(data, $"Loaded \"{save.Name}\".")));
         return true;
     }

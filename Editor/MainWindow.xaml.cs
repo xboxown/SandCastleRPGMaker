@@ -862,6 +862,12 @@ public partial class MainWindow : Window
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             return true;
         }
+        catch (Exception ex) when (IsGameHost)
+        {
+            // A built game that can't start: its error number and words (System Settings > Errors).
+            GameDataException.ShowPlain(GameErrors.Classify(ex, ex is ProjectFileException ? GameErrors.DataDamaged : GameErrors.CantStart), ex.Message, msrpPath,
+                System.IO.Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "Game"));
+        }
         catch (ProjectFileException ex)
         {
             MessageBox.Show(ex.Message, "Open Project", MessageBoxButton.OK, MessageBoxImage.Error);
@@ -1283,12 +1289,15 @@ public partial class MainWindow : Window
     /// <summary>A built game: the folder its media files (.sdbx) are read from, beside its .exe (GameBundle).</summary>
     public string? DataFolderOverride { get; init; }
 
+    /// <summary>This window only hosts a built game (never shown): its errors are the game's (System Settings > Errors).</summary>
+    public bool IsGameHost { get; init; }
+
     public bool RunStandaloneGame(string msrpPath)
     {
         if (!LoadProjectFromPath(msrpPath)) return false;
         if (_map is null || _tileset is null || _tilesetBitmap is null)
         {
-            MessageBox.Show("This game has no map to play.", _currentProjectName ?? "Game", MessageBoxButton.OK, MessageBoxImage.Error);
+            GameDataException.ShowPlain(GameErrors.CantStart, "it has no map to play.", msrpPath, _currentProjectName ?? "Game");
             return false;
         }
         RunStandalone(NewGameWindow(atTitle: true, shipped: true));

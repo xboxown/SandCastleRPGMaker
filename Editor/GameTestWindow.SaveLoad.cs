@@ -88,12 +88,12 @@ public partial class GameTestWindow
         if (_saveScreen is not null) { BringDollToFront(_saveScreen.Gump); return; }
         if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.DollDesignId) is not { } design)
         {
-            StatusText.Text = "This game has no Save/Load screen yet (System Settings > Save / Load).";
+            if (!GameError(GameErrors.NoSaveScreen)) StatusText.Text = "This game has no Save/Load screen yet (System Settings > Save / Load).";
             return;
         }
         if (ProjectSession.ProjectIdProvider?.Invoke() is not { } projectId)
         {
-            StatusText.Text = "Saving needs the project to be saved once first.";
+            GameError(GameErrors.ProjectNotSaved);
             return;
         }
         byte[]? shot = TakeScreenshot(); // before the screen covers the game
@@ -413,10 +413,10 @@ public partial class GameTestWindow
     private void SaveFromScreen(SaveScreen screen, DollPart? button)
     {
         int slot = screen.PickedSlot;
-        if (slot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) { SaveScreenSay(screen, "Click a slot to save into first.", button); return; }
+        if (slot == 0 && screen.Slots.Count > 0 && !HasPart(screen, DollPartKind.SaveList)) { SaveScreenError(screen, GameErrors.PickSlotToSave, "", button); return; }
         string name = screen.Name.Trim();
-        if (name.Length == 0) { SaveScreenSay(screen, "Type a name for the save first.", button); return; }
-        if (WhatIsHappening() is { } happening) { SaveScreenSay(screen, $"You can't save now: {happening}.", button); return; }
+        if (name.Length == 0) { SaveScreenError(screen, GameErrors.NeedsName, "", button); return; }
+        if (WhatIsHappening() is { } happening) { SaveScreenError(screen, GameErrors.CantSaveNow, happening, button); return; }
         var existing = slot > 0 ? screen.InSlot(slot) // a slot is written over whatever its save was called
             : screen.Saves.FirstOrDefault(s => s.Slot == 0 && string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
         if (existing is null) WriteSave(screen, slot, name, null, button);
@@ -443,7 +443,7 @@ public partial class GameTestWindow
 
     private void WriteSave(SaveScreen screen, int slot, string name, SaveSlotInfo? existing, DollPart? button)
     {
-        if (WhatIsHappening() is { } happening) { SaveScreenSay(screen, $"You can't save now: {happening}.", button); return; }
+        if (WhatIsHappening() is { } happening) { SaveScreenError(screen, GameErrors.CantSaveNow, happening, button); return; }
         try
         {
             var data = CaptureSave();
@@ -465,7 +465,7 @@ public partial class GameTestWindow
         }
         catch (Exception ex)
         {
-            SaveScreenSay(screen, $"The game couldn't be saved: {ex.Message}", button);
+            SaveScreenError(screen, GameErrors.Classify(ex, GameErrors.SaveFailed), ex.Message, button);
         }
     }
 
@@ -492,12 +492,12 @@ public partial class GameTestWindow
 
     private void LoadFromScreen(SaveScreen screen)
     {
-        if (screen.PickedSave is not { } save) { SaveScreenSay(screen, screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to load.", null); return; }
+        if (screen.PickedSave is not { } save) { SaveScreenError(screen, screen.PickedSlot > 0 ? GameErrors.EmptySlot : GameErrors.PickSaveToLoad, "", null); return; }
         GameSaveData data;
         try { data = GameSaveStore.Read(screen.ProjectId, save); }
         catch (Exception ex)
         {
-            StatusText.Text = $"\"{save.Name}\" couldn't be loaded: {ex.Message}";
+            GameError(GameErrors.ClassifyLoad(ex), ex.Message);
             return;
         }
         LoadGame(data, $"Loaded \"{save.Name}\".");
@@ -505,7 +505,7 @@ public partial class GameTestWindow
 
     private void DeleteFromScreen(SaveScreen screen, DollPart part)
     {
-        if (screen.PickedSave is not { } save) { SaveScreenSay(screen, screen.PickedSlot > 0 ? "That slot is empty." : "Pick a save to delete.", part); return; }
+        if (screen.PickedSave is not { } save) { SaveScreenError(screen, screen.PickedSlot > 0 ? GameErrors.EmptySlot : GameErrors.PickSaveToLoad, "", part); return; }
         AskThenDo(screen, DollPartKind.DeleteSaveButton, save.Folder, part, $"Delete \"{save.Name}\"? Press Delete again.", () => DeleteSave(screen, save));
     }
 
@@ -514,7 +514,7 @@ public partial class GameTestWindow
         try { GameSaveStore.Delete(save); }
         catch (Exception ex)
         {
-            StatusText.Text = $"\"{save.Name}\" couldn't be deleted: {ex.Message}";
+            GameError(ex, GameErrors.DeleteFailed);
             return;
         }
         screen.Saves = GameSaveStore.List(screen.ProjectId);
@@ -625,7 +625,7 @@ public partial class GameTestWindow
         }
         catch (Exception ex)
         {
-            StatusText.Text = $"The save couldn't be loaded: {ex.Message}";
+            GameError(GameErrors.ClassifyLoad(ex), ex.Message);
             return;
         }
         next.Title = Title;

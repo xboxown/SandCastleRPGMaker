@@ -92,6 +92,14 @@ public class DollSlotFit
 public class DollPart
 {
     /// <summary>A copy with a running paperdoll's own words and choices (Set Part Text, Fill List From Array) - the design itself is never changed.</summary>
+    /// <summary>A copy with other words (the error paperdoll's %errnum, %errdescrp filled in).</summary>
+    public DollPart WithText(string text)
+    {
+        var copy = (DollPart)MemberwiseClone();
+        copy.Text = text;
+        return copy;
+    }
+
     public DollPart WithRuntime(DollPartRuntime runtime)
     {
         if (runtime.Caption is null && runtime.Options is null) return this;

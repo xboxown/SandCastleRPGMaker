@@ -116,7 +116,8 @@ public enum EventCommandType
     FadeScreen, FlashScreen, MoveCamera, CameraFollow, ShowPicture, ErasePicture, SetTime, ChangeMap,
     StopMusic, FadeMusicIn, SetVolume, ResumeMapMusic,
     SaveGame, LoadGame, OpenSaveLoadScreen, AllowSaving, AllowControls, GameOver, ReturnToTitle, QuitGame, LearnSpell, CastSpell,
-    DebugLog, PauseHere
+    DebugLog, PauseHere,
+    ShowError
 }
 
 /// <summary>

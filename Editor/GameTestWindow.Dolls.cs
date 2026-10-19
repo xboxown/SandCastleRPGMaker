@@ -38,6 +38,8 @@ public partial class GameTestWindow
         public readonly List<SpriteAnimator> Animators = new();
         /// <summary>Modal (above everything, nothing under it reachable): its layer; 0 = not modal.</summary>
         public int ModalLayer;
+        /// <summary>The error paperdoll's error: its text and captions show %errnum, %errdescrp, %errdetail.</summary>
+        public (int Number, string Words, string Detail)? Fill;
         /// <summary>A modal paperdoll's cover over the game and every other window.</summary>
         public Border? Blocker;
         /// <summary>Whoever opened it to ask (a save prompt, Open Paperdoll): hears yes (Yes / OK) or no.</summary>
@@ -194,6 +196,7 @@ public partial class GameTestWindow
     private FrameworkElement BuildDollPartVisual(OpenDollGump gump, DollPart part, DollPartRuntime runtime)
     {
         part = part.WithRuntime(runtime); // its words and choices as events set them
+        if (gump.Fill is { } error && part.Text.Contains('%')) part = part.WithText(GameErrors.Fill(part.Text, error.Number, error.Words, error.Detail));
         if (DollPart.IsControlKind(part.Kind)) return DollControlVisual(gump, part, runtime); // buttons with captions, boxes, lists (DollControls)
         var size = DollLook.SizeOf(part, runtime.Look, _sprites);
         switch (part.Kind)
