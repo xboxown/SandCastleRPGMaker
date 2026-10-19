@@ -95,8 +95,8 @@ public partial class GameTestWindow
         RefreshAfterMove();
     }
 
-    /// <summary>A body marked Too Heavy can't be lifted at all (Exult's "too heavy" pointer).</summary>
+    /// <summary>A container marked Too Heavy (a wardrobe; a body so marked) can't be lifted at all (Exult's "too heavy" pointer) - only opened where it stands.</summary>
     private bool IsTooHeavyToLift(PlacedItemInstance item) =>
         item.Category == ReferencedItemCategory.Container
-        && ContainerDef(item.ItemId) is { IsBodyContainer: true, CanBePicked: false };
+        && ContainerDef(item.ItemId) is { CanBePicked: false };
 }

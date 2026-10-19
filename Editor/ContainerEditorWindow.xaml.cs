@@ -208,6 +208,7 @@ public partial class ContainerEditorWindow : Window
         CanBeSoldCheck.IsChecked = container.CanBeSold;
         CanBeTradedCheck.IsChecked = container.CanBeTraded;
         CanBeDroppedCheck.IsChecked = container.CanBeDropped;
+        TooHeavyCheck.IsChecked = !container.CanBePicked;
         IsStackableCheck.IsChecked = container.IsStackable;
         AllowElevationCheck.IsChecked = container.AllowElevation;
         OccludesCheck.IsChecked = container.Occludes;
@@ -306,6 +307,7 @@ public partial class ContainerEditorWindow : Window
         container.CanBeSold = CanBeSoldCheck.IsChecked == true;
         container.CanBeTraded = CanBeTradedCheck.IsChecked == true;
         container.CanBeDropped = CanBeDroppedCheck.IsChecked == true;
+        container.CanBePicked = TooHeavyCheck.IsChecked != true; // the box reads "Too Heavy"
         container.IsStackable = IsStackableCheck.IsChecked == true;
         container.AllowElevation = AllowElevationCheck.IsChecked == true;
         container.Occludes = OccludesCheck.IsChecked == true;

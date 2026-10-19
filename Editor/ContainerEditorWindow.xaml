@@ -113,6 +113,8 @@
                                             <CheckBox x:Name="CanBeSoldCheck" Content="Can be sold" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="CanBeTradedCheck" Content="Can be traded" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="CanBeDroppedCheck" Content="Can be dropped" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                                            <CheckBox x:Name="TooHeavyCheck" Content="Too Heavy" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"
+                                                      ToolTip="Ticked: it can't be picked up or moved (a wardrobe, a chest of drawers) - only opened where it stands. The Too Heavy pointer shows when someone tries."/>
                                             <CheckBox x:Name="IsStackableCheck" Content="Is Stackable" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="AllowElevationCheck" Content="Allow Elevation" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
                                             <CheckBox x:Name="OccludesCheck" Content="Occludes" Margin="0,0,20,0" Checked="Field_Changed" Unchecked="Field_Changed"/>
