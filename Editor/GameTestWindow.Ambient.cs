@@ -15,6 +15,7 @@ public partial class GameTestWindow
 
     private void UpdateAmbient()
     {
+        if (InTitle) { SilenceAmbient(); return; } // the Title Screen isn't a map: only its own music - the map's ambient starts when the game does
         if (AmbientSilencedByCombat()) { SilenceAmbient(); return; } // combat music, or a battle (GameTestWindow.CombatMusic.cs) - weather plays on
         var a = _map.Ambient;
         var d = DayNight;

@@ -214,7 +214,8 @@ public partial class GameTestWindow : Window
         Width = ViewportWidth * DefaultScale;
         Height = ViewportHeight * DefaultScale + StatusBarAllowance;
 
-        ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); PlaceTitle(); };
+        // The title is placed once the view has its new size and place (after layout) - placed at once it went by where the view was before (off-centre after maximize / restore).
+        ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); Dispatcher.BeginInvoke(PlaceTitle, System.Windows.Threading.DispatcherPriority.Loaded); };
         Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
