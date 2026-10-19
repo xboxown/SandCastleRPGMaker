@@ -220,8 +220,6 @@ public partial class MainWindow : Window
         _paletteSlot = 0;
         _paletteColumns = columns;
         _paletteRows = rows;
-        TileWidthBox.Text = tileWidth.ToString();
-        TileHeightBox.Text = tileHeight.ToString();
 
         DrawPalette();
         StatusText.Text = $"Tileset: {sprite.Name} ({sprite.Frames.Count} tiles, {columns}x{rows} grid)";
@@ -855,44 +853,9 @@ public partial class MainWindow : Window
             {
                 try { _objectDatabase = ObjectDatabaseSerializer.Load(oldMap.ObjectDatabasePath); } catch { /* unreadable: start with none */ }
             }
+            LoadWorlds(payload.Map, payload.Worlds); // the starting world and the others (Maps tab)
             _map = payload.Map;
-            if (_map is not null)
-            {
-                _tileset = _map.Tileset;
-                try
-                {
-                    var tilesetGroup = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.TilesetGroupName);
-                    var tilesetSprite = tilesetGroup?.Sprites.FirstOrDefault(s => s.Name == _tileset.TilesetSpriteName);
-                    if (tilesetSprite is not null)
-                    {
-                        var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(tilesetSprite);
-                        if (bitmap is not null)
-                        {
-                            _sheetCache.Clear();
-                            _sheetCache[tilesetSprite.Name] = (bitmap, columns, rows);
-                            _paletteSheetName = tilesetSprite.Name;
-                            _paletteSlot = 0;
-                            _tilesetBitmap = bitmap;
-                            _tileset.TileWidth = tileWidth;
-                            _tileset.TileHeight = tileHeight;
-                            _paletteColumns = columns;
-                            _paletteRows = rows;
-                            DrawPalette();
-                            TilesetCombo.SelectedItem = tilesetSprite;
-                        }
-                    }
-                }
-                catch
-                {
-                    // Tileset sprite's frame images not found this session - map data itself still loaded fine, just can't paint a palette from it until they're available again.
-                }
-
-                BuildMapCanvas();
-                TileWidthBox.Text = _tileset.TileWidth.ToString();
-                TileHeightBox.Text = _tileset.TileHeight.ToString();
-                MapWidthBox.Text = _map.Width.ToString();
-                MapHeightBox.Text = _map.Height.ToString();
-            }
+            if (_map is not null) ShowMapInEditor();
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             return true;
         }
@@ -905,6 +868,43 @@ public partial class MainWindow : Window
             MessageBox.Show($"This project could not be opened: {ex.Message}", "Open Project", MessageBoxButton.OK, MessageBoxImage.Error);
         }
         return false;
+    }
+
+
+    /// <summary>Shows the current map (_map) in the editor: its tileset, the palette, the map itself.</summary>
+    private void ShowMapInEditor()
+    {
+        if (_map is null) return;
+        _tileset = _map.Tileset;
+        try
+        {
+            var tilesetGroup = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.TilesetGroupName);
+            var tilesetSprite = tilesetGroup?.Sprites.FirstOrDefault(s => s.Name == _tileset.TilesetSpriteName);
+            if (tilesetSprite is not null)
+            {
+                var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(tilesetSprite);
+                if (bitmap is not null)
+                {
+                    _sheetCache.Clear();
+                    _sheetCache[tilesetSprite.Name] = (bitmap, columns, rows);
+                    _paletteSheetName = tilesetSprite.Name;
+                    _paletteSlot = 0;
+                    _tilesetBitmap = bitmap;
+                    _tileset.TileWidth = tileWidth;
+                    _tileset.TileHeight = tileHeight;
+                    _paletteColumns = columns;
+                    _paletteRows = rows;
+                    DrawPalette();
+                    TilesetCombo.SelectedItem = tilesetSprite;
+                }
+            }
+        }
+        catch
+        {
+            // Tileset sprite's frame images not found this session - map data itself still loaded fine, just can't paint a palette from it until they're available again.
+        }
+
+        BuildMapCanvas();
     }
 
     private void SaveProjectMenuItem_Click(object sender, RoutedEventArgs e) => SaveProject();
@@ -948,7 +948,8 @@ public partial class MainWindow : Window
                 Stats = _statDatabase,
                 Poses = _poseDatabase,
                 TileProperties = _tilePropertiesDatabase,
-                Map = _map
+                Map = _worlds.FirstOrDefault() ?? _map, // the starting world (Maps tab)
+                Worlds = _worlds.Skip(1).ToList()
             };
             ProjectFiles.SaveManifest(_currentProjectFilePath, payload);
 
@@ -1428,27 +1429,6 @@ public partial class MainWindow : Window
 
     // ---------- Map creation ----------
 
-    private void NewMapButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_tileset is null || _tilesetBitmap is null)
-        {
-            MessageBox.Show("Select a tileset before creating a map.", "No tileset selected",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        if (!int.TryParse(MapWidthBox.Text, out int mapWidth) || mapWidth <= 0 ||
-            !int.TryParse(MapHeightBox.Text, out int mapHeight) || mapHeight <= 0)
-        {
-            MessageBox.Show("Map width/height must be positive numbers.", "Invalid map size",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
-        _map = MapData.CreateEmpty("Untitled Map", mapWidth, mapHeight, _tileset);
-        BuildMapCanvas();
-        StatusText.Text = $"New map created: {mapWidth}x{mapHeight} cells.";
-    }
 
     private void BuildMapCanvas()
     {
@@ -2567,97 +2547,5 @@ public partial class MainWindow : Window
 
     // ---------- Save / Load ----------
 
-    private void SaveMapButton_Click(object sender, RoutedEventArgs e)
-    {
-        if (_map is null)
-        {
-            MessageBox.Show("Create a map first.", "Nothing to save",
-                MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
 
-        var dialog = new SaveFileDialog { Filter = "Map JSON (*.map.json)|*.map.json|All files (*.*)|*.*" };
-        if (dialog.ShowDialog() != true) return;
-
-        _map.ObjectDatabasePath = _objectDatabasePath ?? string.Empty;
-        _map.TilePropertiesPath = _tilePropertiesPath ?? string.Empty;
-        MapSerializer.Save(_map, dialog.FileName);
-        StatusText.Text = $"Saved map to {dialog.FileName}";
-    }
-
-    private void LoadMapButton_Click(object sender, RoutedEventArgs e)
-    {
-        var dialog = new OpenFileDialog { Filter = "Map JSON (*.map.json)|*.map.json|All files (*.*)|*.*" };
-        if (dialog.ShowDialog() != true) return;
-
-        _map = MapSerializer.Load(dialog.FileName);
-        _tileset = _map.Tileset;
-
-        var tilesetGroup = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.TilesetGroupName);
-        var tilesetSprite = tilesetGroup?.Sprites.FirstOrDefault(s => s.Name == _tileset.TilesetSpriteName);
-        if (tilesetSprite is not null)
-        {
-            var (bitmap, tileWidth, tileHeight, columns, rows) = BuildCompositeTilesetBitmap(tilesetSprite);
-            if (bitmap is not null)
-            {
-                _sheetCache.Clear();
-                _sheetCache[tilesetSprite.Name] = (bitmap, columns, rows);
-                _paletteSheetName = tilesetSprite.Name;
-                _paletteSlot = 0;
-                _tilesetBitmap = bitmap;
-                _tileset.TileWidth = tileWidth;
-                _tileset.TileHeight = tileHeight;
-                _paletteColumns = columns;
-                _paletteRows = rows;
-                TilesetCombo.SelectedItem = tilesetSprite;
-            }
-        }
-
-        DrawPalette();
-
-        _objectDatabasePath = _map.ObjectDatabasePath;
-        if (!string.IsNullOrWhiteSpace(_objectDatabasePath) && File.Exists(_objectDatabasePath))
-        {
-            try
-            {
-                _objectDatabase = ObjectDatabaseSerializer.Load(_objectDatabasePath);
-            }
-            catch
-            {
-                MessageBox.Show(
-                    $"This map references an object database at:\n{_objectDatabasePath}\nbut it could not be loaded. Placed objects will show without icons until you reopen it via Object Database....",
-                    "Object database not found", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-        RefreshObjectPalette();
-
-        _tilePropertiesPath = _map.TilePropertiesPath;
-        if (!string.IsNullOrWhiteSpace(_tilePropertiesPath) && File.Exists(_tilePropertiesPath))
-        {
-            try
-            {
-                _tilePropertiesDatabase = TilePropertiesSerializer.Load(_tilePropertiesPath);
-            }
-            catch
-            {
-                _tilePropertiesDatabase = new TilePropertiesDatabase();
-                MessageBox.Show(
-                    $"This map references a tile properties file at:\n{_tilePropertiesPath}\nbut it could not be loaded. Tile properties reset to defaults for this session.",
-                    "Tile properties not found", MessageBoxButton.OK, MessageBoxImage.Warning);
-            }
-        }
-        else
-        {
-            _tilePropertiesDatabase = new TilePropertiesDatabase();
-        }
-
-        BuildMapCanvas();
-
-        TileWidthBox.Text = _tileset.TileWidth.ToString();
-        TileHeightBox.Text = _tileset.TileHeight.ToString();
-        MapWidthBox.Text = _map.Width.ToString();
-        MapHeightBox.Text = _map.Height.ToString();
-
-        StatusText.Text = $"Loaded map: {_map.MapName} ({_map.Width}x{_map.Height})";
-    }
 }

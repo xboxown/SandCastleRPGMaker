@@ -76,6 +76,8 @@ public class MapLayer
 /// </summary>
 public class MapData
 {
+    /// <summary>Which world this is (Maps tab): Change Map takes the party to a world by it. The starting world is the first; ids never change.</summary>
+    public int Id { get; set; }
     public string MapName { get; set; } = "Untitled Map";
     public int Width { get; set; }
     public int Height { get; set; }
@@ -165,6 +167,53 @@ public class MapData
 
     public int GetNextEventId()
         => Events.Count == 0 ? 1 : Events.Max(ev => ev.Id) + 1;
+
+    /// <summary>What a resize to this size would take off the map (things outside it), in words - empty when nothing.</summary>
+    public List<string> LostByResize(int width, int height)
+    {
+        bool Out(int x, int y) => x >= width || y >= height;
+        var lost = new List<string>();
+        void Count(int n, string what) { if (n > 0) lost.Add($"{n} {what}{(n == 1 ? "" : "s")}"); }
+        Count(Objects.Count(o => o.ContainerInstanceId < 0 && Out(o.X, o.Y)), "placed object");
+        Count(Items.Count(i => Out(i.X, i.Y)), "placed item");
+        Count(Characters.Count(c => Out(c.X, c.Y)), "placed character");
+        Count(Events.Count(e => Out(e.X, e.Y)), "event");
+        Count(Zones.Count(z => z.X >= width || z.Y >= height), "zone");
+        int tiles = Layers.Sum(l => Enumerable.Range(0, Math.Min(l.TileIndices.Count, Width * Height)).Count(i => l.TileIndices[i] >= 0 && Out(i % Width, i / Width)));
+        Count(tiles, "painted tile");
+        if (StartX >= width || StartY >= height) lost.Add("the Start Position");
+        return lost;
+    }
+
+    /// <summary>A new size: everything keeps its place; what falls outside a smaller map goes (things inside containers go with their container); new cells are empty.</summary>
+    public void Resize(int width, int height)
+    {
+        width = Math.Max(1, width);
+        height = Math.Max(1, height);
+        foreach (var layer in Layers)
+        {
+            var old = layer.TileIndices;
+            var cells = new List<int>(width * height);
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                {
+                    int i = y * Width + x;
+                    cells.Add(x < Width && y < Height && i < old.Count ? old[i] : -1);
+                }
+            layer.TileIndices = cells;
+        }
+        var gone = Objects.Where(o => o.ContainerInstanceId < 0 && (o.X >= width || o.Y >= height)).Select(o => o.InstanceId).ToHashSet();
+        gone.UnionWith(Items.Where(i => i.InstanceId > 0 && (i.X >= width || i.Y >= height)).Select(i => i.InstanceId)); // what's in a chest that goes, goes with it
+        Objects.RemoveAll(o => (o.ContainerInstanceId < 0 && gone.Contains(o.InstanceId)) || (o.ContainerInstanceId >= 0 && gone.Contains(o.ContainerInstanceId)));
+        Items.RemoveAll(i => i.X >= width || i.Y >= height);
+        Characters.RemoveAll(c => c.X >= width || c.Y >= height);
+        Events.RemoveAll(e => e.X >= width || e.Y >= height);
+        Zones.RemoveAll(z => z.X >= width || z.Y >= height);
+        foreach (var z in Zones) { z.Width = Math.Min(z.Width, width - z.X); z.Height = Math.Min(z.Height, height - z.Y); }
+        if (StartX >= width || StartY >= height) { StartX = -1; StartY = -1; }
+        Width = width;
+        Height = height;
+    }
 
     public static MapData CreateEmpty(string name, int width, int height, TilesetDefinition tileset)
     {

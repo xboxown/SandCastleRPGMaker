@@ -75,20 +75,6 @@
 
         <!-- Toolbar -->
         <ToolBar x:Name="MainToolBar" DockPanel.Dock="Top" IsEnabled="False">
-            <TextBlock Text="Tile W:" VerticalAlignment="Center" Margin="4,0,2,0"/>
-            <TextBox x:Name="TileWidthBox" Text="32" Width="40" IsReadOnly="True"/>
-            <TextBlock Text="Tile H:" VerticalAlignment="Center" Margin="4,0,2,0"/>
-            <TextBox x:Name="TileHeightBox" Text="32" Width="40" IsReadOnly="True"/>
-            <Separator/>
-            <TextBlock Text="Map W (cells):" VerticalAlignment="Center" Margin="4,0,2,0"/>
-            <TextBox x:Name="MapWidthBox" Text="30" Width="40"/>
-            <TextBlock Text="Map H (cells):" VerticalAlignment="Center" Margin="4,0,2,0"/>
-            <TextBox x:Name="MapHeightBox" Text="20" Width="40"/>
-            <Button x:Name="NewMapButton" Content="New Map" Click="NewMapButton_Click" Padding="6,2" Margin="8,2,2,2"/>
-            <Separator/>
-            <Button x:Name="SaveMapButton" Content="Save Map..." Click="SaveMapButton_Click" Padding="6,2" Margin="2"/>
-            <Button x:Name="LoadMapButton" Content="Load Map..." Click="LoadMapButton_Click" Padding="6,2" Margin="2"/>
-            <Separator/>
             <Button x:Name="ObjectDatabaseButton" Content="Object Editor..." Click="ObjectDatabaseButton_Click" Padding="6,2" Margin="2"/>
             <Separator/>
             <TextBlock Text="Floor:" VerticalAlignment="Center" Margin="4,0,2,0" ToolTip="Paint and place on this floor. The floors below show darkened; the floors above are hidden."/>
@@ -101,7 +87,7 @@
         <!-- Status bar -->
         <StatusBar DockPanel.Dock="Bottom">
             <StatusBarItem>
-                <TextBlock x:Name="StatusText" Text="Select a tileset from the dropdown (built in the Sprite Editor's Tileset group), then click New Map to begin."/>
+                <TextBlock x:Name="StatusText" Text="Select a tileset from the dropdown (built in the Sprite Editor's Tileset group), then Add Map in the Maps tab to begin."/>
             </StatusBarItem>
         </StatusBar>
 

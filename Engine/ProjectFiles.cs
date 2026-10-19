@@ -50,6 +50,8 @@ public class ManifestPayload
     public SystemSettings Settings { get; set; } = new();
     /// <summary>The Video Library's videos (names, codecs); their bytes are in videos.sdbx. Older projects load with none.</summary>
     public VideoDatabase Videos { get; set; } = new();
+    /// <summary>The other worlds (Maps tab) - Map is the starting world. Older projects have none.</summary>
+    public List<MapData> Worlds { get; set; } = new();
 }
 
 /// <summary>
