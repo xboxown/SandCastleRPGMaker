@@ -685,6 +685,10 @@ public partial class GameTestWindow
         // Exult drop_on_map: whatever is under the pointer gets first say (found->drop) - dropping onto the avatar hands it to them, gump or no gump.
         var mouseInWorld = PaperdollGumpsCanvas.TranslatePoint(screen, GameCanvas);
         if (_player is not null && IsPointOverPlayer(mouseInWorld)) return DropOnCharacter(origin, _player);
+        // Exult Actor::drop: a party member standing there takes it too (its inventory needn't be open); anyone else doesn't - it goes on the map.
+        if (HitTestCharacter(mouseInWorld) is { } droppedOn && _mapCharacters.FirstOrDefault(mc => mc.Placement == droppedOn) is { } member
+            && member.Character.IsInParty && !IsDead(member.Character))
+            return DropOnCharacter(origin, member.Character);
 
         // The ghost's top-left in world pixels - exactly where it was showing, which is where it lands.
         var ghostTopLeft = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), GameCanvas);

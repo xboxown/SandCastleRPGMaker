@@ -190,6 +190,48 @@ public partial class GameTestWindow
         _statsTimer.Start();
     }
 
+    private int _inventoryPage = -1, _statsPage = -1;
+
+    /// <summary>
+    /// Exult's I (keyactions.cc ActionInventory): the first party member -
+    /// the main character, then the others in order - whose inventory isn't
+    /// open yet opens; when everyone's is open, each press brings the next one
+    /// to the front. Held down, the key repeats: every inventory opens.
+    /// </summary>
+    private void NextPartyInventory()
+    {
+        var party = GetPartyList().Where(c => !IsDead(c)).ToList();
+        if (party.Count == 0) return;
+        for (int i = 0; i < party.Count; i++)
+        {
+            if (_openPaperdolls.Any(g => g.Character == party[i])) continue;
+            OpenPaperdoll(party[i]);
+            _inventoryPage = i;
+            return;
+        }
+        _inventoryPage = (_inventoryPage + 1) % party.Count;
+        OpenPaperdoll(party[_inventoryPage]); // already open: to the front
+    }
+
+    /// <summary>Exult's Z (ActionStats): the same for the stats paperdolls.</summary>
+    private void NextPartyStats()
+    {
+        var party = GetPartyList().Where(c => !IsDead(c) && HasStatsDoll(c)).ToList(); // no stats paperdoll made: skipped
+        if (party.Count == 0) { OpenStatsDoll(_player); return; } // says there's none yet
+        for (int i = 0; i < party.Count; i++)
+        {
+            if (_openStatsDolls.Any(g => g.Character == party[i])) continue;
+            OpenStatsDoll(party[i]);
+            _statsPage = i;
+            return;
+        }
+        _statsPage = (_statsPage + 1) % party.Count;
+        if (_openStatsDolls.FirstOrDefault(g => g.Character == party[_statsPage]) is { } open) BringStatsDollToFront(open);
+    }
+
+    private bool HasStatsDoll(CharacterDefinition character) =>
+        FrameOf(character.Paperdoll.StatsDoll.Background, 0) is not null || character.Paperdoll.StatsDoll.Elements.Count > 0;
+
     private void BringStatsDollToFront(OpenStatsGump gump)
     {
         _openStatsDolls.Remove(gump);

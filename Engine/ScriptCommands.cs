@@ -40,7 +40,9 @@ public enum ScriptFieldKind
     /// <summary>A pose by name.</summary>
     Pose,
     /// <summary>A faction (its id).</summary>
-    Faction
+    Faction,
+    /// <summary>Words as typed (no quotes needed) - or, switched to Formula, a formula. Its mode is kept as key + "Mode" ("Words" / "Formula"; none = Formula, as commands made before it).</summary>
+    Words
 }
 
 public sealed record ScriptField(string Key, string Label, ScriptFieldKind Kind, string Default = "", string[]? Options = null, string Help = "");
@@ -199,7 +201,7 @@ public static class ScriptCommands
         new(EventCommandType.SetPartLook, "Set Part Look", Dolls, "Parts", "Shows one of a part's looks, by its number (from 1) or its name (a light on, a gem lit).",
             new[] { Doll(), Part(), F("Look", "Look number, or its name in quotes (formula)", def: "1") }, "{DesignId} {PartName} look {Look}"),
         new(EventCommandType.SetPartText, "Set Part Text", Dolls, "Parts", "Changes a Text part's words or a button's caption - from a formula: \"Gold: \" + Gold.",
-            new[] { Doll(), Part(), F("Value", "Words (formula)", def: "\"\"") }, "{DesignId} {PartName} = {Value}"),
+            new[] { Doll(), Part(), new("Value", "Words", ScriptFieldKind.Words) }, "{DesignId} {PartName} = {Value}"),
         new(EventCommandType.SetPartValue, "Set Part Value", Dolls, "Parts", "Sets a slider, progress bar, check box (0 / 1), radio button (1 = picked), text box, list or drop-down (picked row from 1).",
             new[] { Doll(), Part(), F("Value", "Value (formula)") }, "{DesignId} {PartName} = {Value}"),
         new(EventCommandType.GetPartValue, "Get Part Value", Dolls, "Parts", "Reads a control's value (slider, check box, text box's words, list's picked row) into a variable.",
@@ -233,7 +235,7 @@ public static class ScriptCommands
         new(EventCommandType.FollowCharacter, "Follow / Stop Following", World, "Characters", "A character walks after another one (keeping close), until told to stop.",
             new[] { Who("Who follows"), Choice("Value", "Do", "Follow", "Stop following"), new("Other", "Whom", ScriptFieldKind.Who) }, "{Who} {Value} {Other}"),
         new(EventCommandType.ChangeName, "Change Name", World, "Characters", "A character's name, from a formula (Name is a text variable typed with Input Text, say).",
-            new[] { Who(), F("Value", "New name (formula)", def: "\"\"") }, "{Who} = {Value}"),
+            new[] { Who(), new("Value", "New name", ScriptFieldKind.Words) }, "{Who} = {Value}"),
         new(EventCommandType.ChangeLook, "Change Look", World, "Characters", "A character looks like another character (its sprites and poses) - a disguise, a transformation; back to its own look with \"Its own\".",
             new[] { Who(), new("Other", "Looks like", ScriptFieldKind.Who), Check("Own", "Back to its own look") }, "{Who} looks like {Other}"),
         new(EventCommandType.SetAttackMode, "Set Attack Mode", World, "Characters", "Exult's combat modes: who it attacks in combat.",
@@ -241,7 +243,7 @@ public static class ScriptCommands
         new(EventCommandType.Resurrect, "Resurrect / Heal Fully", World, "Characters", "Heals fully (all health, no ailments) - or brings a dead character back to life where its body lies.",
             new[] { Who(), Choice("Value", "Do", "Heal fully", "Resurrect") }, "{Who}: {Value}"),
         new(EventCommandType.ShowBark, "Show Bark", World, "Characters", "Words floating over a character's head for a moment (Exult's item_say) - not a dialog box. The event doesn't wait.",
-            new[] { Who(), F("Value", "Words (formula)", def: "\"Hello!\""), F("Seconds", "For how many seconds", def: "3") }, "{Who}: {Value}"),
+            new[] { Who(), new("Value", "Words", ScriptFieldKind.Words, "Hello!"), F("Seconds", "For how many seconds", def: "3") }, "{Who}: {Value}"),
 
         // ---- 8. Objects and the map ----
         new(EventCommandType.CreateObject, "Create Object", World, "Objects & Map", "Puts a new object (or item) on the map at a spot.",

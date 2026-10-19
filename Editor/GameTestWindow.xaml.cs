@@ -1540,20 +1540,13 @@ public partial class GameTestWindow : Window
         if (e.Key == Key.F9 && !IsShippedGame) { ShowScriptState(); e.Handled = true; return; } // the script data and debug log (Game Test only)
         if (e.Key == Key.F10 && !IsShippedGame) { _showFps = !_showFps; StatusText.Text = _showFps ? "Frame rate: measuring..." : ""; e.Handled = true; return; } // the frame rate (Game Test only)
         if (e.Key == Key.C && !_combatForbidden) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
-        if (e.Key == Key.Z) { OpenStatsDoll(_player); e.Handled = true; return; } // Exult: Z shows the player's stats
+        if (e.Key == Key.Z) { NextPartyStats(); e.Handled = true; return; } // Exult ActionStats: the next party member's stats (held down: everyone's)
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
         // Escape mid-drag cancels the drag (the item never left its origin, so it's simply still there) instead of closing a gump out from under it - Exult likewise refuses Escape while dragging.
         if (e.Key == Key.Escape && _pointer is { IsDragging: true }) { CancelPointer(); e.Handled = true; return; }
         if (e.Key == Key.Escape && _gumpFocusOrder.Count > 0) { CloseTopmostPaperdoll(); e.Handled = true; return; }
-        if (e.Key == Key.I)
-        {
-            var existing = _player is not null ? _openPaperdolls.FirstOrDefault(g => g.Character == _player) : null;
-            if (existing is not null) ClosePaperdollGump(existing);
-            else OpenPaperdoll(_player);
-            e.Handled = true;
-            return;
-        }
+        if (e.Key == Key.I) { NextPartyInventory(); e.Handled = true; return; } // Exult ActionInventory: the next party member's inventory (held down: everyone's)
         int? partyIndex = e.Key switch
         {
             Key.D1 or Key.NumPad1 => 0, Key.D2 or Key.NumPad2 => 1, Key.D3 or Key.NumPad3 => 2,

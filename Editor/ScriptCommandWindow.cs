@@ -29,6 +29,7 @@ public class ScriptCommandWindow : FactionCommandWindowBase
             AddField(field, existing);
             anyFormula |= field.Kind is ScriptFieldKind.Formula or ScriptFieldKind.Condition;
         }
+        anyFormula |= spec.Fields.Any(f => f.Kind == ScriptFieldKind.Words);
         if (anyFormula)
             AddLabel("Formulas: 12, \"a text\", a variable (Gold, or {Gold Coins} with spaces), Items[i], Board[x, y], + - * / %, = != < > <= >=, and / or / not, " +
                      "random(1, 6), min, max, round, length(Items), contains(Items, 5), upper(Name)... Arrays and grids count from 0.", bold: false);
@@ -263,6 +264,32 @@ public class ScriptCommandWindow : FactionCommandWindowBase
             case ScriptFieldKind.Condition:
                 AddConditionField(field, existing);
                 break;
+            case ScriptFieldKind.Words:
+            {
+                AddLabel(field.Label);
+                // New: Words. Made before the switch existed: a formula, as it was.
+                bool formula = existing is not null ? existing.Get(field.Key + "Mode") != "Words" : false;
+                var row = CommandFields.Row(Rows);
+                var asWords = new RadioButton { Content = "Words (as typed)", GroupName = "words" + field.Key, IsChecked = !formula, Margin = new Thickness(0, 0, 12, 0) };
+                var asFormula = new RadioButton { Content = "Formula (\"Gold: \" + Gold)", GroupName = "words" + field.Key, IsChecked = formula };
+                row.Children.Add(asWords);
+                row.Children.Add(asFormula);
+                var box = new TextBox { Text = Existing(field.Key, field.Default), Margin = new Thickness(0, 4, 0, 0) };
+                Rows.Children.Add(box);
+                _savers.Add(c =>
+                {
+                    bool isFormula = asFormula.IsChecked == true;
+                    if (isFormula && ScriptExpression.Check(box.Text) is { } error)
+                    {
+                        MessageBox.Show(this, $"{field.Label}: {error}.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return false;
+                    }
+                    c.Parameters[field.Key] = isFormula ? box.Text.Trim() : box.Text;
+                    c.Parameters[field.Key + "Mode"] = isFormula ? "Formula" : "Words";
+                    return true;
+                });
+                break;
+            }
             case ScriptFieldKind.Pose:
             {
                 AddLabel(field.Label);

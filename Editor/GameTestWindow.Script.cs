@@ -64,6 +64,7 @@ public partial class GameTestWindow
     /// <summary>Formula values as numbers and texts, read from the command (errors go to the debug log).</summary>
     private object Formula(EventCommand command, string key)
     {
+        if (command.Get(key + "Mode") == "Words") return command.Get(key); // words as typed (ScriptFieldKind.Words)
         try { return ScriptExpression.Evaluate(command.Get(key), _execContext); }
         catch (ScriptException ex) { _execContext.ScriptData.AddLog($"Script error in {ScriptCommands.Of(command.Type)?.Name}: {ex.Message}"); return 0.0; }
     }
