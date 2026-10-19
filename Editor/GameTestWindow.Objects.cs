@@ -28,8 +28,8 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 public partial class GameTestWindow
 {
-    private WorldObject? DefinitionOf(ObjectInstance instance) => _objects.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-    private WorldObject? DefinitionOf(InventoryItemInstance item) => item.Category == ReferencedItemCategory.Object ? _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) : null;
+    private WorldObject? DefinitionOf(ObjectInstance instance) => ObjectDef(instance.ObjectId);
+    private WorldObject? DefinitionOf(InventoryItemInstance item) => item.Category == ReferencedItemCategory.Object ? ObjectDef(item.ItemId) : null;
 
     // ================= State =================
 
@@ -142,6 +142,7 @@ public partial class GameTestWindow
     /// <summary>After an object's state changes (a door opens, a light goes out, a stack grows): its picture is rebuilt for the new state.</summary>
     private void RefreshObjectLook(ObjectInstance instance)
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         if (!_objectVisuals.TryGetValue(instance, out var old)) return;
         UnregisterWorldAnimator(old);
         GameCanvas.Children.Remove(old);
@@ -150,7 +151,43 @@ public partial class GameTestWindow
         foreach (var animator in animators) RegisterWorldAnimator(visual, animator);
         GameCanvas.Children.Add(visual);
         _objectVisuals[instance] = visual;
-        RefreshStackingVisuals();
+        RestackAround(instance, old, visual);
+    }
+
+    /// <summary>
+    /// A thing's new look in its place: drawn where it was and in the same
+    /// order (over what it rests on, as before) - and for a door, wall or
+    /// window whose picture moved or changed size, the things drawn near it
+    /// ordered again among the walls. Not the whole map's order again (that
+    /// cost nearly a second on a big map, every time a door opened).
+    /// </summary>
+    private void RestackAround(ObjectInstance instance, UIElement oldVisual, UIElement newVisual)
+    {
+        WorldChanged();
+        if (newVisual is not FrameworkElement fe) { RefreshStackingVisuals(); return; }
+        var before = ScreenRectOf(oldVisual);
+        int z = Panel.GetZIndex(oldVisual);
+        ApplyZToVisual(fe, instance.X, instance.Y, instance.Z, instance.OffsetX, instance.OffsetY);
+        ShiftOpenDoor(instance, fe); // hangs from its hinge
+        Panel.SetZIndex(fe, z); // the order it had: over what it rests on
+        if (DefinitionOf(instance)?.Type is not (ObjectType.Wall or ObjectType.Door or ObjectType.Window)) return;
+        var area = before;
+        area.Union(ScreenRectOf(fe));
+        area.Inflate(8, 8);
+        foreach (var (item, itemVisual) in _itemVisuals)
+            if (ScreenRectOf(itemVisual).IntersectsWith(area))
+            {
+                var body = BodyOf(item, null);
+                Panel.SetZIndex(itemVisual, OrderAmongWalls(new UnitRect(body.Left, body.Top, body.Width, body.Depth), body.Z, body.Height, ScreenRectOf(itemVisual), Panel.GetZIndex(itemVisual)));
+            }
+        foreach (var (obj, objVisual) in _objectVisuals)
+            if (!ReferenceEquals(obj, instance) && ScreenRectOf(objVisual).IntersectsWith(area) && DefinitionOf(obj)?.Type is not (ObjectType.Wall or ObjectType.Door or ObjectType.Window or ObjectType.Roof))
+            {
+                var body = BodyOf(null, obj);
+                Panel.SetZIndex(objVisual, OrderAmongWalls(new UnitRect(body.Left, body.Top, body.Width, body.Depth), body.Z, body.Height, ScreenRectOf(objVisual), Panel.GetZIndex(objVisual)));
+            }
+        foreach (var mapCharacter in _mapCharacters)
+            if (mapCharacter.Visual is { } cv && ScreenRectOf(cv).IntersectsWith(area)) PositionCharacterVisual(mapCharacter);
     }
 
     // ================= Identify and use =================
@@ -474,7 +511,7 @@ public partial class GameTestWindow
     /// <summary>Into a list of contents: joins a stack of the same object if the total stays within 100. True if joined.</summary>
     private bool TryCombineIntoContents(List<InventoryItemInstance> contents, ReferencedItemCategory category, int itemId, int quantity)
     {
-        if (category != ReferencedItemCategory.Object || !CanCombine(_objects.Objects.FirstOrDefault(o => o.Id == itemId))) return false;
+        if (category != ReferencedItemCategory.Object || !CanCombine(ObjectDef(itemId))) return false;
         var stack = contents.FirstOrDefault(i => i.Category == category && i.ItemId == itemId && i.Quantity + quantity <= ObjectTypes.MaxQuantity);
         if (stack is null) return false;
         stack.Quantity += quantity;

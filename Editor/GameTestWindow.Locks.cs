@@ -79,7 +79,7 @@ public partial class GameTestWindow
     private void RefreshContainerLook(IHasContainerContents container)
     {
         if (container is PlacedItemInstance placed && _itemVisuals.GetValueOrDefault(placed) is Image image
-            && _containers.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is { } data
+            && ContainerDef(placed.ItemId) is { } data
             && ContainerSprite(data, placed) is { Frames.Count: > 0 } sprite)
         {
             var frame = LoadStaticFrame(sprite.Frames[0].FilePath);
@@ -138,7 +138,7 @@ public partial class GameTestWindow
             _ => null
         };
         int? itemId = container switch { PlacedItemInstance p => p.ItemId, InventoryItemInstance i => i.ItemId, _ => null };
-        if (container is null || itemId is null || _containers.Containers.FirstOrDefault(c => c.Id == itemId) is not { IsBodyContainer: false } data) return null;
+        if (container is null || itemId is null || ContainerDef(itemId.Value) is not { IsBodyContainer: false } data) return null;
         return (container, data);
     }
 

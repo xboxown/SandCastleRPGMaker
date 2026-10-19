@@ -56,7 +56,7 @@ public partial class GameTestWindow
             // A door (KeyInternal: doors and chests alike).
             if (ObjectTargeted(target) is { Obj.Type: ObjectType.Door } door)
             {
-                var fitting = keys.Contains(door.Obj.Door.RequiredKeyItemId) && !door.Obj.Door.MagicallyLocked ? _objects.Objects.FirstOrDefault(o => o.Id == door.Obj.Door.RequiredKeyItemId) : null;
+                var fitting = keys.Contains(door.Obj.Door.RequiredKeyItemId) && !door.Obj.Door.MagicallyLocked ? ObjectDef(door.Obj.Door.RequiredKeyItemId) : null;
                 if (fitting is null) { FlashPointer(MousePointerKind.Blocked); PartySay(barks); return; }
                 PlaySound(u.Obj.Keychain.AddKeySoundResourceId);
                 UseKeyOnDoor(fitting, door.Instance, door.Obj);
@@ -66,7 +66,7 @@ public partial class GameTestWindow
             {
                 var (container, data) = hit;
                 var key = data.RequiredKeyCategory == ReferencedItemCategory.Object && keys.Contains(data.RequiredKeyItemId)
-                    ? _objects.Objects.FirstOrDefault(o => o.Id == data.RequiredKeyItemId) : null;
+                    ? ObjectDef(data.RequiredKeyItemId) : null;
                 if (key is null) { FlashPointer(MousePointerKind.Blocked); PartySay(barks); return; }
                 PlaySound(u.Obj.Keychain.AddKeySoundResourceId);
                 UseKeyOn(key, u.Source, container, data);

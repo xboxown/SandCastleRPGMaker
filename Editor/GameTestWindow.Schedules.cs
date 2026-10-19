@@ -61,6 +61,8 @@ public partial class GameTestWindow
 
         // Combat (GameTestWindow.Combat.cs): Exult's Combat_schedule state.
         public bool InCombat, Fleeing, Hounding;
+        /// <summary>Exult's dormant: off screen and more than a screen away, it does nothing till it's on screen again (GameTestWindow.Perf.cs).</summary>
+        public bool Dormant;
         public CharacterDefinition? Target, FleeFrom, Oppressor;
         public int DexPoints, Failures, FleeCount;
         /// <summary>Approach_actor_action: chasing the target, and the cell it stood on when the chase began (moved more than 2 tiles = think again).</summary>
@@ -79,20 +81,21 @@ public partial class GameTestWindow
     private void UpdateClockAndCharacters(double elapsedMs)
     {
         int hourChanges = _clock.Advance(elapsedMs);
-        if (hourChanges > 0) ScheduleNpcs(_clock.Hour);
-        UpdateVitals(elapsedMs, hourChanges); // hunger, healing, poison, ailments, tile effects - everyone
-        UpdateCombat(elapsedMs); // the player's blows; who sees whom (enemies on sight, fear, allies under attack)
-        UpdateBleeding(elapsedMs); // drips from whoever is bleeding, and temporary puddles far away cleared
+        if (hourChanges > 0) using (Measure("ScheduleNpcs")) ScheduleNpcs(_clock.Hour);
+        using (Measure("UpdateVitals")) UpdateVitals(elapsedMs, hourChanges); // hunger, healing, poison, ailments, tile effects - everyone
+        using (Measure("UpdateCombat")) UpdateCombat(elapsedMs); // the player's blows; who sees whom (enemies on sight, fear, allies under attack)
+        using (Measure("UpdateBleeding")) UpdateBleeding(elapsedMs); // drips from whoever is bleeding, and temporary puddles far away cleared
         foreach (var character in AllLivingCharacters().ToList()) UpdateUnconscious(character, elapsedMs); // the knocked out mend and get up
-        UpdateObjects(elapsedMs); // lights burning, tiles and traps underfoot, doors closed behind NPCs
-        UpdateScriptActions(elapsedMs); // event commands being carried out: walking there, sitting, picking a lock (GameTestWindow.Actions.cs)
+        using (Measure("UpdateObjects")) UpdateObjects(elapsedMs); // lights burning, tiles and traps underfoot, doors closed behind NPCs
+        using (Measure("UpdateScriptActions")) UpdateScriptActions(elapsedMs); // event commands being carried out: walking there, sitting, picking a lock (GameTestWindow.Actions.cs)
         UpdateCinema(elapsedMs); // a Cinema Mode whose event has died gives the controls back (GameTestWindow.Cinema.cs)
-        UpdateAlwaysPages(elapsedMs); // characters' Always pages, run on their own (GameTestWindow.AlwaysPages.cs)
+        using (Measure("UpdateAlwaysPages")) UpdateAlwaysPages(elapsedMs); // characters' Always pages, run on their own (GameTestWindow.AlwaysPages.cs)
         ShowClock();
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
             if (IsShowingMessage) break; // a dialog box just went up: everything stops right here
-            UpdateNpc(mapCharacter, elapsedMs);
+            if (KeepDormant(mapCharacter)) continue; // far off screen: does nothing (Exult)
+            using (Measure("UpdateNpc")) UpdateNpc(mapCharacter, elapsedMs);
         }
     }
 
@@ -553,6 +556,7 @@ public partial class GameTestWindow
     /// <param name="goalFloor">The goal is on this floor: a cell under an upper floor and the same cell on it are different places (Exult paths in 3D, Tile_coord with its lift), and the way there goes up or down the stairs. Null: the goal cell on whatever floor it's reached at.</param>
     private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false, bool besideOnly = false, int? goalFloor = null)
     {
+        using var measured = Measure("FindPath");
         int FloorKey(int lift) => goalFloor is null ? 0 : MapFloors.FloorOfLift(lift); // floors told apart only when one is asked for
         int wantFloor = goalFloor ?? 0;
         (int X, int Y, int F) start = (mapCharacter.Placement.X, mapCharacter.Placement.Y, FloorKey(mapCharacter.Lift));
@@ -578,7 +582,8 @@ public partial class GameTestWindow
             path.Reverse();
             return path;
         }
-        while (open.Count > 0 && expansions++ < 6000)
+        int maxExpansions = Math.Clamp(40 * H(start) + 400, 400, 6000); // a detour up to 40 times the straight way; past that it's no way (or as near as it got)
+        while (open.Count > 0 && expansions++ < maxExpansions)
         {
             var current = open.Dequeue();
             int h = H(current);
@@ -619,13 +624,13 @@ public partial class GameTestWindow
     private static int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
 
     /// <summary>Whether the character could step onto that cell from a lift (the walking rules), and at what lift it would stand.</summary>
-    private bool CanStandAt(MapCharacter mapCharacter, (int X, int Y) cell, int fromLift, List<Body>? world, out int lift, bool anyLift = false)
+    private bool CanStandAt(MapCharacter mapCharacter, (int X, int Y) cell, int fromLift, BodySource? world, out int lift, bool anyLift = false)
     {
         var foot = ActorFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y), mapCharacter.Size);
         if (anyLift)
         {
             lift = 0;
-            var here = (world ?? WorldBodies()).Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, mapCharacter.Placement)).ToList();
+            var here = SolidsOverlapping(foot, mapCharacter.Placement, world).ToList();
             if (PlayerBody() is { } playerBody && playerBody.Overlaps(foot)) return false;
             return IsClear(here, FloorBelow(here, int.MaxValue), mapCharacter.Size.Z);
         }

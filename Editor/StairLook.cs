@@ -33,19 +33,7 @@ internal static class StairLook
         var sprite = SpriteOf(step, sprites);
         if (sprite is null) return null;
         string path = sprite.Frames.Count > 0 ? sprite.Frames[Math.Clamp(step.Frame, 0, sprite.Frames.Count - 1)].FilePath : sprite.FilePath; // a landing's tile: its frame
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
-        }
-        catch { return null; }
+        return FrameCache.Get(path);
     }
 
     /// <summary>A step's picture size in pixels (a step without a sprite: one tile).</summary>

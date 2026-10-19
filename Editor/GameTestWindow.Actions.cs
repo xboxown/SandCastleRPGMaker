@@ -194,7 +194,7 @@ public partial class GameTestWindow
         double wait = 0;
         if (_player is not null) StandUpIfSeated(_player);
         bool CanStandThere((int X, int Y) cell) => floor is { } f
-            ? TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), MapFloors.BaseLift(f), _playerSize.Z, out int lift, out _, null, WorldBodies()) && MapFloors.FloorOfLift(lift) == f
+            ? TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), MapFloors.BaseLift(f), _playerSize.Z, out int lift, out _, null, WorldNow()) && MapFloors.FloorOfLift(lift) == f
             : PlayerCanStandAt(cell);
         return elapsedMs =>
         {
@@ -209,7 +209,7 @@ public partial class GameTestWindow
     }
 
     private bool PlayerCanStandAt((int X, int Y) cell) =>
-        TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), _playerZ, _playerSize.Z, out _, out _, null, WorldBodies());
+        TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), _playerZ, _playerSize.Z, out _, out _, null, WorldNow());
 
     // ================= Poses =================
 
@@ -447,7 +447,7 @@ public partial class GameTestWindow
     private DragOrigin? OriginOfCarried(CharacterDefinition who, InventoryItemInstance item, InventoryItemInstance? holder)
     {
         if (holder is not null)
-            return _containers.Containers.FirstOrDefault(c => c.Id == holder.ItemId) is { } data ? new ContainerOrigin(holder, data, item) : null;
+            return ContainerDef(holder.ItemId) is { } data ? new ContainerOrigin(holder, data, item) : null;
         var slot = ItemsInSlots(who).FirstOrDefault(e => ReferenceEquals(e.Item, item)).Slot;
         return slot is not null ? new SlotOrigin(who, slot, item) : new BackpackOrigin(who, item);
     }
@@ -502,7 +502,7 @@ public partial class GameTestWindow
         {
             if (Equals(bagSlot, slot) || !who.EquippedSlots.TryGetValue(bagSlot, out int bagId)) continue;
             if (who.Inventory.FirstOrDefault(i => i.InstanceId == bagId) is not { Category: ReferencedItemCategory.Container } bag || ReferenceEquals(bag, item)) continue;
-            if (_containers.Containers.FirstOrDefault(c => c.Id == bag.ItemId) is not { } data || !CanContainerAccept(data, bag, origin, out _, out _)) continue;
+            if (ContainerDef(bag.ItemId) is not { } data || !CanContainerAccept(data, bag, origin, out _, out _)) continue;
             if (TryCombineIntoContents(bag.Contents, item.Category, item.ItemId, Math.Max(1, item.Quantity))) { RemoveFromSource(origin); return; }
             var stored = DetachAsInventoryItem(origin, data.GetNextContentsInstanceId);
             PlaceWithinFrame(stored, data, null);
@@ -597,7 +597,7 @@ public partial class GameTestWindow
     private bool CanBeBroken(object thing) => thing switch
     {
         ObjectInstance o => DefinitionOf(o) is { } def && (IsBreakable(def) || (def.Type == ObjectType.Explosive && def.Explosive.ExplodesWhenStruck)),
-        PlacedItemInstance { Category: ReferencedItemCategory.Container } c => _containers.Containers.FirstOrDefault(d => d.Id == c.ItemId) is { Destructible: true, IsBodyContainer: false, RequiredKeyItemId: < 0 },
+        PlacedItemInstance { Category: ReferencedItemCategory.Container } c => ContainerDef(c.ItemId) is { Destructible: true, IsBodyContainer: false, RequiredKeyItemId: < 0 },
         _ => false
     };
 
@@ -792,7 +792,7 @@ public partial class GameTestWindow
     {
         if (CharacterDefinitionFor(command.Get("Who")) is not { } who || IsDead(who)) return false;
         if (ThingOf(command) is not PlacedItemInstance { Category: ReferencedItemCategory.Container } container
-            || _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is not { } data) return Cancel("Pick Item From Container: that container isn't there.");
+            || ContainerDef(container.ItemId) is not { } data) return Cancel("Pick Item From Container: that container isn't there.");
         bool hasCategory = Enum.TryParse<ReferencedItemCategory>(command.Get("Category"), out var category);
         bool any = !int.TryParse(command.Get("ItemId"), out int itemId) || itemId < 0 || !hasCategory; // "(everything)"
         int quantity = int.TryParse(command.Get("Quantity"), out int q) ? Math.Max(1, q) : 1;

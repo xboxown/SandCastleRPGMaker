@@ -71,7 +71,7 @@ public partial class GameTestWindow
     };
 
     private string ReagentList(SpellDefinition spell) => spell.ReagentObjectIds.Count == 0 ? ""
-        : "; " + string.Join(", ", spell.ReagentObjectIds.Select(id => _objects.Objects.FirstOrDefault(o => o.Id == id)?.Name ?? "?"));
+        : "; " + string.Join(", ", spell.ReagentObjectIds.Select(id => ObjectDef(id)?.Name ?? "?"));
 
     /// <summary>can_do_spell - null if it can be cast now, else why not.</summary>
     private string? WhyCannotCast(CharacterDefinition caster, SpellDefinition spell)
@@ -85,7 +85,7 @@ public partial class GameTestWindow
         var carried = CarriedItems(caster);
         foreach (int reagent in spell.ReagentObjectIds.Distinct())
             if (!carried.Any(i => i.Item.Category == ReferencedItemCategory.Object && i.Item.ItemId == reagent))
-                return $"Missing {_objects.Objects.FirstOrDefault(o => o.Id == reagent)?.Name ?? "a reagent"}.";
+                return $"Missing {ObjectDef(reagent)?.Name ?? "a reagent"}.";
         return null;
     }
 

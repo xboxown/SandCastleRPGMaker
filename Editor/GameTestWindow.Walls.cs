@@ -96,12 +96,53 @@ public partial class GameTestWindow
         }
     }
 
+    // The walls kept, with a grid of where their pictures are: ExultCompare orders only pictures that overlap on screen,
+    // so something moving needs only the walls whose pictures are near its own - not every wall on the map.
+    private List<(ObjectInstance Wall, OrderBox Box, UIElement Visual, bool Occludes)>? _walls;
+    private Dictionary<(int, int), List<int>>? _wallCells;
+    private long _wallsVersion = -1;
+    private const double WallCellPixels = 64;
+
+    private List<(ObjectInstance Wall, OrderBox Box, UIElement Visual, bool Occludes)> KeptWalls()
+    {
+        if (_walls is not null && _wallCells is not null && _wallsVersion == _worldVersion) return _walls;
+        _walls = WallBoxes().ToList();
+        _wallCells = new Dictionary<(int, int), List<int>>();
+        for (int i = 0; i < _walls.Count; i++)
+            foreach (var cell in CellsOf(_walls[i].Box.Screen))
+            {
+                if (!_wallCells.TryGetValue(cell, out var list)) _wallCells[cell] = list = new List<int>(2);
+                list.Add(i);
+            }
+        _wallsVersion = _worldVersion;
+        return _walls;
+    }
+
+    private static IEnumerable<(int, int)> CellsOf(Rect screen)
+    {
+        if (screen.IsEmpty) yield break;
+        for (int cy = (int)Math.Floor(screen.Top / WallCellPixels); cy <= (int)Math.Floor(screen.Bottom / WallCellPixels); cy++)
+            for (int cx = (int)Math.Floor(screen.Left / WallCellPixels); cx <= (int)Math.Floor(screen.Right / WallCellPixels); cx++)
+                yield return (cx, cy);
+    }
+
+    /// <summary>The walls whose pictures could overlap a picture at this place on screen.</summary>
+    private IEnumerable<(ObjectInstance Wall, OrderBox Box, UIElement Visual, bool Occludes)> WallsNear(Rect screen)
+    {
+        var walls = KeptWalls();
+        var seen = new HashSet<int>();
+        foreach (var cell in CellsOf(screen))
+            if (_wallCells!.TryGetValue(cell, out var list))
+                foreach (int i in list)
+                    if (seen.Add(i)) yield return walls[i];
+    }
+
     /// <summary>A paint order for something moving among walls: after every wall Exult says it's in front of, before every wall it's behind.</summary>
     private int OrderAmongWalls(UnitRect foot, int lift, int height, Rect screen, int zIndex)
     {
         var me = BoxOf(foot, lift, height, screen);
         int lowest = int.MaxValue;
-        foreach (var (_, box, visual, occludes) in WallBoxes())
+        foreach (var (_, box, visual, occludes) in WallsNear(screen))
         {
             int cmp = ExultCompare(me, box, false, occludes);
             int wallZ = Panel.GetZIndex(visual);
@@ -133,8 +174,7 @@ public partial class GameTestWindow
         foreach (var (item, visual) in _itemVisuals.ToList()) Panel.SetZIndex(visual, OverUpperFloorsInFront(item, visual));
         foreach (var (obj, visual) in _objectVisuals.ToList())
             if (!IsUpperFloorTile(obj)) Panel.SetZIndex(visual, OverUpperFloorsInFront(obj, visual));
-        var walls = WallBoxes().ToList();
-        if (walls.Count == 0) return;
+        if (KeptWalls().Count == 0) return;
         void Order(object entity, UIElement visual)
         {
             var body = entity is PlacedItemInstance item ? BodyOf(item, null) : BodyOf(null, (ObjectInstance)entity);
@@ -144,7 +184,7 @@ public partial class GameTestWindow
                 // On the wall's face: drawn over every wall its picture is over.
                 var screen = ScreenRectOf(visual);
                 int z = Panel.GetZIndex(visual);
-                foreach (var (_, _, wallVisual, _) in walls)
+                foreach (var (_, _, wallVisual, _) in WallsNear(screen))
                     if (ScreenRectOf(wallVisual).IntersectsWith(screen)) z = Math.Max(z, Panel.GetZIndex(wallVisual) + 1);
                 Panel.SetZIndex(visual, z);
                 return;

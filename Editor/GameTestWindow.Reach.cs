@@ -55,7 +55,7 @@ public partial class GameTestWindow
     /// <summary>Exult is_dragable: whether a solid thing can be moved out of the way. Objects say so with Portable; books and containers can always be picked up here.</summary>
     private bool IsMovable(object entity) => entity switch
     {
-        ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.IsPortable ?? true,
+        ObjectInstance obj => ObjectDef(obj.ObjectId)?.IsPortable ?? true,
         FloorSlab => false, // a floor overhead: you can't reach through it
         _ => true
     };
@@ -226,6 +226,7 @@ public partial class GameTestWindow
     {
         private readonly GameTestWindow _window;
         private readonly List<Body> _solids;
+        private BodySource? _solidsSource;
         private readonly Dictionary<(int, int), List<Body>> _solidsAt = new();
         private readonly int _mapUnitsWide, _mapUnitsHigh;
 
@@ -295,7 +296,8 @@ public partial class GameTestWindow
         {
             var foot = new UnitRect(x - actorW + 1, y - actorD + 1, actorW, actorD);
             if (foot.Left < 0 || foot.Top < 0 || foot.Right > _mapUnitsWide || foot.Bottom > _mapUnitsHigh) return -1;
-            return _window.TryStepActor(foot, z, 1, out int newLift, out _, null, _solids) ? newLift : -1;
+            _solidsSource ??= new BodySource { Index = new BodyIndex(_solids), Extra = new List<Body>() };
+            return _window.TryStepActor(foot, z, 1, out int newLift, out _, null, _solidsSource) ? newLift : -1;
         }
 
         /// <summary>path.cc Find_path (A*) with Fast_pathfinder_client's costs and limits. Returns the steps (not including the start), or null if no path.</summary>

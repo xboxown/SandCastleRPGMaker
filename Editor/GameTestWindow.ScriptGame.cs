@@ -342,7 +342,7 @@ public partial class GameTestWindow
     /// <summary>The spellbooks a character carries (objects of the Spellbook type), with their objects.</summary>
     private List<(InventoryItemInstance Item, WorldObject Book)> SpellbooksOf(CharacterDefinition who) =>
         CarriedItems(who).Where(c => c.Item.Category == ReferencedItemCategory.Object)
-            .Select(c => (c.Item, Book: _objects.Objects.FirstOrDefault(o => o.Id == c.Item.ItemId)))
+            .Select(c => (c.Item, Book: ObjectDef(c.Item.ItemId)))
             .Where(c => c.Book is { Type: ObjectType.Spellbook }).Select(c => (c.Item, c.Book!)).ToList();
 
     /// <summary>A spellbook's spells this copy knows: all of them, or (its type starting empty) those learned.</summary>

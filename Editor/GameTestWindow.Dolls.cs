@@ -477,7 +477,7 @@ public partial class GameTestWindow
     private string DollItemName(InventoryItemInstance item) => item.Category switch
     {
         ReferencedItemCategory.Object when DefinitionOf(item) is { } obj => CarriedObjectName(obj, item),
-        ReferencedItemCategory.Book when _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book => EffectiveBookName(book),
+        ReferencedItemCategory.Book when BookDef(item.ItemId) is { } book => EffectiveBookName(book),
         _ => DollLook.ItemName(new ItemReference { Category = item.Category, ItemId = item.ItemId }, _objects, _books, _containers)
     };
 
@@ -735,7 +735,7 @@ public partial class GameTestWindow
     /// <summary>Turn the object into another object: this copy becomes it where it is (on the map or carried) - the machine with every part fitted becomes the finished machine. Its paperdoll closes; the new object starts with its own.</summary>
     private bool TurnDollOwnerInto(DollContext context, EventCommand command)
     {
-        if (!int.TryParse(command.Get("ObjectId"), out int objectId) || _objects.Objects.FirstOrDefault(o => o.Id == objectId) is not { } becomes) return false;
+        if (!int.TryParse(command.Get("ObjectId"), out int objectId) || ObjectDef(objectId) is not { } becomes) return false;
         var holder = HolderOf(context.State, context.Owner);
         foreach (var open in _openDolls.Where(g => ReferenceEquals(g.State, context.State)).ToList()) CloseDollGump(open);
         SoundPlayback.StopFor(context.State);

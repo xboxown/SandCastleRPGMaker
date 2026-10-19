@@ -604,8 +604,8 @@ public partial class GameTestWindow
         {
             "Event" => _map.Events.FirstOrDefault(e => e.Id == id),
             "Character" => _characters?.Characters.FirstOrDefault(c => c.Id == id),
-            "Book" => _books.Books.FirstOrDefault(b => b.Id == id),
-            "Container" => _containers.Containers.FirstOrDefault(c => c.Id == id),
+            "Book" => BookDef(id),
+            "Container" => ContainerDef(id),
             "Object" => _map.Objects.FirstOrDefault(o => o.InstanceId == id),
             _ => null
         };

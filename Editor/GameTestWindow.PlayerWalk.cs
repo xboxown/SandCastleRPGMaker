@@ -77,7 +77,7 @@ public partial class GameTestWindow
         int wantFloor = goalFloor ?? 0;
         (int X, int Y, int F) start = (_playerX, _playerY, FloorKey(_playerZ));
         if ((start.X, start.Y) == goal && start.F == wantFloor && !besideOnly) return new List<(int X, int Y)>();
-        var world = WorldBodies();
+        var world = WorldNow(); // kept by area (GameTestWindow.Perf.cs)
         bool PlayerCanStand((int X, int Y) cell, int fromLift, out int lift) =>
             TryStepActor(PlayerFootprintAt(CellCenterX(cell.X), CellCenterY(cell.Y)), fromLift, _playerSize.Z, out lift, out _, null, world);
         bool goalFree = !besideOnly && (goalFloor is { } gf

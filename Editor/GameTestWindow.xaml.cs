@@ -302,28 +302,7 @@ public partial class GameTestWindow : Window
         GameCanvas.Width = pixelWidth;
         GameCanvas.Height = pixelHeight;
 
-        var ground = _map.Layers[0];
-        for (int y = 0; y < _map.Height; y++)
-        {
-            for (int x = 0; x < _map.Width; x++)
-            {
-                int tileIndex = ground.GetTile(x, y, _map.Width);
-                if (tileIndex < 0) continue;
-
-                var image = new Image
-                {
-                    Width = _tileWidth,
-                    Height = _tileHeight,
-                    IsHitTestVisible = false,
-                    Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
-                };
-                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-                Canvas.SetLeft(image, x * _tileWidth);
-                Canvas.SetTop(image, y * _tileHeight);
-                GameCanvas.Children.Add(image);
-                _groundTileImages[(x, y)] = image;
-            }
-        }
+        BuildGroundChunks(); // the ground in pictures of 16 x 16 tiles, not a picture a tile (GameTestWindow.Tiles.cs)
     }
 
     /// <summary>Renders every placed item (Weapon/Armor/Item/Book), not just Books - Books get their real animated sprite since that's the one category with actual content; the others show a plain lettered marker, same honest placeholder the Select Item picker's own tabs already use, and aren't interactive yet.</summary>
@@ -386,7 +365,7 @@ public partial class GameTestWindow : Window
 
             if (instance.Category == ReferencedItemCategory.Book)
             {
-                var book = _books.Books.FirstOrDefault(b => b.Id == instance.ItemId);
+                var book = BookDef(instance.ItemId);
                 var sprite = book is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
 
                 if (sprite is not null && sprite.Frames.Count > 0)
@@ -413,7 +392,7 @@ public partial class GameTestWindow : Window
             else if (instance.Category == ReferencedItemCategory.Container)
             {
                 // Real, confirmed fix, same real bug as the map editor's own PlaceItemVisual - this is GameTestWindow's own SEPARATE map-item-visual builder, never extended for Container at all, so it fell into the generic lettered-marker fallback below instead of showing its real sprite.
-                var containerData = _containers.Containers.FirstOrDefault(c => c.Id == instance.ItemId);
+                var containerData = ContainerDef(instance.ItemId);
                 var sprite = containerData is null ? null : ContainerSprite(containerData, instance); // its Locked Sprite while locked
 
                 if (sprite is not null && sprite.Frames.Count > 0)
@@ -603,8 +582,8 @@ public partial class GameTestWindow : Window
             {
                 string name = Instance.Category switch
                 {
-                    ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == Instance.ItemId)?.Name ?? "(missing book)",
-                    ReferencedItemCategory.Object => _objects.Objects.FirstOrDefault(o => o.Id == Instance.ItemId)?.Name ?? "(missing object)",
+                    ReferencedItemCategory.Book => _books?.Books.FirstOrDefault(b => b.Id == Instance.ItemId)?.Name ?? "(missing book)",
+                    ReferencedItemCategory.Object => _objects?.Objects.FirstOrDefault(o => o.Id == Instance.ItemId)?.Name ?? "(missing object)",
                     // Real, confirmed fix - this used to always show the stale "(no Container database yet)" placeholder even though the real container database has existed and been used throughout the engine for a long time now.
                     ReferencedItemCategory.Container => _containers?.Containers.FirstOrDefault(c => c.Id == Instance.ItemId)?.Name ?? "(missing container)",
                     _ => $"(no {Instance.Category} database yet)"
@@ -616,8 +595,8 @@ public partial class GameTestWindow : Window
 
     private bool IsPaperdollItemTwoHanded(InventoryItemInstance item) => item.Category switch
     {
-        ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == item.ItemId)?.IsTwoHanded ?? false,
-        ReferencedItemCategory.Object => _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId)?.IsTwoHanded ?? false,
+        ReferencedItemCategory.Book => BookDef(item.ItemId)?.IsTwoHanded ?? false,
+        ReferencedItemCategory.Object => ObjectDef(item.ItemId)?.IsTwoHanded ?? false,
         _ => false
     };
 
@@ -958,7 +937,7 @@ public partial class GameTestWindow : Window
     {
         if (equippedItem.Category == ReferencedItemCategory.Book)
         {
-            var book = _books.Books.FirstOrDefault(b => b.Id == equippedItem.ItemId);
+            var book = BookDef(equippedItem.ItemId);
             var itemSprite = _sprites.Groups.FirstOrDefault(g => g.Name == book?.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book?.SpriteName);
             if (itemSprite is null || itemSprite.Frames.Count == 0) return null;
             var frameBitmap = LoadStaticFrame(itemSprite.Frames[0].FilePath);
@@ -971,7 +950,7 @@ public partial class GameTestWindow : Window
             return BuildCarriedObjectPicture(equippedItem, paperdollItemCounterScale, gump.ItemAnimators); // its look for its state and quantity
         if (equippedItem.Category == ReferencedItemCategory.Container)
         {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == equippedItem.ItemId);
+            var containerData = ContainerDef(equippedItem.ItemId);
             var itemSprite = containerData is null ? null : ContainerSprite(containerData, equippedItem); // its Locked Sprite while locked
             if (itemSprite is null || itemSprite.Frames.Count == 0) return null;
             var frameBitmap = LoadStaticFrame(itemSprite.Frames[0].FilePath);
@@ -1186,7 +1165,7 @@ public partial class GameTestWindow : Window
         var existing = _openContainers.FirstOrDefault(g => g.PlacedItem == equippedItem);
         if (existing is not null) { BringPaperdollToFrontGeneric(existing.GumpBorder, existing); return; }
 
-        var data = _containers.Containers.FirstOrDefault(c => c.Id == equippedItem.ItemId);
+        var data = ContainerDef(equippedItem.ItemId);
         if (data is null) return;
         if (RefuseIfLocked(equippedItem, data)) return; // carried or not, a locked chest says "Locked"
 
@@ -1299,7 +1278,7 @@ public partial class GameTestWindow : Window
             double size = 32;
             if (item.Category == ReferencedItemCategory.Book)
             {
-                var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
+                var book = BookDef(item.ItemId);
                 var sprite = _sprites.Groups.FirstOrDefault(g => g.Name == book?.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book?.SpriteName);
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
@@ -1317,7 +1296,7 @@ public partial class GameTestWindow : Window
             }
             else if (item.Category == ReferencedItemCategory.Container)
             {
-                var inner = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
+                var inner = ContainerDef(item.ItemId);
                 var sprite = inner is null ? null : ContainerSprite(inner, item); // its Locked Sprite while locked
                 if (sprite is not null && sprite.Frames.Count > 0)
                 {
@@ -1356,7 +1335,7 @@ public partial class GameTestWindow : Window
     {
         if (item.Category == ReferencedItemCategory.Book)
         {
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
+            var book = BookDef(item.ItemId);
             if (book is null) return;
             // Real, confirmed fix, per spec ("the same mechanics you used in the inventory paper doll to single click to identify please apply it in the container") - this used to only set a plain status-bar text, the exact same gap already found and fixed for the paperdoll itself; now shows the exact same real, visible floating name label the paperdoll and the map both already use, positioned for this container's own coordinate space.
             if (!isUse) { ShowContainerIdentifyLabel(gump, item, EffectiveBookName(book)); StatusText.Text = EffectiveBookName(book); return; }
@@ -1367,7 +1346,7 @@ public partial class GameTestWindow : Window
         if (item.Category == ReferencedItemCategory.Container)
         {
             // Real, confirmed fix, per spec ("containers inside containers... recursively... the ability to move items between these containers through the paper dolls") - a container found INSIDE an already-open container is a real InventoryItemInstance with its own real Contents, exactly what OpenEquippedContainer already expects, so nesting genuinely works to any depth with no extra plumbing at all: opening this one just opens another real gump on top, which can itself hold another one, and so on.
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
+            var containerData = ContainerDef(item.ItemId);
             if (containerData is null) return;
             if (!isUse) { ShowContainerIdentifyLabel(gump, item, containerData.Name); StatusText.Text = containerData.Name; return; }
             OpenEquippedContainer(item);
@@ -1391,10 +1370,10 @@ public partial class GameTestWindow : Window
 
     private double ResolveContentsVolume(InventoryItemInstance item) => item.Category switch
     {
-        ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == item.ItemId)?.Volume ?? 0,
-        ReferencedItemCategory.Container => _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.Volume ?? 0,
+        ReferencedItemCategory.Book => BookDef(item.ItemId)?.Volume ?? 0,
+        ReferencedItemCategory.Container => ContainerDef(item.ItemId)?.Volume ?? 0,
         // Real, confirmed fix, same real fix and same real reason as the editor's own version - an Object always counted as zero volume here too, so any number of them could be added to a running container with no real limit ever actually applying.
-        ReferencedItemCategory.Object => _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId)?.Volume ?? 0,
+        ReferencedItemCategory.Object => ObjectDef(item.ItemId)?.Volume ?? 0,
         _ => 0
     } * item.Quantity;
 
@@ -1418,7 +1397,7 @@ public partial class GameTestWindow : Window
     {
         if (item.Category == ReferencedItemCategory.Book)
         {
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
+            var book = BookDef(item.ItemId);
             if (book is null) return;
 
             if (!isUse)
@@ -1437,7 +1416,7 @@ public partial class GameTestWindow : Window
         if (item.Category == ReferencedItemCategory.Container)
         {
             // Real, confirmed fix, per spec ("single-click a container to identify it and double-click it to interact with it, the same way I do on the map side") - this is the one, single, shared place every caller of HandleInventoryItemClick reaches, so fixing it here covers a container in ANY equipped slot, not just the one raw click handler this was special-cased for earlier.
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
+            var containerData = ContainerDef(item.ItemId);
             if (containerData is null) return;
             if (!isUse)
             {
@@ -1559,6 +1538,7 @@ public partial class GameTestWindow : Window
         if (_isReadingBook) return;
         if (e.Key == Key.F6 && !IsShippedGame) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
         if (e.Key == Key.F9 && !IsShippedGame) { ShowScriptState(); e.Handled = true; return; } // the script data and debug log (Game Test only)
+        if (e.Key == Key.F10 && !IsShippedGame) { _showFps = !_showFps; StatusText.Text = _showFps ? "Frame rate: measuring..." : ""; e.Handled = true; return; } // the frame rate (Game Test only)
         if (e.Key == Key.C && !_combatForbidden) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
         if (e.Key == Key.Z) { OpenStatsDoll(_player); e.Handled = true; return; } // Exult: Z shows the player's stats
 
@@ -1715,6 +1695,7 @@ public partial class GameTestWindow : Window
     /// </summary>
     private void UpdateCamera()
     {
+        using var measured = Measure("UpdateCamera");
         // Real, continuous position, per Exult's own confirmed mechanics - the camera tracks the avatar's actual pixel position directly, not a coarse tile-center, so it naturally follows every small step of real movement rather than only jumping when the logical tile changes.
         var (followX, followY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } followedOnMap ? (followedOnMap.PixelX, followedOnMap.PixelY) : (_playerPixelX, _playerPixelY);
         double playerCenterX = followX;
@@ -1743,6 +1724,7 @@ public partial class GameTestWindow : Window
         // Instant, per spec - confirmed directly from Exult's own documentation: the original game's camera scrolling is "jerky" (non-interpolated) by default; smooth scrolling is only an optional, later Exult enhancement, not authentic default behavior. Since the avatar's own position is now genuinely continuous (see StepPlayerContinuous), tracking it instantly every frame already looks smooth in practice - no separate interpolation layer is needed, and none of the earlier animation-conflict bugs can recur because nothing here is animated at all.
         CameraTransform.X = -_cameraX;
         CameraTransform.Y = -_cameraY;
+        ShowGroundNearView(); // GameTestWindow.Tiles.cs
     }
 
     /// <summary>
@@ -1761,20 +1743,36 @@ public partial class GameTestWindow : Window
     /// moves on its own real per-frame schedule, not because anything is
     /// counting keyboard repeat events.
     /// </summary>
+    private TimeSpan _lastDrawnTime;
+
     private void GameLoop_Rendering(object? sender, EventArgs e)
     {
         var now = (e as RenderingEventArgs)?.RenderingTime ?? _lastRenderTime;
+        if (now == _lastRenderTime) return; // WPF raises Rendering more than once for the same frame: the work once
+        if (now != _lastDrawnTime) { _drawnFrames++; _lastDrawnTime = now; }
+        if (_lastRenderTime != TimeSpan.Zero && (now - _lastRenderTime).TotalMilliseconds < MinLogicMs) return; // about 30 times a second (GameTestWindow.Perf.cs)
         // Clamped so a stall (window drag, breakpoint, etc.) can't produce one giant catch-up jump - the real avatar never "teleports" to make up for lost time.
         double deltaSeconds = _lastRenderTime == TimeSpan.Zero ? 0 : Math.Min(0.05, (now - _lastRenderTime).TotalSeconds);
         _lastRenderTime = now;
+        _logicFrame++;
+        _frameWork.Restart();
+        try { GameFrame(deltaSeconds); }
+        finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
+    }
+
+    /// <summary>One frame of the game's work.</summary>
+    private void GameFrame(double deltaSeconds)
+    {
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
-        UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
+        using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
-        UpdateScripts(deltaSeconds * 1000); // long loops go on, Wait Until checks - paused or not (GameTestWindow.Script.cs)
+        SoakTest(deltaSeconds * 1000); // only when measuring (GameTestWindow.Perf.cs)
+        using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (GameTestWindow.Perf.cs)
+        using (Measure("UpdateScripts")) UpdateScripts(deltaSeconds * 1000); // long loops go on, Wait Until checks - paused or not (GameTestWindow.Script.cs)
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 
-        UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
+        using (Measure("UpdateClockAndCharacters")) UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
 
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);
@@ -1908,11 +1906,11 @@ public partial class GameTestWindow : Window
     private bool IsSolidAt(PlacedItemInstance? item, ObjectInstance? obj)
     {
         if (item is not null && item.Category == ReferencedItemCategory.Book)
-            return _books.Books.FirstOrDefault(b => b.Id == item.ItemId)?.IsSolid ?? false;
+            return BookDef(item.ItemId)?.IsSolid ?? false;
         // Real, confirmed fix, per spec ("When I checked collision detection, I could still pass through the chest") - a placed Container was never checked here at all, so its own real IsSolid setting was silently ignored no matter what it was set to. This is squarely collision integration, not a change to the walking/input/frame-timing system itself, which stays completely untouched.
         if (item is not null && item.Category == ReferencedItemCategory.Container)
-            return _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.IsSolid ?? false;
-        if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject)
+            return ContainerDef(item.ItemId)?.IsSolid ?? false;
+        if (obj is not null && ObjectDef(obj.ObjectId) is { } worldObject)
             return worldObject.Type switch
             {
                 ObjectType.Wall or ObjectType.Window => true,         // always an obstacle
@@ -2124,7 +2122,7 @@ public partial class GameTestWindow : Window
     {
         if (item is not null && item.Category == ReferencedItemCategory.Book)
         {
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
+            var book = BookDef(item.ItemId);
             if (book is null) return (false, false, 1, 1, 1);
             bool stackable = _execContext.GetEffectiveBookSetting(book, "IsStackable", book.IsStackable.ToString()) == "True";
             bool elevates = _execContext.GetEffectiveBookSetting(book, "AllowElevation", book.AllowElevation.ToString()) == "True";
@@ -2136,12 +2134,12 @@ public partial class GameTestWindow : Window
         // Real, confirmed fix, per spec ("if Allow Elevation is enabled... the mechanics of elevation and stacking" should apply to the container itself) - a container was never handled here at all before, silently falling through to "not stackable, doesn't elevate" regardless of its own real settings. No Change Settings-style runtime override system exists for containers yet (that's Book-specific), so this reads the container's own real, saved values directly.
         if (item is not null && item.Category == ReferencedItemCategory.Container)
         {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
+            var containerData = ContainerDef(item.ItemId);
             return containerData is null ? (false, false, 1, 1, 1) : (containerData.IsStackable, containerData.AllowElevation, Math.Max(1, containerData.SizeX), Math.Max(1, containerData.SizeY), Math.Max(1, containerData.SizeZ));
         }
         if (obj is not null)
         {
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId);
+            var worldObject = ObjectDef(obj.ObjectId);
             if (worldObject is null) return (false, false, 1, 1, 1);
             bool flat = worldObject.Type == ObjectType.Trap || (worldObject.Type == ObjectType.Tile && !worldObject.IsSolid); // Exult: a flat shape is 0 lifts high
             if (worldObject.Type == ObjectType.Tile && worldObject.IsSolid) // a floor slab: things put on it rest on top
@@ -2195,6 +2193,8 @@ public partial class GameTestWindow : Window
     /// </summary>
     private void RefreshStackingVisuals()
     {
+        using var measured = Measure("RefreshStackingVisuals");
+        WorldChanged(); // pictures placed again: kept walls and bodies are made again
         foreach (var item in _map.Items)
         {
             if (_itemVisuals.TryGetValue(item, out var visual) && visual is FrameworkElement fe)
@@ -2208,9 +2208,9 @@ public partial class GameTestWindow : Window
                 ShiftOpenDoor(obj, fe); // hangs from its hinge
             }
         }
-        ApplyRestingDrawOrder();
-        ApplyWallDrawOrder(); // things near walls, by Exult's compare
-        FixFurnitureDrawOrder(); // sitters over chairs, covers over sleepers
+        using (Measure("Restack.Resting")) ApplyRestingDrawOrder();
+        using (Measure("Restack.Walls")) ApplyWallDrawOrder(); // things near walls, by Exult's compare
+        using (Measure("Restack.Furniture")) FixFurnitureDrawOrder(); // sitters over chairs, covers over sleepers
     }
 
     /// <summary>
@@ -2287,7 +2287,7 @@ public partial class GameTestWindow : Window
     {
         if (item.Category == ReferencedItemCategory.Container)
         {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId);
+            var containerData = ContainerDef(item.ItemId);
             if (containerData is null) return;
             if (!isUse) { ShowIdentifyLabel(containerData.Name, item.X, item.Y, _itemVisuals.GetValueOrDefault(item) as FrameworkElement); return; }
             TryOpenContainer(item, containerData);
@@ -2296,7 +2296,7 @@ public partial class GameTestWindow : Window
 
         if (item.Category == ReferencedItemCategory.Book)
         {
-            var book = _books.Books.FirstOrDefault(b => b.Id == item.ItemId);
+            var book = BookDef(item.ItemId);
             if (book is null) return;
 
             if (!isUse)
@@ -2551,16 +2551,6 @@ public partial class GameTestWindow : Window
 
     private static BitmapImage? LoadStaticFrame(string path)
     {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
+        return FrameCache.Get(path);
     }
 }

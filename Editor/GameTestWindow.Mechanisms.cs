@@ -145,7 +145,7 @@ public partial class GameTestWindow
         TeleportCommand(WhoChoice.Player, stairs.DestinationX, stairs.DestinationY);
         // Arrive at the floor at (or just under) the destination lift - so a ladder can lead down into a room under another floor.
         var foot = PlayerFootprint();
-        _playerZ = FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && b.Entity is not PlacedCharacter), stairs.DestinationLift + 1);
+        _playerZ = FloorBelow(WorldNow().Overlapping(foot).Where(b => b.Solid && b.Entity is not PlacedCharacter), stairs.DestinationLift + 1);
         _playerVisualLiftZ = _playerZ;
         SnapPlayerPosition();
         UpdateCamera();
@@ -208,7 +208,7 @@ public partial class GameTestWindow
     private int? CeilingOver(UnitRect foot, int lift)
     {
         int? lowest = null;
-        foreach (var body in WorldBodies())
+        foreach (var body in WorldNow().Overlapping(foot))
         {
             if (!body.Solid || body.Entity is PlacedCharacter || body.Z < lift + 4 || !body.Overlaps(foot)) continue;
             lowest = lowest is null ? body.Z : Math.Min(lowest.Value, body.Z);
@@ -220,7 +220,7 @@ public partial class GameTestWindow
 
     /// <summary>Whether a floor above (its painted tiles or a Floor + Solid tile up there) is what's at this lift over the footprint.</summary>
     private bool IsFloorSlabAt(UnitRect foot, int lift) =>
-        WorldBodies().Any(b => b.Z == lift && b.Overlaps(foot) && (b.Entity is FloorSlab || b.Entity is ObjectInstance o && IsUpperFloorSlabTile(o)));
+        WorldNow().Overlapping(foot).Any(b => b.Z == lift && (b.Entity is FloorSlab || b.Entity is ObjectInstance o && IsUpperFloorSlabTile(o)));
 
     /// <summary>skip_above: under a roof, everything at its lift or above goes; out in the open, it all comes back.</summary>
     private void UpdateRoofs()

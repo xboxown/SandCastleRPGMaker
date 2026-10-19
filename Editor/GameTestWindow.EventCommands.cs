@@ -131,7 +131,7 @@ public partial class GameTestWindow
     /// <summary>Given without being owned: a stack of a stackable thing, otherwise one each. A container comes with its Starting Contents.</summary>
     private List<InventoryItemInstance> MakeGifts(ReferencedItemCategory category, int itemId, int quantity)
     {
-        bool stacks = category == ReferencedItemCategory.Object && CanCombine(_objects.Objects.FirstOrDefault(o => o.Id == itemId));
+        bool stacks = category == ReferencedItemCategory.Object && CanCombine(ObjectDef(itemId));
         InventoryItemInstance Make(int count) => new()
         {
             Category = category, ItemId = itemId, Quantity = count,

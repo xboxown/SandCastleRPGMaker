@@ -50,19 +50,35 @@ public partial class GameTestWindow
 
     // ---------- Tiles and traps ----------
 
+    private List<ObjectInstance> _floorThings = new();
+    private BodyIndex? _floorIndex;
+    private long _floorVersion = -1;
+
+    /// <summary>The tiles and traps on the map, by area - kept till the world changes (GameTestWindow.Perf.cs).</summary>
+    private (List<ObjectInstance> Things, BodyIndex Index) FloorThings()
+    {
+        if (_floorIndex is null || _floorVersion != _worldVersion)
+        {
+            _floorThings = _map.Objects.Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type is ObjectType.Tile or ObjectType.Trap).ToList();
+            _floorIndex = new BodyIndex(_floorThings.Select(o => BodyOf(null, o)).ToList());
+            _floorVersion = _worldVersion;
+        }
+        return (_floorThings, _floorIndex);
+    }
+
     private UnitRect FootOf(CharacterDefinition who) => who == _player ? PlayerFootprint() : MapCharacterOf(who) is { } mc ? CharacterFootprint(mc) : new UnitRect(-999, -999, 0, 0);
 
     /// <summary>Which tiles and traps each character stands on now, and what changed since the last frame.</summary>
     private void UpdateFloorObjects()
     {
-        var floorThings = _map.Objects.Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type is ObjectType.Tile or ObjectType.Trap).ToList();
+        var (floorThings, floorIndex) = FloorThings();
         if (floorThings.Count == 0 && _onFloorObjects.Count == 0) return;
         foreach (var who in AllLivingCharacters().ToList())
         {
             if (who == _player && PlayerSeated) continue;
             var foot = FootOf(who);
             int lift = LiftOf(who);
-            var now = new HashSet<ObjectInstance>(floorThings.Where(o => Math.Abs(o.Z - lift) <= 1 && BodyOf(null, o).Overlaps(foot)), ReferenceEqualityComparer.Instance);
+            var now = new HashSet<ObjectInstance>(floorIndex.Overlapping(foot).Select(b => (ObjectInstance)b.Entity).Where(o => Math.Abs(o.Z - lift) <= 1), ReferenceEqualityComparer.Instance);
             var before = _onFloorObjects.GetValueOrDefault(who) ?? new HashSet<ObjectInstance>(ReferenceEqualityComparer.Instance);
             var activator = MapCharacterOf(who);
             foreach (var entered in now.Where(o => !before.Contains(o)).ToList())
@@ -147,12 +163,17 @@ public partial class GameTestWindow
     // ---------- NPCs and doors ----------
 
     /// <summary>Exult paths.cc: for planning a route, a closed unlocked door counts as open (it will be opened on the way); a locked one stays shut - unless the walker is hostile to the door's side and can break it down.</summary>
-    private List<Body> WorldBodiesForPathing(MapCharacter? walker = null) =>
-        WorldBodies().Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door && !IsDoorOpen(o)
+    private BodySource WorldBodiesForPathing(MapCharacter? walker = null)
+    {
+        var (_, index, doors) = StillBodies(); // everything still, kept (GameTestWindow.Perf.cs); only the doors depend on the walker
+        var extra = doors.Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door && !IsDoorOpen(o)
             && ((!IsDoorLocked(o) && (walker is null || walker.Character.IsHuman)) // a human opens it on the way
                 || (walker is not null && IsDoorLocked(o) && HoldsHouseKey(walker, door)) // its own door: it has the key
                 || (walker is not null && WouldBreakDown(walker, door, IsDoorLocked(o)))) // or it breaks it down
             ? b with { Solid = false } : b).ToList();
+        extra.AddRange(CharacterBodies());
+        return new BodySource { Index = index, Extra = extra };
+    }
 
     /// <summary>The faction a door belongs to: its own, or its owner's.</summary>
     private int DoorFaction(WorldObject door) =>

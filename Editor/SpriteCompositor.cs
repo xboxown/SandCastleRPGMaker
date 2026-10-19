@@ -125,19 +125,5 @@ public static class SpriteCompositor
         return true;
     }
 
-    private static BitmapSource? LoadBitmap(string path)
-    {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bmp.UriSource = new Uri(path, UriKind.Absolute);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
-    }
+    private static BitmapSource? LoadBitmap(string path) => FrameCache.Get(path);
 }

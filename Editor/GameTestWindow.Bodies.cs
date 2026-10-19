@@ -98,5 +98,5 @@ public partial class GameTestWindow
     /// <summary>A body marked Too Heavy can't be lifted at all (Exult's "too heavy" pointer).</summary>
     private bool IsTooHeavyToLift(PlacedItemInstance item) =>
         item.Category == ReferencedItemCategory.Container
-        && _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId) is { IsBodyContainer: true, CanBePicked: false };
+        && ContainerDef(item.ItemId) is { IsBodyContainer: true, CanBePicked: false };
 }

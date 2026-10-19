@@ -32,7 +32,7 @@ public partial class GameTestWindow
     private sealed record WeaponShot(CharacterDefinition Attacker, WorldObject Weapon, WorldObject? Ammo, int AttackValue, WorldObject? Thrown);
 
     private WorldObject? ObjectDef(InventoryItemInstance item) =>
-        item.Category == ReferencedItemCategory.Object ? _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) : null;
+        item.Category == ReferencedItemCategory.Object ? ObjectDef(item.ItemId) : null;
 
     /// <summary>A weapon's or armor's own slot for this character: a built-in slot, or their custom slot of that name.</summary>
     private static object? OwnSlotFor(EquipmentSlot? slot, string? customName, CharacterDefinition character) =>

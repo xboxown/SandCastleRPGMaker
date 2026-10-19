@@ -28,19 +28,7 @@ internal static class DollLook
     {
         if (sprite is null) return null;
         string path = sprite.Frames.Count > 0 ? sprite.Frames[Math.Clamp(frame, 0, sprite.Frames.Count - 1)].FilePath : sprite.FilePath;
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.CreateOptions = BitmapCreateOptions.IgnoreImageCache;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            bmp.Freeze();
-            return bmp;
-        }
-        catch { return null; }
+        return FrameCache.Get(path); // decoded once, shared
     }
 
     /// <summary>A part's size for a look: its sprite's, else its own Width x Height.</summary>

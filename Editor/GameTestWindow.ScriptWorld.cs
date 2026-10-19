@@ -399,7 +399,7 @@ public partial class GameTestWindow
     /// <summary>A placed container's live contents (its starting contents put in the first time).</summary>
     private List<InventoryItemInstance> ContentsOf(PlacedItemInstance container)
     {
-        EnsureContainerSeeded(container, _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) ?? new ContainerData());
+        EnsureContainerSeeded(container, ContainerDef(container.ItemId) ?? new ContainerData());
         return container.Contents;
     }
 
@@ -410,7 +410,7 @@ public partial class GameTestWindow
         if (command.Get("Empty") == "True") contents.Clear();
         if (Enum.TryParse<ReferencedItemCategory>(command.Get("Category"), out var category) && int.TryParse(command.Get("ItemId"), out int itemId) && itemId >= 0)
         {
-            var data = _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) ?? new ContainerData();
+            var data = ContainerDef(container.ItemId) ?? new ContainerData();
             foreach (var gift in MakeGifts(category, itemId, Math.Max(1, (int)FormulaNumber(command, "Quantity")))) { PlaceWithinFrame(gift, data, null); contents.Add(gift); }
         }
         RefreshAfterMove();

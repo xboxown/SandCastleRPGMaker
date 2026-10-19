@@ -215,7 +215,7 @@ public partial class GameTestWindow
     /// <summary>A new object put on the map at a cell (produce, an empty bottle, shards, a spill), resting on whatever is there.</summary>
     private ObjectInstance? SpawnObjectAt(int objectId, int quantity, int cellX, int cellY)
     {
-        if (objectId < 0 || _objects.Objects.FirstOrDefault(o => o.Id == objectId) is not { } def) return null;
+        if (objectId < 0 || ObjectDef(objectId) is not { } def) return null;
         // Joins a stack of the same thing already there (Game_object::drop).
         if (CanCombine(def) && _map.Objects.FirstOrDefault(o => o.ObjectId == objectId && o.ContainerInstanceId < 0 && o.X == cellX && o.Y == cellY && o.Quantity + quantity <= ObjectTypes.MaxQuantity) is { } stack)
         {
@@ -233,6 +233,7 @@ public partial class GameTestWindow
     /// <summary>A placed object gone from the world.</summary>
     private void RemoveMapObject(ObjectInstance instance)
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         if (_objectVisuals.Remove(instance, out var gone)) { UnregisterWorldAnimator(gone); GameCanvas.Children.Remove(gone); }
         _map.Objects.Remove(instance);
         if (ReferenceEquals(_playerTargetThing, instance)) _playerTargetThing = null;

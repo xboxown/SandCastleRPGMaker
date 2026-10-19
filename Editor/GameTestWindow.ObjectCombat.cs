@@ -38,7 +38,7 @@ public partial class GameTestWindow
     {
         if (!_combatMode) return false;
         if (entity is PlacedItemInstance { Category: ReferencedItemCategory.Container } container
-            && _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is { } data
+            && ContainerDef(container.ItemId) is { } data
             && (data.IsBodyContainer || !IsLockedNow(container, data)))
             return false; // bodies and unlocked containers open, combat or not
         _playerTarget = null;
@@ -81,7 +81,7 @@ public partial class GameTestWindow
         }
         // Exult effective_hps: a locked chest with a key of its own can't be broken (only quality 0 has hit points).
         if (entity is not PlacedItemInstance { Category: ReferencedItemCategory.Container } container
-            || _containers.Containers.FirstOrDefault(c => c.Id == container.ItemId) is not { } data
+            || ContainerDef(container.ItemId) is not { } data
             || !data.Destructible || data.IsBodyContainer || data.RequiredKeyItemId >= 0)
         {
             ShowFloatingTextOver(visual, "no effect"); // indestructible: Exult's reduce_health returns 0

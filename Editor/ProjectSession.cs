@@ -83,17 +83,6 @@ internal static class ProjectSession
     {
         if (sprite is null) return null;
         string path = sprite.Frames.Count > 0 ? sprite.Frames[0].FilePath : sprite.FilePath;
-        if (string.IsNullOrEmpty(path) || !System.IO.File.Exists(path)) return null;
-        try
-        {
-            var bmp = new System.Windows.Media.Imaging.BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = System.Windows.Media.Imaging.BitmapCacheOption.OnLoad;
-            bmp.CreateOptions = System.Windows.Media.Imaging.BitmapCreateOptions.IgnoreImageCache; // a frame redrawn in place must show its new pixels
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
+        return FrameCache.Get(path); // a frame redrawn in place is decoded again (FrameCache checks the file)
     }
 }

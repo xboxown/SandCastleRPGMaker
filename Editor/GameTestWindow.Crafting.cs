@@ -73,7 +73,7 @@ public partial class GameTestWindow
             RefreshObjectLook(plant);
         }
         SpawnObjectAt(p.ProduceObjectId, Math.Max(1, p.ProduceQuantity), x, y);
-        string produce = _objects.Objects.FirstOrDefault(o => o.Id == p.ProduceObjectId)?.Name ?? "something";
+        string produce = ObjectDef(p.ProduceObjectId)?.Name ?? "something";
         StatusText.Text = $"You harvest {(p.ProduceQuantity > 1 ? $"{p.ProduceQuantity} " : "")}\"{produce}\".";
         if (_map.Objects.Contains(plant)) FireObjectEvent(plant, obj, BookTriggerConditionBased.ByAfterReadItem); // By Harvested
     }
@@ -168,14 +168,14 @@ public partial class GameTestWindow
             job.Station.IsLitRuntime = false;
             RefreshObjectLook(job.Station);
             SpawnObjectAt(job.Recipe.OutputObjectId, Math.Max(1, job.Recipe.OutputQuantity), job.Station.X, job.Station.Y);
-            string made = _objects.Objects.FirstOrDefault(o => o.Id == job.Recipe.OutputObjectId)?.Name ?? "something";
+            string made = ObjectDef(job.Recipe.OutputObjectId)?.Name ?? "something";
             StatusText.Text = $"\"{job.Obj.Name}\" has made {(job.Recipe.OutputQuantity > 1 ? $"{job.Recipe.OutputQuantity} " : "")}\"{made}\".";
             FireObjectEvent(job.Station, job.Obj, BookTriggerConditionBased.ByAfterReadItem); // By Made Something
         }
     }
 
     private string DescribeIngredients(CraftingRecipe recipe) => string.Join(", ", recipe.Inputs.Where(i => i.ObjectId >= 0)
-        .Select(i => $"{(i.Quantity > 1 ? $"{i.Quantity} " : "")}{_objects.Objects.FirstOrDefault(o => o.Id == i.ObjectId)?.Name ?? "?"}"));
+        .Select(i => $"{(i.Quantity > 1 ? $"{i.Quantity} " : "")}{ObjectDef(i.ObjectId)?.Name ?? "?"}"));
 
     // ================= What the party carries =================
 

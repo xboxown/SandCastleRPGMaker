@@ -17,7 +17,7 @@ public partial class GameTestWindow
     /// footprint by the walking rules (1 lift up or down, headroom, solids).
     /// </summary>
     private bool CanSweep(Func<double, double, UnitRect> footAt, double fromX, double fromY, double toX, double toY,
-        int fromLift, int height, object? mover, List<Body> world, out int lift)
+        int fromLift, int height, object? mover, BodySource world, out int lift)
     {
         lift = fromLift;
         double step = SpriteSizing.BaseUnit / 2.0;
@@ -33,7 +33,7 @@ public partial class GameTestWindow
                 if (alongX) x += move; else y += move;
                 var foot = footAt(x, y);
                 if (foot == last) continue;
-                if (!TryStepActor(foot, lift, height, out lift, out _, mover, world)) return false;
+                if (!TryStepActor(foot, lift, height, out lift, out _, mover, world, explain: false)) return false;
                 last = foot;
             }
         }
@@ -42,18 +42,18 @@ public partial class GameTestWindow
 
     /// <summary>A character's walk from one cell (or, leaving where it stands, its own spot) to the middle of the next.</summary>
     /// <param name="lift">The lift it stands at in the end - walked there step by step, so stairs (several lifts a cell, 1 a step) are climbed and gone down.</param>
-    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, List<Body> world, out int lift) =>
+    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, BodySource world, out int lift) =>
         CanSweep((px, py) => ActorFootprintAt(px, py, mapCharacter.Size),
             fromWhereItStands ? mapCharacter.PixelX : CellCenterX(from.X), fromWhereItStands ? mapCharacter.PixelY : CellCenterY(from.Y),
             CellCenterX(to.X), CellCenterY(to.Y), fromLift, mapCharacter.Size.Z, mapCharacter.Placement, world, out lift);
 
-    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, List<Body> world) =>
+    private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, BodySource world) =>
         CanWalkBetween(mapCharacter, from, to, fromWhereItStands, fromLift, world, out _);
 
     /// <summary>The player's walk from one cell's middle to the next (and the lift they end at).</summary>
-    private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, List<Body> world, out int lift) =>
+    private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, BodySource world, out int lift) =>
         CanSweep(PlayerFootprintAt, CellCenterX(from.X), CellCenterY(from.Y), CellCenterX(to.X), CellCenterY(to.Y), fromLift, _playerSize.Z, null, world, out lift);
 
-    private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, List<Body> world) =>
+    private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, BodySource world) =>
         PlayerCanWalkBetween(from, to, fromLift, world, out _);
 }

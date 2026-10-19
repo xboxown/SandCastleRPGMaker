@@ -99,7 +99,11 @@ public partial class GameTestWindow
     /// <summary>Nothing solid taller than eye level (3 lifts above the feet) lies on the straight line between two feet positions. Characters don't block sight.</summary>
     private bool HasLineOfSight(double fromX, double fromY, int fromLift, double toX, double toY)
     {
-        var solids = WorldBodies().Where(b => b.Solid && b.Entity is not PlacedCharacter && b.TopLift > fromLift + 3 && b.Z <= fromLift + 3 && !LetsSightThrough(b.Entity)).ToList(); // seen through windows
+        // Only the solids along the way (the line's box, by area - GameTestWindow.Perf.cs), not every thing on the map.
+        int left = (int)Math.Floor(Math.Min(fromX, toX) / SpriteSizing.BaseUnit) - 1, right = (int)Math.Ceiling(Math.Max(fromX, toX) / SpriteSizing.BaseUnit) + 1;
+        int top = (int)Math.Floor((Math.Min(fromY, toY) + _tileHeight / 2.0) / SpriteSizing.BaseUnit) - 2, bottom = (int)Math.Ceiling((Math.Max(fromY, toY) + _tileHeight / 2.0) / SpriteSizing.BaseUnit) + 2;
+        var solids = WorldNow().Overlapping(new UnitRect(left, top, right - left, bottom - top))
+            .Where(b => b.Solid && b.Entity is not PlacedCharacter && b.TopLift > fromLift + 3 && b.Z <= fromLift + 3 && !LetsSightThrough(b.Entity)).ToList(); // seen through windows
         if (solids.Count == 0) return true;
         double length = Math.Max(Math.Abs(toX - fromX), Math.Abs(toY - fromY));
         int steps = Math.Max(1, (int)(length / 4));
@@ -510,8 +514,8 @@ public partial class GameTestWindow
     {
         PlaceableItemBase? definition = category switch
         {
-            ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == itemId),
-            ReferencedItemCategory.Container => _containers.Containers.FirstOrDefault(c => c.Id == itemId),
+            ReferencedItemCategory.Book => BookDef(itemId),
+            ReferencedItemCategory.Container => ContainerDef(itemId),
             _ => null
         };
         if (definition is null || _player is null) return null;

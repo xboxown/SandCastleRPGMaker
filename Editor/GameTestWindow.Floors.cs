@@ -40,6 +40,7 @@ public partial class GameTestWindow
     private void BuildFloorSlabs()
     {
         _floorSlabBodies = new List<Body>();
+        WorldChanged();
         foreach (var layer in _map.UpperFloorLayers)
         {
             int slabLift = MapFloors.SlabLift(layer.Floor);

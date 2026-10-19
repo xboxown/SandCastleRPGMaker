@@ -82,7 +82,7 @@ public partial class GameTestWindow
             if (part.Kind is not (DollPartKind.Slot or DollPartKind.ItemArea)) return false;
             if (!Enum.TryParse<ReferencedItemCategory>(c.Get("Category"), out var category) || !int.TryParse(c.Get("ItemId"), out int itemId) || itemId < 0) return false;
             int count = Math.Max(1, (int)FormulaNumber(c, "Quantity"));
-            bool stacks = category == ReferencedItemCategory.Object && CanCombine(_objects.Objects.FirstOrDefault(o => o.Id == itemId));
+            bool stacks = category == ReferencedItemCategory.Object && CanCombine(ObjectDef(itemId));
             int room = Math.Max(1, part.Capacity) - runtime.Items.Count;
             if (room <= 0) return false;
             if (stacks) runtime.Items.Add(new InventoryItemInstance { InstanceId = gump.State.NextItemInstanceId++, Category = category, ItemId = itemId, Quantity = count, ContainerX = UnplacedSpot, ContainerY = UnplacedSpot });

@@ -122,6 +122,7 @@ public partial class GameTestWindow
     /// </summary>
     private void SetCharacterPose(MapCharacter mapCharacter, string poseName, SpriteDirection facing)
     {
+        if (mapCharacter.ShownSprite is not null && mapCharacter.PoseName == poseName && mapCharacter.Facing == facing) return; // as it is already (every walking step asks)
         mapCharacter.Facing = facing;
         mapCharacter.PoseName = poseName;
         if (mapCharacter.Visual is not Image image) return; // the no-art marker has no poses to show

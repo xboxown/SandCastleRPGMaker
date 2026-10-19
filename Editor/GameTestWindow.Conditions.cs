@@ -92,8 +92,8 @@ public partial class GameTestWindow
     private string EventOwnerName(object owner) => owner switch
     {
         ObjectInstance o => DefinitionOf(o)?.Name ?? "",
-        InventoryItemInstance i => DefinitionOf(i)?.Name ?? (i.Category == ReferencedItemCategory.Book ? _books.Books.FirstOrDefault(b => b.Id == i.ItemId)?.Name : _containers.Containers.FirstOrDefault(c => c.Id == i.ItemId)?.Name) ?? "",
-        PlacedItemInstance p => p.Category == ReferencedItemCategory.Book ? _books.Books.FirstOrDefault(b => b.Id == p.ItemId)?.Name ?? "" : _containers.Containers.FirstOrDefault(c => c.Id == p.ItemId)?.Name ?? "",
+        InventoryItemInstance i => DefinitionOf(i)?.Name ?? (i.Category == ReferencedItemCategory.Book ? BookDef(i.ItemId)?.Name : ContainerDef(i.ItemId)?.Name) ?? "",
+        PlacedItemInstance p => p.Category == ReferencedItemCategory.Book ? BookDef(p.ItemId)?.Name ?? "" : ContainerDef(p.ItemId)?.Name ?? "",
         BookData b => b.Name,
         ContainerData c => c.Name,
         GameEvent e => e.Name,

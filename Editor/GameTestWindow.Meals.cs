@@ -359,7 +359,7 @@ public partial class GameTestWindow
     /// </summary>
     private ObjectInstance? ServeDish(int foodId, MapCharacter customer)
     {
-        if (_objects.Objects.FirstOrDefault(o => o.Id == foodId) is null) return null;
+        if (ObjectDef(foodId) is null) return null;
         var (cx, cy) = (customer.Placement.X, customer.Placement.Y);
         var table = _map.Objects
             .Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type == ObjectType.Table && Math.Max(Math.Abs(o.X - cx), Math.Abs(o.Y - cy)) <= 2)
@@ -395,7 +395,7 @@ public partial class GameTestWindow
     {
         var me = mapCharacter.Character;
         if (!me.LocksHouseDoor || !me.IsHuman || door.Door.RequiredKeyItemId < 0 || door.Door.MagicallyLocked) return false;
-        if (_objects.Objects.FirstOrDefault(o => o.Id == door.Door.RequiredKeyItemId) is not { } key || key.BelongToId != me.Id) return false;
+        if (ObjectDef(door.Door.RequiredKeyItemId) is not { } key || key.BelongToId != me.Id) return false;
         return CarriedItems(me).Any(i => i.Item.Category == ReferencedItemCategory.Object && i.Item.ItemId == key.Id);
     }
 

@@ -181,6 +181,7 @@ public partial class GameTestWindow
         Canvas.SetLeft(visual, flying.X - visual.Width / 2);
         Canvas.SetTop(visual, flying.Y - visual.Height / 2 - flying.Lift * LiftPixelShift);
         Panel.SetZIndex(visual, AboveEverythingZIndex - 100); // in the air: over what it flies past
+        WorldChanged();
         flying.Instance.X = Math.Clamp((int)Math.Floor(flying.X / _tileWidth), 0, _map.Width - 1);
         flying.Instance.Y = Math.Clamp((int)Math.Floor(flying.Y / _tileHeight), 0, _map.Height - 1);
     }
@@ -224,7 +225,7 @@ public partial class GameTestWindow
             EndFlight(flying, who);
             return true;
         }
-        foreach (var body in WorldBodies())
+        foreach (var body in WorldNow().Overlapping(foot))
         {
             if (!body.Solid || ReferenceEquals(body.Entity, flying.Instance) || ReferenceEquals(body.Entity, flying.Shooter) || body.Entity is PlacedCharacter) continue;
             if (flying.Lift < body.Z || flying.Lift >= body.TopLift || !body.Overlaps(foot)) continue;

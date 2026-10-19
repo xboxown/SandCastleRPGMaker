@@ -95,18 +95,22 @@ public partial class GameTestWindow
     /// <summary>Where the item's solid box sits relative to its sprite (set by moving the box in the size editor), in 8px units - added on top of where the item itself stands.</summary>
     private (int X, int Y) ResolveSolidOffset(PlacedItemInstance? item, ObjectInstance? obj)
     {
-        if (item is { Category: ReferencedItemCategory.Book } && _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book) return (book.SolidOffsetX, book.SolidOffsetY);
-        if (item is { Category: ReferencedItemCategory.Container } && _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId) is { } container) return (container.SolidOffsetX, container.SolidOffsetY);
-        if (obj is not null && _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId) is { } worldObject) return (worldObject.SolidOffsetX, worldObject.SolidOffsetY);
+        if (item is { Category: ReferencedItemCategory.Book } && BookDef(item.ItemId) is { } book) return (book.SolidOffsetX, book.SolidOffsetY);
+        if (item is { Category: ReferencedItemCategory.Container } && ContainerDef(item.ItemId) is { } container) return (container.SolidOffsetX, container.SolidOffsetY);
+        if (obj is not null && ObjectDef(obj.ObjectId) is { } worldObject) return (worldObject.SolidOffsetX, worldObject.SolidOffsetY);
         return (0, 0);
     }
 
-    private List<Body> WorldBodies() =>
-        _map.Items.Select(i => BodyOf(i, null))
-            .Concat(_map.Objects.Where(o => o.ContainerInstanceId < 0).SelectMany(ObjectBodies)) // stairs: one body a step
-            .Concat(CharacterBodies()) // placed characters: solid, like Exult's actors
-            .Concat(_floorSlabBodies) // upper floors' tiles: slabs to stand on, ceilings for whoever is below
-            .ToList();
+    private List<Body> WorldBodies()
+    {
+        // Items, objects (stairs: one body a step) and upper floors' slabs, kept till the world changes (GameTestWindow.Perf.cs);
+        // placed characters (solid, like Exult's actors) as they are now.
+        var still = StillBodies().Bodies;
+        var all = new List<Body>(still.Count + _mapCharacters.Count);
+        all.AddRange(still);
+        all.AddRange(CharacterBodies());
+        return all;
+    }
 
     // ================= Item stacking and gravity =================
 
@@ -121,6 +125,7 @@ public partial class GameTestWindow
     /// </summary>
     private void SettleAll()
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         var bodies = WorldBodies().Where(b => b.Entity is not PlacedCharacter).ToList(); // gravity here is for items and objects - characters stand where they stand
         // Stable by current Z, then list order - so ties (e.g. a freshly loaded map, everything at Z 0) stack in placement order.
         var order = bodies.Select((b, index) => (b, index)).OrderBy(t => t.b.Z).ThenBy(t => t.index).Select(t => t.b).ToList();
@@ -187,8 +192,9 @@ public partial class GameTestWindow
     /// <summary>Put underneath in the Map Editor (ObjectInstance / PlacedItemInstance.LiesUnder).</summary>
     private static bool LiesUnder(object entity) => entity is ObjectInstance { LiesUnder: true } or PlacedItemInstance { LiesUnder: true };
 
-    private static void SetZ(object entity, int z)
+    private void SetZ(object entity, int z)
     {
+        WorldChanged();
         if (entity is PlacedItemInstance item) item.Z = z;
         else if (entity is ObjectInstance obj) obj.Z = z;
     }
@@ -196,6 +202,7 @@ public partial class GameTestWindow
     /// <summary>Gravity for the whole world after anything moved: things fall onto what's left under them, and so does the player (Map_chunk::gravity drops NPCs too).</summary>
     private void SettleWorld()
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         SettleAll();
         ApplyGravityToPlayer();
         ShatterFallenGlass();
@@ -226,7 +233,7 @@ public partial class GameTestWindow
         var foot = FootprintAt(newCellX, newCellY, newOffsetX + solidOffsetX, newOffsetY + solidOffsetY, sizeX, sizeY);
         var self = (object?)item ?? obj;
         int ceiling = RoofLiftOverPlayer() ?? int.MaxValue; // under a ceiling, nothing goes up through it (the floor above isn't reachable from here)
-        var others = WorldBodies().Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot) && b.Z < ceiling && !LiesUnder(b.Entity)).ToList(); // something lying under a table is no stack to put things on
+        var others = WorldNow().Overlapping(foot).Where(b => !ReferenceEquals(b.Entity, self) && b.Overlaps(foot) && b.Z < ceiling && !LiesUnder(b.Entity)).ToList(); // something lying under a table is no stack to put things on
         var stackedOn = others.Where(b => !IsSurface(b)).ToList(); // a table or a floor under it isn't a stack: anything can go on them
 
         if (stackedOn.Count > 0 && (!stackable || stackedOn.Any(b => !b.Stackable)))
@@ -288,7 +295,7 @@ public partial class GameTestWindow
     /// and must have headroom there over the whole footprint.
     /// </summary>
     /// <param name="mover">The character taking the step (a PlacedCharacter), or null for the player: the mover never blocks itself, and for a character the player is in the way like any other actor.</param>
-    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason, object? mover = null, List<Body>? world = null)
+    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason, object? mover = null, BodySource? world = null, bool explain = true)
     {
         newLift = lift;
         blockReason = "";
@@ -298,17 +305,20 @@ public partial class GameTestWindow
             return false;
         }
 
-        var solids = (world ?? WorldBodies()).Where(b => b.Solid && b.Overlaps(to) && !ReferenceEquals(b.Entity, mover)).ToList();
+        var solids = SolidsOverlapping(to, mover, world).ToList(); // only the bodies near it (GameTestWindow.Perf.cs)
         if (mover is not null && _player is not null && PlayerBody() is { } playerBody && playerBody.Overlaps(to)) solids.Add(playerBody);
         int highest = int.MinValue;
         for (int y = to.Top; y < to.Bottom; y++)
         {
             for (int x = to.Left; x < to.Right; x++)
             {
-                var here = solids.Where(b => x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom).ToList();
+                var here = _stepHere; // one list for every square (GameTestWindow.Perf.cs)
+                here.Clear();
+                foreach (var b in solids)
+                    if (x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom) here.Add(b);
                 if (!TryStepUnit(here, lift, height, out int unitLift))
                 {
-                    blockReason = DescribeBlock(here, lift, height);
+                    blockReason = explain ? DescribeBlock(here, lift, height) : "Blocked.";
                     return false;
                 }
                 highest = Math.Max(highest, unitLift);
@@ -321,12 +331,13 @@ public partial class GameTestWindow
         // while the walker stands on the one just below - a 1-lift step down, as walking down stairs is.
         if (lift - standLift > ActorMaxDrop)
         {
-            blockReason = $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {ActorMaxDrop} at a time.";
+            blockReason = explain ? $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {ActorMaxDrop} at a time." : "Blocked.";
             return false;
         }
         // Standing on the highest support under any part of the footprint, the whole footprint must be clear for the actor's full height.
         if (!IsClear(solids, standLift, height))
         {
+            if (!explain) { blockReason = "Blocked."; return false; }
             var overhead = solids.Where(b => b.Z < standLift + height && standLift < b.TopLift).OrderBy(b => b.Z).First();
             blockReason = $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
             return false;
@@ -359,10 +370,10 @@ public partial class GameTestWindow
 
     private string NameOfEntity(object entity) => entity switch
     {
-        PlacedItemInstance { Category: ReferencedItemCategory.Book } item => _books.Books.FirstOrDefault(b => b.Id == item.ItemId) is { } book ? EffectiveBookName(book) : "book",
-        PlacedItemInstance { Category: ReferencedItemCategory.Container } item => _containers.Containers.FirstOrDefault(c => c.Id == item.ItemId)?.Name ?? "container",
+        PlacedItemInstance { Category: ReferencedItemCategory.Book } item => BookDef(item.ItemId) is { } book ? EffectiveBookName(book) : "book",
+        PlacedItemInstance { Category: ReferencedItemCategory.Container } item => ContainerDef(item.ItemId)?.Name ?? "container",
         PlacedItemInstance item => item.Category.ToString(),
-        ObjectInstance obj => _objects.Objects.FirstOrDefault(o => o.Id == obj.ObjectId)?.Name ?? "object",
+        ObjectInstance obj => ObjectDef(obj.ObjectId)?.Name ?? "object",
         PlacedCharacter placed => _mapCharacters.FirstOrDefault(mc => mc.Placement == placed)?.Character.Name ?? "someone",
         CharacterDefinition character => character.Name,
         FloorSlab => "the floor above",
@@ -418,7 +429,7 @@ public partial class GameTestWindow
     /// <summary>Where the player stands when placed somewhere directly (startup): on top of whatever solid thing is under their footprint, or the ground.</summary>
     /// <summary>The lift something would stand at on that footprint: on top of whatever solid is under it. <paramref name="self"/> (a character's own placement) is left out, or it would stand on top of itself.</summary>
     private int StandingLiftAt(UnitRect foot, object? self = null) =>
-        FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot) && !ReferenceEquals(b.Entity, self) && b.Entity is not PlacedCharacter), int.MaxValue); // nobody stands on another character's head
+        FloorBelow(WorldNow().Overlapping(foot).Where(b => b.Solid && !ReferenceEquals(b.Entity, self) && b.Entity is not PlacedCharacter), int.MaxValue); // nobody stands on another character's head
 
     // ================= Draw order (objs.cc Game_object::compare) =================
 
@@ -435,6 +446,7 @@ public partial class GameTestWindow
     private void ApplyRestingDrawOrder()
     {
         var bodies = WorldBodies().OrderBy(b => b.Z).ToList();
+        var nearby = new BodyIndex(bodies); // each body is compared only with those it overlaps, not every body on the map (GameTestWindow.Perf.cs)
         var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
         foreach (var body in bodies)
         {
@@ -449,7 +461,7 @@ public partial class GameTestWindow
                 ? FloorBand(body.Z) + 1 + body.Z % MapFloors.LiftsPerFloor
                 : Panel.GetZIndex(visual);
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-            foreach (var below in bodies)
+            foreach (var below in nearby.Overlapping(foot))
             {
                 if (ReferenceEquals(below.Entity, body.Entity) || below.TopLift > body.Z || !below.Overlaps(foot)) continue;
                 if (order.TryGetValue(below.Entity, out int belowIndex)) zIndex = Math.Max(zIndex, belowIndex + 1);
@@ -463,7 +475,7 @@ public partial class GameTestWindow
             if (VisualOf(body.Entity) is not { } visual) continue;
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
             int zIndex = Panel.GetZIndex(visual);
-            foreach (var over in bodies)
+            foreach (var over in nearby.Overlapping(foot))
                 if (!ReferenceEquals(over.Entity, body.Entity) && !LiesUnder(over.Entity) && over.Overlaps(foot) && VisualOf(over.Entity) is { } overVisual)
                     zIndex = Math.Min(zIndex, Panel.GetZIndex(overVisual) - 1);
             Panel.SetZIndex(visual, zIndex);
@@ -477,7 +489,7 @@ public partial class GameTestWindow
         if (_player is not null && SeatedZIndex(_player, zIndex) is int seated) return seated; // on a chair or in bed: over it, under its cover
         if (_playerZ <= 0) return PlayerOrderAmongWalls(zIndex); // on the ground - nothing under them to be drawn after; walls by Exult's compare
         var foot = PlayerFootprint();
-        foreach (var body in WorldBodies())
+        foreach (var body in WorldNow().Overlapping(foot))
         {
             if (body.TopLift > _playerZ || !body.Overlaps(foot)) continue;
             if (VisualOf(body.Entity) is { } visual) zIndex = Math.Max(zIndex, Panel.GetZIndex(visual) + 1);
@@ -497,7 +509,7 @@ public partial class GameTestWindow
     private void ApplyGravityToPlayer()
     {
         var foot = PlayerFootprint();
-        int floor = FloorBelow(WorldBodies().Where(b => b.Solid && b.Overlaps(foot)), _playerZ);
+        int floor = FloorBelow(WorldNow().Overlapping(foot).Where(b => b.Solid), _playerZ);
         if (floor >= _playerZ) return;
         _playerZ = floor;
         _playerVisualLiftZ = _playerZ;

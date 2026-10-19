@@ -189,7 +189,7 @@ public partial class GameTestWindow
         double total = 0;
         foreach (var (item, _, _) in PartyItems())
         {
-            if (item.Category != ReferencedItemCategory.Object || _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) is not { Type: ObjectType.Money } money) continue;
+            if (item.Category != ReferencedItemCategory.Object || ObjectDef(item.ItemId) is not { Type: ObjectType.Money } money) continue;
             double worth = currencies.FirstOrDefault(c => c.Id == money.Money.CurrencyId)?.Value ?? 1;
             total += Math.Max(1, item.Quantity) * worth;
         }

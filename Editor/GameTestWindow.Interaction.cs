@@ -598,7 +598,7 @@ public partial class GameTestWindow
         // A container icon under the drop point takes it first (Gump::add -> find_object -> cont->add), with no need to open that one.
         if (hitTarget is ContainerItemTarget { Item: { Category: ReferencedItemCategory.Container } nested }
             && !ReferenceEquals(nested, PayloadObject(origin))
-            && _containers.Containers.FirstOrDefault(c => c.Id == nested.ItemId) is { } nestedData)
+            && ContainerDef(nested.ItemId) is { } nestedData)
         {
             return TryPutIntoContainer(origin, nestedData, nested, dropTopLeft: null); // dropped ON the container, not into its window: no spot yet (Exult 255,255)
         }
@@ -627,7 +627,7 @@ public partial class GameTestWindow
             && TryGetEquippedInstanceId(character, hitSlotKey, out int occupantId)
             && character.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { Category: ReferencedItemCategory.Container } occupant
             && !ReferenceEquals(occupant, PayloadObject(origin))
-            && _containers.Containers.FirstOrDefault(c => c.Id == occupant.ItemId) is { } occupantData)
+            && ContainerDef(occupant.ItemId) is { } occupantData)
             return TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null); // refused: it stays where it was
 
         if (FindClosestFreeSlot(gump, PaperdollGumpsCanvas.TranslatePoint(screen, gump.BodyCanvas), origin) is { } slotKey)
@@ -694,7 +694,7 @@ public partial class GameTestWindow
         var (newCellX, newCellY) = ComputeDropCell(visualLeft, visualTop, visualWidth, visualHeight);
 
         // Exult Game_object::drop: the same kind of stackable thing dropped on a stack joins it (up to 100).
-        if (PayloadIdentity(origin) is (ReferencedItemCategory.Object, var stackId) && CanCombine(_objects.Objects.FirstOrDefault(o => o.Id == stackId)))
+        if (PayloadIdentity(origin) is (ReferencedItemCategory.Object, var stackId) && CanCombine(ObjectDef(stackId)))
         {
             int adding = PayloadQuantity(origin);
             var stack = _map.Objects.LastOrDefault(o => !ReferenceEquals(o, PayloadObject(origin)) && o.ContainerInstanceId < 0 && o.ObjectId == stackId
@@ -715,7 +715,7 @@ public partial class GameTestWindow
         var payloadObject = PayloadObject(origin);
         var targetCellContainer = _map.Items.FirstOrDefault(i => !ReferenceEquals(i, payloadObject) && i.Category == ReferencedItemCategory.Container && i.X == newCellX && i.Y == newCellY);
         if (targetCellContainer is not null
-            && _containers.Containers.FirstOrDefault(c => c.Id == targetCellContainer.ItemId) is { AllowElevation: false } targetContainerData)
+            && ContainerDef(targetCellContainer.ItemId) is { AllowElevation: false } targetContainerData)
         {
             return TryPutIntoContainer(origin, targetContainerData, targetCellContainer, dropTopLeft: null);
         }
@@ -791,7 +791,7 @@ public partial class GameTestWindow
         bool isTwoHanded = PayloadIsTwoHanded(origin);
 
         // Ammo goes to its own slot (Object Editor > Ammo), joining a stack of the same ammo already there.
-        if (category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Ammo } ammo
+        if (category == ReferencedItemCategory.Object && ObjectDef(itemId) is { Type: ObjectType.Ammo } ammo
             && AmmoSlotFor(ammo, character) is { } ammoSlot)
         {
             if (TryGetEquippedInstanceId(character, ammoSlot, out int heldId) && character.Inventory.FirstOrDefault(i => i.InstanceId == heldId) is { } held
@@ -833,7 +833,7 @@ public partial class GameTestWindow
             if (!character.EquippedSlots.TryGetValue(containerSlot, out int slotInstanceId)) continue;
             var slotItem = character.Inventory.FirstOrDefault(i => i.InstanceId == slotInstanceId);
             if (slotItem is not { Category: ReferencedItemCategory.Container } || ReferenceEquals(slotItem, payloadObject)) continue;
-            var slotContainerData = _containers.Containers.FirstOrDefault(c => c.Id == slotItem.ItemId);
+            var slotContainerData = ContainerDef(slotItem.ItemId);
             if (slotContainerData is null || !CanContainerAccept(slotContainerData, slotItem, origin, out _, out _)) continue;
 
             string storedName = PayloadName(origin);
@@ -1092,7 +1092,7 @@ public partial class GameTestWindow
     /// <summary>The slot a container's Location (Container Editor) names for this character - a built-in slot, or the character's custom slot of that name - or null for "No preference" / a custom slot this character doesn't have.</summary>
     private object? ContainerLocationSlot(int containerId, CharacterDefinition character)
     {
-        var containerData = _containers.Containers.FirstOrDefault(c => c.Id == containerId);
+        var containerData = ContainerDef(containerId);
         if (containerData?.PreferredEquipSlot is { } builtin) return builtin;
         if (containerData?.PreferredCustomSlotName is { } customName)
             return character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == customName)?.Id;
@@ -1110,7 +1110,7 @@ public partial class GameTestWindow
         if (slotKey is EquipmentSlot.RightHand or EquipmentSlot.LeftHand) return true;
         var (category, itemId) = PayloadIdentity(origin);
         if (category == ReferencedItemCategory.Container) return IsContainerSlotAllowed(itemId, character, slotKey);
-        if (category != ReferencedItemCategory.Object || _objects.Objects.FirstOrDefault(o => o.Id == itemId) is not { } def) return false;
+        if (category != ReferencedItemCategory.Object || ObjectDef(itemId) is not { } def) return false;
         object? own = def.Type == ObjectType.Ammo ? AmmoSlotFor(def, character) : OwnSlotFor(def, character);
         return own is not null && Equals(own, slotKey);
     }
@@ -1135,6 +1135,7 @@ public partial class GameTestWindow
     /// <summary>Removes the dragged thing from wherever it lives. Only ever called once a drop has been accepted.</summary>
     private void RemoveFromSource(DragOrigin origin)
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         switch (origin)
         {
             case MapItemOrigin m:
@@ -1243,7 +1244,7 @@ public partial class GameTestWindow
         seeds.Select(seed => new InventoryItemInstance { InstanceId = seed.InstanceId, Category = seed.Category, ItemId = seed.ItemId, Quantity = seed.Quantity, ContainerX = seed.ContainerX, ContainerY = seed.ContainerY }).ToList();
 
     private List<InventoryItemInstance> SeedStartingContents(int containerId) =>
-        _containers.Containers.FirstOrDefault(c => c.Id == containerId)?.StartingContents
+        ContainerDef(containerId)?.StartingContents
             .Select(seed => new InventoryItemInstance { InstanceId = seed.InstanceId, Category = seed.Category, ItemId = seed.ItemId, Quantity = seed.Quantity, ContainerX = seed.ContainerX, ContainerY = seed.ContainerY })
             .ToList() ?? new List<InventoryItemInstance>();
 
@@ -1269,14 +1270,16 @@ public partial class GameTestWindow
         return placed;
     }
 
-    private static void SetMapPosition(PlacedItemInstance? item, ObjectInstance? obj, int x, int y, int offsetX, int offsetY)
+    private void SetMapPosition(PlacedItemInstance? item, ObjectInstance? obj, int x, int y, int offsetX, int offsetY)
     {
+        WorldChanged();
         if (item is not null) { item.X = x; item.Y = y; item.OffsetX = offsetX; item.OffsetY = offsetY; }
         if (obj is not null) { obj.X = x; obj.Y = y; obj.OffsetX = offsetX; obj.OffsetY = offsetY; }
     }
 
     private void AddMapEntity(PlacedItemInstance? item, ObjectInstance? obj)
     {
+        WorldChanged(); // kept bodies are made again (GameTestWindow.Perf.cs)
         if (item is not null)
         {
             var animators = new List<SpriteAnimator>();
@@ -1382,9 +1385,9 @@ public partial class GameTestWindow
         var (category, itemId) = PayloadIdentity(origin);
         return category switch
         {
-            ReferencedItemCategory.Book => _books.Books.FirstOrDefault(b => b.Id == itemId) is { } book ? EffectiveBookName(book) : "book",
-            ReferencedItemCategory.Container => _containers.Containers.FirstOrDefault(c => c.Id == itemId)?.Name ?? "container",
-            ReferencedItemCategory.Object => _objects.Objects.FirstOrDefault(o => o.Id == itemId)?.Name ?? "object",
+            ReferencedItemCategory.Book => BookDef(itemId) is { } book ? EffectiveBookName(book) : "book",
+            ReferencedItemCategory.Container => ContainerDef(itemId)?.Name ?? "container",
+            ReferencedItemCategory.Object => ObjectDef(itemId)?.Name ?? "object",
             _ => category.ToString()
         };
     }
@@ -1394,12 +1397,12 @@ public partial class GameTestWindow
     {
         if (category == ReferencedItemCategory.Container)
         {
-            var containerData = _containers.Containers.FirstOrDefault(c => c.Id == itemId);
+            var containerData = ContainerDef(itemId);
             if (containerData is not null) TryFireEventPages(containerData, containerData.EventPages, trigger, containerData.Id, $"\"{containerData.Name}\" fired ({trigger}).");
             return;
         }
         if (category != ReferencedItemCategory.Book) return;
-        var book = _books.Books.FirstOrDefault(b => b.Id == itemId);
+        var book = BookDef(itemId);
         if (book is null) return;
         TryFireEventPages(book, book.EventPages, trigger, book.Id, $"\"{EffectiveBookName(book)}\" fired ({trigger}).");
     }
@@ -1425,9 +1428,9 @@ public partial class GameTestWindow
             return BuildObjectVisual(new ObjectInstance { ObjectId = itemId }, animators);
         }
         SpriteEntry? sprite = null;
-        if (category == ReferencedItemCategory.Book && _books.Books.FirstOrDefault(b => b.Id == itemId) is { } book)
+        if (category == ReferencedItemCategory.Book && BookDef(itemId) is { } book)
             sprite = _sprites.Groups.FirstOrDefault(g => g.Name == book.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == book.SpriteName);
-        else if (category == ReferencedItemCategory.Container && _containers.Containers.FirstOrDefault(c => c.Id == itemId) is { } containerData)
+        else if (category == ReferencedItemCategory.Container && ContainerDef(itemId) is { } containerData)
             sprite = ContainerSprite(containerData, instance as IHasContainerContents); // its Locked Sprite while locked
 
         if (sprite is not null && sprite.Frames.Count > 0)
@@ -1441,7 +1444,7 @@ public partial class GameTestWindow
 
         if (category == ReferencedItemCategory.Object)
         {
-            var worldObject = _objects.Objects.FirstOrDefault(o => o.Id == itemId);
+            var worldObject = ObjectDef(itemId);
             var bitmap = string.IsNullOrEmpty(worldObject?.IconPath) || !File.Exists(worldObject.IconPath) ? null : LoadStaticFrame(worldObject.IconPath);
             if (bitmap is not null)
             {
