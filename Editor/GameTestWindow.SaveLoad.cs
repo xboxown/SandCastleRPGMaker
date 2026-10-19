@@ -473,7 +473,7 @@ public partial class GameTestWindow
     private string? WhatIsHappening() =>
         InCinema ? "a cutscene is playing"
         : IsShowingMessage ? "a message is showing"
-        : _scriptActions.Count > 0 ? $"{string.Join(", ", _scriptActions.Keys.Select(c => c.Name))} {(_scriptActions.Count == 1 ? "is" : "are")} still doing an event's command"
+        : _scriptActions.Values.Where(a => !a.AfterEvent).Select(a => a.Who.Name).ToList() is { Count: > 0 } busy ? $"{string.Join(", ", busy)} {(busy.Count == 1 ? "is" : "are")} still doing an event's command"
         : _scriptWaits.Count > 0 ? "an event is waiting"
         : IsPlayingVideo ? "a video is playing"
         : _gameOver ? "the game is over"

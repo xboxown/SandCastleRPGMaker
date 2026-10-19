@@ -24,6 +24,8 @@ public partial class GameTestWindow
         public required Func<double, bool?> Tick;
         /// <summary>The event waiting for it; null for a hold nobody waits on (sitting on after Sit).</summary>
         public Action<bool>? Done;
+        /// <summary>After its event is over (sitting on after Sit): part of their routine - it doesn't stop a save.</summary>
+        public bool AfterEvent;
     }
 
     /// <summary>A Play Animation showing: its picture, how long is left, and who it follows (or null: a fixed spot).</summary>
@@ -69,11 +71,11 @@ public partial class GameTestWindow
     private bool IsScripted(CharacterDefinition character) => _scriptActions.ContainsKey(character);
 
     /// <summary>Starts a command for someone - whatever they were doing for an earlier command is cancelled.</summary>
-    private void BeginScriptAction(CharacterDefinition who, Func<double, bool?> tick, Action<bool>? done)
+    private void BeginScriptAction(CharacterDefinition who, Func<double, bool?> tick, Action<bool>? done, bool afterEvent = false)
     {
         if (_scriptActions.Remove(who, out var old)) old.Done?.Invoke(false);
         if (MapCharacterOf(who) is { } mapCharacter) StopWalking(mapCharacter);
-        _scriptActions[who] = new ScriptAction { Who = who, Tick = tick, Done = done };
+        _scriptActions[who] = new ScriptAction { Who = who, Tick = tick, Done = done, AfterEvent = afterEvent };
     }
 
     /// <summary>Each frame (not while the game is paused): every command being carried out takes its step.</summary>
@@ -680,7 +682,7 @@ public partial class GameTestWindow
             done(ok);
             // Seated, with nothing else to do: it sits for 10-25 seconds, then gets up and goes back to its schedule.
             if (ok && !IsScripted(who) && _seats.ContainsKey(who))
-                BeginScriptAction(who, WaitFor(10_000 + Rng.Next(15_000)), stayed => { if (stayed) StandUp(who); });
+                BeginScriptAction(who, WaitFor(10_000 + Rng.Next(15_000)), stayed => { if (stayed) StandUp(who); }, afterEvent: true);
         });
         return true;
     }
