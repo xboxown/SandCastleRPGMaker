@@ -107,7 +107,7 @@ public partial class ShowTextCommandWindow : Window
         var face = speaker is null ? null : ProjectSession.FirstFrame(ProjectSession.FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName));
         var content = new DialogBoxContent(TitleBox.Text, TextBox1.Text, face, FaceSideCombo.SelectedIndex == 1, PositionText, DimCheck.IsChecked == true,
             sprites.FindDialogFrame(FrameKey), _replies.Select(r => r.Text).ToList());
-        _preview = DialogBoxBuilder.Draw(PreviewCanvas, content, sprites, ProjectSession.ResourcesProvider?.Invoke());
+        _preview = DialogBoxBuilder.Draw(PreviewCanvas, DialogBoxBuilder.AsProjectShowsIt(content), sprites, ProjectSession.ResourcesProvider?.Invoke());
     }
 
     private void FrameHelp_Click(object sender, RoutedEventArgs e) => new DialogFrameGuideWindow { Owner = this }.ShowDialog();

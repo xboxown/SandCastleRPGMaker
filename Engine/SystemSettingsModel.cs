@@ -28,6 +28,18 @@ public class MousePointerSettings
     public Dictionary<MousePointerKind, MousePointerSprite> Sprites { get; set; } = new();
 }
 
+/// <summary>How conversations show.</summary>
+public class ConversationSettings
+{
+    /// <summary>
+    /// Off: the replies are in the speaker's own box, under their words.
+    /// On (as Exult, Conversation::show_avatar_choices): the main character
+    /// answers - the replies are in a box of their own under the speaker's,
+    /// with the main character's face.
+    /// </summary>
+    public bool RepliesUnderMainCharacter { get; set; }
+}
+
 /// <summary>Project-wide system settings, stored in the .msrp manifest alongside everything else.</summary>
 /// <summary>How combat shows on screen.</summary>
 public class CombatSettings
@@ -234,6 +246,8 @@ public class SystemSettings
     public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
     public CombatSettings Combat { get; set; } = new();
+    /// <summary>How conversations show (System Settings > Conversations).</summary>
+    public ConversationSettings Conversation { get; set; } = new();
     /// <summary>The day and night cycle (System Settings > Day &amp; Night).</summary>
     public DayNightSettings DayNight { get; set; } = new();
     /// <summary>

@@ -53,6 +53,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Day & Night", Content = BuildDayNightTab() });
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
+        tabs.Items.Add(new TabItem { Header = "Conversations", Content = BuildConversationTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
         tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
         tabs.Items.Add(new TabItem { Header = "Errors", Content = BuildErrorsTab() });
@@ -283,6 +284,29 @@ public partial class SystemSettingsWindow : Window
                    "Unchecked (Exult's default): no numbers. Either way, as in Exult, whoever is hit flashes a red outline for a moment, " +
                    "and a big hit on the main character (a third of its health or more, or while below a quarter) flashes the whole screen red instead.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
+        return panel;
+    }
+
+    /// <summary>Where a conversation's replies show: in the speaker's box, or (as Exult) in the main character's own box under it.</summary>
+    private UIElement BuildConversationTab()
+    {
+        var conversation = _settings.Conversation;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock { Text = "The replies the player picks from show:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+        var speaker = new RadioButton { Content = "Under the speaker's words, in the same box", GroupName = "replies", IsChecked = !conversation.RepliesUnderMainCharacter };
+        var main = new RadioButton { Content = "Under the main character, in a box of their own (as Exult)", GroupName = "replies", IsChecked = conversation.RepliesUnderMainCharacter, Margin = new Thickness(0, 6, 0, 0) };
+        speaker.Checked += (_, _) => conversation.RepliesUnderMainCharacter = false;
+        main.Checked += (_, _) => conversation.RepliesUnderMainCharacter = true;
+        panel.Children.Add(speaker);
+        panel.Children.Add(main);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "In Ultima VII (Exult) the main character is the one answering: the person talked to has a box with their face and words, " +
+                   "and under it is a second box with the main character's face (Character Editor > Face) and the replies beside it.\n\n" +
+                   "The two boxes stay together at the Show Text's Position (Top, Middle or Bottom) and use its frame. " +
+                   "A Show Text with no replies is one box either way. The Show Text window's preview and the Conversation Test show it the way picked here.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
         });
         return panel;
     }

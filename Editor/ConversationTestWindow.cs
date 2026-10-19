@@ -168,7 +168,7 @@ public class ConversationTestWindow : Window
         BitmapSource? face = speaker is null ? null : ProjectSession.FirstFrame(ProjectSession.FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName));
         var content = new DialogBoxContent(title, command.Get("Text"), face, command.Get("FaceSide") == "Right", command.Get("Position"), dim,
             ProjectSession.Sprites.FindDialogFrame(frame), box.Replies?.Select(r => r.Text).ToList() ?? new List<string>());
-        _drawing = DialogBoxBuilder.Draw(_screen, content, ProjectSession.Sprites, _resources);
+        _drawing = DialogBoxBuilder.Draw(_screen, DialogBoxBuilder.AsProjectShowsIt(content),ProjectSession.Sprites, _resources);
 
         if (box.Replies is { } replies)
         {

@@ -344,7 +344,13 @@ public partial class GameTestWindow
         _messageDrawing?.Stop();
         MessageLayer.Children.Clear();
         var content = new DialogBoxContent(message.Title, message.Text, _messageFace, message.FaceRight, message.Position, message.Dim, message.Frame,
-            message.Replies?.Select(r => r.Text).ToList() ?? new List<string>()) { ReplyPage = _replyPage };
+            message.Replies?.Select(r => r.Text).ToList() ?? new List<string>())
+        {
+            ReplyPage = _replyPage,
+            // System Settings > Conversations: as Exult, the main character answers - the replies in a box of their own with its face.
+            RepliesApart = _systemSettings.Conversation.RepliesUnderMainCharacter,
+            ReplyFace = _player is { } player && FindSprite(player.FaceSpriteGroup, player.FaceSpriteName) is { } playerFace ? FirstFrameOf(playerFace) : null
+        };
         _messageDrawing = DialogBoxBuilder.Draw(MessageLayer, content, _sprites, _resources);
         _replyPage = _messageDrawing.ReplyPage;
     }

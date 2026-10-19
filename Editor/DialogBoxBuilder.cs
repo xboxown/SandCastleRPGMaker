@@ -12,6 +12,9 @@ internal sealed record DialogBoxContent(string Title, string Text, BitmapSource?
 {
     /// <summary>Which page of replies shows, when they need more than one (More / Previous).</summary>
     public int ReplyPage { get; init; }
+    /// <summary>The replies in a box of their own under the speaker's, with ReplyFace (the main character's) - as Exult (System Settings > Conversations).</summary>
+    public bool RepliesApart { get; init; }
+    public BitmapSource? ReplyFace { get; init; }
 }
 
 /// <summary>A dialog box drawn on a layer: where its replies are (for clicks and hover), and its frame (stop it when the box goes).</summary>
@@ -19,7 +22,8 @@ internal sealed class DialogBoxDrawing
 {
     public const int More = -1, Previous = -2;
 
-    public DialogFrameVisual? Frame;
+    /// <summary>The frames drawn (two with the replies in a box of their own).</summary>
+    public readonly List<DialogFrameVisual> Frames = new();
     public readonly List<Rect> ReplyRects = new();
     public readonly List<Rectangle> ReplyHighlights = new();
     /// <summary>What each reply spot on the box is: the reply's index in the list, or More / Previous.</summary>
@@ -36,7 +40,7 @@ internal sealed class DialogBoxDrawing
         for (int i = 0; i < ReplyHighlights.Count; i++) ReplyHighlights[i].Visibility = i == index ? Visibility.Visible : Visibility.Hidden;
     }
 
-    public void Stop() => Frame?.Stop();
+    public void Stop() => Frames.ForEach(f => f.Stop());
 }
 
 /// <summary>
@@ -49,6 +53,14 @@ internal static class DialogBoxBuilder
     public const string FrameKey = "Frame";
     public const string DimKey = "Dim";
     public const string TitleKey = "Title";
+
+    /// <summary>The editor's previews (Show Text, Conversation Test): the replies where the project's System Settings put them, with the test player's face.</summary>
+    public static DialogBoxContent AsProjectShowsIt(DialogBoxContent content)
+    {
+        if (ProjectSession.SettingsProvider?.Invoke()?.Conversation.RepliesUnderMainCharacter != true) return content;
+        var player = ProjectSession.Characters.Characters.FirstOrDefault(c => c.IsTestPlayer);
+        return content with { RepliesApart = true, ReplyFace = player is null ? null : ProjectSession.FirstFrame(ProjectSession.FindSprite(player.FaceSpriteGroup, player.FaceSpriteName)) };
+    }
 
     /// <summary>Exult's NPC text box is four lines tall (Conversation::set_face_rect: 4 * text_height); more waits for a click.</summary>
     public const int LinesPerPage = 4;
@@ -196,13 +208,54 @@ internal static class DialogBoxBuilder
         return pages;
     }
 
+    /// <summary>One box, measured: its face, what's in it (reply spots numbered in the drawing) and its height.</summary>
+    private sealed record BoxPlan(DialogBoxContent Content, Image? Face, List<(FrameworkElement Element, double Left, double Top, int Reply)> Pieces, double Height);
+
+    /// <summary>
+    /// Draws the box. With RepliesApart and replies to pick, as Exult's
+    /// conversation: the speaker's box with their words, and under it a box
+    /// of its own with the main character's face and the replies (Exult's
+    /// avatar face and choices) - the two kept together at the box's Position.
+    /// </summary>
     public static DialogBoxDrawing Draw(Canvas layer, DialogBoxContent content, SpriteDatabase sprites, ResourceDatabase? resources)
     {
         var drawing = new DialogBoxDrawing();
-        const double margin = DialogBoxMetrics.Margin, padding = DialogBoxMetrics.Padding;
-        double boxWidth = DialogBoxMetrics.Width;
-        var inset = DialogBoxMetrics.Inset(content.Frame);
+        const double margin = DialogBoxMetrics.Margin;
+        if (content.Dim)
+            layer.Children.Add(new Border { Width = DialogBoxMetrics.ScreenWidth, Height = DialogBoxMetrics.ScreenHeight, Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)), IsHitTestVisible = false });
 
+        if (!content.RepliesApart || content.Replies.Count == 0)
+        {
+            var plan = Measure(content, sprites, drawing, DialogBoxMetrics.ScreenHeight - 2 * margin);
+            Place(layer, drawing, plan, TopFor(content.Position, plan.Height), resources);
+            return drawing;
+        }
+
+        bool speaks = !string.IsNullOrWhiteSpace(content.Title) || !string.IsNullOrEmpty(content.Text);
+        var replies = Measure(content with { Title = "", Text = "", Face = content.ReplyFace }, sprites, drawing, DialogBoxMetrics.ScreenHeight - 2 * margin);
+        if (!speaks)
+        {
+            Place(layer, drawing, replies, TopFor(content.Position, replies.Height), resources);
+            return drawing;
+        }
+        var words = Measure(content with { Replies = Array.Empty<string>() }, sprites, drawing,
+            Math.Max(DialogBoxMetrics.MinHeight, DialogBoxMetrics.ScreenHeight - 3 * margin - replies.Height));
+        double top = TopFor(content.Position, words.Height + margin + replies.Height);
+        Place(layer, drawing, words, top, resources);
+        Place(layer, drawing, replies, top + words.Height + margin, resources);
+        return drawing;
+    }
+
+    private static double TopFor(string position, double height) => position switch
+    {
+        "Top" => DialogBoxMetrics.Margin,
+        "Middle" => (DialogBoxMetrics.ScreenHeight - height) / 2,
+        _ => DialogBoxMetrics.ScreenHeight - DialogBoxMetrics.Margin - height
+    };
+
+    private static BoxPlan Measure(DialogBoxContent content, SpriteDatabase sprites, DialogBoxDrawing drawing, double maxHeight)
+    {
+        var inset = DialogBoxMetrics.Inset(content.Frame);
         Image? face = null;
         if (content.Face is { } faceBitmap)
         {
@@ -210,7 +263,6 @@ internal static class DialogBoxBuilder
             face = new Image { Source = faceBitmap, Width = faceW, Height = faceBitmap.PixelHeight * (faceW / faceBitmap.PixelWidth), Stretch = Stretch.Fill };
             RenderOptions.SetBitmapScalingMode(face, BitmapScalingMode.NearestNeighbor);
         }
-        double faceWidth = face is null ? 0 : face.Width + padding;
         double textWidth = TextWidth(content);
 
         var font = SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
@@ -255,7 +307,7 @@ internal static class DialogBoxBuilder
         if (content.Replies.Count > 0)
         {
             // Left to right, row under row (Exult show_avatar_choices), More / Previous past five rows of five.
-            y += 4;
+            if (y > 0) y += 4;
             var replyWords = content.Replies.Select(r => Words(r, natural: true)).ToList();
             var more = Words("More", natural: true);
             var previous = Words("Previous", natural: true);
@@ -279,26 +331,25 @@ internal static class DialogBoxBuilder
                 y += rowHeight + 2;
             }
         }
-        double contentHeight = y;
+        double height = Math.Min(maxHeight, Math.Max(DialogBoxMetrics.MinHeight, Math.Max(face?.Height ?? 0, y) + inset.Top + inset.Bottom));
+        return new BoxPlan(content, face, pieces, height);
+    }
 
-        double boxHeight = Math.Min(DialogBoxMetrics.ScreenHeight - 2 * margin,
-            Math.Max(DialogBoxMetrics.MinHeight, Math.Max(face?.Height ?? 0, contentHeight) + inset.Top + inset.Bottom));
-        double boxTop = content.Position switch
-        {
-            "Top" => margin,
-            "Middle" => (DialogBoxMetrics.ScreenHeight - boxHeight) / 2,
-            _ => DialogBoxMetrics.ScreenHeight - margin - boxHeight
-        };
-
-        if (content.Dim)
-            layer.Children.Add(new Border { Width = DialogBoxMetrics.ScreenWidth, Height = DialogBoxMetrics.ScreenHeight, Background = new SolidColorBrush(Color.FromArgb(128, 0, 0, 0)), IsHitTestVisible = false });
+    private static void Place(Canvas layer, DialogBoxDrawing drawing, BoxPlan plan, double boxTop, ResourceDatabase? resources)
+    {
+        const double margin = DialogBoxMetrics.Margin, padding = DialogBoxMetrics.Padding;
+        double boxWidth = DialogBoxMetrics.Width, boxHeight = plan.Height;
+        var content = plan.Content;
+        var inset = DialogBoxMetrics.Inset(content.Frame);
+        var face = plan.Face;
 
         if (content.Frame is { } frameSprite)
         {
-            drawing.Frame = new DialogFrameVisual(frameSprite, boxWidth, boxHeight, resources);
-            Canvas.SetLeft(drawing.Frame, margin);
-            Canvas.SetTop(drawing.Frame, boxTop);
-            layer.Children.Add(drawing.Frame);
+            var frame = new DialogFrameVisual(frameSprite, boxWidth, boxHeight, resources);
+            Canvas.SetLeft(frame, margin);
+            Canvas.SetTop(frame, boxTop);
+            layer.Children.Add(frame);
+            drawing.Frames.Add(frame);
         }
 
         if (face is not null)
@@ -308,9 +359,10 @@ internal static class DialogBoxBuilder
             layer.Children.Add(face);
         }
 
+        double faceWidth = face is null ? 0 : face.Width + padding;
         double left = margin + inset.Left + (content.FaceRight ? 0 : faceWidth);
         double top = boxTop + inset.Top;
-        foreach (var (element, pieceLeft, pieceTop, replyIndex) in pieces)
+        foreach (var (element, pieceLeft, pieceTop, replyIndex) in plan.Pieces)
         {
             if (replyIndex >= 0)
             {
@@ -328,6 +380,5 @@ internal static class DialogBoxBuilder
             Canvas.SetTop(element, top + pieceTop);
             layer.Children.Add(element);
         }
-        return drawing;
     }
 }
