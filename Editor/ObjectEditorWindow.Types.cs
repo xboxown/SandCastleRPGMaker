@@ -32,6 +32,7 @@ public partial class ObjectEditorWindow
             case ObjectType.UseableObject: BuildUseable(obj); return true;
             case ObjectType.Lever: BuildLever(obj); return true;
             case ObjectType.Stairs: BuildStairs(obj); return true;
+            case ObjectType.Wall: BuildWall(obj); return true;
             case ObjectType.Roof: BuildRoof(obj); return true;
             case ObjectType.Clock: BuildClock(obj); return true;
             case ObjectType.Tool: BuildTool(obj); return true;
@@ -419,6 +420,45 @@ public partial class ObjectEditorWindow
             panel.Children.Add(Note($"\"{design.Name}\": {pose.Steps.Count} steps, the top one {pose.Steps.Max(st => st.TopLift)} lifts up. Poses: {string.Join(", ", design.Poses.Where(p => p.Steps.Count > 0).Select(p => p.Facing))}."));
         }
         return panel;
+    }
+
+    /// <summary>A Wall: plain (its own sprite), or a wall set from the Wall Designer - a wall with a window, a doorway - placed as one wall.</summary>
+    private void BuildWall(WorldObject obj)
+    {
+        var w = obj.Wall;
+        var body = Group("Wall");
+        var none = new WallDesign { Id = -1, Name = "(none - a plain wall, its own sprite)" };
+        var choices = new List<WallDesign> { none };
+        choices.AddRange(_db.WallDesigns);
+        var combo = new ComboBox { Width = 260, ItemsSource = choices, DisplayMemberPath = nameof(WallDesign.Name) };
+        combo.SelectedItem = choices.FirstOrDefault(d => d.Id == w.DesignId) ?? none;
+        combo.SelectionChanged += (_, _) => { w.DesignId = (combo.SelectedItem as WallDesign)?.Id ?? -1; ShowCurrent(); };
+        var open = new Button { Content = "Wall Designer...", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 0, 4), VerticalAlignment = VerticalAlignment.Bottom };
+        open.Click += (_, _) =>
+        {
+            var designer = new WallDesignerWindow(_db, _sprites, TileWidth, TileHeight, w.DesignId) { Owner = this };
+            designer.ShowDialog();
+            // Opened from a wall with no set yet: it takes the one left showing.
+            if (w.DesignId < 0 || _db.WallDesigns.All(d => d.Id != w.DesignId)) w.DesignId = designer.SelectedDesignId;
+            ShowCurrent();
+        };
+        var row = new WrapPanel();
+        row.Children.Add(Labeled("Built from (Wall Designer)", combo));
+        row.Children.Add(open);
+        body.Children.Add(row);
+        if (WallLook.DesignOf(obj, _db) is { } design)
+        {
+            foreach (var run in new[] { WallRun.WestEast, WallRun.NorthSouth })
+            {
+                if (design.Poses.FirstOrDefault(p => p.Run == run && p.Pieces.Count > 0) is not { } pose || WallLook.Bitmap(pose, _db, _sprites, TileWidth, TileHeight) is not { } picture) continue;
+                var image = new Image { Source = picture, Stretch = Stretch.None, LayoutTransform = new ScaleTransform(2, 2) };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                body.Children.Add(Note($"{WallDesign.RunName(run)}: {pose.Pieces.Count} pieces"));
+                body.Children.Add(new Border { Background = Brushes.Black, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1), Padding = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Left, Child = image });
+            }
+            body.Children.Add(Note("Placed on the map as one wall (right-click > Runs: west-east or north-south); in play every piece is its own object - the wall a wall, the window a window (shutters, glass), the door a door (lock, key). Its own Size and collision below aren't used: each piece has its own."));
+        }
+        else body.Children.Add(Note("A plain wall: its own sprite and Size. For a wall with a window or a doorway in it, build a set in the Wall Designer and pick it here. A half wall is a plain Wall with a lower Height (Size Z: 5 lifts is a storey)."));
     }
 
     /// <summary>Any object can open a paperdoll (PaperDoll Editor) when double-clicked in play - a radio, a coffin, a sign, a machine with parts missing.</summary>

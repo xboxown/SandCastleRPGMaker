@@ -134,6 +134,7 @@ public partial class GameTestWindow
         {
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             if (HangsOnWall(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
+            if (IsWallSetPiece(body.Entity)) { settled.Add(body); continue; } // a wall set's piece: at its designed height (the window on its half wall), and it holds up what's on it
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
             int floorBase = HomeFloorBase(body);
             var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity) && !HangsOnWall(b.Entity) // never held up by the floor above (its slab is the ceiling), nor by something put underneath or hung on the wall
@@ -196,7 +197,7 @@ public partial class GameTestWindow
     {
         WorldChanged();
         if (entity is PlacedItemInstance item) item.Z = z;
-        else if (entity is ObjectInstance obj) obj.Z = z;
+        else if (entity is ObjectInstance { WallSetPiece: false } obj) obj.Z = z; // a wall set's piece never moves from its height
     }
 
     /// <summary>Gravity for the whole world after anything moved: things fall onto what's left under them, and so does the player (Map_chunk::gravity drops NPCs too).</summary>

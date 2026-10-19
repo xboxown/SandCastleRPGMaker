@@ -2550,6 +2550,14 @@ public partial class MainWindow : Window
         new PaperDollEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase) { Owner = this }.ShowDialog();
     }
 
+    private void WallDesignerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // Wall sets are saved with the project's objects; a Wall object links to one (Object Editor).
+        new WallDesignerWindow(_objectDatabase, _spriteDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32) { Owner = this }.ShowDialog();
+        RefreshObjectPalette();
+        if (_map is not null) BuildMapCanvas(); // placed sets show their pieces as they are now
+    }
+
     private void StaircaseDesignerMenuItem_Click(object sender, RoutedEventArgs e)
     {
         // Staircases are saved with the project's objects; a Stairs object links to one (Object Editor).

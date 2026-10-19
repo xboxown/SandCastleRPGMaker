@@ -71,6 +71,8 @@ public partial class MainWindow
         var state = instance is null ? ObjectLooks.DefaultState(obj) : ObjectLooks.StartState(obj, instance);
         if (StairLook.PoseOf(obj, _objectDatabase, state.Facing) is { } stairPose) // a designed staircase: all its steps, for this copy's pose
             return StairLook.Bitmap(stairPose, _spriteDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32, landings: false); // landing tiles: drawn with their floor (PlaceLandingVisuals)
+        if (WallLook.PoseOf(obj, _objectDatabase, state.Facing) is { } wallPose) // a wall set (Wall Designer): all its pieces, for the way this copy runs
+            return WallLook.Bitmap(wallPose, _objectDatabase, _spriteDatabase, _tileset?.TileWidth ?? 32, _tileset?.TileHeight ?? 32);
         var sprite = ObjectLooks.SpriteFor(obj, state, _spriteDatabase);
         if (sprite is not null)
         {
@@ -202,7 +204,24 @@ public partial class MainWindow
             }
             menu.Items.Add(facingMenu);
         }
-        if (obj.Type == ObjectType.Door)
+        if (WallLook.DesignOf(obj, _objectDatabase) is { } wallDesign)
+        {
+            var runMenu = new MenuItem { Header = "Runs" };
+            foreach (var run in new[] { WallRun.WestEast, WallRun.NorthSouth })
+            {
+                bool hasPieces = wallDesign.Poses.Any(p => p.Run == run && p.Pieces.Count > 0);
+                var item = new MenuItem
+                {
+                    Header = WallDesign.RunName(run) + (hasPieces ? "" : " (no pieces - shows the other way)"),
+                    IsCheckable = true, IsChecked = WallDesign.RunOf(existing.Facing) == run
+                };
+                var r = run;
+                item.Click += (_, _) => { existing.Facing = WallDesign.FacingOf(r); PlaceObjectVisual(existing); StatusText.Text = $"\"{obj.Name}\" now {WallDesign.RunName(r).ToLowerInvariant()}."; };
+                runMenu.Items.Add(item);
+            }
+            menu.Items.Add(runMenu);
+        }
+        if (obj.Type == ObjectType.Door || WallLook.DesignOf(obj, _objectDatabase)?.Poses.Any(p => p.Pieces.Any(pc => _objectDatabase.Objects.FirstOrDefault(o => o.Id == pc.ObjectId)?.Type == ObjectType.Door)) == true)
         {
             var state = ObjectLooks.StartState(obj, existing);
             AddStateItem(menu, "Starts open", state.Open, () => { existing.StartsOpen = true; existing.StartsLocked = false; }, existing);

@@ -88,7 +88,7 @@ public partial class MainWindow
 
     /// <summary>The sprite an object shows in the palette (its starting look) - null for a designed staircase (its still picture).</summary>
     private SpriteEntry? ObjectPaletteSprite(WorldObject obj) =>
-        StairLook.DesignOf(obj, _objectDatabase) is not null ? null : ObjectLooks.SpriteFor(obj, ObjectLooks.DefaultState(obj), _spriteDatabase);
+        StairLook.DesignOf(obj, _objectDatabase) is not null || WallLook.DesignOf(obj, _objectDatabase) is not null ? null : ObjectLooks.SpriteFor(obj, ObjectLooks.DefaultState(obj), _spriteDatabase);
 
     private TreeViewItem PaletteFolderNode(string title, bool expanded, int key)
     {

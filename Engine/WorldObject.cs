@@ -145,6 +145,7 @@ public class WorldObject
     public UseableSettings Useable { get; set; } = new();
     public LeverSettings Lever { get; set; } = new();
     public StairsSettings Stairs { get; set; } = new();
+    public WallSettings Wall { get; set; } = new();
     public RoofSettings Roof { get; set; } = new();
     public ClockSettings Clock { get; set; } = new();
     public ToolSettings Tool { get; set; } = new();
@@ -242,6 +243,9 @@ public class ObjectInstance : IHasDollState
     /// </summary>
     public bool HangsOnWall { get; set; }
 
+    /// <summary>A piece of a wall set (Wall Designer), split from it when the game starts: it stays at the height it was designed at (never falls), and is otherwise its own object - a wall, a window, a door.</summary>
+    public bool WallSetPiece { get; set; }
+
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
 
@@ -318,6 +322,9 @@ public class ObjectDatabase
     /// <summary>Staircases made in the Staircase Designer; a Stairs object links to one.</summary>
     public List<StairDesign> StairDesigns { get; set; } = new();
     public int NextStairDesignId() => StairDesigns.Count == 0 ? 1 : StairDesigns.Max(s => s.Id) + 1;
+    /// <summary>Wall sets made in the Wall Designer (a wall with a window, a doorway); a Wall object links to one.</summary>
+    public List<WallDesign> WallDesigns { get; set; } = new();
+    public int NextWallDesignId() => WallDesigns.Count == 0 ? 1 : WallDesigns.Max(s => s.Id) + 1;
     /// <summary>Paperdolls made in the PaperDoll Editor; an object opens one (WorldObject.DollDesignId).</summary>
     public List<DollDesign> DollDesigns { get; set; } = new();
     public int NextDollDesignId() => DollDesigns.Count == 0 ? 1 : DollDesigns.Max(d => d.Id) + 1;

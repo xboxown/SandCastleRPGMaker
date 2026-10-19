@@ -52,6 +52,7 @@
             <MenuItem x:Name="ToolsMenu" Header="_Tools" IsEnabled="False">
                 <MenuItem Header="Object Editor..." Click="ObjectDatabaseButton_Click"/>
                 <MenuItem Header="Staircase Designer..." Click="StaircaseDesignerMenuItem_Click"/>
+                <MenuItem Header="Wall Designer..." Click="WallDesignerMenuItem_Click" ToolTip="Walls with windows and doorways: pieces glued once, placed as one wall, each its own in play"/>
                 <MenuItem Header="PaperDoll Editor..." Click="PaperDollEditorMenuItem_Click"/>
                 <MenuItem Header="Common Events..." Click="CommonEventsMenuItem_Click" ToolTip="Command lists made once and run from anywhere with Call Common Event"/>
                 <MenuItem Header="Title Screen..." Click="TitleScreenMenuItem_Click" ToolTip="The Title Screen: its paperdoll (made in the PaperDoll Editor), music and intro video"/>

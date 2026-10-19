@@ -163,6 +163,7 @@ public partial class GameTestWindow : Window
         _sprites = sprites;
         _books = books;
         _objects = objects;
+        SplitWallSets(); // a wall set (Wall Designer) is its pieces in play (GameTestWindow.WallSets.cs)
         // Same real principle, and same real reason, as CloneCharacterDatabase - a container's own runtime contents (and its per-instance IsLockedRuntime state) get mutated live during play, exactly like a character's inventory, so Game Test needs its own fully disposable copy, never the live editor reference.
         _containers = CloneContainerDatabase(containers);
         _tileProperties = tileProperties;
