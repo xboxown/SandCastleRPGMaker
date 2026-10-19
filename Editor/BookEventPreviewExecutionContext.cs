@@ -21,6 +21,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
 {
     /// <summary>Text variables, arrays, grids, self switches and the debug log (Engine/ScriptData.cs).</summary>
     public ScriptData ScriptData { get; } = new();
+    /// <summary>Who owns the event music (Play Music): Stop / Fade Music and Resume Map Music stop it.</summary>
+    public static readonly object MusicOwner = new();
     /// <summary>The game carries a long command list on next frame; without it (the editor's preview) a list stops after its steps for one go.</summary>
     public Action<Action>? OnDefer { get; set; }
     /// <summary>Wait Until: the game checks the condition every frame, then goes on (after the timeout in seconds, 0 = never).</summary>
@@ -186,7 +188,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
             {
                 if (!int.TryParse(command.Get("MusicResourceId"), out int id)) return false;
                 double? volumeOverride = double.TryParse(command.Get("Volume"), out double v) ? v : null;
-                return SoundPlayback.TryPlay(_resources, id, volumeOverride);
+                SoundPlayback.StopFor(MusicOwner); // one piece of event music at a time
+                return SoundPlayback.TryPlayFor(MusicOwner, _resources, id, loop: command.Get("Loop") == "True", volumeOverride);
             }
             case EventCommandType.SetSwitch:
             {

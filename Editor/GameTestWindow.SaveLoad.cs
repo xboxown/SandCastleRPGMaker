@@ -477,6 +477,7 @@ public partial class GameTestWindow
         : _scriptWaits.Count > 0 ? "an event is waiting"
         : IsPlayingVideo ? "a video is playing"
         : _gameOver ? "the game is over"
+        : _savingForbidden ? "saving isn't allowed here"
         : null;
 
     /// <summary>Tells the player on the Save/Load screen itself (by the button or the picked slot) and in the status bar.</summary>

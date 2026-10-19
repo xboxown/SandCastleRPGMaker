@@ -41,6 +41,7 @@ public partial class GameTestWindow
         _execContext.OnGameFunction = GameFunction;
         InitializeScriptDolls(); // group 6 (GameTestWindow.ScriptDolls.cs)
         InitializeScriptWorld(); // groups 7-8 (GameTestWindow.ScriptWorld.cs)
+        InitializeScriptGame(); // groups 9-11 (GameTestWindow.ScriptGame.cs)
         _execContext.ScriptData.Logged += line => { if (!IsShippedGame) StatusText.Text = "Debug: " + line; };
 
         var h = _execContext.GameHandlers;
@@ -100,6 +101,7 @@ public partial class GameTestWindow
     private void UpdateScripts(double elapsedMs)
     {
         UpdatePartSlides(elapsedMs); // Move Part over a time
+        UpdateScreenTweens(elapsedMs); // fades, flashes, the camera moving
         if (!_gamePaused) UpdateFollowers(elapsedMs); // Follow, timed Change Schedule
         if (_deferredScripts.Count > 0)
         {

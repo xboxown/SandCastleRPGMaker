@@ -29,10 +29,12 @@ public partial class PlayMusicCommandWindow : Window
         {
             if (int.TryParse(existing.Get("MusicResourceId"), out int id)) MusicCombo.SelectedValue = id;
             VolumeBox.Text = string.IsNullOrEmpty(existing.Get("Volume")) ? "1.0" : existing.Get("Volume");
+            LoopBox.IsChecked = existing.Get("Loop") == "True";
         }
         else
         {
             VolumeBox.Text = "1.0";
+            LoopBox.IsChecked = true;
             if (music.Count > 0) MusicCombo.SelectedIndex = 0;
         }
     }
@@ -48,6 +50,7 @@ public partial class PlayMusicCommandWindow : Window
         var command = new EventCommand { Type = EventCommandType.PlayMusic };
         command.Parameters["MusicResourceId"] = id.ToString();
         command.Parameters["Volume"] = VolumeBox.Text;
+        command.Parameters["Loop"] = LoopBox.IsChecked == true ? "True" : "False";
         Result = command;
         DialogResult = true;
     }

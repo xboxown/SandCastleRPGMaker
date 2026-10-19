@@ -538,6 +538,8 @@ public partial class GameTestWindow : Window
         _currentAppliedPose = pose;
     }
 
+    private static bool IsArrowKey(Key key) => key is Key.Left or Key.Right or Key.Up or Key.Down;
+
     private static (int dx, int dy) DirectionFor(Key key) => key switch
     {
         Key.Left => (-1, 0),
@@ -1536,6 +1538,7 @@ public partial class GameTestWindow : Window
         if (_typing is not null) { DollTypingKey(e.Key); e.Handled = true; return; } // a paperdoll's text box takes the keys (Escape / Enter end the typing)
         if (TopModalDoll is { } modal) { ModalDollKey(modal, e.Key); e.Handled = true; return; } // a modal paperdoll: only Escape (no) and Enter (yes)
         if (_saveScreen is not null && e.Key != Key.Escape) { if (SaveScreenKey(e.Key)) e.Handled = true; return; } // the Save/Load screen takes the keys - its name is typed (GameTestWindow.SaveLoad.cs)
+        if (_keysForbidden && !IsArrowKey(e.Key)) { e.Handled = true; return; } // Allow / Forbid Controls > Keys: only walking
         if (e.Key == Key.S && !InCinema && !PlayerKnockedOut) { OpenSaveLoad(); e.Handled = true; return; } // Exult: S opens the Save/Load screen - even after dying, to load
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (PlayerKnockedOut && e.Key != Key.F6) { e.Handled = true; return; } // unconscious: nothing until back on your feet
@@ -1555,7 +1558,7 @@ public partial class GameTestWindow : Window
         if (_isReadingBook) return;
         if (e.Key == Key.F6 && !IsShippedGame) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
         if (e.Key == Key.F9 && !IsShippedGame) { ShowScriptState(); e.Handled = true; return; } // the script data and debug log (Game Test only)
-        if (e.Key == Key.C) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
+        if (e.Key == Key.C && !_combatForbidden) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
         if (e.Key == Key.Z) { OpenStatsDoll(_player); e.Handled = true; return; } // Exult: Z shows the player's stats
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
@@ -1712,8 +1715,9 @@ public partial class GameTestWindow : Window
     private void UpdateCamera()
     {
         // Real, continuous position, per Exult's own confirmed mechanics - the camera tracks the avatar's actual pixel position directly, not a coarse tile-center, so it naturally follows every small step of real movement rather than only jumping when the logical tile changes.
-        double playerCenterX = _playerPixelX;
-        double playerCenterY = _playerPixelY;
+        var (followX, followY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } followedOnMap ? (followedOnMap.PixelX, followedOnMap.PixelY) : (_playerPixelX, _playerPixelY);
+        double playerCenterX = followX;
+        double playerCenterY = followY;
 
         double relativeX = playerCenterX - _cameraX;
         double relativeY = playerCenterY - _cameraY;
@@ -1728,6 +1732,8 @@ public partial class GameTestWindow : Window
 
         if (relativeY < deadZoneTop) _cameraY -= deadZoneTop - relativeY;
         else if (relativeY > deadZoneBottom) _cameraY += relativeY - deadZoneBottom;
+
+        if (_cameraHold is { } hold) { _cameraX = hold.X - ViewportWidth / 2; _cameraY = hold.Y - ViewportHeight / 2; } // Move Camera: centred on its spot
 
         // Boundary clamp - never shows outside the valid world/map area. A map smaller than the viewport on an axis is centered on that axis instead of clamped to a negative range.
         _cameraX = GameCanvas.Width <= ViewportWidth ? (GameCanvas.Width - ViewportWidth) / 2.0 : Math.Clamp(_cameraX, 0, GameCanvas.Width - ViewportWidth);

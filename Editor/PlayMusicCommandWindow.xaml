@@ -14,5 +14,6 @@
 
         <TextBlock DockPanel.Dock="Top" Text="Volume (0.0 - 1.0):" FontWeight="Bold" Margin="0,0,0,4"/>
         <TextBox x:Name="VolumeBox" DockPanel.Dock="Top"/>
+        <CheckBox x:Name="LoopBox" DockPanel.Dock="Top" Content="Loops (plays over and over until Stop / Fade Music or another Play Music)" Margin="0,8,0,0"/>
     </DockPanel>
 </Window>

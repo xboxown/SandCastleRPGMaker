@@ -24,7 +24,7 @@ public partial class GameTestWindow
         if (FireUseEvent(u)) return;
         var caster = UserOf(u);
         if (caster is null) return;
-        var spells = u.Obj.Spellbook.Spells.OrderBy(s => s.Circle).ThenBy(s => s.Name).ToList();
+        var spells = u.Obj.Spellbook.Spells.Where(s => KnowsSpell(u.Obj, u.Carried?.LearnedSpellsRuntime, s)).OrderBy(s => s.Circle).ThenBy(s => s.Name).ToList(); // only those this copy knows
         var panel = new StackPanel { Margin = new Thickness(14) };
         panel.Children.Add(new TextBlock { Text = u.Obj.Name, FontSize = 18, FontWeight = FontWeights.Bold, Foreground = Brushes.Black, HorizontalAlignment = HorizontalAlignment.Center });
         panel.Children.Add(new TextBlock
@@ -90,7 +90,8 @@ public partial class GameTestWindow
     }
 
     /// <summary>do_spell, then the spell's effects - on the caster, or a target clicked.</summary>
-    private void CastSpell(CharacterDefinition caster, SpellDefinition spell)
+    /// <param name="castOn">Cast Spell (event command): its target given, no clicking.</param>
+    private void CastSpell(CharacterDefinition caster, SpellDefinition spell, CharacterDefinition? castOn = null)
     {
         if (WhyCannotCast(caster, spell) is { } why) { StatusText.Text = why; return; }
         SetStat(caster, BuiltInStatKind.Mana, Stat(caster, BuiltInStatKind.Mana, 0) - spell.EffectiveManaCost);
@@ -100,6 +101,14 @@ public partial class GameTestWindow
         if (spell.Words.Trim().Length > 0) ShowFloatingText(caster, spell.Words.Trim(), 2500); // begin_casting: the words of power
         PlaySound(spell.CastSoundResourceId);
         ShowClock();
+        if (castOn is not null && spell.NeedsTarget)
+        {
+            ApplyEffects(spell.Effects, castOn, spell.Name);
+            if (castOn != caster && !IsPartyOrPlayer(castOn) && spell.Effects.Any(e => e.Kind is MagicEffectKind.Damage or MagicEffectKind.Poison or MagicEffectKind.Sleep or MagicEffectKind.Paralyze or MagicEffectKind.Curse))
+                FightBack(castOn, caster);
+            StatusText.Text = $"{spell.Name} on {castOn.Name}.";
+            return;
+        }
         if (!spell.NeedsTarget)
         {
             ApplyEffects(spell.Effects, caster, spell.Name);

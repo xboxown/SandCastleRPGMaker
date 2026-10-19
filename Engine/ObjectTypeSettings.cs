@@ -231,6 +231,8 @@ public class SpellDefinition
 public class SpellbookSettings
 {
     public List<SpellDefinition> Spells { get; set; } = new();
+    /// <summary>Ticked: every copy of the book knows all its spells. Unticked: a copy knows only those it learned (Learn Spell) - Exult's spellbooks.</summary>
+    public bool StartsWithAllSpells { get; set; } = true;
 }
 
 /// <summary>A useable object: charges, what it does and how it looks used up.</summary>

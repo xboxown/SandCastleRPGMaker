@@ -279,6 +279,7 @@ public partial class ObjectEditorWindow
         var book = obj.Spellbook;
         var body = Group("Spells");
         body.Children.Add(Note("Exult's rules: casting costs mana equal to the spell's circle (unless you set a cost), needs the caster's Level to be at least its circle, and uses up one of each of its reagents (Reagent objects carried). Linear spells (circle 0) cost nothing."));
+        body.Children.Add(Check("Every copy knows all its spells (unticked: only those learned with Learn Spell, as Exult's spellbooks)", () => book.StartsWithAllSpells, v => book.StartsWithAllSpells = v));
         var list = new StackPanel();
         void Show()
         {

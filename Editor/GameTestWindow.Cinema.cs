@@ -32,10 +32,10 @@ public partial class GameTestWindow
     private void UpdateCinema(double elapsedMs)
     {
         if (!InCinema) return;
-        bool going = IsShowingMessage || IsPlayingVideo || _scriptWaits.Count > 0 || _scriptActions.Values.Any(a => a.Done is not null) || _scriptEffects.Any(e => e.Done is not null);
+        bool going = IsShowingMessage || IsPlayingVideo || _scriptWaits.Count > 0 || _conditionWaits.Count > 0 || _screenTweens.Count > 0 || _scriptActions.Values.Any(a => a.Done is not null) || _scriptEffects.Any(e => e.Done is not null);
         if (going) { _cinemaIdleMs = 0; return; }
         if ((_cinemaIdleMs += elapsedMs) < 1000) return;
-        _cinemaRuns.Clear();
+        _cinemaRuns.RemoveWhere(run => !ReferenceEquals(run, PlayerControlLock)); // Forbid Controls stays till allowed again
         _cinemaIdleMs = 0;
     }
 }
