@@ -582,8 +582,7 @@ public partial class GameTestWindow
             path.Reverse();
             return path;
         }
-        int maxExpansions = Math.Clamp(40 * H(start) + 400, 400, 6000); // a detour up to 40 times the straight way; past that it's no way (or as near as it got)
-        while (open.Count > 0 && expansions++ < maxExpansions)
+        while (open.Count > 0 && expansions++ < 6000) // the way round can be far longer than the straight way (out of a house, round to its door)
         {
             var current = open.Dequeue();
             int h = H(current);
