@@ -816,7 +816,7 @@ public partial class MainWindow : Window
         {
             var payload = ProjectFiles.LoadManifest(msrpPath);
             var manifest = payload.Manifest;
-            string folder = System.IO.Path.GetDirectoryName(msrpPath) ?? string.Empty;
+            string folder = DataFolderOverride ?? System.IO.Path.GetDirectoryName(msrpPath) ?? string.Empty; // a built game: its media files beside its .exe
             string shapePath = System.IO.Path.Combine(folder, "shapes.sdbx");
             string objectsPath = System.IO.Path.Combine(folder, "objects.sdbx");
             string audiosPath = System.IO.Path.Combine(folder, "audios.sdbx");
@@ -1250,7 +1250,8 @@ public partial class MainWindow : Window
             Mouse.OverrideCursor = Cursors.Wait;
             GameBundle.Build(engineFolder, engineExe, pick.FileName, projectFolder, System.IO.Path.GetFileName(_currentProjectFilePath));
             StatusText.Text = $"Game built: {pick.FileName}";
-            MessageBox.Show($"Your game was built:\n{pick.FileName}\n\nRun that .exe to play it. Keep it together with the other files in that folder - they're the engine it runs on. The player's PC needs the free Microsoft .NET 8 Desktop Runtime.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"Your game was built:\n{pick.FileName}\n\nRun that .exe to play it. Its project is inside the .exe; its sprites, sounds, objects and videos are in the \"{GameBundle.DataFolderName(pick.FileName)}\" folder beside it - they only work with this game. " +
+                "Keep everything in that folder together - the other files are the engine it runs on. The player's PC needs the free Microsoft .NET 8 Desktop Runtime.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {
@@ -1275,6 +1276,9 @@ public partial class MainWindow : Window
     /// its own window titled with the project's name. Closing it ends the
     /// program. False if the project couldn't be loaded or has no map.
     /// </summary>
+    /// <summary>A built game: the folder its media files (.sdbx) are read from, beside its .exe (GameBundle).</summary>
+    public string? DataFolderOverride { get; init; }
+
     public bool RunStandaloneGame(string msrpPath)
     {
         if (!LoadProjectFromPath(msrpPath)) return false;
@@ -1306,6 +1310,20 @@ public partial class MainWindow : Window
     /// <summary>A built game's window: closing it ends the program - unless another game window carries on (a loaded save, Return To Title, New Game).</summary>
     private void RunStandalone(GameTestWindow game)
     {
+        var display = _systemSettings.Display;
+        if (display.Mode == GameScreenMode.FullScreen)
+        {
+            game.WindowStyle = WindowStyle.None; // no frame or title bar: the whole screen
+            game.ResizeMode = ResizeMode.NoResize;
+            game.WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            int scale = Math.Clamp(display.WindowScale, 2, 6);
+            game.SizeToContent = SizeToContent.Manual;
+            game.Width = 320 * scale + 16;
+            game.Height = 200 * scale + 39;
+        }
         game.Closed += (_, _) =>
         {
             if (NextGameWindow(game, shipped: true) is { } next) RunStandalone(next);

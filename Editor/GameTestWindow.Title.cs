@@ -26,6 +26,7 @@ public partial class GameTestWindow
     /// <summary>On loading: the intro video, then the title - if the game has one.</summary>
     private void ShowTitleIfAny()
     {
+        if (IsShippedGame) GameStatusBar.Visibility = Visibility.Collapsed; // a built game: no testing bar
         if (!StartAtTitle || _objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.Title.DollDesignId) is not { } design) return;
         ViewportBorder.Opacity = 0; // the world isn't seen behind the title
         int video = _systemSettings.Title.IntroVideoId;

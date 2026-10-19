@@ -12,9 +12,19 @@ public partial class App : Application
     protected override void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
-        if (GameBundle.TryExtractEmbeddedGame(Environment.ProcessPath, out string msrpPath))
+        bool isGame;
+        string msrpPath;
+        string? dataFolder;
+        try { isGame = GameBundle.TryExtractEmbeddedGame(Environment.ProcessPath, out msrpPath, out dataFolder); }
+        catch (GameDataException ex)
         {
-            var host = new MainWindow(); // never shown - it only loads the embedded project, exactly like File > Open
+            MessageBox.Show(ex.Message, System.IO.Path.GetFileNameWithoutExtension(Environment.ProcessPath ?? "Game"), MessageBoxButton.OK, MessageBoxImage.Error);
+            Shutdown();
+            return;
+        }
+        if (isGame)
+        {
+            var host = new MainWindow { DataFolderOverride = dataFolder }; // never shown - it only loads the embedded project, exactly like File > Open
             if (!host.RunStandaloneGame(msrpPath)) Shutdown();
             return;
         }

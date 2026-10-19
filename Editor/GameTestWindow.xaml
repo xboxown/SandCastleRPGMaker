@@ -5,7 +5,7 @@
         WindowStartupLocation="CenterOwner" Background="Black">
     <Grid>
     <DockPanel>
-        <StatusBar DockPanel.Dock="Bottom">
+        <StatusBar x:Name="GameStatusBar" DockPanel.Dock="Bottom">
             <StatusBarItem DockPanel.Dock="Right">
                 <TextBlock x:Name="ClockText" ToolTip="The game clock (Exult: a game minute every 5 seconds). F6 skips to the next 3-hour period." Margin="8,0,4,0"/>
             </StatusBarItem>

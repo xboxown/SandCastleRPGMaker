@@ -56,6 +56,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
         tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
+        tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
@@ -171,6 +172,34 @@ public partial class SystemSettingsWindow : Window
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
         });
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    /// <summary>How a built game opens: in a window, or 100% full screen.</summary>
+    private UIElement BuildGameWindowTab()
+    {
+        var display = _settings.Display;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var window = new RadioButton { Content = "In a window", GroupName = "screen", IsChecked = display.Mode == GameScreenMode.Window };
+        var full = new RadioButton { Content = "Full screen (the whole screen, no frame - Alt+F4 or Ctrl+Q quits)", GroupName = "screen", IsChecked = display.Mode == GameScreenMode.FullScreen, Margin = new Thickness(0, 6, 0, 0) };
+        window.Checked += (_, _) => display.Mode = GameScreenMode.Window;
+        full.Checked += (_, _) => display.Mode = GameScreenMode.FullScreen;
+        panel.Children.Add(new TextBlock { Text = "A built game (Game > Build...) opens:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+        panel.Children.Add(window);
+        panel.Children.Add(full);
+        var scales = Enumerable.Range(2, 5).Select(n => $"{n} x  ({320 * n} x {200 * n})").ToList();
+        var scale = new ComboBox { Width = 180, ItemsSource = scales, SelectedIndex = Math.Clamp(display.WindowScale, 2, 6) - 2 };
+        scale.SelectionChanged += (_, _) => display.WindowScale = scale.SelectedIndex + 2;
+        var row = LabeledRow("Window size:", scale);
+        ((FrameworkElement)row).Margin = new Thickness(0, 12, 0, 0);
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Full screen fills the screen completely - no title bar, no taskbar. The game's view keeps Ultima VII's 320 x 200 shape, scaled up as big as it fits (black bars at the sides on a wide screen). " +
+                   "A window can still be resized or maximized by the player.\n\n" +
+                   "Game Test in the editor always opens in a window, with its testing bar at the bottom (messages, the clock, F6 to skip time, F9 for the script data); a built game has none of these.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
+        });
+        return panel;
     }
 
     private static FrameworkElement LabeledRow(string label, UIElement content)

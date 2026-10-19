@@ -209,8 +209,19 @@ public class QuitSettings
     public int DollDesignId { get; set; } = -1;
 }
 
+public enum GameScreenMode { Window, FullScreen }
+
+/// <summary>How a built game opens (System Settings > Game Window). Game Test always opens in a window.</summary>
+public class DisplaySettings
+{
+    public GameScreenMode Mode { get; set; } = GameScreenMode.Window;
+    /// <summary>Window mode: the game's view drawn this many times its 320 x 200 (2-6), the window sized round it.</summary>
+    public int WindowScale { get; set; } = 3;
+}
+
 public class SystemSettings
 {
+    public DisplaySettings Display { get; set; } = new();
     public TitleScreenSettings Title { get; set; } = new();
     public QuitSettings Quit { get; set; } = new();
     /// <summary>Common Events (Tools > Common Events): command lists made once, run from anywhere with Call Common Event.</summary>
