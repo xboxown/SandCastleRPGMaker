@@ -46,6 +46,8 @@ public partial class GameTestWindow
         public Action<bool>? Answered;
         /// <summary>Its own size on screen (the Title Screen fills the game's view); null = a paperdoll's usual size.</summary>
         public double? Scale;
+        /// <summary>The Title Screen: it stays where the engine puts it (filling the view) - it can't be dragged.</summary>
+        public bool Fixed;
     }
 
     private readonly List<OpenDollGump> _openDolls = new();
@@ -81,22 +83,27 @@ public partial class GameTestWindow
         return state;
     }
 
-    private void OpenDoll(IHasDollState owner, WorldObject obj, DollDesign design)
+    /// <param name="title">The Title Screen: a paperdoll of its own kind - it opens without the paperdoll-open sound and can't be dragged.</param>
+    private void OpenDoll(IHasDollState owner, WorldObject obj, DollDesign design, bool title = false)
     {
         var state = DollStateOf(owner, design);
         var existing = _openDolls.FirstOrDefault(g => ReferenceEquals(g.State, state));
         if (existing is not null) { BringDollToFront(existing); return; }
 
-        // Every PaperDoll Editor paperdoll opens with System Settings > Sounds > Paperdoll open (none set = silent).
-        PlaySound(_systemSettings.Sounds.PaperdollOpenSoundId);
+        // Every PaperDoll Editor paperdoll opens with System Settings > Sounds > Paperdoll open (none set = silent) - the Title Screen has its own music instead.
+        if (!title) PlaySound(_systemSettings.Sounds.PaperdollOpenSoundId);
         var canvas = new Canvas(); // no background: only its parts are part of it (pixel-precise), as a container's art
         var border = new Border { Child = canvas };
-        var gump = new OpenDollGump { State = state, Design = design, Obj = obj, Owner = owner, GumpBorder = border, PartsCanvas = canvas };
+        var gump = new OpenDollGump { State = state, Design = design, Obj = obj, Owner = owner, GumpBorder = border, PartsCanvas = canvas, Fixed = title };
         int open = _openContainers.Count + _openDolls.Count;
         Canvas.SetLeft(border, 40 + open * 36);
         Canvas.SetTop(border, 30 + open * 30);
         // Its body (every part that does nothing on a click) drags the window; clickable parts are claimed by the interaction pipeline first.
-        canvas.MouseLeftButtonDown += (_, e) => { BringDollToFront(gump); PaperdollTitleBar_MouseLeftButtonDown(gump, border, canvas, e); };
+        canvas.MouseLeftButtonDown += (_, e) =>
+        {
+            BringDollToFront(gump);
+            if (!gump.Fixed) PaperdollTitleBar_MouseLeftButtonDown(gump, border, canvas, e);
+        };
         canvas.MouseMove += (_, e) => PaperdollTitleBar_MouseMove(border, e);
         canvas.MouseLeftButtonUp += (_, _) => PaperdollTitleBar_MouseLeftButtonUp(canvas);
         PaperdollGumpsCanvas.Children.Add(border);

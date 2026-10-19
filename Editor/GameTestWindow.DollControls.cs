@@ -43,7 +43,7 @@ public partial class GameTestWindow
     /// no (No / Cancel, Escape, closed any other way). Fresh: as designed,
     /// not as it was last left.
     /// </summary>
-    private OpenDollGump? OpenForm(DollDesign design, bool modal, Action<bool>? answered, bool fresh)
+    private OpenDollGump? OpenForm(DollDesign design, bool modal, Action<bool>? answered, bool fresh, bool title = false)
     {
         if (!_formOwners.TryGetValue(design.Id, out var owner)) _formOwners[design.Id] = owner = new FormOwner();
         if (fresh)
@@ -51,7 +51,7 @@ public partial class GameTestWindow
             foreach (var open in _openDolls.Where(g => ReferenceEquals(g.Owner, owner)).ToList()) CloseDollGump(open);
             owner.DollRuntime = null;
         }
-        OpenDoll(owner, new WorldObject { Name = design.Name }, design);
+        OpenDoll(owner, new WorldObject { Name = design.Name }, design, title);
         if (_openDolls.LastOrDefault(g => ReferenceEquals(g.Owner, owner)) is not { } gump) return null;
         if (answered is not null)
         {

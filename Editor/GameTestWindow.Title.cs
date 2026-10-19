@@ -38,7 +38,8 @@ public partial class GameTestWindow
     private void OpenTitle(DollDesign design)
     {
         if (_systemSettings.Title.MusicId >= 0) SoundPlayback.TryPlayFor(TitleMusicOwner, _resources, _systemSettings.Title.MusicId, _systemSettings.Title.MusicLoops, null);
-        if (OpenForm(design, modal: true, answered: null, fresh: true) is not { } gump) { ViewportBorder.Opacity = 1; return; }
+        // A title, not a window: no paperdoll-open sound (it has its music) and it can't be dragged off the view.
+        if (OpenForm(design, modal: true, answered: null, fresh: true, title: true) is not { } gump) { ViewportBorder.Opacity = 1; return; }
         _titleGump = gump;
         // Continue: greyed when there's nothing to continue.
         bool anySave = ProjectSession.ProjectIdProvider?.Invoke() is { } projectId && GameSaveStore.List(projectId).Count > 0;
