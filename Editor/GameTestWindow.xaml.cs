@@ -732,6 +732,10 @@ public partial class GameTestWindow : Window
         {
             BringPaperdollToFrontGeneric(gumpBorder, containerGump);
         }
+        else if (ownerForFrontOrdering is OpenDollGump dollGump)
+        {
+            BringDollToFront(dollGump); // its own layer: a modal one (a prompt) stays over its blocker, not dropped under it
+        }
         else
         {
             Panel.SetZIndex(gumpBorder, 200);
