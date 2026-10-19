@@ -224,8 +224,8 @@ public static class ScriptCommands
         // ---- 7. Characters and party ----
         new(EventCommandType.JoinParty, "Join / Leave Party", World, "Characters", "A character joins the party, or leaves it (and goes back to its schedule).",
             new[] { Who("Character"), Choice("Value", "They", "Join the party", "Leave the party") }, "{Who}: {Value}"),
-        new(EventCommandType.ChangeSchedule, "Change Schedule", World, "Characters", "Gives a character a new activity for some hours (or from now on): wander, sleep, eat, work, dance, guard, stand... (its Character Editor schedule comes back after).",
-            new[] { Who("Character"), Choice("Activity", "Activity", "Stand", "Wander", "Sleep", "Eat", "Work", "Dance", "Guard", "Sit", "Patrol", "Talk", "Loiter"), F("Hours", "For how many game hours (0 = from now on)", def: "0") }, "{Who}: {Activity}"),
+        new(EventCommandType.ChangeSchedule, "Change Schedule", World, "Characters", "Gives a character a new activity right where it is, for some game hours (or until its schedule next changes): stand, loiter, wander, sleep, sit, dance, pace, eat at the inn, wait tables - or back to its schedule now.",
+            new[] { Who("Character"), Choice("Activity", "Activity", "Stand", "Loiter", "Wander", "Sleep", "Wait", "Sit", "Dance", "Pace east-west", "Pace north-south", "Eat at inn", "Waiter", "Back to its schedule"), F("Hours", "For how many game hours (0 = from now on)", def: "0") }, "{Who}: {Activity}"),
         new(EventCommandType.PlaceCharacter, "Place / Remove Character", World, "Characters", "Puts a character on the map at a spot (coming in from wherever it was), or takes it off the map.",
             new[] { Who("Character"), Choice("Value", "Do", "Place it", "Remove it from the map"), new("X", "At", ScriptFieldKind.Spot) }, "{Who}: {Value}"),
         new(EventCommandType.TurnToFace, "Turn To Face", World, "Characters", "Turns a character to a direction, to the main player, or to another character.",

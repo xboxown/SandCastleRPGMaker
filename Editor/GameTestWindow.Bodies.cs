@@ -85,6 +85,7 @@ public partial class GameTestWindow
             GameCanvas.Children.Remove(visual);
         }
         _mapCharacters.Remove(mapCharacter);
+        _bodies[character] = (body, mapCharacter.Placement); // Resurrect brings it back here
 
         AddMapEntity(body, null);
         SetMapPosition(body, null, cellX, cellY, 0, 0);

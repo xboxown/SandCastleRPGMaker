@@ -254,6 +254,8 @@ public class ObjectInstance : IHasDollState
     public bool? IsOpenRuntime { get; set; }
     public bool? IsLockedRuntime { get; set; }
     public bool? IsLitRuntime { get; set; }
+    /// <summary>Change Object Look: the sprite it shows now ("group/name"), null = its own.</summary>
+    public string? LookOverrideRuntime { get; set; }
     /// <summary>Game minutes of burning left (light sources), -1 = not started counting.</summary>
     public double BurnLeftRuntime { get; set; } = -1;
     public bool IsSpentRuntime { get; set; }
