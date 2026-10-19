@@ -200,6 +200,7 @@ public partial class EventEditorControl : UserControl
             EventCommandType.CinemaMode => "Cinema Mode",
             EventCommandType.EndCinemaMode => "End Cinema Mode",
             _ when CommandWindowRegistry.All.TryGetValue(command.Type, out var registered) => registered.Name,
+            _ when ScriptCommands.Of(command.Type) is { } script => script.Name,
             _ => command.Type.ToString()
         };
         block.Inlines.Add(new Run(commandName) { Foreground = IsChoiceLine(command) ? Brushes.MediumBlue : Brushes.Red, FontWeight = FontWeights.Bold });
@@ -397,7 +398,11 @@ public partial class EventEditorControl : UserControl
             insertAt = blockEnd + 1;
         int indentLevel = ComputeInsertIndentLevel(insertAt);
 
-        if (CommandWindowRegistry.All.TryGetValue(type, out var registered))
+        if (ScriptCommands.Of(type) is { } script)
+        {
+            InsertScriptCommand(script, insertAt, indentLevel);
+        }
+        else if (CommandWindowRegistry.All.TryGetValue(type, out var registered))
         {
             var dialog = registered.Open(null);
             dialog.Owner = Window.GetWindow(this);
@@ -628,8 +633,91 @@ public partial class EventEditorControl : UserControl
     {
         if (CurrentPage is null || insertAt <= 0 || insertAt > CurrentPage.Commands.Count) return 0;
         var previous = CurrentPage.Commands[insertAt - 1];
-        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf or EventCommandType.Else or EventCommandType.WhenChoice or EventCommandType.CinemaMode;
+        bool opensBlock = previous.Type is EventCommandType.ConditionalBranchSwitch or EventCommandType.ConditionalBranchVariable or EventCommandType.AdvancedIf or EventCommandType.Else or EventCommandType.WhenChoice or EventCommandType.CinemaMode
+            || ScriptCommands.RoleOf(previous.Type) is ScriptBlockRole.Opens or ScriptBlockRole.Middle;
         return opensBlock ? previous.IndentLevel + 1 : previous.IndentLevel;
+    }
+
+    /// <summary>A script command: its window (if it has one), then the line - with its End (a loop, a Select Case with its Cases) as a pair, what goes between one level deeper.</summary>
+    private void InsertScriptCommand(ScriptCommandSpec script, int insertAt, int indentLevel)
+    {
+        if (CurrentPage is null) return;
+        EventCommand command;
+        if (script.HasWindow)
+        {
+            var dialog = new ScriptCommandWindow(script, null) { Owner = Window.GetWindow(this) };
+            if (dialog.ShowDialog() != true) return;
+            command = dialog.Result;
+        }
+        else command = new EventCommand { Type = script.Type };
+
+        if (script.Type == EventCommandType.Case)
+        {
+            // A Case sits at its Select Case's level, inside it.
+            int select = -1;
+            for (int j = insertAt - 1; j >= 0 && select < 0; j--)
+            {
+                if (CurrentPage.Commands[j].Type != EventCommandType.SelectCase) continue;
+                int level = CurrentPage.Commands[j].IndentLevel;
+                int end = CurrentPage.Commands.FindIndex(j + 1, c => c.Type == EventCommandType.EndSelect && c.IndentLevel == level);
+                if (end >= insertAt) select = j;
+            }
+            if (select < 0)
+            {
+                MessageBox.Show(Window.GetWindow(this), "A Case goes inside a Select Case - select a line between a Select Case and its End Select first.", "Case", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            indentLevel = CurrentPage.Commands[select].IndentLevel;
+        }
+
+        command.IndentLevel = indentLevel;
+        var lines = new List<EventCommand> { command };
+        if (script.Type == EventCommandType.SelectCase)
+        {
+            foreach (var value in command.Get("Cases").Split('\n').Select(v => v.Trim()).Where(v => v.Length > 0))
+                lines.Add(new EventCommand { Type = EventCommandType.Case, IndentLevel = indentLevel, Parameters = { ["Formula"] = value } });
+            if (command.Get("WithElse") == "True") lines.Add(new EventCommand { Type = EventCommandType.CaseElse, IndentLevel = indentLevel });
+        }
+        if (ScriptCommands.CloserOf(script.Type) is { } closer) lines.Add(new EventCommand { Type = closer, IndentLevel = indentLevel });
+        CurrentPage.Commands.InsertRange(insertAt, lines);
+        RenderContentsList();
+        ContentChanged?.Invoke();
+    }
+
+    /// <summary>Delete on a loop's or Select Case's opening or End line: the whole frame goes (its Cases too), and the commands inside stay, back one level. True when handled here.</summary>
+    private bool TryDeleteScriptBlock(int index)
+    {
+        if (CurrentPage is null) return false;
+        var commands = CurrentPage.Commands;
+        var command = commands[index];
+        int start, end;
+        if (ScriptCommands.CloserOf(command.Type) is { } closer)
+        {
+            start = index;
+            end = commands.FindIndex(index + 1, c => c.Type == closer && c.IndentLevel == command.IndentLevel);
+        }
+        else if (ScriptCommands.OpenerOf(command.Type) is { } opener)
+        {
+            end = index;
+            start = commands.FindLastIndex(index, c => c.Type == opener && c.IndentLevel == command.IndentLevel);
+        }
+        else return false;
+        if (start < 0 || end <= start)
+        {
+            commands.RemoveAt(index); // its partner is gone already
+        }
+        else
+        {
+            int level = commands[start].IndentLevel;
+            for (int i = end; i >= start; i--)
+            {
+                if (i == start || i == end || (commands[i].IndentLevel == level && commands[i].Type is EventCommandType.Case or EventCommandType.CaseElse)) commands.RemoveAt(i);
+                else commands[i].IndentLevel = Math.Max(0, commands[i].IndentLevel - 1);
+            }
+        }
+        RenderContentsList();
+        ContentChanged?.Invoke();
+        return true;
     }
 
     private void EditCommandAt(int index)
@@ -846,6 +934,7 @@ public partial class EventEditorControl : UserControl
         if (index < 0 || index >= CurrentPage.Commands.Count) return;
         if (TryDeleteChoiceAware(index)) return;
         if (TryDeleteCinema(index)) return;
+        if (TryDeleteScriptBlock(index)) return;
         CurrentPage.Commands.RemoveAt(index);
         RenderContentsList();
         ContentChanged?.Invoke();

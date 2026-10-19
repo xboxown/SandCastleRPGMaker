@@ -16,8 +16,42 @@ namespace SandcastleRpgMaker.Editor;
 /// its own visuals. A caller with no callback set just gets a no-op,
 /// exactly like every other optional dependency in this project.
 /// </summary>
-public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext, IActionCommandHost, ICinemaHost
+public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogChoiceHost, IGameConditionContext, IActionCommandHost, ICinemaHost,
+    IScriptDataHost, IScriptYieldHost, IScriptWaitHost, IScriptLibraryHost, IScriptGameFunctions
 {
+    /// <summary>Text variables, arrays, grids, self switches and the debug log (Engine/ScriptData.cs).</summary>
+    public ScriptData ScriptData { get; } = new();
+    /// <summary>The game carries a long command list on next frame; without it (the editor's preview) a list stops after its steps for one go.</summary>
+    public Action<Action>? OnDefer { get; set; }
+    /// <summary>Wait Until: the game checks the condition every frame, then goes on (after the timeout in seconds, 0 = never).</summary>
+    public Action<Func<bool>, double, Action>? OnWaitUntil { get; set; }
+    /// <summary>The game's own formula functions (hp(Player), hour()...): null when it has no such function.</summary>
+    public Func<string, IReadOnlyList<object>, object?>? OnGameFunction { get; set; }
+
+    public void Defer(Action goOn)
+    {
+        if (OnDefer is not null) OnDefer(goOn);
+        else ScriptData.AddLog("(a long loop stopped here - in the preview it runs only so many steps; it runs on in the game)");
+    }
+
+    public void WaitUntil(Func<bool> condition, double timeoutSeconds, Action goOn)
+    {
+        if (OnWaitUntil is not null) OnWaitUntil(condition, timeoutSeconds, goOn);
+        else goOn(); // the preview doesn't wait
+    }
+
+    public CommonEventDefinition? GetCommonEvent(int id) => ProjectSession.SettingsProvider?.Invoke()?.CommonEvents.FirstOrDefault(e => e.Id == id) ?? CommonEvents?.FirstOrDefault(e => e.Id == id);
+    /// <summary>The Common Events when there's no project session (a built game sets them from its settings).</summary>
+    public List<CommonEventDefinition>? CommonEvents { get; set; }
+
+    public bool TryCall(string name, IReadOnlyList<object> args, out object result)
+    {
+        result = 0.0;
+        if (OnGameFunction?.Invoke(name, args) is not { } value) return false;
+        result = value;
+        return true;
+    }
+
     private readonly ResourceDatabase _resources;
     private readonly Dictionary<string, double> _variables = new();
     /// <summary>Runtime-only content overrides, keyed by (which book, which page, which frame). Never touches the book's own authored data - this is exactly the "only during runtime, through the command" storage the spec calls for. Exposed via GetContentOverride for a real future engine to consult; the Book Editor's own Preview deliberately never reads this to change what it shows.</summary>
@@ -29,6 +63,7 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public void SaveState(GameSaveData save)
     {
         save.Variables = new Dictionary<string, double>(_variables);
+        save.Script = ScriptData.ToSave();
         save.BookContents = _contentOverrides.Select(kv => new SavedBookContent { BookId = kv.Key.BookId, PageIndex = kv.Key.PageIndex, FrameId = kv.Key.FrameId, Text = kv.Value }).ToList();
         save.BookSettings = _bookSettingOverrides.Select(kv => new SavedBookSetting { BookId = kv.Key.BookId, Field = kv.Key.Field, Value = kv.Value }).ToList();
     }
@@ -38,6 +73,7 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     {
         _variables.Clear();
         foreach (var (name, value) in save.Variables) _variables[name] = value;
+        ScriptData.Load(save.Script);
         _contentOverrides.Clear();
         foreach (var c in save.BookContents) _contentOverrides[(c.BookId, c.PageIndex, c.FrameId)] = c.Text;
         _bookSettingOverrides.Clear();
@@ -352,6 +388,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public bool GetSwitch(string name) => GetVariable(name) != 0;
     public void SetSwitch(string name, bool value) => _variables[name] = value ? 1 : 0;
     public double GetVariable(string name) => _variables.TryGetValue(name, out var v) ? v : 0;
+    /// <summary>Every number variable and switch set so far (Game Test's Script Data window).</summary>
+    public IReadOnlyDictionary<string, double> Variables => _variables;
     public void SetVariable(string name, double value) => _variables[name] = value;
     /// <summary>Whether anything has set this variable yet (a paperdoll control then shows it, rather than its own start).</summary>
     public bool HasVariable(string name) => _variables.ContainsKey(name);

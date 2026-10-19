@@ -37,6 +37,8 @@ public class GameSaveData
 
     /// <summary>Variables and switches, as the running game holds them (by name).</summary>
     public Dictionary<string, double> Variables { get; set; } = new();
+    /// <summary>Text variables, arrays, grids and self switches (script commands). Older saves have none.</summary>
+    public SavedScriptData? Script { get; set; }
     /// <summary>Change Book Content: (book, page, frame) -> text.</summary>
     public List<SavedBookContent> BookContents { get; set; } = new();
     /// <summary>Change Book Settings: (book, field) -> value.</summary>

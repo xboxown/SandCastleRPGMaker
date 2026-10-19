@@ -41,6 +41,16 @@ internal static class CommandWindowRegistry
         [EventCommandType.Wait] = new("Wait", c => new WaitCommandWindow(c), WaitCommandWindow.Describe),
         [EventCommandType.TakeFromContainer] = new("Pick Item From Container", c => new TakeFromContainerCommandWindow(c), TakeFromContainerCommandWindow.Describe),
     };
+
+    /// <summary>The script commands (Engine/ScriptCommands.cs) that have a window - all built by ScriptCommandWindow from their field lists.</summary>
+    static CommandWindowRegistry()
+    {
+        foreach (var spec in ScriptCommands.All.Where(s => s.HasWindow))
+        {
+            var s = spec;
+            All[s.Type] = new(s.Name.Split(" ... ")[0], c => new ScriptCommandWindow(s, c), ScriptCommandWindow.Describe);
+        }
+    }
 }
 
 /// <summary>Stop Sound: the reverse of Play Sound - stops one sound (every copy of it, looping ones too) or every sound playing.</summary>

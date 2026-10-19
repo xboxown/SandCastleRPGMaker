@@ -191,6 +191,8 @@ public class SaveLoadSettings
 
 public class SystemSettings
 {
+    /// <summary>Common Events (Tools > Common Events): command lists made once, run from anywhere with Call Common Event.</summary>
+    public List<CommonEventDefinition> CommonEvents { get; set; } = new();
     public SaveLoadSettings SaveLoad { get; set; } = new();
     public SliderSettings Slider { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();

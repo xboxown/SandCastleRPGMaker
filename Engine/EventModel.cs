@@ -102,7 +102,21 @@ public enum EventCommandType
     /// <summary>Play Video: plays a video from the Video Library over the whole game, the game paused till it ends (or is skipped).</summary>
     PlayVideo,
     /// <summary>Open Paperdoll: opens a PaperDoll Editor paperdoll - modal or not, waiting for it to close or not, its answer (Yes / OK = 1, else 0) into a variable.</summary>
-    OpenPaperdoll
+    OpenPaperdoll,
+
+    // ---- Script commands (Engine/ScriptCommands.cs has what each one is). Appended only: saved as numbers. ----
+    InputNumber, SelectItem, ControlSelfSwitch, ChangeState,
+    Calculate, InputText, TextOperation, GetGameData, SwapVariables,
+    CreateArray, SetElement, GetElement, AddToArray, InsertAt, RemoveAt, ArrayLength, FindInArray, ReorderArray, FillArray, ClearArray, CopyArray, ArrayStatistic,
+    CreateGrid, SetCell, GetCell, FillGrid, GridSize, ResizeGrid, FindInGrid, GridLineToArray, ArrayToGridLine, GridFromMap, GridToMap,
+    While, EndWhile, RepeatTimes, EndRepeat, ForEach, EndForEach, BreakLoop, NextLoop, SelectCase, Case, CaseElse, EndSelect, WaitUntil, CallCommonEvent, ReturnFromCommon, Comment,
+    ClosePaperdoll, ShowHidePart, SetPartLook, SetPartText, SetPartValue, GetPartValue, FillListFromArray, GetPickedChoice, EnablePart, MovePart, PutItemInSlot, TakeItemFromSlot, MovePaperdoll, FocusTextBox,
+    JoinParty, ChangeSchedule, PlaceCharacter, TurnToFace, FollowCharacter, ChangeName, ChangeLook, SetAttackMode, Resurrect, ShowBark,
+    CreateObject, DeleteObject, MoveObject, ChangeObjectLook, SetDoorState, CountItems, SetContainerContents,
+    FadeScreen, FlashScreen, MoveCamera, CameraFollow, ShowPicture, ErasePicture, SetTime, ChangeMap,
+    StopMusic, FadeMusicIn, SetVolume, ResumeMapMusic,
+    SaveGame, LoadGame, OpenSaveLoadScreen, AllowSaving, AllowControls, GameOver, ReturnToTitle, QuitGame, LearnSpell, CastSpell,
+    DebugLog, PauseHere
 }
 
 /// <summary>

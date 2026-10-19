@@ -34,7 +34,7 @@ public partial class GameTestWindow
     private bool _gamePaused;
 
     /// <summary>True while any gump-mode window is open - Exult's gump_mode() with the default "gumps pause game".</summary>
-    private bool IsGamePaused => _openPaperdolls.Count > 0 || _openContainers.Count > 0 || _openDolls.Count > 0 || _isReadingBook || IsShowingMessage || _gameOver || IsChoosingTarget || _objectOverlayOpen || _restingNow || IsPlayingVideo; // Get_click pauses the time queue while a target is chosen
+    private bool IsGamePaused => _openPaperdolls.Count > 0 || _openContainers.Count > 0 || _openDolls.Count > 0 || _isReadingBook || IsShowingMessage || _gameOver || IsChoosingTarget || _objectOverlayOpen || _restingNow || IsPlayingVideo || _scriptInput is not null; // Get_click pauses the time queue while a target is chosen
 
     /// <summary>Checked every frame by the game loop: pauses or resumes the game the moment the first gump opens or the last one closes (Time_queue::pause / resume).</summary>
     private void UpdateGamePause()

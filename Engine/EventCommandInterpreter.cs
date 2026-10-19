@@ -55,19 +55,52 @@ public interface ICinemaHost
 /// </summary>
 public static class EventCommandInterpreter
 {
-    private const int MaxSteps = 5000; // safety valve - nothing in a real command list should ever need this many steps; a runaway loop (once GoToLabel is real) would otherwise hang forever
+    /// <summary>With no host to carry on next frame (the editor's preview): a list that runs this many steps at once is stopped (a loop that never ends).</summary>
+    private const int MaxSteps = 100000;
+    /// <summary>In the game: after this many steps at once the list carries on next frame (IScriptYieldHost), so a long loop never freezes the game.</summary>
+    private const int StepsPerFrame = 2000;
+    /// <summary>Common Events calling Common Events: deeper than this is a mistake (one calling itself for ever).</summary>
+    private const int MaxCallDepth = 40;
 
     /// <param name="start">Where to begin - a reply's branch, when the player has just picked it.</param>
     /// <param name="returns">Pinned replies being answered: reaching StopAt (the end of that reply's branch) goes back to ResumeAt (its Show Text). Innermost last.</param>
-    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start = 0, IReadOnlyList<(int StopAt, int ResumeAt)>? returns = null)
+    /// <param name="state">Where its loops are (kept across waits); a fresh one when null.</param>
+    /// <param name="finished">Called once the list has ended (its last line, Exit Event Processing or Return) - how a Common Event goes back to its caller.</param>
+    public static void Run(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start = 0, IReadOnlyList<(int StopAt, int ResumeAt)>? returns = null,
+        ScriptRunState? state = null, Action? finished = null)
+    {
+        // Each Common Event call (and each command finishing at once) runs on inside this one: past a depth, carry on next frame instead.
+        if (_nesting > MaxNesting && context is IScriptYieldHost deferHost)
+        {
+            deferHost.Defer(() => Run(commands, context, trace, start, returns, state, finished));
+            return;
+        }
+        _nesting++;
+        try { RunCore(commands, context, trace, start, returns, state, finished); }
+        finally { _nesting--; }
+    }
+
+    [ThreadStatic] private static int _nesting;
+    private const int MaxNesting = 150;
+
+    private static void RunCore(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start, IReadOnlyList<(int StopAt, int ResumeAt)>? returns,
+        ScriptRunState? state, Action? finished)
     {
         int i = start;
         returns ??= Array.Empty<(int, int)>();
+        state ??= new ScriptRunState();
         int guard = 0;
 
         while (i < commands.Count)
         {
-            if (++guard > MaxSteps)
+            if (++guard > StepsPerFrame && context is IScriptYieldHost yieldHost)
+            {
+                int resumeAt = i;
+                var returnsThen = returns;
+                yieldHost.Defer(() => Run(commands, context, trace, resumeAt, returnsThen, state, finished));
+                return;
+            }
+            if (guard > MaxSteps)
             {
                 trace.Add("(stopped - exceeded max command steps, likely a runaway loop)");
                 (context as ICinemaHost)?.EndCinema(commands);
@@ -88,9 +121,150 @@ public static class EventCommandInterpreter
             switch (cmd.Type)
             {
                 case EventCommandType.End:
-                    trace.Add("End - command list stopped.");
+                case EventCommandType.ReturnFromCommon:
+                    if (cmd.Type == EventCommandType.ReturnFromCommon && cmd.Get("Value").Trim().Length > 0)
+                    {
+                        try { ScriptExpression.SetVariable(context, "Result", ScriptExpression.Evaluate(cmd.Get("Value"), context)); }
+                        catch (ScriptException ex) { ScriptError(context, trace, "Return", ex); }
+                    }
+                    trace.Add(cmd.Type == EventCommandType.End ? "End - command list stopped." : "Return");
                     (context as ICinemaHost)?.EndCinema(commands); // the event is over: a cinema still on ends with it
+                    finished?.Invoke();
                     return;
+
+                // ---- Loops (ScriptCommands): an opener, its End, Break Loop / Next Loop inside ----
+                case EventCommandType.While:
+                {
+                    bool go = SafeCondition(cmd, context, trace);
+                    trace.Add($"While -> {(go ? "true" : "false")}");
+                    i = go ? i + 1 : FindCloser(commands, i) + 1;
+                    continue;
+                }
+                case EventCommandType.EndWhile:
+                    i = FindOpener(commands, i); // back to its While, which checks again
+                    if (i < 0) i = commands.Count;
+                    continue;
+
+                case EventCommandType.RepeatTimes:
+                {
+                    int total = (int)Math.Floor(SafeNumber(cmd.Get("Count"), context, trace));
+                    var loop = state.Loop(cmd);
+                    loop.Count = 1;
+                    loop.Total = total;
+                    if (total < 1) { state.Clear(cmd); i = FindCloser(commands, i) + 1; continue; }
+                    SafeSet(context, trace, cmd.Get("Variable"), 1.0);
+                    i++;
+                    continue;
+                }
+                case EventCommandType.EndRepeat:
+                {
+                    int open = FindOpener(commands, i);
+                    if (open < 0) { i++; continue; }
+                    var loop = state.Loop(commands[open]);
+                    if (++loop.Count <= loop.Total) { SafeSet(context, trace, commands[open].Get("Variable"), (double)loop.Count); i = open + 1; }
+                    else { state.Clear(commands[open]); i++; }
+                    continue;
+                }
+
+                case EventCommandType.ForEach:
+                {
+                    var loop = state.Loop(cmd);
+                    loop.Count = 0;
+                    if (ForEachStep(cmd, loop, context, trace)) i++;
+                    else { state.Clear(cmd); i = FindCloser(commands, i) + 1; }
+                    continue;
+                }
+                case EventCommandType.EndForEach:
+                {
+                    int open = FindOpener(commands, i);
+                    if (open < 0) { i++; continue; }
+                    var loop = state.Loop(commands[open]);
+                    loop.Count++;
+                    if (ForEachStep(commands[open], loop, context, trace)) i = open + 1;
+                    else { state.Clear(commands[open]); i++; }
+                    continue;
+                }
+
+                case EventCommandType.BreakLoop:
+                {
+                    int open = EnclosingLoop(commands, i);
+                    if (open < 0) { trace.Add("Break Loop - not inside a loop"); i++; continue; }
+                    state.Clear(commands[open]);
+                    i = FindCloser(commands, open) + 1;
+                    continue;
+                }
+                case EventCommandType.NextLoop:
+                {
+                    int open = EnclosingLoop(commands, i);
+                    i = open < 0 ? i + 1 : FindCloser(commands, open); // its End moves the loop on
+                    continue;
+                }
+
+                // ---- Select Case ----
+                case EventCommandType.SelectCase:
+                {
+                    object value = SafeValue(cmd.Get("Formula"), context, trace);
+                    int indent = cmd.IndentLevel, target = -1, otherwise = -1, end = commands.Count - 1;
+                    for (int j = i + 1; j < commands.Count; j++)
+                    {
+                        if (commands[j].IndentLevel != indent) continue;
+                        var t = commands[j].Type;
+                        if (t == EventCommandType.EndSelect) { end = j; break; }
+                        if (t == EventCommandType.CaseElse && otherwise < 0) otherwise = j + 1;
+                        if (t == EventCommandType.Case && target < 0 && ScriptRuntime.SplitList(commands[j].Get("Formula")).Any(f => ScriptValues.Same(SafeValue(f, context, trace), value))) target = j + 1;
+                    }
+                    trace.Add($"Select Case {ScriptValues.Text(value)}");
+                    i = target >= 0 ? target : otherwise >= 0 ? otherwise : end + 1;
+                    continue;
+                }
+                case EventCommandType.Case:
+                case EventCommandType.CaseElse:
+                {
+                    // The end of the Case that ran: on past End Select.
+                    int indent = cmd.IndentLevel;
+                    int end = commands.FindIndex(i + 1, c => c.IndentLevel == indent && c.Type == EventCommandType.EndSelect);
+                    i = end < 0 ? commands.Count : end + 1;
+                    continue;
+                }
+                case EventCommandType.EndSelect:
+                case EventCommandType.Comment:
+                    i++;
+                    continue;
+
+                case EventCommandType.WaitUntil:
+                {
+                    if (context is not IScriptWaitHost waitHost) { trace.Add("Wait Until - nothing to wait in here, going on"); i++; continue; }
+                    if (SafeCondition(cmd, context, trace)) { i++; continue; }
+                    int next = i + 1;
+                    var returnsThen = returns;
+                    double.TryParse(cmd.Get("Timeout"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double timeout);
+                    trace.Add("Wait Until - waiting");
+                    waitHost.WaitUntil(() => SafeCondition(cmd, context, trace), Math.Max(0, timeout), () => Run(commands, context, trace, next, returnsThen, state, finished));
+                    return;
+                }
+
+                case EventCommandType.CallCommonEvent:
+                {
+                    if (context is not IScriptLibraryHost library || !int.TryParse(cmd.Get("CommonEventId"), out int id) || library.GetCommonEvent(id) is not { } common)
+                    {
+                        trace.Add("Call Common Event - it isn't there any more, going on");
+                        i++;
+                        continue;
+                    }
+                    if (state.Depth >= MaxCallDepth)
+                    {
+                        ScriptError(context, trace, "Call Common Event", new ScriptException($"\"{common.Name}\" calls Common Events more than {MaxCallDepth} deep (one calling itself?)"));
+                        i++;
+                        continue;
+                    }
+                    var values = ScriptRuntime.SplitList(cmd.Get("Args")).Select(f => SafeValue(f, context, trace)).ToList();
+                    for (int p = 0; p < common.Parameters.Count && p < values.Count; p++) SafeSet(context, trace, common.Parameters[p], values[p]);
+                    int next = i + 1;
+                    var returnsThen = returns;
+                    trace.Add($"Call Common Event \"{common.Name}\"");
+                    Run(common.Commands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1 }, () => Run(commands, context, trace, next, returnsThen, state, finished));
+                    return;
+                }
 
                 case EventCommandType.CinemaMode:
                     (context as ICinemaHost)?.BeginCinema(commands);
@@ -151,11 +325,11 @@ public static class EventCommandInterpreter
                         bool waiting = host.AskChoice(cmd, choices, id =>
                         {
                             int when = DialogChoices.FindWhen(commands, at, id);
-                            if (when < 0) { Run(commands, context, trace, afterBranches, returnsHere); return; }
+                            if (when < 0) { Run(commands, context, trace, afterBranches, returnsHere, state, finished); return; }
                             var next = returnsHere;
                             if (choices.FirstOrDefault(c => c.Id == id) is { Pinned: true })
                                 next = returnsHere.Append((DialogChoices.FindBranchEnd(commands, when), at)).ToList();
-                            Run(commands, context, trace, when + 1, next);
+                            Run(commands, context, trace, when + 1, next, state, finished);
                         });
                         if (waiting)
                         {
@@ -190,7 +364,7 @@ public static class EventCommandInterpreter
                     if (context is IDialogChoiceHost { CanAskChoice: true } waiter)
                     {
                         int next = i + 1;
-                        if (waiter.WaitUntilRead(() => Run(commands, context, trace, next)))
+                        if (waiter.WaitUntilRead(() => Run(commands, context, trace, next, null, state, finished)))
                         {
                             trace.Add("Stop Conversation - the box closes once its lines are read");
                             return;
@@ -203,6 +377,8 @@ public static class EventCommandInterpreter
 
                 default:
                 {
+                    // Variables, texts, arrays, grids, the debug log: the same everywhere (ScriptRuntime).
+                    if (ScriptRuntime.TryExecute(cmd, context, trace)) { i++; continue; }
                     if (context is IActionCommandHost actions)
                     {
                         // A command that takes time: everything after it waits till it's done.
@@ -214,7 +390,7 @@ public static class EventCommandInterpreter
                                 if (ranOn) return;
                                 ranOn = true;
                                 trace.Add($"{(ok ? "Done" : "Cancelled")}: {Describe(cmd)}");
-                                Run(commands, context, trace, next, returnsHere);
+                                Run(commands, context, trace, next, returnsHere, state, finished);
                             }))
                         {
                             if (!ranOn) trace.Add($"Started: {Describe(cmd)} - waiting till it's done");
@@ -229,6 +405,93 @@ public static class EventCommandInterpreter
             }
         }
         (context as ICinemaHost)?.EndCinema(commands); // the last line done: a cinema still on ends with the event
+        finished?.Invoke();
+    }
+
+    // ---------- Script helpers ----------
+
+    /// <summary>An opener's End line (same indent, after it); the list's end when it's missing.</summary>
+    private static int FindCloser(List<EventCommand> commands, int openIndex)
+    {
+        var closer = ScriptCommands.CloserOf(commands[openIndex].Type);
+        int indent = commands[openIndex].IndentLevel;
+        for (int j = openIndex + 1; j < commands.Count; j++)
+            if (commands[j].IndentLevel == indent && commands[j].Type == closer) return j;
+        return commands.Count - 1;
+    }
+
+    /// <summary>An End line's opener (same indent, before it), or -1.</summary>
+    private static int FindOpener(List<EventCommand> commands, int closeIndex)
+    {
+        var opener = ScriptCommands.OpenerOf(commands[closeIndex].Type);
+        int indent = commands[closeIndex].IndentLevel;
+        for (int j = closeIndex - 1; j >= 0; j--)
+            if (commands[j].IndentLevel == indent && commands[j].Type == opener) return j;
+        return -1;
+    }
+
+    /// <summary>The loop a line is inside (the nearest While / Repeat / For Each whose End is after it), or -1.</summary>
+    private static int EnclosingLoop(List<EventCommand> commands, int index)
+    {
+        int indent = commands[index].IndentLevel;
+        for (int j = index - 1; j >= 0; j--)
+        {
+            if (commands[j].IndentLevel >= indent || !ScriptCommands.IsLoopOpener(commands[j].Type)) continue;
+            if (FindCloser(commands, j) > index) return j;
+            indent = commands[j].IndentLevel;
+        }
+        return -1;
+    }
+
+    /// <summary>For Each: the element / cell number loop.Count into its variables; false once past the last.</summary>
+    private static bool ForEachStep(EventCommand cmd, ScriptRunState.LoopState loop, IEventExecutionContext context, List<string> trace)
+    {
+        var data = ScriptExpression.DataOf(context);
+        string name = cmd.Get("Array");
+        if (cmd.Get("Of") == "Cell of a grid")
+        {
+            if (!data.Grids.TryGetValue(name, out var grid)) { ScriptError(context, trace, "For Each", new ScriptException($"there is no grid called \"{name}\"")); return false; }
+            if (loop.Count >= grid.Cells.Length) return false;
+            int x = loop.Count % grid.Columns, y = loop.Count / grid.Columns;
+            SafeSet(context, trace, cmd.Get("Variable"), grid.Cells[loop.Count]);
+            SafeSet(context, trace, cmd.Get("Index"), (double)x);
+            SafeSet(context, trace, cmd.Get("Index2"), (double)y);
+            return true;
+        }
+        if (!data.Arrays.TryGetValue(name, out var list)) { ScriptError(context, trace, "For Each", new ScriptException($"there is no array called \"{name}\"")); return false; }
+        if (loop.Count >= list.Count) return false;
+        SafeSet(context, trace, cmd.Get("Variable"), list[loop.Count]);
+        SafeSet(context, trace, cmd.Get("Index"), (double)loop.Count);
+        return true;
+    }
+
+    private static bool SafeCondition(EventCommand cmd, IEventExecutionContext context, List<string> trace)
+    {
+        try { return ScriptRuntime.Condition(cmd, context); }
+        catch (ScriptException ex) { ScriptError(context, trace, ScriptCommands.Of(cmd.Type)?.Name ?? "Condition", ex); return false; }
+    }
+
+    private static object SafeValue(string formula, IEventExecutionContext context, List<string> trace)
+    {
+        try { return ScriptExpression.Evaluate(formula, context); }
+        catch (ScriptException ex) { ScriptError(context, trace, "Formula", ex); return 0.0; }
+    }
+
+    private static double SafeNumber(string formula, IEventExecutionContext context, List<string> trace) => ScriptValues.Number(SafeValue(formula, context, trace));
+
+    /// <summary>Sets a variable if a name was given (an optional counter / index left empty is skipped).</summary>
+    private static void SafeSet(IEventExecutionContext context, List<string> trace, string name, object value)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return;
+        try { ScriptExpression.SetVariable(context, name, value); }
+        catch (ScriptException ex) { ScriptError(context, trace, "Variable", ex); }
+    }
+
+    private static void ScriptError(IEventExecutionContext context, List<string> trace, string where, ScriptException ex)
+    {
+        string line = $"Script error in {where}: {ex.Message}";
+        trace.Add(line);
+        ScriptExpression.DataOf(context).AddLog(line);
     }
 
     private static int LastIndexOf(IReadOnlyList<(int StopAt, int ResumeAt)> returns, int index)

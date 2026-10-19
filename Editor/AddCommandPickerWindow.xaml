@@ -3,13 +3,13 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Event Commands" Height="640" Width="600" MinHeight="300" MinWidth="420" WindowStartupLocation="CenterOwner" ResizeMode="CanResizeWithGrip">
     <DockPanel Margin="12">
-        <TextBlock DockPanel.Dock="Top" Text="Greyed-out commands aren't built yet."
+        <TextBlock DockPanel.Dock="Top" Text="Data, Loops, Paperdolls, World and Screen &amp; Game hold the script commands: formulas, arrays, grids, loops, Common Events..."
                    TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
         <StackPanel DockPanel.Dock="Bottom" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
             <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
         </StackPanel>
 
-        <TabControl>
+        <TabControl x:Name="Tabs">
             <TabItem Header="Page 1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
                 <Grid Margin="0,10,8,0">
@@ -22,13 +22,13 @@
                         <TextBlock Text="Message" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Show Text..." Margin="0,0,0,4" Click="ShowText_Click" ToolTip="A line of text - with replies (choices) if you add them on its right side"/>
                         <Button Content="Stop Conversation" Margin="0,0,0,4" Click="StopConversation_Click" ToolTip="Ends the conversation: pinned replies stop coming back, and the box closes once the lines already up are read. Commands after it still run (e.g. Attack)."/>
-                        <Button Content="Input Number..." Margin="0,0,0,4" IsEnabled="False"/>
-                        <Button Content="Select Item..." Margin="0,0,0,12" IsEnabled="False"/>
+                        <Button Content="Input Number..." Margin="0,0,0,4" Click="Registered_Click" Tag="InputNumber" ToolTip="The player types a number into a variable"/>
+                        <Button Content="Select Item..." Margin="0,0,0,12" Click="Registered_Click" Tag="SelectItem" ToolTip="The player clicks one of their items; its name and id go into variables"/>
 
                         <TextBlock Text="Game Progression" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Control Switches..." Margin="0,0,0,4" Click="SetSwitch_Click"/>
                         <Button Content="Control Variables..." Margin="0,0,0,4" Click="SetVariable_Click"/>
-                        <Button Content="Control Self Switch..." Margin="0,0,0,12" IsEnabled="False"/>
+                        <Button Content="Control Self Switch..." Margin="0,0,0,12" Click="Registered_Click" Tag="ControlSelfSwitch" ToolTip="Switches A-D that belong to this event alone"/>
 
                         <TextBlock Text="Flow Control" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Conditional Branch..." Margin="0,0,0,4" Click="ConditionalBranch_Click"/>
@@ -43,10 +43,10 @@
                         <TextBlock Text="Party / Item" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Give Item..." Margin="0,0,0,4" Click="Registered_Click" Tag="GiveItem" ToolTip="One character gives an item to another - from what they really have, or not; someone who can't carry it gets help from the party, or it's put down at their feet"/>
                         <Button Content="Exchange Currency..." Margin="0,0,0,4" Click="ExchangeCurrency_Click" ToolTip="A money changer: the party's money of one currency into another, at the Currency Editor's rate"/>
-                        <Button Content="Remove Item..." Margin="0,0,0,12" IsEnabled="False"/>
+                        <Button Content="Remove Item..." Margin="0,0,0,12" Click="Registered_Click" Tag="RemoveItem" ToolTip="Takes an item away from a character or the party"/>
 
                         <TextBlock Text="Actor" FontWeight="Bold" Margin="0,0,0,4"/>
-                        <Button Content="Change HP..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Change HP..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangeHp" ToolTip="Adds to, takes from or sets a character's health"/>
                         <Button Content="Change Stat..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangeStat" ToolTip="Set, raise or lower a stat - for ever, or for some game minutes or hours"/>
                         <Button Content="Reset Stat..." Margin="0,0,0,4" Click="Registered_Click" Tag="ResetStat" ToolTip="Takes back every Change Stat on a stat (or all of them); training is kept"/>
                         <Button Content="Train..." Margin="0,0,0,4" Click="Registered_Click" Tag="Train" ToolTip="A trainer raises stats for training points and money"/>
@@ -54,7 +54,7 @@
                         <Button Content="Food Level..." Margin="0,0,0,4" Click="ChangeFoodLevel_Click"/>
                         <Button Content="Modify Ailments..." Margin="0,0,0,4" Click="ModifyAilments_Click"/>
                         <Button Content="Attack..." Margin="0,0,0,4" Click="Attack_Click"/>
-                        <Button Content="Change State..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Change State..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangeState" ToolTip="Asleep, paralyzed, poisoned, charmed, cursed, invisible or protected - on or off"/>
                         <Button Content="Change Behavior..." Margin="0,0,0,12" Click="ChangeBehavior_Click"/>
 
                         <TextBlock Text="Movement / World" FontWeight="Bold" Margin="0,0,0,4"/>
@@ -65,7 +65,7 @@
                         <Button Content="Stop Sound..." Margin="0,0,0,4" Click="StopSound_Click" ToolTip="Stops a sound that is playing (a looping one, say), or every sound"/>
                         <Button Content="Open Paperdoll..." Margin="0,0,0,4" Click="Registered_Click" Tag="OpenPaperdoll" ToolTip="Opens a PaperDoll Editor paperdoll - modal or not, its Yes / No answer into a variable"/>
                         <Button Content="Play Video..." Margin="0,0,0,4" Click="Registered_Click" Tag="PlayVideo" ToolTip="Plays a video from the Video Library over the whole game - the game waits till it ends"/>
-                        <Button Content="Change Tile..." Margin="0,0,0,4" IsEnabled="False"/>
+                        <Button Content="Change Tile..." Margin="0,0,0,4" Click="Registered_Click" Tag="ChangeTile" ToolTip="Changes the floor tile of a map cell"/>
                         <Button Content="Wait..." Margin="0,0,0,4" Tag="Wait" Click="Registered_Click" ToolTip="Pauses the event for some seconds, game minutes or game hours before its next command"/>
                     </StackPanel>
                 </Grid>

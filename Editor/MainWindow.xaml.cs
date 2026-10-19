@@ -2511,6 +2511,12 @@ public partial class MainWindow : Window
         RefreshAllObjectVisuals();
     }
 
+    private void CommonEventsMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        // Saved with the project's System Settings; Call Common Event runs one.
+        new CommonEventsWindow(_systemSettings.CommonEvents, _resourceDatabase, _variableDatabase, _bookDatabase, _objectDatabase, _containerDatabase, _spriteDatabase) { Owner = this }.ShowDialog();
+    }
+
     private void PaperDollEditorMenuItem_Click(object sender, RoutedEventArgs e)
     {
         // Paperdolls are saved with the project's objects; an object opens one (Object Editor > Opens paperdoll).

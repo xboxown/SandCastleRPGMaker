@@ -321,6 +321,7 @@ public partial class GameTestWindow : Window
                 Canvas.SetLeft(image, x * _tileWidth);
                 Canvas.SetTop(image, y * _tileHeight);
                 GameCanvas.Children.Add(image);
+                _groundTileImages[(x, y)] = image;
             }
         }
     }
@@ -1552,7 +1553,8 @@ public partial class GameTestWindow : Window
         if (e.Key == Key.Escape && TryCancelChoosingTarget()) { e.Handled = true; return; } // Get_click: Escape cancels choosing a target
         if (IsChoosingTarget) { e.Handled = true; return; } // waiting for a click: nothing else happens
         if (_isReadingBook) return;
-        if (e.Key == Key.F6) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
+        if (e.Key == Key.F6 && !IsShippedGame) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
+        if (e.Key == Key.F9 && !IsShippedGame) { ShowScriptState(); e.Handled = true; return; } // the script data and debug log (Game Test only)
         if (e.Key == Key.C) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
         if (e.Key == Key.Z) { OpenStatsDoll(_player); e.Handled = true; return; } // Exult: Z shows the player's stats
 
@@ -1762,6 +1764,7 @@ public partial class GameTestWindow : Window
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
+        UpdateScripts(deltaSeconds * 1000); // long loops go on, Wait Until checks - paused or not (GameTestWindow.Script.cs)
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 
         UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking

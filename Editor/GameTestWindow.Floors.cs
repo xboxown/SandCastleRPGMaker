@@ -87,6 +87,7 @@ public partial class GameTestWindow
                     Panel.SetZIndex(image, SlabZIndex(layer.Floor, MapFloors.SlabLift(layer.Floor))); // under everything standing on it, over the floors below - except what stands in front of it (GameTestWindow.UpperFloorOrder.cs)
                     GameCanvas.Children.Add(image);
                     _floorTileVisuals.Add((MapFloors.SlabLift(layer.Floor), image));
+                    _upperTileImages[(layer.Floor, x, y)] = image;
                 }
             }
         }

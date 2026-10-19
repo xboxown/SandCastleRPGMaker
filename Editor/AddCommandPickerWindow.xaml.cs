@@ -10,6 +10,48 @@ public partial class AddCommandPickerWindow : Window
     public AddCommandPickerWindow()
     {
         InitializeComponent();
+        AddScriptTabs();
+    }
+
+    /// <summary>The script commands' tabs (Engine/ScriptCommands.cs): each tab's groups in two columns, a button per command.</summary>
+    private void AddScriptTabs()
+    {
+        foreach (var tab in ScriptCommands.All.Where(s => s.Tab.Length > 0).GroupBy(s => s.Tab))
+        {
+            var grid = new System.Windows.Controls.Grid { Margin = new Thickness(0, 10, 8, 0) };
+            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());
+            grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());
+            var columns = new[] { new System.Windows.Controls.StackPanel { Margin = new Thickness(0, 0, 10, 0) }, new System.Windows.Controls.StackPanel() };
+            System.Windows.Controls.Grid.SetColumn(columns[1], 1);
+            grid.Children.Add(columns[0]);
+            grid.Children.Add(columns[1]);
+            var groups = tab.GroupBy(s => s.Group).ToList();
+            int half = (tab.Count() + 1) / 2, placed = 0;
+            foreach (var group in groups)
+            {
+                var column = columns[placed >= half && placed > 0 ? 1 : 0];
+                column.Children.Add(new System.Windows.Controls.TextBlock { Text = group.Key, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 0, 0, 4) });
+                foreach (var spec in group)
+                {
+                    var button = new System.Windows.Controls.Button
+                    {
+                        Content = spec.Name + (spec.HasWindow ? "..." : ""),
+                        Tag = spec.Type.ToString(),
+                        ToolTip = new System.Windows.Controls.TextBlock { Text = spec.Help, TextWrapping = TextWrapping.Wrap, MaxWidth = 380 },
+                        Margin = new Thickness(0, 0, 0, 4)
+                    };
+                    button.Click += Registered_Click;
+                    column.Children.Add(button);
+                    placed++;
+                }
+                ((FrameworkElement)column.Children[^1]).Margin = new Thickness(0, 0, 0, 12);
+            }
+            Tabs.Items.Add(new System.Windows.Controls.TabItem
+            {
+                Header = tab.Key,
+                Content = new System.Windows.Controls.ScrollViewer { Content = grid, VerticalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Auto, HorizontalScrollBarVisibility = System.Windows.Controls.ScrollBarVisibility.Disabled }
+            });
+        }
     }
 
     /// <summary>A command from CommandWindowRegistry: its button's Tag is its EventCommandType name.</summary>

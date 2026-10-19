@@ -52,6 +52,7 @@
                 <MenuItem Header="Object Editor..." Click="ObjectDatabaseButton_Click"/>
                 <MenuItem Header="Staircase Designer..." Click="StaircaseDesignerMenuItem_Click"/>
                 <MenuItem Header="PaperDoll Editor..." Click="PaperDollEditorMenuItem_Click"/>
+                <MenuItem Header="Common Events..." Click="CommonEventsMenuItem_Click" ToolTip="Command lists made once and run from anywhere with Call Common Event"/>
                 <MenuItem Header="Currency Editor..." Click="CurrencyEditorMenuItem_Click"/>
                 <MenuItem Header="Resources..." Click="ResourcesMenuItem_Click"/>
                 <MenuItem Header="Faction Editor..." Click="FactionEditorMenuItem_Click"/>
