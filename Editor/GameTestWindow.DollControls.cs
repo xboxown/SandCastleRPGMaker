@@ -165,6 +165,8 @@ public partial class GameTestWindow
     /// <summary>A click on a form control. True = handled.</summary>
     private bool DollControlClicked(OpenDollGump gump, DollPart part, DollPartRuntime runtime)
     {
+        if (runtime.Disabled) return true; // greyed out: nothing happens
+        part = part.WithRuntime(runtime); // a list's choices as an event set them
         if (_typing is { } typing && (typing.Gump != gump || typing.Part.Id != part.Id)) StopTyping(); // clicking anything else ends the typing
         if (_openDropDown is { } list && (list.Gump != gump || list.PartId != part.Id))
         {

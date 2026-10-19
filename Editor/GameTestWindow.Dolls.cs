@@ -164,8 +164,9 @@ public partial class GameTestWindow
             if (lid is { HidesWhatItCovers: true }) continue;
             bool reachable = lid is null;
             var visual = BuildDollPartVisual(gump, part, runtime);
-            Canvas.SetLeft(visual, part.X);
-            Canvas.SetTop(visual, part.Y);
+            Canvas.SetLeft(visual, runtime.X ?? part.X); // Move Part
+            Canvas.SetTop(visual, runtime.Y ?? part.Y);
+            if (runtime.Disabled) { visual.Opacity = 0.45; reachable = false; } // Enable / Disable Part: greyed, out of reach
             Panel.SetZIndex(visual, IsOpenDropDown(gump, part) ? int.MaxValue / 2 : z); // an open list over everything
             if (reachable && IsClickable(part))
             {
@@ -189,6 +190,7 @@ public partial class GameTestWindow
 
     private FrameworkElement BuildDollPartVisual(OpenDollGump gump, DollPart part, DollPartRuntime runtime)
     {
+        part = part.WithRuntime(runtime); // its words and choices as events set them
         if (DollPart.IsControlKind(part.Kind)) return DollControlVisual(gump, part, runtime); // buttons with captions, boxes, lists (DollControls)
         var size = DollLook.SizeOf(part, runtime.Look, _sprites);
         switch (part.Kind)

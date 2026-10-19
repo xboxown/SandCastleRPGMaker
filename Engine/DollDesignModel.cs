@@ -83,6 +83,16 @@ public class DollSlotFit
 /// <summary>One part of a paperdoll, drawn in list order (later parts on top).</summary>
 public class DollPart
 {
+    /// <summary>A copy with a running paperdoll's own words and choices (Set Part Text, Fill List From Array) - the design itself is never changed.</summary>
+    public DollPart WithRuntime(DollPartRuntime runtime)
+    {
+        if (runtime.Caption is null && runtime.Options is null) return this;
+        var copy = (DollPart)MemberwiseClone();
+        if (runtime.Caption is not null && Kind != DollPartKind.TextBox) copy.Text = runtime.Caption;
+        if (runtime.Options is not null) copy.Options = runtime.Options;
+        return copy;
+    }
+
     public int Id { get; set; }
     public string Name { get; set; } = string.Empty;
     public DollPartKind Kind { get; set; } = DollPartKind.Picture;
@@ -267,6 +277,15 @@ public class DollDesign
 /// <summary>One part of one object's paperdoll as it is now, in play.</summary>
 public class DollPartRuntime
 {
+    /// <summary>Disabled by Enable / Disable Part: shown greyed, can't be clicked.</summary>
+    public bool Disabled { get; set; }
+    /// <summary>Moved by Move Part (null = where it was designed).</summary>
+    public double? X { get; set; }
+    public double? Y { get; set; }
+    /// <summary>Set Part Text: its words or caption now (null = as designed).</summary>
+    public string? Caption { get; set; }
+    /// <summary>Fill List From Array: a list's choices now (null = as designed).</summary>
+    public List<string>? Options { get; set; }
     public int Look { get; set; }
     public bool Visible { get; set; } = true;
     public int Value { get; set; }
