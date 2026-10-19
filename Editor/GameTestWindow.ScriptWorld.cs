@@ -207,7 +207,7 @@ public partial class GameTestWindow
         foreach (var (follower, leader) in _followers.ToList())
         {
             if (!_mapCharacters.Contains(follower) || IsDead(follower.Character) || IsDead(leader)) { _followers.Remove(follower); continue; }
-            if (IsIncapacitated(follower.Character) || follower.Npc.InCombat) continue;
+            if (IsIncapacitated(follower.Character) || follower.Npc.InCombat || IsScripted(follower.Character)) continue; // carrying out an event's command (walking to a pumpkin...): it isn't pulled back
             var target = CellOf(leader);
             var at = follower.Placement;
             if (Math.Max(Math.Abs(target.X - at.X), Math.Abs(target.Y - at.Y)) <= 2) continue;

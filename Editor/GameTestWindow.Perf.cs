@@ -75,8 +75,8 @@ public partial class GameTestWindow
             for (int i = 0; i < bodies.Count; i++)
             {
                 var b = bodies[i];
-                for (int cy = Floor(b.Top); cy <= Floor(b.Bottom - 1); cy++)
-                    for (int cx = Floor(b.Left); cx <= Floor(b.Right - 1); cx++)
+                for (int cy = Floor(b.Top); cy <= Floor(Math.Max(b.Top, b.Bottom - 1)); cy++) // a body with no width or depth still has a cell
+                    for (int cx = Floor(b.Left); cx <= Floor(Math.Max(b.Left, b.Right - 1)); cx++)
                     {
                         if (!_cells.TryGetValue((cx, cy), out var list)) _cells[(cx, cy)] = list = new List<int>(4);
                         list.Add(i);
@@ -274,7 +274,13 @@ public partial class GameTestWindow
         return text;
     }
 
-    private double _soakMessageMs, _soakPeriodMs;
+    private double _soakMessageMs, _soakPeriodMs, _soakTraceMs;
+    private bool _soakWatching;
+
+    private void SoakLog(string line)
+    {
+        if (_perfLogPath is not null) try { System.IO.File.AppendAllText(_perfLogPath, DateTime.Now.ToString("HH:mm:ss.f ") + line + Environment.NewLine); } catch { /* no log then */ }
+    }
     private bool _soakHidden;
 
     /// <summary>Measuring only: SANDCASTLE_PERF_HIDE=ground,weather,light,things hides those layers, to see what WPF's drawing costs.</summary>
@@ -294,7 +300,19 @@ public partial class GameTestWindow
         if (!Profiling) return;
         SoakHide();
         if (_currentMessage is not null && (_soakMessageMs += elapsedMs) > 500) { _soakMessageMs = 0; MessageKey(System.Windows.Input.Key.Enter); }
-        if ((_soakPeriodMs += elapsedMs) > 20000) { _soakPeriodMs = 0; using (Measure("SkipToNextPeriod")) SkipToNextPeriod(); }
+        if (Environment.GetEnvironmentVariable("SANDCASTLE_PERF_SKIP") is not null && (_soakPeriodMs += elapsedMs) > 20000) { _soakPeriodMs = 0; using (Measure("SkipToNextPeriod")) SkipToNextPeriod(); }
+        if (!_soakWatching)
+        {
+            _soakWatching = true;
+            System.ComponentModel.DependencyPropertyDescriptor.FromProperty(System.Windows.Controls.TextBlock.TextProperty, typeof(System.Windows.Controls.TextBlock))
+                .AddValueChanged(StatusText, (_, _) => SoakLog("status: " + StatusText.Text));
+        }
+        if ((_soakTraceMs += elapsedMs) > 1000)
+        {
+            _soakTraceMs = 0;
+            foreach (var mc in _mapCharacters.Where(m => IsScripted(m.Character) || m.Npc.Dormant))
+                SoakLog($"{mc.Character.Name}: cell ({mc.Placement.X}, {mc.Placement.Y}) lift {mc.Lift}, scripted {IsScripted(mc.Character)}, dormant {mc.Npc.Dormant}, path {(mc.Npc.Path is { } path ? $"{mc.Npc.PathIndex}/{path.Count} to ({path[^1].X}, {path[^1].Y})" : "none")}, pose {mc.PoseName}");
+        }
     }
 
     // ---------- Frame rate ----------
