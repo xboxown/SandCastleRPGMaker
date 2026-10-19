@@ -42,6 +42,8 @@ public partial class GameTestWindow
         public Border? Blocker;
         /// <summary>Whoever opened it to ask (a save prompt, Open Paperdoll): hears yes (Yes / OK) or no.</summary>
         public Action<bool>? Answered;
+        /// <summary>Its own size on screen (the Title Screen fills the game's view); null = a paperdoll's usual size.</summary>
+        public double? Scale;
     }
 
     private readonly List<OpenDollGump> _openDolls = new();
@@ -119,6 +121,7 @@ public partial class GameTestWindow
         SaveScreenClosed(gump);
         UntrackGumpFocus(gump);
         DollControlsClosed(gump); // last: an unanswered question hears no once it's gone
+        TitleClosed(gump); // the Title Screen closing starts the game (GameTestWindow.Title.cs)
         if (_openPaperdolls.Count == 0 && _openContainers.Count == 0 && _openDolls.Count == 0) GameCanvas.Focus();
     }
 
@@ -129,7 +132,7 @@ public partial class GameTestWindow
             or DollPartKind.Slider or DollPartKind.Hotspot or DollPartKind.CloseButton
             or DollPartKind.SaveList or DollPartKind.SaveName or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
             or DollPartKind.ConfirmButton or DollPartKind.CancelButton or DollPartKind.TextBox or DollPartKind.CheckBox or DollPartKind.RadioButton
-            or DollPartKind.DropDown or DollPartKind.ListBox
+            or DollPartKind.DropDown or DollPartKind.ListBox || DollPart.IsTitleKind(part.Kind)
         || part.EventPages.Any(p => p.Commands.Count > 0); // a picture, light, text or display with its own events
 
     private (int Look, bool Visible) DollStateOf(OpenDollGump gump, DollPart part)
@@ -151,7 +154,7 @@ public partial class GameTestWindow
         var design = gump.Design;
         canvas.Width = design.Width;
         canvas.Height = design.Height;
-        canvas.LayoutTransform = new ScaleTransform(DollGumpScale, DollGumpScale);
+        canvas.LayoutTransform = new ScaleTransform(gump.Scale ?? DollGumpScale, gump.Scale ?? DollGumpScale);
 
         int z = 0;
         foreach (var part in design.Parts)
@@ -159,7 +162,7 @@ public partial class GameTestWindow
             z += 10;
             var runtime = gump.State.Of(part);
             if (!runtime.Visible) continue;
-            if (_gameOver && part.Kind == DollPartKind.SaveButton && IsSaveScreen(gump)) continue; // dead: load only, no Save button
+            if ((_gameOver || InTitle) && part.Kind == DollPartKind.SaveButton && IsSaveScreen(gump)) continue; // dead or at the title: load only, no Save button
             var lid = DollLook.ClosedLidOver(part, design, p => DollStateOf(gump, p));
             if (lid is { HidesWhatItCovers: true }) continue;
             bool reachable = lid is null;

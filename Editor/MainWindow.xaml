@@ -24,6 +24,7 @@
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>
+                <MenuItem x:Name="TestTitleScreenMenuItem" Header="Test the Title Screen" Click="TestTitleScreenMenuItem_Click" ToolTip="Game Test starting at the Title Screen (System Settings > Title Screen), as a built game does"/>
                 <MenuItem x:Name="BuildGameMenuItem" Header="Build..." Click="BuildGameMenuItem_Click" ToolTip="Build a standalone game: choose where, and the project is merged into the game's .exe"/>
             </MenuItem>
             <MenuItem x:Name="ModeMenu" Header="_Mode" IsEnabled="False">
@@ -53,6 +54,7 @@
                 <MenuItem Header="Staircase Designer..." Click="StaircaseDesignerMenuItem_Click"/>
                 <MenuItem Header="PaperDoll Editor..." Click="PaperDollEditorMenuItem_Click"/>
                 <MenuItem Header="Common Events..." Click="CommonEventsMenuItem_Click" ToolTip="Command lists made once and run from anywhere with Call Common Event"/>
+                <MenuItem Header="Title Screen..." Click="TitleScreenMenuItem_Click" ToolTip="The Title Screen: its paperdoll (made in the PaperDoll Editor), music and intro video"/>
                 <MenuItem Header="Currency Editor..." Click="CurrencyEditorMenuItem_Click"/>
                 <MenuItem Header="Resources..." Click="ResourcesMenuItem_Click"/>
                 <MenuItem Header="Faction Editor..." Click="FactionEditorMenuItem_Click"/>

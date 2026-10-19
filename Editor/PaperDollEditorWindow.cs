@@ -93,8 +93,9 @@ public class PaperDollEditorWindow : Window
         foreach (var (label, group) in new[]
         {
             ("Parts:", kinds.Where(k => !DollPart.IsSaveLoadKind(k) && !(DollPart.IsControlKind(k) && k is not (DollPartKind.Button or DollPartKind.CloseButton)))),
-            ("Controls:", kinds.Where(k => DollPart.IsControlKind(k) && !DollPart.IsSaveLoadKind(k) && k is not (DollPartKind.Button or DollPartKind.CloseButton))),
-            ("Save / Load:", kinds.Where(DollPart.IsSaveLoadKind))
+            ("Controls:", kinds.Where(k => DollPart.IsControlKind(k) && !DollPart.IsSaveLoadKind(k) && !DollPart.IsTitleKind(k) && k is not (DollPartKind.Button or DollPartKind.CloseButton))),
+            ("Save / Load:", kinds.Where(DollPart.IsSaveLoadKind)),
+            ("Title / Quit:", kinds.Where(DollPart.IsTitleKind))
         })
         {
             var toolbox = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
@@ -184,6 +185,10 @@ public class PaperDollEditorWindow : Window
         DollPartKind.DeleteSaveButton => "Save/Load screen: deletes the picked save, after asking.",
         DollPartKind.ConfirmButton => "Yes / OK: closes its paperdoll answering yes. On the \"Are you sure?\" save prompt (System Settings > Save / Load) the save goes ahead; opened by Open Paperdoll, its answer (1) goes into a variable. Its caption can be words or its sprite.",
         DollPartKind.CancelButton => "No / Cancel: closes its paperdoll answering no, back to the paperdoll behind it. Caption it OK for a message that only needs closing.",
+        DollPartKind.NewGameButton => "On the Title Screen (System Settings > Title Screen): starts the game. On any other paperdoll: a new game from the start.",
+        DollPartKind.ContinueButton => "On the Title Screen: loads the newest saved game (greyed when there is none).",
+        DollPartKind.LoadGameButton => "Opens the Save/Load screen to load a game (on the Title Screen its Save button is hidden).",
+        DollPartKind.QuitButton => "Quits the game - asking first with the Quit prompt (System Settings > Save / Load) if there is one. Put it on the Title Screen, the Save/Load screen, anywhere.",
         DollPartKind.TextBox => "A box the player clicks and types in (Enter ends it). Numbers only: its number goes into its variable.",
         DollPartKind.CheckBox => "Ticked / unticked by a click, its words beside it: 1 / 0 in its variable.",
         DollPartKind.RadioButton => "One choice of a group (same Radio group): picking it unpicks the others. 1 / 0 in its variable.",
@@ -312,6 +317,11 @@ public class PaperDollEditorWindow : Window
                 part.Width = 48;
                 part.Height = 16;
                 part.Text = kind switch { DollPartKind.ConfirmButton => "Yes", DollPartKind.CancelButton => "No", DollPartKind.CloseButton => "Close", _ => "" };
+                break;
+            case DollPartKind.NewGameButton or DollPartKind.ContinueButton or DollPartKind.LoadGameButton or DollPartKind.QuitButton:
+                part.Width = 72;
+                part.Height = 16;
+                part.Text = kind switch { DollPartKind.NewGameButton => "New Game", DollPartKind.ContinueButton => "Continue", DollPartKind.LoadGameButton => "Load Game", _ => "Quit" };
                 break;
             case DollPartKind.TextBox or DollPartKind.DropDown:
                 part.Width = 100;

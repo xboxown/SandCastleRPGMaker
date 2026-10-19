@@ -61,7 +61,15 @@ public enum DollPartKind
     /// <summary>A list of choices always shown; click picks one - its number (1, 2, 3...) in a variable.</summary>
     ListBox,
     /// <summary>A bar filled by its value between Min and Max (or a slider's), not clickable: health, a loading bar.</summary>
-    ProgressBar
+    ProgressBar,
+    /// <summary>Title Screen: starts the game (elsewhere: a new game from the start).</summary>
+    NewGameButton,
+    /// <summary>Title Screen: loads the newest save (greyed when there is none).</summary>
+    ContinueButton,
+    /// <summary>Opens the Save/Load screen to load a game (Save is hidden on the Title Screen).</summary>
+    LoadGameButton,
+    /// <summary>Quits the game - asking first with the Quit prompt (System Settings > Save / Load) when there is one.</summary>
+    QuitButton
 }
 
 /// <summary>One look (state) of a part: its name and its sprite.</summary>
@@ -180,6 +188,10 @@ public class DollPart
         DollPartKind.DropDown => "Drop-down list",
         DollPartKind.ListBox => "List box",
         DollPartKind.ProgressBar => "Progress bar",
+        DollPartKind.NewGameButton => "New Game button",
+        DollPartKind.ContinueButton => "Continue button",
+        DollPartKind.LoadGameButton => "Load Game button",
+        DollPartKind.QuitButton => "Quit button",
         _ => kind.ToString()
     };
 
@@ -188,7 +200,8 @@ public class DollPart
     {
         DollPartKind.Picture => new[] { "Picture" },
         DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
-            or DollPartKind.ConfirmButton or DollPartKind.CancelButton => new[] { "Normal", "Pressed" },
+            or DollPartKind.ConfirmButton or DollPartKind.CancelButton
+            or DollPartKind.NewGameButton or DollPartKind.ContinueButton or DollPartKind.LoadGameButton or DollPartKind.QuitButton => new[] { "Normal", "Pressed" },
         DollPartKind.TextBox => new[] { "Box", "Box while typing" },
         DollPartKind.CheckBox => new[] { "Unticked", "Ticked" },
         DollPartKind.RadioButton => new[] { "Not picked", "Picked" },
@@ -212,7 +225,10 @@ public class DollPart
     public static bool IsSaveLoadKind(DollPartKind kind) => kind is >= DollPartKind.SaveList and <= DollPartKind.DeleteSaveButton;
 
     /// <summary>Pressed like a button: its Pressed look for a moment, its caption (Text) drawn on it.</summary>
-    public static bool IsButtonKind(DollPartKind kind) =>
+    /// <summary>The Title Screen's buttons (and Quit, usable on any paperdoll).</summary>
+    public static bool IsTitleKind(DollPartKind kind) => kind is >= DollPartKind.NewGameButton and <= DollPartKind.QuitButton;
+
+    public static bool IsButtonKind(DollPartKind kind) => IsTitleKind(kind) ||
         kind is DollPartKind.Button or DollPartKind.CloseButton or DollPartKind.SaveButton or DollPartKind.LoadButton or DollPartKind.DeleteSaveButton
             or DollPartKind.ConfirmButton or DollPartKind.CancelButton;
 

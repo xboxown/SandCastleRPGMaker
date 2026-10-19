@@ -175,6 +175,18 @@ public partial class GameTestWindow
         }
         switch (part.Kind)
         {
+            case DollPartKind.NewGameButton or DollPartKind.ContinueButton or DollPartKind.LoadGameButton or DollPartKind.QuitButton:
+            {
+                var kind = part.Kind;
+                PressDollButton(gump, runtime);
+                AfterPress(() =>
+                {
+                    if (!_openDolls.Contains(gump)) return;
+                    FireDollPartEvent(gump.State, part, BookTriggerConditionBased.ByUseItem, $"\"{part.Name}\" pressed.");
+                    if (_openDolls.Contains(gump) || kind == DollPartKind.QuitButton) TitleButton(gump, kind); // GameTestWindow.Title.cs
+                });
+                return true;
+            }
             case DollPartKind.ConfirmButton or DollPartKind.CancelButton:
             {
                 bool yes = part.Kind == DollPartKind.ConfirmButton;
@@ -308,7 +320,7 @@ public partial class GameTestWindow
     /// <summary>A key while a modal paperdoll is open: Escape answers no, Enter presses its Yes / OK button. Nothing else reaches the game.</summary>
     private void ModalDollKey(OpenDollGump gump, Key key)
     {
-        if (key == Key.Escape) { AnswerDoll(gump, false); return; }
+        if (key == Key.Escape) { if (!ReferenceEquals(gump, _titleGump)) AnswerDoll(gump, false); return; } // Escape doesn't close the Title Screen
         if (key == Key.Enter && gump.Design.Parts.FirstOrDefault(p => p.Kind == DollPartKind.ConfirmButton && gump.State.Of(p).Visible) is { } confirm)
         {
             PlayControlClick(confirm);

@@ -213,8 +213,8 @@ public partial class GameTestWindow : Window
         Width = ViewportWidth * DefaultScale;
         Height = ViewportHeight * DefaultScale + StatusBarAllowance;
 
-        ViewportHost.SizeChanged += (_, _) => RecomputeViewportScale();
-        Loaded += (_, _) => RecomputeViewportScale();
+        ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); PlaceTitle(); };
+        Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
 
@@ -1529,6 +1529,7 @@ public partial class GameTestWindow : Window
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (GameTestWindow.Video.cs)
+        if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
         if (_currentMessage is not null)
         {
             MessageKey(e.Key); // a dialog box is up: Enter/Space/Escape go on, or the keys pick a reply - nothing else happens

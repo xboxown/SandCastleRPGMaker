@@ -618,7 +618,7 @@ public partial class GameTestWindow
         try
         {
             next = new GameTestWindow(data.Map, _tilesetBitmap, _tileWidth, _tileHeight, _columns, _tilesetSpriteName, _resources, _sprites, _books, _objects,
-                data.Characters, _poseDatabase, _tileProperties, _variables, _stats, data.Containers, _systemSettings, data.Factions);
+                data.Characters, _poseDatabase, _tileProperties, _variables, _stats, data.Containers, _systemSettings, data.Factions) { IsShippedGame = IsShippedGame };
             next.ApplySave(data);
         }
         catch (Exception ex)

@@ -189,8 +189,30 @@ public class SaveLoadSettings
     public int SavedDollDesignId { get; set; } = -1;
 }
 
+/// <summary>The Title Screen (System Settings > Title Screen): a PaperDoll Editor paperdoll shown before the game, its music and an intro video.</summary>
+public class TitleScreenSettings
+{
+    /// <summary>The title paperdoll (-1 = none: the game starts at once).</summary>
+    public int DollDesignId { get; set; } = -1;
+    public int MusicId { get; set; } = -1;
+    public bool MusicLoops { get; set; } = true;
+    /// <summary>A video (Video Library) played before the title (-1 = none).</summary>
+    public int IntroVideoId { get; set; } = -1;
+    /// <summary>Game Test (F5) starts at the Title Screen too; a built game always does when there is one.</summary>
+    public bool InGameTest { get; set; }
+}
+
+/// <summary>Quitting (Ctrl+Q, a Quit button): the "Are you sure?" paperdoll asked first.</summary>
+public class QuitSettings
+{
+    /// <summary>The Quit prompt - its Yes / OK quits, No / Cancel closes it (-1 = none: quits at once).</summary>
+    public int DollDesignId { get; set; } = -1;
+}
+
 public class SystemSettings
 {
+    public TitleScreenSettings Title { get; set; } = new();
+    public QuitSettings Quit { get; set; } = new();
     /// <summary>Common Events (Tools > Common Events): command lists made once, run from anywhere with Call Common Event.</summary>
     public List<CommonEventDefinition> CommonEvents { get; set; } = new();
     public SaveLoadSettings SaveLoad { get; set; } = new();

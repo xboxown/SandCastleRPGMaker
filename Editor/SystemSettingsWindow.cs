@@ -32,7 +32,7 @@ public partial class SystemSettingsWindow : Window
     private readonly List<(string Group, SpriteEntry Sprite, int Width, int Height)> _measured = new();
     private bool _suppress;
 
-    public SystemSettingsWindow(SystemSettings settings, SpriteDatabase sprites, ResourceDatabase resources)
+    public SystemSettingsWindow(SystemSettings settings, SpriteDatabase sprites, ResourceDatabase resources, string? startTab = null)
     {
         _settings = settings;
         _sprites = sprites;
@@ -55,9 +55,11 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
         tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
+        tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
+        if (startTab is not null) tabs.SelectedItem = tabs.Items.OfType<TabItem>().FirstOrDefault(t => (t.Header as string) == startTab);
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => Close();
         var root = new DockPanel { Margin = new Thickness(10) };
@@ -95,6 +97,7 @@ public partial class SystemSettingsWindow : Window
         Row("Save/Load screen:", "(None - the game can't be saved)", () => _settings.SaveLoad.DollDesignId, v => _settings.SaveLoad.DollDesignId = v);
         Row("\"Are you sure?\" prompt:", "(None - press the button again)", () => _settings.SaveLoad.ConfirmDollDesignId, v => _settings.SaveLoad.ConfirmDollDesignId = v);
         Row("\"Game saved\" message:", "(None - a \"Game saved\" label)", () => _settings.SaveLoad.SavedDollDesignId, v => _settings.SaveLoad.SavedDollDesignId = v);
+        Row("Quit prompt:", "(None - Ctrl+Q / Quit quit at once)", () => _settings.Quit.DollDesignId, v => _settings.Quit.DollDesignId = v);
         panel.Children.Add(new TextBlock
         {
             Text = "The paperdoll the player saves and loads the game with. Make it in the PaperDoll Editor like any paperdoll - its look is all yours - with these parts from its toolbox:\n" +
@@ -109,6 +112,73 @@ public partial class SystemSettingsWindow : Window
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
         return panel;
+    }
+
+    /// <summary>The Title Screen: a PaperDoll Editor paperdoll shown before the game, its music, an intro video.</summary>
+    private UIElement BuildTitleTab()
+    {
+        var title = _settings.Title;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var designs = (ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)).ToList();
+        var dolls = new List<DollChoice> { new(-1, "(None - the game starts at once)") };
+        dolls.AddRange(designs);
+        var doll = new ComboBox { Width = 280, ItemsSource = dolls };
+        doll.SelectedItem = dolls.FirstOrDefault(d => d.Id == title.DollDesignId) ?? dolls[0];
+        doll.SelectionChanged += (_, _) => title.DollDesignId = (doll.SelectedItem as DollChoice)?.Id ?? -1;
+        panel.Children.Add(LabeledRow("Title paperdoll:", doll));
+
+        var none = new ResourceEntry { Id = -1, Name = "(None)" };
+        var tunes = new List<ResourceEntry> { none };
+        tunes.AddRange(_resources.Entries.Where(r => r.Kind is ResourceKind.Music or ResourceKind.Sound));
+        var music = new ComboBox { Width = 220, ItemsSource = tunes, DisplayMemberPath = "Name" };
+        music.SelectedItem = tunes.FirstOrDefault(t => t.Id == title.MusicId) ?? none;
+        music.SelectionChanged += (_, _) => title.MusicId = (music.SelectedItem as ResourceEntry)?.Id ?? -1;
+        var play = new Button { Content = "\u25B6", Width = 28, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Hear it" };
+        play.Click += (_, _) => { SoundPlayback.StopFor(this); if (title.MusicId >= 0) SoundPlayback.TryPlayFor(this, _resources, title.MusicId, false); };
+        var stop = new Button { Content = "\u25A0", Width = 28, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Stop" };
+        stop.Click += (_, _) => SoundPlayback.StopFor(this);
+        var loops = new CheckBox { Content = "Loop", IsChecked = title.MusicLoops, Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        loops.Checked += (_, _) => title.MusicLoops = true;
+        loops.Unchecked += (_, _) => title.MusicLoops = false;
+        var musicRow = new StackPanel { Orientation = Orientation.Horizontal };
+        musicRow.Children.Add(music);
+        musicRow.Children.Add(play);
+        musicRow.Children.Add(stop);
+        musicRow.Children.Add(loops);
+        panel.Children.Add(LabeledRow("Title music:", musicRow));
+
+        var videoList = new List<KeyValuePair<int, string>> { new(-1, "(None)") };
+        videoList.AddRange((ProjectSession.VideosProvider?.Invoke()?.Videos ?? new List<VideoEntry>()).Select(v => new KeyValuePair<int, string>(v.Id, v.Name)));
+        var video = new ComboBox { Width = 280, ItemsSource = videoList, DisplayMemberPath = "Value" };
+        video.SelectedItem = videoList.FirstOrDefault(v => v.Key == title.IntroVideoId);
+        if (video.SelectedItem is null) video.SelectedIndex = 0;
+        video.SelectionChanged += (_, _) => title.IntroVideoId = video.SelectedItem is KeyValuePair<int, string> v ? v.Key : -1;
+        panel.Children.Add(LabeledRow("Intro video:", video));
+
+        var inTest = new CheckBox { Content = "Game Test (F5) starts at the Title Screen too", IsChecked = title.InGameTest, Margin = new Thickness(0, 8, 0, 0) };
+        inTest.Checked += (_, _) => title.InGameTest = true;
+        inTest.Unchecked += (_, _) => title.InGameTest = false;
+        panel.Children.Add(inTest);
+
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Make the Title Screen in the PaperDoll Editor like any paperdoll - its size is the game's view (320 x 200, or bigger and it's scaled to fit):\n" +
+                   "  a Picture for the background (an animated sprite works), Text for the game's name,\n" +
+                   "  and from the toolbox's Title / Quit row: New Game, Continue (loads the newest save; greyed when there's none), Load Game (the Save/Load screen, load only) and Quit.\n" +
+                   "  Any other Button runs its own events (Events..., By Use) - credits, an options paperdoll (Open Paperdoll), a sound.\n\n" +
+                   "A built game always starts here (after the intro video, if any); Game > Test the Title Screen tries it. Escape doesn't close it; closing it any other way starts the game. " +
+                   "The Return To Title command comes back here with a fresh game. Ctrl+Q asks to quit at any time (the Quit prompt, Save / Load tab).",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
+        });
+        return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    private static FrameworkElement LabeledRow(string label, UIElement content)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        row.Children.Add(new TextBlock { Text = label, Width = 130, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(content);
+        return row;
     }
 
     /// <summary>How combat shows: Exult's "show hits" option.</summary>

@@ -1283,30 +1283,39 @@ public partial class MainWindow : Window
             MessageBox.Show("This game has no map to play.", _currentProjectName ?? "Game", MessageBoxButton.OK, MessageBoxImage.Error);
             return false;
         }
-        var game = new GameTestWindow(_map, PrimarySheet()?.Bitmap ?? _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
-            _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
-        {
-            Title = _currentProjectName is { Length: > 0 } name ? name : "Game",
-            WindowStartupLocation = WindowStartupLocation.CenterScreen
-        };
-        RunStandalone(game);
+        RunStandalone(NewGameWindow(atTitle: true, shipped: true));
         return true;
     }
 
-    /// <summary>A built game's window: closing it ends the program - unless a loaded save carries on in a new one (GameTestWindow.SaveLoad.cs).</summary>
-    private static void RunStandalone(GameTestWindow game)
+    /// <summary>A fresh game from the project as it is (never a game already played): at its Title Screen or straight in; a built game's or Game Test's.</summary>
+    private GameTestWindow NewGameWindow(bool atTitle, bool shipped) =>
+        new(_map!, PrimarySheet()?.Bitmap ?? _tilesetBitmap!, _tileset!.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
+            _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
+            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
+        {
+            StartAtTitle = atTitle,
+            IsShippedGame = shipped,
+            Title = shipped ? (_currentProjectName is { Length: > 0 } name ? name : "Game") : "Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)",
+            WindowStartupLocation = shipped ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner
+        };
+
+    /// <summary>What comes after a game window closes: a loaded save carrying on, a fresh game at the title (Return To Title) or straight in (New Game), or nothing.</summary>
+    private GameTestWindow? NextGameWindow(GameTestWindow closed, bool shipped) =>
+        closed.ReplacedBy ?? (closed.ReturnToTitleRequested ? NewGameWindow(atTitle: true, shipped) : closed.RestartRequested ? NewGameWindow(atTitle: false, shipped) : null);
+
+    /// <summary>A built game's window: closing it ends the program - unless another game window carries on (a loaded save, Return To Title, New Game).</summary>
+    private void RunStandalone(GameTestWindow game)
     {
         game.Closed += (_, _) =>
         {
-            if (game.ReplacedBy is { } next) RunStandalone(next);
+            if (NextGameWindow(game, shipped: true) is { } next) RunStandalone(next);
             else Application.Current.Shutdown();
         };
         Application.Current.MainWindow = game;
         game.Show();
     }
 
-    private void LaunchGameTest()
+    private void LaunchGameTest(bool atTitle = false)
     {
         if (_map is null || _tileset is null)
         {
@@ -1319,16 +1328,20 @@ public partial class MainWindow : Window
             return;
         }
 
-        var window = new GameTestWindow(_map, PrimarySheet()?.Bitmap ?? _tilesetBitmap, _tileset.TileWidth, _tileset.TileHeight, PrimarySheet()?.Columns ?? _paletteColumns,
-            _tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
-        { Owner = this };
-        // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs).
-        for (GameTestWindow? game = window; game is not null; game = game.ReplacedBy)
+        // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs); Return To Title and New Game start a fresh one.
+        for (GameTestWindow? game = NewGameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextGameWindow(game, shipped: false))
         {
             game.Owner = this;
             game.ShowDialog();
         }
+    }
+
+    private void TestTitleScreenMenuItem_Click(object sender, RoutedEventArgs e) => LaunchGameTest(atTitle: true);
+
+    private void TitleScreenMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        var window = new SystemSettingsWindow(_systemSettings, _spriteDatabase, _resourceDatabase, startTab: "Title Screen") { Owner = this };
+        window.ShowDialog();
     }
 
     private void SaveTilePropertiesMenuItem_Click(object sender, RoutedEventArgs e)
