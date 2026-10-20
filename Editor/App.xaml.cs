@@ -49,8 +49,10 @@ public partial class App : Application
             if (!host.RunStandaloneGame(msrpPath)) Shutdown();
             return;
         }
+        SplashWindow.ShowWhileLoading(); // the splash screen, on its own thread while the editor loads (SplashWindow.cs)
         var editor = new MainWindow();
         editor.Closed += (_, _) => Shutdown();
+        editor.ContentRendered += (_, _) => SplashWindow.CloseWhenEditorShown();
         MainWindow = editor;
         editor.Show();
     }
