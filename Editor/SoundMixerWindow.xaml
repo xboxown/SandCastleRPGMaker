@@ -4,6 +4,18 @@
         Title="Sound Mixer" Height="600" Width="900" WindowStartupLocation="CenterOwner">
     <DockPanel Margin="10">
         <TextBlock DockPanel.Dock="Top" Text="Sound Mixer" FontSize="16" FontWeight="Bold" Margin="0,0,0,10"/>
+        <Border DockPanel.Dock="Bottom" BorderBrush="Gray" BorderThickness="0,1,0,0" Padding="0,8,0,0" Margin="0,8,0,0">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                    <Button x:Name="PreviewMixButton" Content="Preview Mix" Padding="10,3" Margin="0,0,6,0" Click="PreviewMix_Click"
+                            ToolTip="Hear the whole mix as Compose will make it (each sound at its volume and start, columns at theirs, loops filling the length)"/>
+                    <Button Content="Compose..." Padding="14,3" FontWeight="Bold" Click="Compose_Click"
+                            ToolTip="Make the mix into a new sound of its own, in the Sound list - then the mixer is cleared (it can't be undone)"/>
+                </StackPanel>
+                <TextBlock TextWrapping="Wrap" Opacity="0.75" VerticalAlignment="Center" Margin="0,0,12,0"
+                           Text="Compose: every sound in every column plays together - at its own volume times its column's, from its Starts after time; a looping sound (or column) repeats to fill the mix. The mix becomes a new sound in the Sound list, inside the project only (never a file outside it). The mixer is then empty: a mix can't be taken apart again."/>
+            </DockPanel>
+        </Border>
         <ScrollViewer HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
             <StackPanel x:Name="ColumnsPanel" Orientation="Horizontal"/>
         </ScrollViewer>

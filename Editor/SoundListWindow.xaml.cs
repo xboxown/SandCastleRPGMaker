@@ -57,6 +57,7 @@ public partial class SoundListWindow : Window
     private void OpenMixer_Click(object sender, RoutedEventArgs e)
     {
         var mixer = new SoundMixerWindow(Database) { Owner = this };
+        mixer.Composed += _ => Refresh();
         mixer.Show();
     }
 
@@ -67,6 +68,7 @@ public partial class SoundListWindow : Window
 
         var mixer = new SoundMixerWindow(Database, entries[0]) { Owner = this };
         foreach (var extra in entries.Skip(1)) mixer.AddSound(extra);
+        mixer.Composed += _ => Refresh();
         mixer.Show();
     }
 }

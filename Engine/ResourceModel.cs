@@ -60,7 +60,11 @@ public class ResourceEntry
     /// <summary>Set true after a Save/New/Open Project, mirroring SpriteEntry's own flag - "nothing about Integrated Into System is true until a Save has actually happened" applies here identically.</summary>
     public bool IsProjectIntegrated { get; set; }
 
-    public string DisplayLocation => IsProjectIntegrated ? "\U0001F5A5 Integrated Into System" : FilePath;
+    /// <summary>Made in the Sound Mixer (Compose): it never existed as a file outside the editor - it lives only in the project.</summary>
+    public bool IsMix { get; set; }
+
+    public string DisplayLocation => IsMix ? "\U0001F39B Composed in the Sound Mixer" + (IsProjectIntegrated ? " (in the project)" : " (goes into the project at the next Save)")
+        : IsProjectIntegrated ? "\U0001F5A5 Integrated Into System" : FilePath;
 }
 
 /// <summary>One column's saved state in the Sound Mixer - which sounds it holds (by ResourceEntry.Id, so a rename elsewhere doesn't break it), its master volume/loop, and which Audio Group (if any) it's tracking.</summary>
@@ -70,6 +74,8 @@ public class MixerColumnLayout
     public bool Loop { get; set; }
     public int? AudioGroupId { get; set; }
     public List<int> SoundResourceIds { get; set; } = new();
+    /// <summary>Each sound's start in the mix, in seconds (same order as SoundResourceIds).</summary>
+    public List<double> SoundDelays { get; set; } = new();
 }
 
 /// <summary>A Link Columns connection between two columns, referenced by their index in MixerLayout.Columns. A plain class with named properties, not a tuple - System.Text.Json doesn't reliably serialize bare ValueTuples (this exact mistake already broke book frame geometry once).</summary>

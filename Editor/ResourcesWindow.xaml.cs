@@ -69,6 +69,7 @@ public partial class ResourcesWindow : Window
 
         var mixer = new SoundMixerWindow(Database, entries[0]) { Owner = this };
         foreach (var extra in entries.Skip(1)) mixer.AddSound(extra);
+        mixer.Composed += _ => Refresh();
         mixer.Show();
     }
 
