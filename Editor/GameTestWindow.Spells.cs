@@ -336,6 +336,42 @@ public partial class GameTestWindow
         }
     }
 
+    // ================= Mages in a fight =================
+
+    /// <summary>
+    /// A character who can cast magic, with a spellbook it may read, casts in a
+    /// fight a third of its turns: a healing spell on itself when below half its
+    /// health, else a harmful (or summoning) spell at its foe in sight within 16
+    /// tiles - paying mana and reagents as anyone does. True = it cast.
+    /// </summary>
+    private bool TryCombatSpell(MapCharacter mapCharacter, CharacterDefinition target)
+    {
+        var me = mapCharacter.Character;
+        if (!me.CanCastMagic || Rng.Next(3) != 0) return false;
+        var known = SpellbooksOf(me)
+            .Where(b => b.Book.Spellbook.AllowedCharacterIds.Count == 0 || b.Book.Spellbook.AllowedCharacterIds.Contains(me.Id))
+            .SelectMany(b => b.Book.Spellbook.Spells.Where(s => KnowsSpell(b.Book, b.Item.LearnedSpellsRuntime, s)))
+            .Where(s => WhyCannotCast(me, s) is null).ToList();
+        if (known.Count == 0) return false;
+        var (mx, my) = PixelOf(me);
+        int max = MaxHp(me);
+        if (max > 0 && (GetHp(me) ?? max) * 2 < max && known.FirstOrDefault(s => s.Effects.Any(e => e.Kind == MagicEffectKind.Heal)) is { } heal)
+        {
+            SetCharacterPose(mapCharacter, "Attacking Melee", mapCharacter.Facing);
+            CastSpell(me, heal, heal.NeedsTarget ? me : null);
+            return true;
+        }
+        var (tx, ty) = PixelOf(target);
+        if (TilesBetween(me, target) > 16 || !HasLineOfSight(mx, my, LiftOf(me), tx, ty)) return false;
+        var attacks = known.Where(s => (s.NeedsTarget && s.Effects.Any(e => IsHarmful(e.Kind))) || s.Effects.Any(e => e.Kind == MagicEffectKind.Summon)).ToList();
+        if (attacks.Count == 0) return false;
+        var spell = attacks[Rng.Next(attacks.Count)];
+        var facing = FacingTowards(mx, my, tx, ty);
+        SetCharacterPose(mapCharacter, "Attacking Melee", facing);
+        CastSpell(me, spell, spell.NeedsTarget ? target : null);
+        return true;
+    }
+
     // ================= As time goes by =================
 
     /// <summary>Each frame: summoned creatures leave, fields fade, fear wears off, time starts again.</summary>

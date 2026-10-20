@@ -252,6 +252,9 @@ public partial class GameTestWindow
             return;
         }
 
+        // A mage casts (Exult: an NPC with its spellbook casts in a fight) - a heal when badly hurt, else a spell at the foe (GameTestWindow.Spells.cs).
+        if (TryCombatSpell(mapCharacter, target)) { npc.DexPoints -= DexToAttack; npc.WaitMs = 1200 + StdDelay; return; }
+
         // A weapon that shoots or is thrown at this distance (combat.cc not_in_melee_range): fire it, if there's a clear line.
         var npcWeapon = WieldedWeapon(me);
         bool npcInReach = InReach(me, target);
