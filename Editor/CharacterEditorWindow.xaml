@@ -79,6 +79,15 @@
                             </DataTemplate>
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
+                    <Grid Margin="0,0,0,4" ToolTip="The highest level this character can reach by experience. 0 = the game's Max Level (System Settings > Levels). Monsters level up too, from their kills.">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="*"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0" Text="Level Lock (0 = game's max)" VerticalAlignment="Center"/>
+                        <TextBox Grid.Column="1" x:Name="LevelLockBox" LostFocus="LevelLockBox_LostFocus"/>
+                    </Grid>
+                    <TextBlock Text="EXP: what killing it gives its killer (and what it has gained). Level, Training Points and Next Exp follow the level curve in System Settings > Levels." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,4"/>
 
                     <DockPanel Margin="0,10,0,4">
                         <Button DockPanel.Dock="Right" Content="Add Custom Pose..." Click="AddCustomPose_Click"/>

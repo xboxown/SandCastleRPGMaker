@@ -248,6 +248,8 @@ public class SystemSettings
     public CombatSettings Combat { get; set; } = new();
     /// <summary>How conversations show (System Settings > Conversations).</summary>
     public ConversationSettings Conversation { get; set; } = new();
+    /// <summary>The level curve: Max Level, experience needed and training points per level (System Settings > Levels).</summary>
+    public LevelSettings Levels { get; set; } = new();
     /// <summary>The day and night cycle (System Settings > Day &amp; Night).</summary>
     public DayNightSettings DayNight { get; set; } = new();
     /// <summary>

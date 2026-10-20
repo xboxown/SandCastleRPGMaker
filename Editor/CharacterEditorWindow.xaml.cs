@@ -174,6 +174,7 @@ public partial class CharacterEditorWindow : Window
             foreach (var strengthRow in statRows.Where(r => r.Kind == BuiltInStatKind.Strength))
                 strengthRow.Changed = row => hitsRow.Value = row.Value;
         StatsItemsControl.ItemsSource = statRows;
+        LevelLockBox.Text = character.LevelLock.ToString();
         BuildPosesPanel(character);
 
         _paperdollBodyFilterGroup = string.IsNullOrEmpty(character.Paperdoll.BodySpriteGroup) ? null : character.Paperdoll.BodySpriteGroup;
@@ -690,6 +691,14 @@ public partial class CharacterEditorWindow : Window
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         _faceFilterGroup = null;
         PopulateFaceChoices(null, character.FaceSpriteName);
+    }
+
+    /// <summary>The highest level it can reach (0 = the game's Max Level): a whole number, 0 or more.</summary>
+    private void LevelLockBox_LostFocus(object sender, RoutedEventArgs e)
+    {
+        if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        character.LevelLock = int.TryParse(LevelLockBox.Text.Trim(), out int value) ? Math.Clamp(value, 0, LevelSettings.MaxMaxLevel) : character.LevelLock;
+        LevelLockBox.Text = character.LevelLock.ToString();
     }
 
     private void Field_Changed(object sender, RoutedEventArgs e)

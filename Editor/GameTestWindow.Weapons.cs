@@ -120,6 +120,7 @@ public partial class GameTestWindow
             MaybeStartBleeding(defender, damage);
             Damage(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
             if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
+            if (willDie && IsDead(defender)) AwardKill(attacker, defender); // Exult: the killing blow's experience (GameTestWindow.Levels.cs)
         }
         if (IsDead(defender)) return;
         if (powers.HasFlag(WeaponPowers.Sleep)) Inflict(defender, Ailment.Asleep);

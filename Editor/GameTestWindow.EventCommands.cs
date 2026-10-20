@@ -194,6 +194,7 @@ public partial class GameTestWindow
             return;
         }
         who.StatValues[stat.Id] = value.ToString();
+        if (stat.Kind == BuiltInStatKind.Exp) CheckLevel(who); // more experience by an event levels up as a kill does (GameTestWindow.Levels.cs)
     }
 
     private bool ChangeStatCommand(EventCommand command)
