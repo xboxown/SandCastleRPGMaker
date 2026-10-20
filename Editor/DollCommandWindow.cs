@@ -160,7 +160,7 @@ public class DollCommandWindow : FactionCommandWindowBase
             "UseUpCombined" => "For By Combined With An Item: the item dropped on the part is used up (otherwise it stays where it came from).",
             "ToVariable" => "Then test the variable with Conditional Branch - e.g. copy how many items each hole holds, and turn the machine into its finished form when all are filled.",
             "PlaySound" => "Keeps playing after the paperdoll is closed. Stop it with \"Stop this paperdoll's sounds\" (a Stop button).",
-            "TurnInto" => "The object (this placed or carried copy) becomes the other object, keeping its place. Its paperdoll closes; the new object starts with its own.",
+            "TurnInto" => "The object (this placed or carried copy) becomes the other object, keeping its place. Its paperdoll closes; the new object starts with its own. Works in any object's own events too, paperdoll or not (cloth cut into a bandage, seeds sown into soil becoming a seedling).",
             "PutItem" => "A new copy of the item appears inside (if there's room).",
             _ => "Acts on this paperdoll: the one whose part's event is running, or the paperdoll of the object whose own event is running."
         };

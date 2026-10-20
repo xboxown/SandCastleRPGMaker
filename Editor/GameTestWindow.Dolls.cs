@@ -662,6 +662,9 @@ public partial class GameTestWindow
             UseUpOne(combinedOnObject);
             return true;
         }
+        // Turn the object into another object - also from any object's own events (no paperdoll): the object whose event is running (cloth cut into a bandage, seeds sown in soil).
+        if (command.Get("Action") == "TurnInto" && _dollContext is null && _firingOwner is ObjectInstance or InventoryItemInstance)
+            return TurnObjectInto(_firingOwner, command);
         var context = _dollContext ?? _lastDollContext;
         if (context is null) { StatusText.Text = "Paperdoll command: no paperdoll here (it runs from a paperdoll part's events, or an object's that opens one)."; return false; }
         var state = context.State;
@@ -741,6 +744,42 @@ public partial class GameTestWindow
         DollItemOrigin d => DollItemStillThere(d),
         _ => ToolStillThere(origin)
     };
+
+    /// <summary>Turn the object into another object from the object's own event: it becomes the new object where it is, starting as that object starts (a plant at its first stage, a light lit or not).</summary>
+    private bool TurnObjectInto(object owner, EventCommand command)
+    {
+        if (!int.TryParse(command.Get("ObjectId"), out int objectId) || ObjectDef(objectId) is not { } becomes) return false;
+        string was;
+        switch (owner)
+        {
+            case ObjectInstance placed when _map.Objects.Contains(placed):
+                was = DefinitionOf(placed)?.Name ?? "It";
+                placed.ObjectId = becomes.Id;
+                placed.DollRuntime = null;
+                placed.FrameRuntime = becomes.Type == ObjectType.Plant ? 0 : placed.FrameRuntime;
+                placed.GrowMinutesRuntime = 0;
+                placed.IsSpentRuntime = false;
+                var start = ObjectLooks.StartState(becomes, placed);
+                placed.IsOpenRuntime = start.Open;
+                placed.IsLockedRuntime = start.Locked;
+                placed.IsLitRuntime = start.Lit;
+                placed.LiquidIdRuntime = becomes.Type == ObjectType.LiquidContainer ? ObjectLooks.StartLiquid(becomes, placed) : null;
+                placed.HitPointsRuntime = becomes.HitPoints > 0 ? becomes.HitPoints : -1;
+                RefreshObjectLook(placed);
+                SettleWorld();
+                break;
+            case InventoryItemInstance carried:
+                was = DefinitionOf(carried)?.Name ?? "It";
+                carried.ItemId = becomes.Id;
+                carried.DollRuntime = null;
+                RefreshAfterMove();
+                break;
+            default:
+                return false;
+        }
+        StatusText.Text = $"\"{was}\" becomes \"{becomes.Name}\".";
+        return true;
+    }
 
     /// <summary>Turn the object into another object: this copy becomes it where it is (on the map or carried) - the machine with every part fitted becomes the finished machine. Its paperdoll closes; the new object starts with its own.</summary>
     private bool TurnDollOwnerInto(DollContext context, EventCommand command)
