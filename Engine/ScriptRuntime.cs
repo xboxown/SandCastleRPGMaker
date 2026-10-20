@@ -39,6 +39,10 @@ public sealed class ScriptRunState
 
     private readonly Dictionary<EventCommand, LoopState> _loops = new(ReferenceEqualityComparer.Instance);
     public int Depth { get; init; }
+    /// <summary>The run that called this one (a Common Event's caller); null for an event's own run.</summary>
+    public ScriptRunState? Parent { get; init; }
+    /// <summary>The event's own run - the same for every Common Event it calls: what a character it moved belongs to till it's over.</summary>
+    public ScriptRunState Root => Parent?.Root ?? this;
 
     public LoopState Loop(EventCommand opener)
     {

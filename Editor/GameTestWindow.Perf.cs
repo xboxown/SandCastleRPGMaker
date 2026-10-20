@@ -183,7 +183,7 @@ public partial class GameTestWindow
     {
         var npc = mapCharacter.Npc;
         var character = mapCharacter.Character;
-        bool exempt = character.IsInParty || _followers.ContainsKey(mapCharacter) || IsScripted(character) || IsDead(character);
+        bool exempt = character.IsInParty || _followers.ContainsKey(mapCharacter) || IsScripted(character) || IsHeldByEvent(character) || IsDead(character);
         bool onScreen = IsOnScreen(mapCharacter.PixelX, mapCharacter.PixelY);
         if (npc.Dormant)
         {

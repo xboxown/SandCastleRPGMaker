@@ -43,6 +43,12 @@ public interface ICinemaHost
     void EndCinema(object run);
 }
 
+/// <summary>Told when an event's run is over (its last line, Exit Event Processing, or stopped) - the characters it moved go back to their schedules then.</summary>
+public interface IEventRunHost
+{
+    void RunEnded(object run);
+}
+
 /// <summary>
 /// Walks one command list for real. ConditionalBranchSwitch/Variable,
 /// Else, EndBranch, and End are genuinely interpreted here (not stubbed) -
@@ -81,6 +87,15 @@ public static class EventCommandInterpreter
     }
 
     [ThreadStatic] private static int _nesting;
+
+    /// <summary>The event run whose command is starting right now (its Root - see ScriptRunState): who began a command that takes time.</summary>
+    [ThreadStatic] private static object? _currentRun;
+    public static object? CurrentRun => _currentRun;
+
+    private static void RunEnded(IEventExecutionContext context, ScriptRunState state)
+    {
+        if (state.Parent is null) (context as IEventRunHost)?.RunEnded(state);
+    }
     private const int MaxNesting = 150;
 
     private static void RunCore(List<EventCommand> commands, IEventExecutionContext context, List<string> trace, int start, IReadOnlyList<(int StopAt, int ResumeAt)>? returns,
@@ -104,6 +119,7 @@ public static class EventCommandInterpreter
             {
                 trace.Add("(stopped - exceeded max command steps, likely a runaway loop)");
                 (context as ICinemaHost)?.EndCinema(commands);
+                RunEnded(context, state);
                 return;
             }
 
@@ -129,6 +145,7 @@ public static class EventCommandInterpreter
                     }
                     trace.Add(cmd.Type == EventCommandType.End ? "End - command list stopped." : "Return");
                     (context as ICinemaHost)?.EndCinema(commands); // the event is over: a cinema still on ends with it
+                    RunEnded(context, state);
                     finished?.Invoke();
                     return;
 
@@ -262,7 +279,7 @@ public static class EventCommandInterpreter
                     int next = i + 1;
                     var returnsThen = returns;
                     trace.Add($"Call Common Event \"{common.Name}\"");
-                    Run(common.Commands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1 }, () => Run(commands, context, trace, next, returnsThen, state, finished));
+                    Run(common.Commands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1, Parent = state }, () => Run(commands, context, trace, next, returnsThen, state, finished));
                     return;
                 }
 
@@ -385,13 +402,21 @@ public static class EventCommandInterpreter
                         int next = i + 1;
                         var returnsHere = returns;
                         bool ranOn = false;
-                        if (actions.TryBegin(cmd, ok =>
+                        var outerRun = _currentRun;
+                        _currentRun = state.Root;
+                        bool began;
+                        try
+                        {
+                            began = actions.TryBegin(cmd, ok =>
                             {
                                 if (ranOn) return;
                                 ranOn = true;
                                 trace.Add($"{(ok ? "Done" : "Cancelled")}: {Describe(cmd)}");
                                 Run(commands, context, trace, next, returnsHere, state, finished);
-                            }))
+                            });
+                        }
+                        finally { _currentRun = outerRun; }
+                        if (began)
                         {
                             if (!ranOn) trace.Add($"Started: {Describe(cmd)} - waiting till it's done");
                             return;
@@ -405,6 +430,7 @@ public static class EventCommandInterpreter
             }
         }
         (context as ICinemaHost)?.EndCinema(commands); // the last line done: a cinema still on ends with the event
+        RunEnded(context, state);
         finished?.Invoke();
     }
 

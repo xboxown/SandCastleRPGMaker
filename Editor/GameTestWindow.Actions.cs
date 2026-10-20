@@ -26,6 +26,35 @@ public partial class GameTestWindow
         public Action<bool>? Done;
         /// <summary>After its event is over (sitting on after Sit): part of their routine - it doesn't stop a save.</summary>
         public bool AfterEvent;
+        /// <summary>The event run that gave the command (null: not an event's - a schedule's own work).</summary>
+        public object? Run;
+    }
+
+    /// <summary>
+    /// Characters an event moved (walked, sat...) whose event is still going:
+    /// they stay where it left them - no schedule, not sent back to it when
+    /// off screen - till that event is over. They still fight back, and follow
+    /// their leader. Change Behavior lets one go at once.
+    /// </summary>
+    private readonly Dictionary<CharacterDefinition, object> _heldByEvent = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Held characters whose hour came round while held: their schedule is looked at again when they're let go.</summary>
+    private readonly HashSet<CharacterDefinition> _heldMissedHour = new(ReferenceEqualityComparer.Instance);
+
+    private bool IsHeldByEvent(CharacterDefinition character) => _heldByEvent.ContainsKey(character);
+
+    /// <summary>An event's run is over: everyone it was holding goes back to their schedule.</summary>
+    private void ReleaseHeldBy(object run)
+    {
+        foreach (var who in _heldByEvent.Where(h => ReferenceEquals(h.Value, run)).Select(h => h.Key).ToList()) LetGo(who);
+    }
+
+    private void LetGo(CharacterDefinition who)
+    {
+        if (!_heldByEvent.Remove(who)) return;
+        bool missedHour = _heldMissedHour.Remove(who);
+        if (MapCharacterOf(who) is not { } mapCharacter || IsScripted(who)) return;
+        if (missedHour) UpdateSchedule(mapCharacter, _clock.Period, 0);
+        if (mapCharacter.Npc.Path is null) mapCharacter.Npc.WaitMs = StdDelay;
     }
 
     /// <summary>A Play Animation showing: its picture, how long is left, and who it follows (or null: a fixed spot).</summary>
@@ -75,7 +104,7 @@ public partial class GameTestWindow
     {
         if (_scriptActions.Remove(who, out var old)) old.Done?.Invoke(false);
         if (MapCharacterOf(who) is { } mapCharacter) StopWalking(mapCharacter);
-        _scriptActions[who] = new ScriptAction { Who = who, Tick = tick, Done = done, AfterEvent = afterEvent };
+        _scriptActions[who] = new ScriptAction { Who = who, Tick = tick, Done = done, AfterEvent = afterEvent, Run = afterEvent ? null : EventCommandInterpreter.CurrentRun };
     }
 
     /// <summary>Each frame (not while the game is paused): every command being carried out takes its step.</summary>
@@ -87,8 +116,9 @@ public partial class GameTestWindow
             bool? result = IsDead(action.Who) ? false : IsIncapacitated(action.Who) ? null : action.Tick(elapsedMs); // asleep or paralyzed: it waits
             if (result is not bool ok) continue;
             _scriptActions.Remove(action.Who);
-            // Back to its schedule (Exult: the usecode's actions done, the schedule's now_what again).
-            if (MapCharacterOf(action.Who) is { } mapCharacter && !IsScripted(action.Who) && mapCharacter.Npc.Path is null) mapCharacter.Npc.WaitMs = StdDelay;
+            // Its event still going: it stays where the event left it till the event is over (then LetGo). Otherwise back to its schedule (Exult: the usecode's actions done, the schedule's now_what again).
+            if (action.Run is { } run && action.Done is not null && action.Who != _player) _heldByEvent[action.Who] = run;
+            else if (MapCharacterOf(action.Who) is { } mapCharacter && !IsScripted(action.Who) && mapCharacter.Npc.Path is null) mapCharacter.Npc.WaitMs = StdDelay;
             action.Done?.Invoke(ok);
         }
         foreach (var wait in _scriptWaits.ToList())

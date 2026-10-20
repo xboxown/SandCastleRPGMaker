@@ -202,6 +202,8 @@ public partial class GameTestWindow
         var mapCharacter = CharacterFor(who);
         if (mapCharacter is null) return false;
         var npc = mapCharacter.Npc;
+        _heldByEvent.Remove(mapCharacter.Character); // told what to do now: no longer waiting for its event to end
+        _heldMissedHour.Remove(mapCharacter.Character);
         StopWalking(mapCharacter);
         npc.WalkingToSchedule = false;
         if (behavior == ChangeBehaviorCommandWindow.Resume)

@@ -310,7 +310,7 @@ public partial class GameTestWindow
         }
 
         var solids = SolidsOverlapping(to, mover, world).ToList(); // only the bodies near it (GameTestWindow.Perf.cs)
-        if (mover is not null && _player is not null && PlayerBody() is { } playerBody && playerBody.Overlaps(to)) solids.Add(playerBody);
+        if (mover is not null && _player is not null && !_planningThroughPlayer && PlayerBody() is { } playerBody && playerBody.Overlaps(to)) solids.Add(playerBody);
         int highest = int.MinValue;
         for (int y = to.Top; y < to.Bottom; y++)
         {

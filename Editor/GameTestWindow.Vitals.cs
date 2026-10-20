@@ -71,6 +71,7 @@ public partial class GameTestWindow
         InitializeScripts(); // formulas, arrays, loops, Common Events... (GameTestWindow.Script.cs)
         InitializeActionCommands(); // Walk To Location, Sit, Open Door... (GameTestWindow.Actions.cs)
         _execContext.OnCinema = (run, on) => { if (on) BeginCinema(run); else EndCinema(run); }; // GameTestWindow.Cinema.cs
+        _execContext.OnRunEnded = ReleaseHeldBy; // GameTestWindow.Actions.cs
         WatchSounds();
     }
 

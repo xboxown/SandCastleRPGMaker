@@ -83,11 +83,35 @@ public partial class GameTestWindow
             TeleportCommand(WhoChoice.Player, x, y);
             return true;
         }
-        if ((walker.Size.X, walker.Size.Y) != (_playerSize.X, _playerSize.Y)) return false;
+        // A narrow way with no room beside (a one-wide stair): on along it, ahead of the walker - or back behind it - walked there step by step (up or down the stairs).
+        foreach (var (sx, sy) in new[] { (dx, dy), (-dx, -dy) })
+        {
+            var to = (X: _playerX + sx, Y: _playerY + sy);
+            if (!InsideMap(to.X, to.Y) || to == (walker.Placement.X, walker.Placement.Y)) continue;
+            if (!PlayerCanWalkBetween((_playerX, _playerY), to, _playerZ, WorldNow(), out int lift)) continue;
+            PlacePlayer(to, lift);
+            return true;
+        }
+        if (walker.Size.X > _playerSize.X || walker.Size.Y > _playerSize.Y) return false; // swapped only if the walker fits where the player stood
         var walkerCell = (walker.Placement.X, walker.Placement.Y);
+        if (walkerCell == (_playerX, _playerY)) return false; // already in the same cell: a swap changes nothing
         PutCharacter(walker, (_playerX, _playerY));
         TeleportCommand(WhoChoice.Player, walkerCell.X, walkerCell.Y);
         return true;
+    }
+
+    /// <summary>The player put straight onto a cell, at a lift (stepping aside on a stair).</summary>
+    private void PlacePlayer((int X, int Y) cell, int lift)
+    {
+        _playerX = cell.X;
+        _playerY = cell.Y;
+        _playerPixelX = CellCenterX(cell.X);
+        _playerPixelY = CellCenterY(cell.Y);
+        _playerZ = lift;
+        _playerVisualLiftZ = lift;
+        _eventUnderPlayer = EventAt(cell.X, cell.Y, lift); // stepping aside doesn't set off the event there
+        SnapPlayerPosition();
+        UpdateCamera();
     }
 
     /// <summary>Puts a character straight onto a cell (Game_object::move), and lets it think again from there.</summary>

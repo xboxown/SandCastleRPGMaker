@@ -117,6 +117,7 @@ public partial class GameTestWindow
     {
         foreach (var mapCharacter in _mapCharacters)
         {
+            if (IsHeldByEvent(mapCharacter.Character)) { _heldMissedHour.Add(mapCharacter.Character); continue; } // an event still has them: their new hour waits till it's over
             if (mapCharacter.Npc.Activity == ScheduleType.Wait) continue;
             if (mapCharacter.Npc.InCombat && mapCharacter.Npc.Target is not null) continue; // Exult: not while fighting someone
             UpdateSchedule(mapCharacter, hour / 3, hour % 3 == 0 ? -1 : 0);
@@ -193,6 +194,12 @@ public partial class GameTestWindow
         if (IsScripted(mapCharacter.Character))
         {
             // Carrying out an event command: its schedule, hunger and rules wait; only its walking goes on.
+            if (npc.Path is not null) MoveAlongPath(mapCharacter, elapsedMs);
+            return;
+        }
+        if (IsHeldByEvent(mapCharacter.Character) && !npc.InCombat)
+        {
+            // Left there by an event that is still going: it stays (following its leader, if it has one) - its schedule waits till the event is over.
             if (npc.Path is not null) MoveAlongPath(mapCharacter, elapsedMs);
             return;
         }
@@ -586,7 +593,20 @@ public partial class GameTestWindow
             ? CanStandAt(mapCharacter, goal, MapFloors.BaseLift(gf), world, out int goalLift) && MapFloors.FloorOfLift(goalLift) == gf
             : CanStandAt(mapCharacter, goal, mapCharacter.Lift, world, out _, anyLift: true));
         int H((int X, int Y, int F) node) => Heuristic((node.X, node.Y), goal) + (goalFloor is null ? 0 : Math.Abs(node.F - wantFloor) * MapFloors.LiftsPerFloor);
+        // The player is no wall to plan around (Exult): the way goes through them, and they're asked to step aside when the walker gets there (MoveAlongPath).
+        bool wasPlanning = _planningThroughPlayer;
+        _planningThroughPlayer = true;
+        try { return FindPathAStar(mapCharacter, goal, allowPartial, goalFloor, start, wantFloor, world, goalFree, besideOnly, H); }
+        finally { _planningThroughPlayer = wasPlanning; }
+    }
 
+    /// <summary>The paths planned now go through the player (they step aside when reached): only the player's own body is let through.</summary>
+    private bool _planningThroughPlayer;
+
+    private List<(int X, int Y)>? FindPathAStar(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial, int? goalFloor, (int X, int Y, int F) start, int wantFloor,
+        BodySource world, bool goalFree, bool besideOnly, Func<(int X, int Y, int F), int> H)
+    {
+        int FloorKey(int lift) => goalFloor is null ? 0 : MapFloors.FloorOfLift(lift);
         var open = new PriorityQueue<(int X, int Y, int F), int>();
         var cameFrom = new Dictionary<(int X, int Y, int F), (int X, int Y, int F)>();
         var cost = new Dictionary<(int X, int Y, int F), int> { [start] = 0 };
