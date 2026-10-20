@@ -206,6 +206,18 @@ public partial class GameTestWindow
     private (ObjectInstance Instance, WorldObject Obj)? ObjectTargeted(InteractionTarget? target) =>
         target is MapEntityTarget { Entity: ObjectInstance instance } && _map.Objects.Contains(instance) && DefinitionOf(instance) is { } obj ? (instance, obj) : null;
 
+    /// <summary>The object a target click picked - on the map, or carried (a backpack list, a container window, a paperdoll's item).</summary>
+    private Used? ThingTargeted(InteractionTarget? target) => target switch
+    {
+        MapEntityTarget { Entity: ObjectInstance o } when _map.Objects.Contains(o) && DefinitionOf(o) is { } d => new Used(d, new MapObjectOrigin(o)),
+        BackpackRowTarget r when DefinitionOf(r.Item) is { } d => new Used(d, new BackpackOrigin(r.Gump.Character, r.Item)),
+        ContainerItemTarget c when DefinitionOf(c.Item) is { } d => new Used(d, new ContainerOrigin(c.Gump.PlacedItem, c.Gump.Data, c.Item)),
+        DollItemTarget di when DefinitionOf(di.Item) is { } d => new Used(d, new DollItemOrigin(di.Gump.State, di.PartId, di.Item)),
+        _ => null
+    };
+
+    private static bool IsSameThing(Used a, Used b) => ReferenceEquals((object?)a.Placed ?? a.Carried, (object?)b.Placed ?? b.Carried);
+
     /// <summary>The map cell of the last target click.</summary>
     private (int X, int Y) LastTargetCell() =>
         (Math.Clamp((int)Math.Floor(_lastTargetClickWorld.X / _tileWidth), 0, _map.Width - 1), Math.Clamp((int)Math.Floor(_lastTargetClickWorld.Y / _tileHeight), 0, _map.Height - 1));

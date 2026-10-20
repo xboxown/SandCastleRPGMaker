@@ -382,4 +382,6 @@ public class LiquidContainerSettings
     public int PourSoundResourceId { get; set; } = -1;
     /// <summary>What a spill leaves on the floor (a puddle object; -1 = nothing).</summary>
     public int SpillObjectId { get; set; } = -1;
+    /// <summary>Gone once poured into another container (a bottle thrown away); otherwise it stays, empty.</summary>
+    public bool UsedUpWhenPouredOut { get; set; }
 }

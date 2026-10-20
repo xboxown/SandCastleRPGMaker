@@ -36,6 +36,8 @@ public partial class GameTestWindow
         BeginChoosingTarget($"Who eats \"{u.Obj.Name}\"?", target =>
         {
             if (!ToolStillThere(u.Source)) return;
+            // A liquid on its own (a bottle of water) used on an empty container: poured into it.
+            if (u.Obj.Food.IsLiquid && ThingTargeted(target) is { Obj.Type: ObjectType.LiquidContainer } container && PourBetween(container, u)) return;
             if (CharacterTargeted(target) is { } eater) Eat(u, eater);
         });
     }
@@ -113,6 +115,42 @@ public partial class GameTestWindow
     /// <summary>Whether this container can hold that liquid (it's on its list).</summary>
     private static bool CanHold(WorldObject container, int foodId) => container.Liquid.Liquids.Any(l => l.FoodId == foodId);
 
+    /// <summary>
+    /// Pouring (not in Exult - the user's rule): a liquid container used on
+    /// another one - the liquid goes from the full one into the empty one
+    /// (the poured-out one is used up if set so, else left empty) - or used on
+    /// a liquid on its own (a Food set to Liquid: a bottle of water), which
+    /// fills it and is used up. False = the other thing isn't a liquid.
+    /// </summary>
+    private bool PourBetween(Used container, Used other)
+    {
+        string name = container.Obj.Name.ToLowerInvariant();
+        if (other.Obj.Type == ObjectType.Food && other.Obj.Food.IsLiquid)
+        {
+            if (LiquidOf(container) >= 0) { AvatarBark($"The {name} is full."); return true; }
+            if (!CanHold(container.Obj, other.Obj.Id)) { StatusText.Text = $"\"{container.Obj.Name}\" can't hold {other.Obj.Name.ToLowerInvariant()}."; return true; }
+            PlaySound(container.Obj.Liquid.FillSoundResourceId);
+            SetLiquid(container, other.Obj.Id);
+            UseUpOne(other.Source);
+            StatusText.Text = $"You pour \"{other.Obj.Name}\" into \"{container.Obj.Name}\".";
+            return true;
+        }
+        if (other.Obj.Type != ObjectType.LiquidContainer) return false;
+        bool full = LiquidOf(container) >= 0, otherFull = LiquidOf(other) >= 0;
+        if (!full && !otherFull) { AvatarBark($"The {name} is empty."); return true; }
+        if (full && otherFull) { AvatarBark($"The {other.Obj.Name.ToLowerInvariant()} is full."); return true; }
+        var (from, into) = full ? (container, other) : (other, container);
+        int liquidId = LiquidOf(from);
+        if (!CanHold(into.Obj, liquidId)) { StatusText.Text = $"\"{into.Obj.Name}\" can't hold {LiquidFood(liquidId)?.Name.ToLowerInvariant() ?? "that"}."; return true; }
+        PlaySound(from.Obj.Liquid.PourSoundResourceId);
+        PlaySound(into.Obj.Liquid.FillSoundResourceId);
+        SetLiquid(into, liquidId);
+        if (from.Obj.Liquid.UsedUpWhenPouredOut) UseUpOne(from.Source);
+        else SetLiquid(from, -1);
+        StatusText.Text = $"You pour \"{from.Obj.Name}\" into \"{into.Obj.Name}\".";
+        return true;
+    }
+
     private void UseLiquid(Used u)
     {
         if (FireUseEvent(u)) return;
@@ -120,6 +158,7 @@ public partial class GameTestWindow
         BeginChoosingTarget($"Use \"{u.Obj.Name}\" on what?", target =>
         {
             if (!ToolStillThere(u.Source)) return;
+            if (ThingTargeted(target) is { } other && !IsSameThing(other, u) && PourBetween(u, other)) return; // another container, a bottle of water
             int liquidId = LiquidOf(u);
             var liquid = LiquidFood(liquidId);
             bool empty = liquid is null;

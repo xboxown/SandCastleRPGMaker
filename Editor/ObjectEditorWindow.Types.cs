@@ -711,6 +711,8 @@ public partial class ObjectEditorWindow
         row2.Children.Add(SoundPicker("Pour sound", () => l.PourSoundResourceId, v => l.PourSoundResourceId = v));
         row2.Children.Add(ObjectPicker("A spill leaves", o => o.Id != obj.Id, () => l.SpillObjectId, v => l.SpillObjectId = v, "(nothing)"));
         body.Children.Add(row2);
+        body.Children.Add(Check("Used up when poured into another container (a bottle thrown away)", () => l.UsedUpWhenPouredOut, v => l.UsedUpWhenPouredOut = v));
+        body.Children.Add(Note("Pouring: use a full container on an empty one (or an empty one on a full one) and the liquid goes across, if the empty one can hold it. A liquid on its own (a Food set to Liquid, like a bottle of water) used on an empty container, or the container used on it, fills it - and is used up."));
     }
 
     private List<WorldObject> LiquidFoods() => _db.Objects.Where(o => o.TypeChosen && o.Type == ObjectType.Food && o.Food.IsLiquid).ToList();

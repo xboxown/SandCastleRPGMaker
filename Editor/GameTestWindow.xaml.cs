@@ -1916,6 +1916,7 @@ public partial class GameTestWindow : Window
                 ObjectType.Door => obj.IsOpenRuntime != true,         // solid while closed
                 ObjectType.Trap => false,                             // flat, no collision
                 ObjectType.Tile => worldObject.IsSolid,               // a solid tile is a floor or a ceiling slab
+                ObjectType.LightSource when worldObject.Light.SolidOnlyWhileLit => worldObject.IsSolid && obj.IsLitRuntime == true, // a wall of fire: walkable once put out
                 _ => worldObject.IsSolid
             };
         return false;

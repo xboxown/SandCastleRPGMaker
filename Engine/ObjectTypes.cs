@@ -298,6 +298,12 @@ public class LightSettings
     public int LitSoundResourceId { get; set; } = -1;
     public int OffSoundResourceId { get; set; } = -1;
     public int SpentSoundResourceId { get; set; } = -1;
+    /// <summary>A fire (a campfire, a wall of flames): whoever steps into it while it's lit is burnt, and again every second they stay (Exult's fire field). Put out or spent, it's harmless.</summary>
+    public bool BurnsWhenLit { get; set; }
+    public int BurnDamageMin { get; set; } = 2;
+    public int BurnDamageMax { get; set; } = 6;
+    /// <summary>With Solid ticked: it blocks walking only while lit - walkable once put out or spent.</summary>
+    public bool SolidOnlyWhileLit { get; set; }
 }
 
 /// <summary>Ammo and money: the eight bundle pictures (Exult's quantity frames), and what each is for.</summary>

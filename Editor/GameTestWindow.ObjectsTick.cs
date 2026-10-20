@@ -20,6 +20,8 @@ public partial class GameTestWindow
     private double _floorStayMs;
     private readonly Dictionary<CharacterDefinition, HashSet<ObjectInstance>> _onFloorObjects = new();
     private readonly Dictionary<ObjectInstance, double> _trapRearmMs = new(ReferenceEqualityComparer.Instance);
+    /// <summary>Who was just burnt by a fire, and how long till it burns them again.</summary>
+    private readonly Dictionary<CharacterDefinition, double> _burnAgainMs = new();
     /// <summary>Doors NPCs opened on their way, to close behind them.</summary>
     private readonly Dictionary<MapCharacter, ObjectInstance> _doorsToClose = new();
 
@@ -31,6 +33,8 @@ public partial class GameTestWindow
 
         foreach (var key in _trapRearmMs.Keys.ToList())
             if ((_trapRearmMs[key] -= elapsedMs) <= 0) _trapRearmMs.Remove(key);
+        foreach (var key in _burnAgainMs.Keys.ToList())
+            if ((_burnAgainMs[key] -= elapsedMs) <= 0) _burnAgainMs.Remove(key);
 
         UpdateFloorObjects();
         _floorStayMs += elapsedMs;
@@ -54,12 +58,12 @@ public partial class GameTestWindow
     private BodyIndex? _floorIndex;
     private long _floorVersion = -1;
 
-    /// <summary>The tiles and traps on the map, by area - kept till the world changes (GameTestWindow.Perf.cs).</summary>
+    /// <summary>The tiles, traps and fires on the map, by area - kept till the world changes (GameTestWindow.Perf.cs).</summary>
     private (List<ObjectInstance> Things, BodyIndex Index) FloorThings()
     {
         if (_floorIndex is null || _floorVersion != _worldVersion)
         {
-            _floorThings = _map.Objects.Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type is ObjectType.Tile or ObjectType.Trap).ToList();
+            _floorThings = _map.Objects.Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o) is { Type: ObjectType.Tile or ObjectType.Trap } or { Type: ObjectType.LightSource, Light.BurnsWhenLit: true }).ToList();
             _floorIndex = new BodyIndex(_floorThings.Select(o => BodyOf(null, o)).ToList());
             _floorVersion = _worldVersion;
         }
@@ -85,8 +89,11 @@ public partial class GameTestWindow
             {
                 if (DefinitionOf(entered) is not { } obj) continue;
                 if (obj.Type == ObjectType.Trap) TriggerTrap(entered, obj, who); // ground, shooting or explosive (GameTestWindow.Projectiles.cs)
-                else FireObjectEvent(entered, obj, BookTriggerConditionBased.ByEnter, activator);
+                else if (obj.Type == ObjectType.Tile) FireObjectEvent(entered, obj, BookTriggerConditionBased.ByEnter, activator);
             }
+            foreach (var fire in now)
+                if (fire.IsLitRuntime == true && DefinitionOf(fire) is { Type: ObjectType.LightSource, Light.BurnsWhenLit: true } fireObj && !_burnAgainMs.ContainsKey(who))
+                    Burn(fire, fireObj, who);
             foreach (var left in before.Where(o => !now.Contains(o)).ToList())
                 if (DefinitionOf(left) is { Type: ObjectType.Tile } obj) FireObjectEvent(left, obj, BookTriggerConditionBased.ByExit, activator);
             _onFloorObjects[who] = now;
@@ -110,6 +117,16 @@ public partial class GameTestWindow
         if (damage > 0) Damage(victim, damage, $"a {obj.Name.ToLowerInvariant()}");
         var ailment = t.Ailment switch { TrapAilment.Poisoned => Ailment.Poisoned, TrapAilment.Asleep => Ailment.Asleep, TrapAilment.Paralyzed => Ailment.Paralyzed, _ => (Ailment?)null };
         if (ailment is { } a && !IsDead(victim)) Inflict(victim, a);
+    }
+
+    /// <summary>A lit fire burns whoever is in it - again every second they stay (Exult's fire field).</summary>
+    private void Burn(ObjectInstance fire, WorldObject obj, CharacterDefinition victim)
+    {
+        _burnAgainMs[victim] = 1000;
+        int low = Math.Min(obj.Light.BurnDamageMin, obj.Light.BurnDamageMax), high = Math.Max(obj.Light.BurnDamageMin, obj.Light.BurnDamageMax);
+        int damage = high <= 0 ? 0 : low + Rng.Next(high - low + 1);
+        if (victim == _player) StatusText.Text = $"You are burnt by \"{obj.Name}\"!";
+        if (damage > 0) Damage(victim, damage, $"a {obj.Name.ToLowerInvariant()}");
     }
 
     /// <summary>Hidden traps start out of sight.</summary>
