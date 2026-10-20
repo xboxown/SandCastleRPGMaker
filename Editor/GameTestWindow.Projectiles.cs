@@ -41,6 +41,8 @@ public partial class GameTestWindow
         public double AimDistance;
         /// <summary>A spell's missile: what happens where it lands (whoever it met, or the spot) - instead of its own damage.</summary>
         public Action<CharacterDefinition?, double, double>? OnArrive;
+        /// <summary>It has flown over the seam of a map that wraps around: once off the screen, it's gone.</summary>
+        public bool Crossed;
     }
 
     private readonly List<Flying> _flying = new();
@@ -88,7 +90,7 @@ public partial class GameTestWindow
     /// <summary>Everyone and every breakable thing within the radius (Exult tiles, 8px) of a point (in 8px units) is hurt; explosives catch.</summary>
     private void Blast(double cx, double cy, int radius, int damageMin, int damageMax, string what, ObjectInstance? source)
     {
-        bool InReach(double x, double y) => Math.Max(Math.Abs(x - cx), Math.Abs(y - cy)) <= Math.Max(1, radius);
+        bool InReach(double x, double y) => Math.Max(Math.Abs(UnitsAcross((int)Math.Round(x - cx))), Math.Abs(UnitsUpDown((int)Math.Round(y - cy)))) <= Math.Max(1, radius); // the short way round a map that wraps around
         int Roll() => Math.Min(damageMin, damageMax) + Rng.Next(Math.Abs(damageMax - damageMin) + 1);
         foreach (var character in AllLivingCharacters().ToList())
         {
@@ -141,7 +143,8 @@ public partial class GameTestWindow
             foreach (var who in AllLivingCharacters())
             {
                 var (px, py) = PixelOf(who);
-                double ux = px / SpriteSizing.BaseUnit - tx, uy = py / SpriteSizing.BaseUnit - ty;
+                var (ox, oy) = NearestImage(tx * SpriteSizing.BaseUnit, ty * SpriteSizing.BaseUnit, px, py); // over the seam of a map that wraps around, if nearer
+                double ux = ox / SpriteSizing.BaseUnit - tx, uy = oy / SpriteSizing.BaseUnit - ty;
                 double along = ux * dx + uy * dy; // how far ahead of it, in units
                 double across = Math.Abs(ux * dy - uy * dx) / Math.Max(1, Math.Sqrt(dx * dx + dy * dy));
                 if (along <= 0 || along > Math.Max(1, obj.Trap.RangeTiles) || across > 2) continue;
@@ -214,6 +217,8 @@ public partial class GameTestWindow
                     flying.Lift = flying.StartLift + (int)Math.Round((aim - flying.StartLift) * Math.Min(1, flying.Traveled / flying.AimDistance));
                 if (CheckHit(flying)) break;
                 if (flying.Traveled / SpriteSizing.BaseUnit >= Math.Max(1, flying.MaxTiles > 0 ? flying.MaxTiles : flying.Def.Projectile.RangeTiles)) { EndFlight(flying, null); break; }
+                if (WrapPixel(ref flying.X, ref flying.Y) != (0, 0)) flying.Crossed = true; // a map that wraps around: on over the seam
+                if (flying.Crossed && !IsOnScreen(flying.X, flying.Y)) { EndFlight(flying, null); break; } // ...and gone once it's off the screen
                 if (flying.X < 0 || flying.Y < 0 || flying.X >= _map.Width * _tileWidth || flying.Y >= _map.Height * _tileHeight) { EndFlight(flying, null); break; }
             }
             if (_flying.Contains(flying)) PlaceFlying(flying);
@@ -225,16 +230,17 @@ public partial class GameTestWindow
     {
         var p = flying.Def.Projectile;
         int size = Math.Max(1, flying.Def.SizeX);
-        var foot = new UnitRect((int)Math.Floor(flying.X / SpriteSizing.BaseUnit) - size / 2, (int)Math.Floor(flying.Y / SpriteSizing.BaseUnit) - size / 2, size, Math.Max(1, flying.Def.SizeY));
+        var whole = new UnitRect((int)Math.Floor(flying.X / SpriteSizing.BaseUnit) - size / 2, (int)Math.Floor(flying.Y / SpriteSizing.BaseUnit) - size / 2, size, Math.Max(1, flying.Def.SizeY));
+        var pieces = SplitAtSeam(whole) ?? new List<UnitRect> { whole }; // over the seam of a map that wraps around: it meets what's on both sides
         foreach (var who in AllLivingCharacters())
         {
             if (ReferenceEquals(who, flying.Shooter)) continue;
             int lift = LiftOf(who);
-            if (flying.Lift < lift - 1 || flying.Lift > lift + 5 || !FootOf(who).Overlaps(foot)) continue;
+            if (flying.Lift < lift - 1 || flying.Lift > lift + 5 || !pieces.Any(FootOf(who).Overlaps)) continue;
             EndFlight(flying, who);
             return true;
         }
-        foreach (var body in WorldNow().Overlapping(foot))
+        foreach (var (body, foot) in pieces.SelectMany(piece => WorldNow().Overlapping(piece).Select(body => (body, piece))))
         {
             if (!body.Solid || ReferenceEquals(body.Entity, flying.Instance) || ReferenceEquals(body.Entity, flying.Shooter) || body.Entity is PlacedCharacter) continue;
             if (flying.Lift < body.Z || flying.Lift >= body.TopLift || !body.Overlaps(foot)) continue;

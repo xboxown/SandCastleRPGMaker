@@ -12,9 +12,11 @@ namespace SandcastleRpgMaker.Editor;
 /// the camera move across the seam together; the land on the other side is
 /// drawn in the gap beyond the edge (copies of the world's own picture, so
 /// everything over there - characters walking, fires burning - shows live).
-/// Characters other than the player keep to their own side (their paths stop
-/// at the seam), and things seen across the seam are clicked on once you've
-/// stepped over it.
+/// Everyone crosses it as the player does: characters' paths go over the
+/// seam, a party follows its leader across, fights are fought over it (the
+/// short way round counts, as Exult's delta_wrap_check), and a missile flies
+/// on over it - gone once it has crossed and is off the screen. Things seen
+/// across the seam are clicked on once you've stepped over it.
 /// </summary>
 public partial class GameTestWindow
 {
@@ -51,14 +53,37 @@ public partial class GameTestWindow
         return (dx, dy);
     }
 
-    /// <summary>The shortest way from one spot to another, across the seam if that's nearer.</summary>
-    private (double DX, double DY) WrappedDelta(double dx, double dy)
+    /// <summary>The shortest way from one spot to another (pixels), across the seam if that's nearer.</summary>
+    private (double DX, double DY) WrappedDelta(double dx, double dy) =>
+        Wraps ? (ShortWay(dx, WorldPixelWidth), ShortWay(dy, WorldPixelHeight)) : (dx, dy);
+
+    /// <summary>Where another spot is as seen from this one: itself, or its copy over the seam if that's nearer (aiming, sight).</summary>
+    private (double X, double Y) NearestImage(double fromX, double fromY, double x, double y)
     {
-        if (!Wraps) return (dx, dy);
-        double w = WorldPixelWidth, h = WorldPixelHeight;
-        if (dx > w / 2) dx -= w; else if (dx < -w / 2) dx += w;
-        if (dy > h / 2) dy -= h; else if (dy < -h / 2) dy += h;
-        return (dx, dy);
+        var (dx, dy) = WrappedDelta(x - fromX, y - fromY);
+        return (fromX + dx, fromY + dy);
+    }
+
+    /// <summary>Cells apart across (or up/down), the short way round on a map that wraps around.</summary>
+    private int CellsAcross(int d) => Wraps ? (int)ShortWay(d, _map.Width) : d;
+    private int CellsUpDown(int d) => Wraps ? (int)ShortWay(d, _map.Height) : d;
+    /// <summary>8px units apart, the short way round.</summary>
+    private int UnitsAcross(int d) => Wraps ? (int)ShortWay(d, _map.Width * UnitsPerTileX) : d;
+    private int UnitsUpDown(int d) => Wraps ? (int)ShortWay(d, _map.Height * UnitsPerTileY) : d;
+
+    /// <summary>Cells between two cells, the larger axis (Exult's distance), the short way round.</summary>
+    private int CellsApart((int X, int Y) a, (int X, int Y) b) => Math.Max(Math.Abs(CellsAcross(a.X - b.X)), Math.Abs(CellsUpDown(a.Y - b.Y)));
+
+    /// <summary>A cell past the edge of a map that wraps around: the one it is on the other side (any other map: as it is).</summary>
+    private (int X, int Y) WrapCell((int X, int Y) cell) =>
+        Wraps ? (((cell.X % _map.Width) + _map.Width) % _map.Width, ((cell.Y % _map.Height) + _map.Height) % _map.Height) : cell;
+
+    private static double ShortWay(double d, double size)
+    {
+        if (size <= 0) return d;
+        d %= size;
+        if (d > size / 2) d -= size; else if (d < -size / 2) d += size;
+        return d;
     }
 
     /// <summary>A footprint over the seam of a wrapping map, cut into its pieces on either side (null: it isn't over one).</summary>

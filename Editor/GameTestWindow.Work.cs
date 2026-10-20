@@ -73,7 +73,7 @@ public partial class GameTestWindow
         if (WorkZone(mapCharacter) is { } zone) return zone.Contains(x, y);
         int reach = CellsForTiles(Math.Max(1, mapCharacter.Npc.Entry?.WorkAreaTiles ?? 12));
         var dest = mapCharacter.Npc.Dest;
-        return Math.Max(Math.Abs(x - dest.X), Math.Abs(y - dest.Y)) <= reach;
+        return CellsApart((x, y), (dest.X, dest.Y)) <= reach;
     }
 
     /// <summary>Who a placed item (a chest, a book) belongs to: this copy's own owner, else its editor's Belong To.</summary>
@@ -89,7 +89,7 @@ public partial class GameTestWindow
     /// <summary>A worker uses its own things and nobody's - never someone else's.</summary>
     private static bool MineOrNobodys(int ownerId, CharacterDefinition me) => ownerId < 0 || ownerId == me.Id;
 
-    private static int Distance(MapCharacter mapCharacter, int x, int y) => Math.Max(Math.Abs(x - mapCharacter.Placement.X), Math.Abs(y - mapCharacter.Placement.Y));
+    private int Distance(MapCharacter mapCharacter, int x, int y) => CellsApart((x, y), (mapCharacter.Placement.X, mapCharacter.Placement.Y));
 
     /// <summary>Its sounds are heard only near the player.</summary>
     private bool HeardFrom(CharacterDefinition who) => _player is not null && TilesBetween(who, _player) <= 24;
@@ -451,8 +451,8 @@ public partial class GameTestWindow
         var entry = mapCharacter.Npc.Entry;
         if (entry is not null && entry.OutputX >= 0 && entry.OutputY >= 0 && InsideMap(entry.OutputX, entry.OutputY))
         {
-            var chest = _map.Items.Where(i => i.Category == ReferencedItemCategory.Container && Math.Max(Math.Abs(i.X - entry.OutputX), Math.Abs(i.Y - entry.OutputY)) <= 1)
-                .OrderBy(i => Math.Abs(i.X - entry.OutputX) + Math.Abs(i.Y - entry.OutputY)).FirstOrDefault();
+            var chest = _map.Items.Where(i => i.Category == ReferencedItemCategory.Container && CellsApart((i.X, i.Y), (entry.OutputX, entry.OutputY)) <= 1)
+                .OrderBy(i => Heuristic((i.X, i.Y), (entry.OutputX, entry.OutputY))).FirstOrDefault();
             return (chest, (entry.OutputX, entry.OutputY));
         }
         if (IsFieldWork(mapCharacter.Npc.Activity))

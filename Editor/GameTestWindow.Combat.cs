@@ -68,7 +68,8 @@ public partial class GameTestWindow
     {
         var (ax, ay) = PixelOf(a);
         var (bx, by) = PixelOf(b);
-        return Math.Max(Math.Abs(ax - bx), Math.Abs(ay - by)) / SpriteSizing.BaseUnit;
+        var (dx, dy) = WrappedDelta(ax - bx, ay - by); // the short way round a map that wraps around
+        return Math.Max(Math.Abs(dx), Math.Abs(dy)) / SpriteSizing.BaseUnit;
     }
 
     /// <summary>Melee reach: next to each other (neighbouring map cells, diagonals included) and within a few lifts - the closest two characters can stand on this map's cells.</summary>
@@ -76,7 +77,7 @@ public partial class GameTestWindow
     {
         var (ax, ay) = CellOf(a);
         var (bx, by) = CellOf(b);
-        return Math.Max(Math.Abs(ax - bx), Math.Abs(ay - by)) <= 1 && Math.Abs(LiftOf(a) - LiftOf(b)) <= 4;
+        return CellsApart((ax, ay), (bx, by)) <= 1 && Math.Abs(LiftOf(a) - LiftOf(b)) <= 4;
     }
 
     /// <summary>What one character does about another, by their factions (FactionDatabase bands).</summary>
@@ -92,6 +93,7 @@ public partial class GameTestWindow
         var (ox, oy) = PixelOf(other);
         if (double.IsNaN(vx) || double.IsNaN(ox)) return false;
         if (Has(other, Ailment.Invisible) && !SameSide(viewer, other) && !(IsPartyOrPlayer(viewer) && IsPartyOrPlayer(other))) return false; // Exult: invisible to those who can't see invisible
+        (ox, oy) = NearestImage(vx, vy, ox, oy); // over the seam of a map that wraps around, if nearer
         if (Math.Abs(vx - ox) > ViewportWidth / 2 || Math.Abs(vy - oy) > ViewportHeight / 2) return false;
         return HasLineOfSight(vx, vy, LiftOf(viewer), ox, oy);
     }
@@ -102,7 +104,8 @@ public partial class GameTestWindow
         // Only the solids along the way (the line's box, by area - GameTestWindow.Perf.cs), not every thing on the map.
         int left = (int)Math.Floor(Math.Min(fromX, toX) / SpriteSizing.BaseUnit) - 1, right = (int)Math.Ceiling(Math.Max(fromX, toX) / SpriteSizing.BaseUnit) + 1;
         int top = (int)Math.Floor((Math.Min(fromY, toY) + _tileHeight / 2.0) / SpriteSizing.BaseUnit) - 2, bottom = (int)Math.Ceiling((Math.Max(fromY, toY) + _tileHeight / 2.0) / SpriteSizing.BaseUnit) + 2;
-        var solids = WorldNow().Overlapping(new UnitRect(left, top, right - left, bottom - top))
+        var box = new UnitRect(left, top, right - left, bottom - top);
+        var solids = (SplitAtSeam(box) ?? new List<UnitRect> { box }).SelectMany(piece => WorldNow().Overlapping(piece)).Distinct() // a line over the seam of a map that wraps around: the solids on both sides
             .Where(b => b.Solid && b.Entity is not PlacedCharacter && b.TopLift > fromLift + 3 && b.Z <= fromLift + 3 && !LetsSightThrough(b.Entity)).ToList(); // seen through windows
         if (solids.Count == 0) return true;
         double length = Math.Max(Math.Abs(toX - fromX), Math.Abs(toY - fromY));
@@ -111,6 +114,7 @@ public partial class GameTestWindow
         {
             double x = fromX + (toX - fromX) * i / steps, y = fromY + (toY - fromY) * i / steps + _tileHeight / 2.0 - SpriteSizing.BaseUnit / 2.0;
             int ux = (int)Math.Floor(x / SpriteSizing.BaseUnit), uy = (int)Math.Floor(y / SpriteSizing.BaseUnit);
+            if (Wraps) { int wu = _map.Width * UnitsPerTileX, hu = _map.Height * UnitsPerTileY; ux = (ux % wu + wu) % wu; uy = (uy % hu + hu) % hu; }
             if (solids.Any(b => ux >= b.Left && ux < b.Right && uy >= b.Top && uy < b.Bottom)) return false;
         }
         return true;
@@ -318,7 +322,7 @@ public partial class GameTestWindow
         if (!stop)
         {
             var (tx, ty) = CellOf(target!);
-            stop = Math.Max(Math.Abs(tx - npc.ChaseFrom.X), Math.Abs(ty - npc.ChaseFrom.Y)) > CellsForTiles(2);
+            stop = CellsApart((tx, ty), (npc.ChaseFrom.X, npc.ChaseFrom.Y)) > CellsForTiles(2);
         }
         if (!stop) return false;
         npc.Chasing = false;

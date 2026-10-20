@@ -211,7 +211,7 @@ public partial class GameTestWindow
             if (IsIncapacitated(follower.Character) || follower.Npc.InCombat || IsScripted(follower.Character)) continue; // carrying out an event's command (walking to a pumpkin...): it isn't pulled back
             var target = CellOf(leader);
             var at = follower.Placement;
-            if (Math.Max(Math.Abs(target.X - at.X), Math.Abs(target.Y - at.Y)) <= 2) continue;
+            if (CellsApart(target, (at.X, at.Y)) <= 2) continue; // the short way round a map that wraps around: they follow over the seam
             if (FindPath(follower, target, allowPartial: true, besideOnly: true, goalFloor: MapFloors.FloorOfLift(LiftOf(leader))) is { Count: > 0 } path) StartPath(follower, path);
         }
     }

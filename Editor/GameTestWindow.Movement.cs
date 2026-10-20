@@ -73,6 +73,11 @@ public partial class GameTestWindow
     {
         newLift = lift;
         blockReason = "";
+        if (SplitAtSeam(to) is { } pieces) // over the seam of a map that wraps around: room on both sides
+        {
+            foreach (var piece in pieces) if (!TryFlyStep(piece, lift, height, mover, world, out _, out blockReason)) return false;
+            return true;
+        }
         if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY) { blockReason = "Blocked: edge of the map."; return false; }
         if (FreeBands(to, mover, world).Any(b => lift >= b.Low && lift + height <= b.High)) return true;
         blockReason = "Blocked: no room to fly there.";
@@ -145,7 +150,7 @@ public partial class GameTestWindow
         var start = (startCell.Item1, startCell.Item2, startBand.Low);
         bool AtGoal((int X, int Y, int Low) node) =>
             (goalFloor is null || MapFloors.FloorOfLift(node.Low) == goalFloor)
-            && (besideOnly ? Math.Abs(node.X - goal.X) + Math.Abs(node.Y - goal.Y) == 1 : (node.X, node.Y) == goal);
+            && (besideOnly ? Heuristic((node.X, node.Y), goal) == 1 : (node.X, node.Y) == goal);
         int H((int X, int Y, int Low) node) => Heuristic((node.X, node.Y), goal);
 
         var open = new PriorityQueue<(int X, int Y, int Low), int>();
@@ -174,7 +179,7 @@ public partial class GameTestWindow
             var band = (current.Item1, current.Item2) == startCell && current.Item3 == startBand.Low ? startBand : Bands((current.Item1, current.Item2)).FirstOrDefault(b => b.Low == current.Item3);
             foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
             {
-                var cell = (current.Item1 + dx, current.Item2 + dy);
+                var cell = WrapCell((current.Item1 + dx, current.Item2 + dy)); // over the seam of a map that wraps around too
                 if (!InsideMap(cell.Item1, cell.Item2)) continue;
                 foreach (var next in Bands(cell))
                 {

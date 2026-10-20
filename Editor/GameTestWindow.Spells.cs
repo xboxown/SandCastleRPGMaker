@@ -66,6 +66,7 @@ public partial class GameTestWindow
         {
             var (sx, sy) = PixelOf(caster);
             var (tx, ty) = who is not null && !double.IsNaN(PixelOf(who).X) ? PixelOf(who) : (CellCenterX(cell.X), CellCenterY(cell.Y));
+            (tx, ty) = NearestImage(sx, sy, tx, ty); // aimed over the seam of a map that wraps around, if that's the short way
             double distance = Math.Sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
             int tiles = (int)Math.Ceiling(distance / SpriteSizing.BaseUnit) + 1;
             var aimedAt = cell;
@@ -73,7 +74,7 @@ public partial class GameTestWindow
             _flying[^1].OnArrive = (victim, x, y) =>
             {
                 var landed = CellAtPixel(x, y);
-                bool reached = Math.Max(Math.Abs(landed.X - aimedAt.X), Math.Abs(landed.Y - aimedAt.Y)) <= 1;
+                bool reached = CellsApart((landed.X, landed.Y), (aimedAt.X, aimedAt.Y)) <= 1;
                 SpellArrives(caster, spell, victim, victim is null && reached ? thing : null, victim is not null ? CellOf(victim) : landed);
             };
             return;
@@ -95,7 +96,8 @@ public partial class GameTestWindow
             {
                 var (px, py) = PixelOf(other);
                 if (double.IsNaN(px) || MapFloors.FloorOfLift(LiftOf(other)) != floor) continue;
-                if (Math.Max(Math.Abs(px - cx), Math.Abs(py - cy)) / SpriteSizing.BaseUnit > spell.RadiusTiles) continue;
+                var (awayX, awayY) = WrappedDelta(px - cx, py - cy); // the short way round a map that wraps around
+                if (Math.Max(Math.Abs(awayX), Math.Abs(awayY)) / SpriteSizing.BaseUnit > spell.RadiusTiles) continue;
                 if (SpellTouches(spell, caster, other)) touched.Add(other);
             }
         }
@@ -112,7 +114,7 @@ public partial class GameTestWindow
 
         // Resurrect: the dead lie as bodies - the body clicked, or every body within its reach.
         if (spell.Effects.Any(e => e.Kind == MagicEffectKind.Resurrect))
-            foreach (var dead in _bodies.Where(b => ReferenceEquals(b.Value.Body, thing) || (spell.RadiusTiles > 0 && Math.Max(Math.Abs(b.Value.Body.X - cell.X), Math.Abs(b.Value.Body.Y - cell.Y)) <= CellsForTiles(spell.RadiusTiles)))
+            foreach (var dead in _bodies.Where(b => ReferenceEquals(b.Value.Body, thing) || (spell.RadiusTiles > 0 && CellsApart((b.Value.Body.X, b.Value.Body.Y), (cell.X, cell.Y)) <= CellsForTiles(spell.RadiusTiles)))
                          .Select(b => b.Key).ToList())
                 if (dead != _player) ResurrectDead(dead);
 
@@ -225,7 +227,7 @@ public partial class GameTestWindow
     private void ApplySpotEffect(MagicEffect effect, CharacterDefinition caster, (int X, int Y) cell, int radiusTiles, CharacterDefinition? who)
     {
         int reach = CellsForTiles(Math.Max(1, radiusTiles));
-        bool Near(int x, int y) => Math.Max(Math.Abs(x - cell.X), Math.Abs(y - cell.Y)) <= (radiusTiles > 0 ? reach : 0);
+        bool Near(int x, int y) => CellsApart((x, y), cell) <= (radiusTiles > 0 ? reach : 0);
         double seconds = Math.Max(1, effect.Seconds);
         int amount = RollEffect(effect);
         switch (effect.Kind)
@@ -262,7 +264,7 @@ public partial class GameTestWindow
             case MagicEffectKind.IgniteLights:
             {
                 bool lit = effect.Kind == MagicEffectKind.IgniteLights;
-                foreach (var light in _map.Objects.Where(o => o.ContainerInstanceId < 0 && Math.Max(Math.Abs(o.X - cell.X), Math.Abs(o.Y - cell.Y)) <= reach).ToList())
+                foreach (var light in _map.Objects.Where(o => o.ContainerInstanceId < 0 && CellsApart((o.X, o.Y), (cell.X, cell.Y)) <= reach).ToList())
                 {
                     if (DefinitionOf(light) is not { Type: ObjectType.LightSource } lightObj || light.IsSpentRuntime || (light.IsLitRuntime == true) == lit) continue;
                     light.IsLitRuntime = lit;
@@ -273,7 +275,7 @@ public partial class GameTestWindow
             }
             case MagicEffectKind.RevealTraps:
             case MagicEffectKind.DestroyTraps:
-                foreach (var trap in _map.Objects.Where(o => o.ContainerInstanceId < 0 && Math.Max(Math.Abs(o.X - cell.X), Math.Abs(o.Y - cell.Y)) <= Math.Max(reach, CellsForTiles(8))).ToList())
+                foreach (var trap in _map.Objects.Where(o => o.ContainerInstanceId < 0 && CellsApart((o.X, o.Y), (cell.X, cell.Y)) <= Math.Max(reach, CellsForTiles(8))).ToList())
                 {
                     if (DefinitionOf(trap) is not { Type: ObjectType.Trap }) continue;
                     if (effect.Kind == MagicEffectKind.DestroyTraps) RemoveMapObject(trap);

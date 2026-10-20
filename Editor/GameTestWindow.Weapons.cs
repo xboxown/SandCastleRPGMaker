@@ -226,6 +226,7 @@ public partial class GameTestWindow
         else if (w.Use == WeaponUse.GoodThrown) attval -= (int)tiles / 2;
         var (ax, ay) = PixelOf(attacker);
         var (tx, ty) = PixelOf(target);
+        (tx, ty) = NearestImage(ax, ay, tx, ty); // shot over the seam of a map that wraps around, if that's the short way
         PlaySound(w.AttackSoundResourceId);
         LaunchToward(flies, ax, ay, tx - ax, ty - ay, LiftOf(attacker) + 2, attacker, Math.Max(1, w.RangeTiles) + 2,
             new WeaponShot(attacker, weapon, ammoDef, attval, thrown), LiftOf(target) + 2, Math.Sqrt((tx - ax) * (tx - ax) + (ty - ay) * (ty - ay))); // up at a bird, down from a wall

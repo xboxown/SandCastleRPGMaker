@@ -105,9 +105,9 @@ public partial class GameTestWindow
         RunCommandsAs(mapCharacter, character.TalkCommands, byStepping: false);
     }
 
-    private static SpriteDirection FacingTowards(double fromX, double fromY, double toX, double toY)
+    private SpriteDirection FacingTowards(double fromX, double fromY, double toX, double toY)
     {
-        double dx = toX - fromX, dy = toY - fromY;
+        var (dx, dy) = WrappedDelta(toX - fromX, toY - fromY); // over the seam of a map that wraps around, if nearer
         return Math.Abs(dx) > Math.Abs(dy) ? (dx > 0 ? SpriteDirection.East : SpriteDirection.West) : (dy > 0 ? SpriteDirection.South : SpriteDirection.North);
     }
 

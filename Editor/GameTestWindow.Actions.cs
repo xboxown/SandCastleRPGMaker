@@ -151,9 +151,9 @@ public partial class GameTestWindow
     /// <summary>Lifts at least between this lift's floor and the goal floor (a floor is 5 lifts, each step climbs at most 1): 0 when no floor is asked for.</summary>
     private static int FloorSteps(int lift, int? floor) => floor is { } f ? Math.Abs(MapFloors.FloorOfLift(lift) - f) * MapFloors.LiftsPerFloor : 0;
 
-    private static bool Arrived((int X, int Y) here, (int X, int Y) goal, bool beside, Func<(int X, int Y), bool> canStand)
+    private bool Arrived((int X, int Y) here, (int X, int Y) goal, bool beside, Func<(int X, int Y), bool> canStand)
     {
-        int dx = Math.Abs(here.X - goal.X), dy = Math.Abs(here.Y - goal.Y);
+        int dx = Math.Abs(CellsAcross(here.X - goal.X)), dy = Math.Abs(CellsUpDown(here.Y - goal.Y)); // the short way round a map that wraps around
         if (beside) return Math.Max(dx, dy) <= 1; // next to it (or on it, for a thing lying on the floor)
         return dx + dy == 0 || (dx + dy == 1 && !canStand(goal)); // someone or something on the spot: right beside it will do
     }
@@ -290,7 +290,7 @@ public partial class GameTestWindow
         var parts = command.Get("Thing").Split(':');
         int.TryParse(command.Get("X"), out int x);
         int.TryParse(command.Get("Y"), out int y);
-        int Near(int tx, int ty) => Math.Max(Math.Abs(tx - x), Math.Abs(ty - y));
+        int Near(int tx, int ty) => CellsApart((tx, ty), (x, y));
         if (parts.Length == 3 && parts[0] == "Object" && int.TryParse(parts[1], out int instanceId) && int.TryParse(parts[2], out int objectId))
             return _map.Objects.FirstOrDefault(o => o.InstanceId == instanceId && o.ObjectId == objectId && o.ContainerInstanceId < 0)
                 ?? _map.Objects.Where(o => o.ObjectId == objectId && o.ContainerInstanceId < 0 && Near(o.X, o.Y) <= 2).OrderBy(o => Near(o.X, o.Y)).FirstOrDefault();
@@ -703,7 +703,7 @@ public partial class GameTestWindow
         if (spot < 0 || SpotPosition(chair, obj, spot) is not { } p) return false;
         var goal = ((int)Math.Floor(p.X / _tileWidth), (int)Math.Floor((p.Y - 1) / _tileHeight));
         var here = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
-        var path = Math.Abs(here.Item1 - goal.Item1) + Math.Abs(here.Item2 - goal.Item2) <= 1 ? new List<(int X, int Y)>() : FindPath(mapCharacter, goal, besideOnly: true);
+        var path = Heuristic(here, goal) <= 1 ? new List<(int X, int Y)>() : FindPath(mapCharacter, goal, besideOnly: true);
         if (path is null) return false;
         _headingToSeat[me] = (chair, spot);
         if (path.Count == 0) ArriveAtFurniture(mapCharacter);

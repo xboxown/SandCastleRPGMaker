@@ -462,7 +462,7 @@ public partial class GameTestWindow
         // A flier first climbs or drops in its own cell to the height its way goes on at (down outside a door, up into the open sky).
         if (IsFlier(mapCharacter) && PlannedFlyLift(mapCharacter) is { } wantLift && mapCharacter.Lift != wantLift && ClimbToward(mapCharacter, wantLift, elapsedMs)) return;
         double targetX = CellCenterX(cellX), targetY = CellCenterY(cellY);
-        double remainingX = targetX - mapCharacter.PixelX, remainingY = targetY - mapCharacter.PixelY;
+        var (remainingX, remainingY) = WrappedDelta(targetX - mapCharacter.PixelX, targetY - mapCharacter.PixelY); // the next cell can be over the seam of a map that wraps around
         // Cardinal steps, one axis at a time, like the player.
         bool alongX = Math.Abs(remainingX) > 0.01;
         double remaining = alongX ? remainingX : remainingY;
@@ -500,6 +500,7 @@ public partial class GameTestWindow
             }
             mapCharacter.Lift = newLift;
         }
+        WrapPixel(ref newX, ref newY); // over the edge of a map that wraps around: on the other side (GameTestWindow.Wrap.cs)
         mapCharacter.PixelX = newX;
         mapCharacter.PixelY = newY;
         var oldCell = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
@@ -608,23 +609,24 @@ public partial class GameTestWindow
             if (h < nearestH) { nearest = current; nearestH = h; }
             // A taken goal (someone on it, a chair): right beside it - not across a corner, where a table can be in between.
             bool done = current.F == wantFloor
-                && (((current.X, current.Y) == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1 && (current != start || besideOnly)));
+                && (((current.X, current.Y) == goal && goalFree) || (!goalFree && Heuristic((current.X, current.Y), goal) == 1 && (current != start || besideOnly)));
             if (done) return PathTo(current);
             foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
             {
-                var cell = (current.X + dx, current.Y + dy);
+                var stepTo = (current.X + dx, current.Y + dy); // the walk itself, measured from here (past the edge of a map that wraps around: over the seam)
+                var cell = WrapCell(stepTo);
                 if (!InsideMap(cell.Item1, cell.Item2)) continue;
                 if (goalFloor is null && cost.TryGetValue((cell.Item1, cell.Item2, 0), out int reached) && reached <= cost[current] + 1) continue; // no floor asked for: one place per cell, so skip the walking rules for a cell already reached as cheaply
                 int lift;
                 if (goalFloor is not null)
                 {
                     // To another floor: the stairs climb several lifts a cell, 1 a step - only the walk itself, step by step, gets up or down them (a jump cell to cell is a cliff).
-                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), cell, current == start, liftAt[current], world, out lift)) continue;
+                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), stepTo, current == start, liftAt[current], world, out lift)) continue;
                 }
                 else
                 {
-                    if (!CanStandAt(mapCharacter, cell, liftAt[current], world, out lift)) continue;
-                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), cell, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
+                    if (!CanStandAt(mapCharacter, stepTo, liftAt[current], world, out lift)) continue;
+                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), stepTo, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
                 }
                 var next = (cell.Item1, cell.Item2, FloorKey(lift));
                 int newCost = cost[current] + 1;
@@ -639,7 +641,7 @@ public partial class GameTestWindow
         return PathTo(nearest);
     }
 
-    private static int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(a.X - b.X) + Math.Abs(a.Y - b.Y);
+    private int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(CellsAcross(a.X - b.X)) + Math.Abs(CellsUpDown(a.Y - b.Y)); // the short way round a map that wraps around
 
     /// <summary>Whether the character could step onto that cell from a lift (the walking rules), and at what lift it would stand.</summary>
     private bool CanStandAt(MapCharacter mapCharacter, (int X, int Y) cell, int fromLift, BodySource? world, out int lift, bool anyLift = false)
@@ -663,7 +665,7 @@ public partial class GameTestWindow
 
     /// <summary>Exult tiles (8px) between the character and a cell, the larger of the two axes (Exult's distance()).</summary>
     private int TileDistance(MapCharacter mapCharacter, (int X, int Y) cell) =>
-        (int)Math.Round(Math.Max(Math.Abs(CellCenterX(cell.X) - mapCharacter.PixelX), Math.Abs(CellCenterY(cell.Y) - mapCharacter.PixelY)) / SpriteSizing.BaseUnit);
+        WrappedDelta(CellCenterX(cell.X) - mapCharacter.PixelX, CellCenterY(cell.Y) - mapCharacter.PixelY) is var (dx, dy) ? (int)Math.Round(Math.Max(Math.Abs(dx), Math.Abs(dy)) / SpriteSizing.BaseUnit) : 0;
 
     /// <summary>A distance in Exult tiles as map cells (at least 1).</summary>
     private int CellsForTiles(int tiles) => Math.Max(1, (int)Math.Round(tiles * SpriteSizing.BaseUnit / (double)_tileWidth));

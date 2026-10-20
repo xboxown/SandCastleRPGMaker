@@ -51,7 +51,7 @@ public partial class GameTestWindow
         if (_playerWalkPath is null) return;
         if (_playerWalkIndex >= _playerWalkPath.Count) { FinishPlayerWalk(); return; }
         var (cx, cy) = _playerWalkPath[_playerWalkIndex];
-        double rx = CellCenterX(cx) - _playerPixelX, ry = CellCenterY(cy) - _playerPixelY;
+        var (rx, ry) = WrappedDelta(CellCenterX(cx) - _playerPixelX, CellCenterY(cy) - _playerPixelY); // over the seam of a map that wraps around
         if (Math.Abs(rx) < 0.01 && Math.Abs(ry) < 0.01) { _playerWalkIndex++; return; }
         bool alongX = Math.Abs(rx) > 0.01;
         double remaining = Math.Abs(alongX ? rx : ry);
@@ -95,7 +95,7 @@ public partial class GameTestWindow
         {
             var current = open.Dequeue();
             bool done = current.F == wantFloor
-                && (((current.X, current.Y) == goal && goalFree) || (!goalFree && Math.Abs(current.X - goal.X) + Math.Abs(current.Y - goal.Y) == 1));
+                && (((current.X, current.Y) == goal && goalFree) || (!goalFree && Heuristic((current.X, current.Y), goal) == 1));
             if (done)
             {
                 var path = new List<(int X, int Y)>();
@@ -105,19 +105,20 @@ public partial class GameTestWindow
             }
             foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
             {
-                var cell = (current.X + dx, current.Y + dy);
+                var stepTo = (current.X + dx, current.Y + dy); // the walk itself, measured from here (past the edge of a map that wraps around: over the seam)
+                var cell = WrapCell(stepTo);
                 if (!InsideMap(cell.Item1, cell.Item2)) continue;
                 if (goalFloor is null && cost.TryGetValue((cell.Item1, cell.Item2, 0), out int reached) && reached <= cost[current] + 1) continue; // no floor asked for: one place per cell
                 int lift;
                 if (goalFloor is not null)
                 {
                     // To another floor: only the walk itself, step by step, gets up or down the stairs (several lifts a cell, 1 a step).
-                    if (!PlayerCanWalkBetween((current.X, current.Y), cell, liftAt[current], world, out lift)) continue;
+                    if (!PlayerCanWalkBetween((current.X, current.Y), stepTo, liftAt[current], world, out lift)) continue;
                 }
                 else
                 {
-                    if (!PlayerCanStand(cell, liftAt[current], out lift)) continue;
-                    if (!PlayerCanWalkBetween((current.X, current.Y), cell, liftAt[current], world)) continue; // the walk itself, not just where it ends
+                    if (!PlayerCanStand(stepTo, liftAt[current], out lift)) continue;
+                    if (!PlayerCanWalkBetween((current.X, current.Y), stepTo, liftAt[current], world)) continue; // the walk itself, not just where it ends
                 }
                 var next = (cell.Item1, cell.Item2, FloorKey(lift));
                 int newCost = cost[current] + 1;
