@@ -81,6 +81,8 @@ public class MapData
     public string MapName { get; set; } = "Untitled Map";
     public int Width { get; set; }
     public int Height { get; set; }
+    /// <summary>Wraps around (Maps tab): walk off one edge and you come back on the other, as in Ultima V and VI. Off: the edges are the end of the world.</summary>
+    public bool WrapsAround { get; set; }
     public TilesetDefinition Tileset { get; set; } = new();
     public List<MapLayer> Layers { get; set; } = new();
 

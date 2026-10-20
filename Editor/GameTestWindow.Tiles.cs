@@ -84,9 +84,12 @@ public partial class GameTestWindow
         int x1 = (int)Math.Floor((_cameraX + ViewportWidth + chunkW) / chunkW), y1 = (int)Math.Floor((_cameraY + ViewportHeight + chunkH) / chunkH);
         var now = (x0, y0, x1, y1);
         if (now == _shownChunks) return;
+        var shifts = WrapShifts().Skip(1).ToList(); // a map that wraps around: the chunks over the seam are seen too
+        var view = new Rect(_cameraX - chunkW, _cameraY - chunkH, ViewportWidth + 2 * chunkW, ViewportHeight + 2 * chunkH);
         foreach (var ((cx, cy), image) in _groundChunks)
         {
-            bool near = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1;
+            bool near = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1
+                || shifts.Any(s => new Rect(cx * chunkW - s.DX, cy * chunkH - s.DY, chunkW, chunkH).IntersectsWith(view));
             var wanted = near ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
             if (image.Visibility != wanted) image.Visibility = wanted;
         }

@@ -1717,13 +1717,15 @@ public partial class GameTestWindow : Window
         if (_cameraHold is { } hold) { _cameraX = hold.X - ViewportWidth / 2; _cameraY = hold.Y - ViewportHeight / 2; } // Move Camera: centred on its spot
 
         // Boundary clamp - never shows outside the valid world/map area. A map smaller than the viewport on an axis is centered on that axis instead of clamped to a negative range.
-        _cameraX = GameCanvas.Width <= ViewportWidth ? (GameCanvas.Width - ViewportWidth) / 2.0 : Math.Clamp(_cameraX, 0, GameCanvas.Width - ViewportWidth);
-        _cameraY = GameCanvas.Height <= ViewportHeight ? (GameCanvas.Height - ViewportHeight) / 2.0 : Math.Clamp(_cameraY, 0, GameCanvas.Height - ViewportHeight);
+        // A map that wraps around has no edge to stop at: the land on the other side is shown beyond it (GameTestWindow.Wrap.cs).
+        if (!WrapsAcross) _cameraX = GameCanvas.Width <= ViewportWidth ? (GameCanvas.Width - ViewportWidth) / 2.0 : Math.Clamp(_cameraX, 0, GameCanvas.Width - ViewportWidth);
+        if (!WrapsUpDown) _cameraY = GameCanvas.Height <= ViewportHeight ? (GameCanvas.Height - ViewportHeight) / 2.0 : Math.Clamp(_cameraY, 0, GameCanvas.Height - ViewportHeight);
 
         // Instant, per spec - confirmed directly from Exult's own documentation: the original game's camera scrolling is "jerky" (non-interpolated) by default; smooth scrolling is only an optional, later Exult enhancement, not authentic default behavior. Since the avatar's own position is now genuinely continuous (see StepPlayerContinuous), tracking it instantly every frame already looks smooth in practice - no separate interpolation layer is needed, and none of the earlier animation-conflict bugs can recur because nothing here is animated at all.
         CameraTransform.X = -_cameraX;
         CameraTransform.Y = -_cameraY;
         ShowGroundNearView(); // GameTestWindow.Tiles.cs
+        ShowAcrossTheSeam(); // GameTestWindow.Wrap.cs
     }
 
     /// <summary>
@@ -1848,6 +1850,7 @@ public partial class GameTestWindow : Window
         double distance = PlayerTilesPerSecond * _tileWidth * deltaSeconds; // _tileWidth/_tileHeight share one grid, so one distance serves both axes
         double newPixelX = _playerPixelX + dx * distance;
         double newPixelY = _playerPixelY + dy * distance;
+        var (wrapDX, wrapDY) = WrapPixel(ref newPixelX, ref newPixelY); // over the edge of a map that wraps around: the other side (GameTestWindow.Wrap.cs)
 
         int prospectiveTileX = (int)Math.Floor(newPixelX / _tileWidth);
         int prospectiveTileY = (int)Math.Floor(newPixelY / _tileHeight);
@@ -1875,6 +1878,8 @@ public partial class GameTestWindow : Window
 
         _playerPixelX = newPixelX;
         _playerPixelY = newPixelY;
+        _cameraX += wrapDX; // the camera crosses the seam with the player: the view doesn't jump
+        _cameraY += wrapDY;
         // Sprite drawn directly from the continuous center point - center-anchored horizontally, bottom-anchored vertically, matching ComputeQuantizedPosition's own convention exactly (so this and the tile-based version agree perfectly at rest) but with no tile/offset indirection or modulo math that could jump at a boundary.
         Canvas.SetLeft(_playerImage, _playerPixelX - _playerImage.Width / 2);
         Canvas.SetTop(_playerImage, _playerPixelY + _tileHeight / 2 - _playerImage.Height);

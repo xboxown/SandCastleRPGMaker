@@ -282,8 +282,8 @@ public partial class GameTestWindow
 
     /// <summary>In sight: on the visible screen itself.</summary>
     private bool IsInSight(MapCharacter mapCharacter) =>
-        mapCharacter.PixelX >= _cameraX && mapCharacter.PixelX <= _cameraX + ViewportWidth
-        && mapCharacter.PixelY >= _cameraY && mapCharacter.PixelY <= _cameraY + ViewportHeight;
+        WrapShifts().Any(s => mapCharacter.PixelX + s.DX >= _cameraX && mapCharacter.PixelX + s.DX <= _cameraX + ViewportWidth
+            && mapCharacter.PixelY + s.DY >= _cameraY && mapCharacter.PixelY + s.DY <= _cameraY + ViewportHeight); // over the seam of a map that wraps around too
 
     private void AdvanceMessage()
     {

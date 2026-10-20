@@ -9,7 +9,8 @@ namespace SandcastleRpgMaker.Editor;
 /// world needs one map; a portal to a dark world is another. The first is the
 /// starting world (the game begins there, saved as the project's map as
 /// always); the others are saved with it. Click a world to edit it; Add makes
-/// one (its name and size asked); right-click renames, resizes (what a smaller
+/// one (its name, size and whether it wraps around asked); right-click renames,
+/// turns wrapping around the edges on or off, resizes (what a smaller
 /// size would cut off is listed first), makes it the starting world, or
 /// deletes it (asked first). Each world has its own tileset, tiles, objects,
 /// characters, events, zones, weather and ambient sound.
@@ -40,6 +41,15 @@ public partial class MainWindow
         }
         Item("Rename...", RenameWorld);
         Item("Resize...", ResizeWorld);
+        var wraps = Item("Wraps around the edges", world =>
+        {
+            world.WrapsAround = !world.WrapsAround;
+            RefreshWorldList();
+            StatusText.Text = world.WrapsAround
+                ? $"\"{world.MapName}\" wraps around: walk off one edge and you come back on the other."
+                : $"\"{world.MapName}\" no longer wraps: its edges are the end of the world.";
+        });
+        menu.Opened += (_, _) => wraps.IsChecked = _worldList.SelectedItem is WorldRow { Map.WrapsAround: true };
         Item("Make it the starting world", MakeStartingWorld);
         menu.Items.Add(new Separator());
         Item("Delete...", DeleteWorld);
@@ -54,7 +64,7 @@ public partial class MainWindow
         add.Click += (_, _) => AddWorld();
         var note = new TextBlock
         {
-            Text = "One map is one world (a portal to a dark world is another). The first is the starting world. Click to edit; right-click to rename, resize or delete.",
+            Text = "One map is one world (a portal to a dark world is another). The first is the starting world. Click to edit; right-click to rename, resize, make it wrap around (or not) or delete.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Margin = new Thickness(6, 6, 6, 0), FontSize = 11
         };
         var panel = new DockPanel();
@@ -69,7 +79,7 @@ public partial class MainWindow
 
     private sealed record WorldRow(MapData Map, bool Starting)
     {
-        public override string ToString() => $"{(Starting ? "★ " : "")}{Map.MapName}   ({Map.Width} x {Map.Height})";
+        public override string ToString() => $"{(Starting ? "★ " : "")}{Map.MapName}   ({Map.Width} x {Map.Height}{(Map.WrapsAround ? ", wraps" : "")})";
     }
 
     /// <summary>The project's worlds as loaded: its map (the starting world) and the others; each with its own id.</summary>
@@ -117,10 +127,11 @@ public partial class MainWindow
             MessageBox.Show(this, "Pick a tileset first (Tileset tab) - a new map starts with it.", "Add Map", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var ask = new MapSizeWindow("Add Map", _worlds.Count == 0 ? "World" : $"World {_worlds.Count + 1}", _map?.Width ?? 30, _map?.Height ?? 20) { Owner = this };
+        var ask = new MapSizeWindow("Add Map", _worlds.Count == 0 ? "World" : $"World {_worlds.Count + 1}", _map?.Width ?? 30, _map?.Height ?? 20, askWrap: true) { Owner = this };
         if (ask.ShowDialog() != true) return;
         var tileset = new TilesetDefinition { TileWidth = _tileset.TileWidth, TileHeight = _tileset.TileHeight, TilesetSpriteName = _tileset.TilesetSpriteName };
         var world = MapData.CreateEmpty(ask.MapName, ask.MapWidth, ask.MapHeight, tileset);
+        world.WrapsAround = ask.Wraps;
         world.Id = _worlds.Count == 0 ? 1 : _worlds.Max(w => w.Id) + 1;
         _worlds.Add(world);
         ShowWorld(world);
@@ -173,14 +184,15 @@ public partial class MainWindow
     }
 }
 
-/// <summary>A map's name and size (Add, Rename, Resize).</summary>
+/// <summary>A map's name and size (Add, Rename, Resize) - and, for a new one, whether it wraps around.</summary>
 internal sealed class MapSizeWindow : Window
 {
     public string MapName { get; private set; } = "";
     public int MapWidth { get; private set; }
     public int MapHeight { get; private set; }
+    public bool Wraps { get; private set; }
 
-    public MapSizeWindow(string title, string name, int width, int height, bool nameOnly = false, bool sizeOnly = false)
+    public MapSizeWindow(string title, string name, int width, int height, bool nameOnly = false, bool sizeOnly = false, bool askWrap = false)
     {
         Title = title;
         Width = 340;
@@ -206,6 +218,16 @@ internal sealed class MapSizeWindow : Window
             size.Children.Add(heightBox);
             rows.Children.Add(size);
         }
+        var wrapBox = new CheckBox { Content = "Wraps around the edges", Margin = new Thickness(0, 10, 0, 0) };
+        if (askWrap)
+        {
+            rows.Children.Add(wrapBox);
+            rows.Children.Add(new TextBlock
+            {
+                Text = "Walk off one edge and you come back on the other (Ultima V and VI). Unticked: the edges are the end of the world. You can change it later (right-click the map).",
+                TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(18, 2, 0, 0)
+            });
+        }
         var ok = new Button { Content = "OK", Width = 80, IsDefault = true, Margin = new Thickness(0, 0, 6, 0) };
         var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
         ok.Click += (_, _) =>
@@ -219,6 +241,7 @@ internal sealed class MapSizeWindow : Window
             }
             MapWidth = nameOnly ? width : int.Parse(widthBox.Text);
             MapHeight = nameOnly ? height : int.Parse(heightBox.Text);
+            Wraps = wrapBox.IsChecked == true;
             DialogResult = true;
         };
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };

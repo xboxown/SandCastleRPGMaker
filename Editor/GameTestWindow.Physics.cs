@@ -302,6 +302,7 @@ public partial class GameTestWindow
         blockReason = "";
         var movement = MovementOf(mover); // land, sea or air (GameTestWindow.Movement.cs)
         if (movement == MovementKind.Air) return TryFlyStep(to, lift, height, mover, world, out newLift, out blockReason);
+        if (SplitAtSeam(to) is { } pieces) return TryStepAcrossSeam(pieces, lift, height, out newLift, out blockReason, mover, world, explain); // a map that wraps around (GameTestWindow.Wrap.cs)
         if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY)
         {
             blockReason = "Blocked: edge of the map.";

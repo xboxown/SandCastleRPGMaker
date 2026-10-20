@@ -672,8 +672,13 @@ public partial class GameTestWindow
     private bool IsOnScreen(double pixelX, double pixelY)
     {
         double margin = 6 * SpriteSizing.BaseUnit;
-        return pixelX >= _cameraX - margin && pixelX <= _cameraX + ViewportWidth + margin
-            && pixelY >= _cameraY - margin && pixelY <= _cameraY + ViewportHeight + margin;
+        foreach (var (dx, dy) in WrapShifts()) // a map that wraps around: seen over the seam too
+        {
+            double x = pixelX + dx, y = pixelY + dy;
+            if (x >= _cameraX - margin && x <= _cameraX + ViewportWidth + margin
+                && y >= _cameraY - margin && y <= _cameraY + ViewportHeight + margin) return true;
+        }
+        return false;
     }
 
     /// <summary>What a character is up to, for identifying it while testing.</summary>
