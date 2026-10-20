@@ -214,6 +214,8 @@ public partial class GameTestWindow
         }
         if (obj is null) return;
         if (TryUseLockTool(obj, new MapObjectOrigin(instance))) return;
+        if (obj.Type == ObjectType.Spellbook && _player is not null && RefusedSpellbook(obj, _player)) return; // not everyone can read it (GameTestWindow.Magic.cs)
+        if (obj.Type == ObjectType.Spellbook && _player is not null) _spellbookReader = _player;
         if (TryUseDoll(instance, obj, () => FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem))) return; // it opens a paperdoll
         // A bed's cover lies over the bed: double-clicking it means the bed (unless the cover has events of its own).
         if (!obj.EventPages.Any(p => p.Commands.Count > 0) && BedUnderCover(instance) is { } coveredBed) { LieDownOn(coveredBed); return; }
@@ -235,6 +237,12 @@ public partial class GameTestWindow
         if (DefinitionOf(item) is not { } obj) return false;
         RecordItem("used", ReferencedItemCategory.Object, obj.Id); // Used object (GameTestWindow.Conditions.cs)
         if (TryUseLockTool(obj, source)) return true;
+        if (obj.Type == ObjectType.Spellbook)
+        {
+            var reader = source switch { SlotOrigin s => s.Character, BackpackOrigin b => b.Character, _ => _player };
+            if (reader is not null && RefusedSpellbook(obj, reader)) return true;
+            _spellbookReader = reader;
+        }
         if (TryUseDoll(item, obj, () => TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByUseItem, -1, $"You use \"{obj.Name}\" - event fired."))) return true; // it opens a paperdoll
         if (obj.Type == ObjectType.LightSource)
         {

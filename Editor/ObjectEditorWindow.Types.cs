@@ -286,6 +286,14 @@ public partial class ObjectEditorWindow
         var body = Group("Spells");
         body.Children.Add(Note("Exult's rules: casting costs mana equal to the spell's circle (unless you set a cost), needs the caster's Level to be at least its circle, and uses up one of each of its reagents (Reagent objects carried). Linear spells (circle 0) cost nothing."));
         body.Children.Add(Check("Every copy knows all its spells (unticked: only those learned with Learn Spell, as Exult's spellbooks)", () => book.StartsWithAllSpells, v => book.StartsWithAllSpells = v));
+        body.Children.Add(CharacterIdList("Who can read it (empty = anyone with Can cast magic ticked, Character Editor)", book.AllowedCharacterIds));
+        var looks = new WrapPanel();
+        looks.Children.Add(SpritePicker("Open book (both pages; optional)", () => (book.OpenBookSprite.SpriteGroup, book.OpenBookSprite.SpriteName), (g, n) => { book.OpenBookSprite.SpriteGroup = g; book.OpenBookSprite.SpriteName = n; }, compact: true));
+        looks.Children.Add(SpritePicker("Bookmark (optional)", () => (book.BookmarkSprite.SpriteGroup, book.BookmarkSprite.SpriteName), (g, n) => { book.BookmarkSprite.SpriteGroup = g; book.BookmarkSprite.SpriteName = n; }, compact: true));
+        looks.Children.Add(SoundPicker("Page turn sound", () => book.PageTurnSoundResourceId, v => book.PageTurnSoundResourceId = v));
+        body.Children.Add(looks);
+        body.Children.Add(Note("In play it opens as Exult's spellbook: two pages, a circle a page, each spell's icon with how many times it can be cast now. Click a spell to mark it (the bookmark), double-click to cast; the corners turn the pages. " +
+                               "Or design your own: pick a paperdoll for it below (Paperdoll) - it opens that instead, and its buttons can run Cast Spell (Who: whoever set it off = the one reading the book)."));
         var list = new StackPanel();
         void Show()
         {
@@ -303,6 +311,7 @@ public partial class ObjectEditorWindow
                 top.Children.Add(TextField("Words of power", 120, () => spell.Words, v => spell.Words = v));
                 top.Children.Add(Check("Click a target", () => spell.NeedsTarget, v => spell.NeedsTarget = v));
                 inner.Children.Add(top);
+                inner.Children.Add(SpritePicker("Icon (on its page)", () => (spell.Icon.SpriteGroup, spell.Icon.SpriteName), (g, n) => { spell.Icon.SpriteGroup = g; spell.Icon.SpriteName = n; }, compact: true));
                 inner.Children.Add(ObjectIdList("Reagents (one of each used up)", spell.ReagentObjectIds, o => o.Type == ObjectType.Reagent));
                 inner.Children.Add(EffectsEditor("Effects", spell.Effects));
                 var bottom = new WrapPanel();
@@ -772,6 +781,34 @@ public partial class ObjectEditorWindow
             choices.AddRange(_db.Objects.Where(o => o.TypeChosen && filter(o)));
             var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2), HorizontalAlignment = HorizontalAlignment.Left };
             add.SelectionChanged += (_, _) => { if (add.SelectedItem is WorldObject { Id: >= 0 } o) { ids.Add(o.Id); Show(); } };
+            row.Children.Add(add);
+            panel.Children.Add(row);
+        }
+        Show();
+        return panel;
+    }
+
+    /// <summary>A list of characters (who can read a spellbook).</summary>
+    private FrameworkElement CharacterIdList(string label, List<int> ids)
+    {
+        var characters = ProjectSession.CharactersProvider?.Invoke()?.Characters ?? new List<CharacterDefinition>();
+        var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 6) };
+        void Show()
+        {
+            panel.Children.Clear();
+            panel.Children.Add(new TextBlock { Text = label });
+            var row = new WrapPanel();
+            foreach (int id in ids.ToList())
+            {
+                var name = characters.FirstOrDefault(c => c.Id == id)?.Name ?? $"(missing #{id})";
+                var chip = new Button { Content = $"{name}  ✕", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 2, 6, 2), ToolTip = "Click to remove" };
+                chip.Click += (_, _) => { ids.Remove(id); Show(); };
+                row.Children.Add(chip);
+            }
+            var choices = new List<CharacterDefinition> { new() { Id = -1, Name = "Add..." } };
+            choices.AddRange(characters.Where(c => !ids.Contains(c.Id)).OrderBy(c => c.Name));
+            var add = new ComboBox { Width = 160, ItemsSource = choices, DisplayMemberPath = "Name", SelectedIndex = 0, Margin = new Thickness(0, 2, 0, 2), HorizontalAlignment = HorizontalAlignment.Left };
+            add.SelectionChanged += (_, _) => { if (add.SelectedItem is CharacterDefinition { Id: >= 0 } c) { ids.Add(c.Id); Show(); } };
             row.Children.Add(add);
             panel.Children.Add(row);
         }

@@ -42,7 +42,8 @@
                     <CheckBox x:Name="TestPlayerCheck" Content="Is Main Player" Margin="0,0,0,2" Checked="Field_Changed" Unchecked="Field_Changed"
                               ToolTip="The character the person playing controls (only one character can be the main player). Every other character is run by AI and follows its schedule."/>
                     <TextBlock x:Name="MainPlayerNote" Text="Controlled by the person playing: no AI, no schedule." Opacity="0.7" FontSize="11" Margin="20,0,0,4" Visibility="Collapsed"/>
-                    <CheckBox x:Name="InPartyCheck" Content="Starts the game in the party (leave off for someone who joins later through a Join / Leave Party command)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <CheckBox x:Name="InPartyCheck" Content="Starts the game in the party (leave off for someone who joins later through a Join / Leave Party command)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <CheckBox x:Name="CanCastCheck" Content="Can cast magic (reads spellbooks - Exult's mages; a spellbook can also name who may read it)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
 
                     <TextBlock Text="Size (Exult 3D size)" FontWeight="Bold"/>
                     <TextBlock Text="Footprint X/Y in 8px world units, Height Z in lifts - used for collision, climbing and headroom exactly like Exult (you can't walk into or under anything lower than you are tall). Filled in automatically from the Idle sprite; adjust if needed." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>

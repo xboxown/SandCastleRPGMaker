@@ -107,6 +107,8 @@ public class CharacterDefinition
 
     /// <summary>Whether this character is a member of the active party (distinct from IsTestPlayer, which is who you directly walk around as) - confirmed from Exult's own real model, where you can open ANY party member's own inventory/paperdoll (number keys 1-8), not just the one you're controlling.</summary>
     public bool IsInParty { get; set; }
+    /// <summary>Can read spellbooks and cast their spells (Exult: mages, the Avatar). Unticked: "can't make sense of the runes".</summary>
+    public bool CanCastMagic { get; set; } = true;
     /// <summary>The highest level this character can reach (Character Editor > Stats); 0 = the game's Max Level (System Settings > Levels). Monsters too - every character is the same prefab.</summary>
     public int LevelLock { get; set; }
 

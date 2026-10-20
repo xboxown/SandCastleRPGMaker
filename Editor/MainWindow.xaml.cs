@@ -116,6 +116,7 @@ public partial class MainWindow : Window
         ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
         ProjectSession.StatsProvider = () => _statDatabase;
+        ProjectSession.CharactersProvider = () => _characterDatabase;
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
         ProjectSession.MapFloorPictureProvider = (floor, seeInside) => RenderMapPicture(floor, seeInside);
         ProjectSession.MapEditorFloorProvider = () => _currentFloor;

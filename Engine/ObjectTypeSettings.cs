@@ -228,6 +228,8 @@ public class SpellDefinition
     public List<int> ReagentObjectIds { get; set; } = new();
     public List<MagicEffect> Effects { get; set; } = new();
     public int CastSoundResourceId { get; set; } = -1;
+    /// <summary>Its picture on the page of the book (Exult's spell icons).</summary>
+    public SpriteLink Icon { get; set; } = new();
 
     public int EffectiveManaCost => ManaCost >= 0 ? ManaCost : Math.Max(0, Circle);
 }
@@ -237,6 +239,13 @@ public class SpellbookSettings
     public List<SpellDefinition> Spells { get; set; } = new();
     /// <summary>Ticked: every copy of the book knows all its spells. Unticked: a copy knows only those it learned (Learn Spell) - Exult's spellbooks.</summary>
     public bool StartsWithAllSpells { get; set; } = true;
+    /// <summary>Who can read it (characters' ids); empty = anyone who can cast magic (Character Editor).</summary>
+    public List<int> AllowedCharacterIds { get; set; } = new();
+    /// <summary>The open book, both pages (Exult's spellbook gump). Not set: a plain book is drawn.</summary>
+    public SpriteLink OpenBookSprite { get; set; } = new();
+    /// <summary>The ribbon marking the last spell chosen (Exult's bookmark).</summary>
+    public SpriteLink BookmarkSprite { get; set; } = new();
+    public int PageTurnSoundResourceId { get; set; } = -1;
 }
 
 /// <summary>A useable object: charges, what it does and how it looks used up.</summary>

@@ -385,6 +385,18 @@ public partial class GameTestWindow
             CastSpell(caster, spell, target ?? (spell.NeedsTarget ? caster : null));
             return true;
         }
+        // From a spellbook's own paperdoll (a book you designed): the book being read, even lying on a table; "whoever set it off" is its reader.
+        if ((_dollContext ?? _lastDollContext) is { Obj: { Type: ObjectType.Spellbook } openBook } context
+            && openBook.Spellbook.Spells.FirstOrDefault(s => s.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) is { } fromDoll
+            && KnowsSpell(openBook, (context.Owner as InventoryItemInstance)?.LearnedSpellsRuntime, fromDoll))
+        {
+            if (command.Get("Who") == WhoChoice.Activator && _spellbookReader is { } reader) caster = reader;
+            if (WhyCannotCast(caster, fromDoll) is { } why) { StatusText.Text = why; return false; }
+            var target = command.Get("Other").Length > 0 ? CharacterDefinitionFor(command.Get("Other")) : null;
+            foreach (var doll in _openDolls.Where(g => ReferenceEquals(g.State, context.State)).ToList()) CloseDollGump(doll); // Exult: casting closes the book
+            CastSpell(caster, fromDoll, target);
+            return true;
+        }
         StatusText.Text = $"Cast Spell: {caster.Name} has no spellbook that knows \"{name}\".";
         return false;
     }
