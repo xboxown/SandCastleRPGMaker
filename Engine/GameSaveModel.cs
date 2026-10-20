@@ -72,6 +72,8 @@ public class SavedBookSetting
 public class SavedVitals
 {
     public int CharacterId { get; set; }
+    /// <summary>Which of the save's characters (a copy of a character placed more than once has its own); -1 = the first with CharacterId.</summary>
+    public int CharacterIndex { get; set; } = -1;
     public int Food { get; set; }
     public int Ailments { get; set; }
     public double PoisonRemainingMs { get; set; }

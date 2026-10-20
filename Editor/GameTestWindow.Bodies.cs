@@ -86,6 +86,8 @@ public partial class GameTestWindow
         }
         _mapCharacters.Remove(mapCharacter);
         _bodies[character] = (body, mapCharacter.Placement); // Resurrect brings it back here
+        mapCharacter.Placement.Dead = true; // a save (or a world left and come back to) keeps it dead, its body where it fell
+        mapCharacter.Placement.BodyInstanceId = body.InstanceId;
 
         AddMapEntity(body, null);
         SetMapPosition(body, null, cellX, cellY, 0, 0);

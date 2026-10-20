@@ -308,4 +308,10 @@ public class PlacedCharacter
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
     /// <summary>The floor (1-9) they start on.</summary>
     public int Floor { get; set; } = 1;
+
+    /// <summary>Died in play: its body lies on the map (BodyInstanceId) and it isn't put back on the map - a save, or a world left and come back to, keeps it dead.</summary>
+    public bool Dead { get; set; }
+    public int BodyInstanceId { get; set; } = -1;
+    /// <summary>In a save only: which of the save's characters this placement is (each copy of a character placed more than once has its own health, things and fights); -1 = by its CharacterId.</summary>
+    public int SavedCharacterIndex { get; set; } = -1;
 }

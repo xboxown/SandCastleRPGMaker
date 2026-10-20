@@ -540,9 +540,14 @@ public partial class GameTestWindow
         map.StartX = _playerX;
         map.StartY = _playerY;
         map.StartFloor = MapFloors.FloorOfLift(Math.Max(0, _playerZ));
-        foreach (var mapCharacter in _mapCharacters) // the floor each character is on now, by its own placement
+        foreach (var mapCharacter in _mapCharacters) // the floor each character is on now, and which character it is, by its own placement
             if (map.Characters.FirstOrDefault(c => c.Id == mapCharacter.Placement.Id) is { } placed)
+            {
                 placed.Floor = MapFloors.FloorOfLift(Math.Max(0, mapCharacter.Lift));
+                placed.SavedCharacterIndex = SavedIndexOf(mapCharacter.Character);
+            }
+        foreach (var (dead, lying) in _bodies) // the dead: which character lies in which body
+            if (map.Characters.FirstOrDefault(c => c.Id == lying.Placement.Id) is { } placed) placed.SavedCharacterIndex = SavedIndexOf(dead);
 
         var save = new GameSaveData
         {
@@ -561,7 +566,7 @@ public partial class GameTestWindow
         foreach (var (character, vitals) in _vitals)
             save.Vitals.Add(new SavedVitals
             {
-                CharacterId = character.Id, Food = vitals.Food, Ailments = (int)vitals.Ailments,
+                CharacterId = character.Id, CharacterIndex = SavedIndexOf(character), Food = vitals.Food, Ailments = (int)vitals.Ailments,
                 PoisonRemainingMs = vitals.PoisonRemainingMs, SleepRemainingMs = vitals.SleepRemainingMs, ParalyzeRemainingMs = vitals.ParalyzeRemainingMs,
                 CharmRemainingMs = vitals.CharmRemainingMs, CurseRemainingMs = vitals.CurseRemainingMs, InvisibleRemainingMs = vitals.InvisibleRemainingMs,
                 ProtectedRemainingMs = vitals.ProtectedRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
@@ -575,6 +580,9 @@ public partial class GameTestWindow
         }
         return save;
     }
+
+    /// <summary>Where a character is in the game's own list (the save's list is a copy of it, in the same order): -1 if it isn't there.</summary>
+    private int SavedIndexOf(CharacterDefinition character) => _characters?.Characters.FindIndex(c => ReferenceEquals(c, character)) ?? -1;
 
     /// <summary>An event owner as a save names it - only those a save can find again (map events, characters, books, containers, placed objects).</summary>
     private static string? OwnerKey(object owner) => owner switch
@@ -661,7 +669,10 @@ public partial class GameTestWindow
         foreach (int book in data.ReadBooks) _hasBeenReadBooks.Add(book);
         foreach (var saved in data.Vitals)
         {
-            if (_characters?.Characters.FirstOrDefault(c => c.Id == saved.CharacterId) is not { } character) continue;
+            var character = saved.CharacterIndex >= 0 && _characters is { } list && saved.CharacterIndex < list.Characters.Count && list.Characters[saved.CharacterIndex].Id == saved.CharacterId
+                ? list.Characters[saved.CharacterIndex] // its own copy
+                : _characters?.Characters.FirstOrDefault(c => c.Id == saved.CharacterId); // a save from before copies were told apart
+            if (character is null) continue;
             var vitals = VitalsOf(character);
             vitals.Food = saved.Food;
             vitals.Ailments = (Ailment)saved.Ailments;

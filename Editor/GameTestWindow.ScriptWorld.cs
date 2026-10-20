@@ -269,6 +269,8 @@ public partial class GameTestWindow
         }
         placement.X = x;
         placement.Y = y;
+        placement.Dead = false;
+        placement.BodyInstanceId = -1;
         HealFully(dead);
         BringOntoMap(dead, placement);
         SettleWorld();

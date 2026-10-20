@@ -42,14 +42,26 @@ public partial class GameTestWindow
     private void BuildCharacterVisuals()
     {
         if (_characters is null) return;
+        // Bodies left by a save keep their numbers: new ones are numbered after them.
+        if (_map.Items.Count > 0) _nextContainerRuntimeInstanceId = Math.Max(_nextContainerRuntimeInstanceId, _map.Items.Max(i => i.InstanceId) + 1);
         var placed = new HashSet<CharacterDefinition>(ReferenceEqualityComparer.Instance);
+        var deadOnes = new List<(PlacedCharacter Placement, CharacterDefinition Character)>();
         foreach (var placement in _map.Characters)
         {
-            var character = _characters.Characters.FirstOrDefault(c => c.Id == placement.CharacterId);
-            if (character is null || character.IsTestPlayer) continue; // the main player is the one you control, not a placed character
-            // The same character placed more than once: every copy after the first is its own instance of it (a prefab),
-            // with its own health, inventory, ailments and fights - killing one never kills the others.
-            if (!placed.Add(character)) character = CopyOfCharacter(character);
+            // From a save: the very character this placement was (each copy its own).
+            int saved = placement.SavedCharacterIndex;
+            var character = saved >= 0 && saved < _characters.Characters.Count && _characters.Characters[saved].Id == placement.CharacterId ? _characters.Characters[saved] : null;
+            if (character is not null) placed.Add(character);
+            else
+            {
+                character = _characters.Characters.FirstOrDefault(c => c.Id == placement.CharacterId);
+                if (character is null || character.IsTestPlayer) continue; // the main player is the one you control, not a placed character
+                // The same character placed more than once: every copy after the first is its own instance of it (a prefab),
+                // with its own health, inventory, ailments and fights - killing one never kills the others.
+                if (!placed.Add(character)) character = CopyOfCharacter(character);
+            }
+            if (character.IsTestPlayer) continue;
+            if (placement.Dead) { deadOnes.Add((placement, character)); continue; } // died before (a save, a world come back to): only its body is here
             var mapCharacter = new MapCharacter
             {
                 Placement = placement, Character = character, Size = ActorSizing.Resolve(character, _poseDatabase, _sprites),
@@ -66,6 +78,12 @@ public partial class GameTestWindow
             PositionCharacterVisual(mapCharacter);
         }
         InitializeVitals(); // health, food, ailments for the player and every character
+        foreach (var (placement, character) in deadOnes)
+        {
+            _vitals[character] = new Vitals { Dead = true };
+            if (_map.Items.FirstOrDefault(i => i.InstanceId == placement.BodyInstanceId && i.Category == ReferencedItemCategory.Container) is { } body)
+                _bodies[character] = (body, placement); // Resurrect still brings it back from its body
+        }
         StartSchedules(); // Exult: every NPC takes up the schedule for the time of day
         StartWeather(); // the map's weather (GameTestWindow.Weather.cs)
     }
