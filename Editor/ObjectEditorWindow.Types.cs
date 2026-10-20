@@ -295,6 +295,7 @@ public partial class ObjectEditorWindow
         body.Children.Add(Note("In play it opens as Exult's spellbook: two pages, a circle a page, each spell's icon with how many times it can be cast now. Click a spell to mark it (the bookmark), double-click to cast; the corners turn the pages. " +
                                "Or design your own: pick a paperdoll for it below (Paperdoll) - it opens that instead, and its buttons can run Cast Spell (Who: whoever set it off = the one reading the book)."));
         var list = new StackPanel();
+        body.Children.Add(CirclesEditor(() => ShowCurrent()));
         void Show()
         {
             list.Children.Clear();
@@ -304,15 +305,21 @@ public partial class ObjectEditorWindow
                 var inner = new StackPanel();
                 var top = new WrapPanel();
                 top.Children.Add(TextField("Name", 160, () => spell.Name, v => { spell.Name = v.Length > 0 ? v : spell.Name; box.Header = $"{CircleName(spell.Circle)}: {spell.Name}"; }));
-                var circle = new ComboBox { Width = 110, ItemsSource = Enumerable.Range(0, 9).Select(CircleName).ToList(), SelectedIndex = Math.Clamp(spell.Circle, 0, 8) };
-                circle.SelectionChanged += (_, _) => { spell.Circle = Math.Max(0, circle.SelectedIndex); box.Header = $"{CircleName(spell.Circle)}: {spell.Name}"; };
+                var circleNumbers = Enumerable.Range(0, 9).Concat(_db.CustomCircles.OrderBy(c => c.Number).Select(c => c.Number)).ToList();
+                var circle = new ComboBox { Width = 140, ItemsSource = circleNumbers.Select(CircleName).ToList(), SelectedIndex = Math.Max(0, circleNumbers.IndexOf(spell.Circle)) };
+                circle.SelectionChanged += (_, _) => { spell.Circle = circleNumbers[Math.Max(0, circle.SelectedIndex)]; box.Header = $"{CircleName(spell.Circle)}: {spell.Name}"; };
                 top.Children.Add(Labeled("Circle", circle));
                 top.Children.Add(NumberField("Mana (-1 = its circle)", () => spell.ManaCost, v => spell.ManaCost = (int)Math.Max(-1, v)));
                 top.Children.Add(TextField("Words of power", 120, () => spell.Words, v => spell.Words = v));
                 top.Children.Add(Check("Click a target", () => spell.NeedsTarget, v => spell.NeedsTarget = v));
                 inner.Children.Add(top);
                 inner.Children.Add(SpritePicker("Icon (on its page)", () => (spell.Icon.SpriteGroup, spell.Icon.SpriteName), (g, n) => { spell.Icon.SpriteGroup = g; spell.Icon.SpriteName = n; }, compact: true));
-                inner.Children.Add(ObjectIdList("Reagents (one of each used up)", spell.ReagentObjectIds, o => o.Type == ObjectType.Reagent));
+                if (spell.Reagents.Count == 0 && spell.ReagentObjectIds.Count > 0)
+                {
+                    spell.Reagents = spell.ReagentObjectIds.Distinct().Select(id => new RecipeInput { ObjectId = id, Quantity = 1 }).ToList(); // the older one-of-each list, now with amounts
+                    spell.ReagentObjectIds.Clear();
+                }
+                inner.Children.Add(RecipeInputs(spell.Reagents, "Reagents (that many of each used up)", o => o.Type == ObjectType.Reagent, "Add reagent"));
                 var delivery = new WrapPanel();
                 delivery.Children.Add(ObjectPicker("Missile (flies to the target)", o => o.Type == ObjectType.Projectile, () => spell.MissileObjectId, v => spell.MissileObjectId = v, "(none - straight there)"));
                 delivery.Children.Add(NumberField("Reach (tiles, 0 = the one target)", () => spell.RadiusTiles, v => spell.RadiusTiles = (int)Math.Clamp(v, 0, 64)));
@@ -339,11 +346,52 @@ public partial class ObjectEditorWindow
         body.Children.Add(list);
     }
 
-    private static string CircleName(int circle) => circle switch
+    private string CircleName(int circle) => _db.CircleName(circle);
+
+    /// <summary>
+    /// The circles: Exult's nine (Linear, First to Eighth) are fixed - they can't
+    /// be renamed or deleted; yours come after them (9 and up), each with its
+    /// name and the Level needed to cast from it. A circle of yours deleted:
+    /// its spells (in every spellbook) go to the Eighth Circle.
+    /// </summary>
+    private FrameworkElement CirclesEditor(Action changed)
     {
-        0 => "Linear", 1 => "First circle", 2 => "Second circle", 3 => "Third circle", 4 => "Fourth circle",
-        5 => "Fifth circle", 6 => "Sixth circle", 7 => "Seventh circle", _ => "Eighth circle"
-    };
+        var panel = new StackPanel { Margin = new Thickness(0, 4, 0, 6) };
+        void Show()
+        {
+            panel.Children.Clear();
+            panel.Children.Add(new TextBlock { Text = "Circles (every spellbook)", FontWeight = FontWeights.SemiBold });
+            panel.Children.Add(new TextBlock { Text = "Linear, First ... Eighth Circle - Exult's nine, fixed (Level needed = the circle).", Opacity = 0.6, FontSize = 11 });
+            foreach (var custom in _db.CustomCircles.OrderBy(c => c.Number).ToList())
+            {
+                var row = new WrapPanel();
+                row.Children.Add(new TextBlock { Text = $"{custom.Number}.", VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 6, 10), Width = 24 });
+                row.Children.Add(TextField("Name", 160, () => custom.Name, v => { custom.Name = v.Length > 0 ? v : custom.Name; changed(); }));
+                row.Children.Add(NumberField("Level needed", () => custom.LevelNeeded, v => custom.LevelNeeded = (int)Math.Clamp(v, 0, LevelSettings.MaxMaxLevel)));
+                var remove = new Button { Content = "Delete", Padding = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
+                remove.Click += (_, _) =>
+                {
+                    var spells = _db.Objects.Where(o => o.Type == ObjectType.Spellbook).SelectMany(o => o.Spellbook.Spells).Where(s => s.Circle == custom.Number).ToList();
+                    if (spells.Count > 0 && MessageBox.Show(this, $"{spells.Count} spell{(spells.Count == 1 ? "" : "s")} in \"{custom.Name}\" will go to the Eighth Circle. Delete it?", "Delete circle", MessageBoxButton.YesNo) != MessageBoxResult.Yes) return;
+                    foreach (var spell in spells) spell.Circle = 8;
+                    _db.CustomCircles.Remove(custom);
+                    changed();
+                };
+                row.Children.Add(remove);
+                panel.Children.Add(row);
+            }
+            var add = new Button { Content = "Add a circle", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Left };
+            add.Click += (_, _) =>
+            {
+                int number = Math.Max(9, _db.CustomCircles.Count == 0 ? 9 : _db.CustomCircles.Max(c => c.Number) + 1);
+                _db.CustomCircles.Add(new SpellCircle { Number = number, Name = number == 9 ? "Ninth Circle" : $"Circle {number}", LevelNeeded = number });
+                changed();
+            };
+            panel.Children.Add(add);
+        }
+        Show();
+        return panel;
+    }
 
     // ================= Useable objects =================
 
@@ -578,24 +626,24 @@ public partial class ObjectEditorWindow
         body.Children.Add(Note("Ingredients come from what the party carries. The work plays out (the sound, the working sprite, the player at work), then what it makes appears on the station - or beside it - as Exult's millstone makes flour."));
     }
 
-    private FrameworkElement RecipeInputs(List<RecipeInput> inputs)
+    private FrameworkElement RecipeInputs(List<RecipeInput> inputs, string label = "Ingredients (used up)", Func<WorldObject, bool>? filter = null, string addText = "Add ingredient")
     {
         var panel = new StackPanel { Margin = new Thickness(0, 2, 0, 4) };
-        panel.Children.Add(new TextBlock { Text = "Ingredients (used up)" });
+        panel.Children.Add(new TextBlock { Text = label });
         void Show()
         {
             while (panel.Children.Count > 1) panel.Children.RemoveAt(1);
             foreach (var input in inputs.ToList())
             {
                 var row = new WrapPanel();
-                row.Children.Add(ObjectPicker("", _ => true, () => input.ObjectId, v => input.ObjectId = v, "(choose)"));
+                row.Children.Add(ObjectPicker("", filter ?? (_ => true), () => input.ObjectId, v => input.ObjectId = v, "(choose)"));
                 row.Children.Add(NumberField("How many", () => input.Quantity, v => input.Quantity = (int)Math.Clamp(v, 1, ObjectTypes.MaxQuantity)));
                 var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0), VerticalAlignment = VerticalAlignment.Bottom, Margin = new Thickness(0, 0, 0, 8) };
                 remove.Click += (_, _) => { inputs.Remove(input); Show(); };
                 row.Children.Add(remove);
                 panel.Children.Add(row);
             }
-            var add = new Button { Content = "Add ingredient", Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Left };
+            var add = new Button { Content = addText, Padding = new Thickness(6, 1, 6, 1), HorizontalAlignment = HorizontalAlignment.Left };
             add.Click += (_, _) => { inputs.Add(new RecipeInput()); Show(); };
             panel.Children.Add(add);
         }

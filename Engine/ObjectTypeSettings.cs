@@ -312,6 +312,13 @@ public class SpellDefinition
     public bool NeedsTarget { get; set; }
     /// <summary>Reagents: one of each is used up (Exult).</summary>
     public List<int> ReagentObjectIds { get; set; } = new();
+    /// <summary>Reagents and how many of each are used up (4 garlic, 2 spider silk). Older projects' ReagentObjectIds (one of each) count until this is filled.</summary>
+    public List<RecipeInput> Reagents { get; set; } = new();
+
+    /// <summary>Every reagent it needs, with how many: Reagents, else the older one-of-each list.</summary>
+    public IEnumerable<RecipeInput> AllReagents() => Reagents.Count > 0
+        ? Reagents.Where(r => r.ObjectId >= 0)
+        : ReagentObjectIds.Distinct().Select(id => new RecipeInput { ObjectId = id, Quantity = 1 });
     public List<MagicEffect> Effects { get; set; } = new();
     public int CastSoundResourceId { get; set; } = -1;
     /// <summary>Its picture on the page of the book (Exult's spell icons).</summary>

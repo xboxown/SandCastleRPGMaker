@@ -42,8 +42,8 @@ public partial class GameTestWindow
     {
         int left = spell.EffectiveManaCost > 0 ? Stat(caster, BuiltInStatKind.Mana, 0) / spell.EffectiveManaCost : 99;
         var carried = CarriedItems(caster);
-        foreach (int reagent in spell.ReagentObjectIds.Distinct())
-            left = Math.Min(left, carried.Where(c => c.Item.Category == ReferencedItemCategory.Object && c.Item.ItemId == reagent).Sum(c => Math.Max(1, c.Item.Quantity)));
+        foreach (var reagent in spell.AllReagents())
+            left = Math.Min(left, CountOf(carried, reagent.ObjectId) / Math.Max(1, reagent.Quantity));
         return Math.Clamp(left, 0, 99);
     }
 
@@ -190,14 +190,16 @@ public partial class GameTestWindow
         ShowObjectOverlay(canvas, takesClicks: true, scaleLikeViewport: true);
     }
 
-    private static string CircleTitle(int circle) => circle switch
-    {
-        0 => "Linear", 1 => "First Circle", 2 => "Second Circle", 3 => "Third Circle", 4 => "Fourth Circle",
-        5 => "Fifth Circle", 6 => "Sixth Circle", 7 => "Seventh Circle", _ => "Eighth Circle"
-    };
+    private string CircleTitle(int circle) => _objects.CircleName(circle);
 
-    private string ReagentList(SpellDefinition spell) => spell.ReagentObjectIds.Count == 0 ? ""
-        : "; " + string.Join(", ", spell.ReagentObjectIds.Select(id => ObjectDef(id)?.Name ?? "?"));
+    private string ReagentList(SpellDefinition spell)
+    {
+        var reagents = spell.AllReagents().ToList();
+        return reagents.Count == 0 ? "" : "; " + string.Join(", ", reagents.Select(r => $"{(r.Quantity > 1 ? $"{r.Quantity} " : "")}{ObjectDef(r.ObjectId)?.Name ?? "?"}"));
+    }
+
+    private static int CountOf(List<(InventoryItemInstance Item, List<InventoryItemInstance> List, CharacterDefinition Carrier)> carried, int objectId) =>
+        carried.Where(c => c.Item.Category == ReferencedItemCategory.Object && c.Item.ItemId == objectId).Sum(c => Math.Max(1, c.Item.Quantity));
 
     /// <summary>can_do_spell - null if it can be cast now, else why not.</summary>
     private string? WhyCannotCast(CharacterDefinition caster, SpellDefinition spell)
@@ -206,12 +208,14 @@ public partial class GameTestWindow
         if (Has(caster, Ailment.Cursed)) return "The caster is cursed.";
         int mana = Stat(caster, BuiltInStatKind.Mana, 0);
         if (mana < spell.EffectiveManaCost) return $"Not enough mana ({mana} of {spell.EffectiveManaCost}).";
-        int level = Stat(caster, BuiltInStatKind.Level, int.MaxValue);
-        if (level < spell.Circle) return $"Needs level {spell.Circle} (has {level}).";
+        int level = Stat(caster, BuiltInStatKind.Level, int.MaxValue), needed = _objects.LevelForCircle(spell.Circle);
+        if (level < needed) return $"Needs level {needed} (has {level}).";
         var carried = CarriedItems(caster);
-        foreach (int reagent in spell.ReagentObjectIds.Distinct())
-            if (!carried.Any(i => i.Item.Category == ReferencedItemCategory.Object && i.Item.ItemId == reagent))
-                return $"Missing {ObjectDef(reagent)?.Name ?? "a reagent"}.";
+        foreach (var reagent in spell.AllReagents())
+        {
+            int have = CountOf(carried, reagent.ObjectId), need = Math.Max(1, reagent.Quantity);
+            if (have < need) return $"Needs {need} {ObjectDef(reagent.ObjectId)?.Name ?? "of a reagent"} (has {have}).";
+        }
         return null;
     }
 
@@ -222,7 +226,7 @@ public partial class GameTestWindow
         if (WhyCannotCast(caster, spell) is { } why) { StatusText.Text = why; return; }
         SetStat(caster, BuiltInStatKind.Mana, Stat(caster, BuiltInStatKind.Mana, 0) - spell.EffectiveManaCost);
         var carried = CarriedItems(caster);
-        foreach (int reagent in spell.ReagentObjectIds.Distinct()) TakeFrom(carried, reagent, 1);
+        foreach (var reagent in spell.AllReagents()) TakeFrom(carried, reagent.ObjectId, Math.Max(1, reagent.Quantity));
         RefreshAfterMove();
         if (spell.Words.Trim().Length > 0) ShowFloatingText(caster, spell.Words.Trim(), 2500); // begin_casting: the words of power
         PlaySound(spell.CastSoundResourceId);

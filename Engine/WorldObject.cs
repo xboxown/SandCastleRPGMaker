@@ -199,6 +199,14 @@ public enum ObjectUse
 /// (ObjectInstance) is what lets one "torch" or "goblin" definition be
 /// placed hundreds of times without duplicating its data.
 /// </summary>
+/// <summary>A circle of spells added after Exult's nine: its number (9 and up), name, and the Level needed to cast from it.</summary>
+public class SpellCircle
+{
+    public int Number { get; set; } = 9;
+    public string Name { get; set; } = "Ninth Circle";
+    public int LevelNeeded { get; set; } = 9;
+}
+
 public class ObjectInstance : IHasDollState
 {
     public int ObjectId { get; set; }
@@ -327,6 +335,20 @@ public class ObjectDatabase
     /// <summary>Wall sets made in the Wall Designer (a wall with a window, a doorway); a Wall object links to one.</summary>
     public List<WallDesign> WallDesigns { get; set; } = new();
     public int NextWallDesignId() => WallDesigns.Count == 0 ? 1 : WallDesigns.Max(s => s.Id) + 1;
+    /// <summary>Circles added after Exult's nine (Linear, First to Eighth - fixed): Ninth, Necromancy... numbered 9 and up.</summary>
+    public List<SpellCircle> CustomCircles { get; set; } = new();
+
+    /// <summary>A circle's name: Exult's nine, or one of yours.</summary>
+    public string CircleName(int circle) => circle switch
+    {
+        0 => "Linear", 1 => "First Circle", 2 => "Second Circle", 3 => "Third Circle", 4 => "Fourth Circle",
+        5 => "Fifth Circle", 6 => "Sixth Circle", 7 => "Seventh Circle", 8 => "Eighth Circle",
+        _ => CustomCircles.FirstOrDefault(c => c.Number == circle)?.Name ?? $"Circle {circle}"
+    };
+
+    /// <summary>The Level a caster needs for a circle: its number (Exult), or what a circle of yours says.</summary>
+    public int LevelForCircle(int circle) => circle <= 8 ? circle : CustomCircles.FirstOrDefault(c => c.Number == circle)?.LevelNeeded ?? circle;
+
     /// <summary>Paperdolls made in the PaperDoll Editor; an object opens one (WorldObject.DollDesignId).</summary>
     public List<DollDesign> DollDesigns { get; set; } = new();
     public int NextDollDesignId() => DollDesigns.Count == 0 ? 1 : DollDesigns.Max(d => d.Id) + 1;
