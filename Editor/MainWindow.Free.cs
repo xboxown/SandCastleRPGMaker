@@ -309,7 +309,7 @@ public partial class MainWindow
 
     private static PlacedItemInstance CopyOfItem(PlacedItemInstance source) => new()
     {
-        Category = source.Category, ItemId = source.ItemId, OffsetX = source.OffsetX, OffsetY = source.OffsetY, IsLockedRuntime = source.IsLockedRuntime, HangsOnWall = source.HangsOnWall,
+        Category = source.Category, ItemId = source.ItemId, OffsetX = source.OffsetX, OffsetY = source.OffsetY, IsLockedRuntime = source.IsLockedRuntime, HangsOnWall = source.HangsOnWall, BelongsToId = source.BelongsToId,
         OwnContents = source.OwnContents?.Select(c => new InventoryItemInstance { InstanceId = c.InstanceId, Category = c.Category, ItemId = c.ItemId, Quantity = c.Quantity, ContainerX = c.ContainerX, ContainerY = c.ContainerY }).ToList()
     };
 
@@ -556,6 +556,7 @@ public partial class MainWindow
                 AddObjectStateMenuItems(menu, obj, o);
             if (hit is PlacedItemInstance { Category: ReferencedItemCategory.Container } chest && _containerDatabase.Containers.FirstOrDefault(c => c.Id == chest.ItemId) is { } data)
                 AddContainerMenuItems(menu, chest, data);
+            if (hit is PlacedItemInstance placedItem) AddBelongsToMenu(menu, placedItem);
             menu.Items.Add(new Separator());
             var onTop = new MenuItem { Header = "Put on top of the pile" };
             onTop.Click += (_, _) =>
@@ -647,6 +648,38 @@ public partial class MainWindow
     {
         if (entity is ObjectInstance o) o.LiesUnder = value;
         else if (entity is PlacedItemInstance i) i.LiesUnder = value;
+    }
+
+    /// <summary>
+    /// "Belongs to" for this one placed copy - Mary's loom, the baker's flour
+    /// sack, Tom's shears. Taking or using it is stealing from them, and a
+    /// character at work uses its own things first (then anything nobody owns
+    /// in its work zone). "As the editor says" falls back to the Object /
+    /// Container Editor's Belong To.
+    /// </summary>
+    private void AddBelongsToMenu(ContextMenu menu, object entity)
+    {
+        int current = entity switch { ObjectInstance o => o.BelongsToId, PlacedItemInstance i => i.BelongsToId, _ => -1 };
+        string Name(int id) => _characterDatabase.Characters.FirstOrDefault(c => c.Id == id)?.Name ?? "(nobody)";
+        var belongs = new MenuItem { Header = current >= 0 ? $"Belongs to ({Name(current)})" : "Belongs to (as the editor says)" };
+        void Set(int id)
+        {
+            if (entity is ObjectInstance o) o.BelongsToId = id;
+            else if (entity is PlacedItemInstance i) i.BelongsToId = id;
+            StatusText.Text = id >= 0 ? $"This \"{NameOfThing(entity)}\" belongs to {Name(id)}." : $"This \"{NameOfThing(entity)}\" belongs to whoever the editor says.";
+        }
+        var asEditor = new MenuItem { Header = "(as the editor says)", IsCheckable = true, IsChecked = current < 0 };
+        asEditor.Click += (_, _) => Set(-1);
+        belongs.Items.Add(asEditor);
+        belongs.Items.Add(new Separator());
+        foreach (var character in _characterDatabase.Characters.Where(c => !c.IsTestPlayer).OrderBy(c => c.Name))
+        {
+            int id = character.Id;
+            var choice = new MenuItem { Header = character.Name, IsCheckable = true, IsChecked = current == id };
+            choice.Click += (_, _) => Set(id);
+            belongs.Items.Add(choice);
+        }
+        menu.Items.Add(belongs);
     }
 
     private void AddContainerMenuItems(ContextMenu menu, PlacedItemInstance chest, ContainerData data)

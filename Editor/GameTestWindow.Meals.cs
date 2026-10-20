@@ -233,7 +233,7 @@ public partial class GameTestWindow
 
     /// <summary>Who a placed object belongs to now: its own (a served dish's customer), else its Object Editor Belong To.</summary>
     private int OwnerOf(ObjectInstance instance) =>
-        instance.OwnerIdRuntime >= 0 ? instance.OwnerIdRuntime : DefinitionOf(instance)?.BelongToId ?? -1;
+        instance.OwnerIdRuntime >= 0 ? instance.OwnerIdRuntime : instance.BelongsToId >= 0 ? instance.BelongsToId : DefinitionOf(instance)?.BelongToId ?? -1;
 
     /// <summary>The nearest solid food on the map that belongs to it (within 64 tiles).</summary>
     private ObjectInstance? NearestOwnFood(MapCharacter mapCharacter)

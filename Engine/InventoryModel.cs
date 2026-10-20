@@ -89,6 +89,8 @@ public class InventoryItemInstance : IHasContainerContents, IHasDollState
     public List<int>? KeyIdsRuntime { get; set; }
     public int ChargesRuntime { get; set; } = -1;
     public int? LiquidIdRuntime { get; set; }
+    /// <summary>Whose it is (a placed copy's Belongs to), carried with it: Mary's shears stay Mary's in a worker's hand and when put back. -1 = as the editor says.</summary>
+    public int BelongsToId { get; set; } = -1;
 
     /// <summary>Per-instance lock state in play - only meaningful for a Container. Null until a key or lockpick changes it (it's then as the container's IsLocked says). Travels with the container wherever it goes, as in Exult, where a locked chest is its own shape.</summary>
     public bool? IsLockedRuntime { get; set; }

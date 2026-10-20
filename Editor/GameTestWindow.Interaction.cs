@@ -1198,6 +1198,7 @@ public partial class GameTestWindow
                     ItemId = m.Item.ItemId,
                     Quantity = 1,
                     IsLockedRuntime = m.Item.IsLockedRuntime, // its lock goes with it
+                    BelongsToId = m.Item.BelongsToId, // and whose it is
                     // InstanceId 0 = this placed container was never opened, so it still holds its authored Starting Contents; anything else already has live Contents, carried over exactly as they are, empty or not.
                     Contents = m.Item.Category != ReferencedItemCategory.Container ? new List<InventoryItemInstance>()
                         : m.Item.InstanceId != 0 ? m.Item.Contents
@@ -1213,7 +1214,8 @@ public partial class GameTestWindow
                     FacingRuntime = o.Obj.Facing, IsLitRuntime = o.Obj.IsLitRuntime, BurnLeftRuntime = o.Obj.BurnLeftRuntime,
                     IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime,
                     KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidIdRuntime = o.Obj.LiquidIdRuntime,
-                    DollRuntime = o.Obj.DollRuntime // its paperdoll as it is (the tape still in the radio)
+                    DollRuntime = o.Obj.DollRuntime, // its paperdoll as it is (the tape still in the radio)
+                    BelongsToId = o.Obj.BelongsToId
                 };
             default:
                 var item = (InventoryItemInstance)PayloadObject(origin);
@@ -1262,9 +1264,9 @@ public partial class GameTestWindow
                 Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
                 IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime,
                 KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidIdRuntime = item.LiquidIdRuntime,
-                DollRuntime = item.DollRuntime
+                DollRuntime = item.DollRuntime, BelongsToId = item.BelongsToId
             };
-        var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId };
+        var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId, BelongsToId = item.BelongsToId };
         if (item.Category == ReferencedItemCategory.Container)
         {
             placed.InstanceId = _nextContainerRuntimeInstanceId++;

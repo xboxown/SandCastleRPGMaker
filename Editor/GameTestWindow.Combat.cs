@@ -525,6 +525,14 @@ public partial class GameTestWindow
         return (owner, owner?.FactionId >= 0 ? owner.FactionId : definition.FactionId);
     }
 
+    /// <summary>A placed copy's own owner (Map Editor > Belongs to), unless it's the party's.</summary>
+    private (CharacterDefinition? Owner, int FactionId)? OwnerById(int characterId)
+    {
+        if (_player is null || _characters?.Characters.FirstOrDefault(c => c.Id == characterId) is not { } owner) return null;
+        if (owner == _player || owner.IsInParty) return null;
+        return (owner, owner.FactionId);
+    }
+
     /// <summary>After any successful drop (drag.cc drop: "Check for theft"): moving something that isn't yours, from the world.</summary>
     private void CheckTheft(DragOrigin origin)
     {
@@ -541,9 +549,10 @@ public partial class GameTestWindow
             _ => null
         };
         if (item is not { } it) return;
-        var ownership = OwnerOf(it.Category, it.ItemId);
-        // An item inside an owned container (still in the world) is the container owner's.
-        if (ownership is null && origin is ContainerOrigin { Container: PlacedItemInstance holder }) ownership = OwnerOf(holder.Category, holder.ItemId);
+        var ownership = origin is MapItemOrigin { Item.BelongsToId: >= 0 } placedOwn ? OwnerById(placedOwn.Item.BelongsToId) : OwnerOf(it.Category, it.ItemId);
+        // An item inside an owned container (still in the world) is the container owner's - this chest's own owner first.
+        if (ownership is null && origin is ContainerOrigin { Container: PlacedItemInstance holder })
+            ownership = holder.BelongsToId >= 0 ? OwnerById(holder.BelongsToId) : OwnerOf(holder.Category, holder.ItemId);
         if (ownership is { } owned) { RecordItem("stolen", it.Category, it.ItemId); Theft(owned.Owner, owned.FactionId); }
     }
 

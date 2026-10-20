@@ -234,6 +234,7 @@ public partial class MainWindow
             AddStateItem(menu, "Starts lit", lit, () => existing.StartsLit = !lit, existing);
         }
         AddNewTypeMenuItems(menu, obj, existing);
+        AddBelongsToMenu(menu, existing);
         if (ObjectTypes.IsBundle(obj.Type) || obj.IsStackable)
         {
             var quantity = new MenuItem { Header = $"Quantity ({existing.Quantity})..." };
@@ -278,7 +279,7 @@ public partial class MainWindow
         StartsOpen = source.StartsOpen, StartsLocked = source.StartsLocked, StartsLit = source.StartsLit, OffsetX = source.OffsetX, OffsetY = source.OffsetY,
         StartStage = source.StartStage, StartsFullOfId = source.StartsFullOfId, LinkedInstanceIds = source.LinkedInstanceIds.ToList(),
         DestinationX = source.DestinationX, DestinationY = source.DestinationY, DestinationLift = source.DestinationLift,
-        HangsOnWall = source.HangsOnWall
+        HangsOnWall = source.HangsOnWall, BelongsToId = source.BelongsToId
     };
 
     private void CopyObjectInstance(ObjectInstance source)

@@ -103,7 +103,7 @@ public partial class GameTestWindow
         if (ShowHitNumbers) ShowFloatingTextOver(visual, $"-{damage}"); // "no effect" always shows; the numbers only with Show hit numbers
 
         // Someone's property: a crime if anyone sympathetic is watching (once per container, and again when it breaks).
-        var owner = byPlayer ? OwnerOf(ReferencedItemCategory.Container, container.ItemId) : null;
+        var owner = !byPlayer ? null : container.BelongsToId >= 0 ? OwnerById(container.BelongsToId) : OwnerOf(ReferencedItemCategory.Container, container.ItemId);
         if (owner is { } owned && _struckOwnedContainers.Add(container)) Theft(owned.Owner, owned.FactionId);
 
         if (hp > 0) return;

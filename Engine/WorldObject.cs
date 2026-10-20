@@ -297,6 +297,8 @@ public class ObjectInstance : IHasDollState
     public double FuseRuntime { get; set; } = -1;
     /// <summary>Who this one belongs to in play, over its Object Editor Belong To (a dish a waiter served: the customer's). -1 = as the Object Editor says.</summary>
     public int OwnerIdRuntime { get; set; } = -1;
+    /// <summary>Who this placed copy belongs to (Map Editor, right-click > Belongs to): Mary's loom, Tom's shears. Over the Object Editor's Belong To; -1 = as the Object Editor says. Workers use their own things first.</summary>
+    public int BelongsToId { get; set; } = -1;
 }
 
 /// <summary>

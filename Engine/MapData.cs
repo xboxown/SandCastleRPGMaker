@@ -241,6 +241,8 @@ public class PlacedItemInstance : IHasContainerContents
 {
     public ReferencedItemCategory Category { get; set; } = ReferencedItemCategory.Book;
     public int ItemId { get; set; }
+    /// <summary>Who this placed copy belongs to (Map Editor, right-click > Belongs to): the baker's flour sack, the weaver's thread basket. Over the editor's Belong To; -1 = as the editor says.</summary>
+    public int BelongsToId { get; set; } = -1;
     public int X { get; set; }
     public int Y { get; set; }
 

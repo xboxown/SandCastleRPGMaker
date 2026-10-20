@@ -487,8 +487,9 @@ public partial class GameTestWindow
     /// <summary>Whose a placed object is now: its own owner in play (a dish served to a customer), else as its Object Editor says.</summary>
     private (CharacterDefinition? Owner, int FactionId)? ObjectOwner(WorldObject obj, ObjectInstance? instance)
     {
-        if (instance is null || instance.OwnerIdRuntime < 0 || _player is null) return ObjectOwner(obj);
-        var owner = _characters?.Characters.FirstOrDefault(c => c.Id == instance.OwnerIdRuntime);
+        int ownerId = instance is null ? -1 : instance.OwnerIdRuntime >= 0 ? instance.OwnerIdRuntime : instance.BelongsToId;
+        if (ownerId < 0 || _player is null) return ObjectOwner(obj);
+        var owner = _characters?.Characters.FirstOrDefault(c => c.Id == ownerId);
         if (owner is null || owner == _player || owner.IsInParty) return null;
         return (owner, owner.FactionId);
     }
