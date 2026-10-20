@@ -62,20 +62,11 @@ public partial class GameTestWindow
         }
         int last = Math.Max(0, p.Stages.Count - 1);
         if (p.OnlyWhenRipe && plant.FrameRuntime < last) { StatusText.Text = $"\"{obj.Name}\" isn't ripe yet."; return; }
-        if (ObjectOwner(obj) is { } owned) Theft(owned.Owner, owned.FactionId); // someone else's crop
-        PlaySound(p.HarvestSoundResourceId);
-        var (x, y) = (plant.X, plant.Y);
-        if (p.RemovedWhenHarvested) RemoveMapObject(plant);
-        else
-        {
-            plant.FrameRuntime = Math.Clamp(p.StageAfterHarvest, 0, last);
-            plant.GrowMinutesRuntime = 0;
-            RefreshObjectLook(plant);
-        }
-        SpawnObjectAt(p.ProduceObjectId, Math.Max(1, p.ProduceQuantity), x, y);
+        if (ObjectOwner(obj, plant) is { } owned) Theft(owned.Owner, owned.FactionId); // someone else's crop
+        if (_fieldClaims.ContainsKey(plant)) { StatusText.Text = $"Someone is harvesting \"{obj.Name}\"."; return; }
+        HarvestPlant(plant, obj, null); // the soil left, the stage gone back, By Harvested (GameTestWindow.Work.cs)
         string produce = ObjectDef(p.ProduceObjectId)?.Name ?? "something";
         StatusText.Text = $"You harvest {(p.ProduceQuantity > 1 ? $"{p.ProduceQuantity} " : "")}\"{produce}\".";
-        if (_map.Objects.Contains(plant)) FireObjectEvent(plant, obj, BookTriggerConditionBased.ByAfterReadItem); // By Harvested
     }
 
     // ================= Tools =================
@@ -130,7 +121,7 @@ public partial class GameTestWindow
     private void UseStation(ObjectInstance station, WorldObject obj, string? toolKind)
     {
         if (toolKind is null && FireObjectEvent(station, obj, BookTriggerConditionBased.ByUseItem)) return;
-        if (_craftingJobs.Any(j => ReferenceEquals(j.Station, station))) { StatusText.Text = $"\"{obj.Name}\" is busy."; return; }
+        if (_craftingJobs.Any(j => ReferenceEquals(j.Station, station)) || _stationsInUse.ContainsKey(station)) { StatusText.Text = $"\"{obj.Name}\" is busy."; return; }
         string kind = toolKind?.Trim() ?? "";
         var candidates = obj.Crafting.Recipes.Where(r => string.Equals(r.ToolKind.Trim(), kind, StringComparison.OrdinalIgnoreCase) && r.OutputObjectId >= 0).ToList();
         var recipe = candidates.FirstOrDefault(PartyHasIngredients);

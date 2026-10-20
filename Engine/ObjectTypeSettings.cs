@@ -124,6 +124,10 @@ public class PlantSettings
     /// <summary>Harvesting takes the plant itself (a cabbage, a pumpkin).</summary>
     public bool RemovedWhenHarvested { get; set; }
     public int HarvestSoundResourceId { get; set; } = -1;
+    /// <summary>Sowing: this seed (an object) dropped on this soil (an object) makes the soil this plant, at its first stage. -1 = not sown.</summary>
+    public int SeedObjectId { get; set; } = -1;
+    /// <summary>The soil it's sown in - and, when harvesting takes the whole plant, what it leaves behind, ready to sow again.</summary>
+    public int SoilObjectId { get; set; } = -1;
 }
 
 /// <summary>Exult's keyring (keyring.uc): the keys it starts with; its frame shows how many it holds (0, 1, 2, 3, 4 or more).</summary>

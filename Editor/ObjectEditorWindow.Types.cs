@@ -150,6 +150,11 @@ public partial class ObjectEditorWindow
         after.Children.Add(NumberField("Then back to stage", () => p.StageAfterHarvest + 1, v => p.StageAfterHarvest = (int)Math.Max(0, v - 1)));
         after.Children.Add(SoundPicker("Harvest sound", () => p.HarvestSoundResourceId, v => p.HarvestSoundResourceId = v));
         body.Children.Add(after);
+        var sowing = new WrapPanel();
+        sowing.Children.Add(ObjectPicker("Sown from (seed)", o => o.Type != ObjectType.Plant && o.Id != obj.Id, () => p.SeedObjectId, v => p.SeedObjectId = v, "(not sown)"));
+        sowing.Children.Add(ObjectPicker("in (soil)", o => o.Type != ObjectType.Plant && o.Id != obj.Id, () => p.SoilObjectId, v => p.SoilObjectId = v, "(none)"));
+        body.Children.Add(sowing);
+        body.Children.Add(Note("Sowing: drag the seed onto the soil (or a Farm worker sows it) - the soil becomes this plant at stage 1. With Harvesting takes the whole plant, the harvest leaves the soil behind, ready to sow again."));
     }
 
     // ================= Keychains =================

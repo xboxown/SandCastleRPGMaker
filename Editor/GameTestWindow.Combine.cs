@@ -44,6 +44,16 @@ public partial class GameTestWindow
             target = def;
         }
         if (owner is null || target is null || ReferenceEquals(owner, PayloadObject(origin))) return false;
+        // Sowing: a seed dropped on its soil (Plant: Sown from / in) - the soil becomes the plant, at its first stage.
+        if (owner is ObjectInstance soil && PayloadIdentity(origin) is (ReferencedItemCategory.Object, int seedId) && PlantSownWith(seedId, target.Id) is { } sown)
+        {
+            if (!IsReachable(soil)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return true; }
+            if (ObjectOwner(target, soil) is { } field) Theft(field.Owner, field.FactionId); // someone else's field
+            Sow(soil, sown, _player);
+            UseUpOne(origin);
+            StatusText.Text = $"You sow \"{sown.Name}\".";
+            return true;
+        }
         if (!HasPagesFor(target, BookTriggerConditionBased.ByCombineItem)) return false;
         if (owner is ObjectInstance placed && !IsReachable(placed)) { Refuse(MousePointerKind.Blocked, CantReachMessage); return true; }
         var (category, itemId) = PayloadIdentity(origin);

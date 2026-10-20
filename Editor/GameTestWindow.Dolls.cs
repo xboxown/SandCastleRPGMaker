@@ -754,19 +754,7 @@ public partial class GameTestWindow
         {
             case ObjectInstance placed when _map.Objects.Contains(placed):
                 was = DefinitionOf(placed)?.Name ?? "It";
-                placed.ObjectId = becomes.Id;
-                placed.DollRuntime = null;
-                placed.FrameRuntime = becomes.Type == ObjectType.Plant ? 0 : placed.FrameRuntime;
-                placed.GrowMinutesRuntime = 0;
-                placed.IsSpentRuntime = false;
-                var start = ObjectLooks.StartState(becomes, placed);
-                placed.IsOpenRuntime = start.Open;
-                placed.IsLockedRuntime = start.Locked;
-                placed.IsLitRuntime = start.Lit;
-                placed.LiquidIdRuntime = becomes.Type == ObjectType.LiquidContainer ? ObjectLooks.StartLiquid(becomes, placed) : null;
-                placed.HitPointsRuntime = becomes.HitPoints > 0 ? becomes.HitPoints : -1;
-                RefreshObjectLook(placed);
-                SettleWorld();
+                BecomeObject(placed, becomes); // GameTestWindow.Work.cs
                 break;
             case InventoryItemInstance carried:
                 was = DefinitionOf(carried)?.Name ?? "It";

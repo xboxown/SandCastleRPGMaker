@@ -13,14 +13,26 @@ public enum ScheduleType
     HorizPace = 1,
     VertPace = 2,
     Dance = 4,
+    /// <summary>Exult's farm schedule, real: harvests the ripe plants in its area with the tool they need, carries the crop to its output place, sows empty soil.</summary>
+    Farm = 6,
+    /// <summary>Exult's miner schedule: the same as Farm, for ore veins (Plants that grow back) and a pickaxe.</summary>
+    Miner = 8,
     Stand = 10,
     Loiter = 11,
     Wander = 12,
     Sleep = 14,
+    /// <summary>Exult's blacksmith schedule, real: works the crafting stations in its area (a smelter, an anvil, a quenching trough) by their recipes.</summary>
+    Blacksmith = 13,
     Wait = 15,
     /// <summary>Exult's sit schedule (Schedule::sit): finds the nearest free chair and sits in it.</summary>
     Sit = 16,
     /// <summary>Exult's waiter schedule (Schedule::waiter): serves the customers sitting in the inn - asks their order, fetches it, puts it on the table in front of them.</summary>
+    /// <summary>Exult's bake schedule, real: works the stations in its area (millstone, kneading table, oven) by their recipes.</summary>
+    Bake = 18,
+    /// <summary>Exult's sew schedule, real: works the stations in its area (spinning wheel, loom, cutting table) by their recipes.</summary>
+    Sew = 19,
+    /// <summary>Exult's lab schedule, real: brews at the stations in its area (a cauldron), and sits and reads between brews.</summary>
+    Lab = 21,
     Waiter = 23,
     /// <summary>Exult's eat at inn schedule (Schedule::eat_at_inn): sits in a chair and eats what's served, asking for more.</summary>
     EatAtInn = 26,
@@ -50,6 +62,14 @@ public class ScheduleEntry
     /// <summary>Goes to the nearest zone with this purpose ("Pub") instead of a cell; "" = none.</summary>
     public string ZonePurpose { get; set; } = string.Empty;
 
+    /// <summary>Work schedules: how far round its spot it works, in tiles (when it goes to a zone: the zone).</summary>
+    public int WorkAreaTiles { get; set; } = 12;
+    /// <summary>Work schedules: where what it makes goes - the chest at this cell (or beside it), else onto this cell (a table, a counter). -1 = leave it where it's made.</summary>
+    public int OutputX { get; set; } = -1;
+    public int OutputY { get; set; } = -1;
+    /// <summary>Work schedules: the pose it works in (empty = Attacking Melee, as Exult's workers strike with their tools).</summary>
+    public string WorkPose { get; set; } = string.Empty;
+
     public string DescribePlace() =>
         ZoneId >= 0 ? $"zone #{ZoneId}" : ZonePurpose.Length > 0 ? $"the nearest {ZonePurpose}" : X >= 0 ? $"cell ({X}, {Y})" : "its placed spot";
 }
@@ -72,6 +92,12 @@ public static class Schedules
         ScheduleType.Waiter => "Waiter",
         ScheduleType.EatAtInn => "Eat at Inn",
         ScheduleType.Custom => "Custom (event commands)",
+        ScheduleType.Farm => "Farm",
+        ScheduleType.Miner => "Miner",
+        ScheduleType.Blacksmith => "Blacksmith",
+        ScheduleType.Bake => "Bake",
+        ScheduleType.Sew => "Sew",
+        ScheduleType.Lab => "Lab",
         _ => type.ToString()
     };
 
@@ -89,6 +115,12 @@ public static class Schedules
         ScheduleType.Waiter => "Works at the spot (its counter): finds customers sitting nearby, walks over and asks their order, goes back to the counter to prepare it, then brings a dish (from its menu, Character Editor > Health) and puts it on the table in front of them (Exult waiter).",
         ScheduleType.EatAtInn => "Sits in the nearest free chair and eats whatever is served to it, asking for more when there's nothing in front of it (Exult eat_at_inn). A Waiter brings the food.",
         ScheduleType.Custom => "Goes to the spot and runs your event commands there, then stands.",
+        ScheduleType.Farm => "Works its field (the zone, or the area round the spot): harvests the ripe plants with the tool they need (fetched from its chests or tables), picks up the crop and carries it to its output place; sows empty soil when it has the seeds. Its own things first, then nobody's - never someone else's (Exult farm).",
+        ScheduleType.Miner => "As Farm, for ore veins - Plants that grow back - and a pickaxe (Exult miner).",
+        ScheduleType.Blacksmith => "Works the crafting stations in its area by their recipes (smelter, anvil, trough): fetches the ingredients and the tool, works, carries what it made to its output place (Exult blacksmith).",
+        ScheduleType.Bake => "Works the crafting stations in its area by their recipes (millstone, kneading table, oven): fetches the ingredients, works, carries what it made to its output place (Exult bake).",
+        ScheduleType.Sew => "Works the crafting stations in its area by their recipes (spinning wheel, loom, cutting table with scissors): fetches the ingredients and the tool, works, carries what it made to its output place (Exult sew).",
+        ScheduleType.Lab => "Brews at the crafting stations in its area by their recipes (a cauldron), and between brews sits in a chair of its lab and reads (Exult lab).",
         _ => ""
     };
 }

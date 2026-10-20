@@ -499,21 +499,28 @@ public partial class GameTestWindow
     /// <summary>Off a slot and into the Backpack, then the Pouch, if it fits - otherwise dropped at their feet.</summary>
     private void StowOrDrop(CharacterDefinition who, object slot, InventoryItemInstance item)
     {
+        if (TryStowInBag(who, slot, item)) return;
+        RemoveFromCharacter(who, item);
+        PutDownAt(item, who);
+    }
+
+    /// <summary>Off a slot into the Backpack, then the Pouch, if it fits. False = no bag has room (it stays where it is).</summary>
+    private bool TryStowInBag(CharacterDefinition who, object slot, InventoryItemInstance item)
+    {
         var origin = new SlotOrigin(who, slot, item);
         foreach (var bagSlot in new[] { EquipmentSlot.Backpack, EquipmentSlot.Pouch })
         {
             if (Equals(bagSlot, slot) || !who.EquippedSlots.TryGetValue(bagSlot, out int bagId)) continue;
             if (who.Inventory.FirstOrDefault(i => i.InstanceId == bagId) is not { Category: ReferencedItemCategory.Container } bag || ReferenceEquals(bag, item)) continue;
             if (ContainerDef(bag.ItemId) is not { } data || !CanContainerAccept(data, bag, origin, out _, out _)) continue;
-            if (TryCombineIntoContents(bag.Contents, item.Category, item.ItemId, Math.Max(1, item.Quantity))) { RemoveFromSource(origin); return; }
+            if (TryCombineIntoContents(bag.Contents, item.Category, item.ItemId, Math.Max(1, item.Quantity))) { RemoveFromSource(origin); return true; }
             var stored = DetachAsInventoryItem(origin, data.GetNextContentsInstanceId);
             PlaceWithinFrame(stored, data, null);
             bag.Contents.Add(stored);
             StatusText.Text = $"{who.Name} puts \"{PayloadName(new ContainerOrigin(bag, data, stored))}\" away.";
-            return;
+            return true;
         }
-        RemoveFromCharacter(who, item);
-        PutDownAt(item, who);
+        return false;
     }
 
     // ================= Poses =================

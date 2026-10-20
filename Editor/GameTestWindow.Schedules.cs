@@ -216,6 +216,7 @@ public partial class GameTestWindow
         if (npc.InCombat) { CombatNowWhat(mapCharacter); return; }
         if (npc.Meal != MealStep.None) { MealNowWhat(mapCharacter); return; } // eating comes before its schedule
         if (npc.Hounding) { HoundNowWhat(mapCharacter); return; }
+        if (!IsWorkSchedule(npc.Activity) && NeedsTidying(mapCharacter.Character) && !WorkOf(mapCharacter.Character).RoundRunning) { TidyUpAfterWork(mapCharacter); return; } // the work is over: tools back first (GameTestWindow.Work.cs)
         if (npc.WalkingToSchedule) { WalkToScheduleNowWhat(mapCharacter); return; }
         switch (npc.Activity)
         {
@@ -232,6 +233,9 @@ public partial class GameTestWindow
                 break;
             case ScheduleType.Waiter: WaiterNowWhat(mapCharacter); break;
             case ScheduleType.EatAtInn: InnCustomerNowWhat(mapCharacter); break;
+            case ScheduleType.Farm or ScheduleType.Miner or ScheduleType.Blacksmith or ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Lab:
+                WorkNowWhat(mapCharacter); // GameTestWindow.Work.cs
+                break;
         }
     }
 
@@ -318,6 +322,11 @@ public partial class GameTestWindow
                     var trace = new List<string>();
                     EventCommandInterpreter.Run(entry.CustomCommands, _execContext, trace);
                 }
+                break;
+            case ScheduleType.Farm or ScheduleType.Miner or ScheduleType.Blacksmith or ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Lab:
+                SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+                WorkOf(mapCharacter.Character).SaidIdle = false;
+                npc.WaitMs = 500 + Rng.Next(1000);
                 break;
             default: // Stand, Wait
                 SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);

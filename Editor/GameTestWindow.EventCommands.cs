@@ -110,7 +110,7 @@ public partial class GameTestWindow
     }
 
     /// <summary>Put down where they stand - or at a cell - resting on whatever is there (a table top), on their floor.</summary>
-    private void PutDownAt(InventoryItemInstance gift, CharacterDefinition at, (int X, int Y)? cell = null)
+    private object PutDownAt(InventoryItemInstance gift, CharacterDefinition at, (int X, int Y)? cell = null)
     {
         var (x, y) = cell ?? CellOf(at);
         if (!InsideMap(x, y)) (x, y) = (_playerX, _playerY);
@@ -126,6 +126,7 @@ public partial class GameTestWindow
         SettleWorld();
         TilesUnderDropped(placedItem, placedObject); // By Item Dropped On It, as when the player puts something down
         StatusText.Text = $"\"{DollLook.ItemName(new ItemReference { Category = gift.Category, ItemId = gift.ItemId }, _objects, _books, _containers)}\" is put down at {at.Name}'s feet.";
+        return entity;
     }
 
     /// <summary>Given without being owned: a stack of a stackable thing, otherwise one each. A container comes with its Starting Contents.</summary>

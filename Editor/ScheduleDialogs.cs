@@ -224,6 +224,77 @@ public class MapCellPickerWindow : Window
     }
 }
 
+/// <summary>A work schedule's settings (Farm, Miner, Blacksmith, Bake, Sew, Lab): its work area, where what it makes goes, its work pose.</summary>
+public class WorkScheduleWindow : Window
+{
+    public WorkScheduleWindow(ScheduleEntry entry, (int X, int Y)? placed)
+    {
+        Title = $"Work [{BuildInfo.CurrentBuild}]";
+        Width = 520;
+        SizeToContent = SizeToContent.Height;
+        WindowStartupLocation = WindowStartupLocation.CenterOwner;
+        ShowInTaskbar = false;
+        ResizeMode = ResizeMode.NoResize;
+        int area = entry.WorkAreaTiles, outX = entry.OutputX, outY = entry.OutputY;
+
+        var root = new StackPanel { Margin = new Thickness(12) };
+        root.Children.Add(new TextBlock { Text = Schedules.Describe(entry.Type), FontWeight = FontWeights.Bold, FontSize = 14 });
+        root.Children.Add(new TextBlock { Text = Schedules.Explain(entry.Type), TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 2, 0, 10) });
+
+        root.Children.Add(new TextBlock { Text = "Work area: how many tiles round its spot", FontWeight = FontWeights.SemiBold });
+        var areaBox = new TextBox { Text = area.ToString(), Width = 60, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2) };
+        root.Children.Add(areaBox);
+        root.Children.Add(new TextBlock
+        {
+            Text = "When the line goes to a zone, the zone is the work area instead. Inside it the worker uses its own things (Map Editor > right-click > Belongs to) first, then things that belong to nobody - never someone else's.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 0, 0, 10)
+        });
+
+        root.Children.Add(new TextBlock { Text = "Where what it makes goes", FontWeight = FontWeights.SemiBold });
+        var outText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        void ShowOut() => outText.Text = outX >= 0 ? $"The chest at ({outX}, {outY}), or onto that spot (a table, a counter)" : "Left where it's made (on the station)";
+        ShowOut();
+        var pick = new Button { Content = "Pick on Map...", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 0, 4, 0) };
+        pick.Click += (_, _) =>
+        {
+            if (ProjectSession.MapSnapshotProvider?.Invoke() is not { } map) { MessageBox.Show(this, "Open or create a map in the Map Editor first.", Title); return; }
+            var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, outX >= 0 ? (outX, outY) : placed, placed) { Owner = this };
+            if (picker.ShowDialog() == true && picker.Picked is { } cell) { (outX, outY) = (cell.X, cell.Y); ShowOut(); }
+        };
+        var leave = new Button { Content = "Leave it", Padding = new Thickness(6, 1, 6, 1) };
+        leave.Click += (_, _) => { (outX, outY) = (-1, -1); ShowOut(); };
+        var outRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        outRow.Children.Add(outText);
+        outRow.Children.Add(pick);
+        outRow.Children.Add(leave);
+        root.Children.Add(outRow);
+        root.Children.Add(new TextBlock
+        {
+            Text = "Pick the cell of a chest (it puts the work inside) or of a table or counter (it puts the work on it). A Farm or Miner with none puts the crop in its own chest in the field, else keeps it.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 0, 0, 10)
+        });
+
+        root.Children.Add(new TextBlock { Text = "Work pose (empty = Attacking Melee)", FontWeight = FontWeights.SemiBold });
+        var poseBox = new TextBox { Text = entry.WorkPose, Margin = new Thickness(0, 2, 0, 10) };
+        root.Children.Add(poseBox);
+
+        var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+        var ok = new Button { Content = "OK", Width = 80, Margin = new Thickness(0, 0, 6, 0), IsDefault = true };
+        ok.Click += (_, _) =>
+        {
+            entry.WorkAreaTiles = int.TryParse(areaBox.Text.Trim(), out int a) ? Math.Clamp(a, 1, 128) : entry.WorkAreaTiles;
+            (entry.OutputX, entry.OutputY) = (outX, outY);
+            entry.WorkPose = poseBox.Text.Trim();
+            DialogResult = true;
+        };
+        var cancel = new Button { Content = "Cancel", Width = 80, IsCancel = true };
+        buttons.Children.Add(ok);
+        buttons.Children.Add(cancel);
+        root.Children.Add(buttons);
+        Content = root;
+    }
+}
+
 /// <summary>The event commands a Custom schedule runs when the character arrives at its spot - the same command editor as everywhere else.</summary>
 public class CustomScheduleWindow : Window
 {

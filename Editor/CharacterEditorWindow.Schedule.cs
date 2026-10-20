@@ -75,6 +75,7 @@ public partial class CharacterEditorWindow
         var pick = new Button { Content = "Pick on Map...", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 0, 4, 0), ToolTip = "Choose the spot on the open map" };
         var usePlaced = new Button { Content = "Placed Spot", Padding = new Thickness(6, 1, 6, 1), Margin = new Thickness(0, 0, 4, 0), ToolTip = "Use wherever the character is placed in the Map Editor" };
         var custom = new Button { Content = "Commands...", Padding = new Thickness(6, 1, 6, 1), ToolTip = "The event commands this custom activity runs" };
+        var workSettings = new Button { Content = "Work...", Padding = new Thickness(6, 1, 6, 1), ToolTip = "Its work area, where what it makes goes, and its work pose" };
         var customName = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0), Opacity = 0.8 };
 
         void RefreshButtons()
@@ -85,8 +86,11 @@ public partial class CharacterEditorWindow
             pick.IsEnabled = has;
             usePlaced.IsEnabled = has && (entry!.X >= 0 || entry.ZoneId >= 0 || entry.ZonePurpose.Length > 0);
             custom.Visibility = entry?.Type == ScheduleType.Custom ? Visibility.Visible : Visibility.Collapsed;
+            bool working = entry?.Type is ScheduleType.Farm or ScheduleType.Miner or ScheduleType.Blacksmith or ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Lab;
+            workSettings.Visibility = working ? Visibility.Visible : Visibility.Collapsed;
             customName.Text = entry?.Type == ScheduleType.Custom
                 ? (string.IsNullOrEmpty(entry.CustomName) ? "" : $"\"{entry.CustomName}\"") + $" {entry.CustomCommands.Count} command{(entry.CustomCommands.Count == 1 ? "" : "s")}"
+                : working ? $"area {(entry!.ZoneId >= 0 || entry.ZonePurpose.Length > 0 ? "its zone" : $"{entry.WorkAreaTiles} tiles")}, " + (entry.OutputX >= 0 ? $"puts it at ({entry.OutputX}, {entry.OutputY})" : "leaves it where it's made")
                 : "";
             ShowSpot();
         }
@@ -133,11 +137,18 @@ public partial class CharacterEditorWindow
             new CustomScheduleWindow(entry) { Owner = this }.ShowDialog();
             RefreshButtons();
         };
+        workSettings.Click += (_, _) =>
+        {
+            if (entry is null) return;
+            new WorkScheduleWindow(entry, placed) { Owner = this }.ShowDialog();
+            RefreshButtons();
+        };
 
         row.Children.Add(spot);
         row.Children.Add(pick);
         row.Children.Add(usePlaced);
         row.Children.Add(custom);
+        row.Children.Add(workSettings);
         row.Children.Add(customName);
         RefreshButtons();
         return row;
