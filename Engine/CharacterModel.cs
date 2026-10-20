@@ -109,6 +109,8 @@ public class CharacterDefinition
     public bool IsInParty { get; set; }
     /// <summary>Can read spellbooks and cast their spells (Exult: mages, the Avatar). Unticked: "can't make sense of the runes".</summary>
     public bool CanCastMagic { get; set; } = true;
+    /// <summary>Land (walks), Sea (swims, only on Water tiles) or Air (flies - floor 10 under the open sky, out of reach of blows).</summary>
+    public MovementKind Movement { get; set; } = MovementKind.Land;
     /// <summary>The highest level this character can reach (Character Editor > Stats); 0 = the game's Max Level (System Settings > Levels). Monsters too - every character is the same prefab.</summary>
     public int LevelLock { get; set; }
 
@@ -143,6 +145,9 @@ public class CharacterDefinition
 }
 
 /// <summary>Every PC defined in the project. Per spec, stored in .msrp, not a separate file.</summary>
+/// <summary>How a character gets about: mammals walk, sea creatures swim, birds fly.</summary>
+public enum MovementKind { Land, Sea, Air }
+
 public class CharacterDatabase
 {
     public List<CharacterDefinition> Characters { get; set; } = new();

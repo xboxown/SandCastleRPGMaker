@@ -156,6 +156,7 @@ public partial class GameTestWindow
         };
         _mapCharacters.Add(mapCharacter);
         mapCharacter.Lift = StandingLiftOnFloor(CharacterFootprint(mapCharacter), placement.Floor, placement);
+        if (character.Movement == MovementKind.Air) mapCharacter.Lift = CruiseLift(mapCharacter); // a flier is up in the air
         mapCharacter.Visual = BuildCharacterVisual(mapCharacter);
         GameCanvas.Children.Add(mapCharacter.Visual);
         PositionCharacterVisual(mapCharacter);

@@ -56,6 +56,8 @@ public partial class GameTestWindow
         public List<(int X, int Y)>? Path;
         public int PathIndex;
         public bool WasBlocked;
+        /// <summary>A flier climbing or dropping: time toward its next lift.</summary>
+        public double ClimbMs;
         /// <summary>The map event under it, for By Enter / By Exit / By Stay like the player's.</summary>
         public GameEvent? EventUnder;
 
@@ -94,6 +96,7 @@ public partial class GameTestWindow
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
             if (IsShowingMessage) break; // a dialog box just went up: everything stops right here
+            FallIfGrounded(mapCharacter); // a flier knocked out falls (GameTestWindow.Movement.cs)
             if (KeepDormant(mapCharacter)) continue; // far off screen: does nothing (Exult)
             if (FrozenInTime(mapCharacter)) continue; // Time Stop (GameTestWindow.Spells.cs)
             using (Measure("UpdateNpc")) UpdateNpc(mapCharacter, elapsedMs);
@@ -456,6 +459,8 @@ public partial class GameTestWindow
         if (npc.Path is null) return;
         if (npc.PathIndex >= npc.Path.Count) { FinishPath(mapCharacter); return; }
         var (cellX, cellY) = npc.Path[npc.PathIndex];
+        // A flier first climbs or drops in its own cell to the height its way goes on at (down outside a door, up into the open sky).
+        if (IsFlier(mapCharacter) && PlannedFlyLift(mapCharacter) is { } wantLift && mapCharacter.Lift != wantLift && ClimbToward(mapCharacter, wantLift, elapsedMs)) return;
         double targetX = CellCenterX(cellX), targetY = CellCenterY(cellY);
         double remainingX = targetX - mapCharacter.PixelX, remainingY = targetY - mapCharacter.PixelY;
         // Cardinal steps, one axis at a time, like the player.
@@ -567,6 +572,10 @@ public partial class GameTestWindow
     private List<(int X, int Y)>? FindPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial = false, bool besideOnly = false, int? goalFloor = null)
     {
         using var measured = Measure("FindPath");
+        if (IsFlier(mapCharacter)) // a flier's way through the air (GameTestWindow.Movement.cs) - in a fight, down beside its foe
+            return mapCharacter.Npc.InCombat && mapCharacter.Npc.Target is { } foe
+                ? FindFlyPath(mapCharacter, goal, allowPartial, besideOnly: true, goalFloor: MapFloors.FloorOfLift(LiftOf(foe)))
+                : FindFlyPath(mapCharacter, goal, allowPartial, besideOnly, goalFloor);
         int FloorKey(int lift) => goalFloor is null ? 0 : MapFloors.FloorOfLift(lift); // floors told apart only when one is asked for
         int wantFloor = goalFloor ?? 0;
         (int X, int Y, int F) start = (mapCharacter.Placement.X, mapCharacter.Placement.Y, FloorKey(mapCharacter.Lift));

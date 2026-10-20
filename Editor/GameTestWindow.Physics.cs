@@ -300,6 +300,8 @@ public partial class GameTestWindow
     {
         newLift = lift;
         blockReason = "";
+        var movement = MovementOf(mover); // land, sea or air (GameTestWindow.Movement.cs)
+        if (movement == MovementKind.Air) return TryFlyStep(to, lift, height, mover, world, out newLift, out blockReason);
         if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY)
         {
             blockReason = "Blocked: edge of the map.";
@@ -343,7 +345,11 @@ public partial class GameTestWindow
             blockReason = $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
             return false;
         }
-        if (newLift == 0 && !TerrainWalkableUnder(to))
+        if (movement == MovementKind.Sea)
+        {
+            if (!AllWaterUnder(to)) { blockReason = "Blocked: a sea creature stays in the water."; return false; }
+        }
+        else if (newLift == 0 && !TerrainWalkableUnder(to))
         {
             blockReason = "Blocked: the ground there isn't walkable.";
             return false;

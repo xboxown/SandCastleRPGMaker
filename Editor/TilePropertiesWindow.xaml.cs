@@ -34,6 +34,7 @@ public partial class TilePropertiesWindow : Window
         TileIndexLabel.Text = $"Tile #{target.TileIndex}";
         TerrainLabelBox.Text = target.TerrainLabel;
         WalkableCheck.IsChecked = target.Walkable;
+        WaterCheck.IsChecked = target.IsWater;
 
         RequiredObjectsListBox.ItemsSource = _availableObjects;
         foreach (var obj in _availableObjects.Where(o => target.RequiredObjectIds.Contains(o.Id)))
@@ -169,6 +170,7 @@ public partial class TilePropertiesWindow : Window
     {
         _target.TerrainLabel = TerrainLabelBox.Text;
         _target.Walkable = WalkableCheck.IsChecked == true;
+        _target.IsWater = WaterCheck.IsChecked == true;
         _target.RequiredObjectIds = RequiredObjectsListBox.SelectedItems.Cast<WorldObject>().Select(o => o.Id).ToList();
         _target.CustomEffects = _workingEffects;
         DialogResult = true;

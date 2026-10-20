@@ -60,6 +60,7 @@ public partial class GameTestWindow
             _mapCharacters.Add(mapCharacter);
             // Standing on top of whatever solid thing is under it, like the player at the Start Position.
             mapCharacter.Lift = StandingLiftOnFloor(CharacterFootprint(mapCharacter), placement.Floor, placement); // on its own floor, not counting its own body (it's already in the list)
+            if (character.Movement == MovementKind.Air) mapCharacter.Lift = CruiseLift(mapCharacter); // a flier is up in the air
             mapCharacter.Visual = BuildCharacterVisual(mapCharacter);
             GameCanvas.Children.Add(mapCharacter.Visual);
             PositionCharacterVisual(mapCharacter);

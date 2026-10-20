@@ -40,7 +40,7 @@ public partial class GameTestWindow
     private void LeaveBody(MapCharacter mapCharacter)
     {
         var character = mapCharacter.Character;
-        var (cellX, cellY, lift) = (mapCharacter.Placement.X, mapCharacter.Placement.Y, mapCharacter.Lift);
+        var (cellX, cellY, lift) = (mapCharacter.Placement.X, mapCharacter.Placement.Y, IsFlier(mapCharacter) ? GroundBelow(mapCharacter) : mapCharacter.Lift); // a flier falls
 
         // The body's container: the Body Container template, looking like this character's Body pose, weighing what its settings say.
         string json = System.Text.Json.JsonSerializer.Serialize(_bodyContainerTemplate);

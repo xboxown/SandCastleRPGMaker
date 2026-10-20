@@ -159,6 +159,7 @@ public partial class CharacterEditorWindow : Window
         TestPlayerCheck.IsChecked = character.IsTestPlayer;
         InPartyCheck.IsChecked = character.IsInParty;
         CanCastCheck.IsChecked = character.CanCastMagic;
+        MovementCombo.SelectedIndex = (int)character.Movement;
         // A character that has never had a size gets one filled in automatically the first time it's looked at, so the boxes always show the real numbers the engine will use.
         if (character.SizeX <= 0 || character.SizeY <= 0 || character.SizeZ <= 0)
             (character.SizeX, character.SizeY, character.SizeZ) = ActorSizing.Resolve(character, _poses, _sprites);
@@ -731,6 +732,7 @@ public partial class CharacterEditorWindow : Window
         if (mainPlayerChanged) BuildSchedulePanel(character); // the main player's schedule tab is disabled and empty
         character.IsInParty = InPartyCheck.IsChecked == true;
         character.CanCastMagic = CanCastCheck.IsChecked == true;
+        if (MovementCombo.SelectedIndex >= 0) character.Movement = (MovementKind)MovementCombo.SelectedIndex;
 
         if (FaceCombo.SelectedItem is SpriteEntry faceSprite)
         {

@@ -228,7 +228,7 @@ public partial class GameTestWindow
         var (tx, ty) = PixelOf(target);
         PlaySound(w.AttackSoundResourceId);
         LaunchToward(flies, ax, ay, tx - ax, ty - ay, LiftOf(attacker) + 2, attacker, Math.Max(1, w.RangeTiles) + 2,
-            new WeaponShot(attacker, weapon, ammoDef, attval, thrown));
+            new WeaponShot(attacker, weapon, ammoDef, attval, thrown), LiftOf(target) + 2, Math.Sqrt((tx - ax) * (tx - ax) + (ty - ay) * (ty - ay))); // up at a bird, down from a wall
         RefreshAfterMove();
         return true;
     }

@@ -43,7 +43,16 @@
                               ToolTip="The character the person playing controls (only one character can be the main player). Every other character is run by AI and follows its schedule."/>
                     <TextBlock x:Name="MainPlayerNote" Text="Controlled by the person playing: no AI, no schedule." Opacity="0.7" FontSize="11" Margin="20,0,0,4" Visibility="Collapsed"/>
                     <CheckBox x:Name="InPartyCheck" Content="Starts the game in the party (leave off for someone who joins later through a Join / Leave Party command)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
-                    <CheckBox x:Name="CanCastCheck" Content="Can cast magic (reads spellbooks - Exult's mages; a spellbook can also name who may read it)" Margin="0,0,0,10" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <CheckBox x:Name="CanCastCheck" Content="Can cast magic (reads spellbooks - Exult's mages; a spellbook can also name who may read it)" Margin="0,0,0,4" Checked="Field_Changed" Unchecked="Field_Changed"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <TextBlock Text="Moves on" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                        <ComboBox x:Name="MovementCombo" Width="330" SelectionChanged="Field_Changed"
+                                  ToolTip="Land: walks. Sea: swims, only on Water tiles (Tile Properties). Air: flies at floor 10 under the open sky (only missiles and spells reach it), under the ceiling indoors, in through doors; knocked out, it falls.">
+                            <ComboBoxItem Content="Land (walks - people, animals)"/>
+                            <ComboBoxItem Content="Sea (swims - only on Water tiles)"/>
+                            <ComboBoxItem Content="Air (flies - birds, bats, dragons)"/>
+                        </ComboBox>
+                    </StackPanel>
 
                     <TextBlock Text="Size (Exult 3D size)" FontWeight="Bold"/>
                     <TextBlock Text="Footprint X/Y in 8px world units, Height Z in lifts - used for collision, climbing and headroom exactly like Exult (you can't walk into or under anything lower than you are tall). Filled in automatically from the Idle sprite; adjust if needed." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,2,0,4"/>

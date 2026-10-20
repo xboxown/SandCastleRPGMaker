@@ -35,6 +35,10 @@ public partial class GameTestWindow
         public WeaponShot? Shot;
         /// <summary>How far it flies (tiles of 8px); 0 = its own range.</summary>
         public int MaxTiles;
+        /// <summary>Aimed at someone higher or lower (a bird in the sky): it rises (or drops) to their height over the distance to them.</summary>
+        public int StartLift;
+        public int? AimLift;
+        public double AimDistance;
         /// <summary>A spell's missile: what happens where it lands (whoever it met, or the spot) - instead of its own damage.</summary>
         public Action<CharacterDefinition?, double, double>? OnArrive;
     }
@@ -154,7 +158,7 @@ public partial class GameTestWindow
         LaunchToward(projectile, x, y, dx, dy, lift, shooter, 0, null);
 
     /// <summary>A projectile (or arrow, or thrown weapon) sets off from a point (map pixels) toward a direction - a weapon's shot carries how it was fired.</summary>
-    private void LaunchToward(WorldObject projectile, double x, double y, double dx, double dy, int lift, object? shooter, int maxTiles, WeaponShot? shot)
+    private void LaunchToward(WorldObject projectile, double x, double y, double dx, double dy, int lift, object? shooter, int maxTiles, WeaponShot? shot, int? aimLift = null, double aimDistance = 0)
     {
         if (Math.Abs(dx) < 0.001 && Math.Abs(dy) < 0.001) dy = 1;
         double length = Math.Sqrt(dx * dx + dy * dy);
@@ -166,7 +170,8 @@ public partial class GameTestWindow
             Facing = dx > 0 ? SpriteDirection.East : dx < 0 ? SpriteDirection.West : dy < 0 ? SpriteDirection.North : SpriteDirection.South
         };
         AddMapEntity(null, instance);
-        var flying = new Flying { Instance = instance, Def = projectile, X = x, Y = y, VX = dx / length * speed, VY = dy / length * speed, Lift = lift, Shooter = shooter, Shot = shot, MaxTiles = maxTiles };
+        var flying = new Flying { Instance = instance, Def = projectile, X = x, Y = y, VX = dx / length * speed, VY = dy / length * speed, Lift = lift, Shooter = shooter, Shot = shot, MaxTiles = maxTiles,
+            StartLift = lift, AimLift = aimLift, AimDistance = aimDistance };
         _flying.Add(flying);
         if (projectile.Projectile.RotatesToDirection && VisualOf(instance) is FrameworkElement visual)
         {
@@ -205,6 +210,8 @@ public partial class GameTestWindow
                 flying.X += flying.VX * seconds / parts;
                 flying.Y += flying.VY * seconds / parts;
                 flying.Traveled += step / parts;
+                if (flying.AimLift is { } aim && flying.AimDistance > 0)
+                    flying.Lift = flying.StartLift + (int)Math.Round((aim - flying.StartLift) * Math.Min(1, flying.Traveled / flying.AimDistance));
                 if (CheckHit(flying)) break;
                 if (flying.Traveled / SpriteSizing.BaseUnit >= Math.Max(1, flying.MaxTiles > 0 ? flying.MaxTiles : flying.Def.Projectile.RangeTiles)) { EndFlight(flying, null); break; }
                 if (flying.X < 0 || flying.Y < 0 || flying.X >= _map.Width * _tileWidth || flying.Y >= _map.Height * _tileHeight) { EndFlight(flying, null); break; }

@@ -69,7 +69,7 @@ public partial class GameTestWindow
             double distance = Math.Sqrt((tx - sx) * (tx - sx) + (ty - sy) * (ty - sy));
             int tiles = (int)Math.Ceiling(distance / SpriteSizing.BaseUnit) + 1;
             var aimedAt = cell;
-            LaunchToward(missile, sx, sy, tx - sx, ty - sy, LiftOf(caster) + 2, caster, tiles, null);
+            LaunchToward(missile, sx, sy, tx - sx, ty - sy, LiftOf(caster) + 2, caster, tiles, null, (who is not null ? LiftOf(who) : LiftOf(caster)) + 2, distance);
             _flying[^1].OnArrive = (victim, x, y) =>
             {
                 var landed = CellAtPixel(x, y);

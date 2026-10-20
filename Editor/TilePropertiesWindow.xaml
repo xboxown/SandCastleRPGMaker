@@ -19,7 +19,8 @@
                         <TextBlock Text="Terrain label (for your own reference)" FontWeight="Bold"/>
                         <TextBox x:Name="TerrainLabelBox" Margin="0,2,0,10"/>
 
-                        <CheckBox x:Name="WalkableCheck" Content="Walkable" Margin="0,4,0,10"/>
+                        <CheckBox x:Name="WalkableCheck" Content="Walkable" Margin="0,4,0,4"/>
+                        <CheckBox x:Name="WaterCheck" Content="Water (sea creatures swim here, and only here)" Margin="0,0,0,10"/>
 
                         <TextBlock Text="Required gear to enter this tile at all (equip/carry any one)" FontWeight="Bold" TextWrapping="Wrap"/>
                         <ListBox x:Name="RequiredObjectsListBox" Height="100" Margin="0,4,0,10" SelectionMode="Multiple"

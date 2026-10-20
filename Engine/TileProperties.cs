@@ -54,6 +54,9 @@ public class TileTypeProperties
 
     public bool Walkable { get; set; } = true;
 
+    /// <summary>Water: sea creatures (Character Editor > Moves on: Sea) swim here - and only here. Land walkers go by Walkable (deep water: not walkable).</summary>
+    public bool IsWater { get; set; }
+
     /// <summary>WorldObject ids required (equipped/carried) to enter this tile at all, independent of any damage effects (e.g. "needs a boat" for deep ocean).</summary>
     public List<int> RequiredObjectIds { get; set; } = new();
 
