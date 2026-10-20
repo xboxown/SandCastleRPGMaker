@@ -35,6 +35,7 @@ public partial class GameTestWindow
             if ((_trapRearmMs[key] -= elapsedMs) <= 0) _trapRearmMs.Remove(key);
         foreach (var key in _burnAgainMs.Keys.ToList())
             if ((_burnAgainMs[key] -= elapsedMs) <= 0) _burnAgainMs.Remove(key);
+        UpdateSpellTimers(elapsedMs); // summoned creatures, fields, fear, time stop (GameTestWindow.Spells.cs)
 
         UpdateFloorObjects();
         _floorStayMs += elapsedMs;

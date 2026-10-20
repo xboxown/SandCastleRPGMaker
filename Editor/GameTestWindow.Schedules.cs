@@ -95,6 +95,7 @@ public partial class GameTestWindow
         {
             if (IsShowingMessage) break; // a dialog box just went up: everything stops right here
             if (KeepDormant(mapCharacter)) continue; // far off screen: does nothing (Exult)
+            if (FrozenInTime(mapCharacter)) continue; // Time Stop (GameTestWindow.Spells.cs)
             using (Measure("UpdateNpc")) UpdateNpc(mapCharacter, elapsedMs);
         }
     }

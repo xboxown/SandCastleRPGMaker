@@ -245,7 +245,14 @@ public partial class GameTestWindow
         }
         var dead = _bodies.Keys.FirstOrDefault(c => (whoKey == WhoChoice.Player ? c == _player : c.Id.ToString() == whoKey));
         if (dead is null || dead == _player) return false; // the main character's death ends the game (load a save)
-        var (body, placement) = _bodies[dead];
+        return ResurrectDead(dead);
+    }
+
+    /// <summary>A dead character lives again where its body lies, with what's still in it (Resurrect, the spell or the command).</summary>
+    private bool ResurrectDead(CharacterDefinition dead)
+    {
+        if (!_bodies.TryGetValue(dead, out var lying)) return false;
+        var (body, placement) = lying;
         _bodies.Remove(dead);
         var vitals = VitalsOf(dead);
         vitals.Dead = false;

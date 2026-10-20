@@ -22,12 +22,14 @@ public partial class GameTestWindow
     /// <summary>Game minutes left of a light spell's (or potion's) glow (Exult's special_light).</summary>
     private double _specialLightMinutes;
 
-    private void ApplyEffects(IEnumerable<MagicEffect> effects, CharacterDefinition target, string cause)
+    /// <param name="by">Whoever cast it (a spell): a kill gives them the victim's experience; the spot effects happen where the target is.</param>
+    private void ApplyEffects(IEnumerable<MagicEffect> effects, CharacterDefinition target, string cause, CharacterDefinition? by = null)
     {
         foreach (var effect in effects.ToList())
         {
             if (IsDead(target)) return;
             int amount = RollEffect(effect);
+            if (IsSpotEffect(effect.Kind)) { ApplySpotEffect(effect, by ?? target, CellOf(target), 0, target); continue; } // a potion of teleport, a scroll of summoning (GameTestWindow.Spells.cs)
             switch (effect.Kind)
             {
                 case MagicEffectKind.Heal:
@@ -61,6 +63,10 @@ public partial class GameTestWindow
                     break;
                 case MagicEffectKind.Damage:
                     if (amount > 0) Damage(target, amount, cause);
+                    if (by is not null && by != target && IsDead(target)) AwardKill(by, target); // a spell's kill (GameTestWindow.Levels.cs)
+                    break;
+                case MagicEffectKind.Charm or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.RevealInvisible or MagicEffectKind.Clone:
+                    ApplyCharacterSpell(effect, target, by); // GameTestWindow.Spells.cs
                     break;
                 case MagicEffectKind.Custom:
                     RunCustomEffect(effect.CustomEffectId, target);

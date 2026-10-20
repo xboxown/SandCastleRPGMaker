@@ -35,6 +35,8 @@ public partial class GameTestWindow
         public WeaponShot? Shot;
         /// <summary>How far it flies (tiles of 8px); 0 = its own range.</summary>
         public int MaxTiles;
+        /// <summary>A spell's missile: what happens where it lands (whoever it met, or the spot) - instead of its own damage.</summary>
+        public Action<CharacterDefinition?, double, double>? OnArrive;
     }
 
     private readonly List<Flying> _flying = new();
@@ -241,6 +243,15 @@ public partial class GameTestWindow
     {
         var p = flying.Def.Projectile;
         _flying.Remove(flying);
+        if (flying.OnArrive is { } arrive)
+        {
+            if (p.Explodes) { PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement); PlaySound(p.ExplosionSoundResourceId); }
+            else PlaySound(p.HitSoundResourceId);
+            RemoveMapObject(flying.Instance);
+            arrive(victim, flying.X, flying.Y);
+            RefreshAfterMove();
+            return;
+        }
         if (flying.Shot is { } shot)
         {
             // A weapon's shot: the weapon's hit and damage; a projectile it fires (a fireball) still explodes as it's set to.

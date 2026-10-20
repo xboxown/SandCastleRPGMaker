@@ -313,6 +313,14 @@ public partial class ObjectEditorWindow
                 inner.Children.Add(top);
                 inner.Children.Add(SpritePicker("Icon (on its page)", () => (spell.Icon.SpriteGroup, spell.Icon.SpriteName), (g, n) => { spell.Icon.SpriteGroup = g; spell.Icon.SpriteName = n; }, compact: true));
                 inner.Children.Add(ObjectIdList("Reagents (one of each used up)", spell.ReagentObjectIds, o => o.Type == ObjectType.Reagent));
+                var delivery = new WrapPanel();
+                delivery.Children.Add(ObjectPicker("Missile (flies to the target)", o => o.Type == ObjectType.Projectile, () => spell.MissileObjectId, v => spell.MissileObjectId = v, "(none - straight there)"));
+                delivery.Children.Add(NumberField("Reach (tiles, 0 = the one target)", () => spell.RadiusTiles, v => spell.RadiusTiles = (int)Math.Clamp(v, 0, 64)));
+                var affects = new ComboBox { Width = 130, ItemsSource = new[] { "Everyone", "Foes only", "Friends only" }, SelectedIndex = (int)spell.Affects };
+                affects.SelectionChanged += (_, _) => spell.Affects = (SpellAffects)Math.Max(0, affects.SelectedIndex);
+                delivery.Children.Add(Labeled("In its reach", affects));
+                delivery.Children.Add(SpritePicker("Animation (over each one)", () => (spell.Animation.SpriteGroup, spell.Animation.SpriteName), (g, n) => { spell.Animation.SpriteGroup = g; spell.Animation.SpriteName = n; }, compact: true));
+                inner.Children.Add(delivery);
                 inner.Children.Add(EffectsEditor("Effects", spell.Effects));
                 var bottom = new WrapPanel();
                 bottom.Children.Add(SoundPicker("Cast sound", () => spell.CastSoundResourceId, v => spell.CastSoundResourceId = v));
@@ -886,6 +894,21 @@ public partial class ObjectEditorWindow
                     row.Children.Add(InlineNumber(() => effect.Min, v => effect.Min = v));
                     row.Children.Add(new TextBlock { Text = "to", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0) });
                     row.Children.Add(InlineNumber(() => effect.Max, v => effect.Max = v));
+                }
+                if (MagicEffect.NeedsObject(effect.Kind))
+                    row.Children.Add(ObjectPicker("", o => o.Type != ObjectType.Projectile, () => effect.ThingId, v => effect.ThingId = v, "(choose the object)"));
+                if (MagicEffect.NeedsCharacter(effect.Kind))
+                {
+                    var characters = ProjectSession.CharactersProvider?.Invoke()?.Characters.OrderBy(c => c.Name).ToList() ?? new List<CharacterDefinition>();
+                    var who = new ComboBox { Width = 150, ItemsSource = characters, DisplayMemberPath = "Name", SelectedItem = characters.FirstOrDefault(c => c.Id == effect.ThingId), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Who is summoned" };
+                    who.SelectionChanged += (_, _) => effect.ThingId = (who.SelectedItem as CharacterDefinition)?.Id ?? -1;
+                    row.Children.Add(who);
+                }
+                if (MagicEffect.HasSeconds(effect.Kind))
+                {
+                    row.Children.Add(new TextBlock { Text = "for", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) });
+                    row.Children.Add(InlineNumber(() => (int)effect.Seconds, v => effect.Seconds = Math.Max(1, v)));
+                    row.Children.Add(new TextBlock { Text = "s", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(2, 0, 0, 0) });
                 }
                 if (effect.Kind == MagicEffectKind.Custom && _db.CustomEffects.FirstOrDefault(c => c.Id == effect.CustomEffectId) is { } custom)
                 {

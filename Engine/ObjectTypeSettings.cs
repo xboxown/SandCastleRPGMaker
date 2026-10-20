@@ -34,8 +34,56 @@ public enum MagicEffectKind
     /// <summary>Food: Min..Max nutrition.</summary>
     Nourish,
     /// <summary>A custom effect (Object Editor > Add Custom Stat): its own event commands, run on whoever it's used on.</summary>
-    Custom
+    Custom,
+    // ---- Spells (build 377), after Exult's: appended, so saved projects keep their numbers ----
+    /// <summary>The caster (the party with the main character) is at the spot clicked at once.</summary>
+    Teleport,
+    /// <summary>Remembers where the caster stands, for Recall.</summary>
+    Mark,
+    /// <summary>Back to the caster's Mark.</summary>
+    Recall,
+    /// <summary>Min..Max copies of a character (Thing) appear by the spot, on the caster's side, for Seconds.</summary>
+    Summon,
+    /// <summary>Min..Max of an object (Thing) for the caster - Create Food, Create Gold.</summary>
+    CreateItem,
+    /// <summary>An object (Thing: a fire field, a poison field) on the spot - every cell of the spell's reach - for Seconds.</summary>
+    CreateField,
+    /// <summary>The door or chest clicked is unlocked - magically locked ones too (Unlock Magic).</summary>
+    MagicUnlock,
+    /// <summary>The door or chest clicked is locked.</summary>
+    MagicLock,
+    /// <summary>Lights within reach go out (Great Douse).</summary>
+    DouseLights,
+    /// <summary>Lights within reach are lit (Great Ignite).</summary>
+    IgniteLights,
+    /// <summary>Hidden traps within reach are seen (Detect Trap).</summary>
+    RevealTraps,
+    /// <summary>Traps within reach are gone (Destroy Trap).</summary>
+    DestroyTraps,
+    /// <summary>The thing clicked is used from afar, as a double-click (a lever across a chasm).</summary>
+    Telekinesis,
+    /// <summary>Charmed: fights for the other side a while.</summary>
+    Charm,
+    /// <summary>Runs from the caster for Seconds (Cause Fear).</summary>
+    Fear,
+    /// <summary>Dances for Seconds, whatever it was doing (Dance).</summary>
+    Dance,
+    /// <summary>The dead body clicked (or every body within reach) lives again.</summary>
+    Resurrect,
+    /// <summary>A copy of the one it's cast on appears, on the caster's side, for Seconds (Clone).</summary>
+    Clone,
+    /// <summary>The invisible are seen again (Reveal).</summary>
+    RevealInvisible,
+    /// <summary>Everyone but the party stands frozen for Seconds (Time Stop).</summary>
+    TimeStop,
+    /// <summary>The ground shakes (Tremor) - Min..Max is how hard; add Damage for the hurt.</summary>
+    Tremor,
+    /// <summary>Tells where the caster stands (Locate).</summary>
+    Locate
 }
+
+/// <summary>Who a spell with a reach touches.</summary>
+public enum SpellAffects { Everyone, Foes, Friends }
 
 public class MagicEffect
 {
@@ -44,6 +92,14 @@ public class MagicEffect
     public int Max { get; set; } = 1;
     /// <summary>Kind Custom: which custom effect (ObjectDatabase.CustomEffects).</summary>
     public int CustomEffectId { get; set; } = -1;
+    /// <summary>Summon: the character; Create Item, Create Field: the object.</summary>
+    public int ThingId { get; set; } = -1;
+    /// <summary>How long it lasts (real seconds): summoned creatures, fields, fear, dance, time stop, clones.</summary>
+    public double Seconds { get; set; } = 60;
+
+    public static bool NeedsCharacter(MagicEffectKind kind) => kind == MagicEffectKind.Summon;
+    public static bool NeedsObject(MagicEffectKind kind) => kind is MagicEffectKind.CreateItem or MagicEffectKind.CreateField;
+    public static bool HasSeconds(MagicEffectKind kind) => kind is MagicEffectKind.Summon or MagicEffectKind.CreateField or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.TimeStop or MagicEffectKind.Clone;
 
     /// <summary>A built-in effect's name as the editor lists it ("Restore Mana", "Cure Poison").</summary>
     public static string KindName(MagicEffectKind kind) => kind switch
@@ -52,6 +108,16 @@ public class MagicEffect
         MagicEffectKind.CurePoison => "Cure Poison",
         MagicEffectKind.CureParalysis => "Cure Paralysis",
         MagicEffectKind.RemoveCurse => "Remove Curse",
+        MagicEffectKind.CreateItem => "Create Item",
+        MagicEffectKind.CreateField => "Create Field",
+        MagicEffectKind.MagicUnlock => "Magic Unlock",
+        MagicEffectKind.MagicLock => "Magic Lock",
+        MagicEffectKind.DouseLights => "Douse Lights",
+        MagicEffectKind.IgniteLights => "Ignite Lights",
+        MagicEffectKind.RevealTraps => "Reveal Traps",
+        MagicEffectKind.DestroyTraps => "Destroy Traps",
+        MagicEffectKind.RevealInvisible => "Reveal Invisible",
+        MagicEffectKind.TimeStop => "Time Stop",
         _ => kind.ToString()
     };
 
@@ -73,11 +139,31 @@ public class MagicEffect
         MagicEffectKind.Damage => $"Damage {Range(e)}",
         MagicEffectKind.Nourish => $"Nourish {Range(e)}",
         MagicEffectKind.Custom => "Custom (its own event commands)",
+        MagicEffectKind.Teleport => "To the spot clicked",
+        MagicEffectKind.Mark => "Marks where the caster stands",
+        MagicEffectKind.Recall => "Back to the caster's mark",
+        MagicEffectKind.Summon => $"{Range(e)} appear for {e.Seconds} s",
+        MagicEffectKind.CreateItem => $"{Range(e)} for the caster",
+        MagicEffectKind.CreateField => $"on the spot for {e.Seconds} s",
+        MagicEffectKind.MagicUnlock => "The door or chest clicked",
+        MagicEffectKind.MagicLock => "The door or chest clicked",
+        MagicEffectKind.DouseLights => "Lights in reach go out",
+        MagicEffectKind.IgniteLights => "Lights in reach are lit",
+        MagicEffectKind.Telekinesis => "Uses the thing clicked from afar",
+        MagicEffectKind.Charm => "Charmed (fights for the other side)",
+        MagicEffectKind.Fear => $"Runs away for {e.Seconds} s",
+        MagicEffectKind.Dance => $"Dances for {e.Seconds} s",
+        MagicEffectKind.Resurrect => "The body clicked lives again",
+        MagicEffectKind.Clone => $"A copy fights for the caster {e.Seconds} s",
+        MagicEffectKind.TimeStop => $"Everyone else frozen {e.Seconds} s",
+        MagicEffectKind.Tremor => $"The ground shakes ({Range(e)})",
+        MagicEffectKind.Locate => "Where the caster stands",
         _ => KindName(e.Kind)
     };
 
     /// <summary>Whether the amount (Min..Max) means anything for this effect.</summary>
-    public static bool HasAmount(MagicEffectKind kind) => kind is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Light or MagicEffectKind.Damage or MagicEffectKind.Nourish;
+    public static bool HasAmount(MagicEffectKind kind) => kind is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Light or MagicEffectKind.Damage or MagicEffectKind.Nourish
+        or MagicEffectKind.Summon or MagicEffectKind.CreateItem or MagicEffectKind.Tremor;
 
     private static string Range(MagicEffect e) => e.Min == e.Max ? e.Min.ToString() : $"{e.Min}-{e.Max}";
 }
@@ -230,6 +316,14 @@ public class SpellDefinition
     public int CastSoundResourceId { get; set; } = -1;
     /// <summary>Its picture on the page of the book (Exult's spell icons).</summary>
     public SpriteLink Icon { get; set; } = new();
+    /// <summary>A missile (a Projectile object) flies from the caster to the target, and the spell works where it lands (Fire Blast, Lightning, Death Bolt). -1 = straight there.</summary>
+    public int MissileObjectId { get; set; } = -1;
+    /// <summary>Everyone within this many tiles of the target (or of the caster, cast on no one) - Mass Cure, Explosion. 0 = the one target.</summary>
+    public int RadiusTiles { get; set; }
+    /// <summary>With a reach: everyone, foes only, or friends only.</summary>
+    public SpellAffects Affects { get; set; } = SpellAffects.Everyone;
+    /// <summary>Played over each one it touches (or on the spot).</summary>
+    public SpriteLink Animation { get; set; } = new();
 
     public int EffectiveManaCost => ManaCost >= 0 ? ManaCost : Math.Max(0, Circle);
 }

@@ -227,31 +227,17 @@ public partial class GameTestWindow
         if (spell.Words.Trim().Length > 0) ShowFloatingText(caster, spell.Words.Trim(), 2500); // begin_casting: the words of power
         PlaySound(spell.CastSoundResourceId);
         ShowClock();
-        if (castOn is not null && spell.NeedsTarget)
-        {
-            ApplyEffects(spell.Effects, castOn, spell.Name);
-            if (castOn != caster && !IsPartyOrPlayer(castOn) && spell.Effects.Any(e => e.Kind is MagicEffectKind.Damage or MagicEffectKind.Poison or MagicEffectKind.Sleep or MagicEffectKind.Paralyze or MagicEffectKind.Curse))
-                FightBack(castOn, caster);
-            StatusText.Text = $"{spell.Name} on {castOn.Name}.";
-            return;
-        }
-        if (!spell.NeedsTarget)
-        {
-            ApplyEffects(spell.Effects, caster, spell.Name);
-            StatusText.Text = $"{(caster == _player ? "You cast" : $"{caster.Name} casts")} {spell.Name}.";
-            return;
-        }
+        StatusText.Text = "";
+        if (castOn is not null && spell.NeedsTarget) { DeliverSpell(caster, spell, castOn, null, CellOf(castOn)); return; } // GameTestWindow.Spells.cs
+        if (!spell.NeedsTarget) { DeliverSpell(caster, spell, caster, null, CellOf(caster)); return; }
+        if (caster != _player && !IsPartyOrPlayer(caster)) { DeliverSpell(caster, spell, caster, null, CellOf(caster)); return; } // nobody to click for it
         BeginChoosingTarget($"Cast {spell.Name} on whom?", target =>
         {
-            if (CharacterTargeted(target) is { } who)
-            {
-                ApplyEffects(spell.Effects, who, spell.Name);
-                if (who != caster && !IsPartyOrPlayer(who) && spell.Effects.Any(e => e.Kind is MagicEffectKind.Damage or MagicEffectKind.Poison or MagicEffectKind.Sleep or MagicEffectKind.Paralyze or MagicEffectKind.Curse))
-                    FightBack(who, caster); // a harmful spell is an attack
-                StatusText.Text = $"{spell.Name} on {who.Name}.";
-            }
-            else if (ObjectTargeted(target) is { } hit) ApplyEffectsToObject(spell.Effects, hit.Instance, hit.Obj);
-            else StatusText.Text = $"{spell.Name} fizzles - nothing there.";
+            // Someone, something (a door, a chest, a body), or a spot on the ground.
+            var who = CharacterTargeted(target);
+            object? thing = target is MapEntityTarget { Entity: ObjectInstance or PlacedItemInstance } entity ? entity.Entity : null;
+            var cell = who is not null ? CellOf(who) : thing switch { ObjectInstance o => (o.X, o.Y), PlacedItemInstance i => (i.X, i.Y), _ => LastTargetCell() };
+            DeliverSpell(caster, spell, who, thing, cell);
         });
     }
 
