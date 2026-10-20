@@ -29,6 +29,8 @@ public partial class GameTestWindow
         if (IsShippedGame) GameStatusBar.Visibility = Visibility.Collapsed; // a built game: no testing bar
         if (!StartAtTitle || _objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.Title.DollDesignId) is not { } design) return;
         ViewportBorder.Opacity = 0; // the world isn't seen behind the title
+        // Nor heard: the map's ambient may have started in the first moments of play - the title (and its intro video) pause the game, so it would never be stopped by the frame update.
+        SilenceAmbient();
         int video = _systemSettings.Title.IntroVideoId;
         if (video >= 0 && ProjectSession.Videos.Videos.Any(v => v.Id == video))
             PlayVideoCommand(new EventCommand { Parameters = { ["VideoId"] = video.ToString(), ["Skippable"] = "True" } }, _ => OpenTitle(design));
@@ -37,6 +39,7 @@ public partial class GameTestWindow
 
     private void OpenTitle(DollDesign design)
     {
+        SilenceAmbient(); // Return To Title from play: the map's ambient stops too
         if (_systemSettings.Title.MusicId >= 0) SoundPlayback.TryPlayFor(TitleMusicOwner, _resources, _systemSettings.Title.MusicId, _systemSettings.Title.MusicLoops, null);
         // A title, not a window: no paperdoll-open sound (it has its music) and it can't be dragged off the view.
         if (OpenForm(design, modal: true, answered: null, fresh: true, title: true) is not { } gump) { ViewportBorder.Opacity = 1; return; }
