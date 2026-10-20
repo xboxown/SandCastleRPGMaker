@@ -209,10 +209,13 @@ public partial class GameTestWindow
             .Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o) is { Type: ObjectType.CraftingStation } && InWorkArea(mapCharacter, o.X, o.Y, o.Z)
                         && MineOrNobodys(OwnerOf(o), me) && !StationBusy(o, me))
             .OrderBy(o => OwnerOf(o) == me.Id ? 0 : 1).ThenBy(o => Distance(mapCharacter, o.X, o.Y)).ToList();
-        foreach (var station in stations)
+        // Later steps first: a recipe that uses something made in this workshop (thread at the loom) before one that starts from raw stuff (cotton at the wheel).
+        var madeHere = stations.SelectMany(s => DefinitionOf(s)!.Crafting.Recipes).Select(r => r.OutputObjectId).Where(id => id >= 0).ToHashSet();
+        var candidates = stations.SelectMany((s, order) => DefinitionOf(s)!.Crafting.Recipes.Where(r => r.OutputObjectId >= 0).Select(r => (Station: s, Recipe: r, Order: order)))
+            .OrderBy(c => c.Recipe.Inputs.Any(i => madeHere.Contains(i.ObjectId)) ? 0 : 1).ThenBy(c => c.Order).ToList();
+        foreach (var (station, recipe, _) in candidates)
         {
             var obj = DefinitionOf(station)!;
-            foreach (var recipe in obj.Crafting.Recipes.Where(r => r.OutputObjectId >= 0))
             {
                 if (recipe.Inputs.Any(i => i.ObjectId >= 0 && AvailableFor(mapCharacter, i.ObjectId, chests) < Math.Max(1, i.Quantity))) continue;
                 if (!ToolAvailable(mapCharacter, recipe.ToolKind, chests)) continue;
@@ -467,9 +470,16 @@ public partial class GameTestWindow
         var me = mapCharacter.Character;
         var made = product();
         if (made is null || !_map.Objects.Contains(made) || OutputPlace(mapCharacter) is null) return _ => true;
+        if (NeededInWorkshop(mapCharacter, made.ObjectId)) return _ => true; // thread for the loom: it stays on the station for the next step
+
         int id = made.ObjectId;
         return Chain(GoTo(me, made), PoseOnce(me, "Picking"), Do(() => PickUp(me, made)), DeliverCarried(mapCharacter, new[] { id }));
     };
+
+    /// <summary>Something another recipe in its area uses (the spinner's thread, the loom's): a step on the way, not finished work.</summary>
+    private bool NeededInWorkshop(MapCharacter mapCharacter, int objectId) =>
+        _map.Objects.Any(o => o.ContainerInstanceId < 0 && DefinitionOf(o) is { Type: ObjectType.CraftingStation } d && InWorkArea(mapCharacter, o.X, o.Y, o.Z)
+                              && MineOrNobodys(OwnerOf(o), mapCharacter.Character) && d.Crafting.Recipes.Any(r => r.Inputs.Any(i => i.ObjectId == objectId)));
 
     /// <summary>Everything it carries of these kinds, into the output chest or onto the output spot.</summary>
     private Func<Func<double, bool?>?> DeliverCarried(MapCharacter mapCharacter, IReadOnlyCollection<int> objectIds) => () =>
