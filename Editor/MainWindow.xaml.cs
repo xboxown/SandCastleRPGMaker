@@ -94,6 +94,7 @@ public partial class MainWindow : Window
     public MainWindow()
     {
         InitializeComponent();
+        BuildToolIcons(); // the editors as icons after Zoom (MainWindow.Toolbar.cs)
         Title += $" [{BuildInfo.CurrentBuild}]";
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         InitZoom();
