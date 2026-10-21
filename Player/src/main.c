@@ -10,7 +10,20 @@
 #include <stdio.h>
 #include <string.h>
 
+double sc_strtod(const char *text, char **end);
+
 static uint32_t pixels[SCREEN_W * SCREEN_H];
+
+/* Game.log beside the game: each step of starting, so a game that stops can say where. */
+static void note(const char *step)
+{
+    static int fresh = 1;
+    FILE *f = fopen("Game.log", fresh ? "w" : "a");
+    fresh = 0;
+    if (!f) return;
+    fprintf(f, "%s\n", step);
+    fclose(f);
+}
 
 #ifdef __amigaos__
 /* libnix: the stack the game runs with, whatever the icon or shell gives it. */
@@ -53,11 +66,14 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--say") == 0 && i + 1 < argc) say = argv[++i]; /* testing: words drawn in the game's fonts */
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
+    note("Started.");
     if (!platform_can_run())
     {
+        note(platform_error());
         platform_message("This Amiga can't run the game", platform_error());
         return 20;
     }
+    note("The machine can run it.");
 #ifdef __amigaos__
     /* An Amiga needs the game's memory free before it starts (128 MB at least; the user's rule: say so, don't crash). */
     long freeMb = platform_free_memory_mb();
@@ -65,26 +81,37 @@ int main(int argc, char **argv)
     {
         char text[256];
         snprintf(text, sizeof text, "This game needs %d MB of free memory;\nonly %ld MB is free.\n\nClose other programs, or add memory.", GAME_MIN_RAM_MB, freeMb);
+        note(text);
         platform_message("Not enough memory", text);
         return 20;
     }
+    {
+        char text[64];
+        snprintf(text, sizeof text, "Memory: %ld MB free in one piece.", freeMb);
+        note(text);
+    }
 #endif
+    note("Loading the game...");
     if (!world_load(folder))
     {
         char text[700];
         snprintf(text, sizeof text, "The game couldn't start:\n%s", world_error());
         fprintf(stderr, "%s\n", text);
+        note(text);
         platform_message("Game", text);
         return 1;
     }
+    note("Loaded. Opening the window...");
     if (!platform_open(world_title()[0] ? world_title() : "Game", 0))
     {
         char text[400];
         snprintf(text, sizeof text, "The game couldn't open its window:\n%s", platform_error());
         fprintf(stderr, "%s\n", text);
+        note(text);
         platform_message("Game", text);
         return 1;
     }
+    note("Window open. Running.");
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last;
@@ -126,7 +153,7 @@ int main(int argc, char **argv)
             while (*k && t >= 0)
             {
                 char c = *k; double secs = 0;
-                sscanf(k + 2, "%lf", &secs);
+                secs = sc_strtod(k + 2, NULL);
                 if (t < at + secs) { dx = c == 'L' ? -1 : c == 'R' ? 1 : 0; dy = c == 'U' ? -1 : c == 'D' ? 1 : 0; done = 0; break; }
                 at += secs;
                 k = strchr(k, ',');
@@ -158,5 +185,6 @@ int main(int argc, char **argv)
         platform_present(pixels);
     }
     platform_close();
+    note("Closed normally.");
     return 0;
 }
