@@ -139,6 +139,7 @@ public partial class GameTestWindow
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             if (HangsOnWall(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
             if (IsWallSetPiece(body.Entity)) { settled.Add(body); continue; } // a wall set's piece: at its designed height (the window on its half wall), and it holds up what's on it
+            if (body.Entity is ObjectInstance { VehicleStateId: > 0 }) { settled.Add(body); continue; } // a vehicle's piece: held in its place by the vehicle (flying, too), and it holds up what's on it
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
             int floorBase = HomeFloorBase(body);
             var supports = settled.Where(b => BelowCeilingOf(b, body.Z) && !LiesUnder(b.Entity) && !HangsOnWall(b.Entity) // never held up by the floor above (its slab is the ceiling), nor by something put underneath or hung on the wall

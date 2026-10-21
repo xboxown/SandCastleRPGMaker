@@ -44,7 +44,9 @@ public enum ScriptFieldKind
     /// <summary>Words as typed (no quotes needed) - or, switched to Formula, a formula. Its mode is kept as key + "Mode" ("Words" / "Formula"; none = Formula, as commands made before it).</summary>
     Words,
     /// <summary>A world (Maps tab) - keys World (its id; -1 = the one the party is in), WorldName.</summary>
-    World
+    World,
+    /// <summary>A vehicle (Map Editor > Vehicles tab) - keys Vehicle (its id), VehicleName; in play the copy of it nearest the player.</summary>
+    Vehicle
 }
 
 public sealed record ScriptField(string Key, string Label, ScriptFieldKind Kind, string Default = "", string[]? Options = null, string Help = "");
@@ -309,6 +311,13 @@ public static class ScriptCommands
             new[] { Who(), F("Value", "Spell name (formula)", def: "\"\"") }, "{Who}: {Value}"),
         new(EventCommandType.CastSpell, "Cast Spell", Game, "The Game", "A character casts a spell from its spellbook (reagents and mana as the book says) - at a target if the spell needs one.",
             new[] { Who("Caster"), F("Value", "Spell name (formula)", def: "\"\""), new("Other", "At (target, optional)", ScriptFieldKind.Who) }, "{Who}: {Value}"),
+
+        // ---- Vehicles (Map Editor > Vehicles tab) ----
+        new(EventCommandType.DriveVehicle, "Drive Vehicle", World, "Vehicles", "Puts the main player at the controls of a vehicle (the copy of it nearest them): the direction keys drive it, as if they had taken the controls themselves - no deed asked. A flying one takes off.",
+            new[] { new ScriptField("Vehicle", "Vehicle", ScriptFieldKind.Vehicle) }, "{VehicleName}"),
+        new(EventCommandType.StopDriving, "Stop Driving", World, "Vehicles", "Takes the controls from the player. A flying vehicle comes down - if the ground under it is clear and level; otherwise it stays up.", Array.Empty<ScriptField>(), "", HasWindow: false),
+        new(EventCommandType.TravelVehicle, "Travel Vehicle", World, "Vehicles", "The vehicle goes to a spot by itself (Final Fantasy's airship): everyone aboard can walk about it, talk and open things on the way. A flying one takes off, flies over everything and lands there if it can. Blocked on the way, it stops.",
+            new[] { new ScriptField("Vehicle", "Vehicle", ScriptFieldKind.Vehicle), new("X", "To (its middle there)", ScriptFieldKind.Spot), Check("Wait", "The event waits till it gets there", true) }, "{VehicleName} to ({X}, {Y})"),
 
         // ---- 12. Testing helpers ----
         new(EventCommandType.DebugLog, "Debug Log", Loops, "Testing", "Writes a line into the Game Test log (F9 shows it) - with values: \"i = \" + i. A built game ignores it.",

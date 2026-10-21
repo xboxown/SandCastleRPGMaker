@@ -191,6 +191,24 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 });
                 break;
             }
+            case ScriptFieldKind.Vehicle:
+            {
+                AddLabel(field.Label);
+                var choices = ProjectSession.Houses.Where(h => h.Vehicle is not null).Select(h => new KeyValuePair<int, string>(h.Id, h.Name)).ToList();
+                var combo = new ComboBox { ItemsSource = choices, DisplayMemberPath = "Value" };
+                combo.SelectedItem = choices.FirstOrDefault(v => v.Key.ToString() == Existing("Vehicle", ""));
+                if (combo.SelectedItem is null && choices.Count > 0) combo.SelectedIndex = 0;
+                Rows.Children.Add(combo);
+                if (choices.Count == 0) Rows.Children.Add(new TextBlock { Text = "No vehicles yet - make one in the Map Editor's Vehicles tab.", Opacity = 0.7, FontSize = 11, TextWrapping = TextWrapping.Wrap });
+                _savers.Add(c =>
+                {
+                    if (combo.SelectedItem is not KeyValuePair<int, string> picked) { MessageBox.Show(this, "Pick a vehicle.", Title); return false; }
+                    c.Parameters["Vehicle"] = picked.Key.ToString();
+                    c.Parameters["VehicleName"] = picked.Value;
+                    return true;
+                });
+                break;
+            }
             case ScriptFieldKind.Paperdoll:
             {
                 AddLabel(field.Label);
@@ -410,6 +428,7 @@ public class ScriptCommandWindow : FactionCommandWindowBase
     private static string Show(ScriptField field, EventCommand command) => field.Kind switch
     {
         ScriptFieldKind.Who => WhoChoice.Describe(command.Get(field.Key)),
+        ScriptFieldKind.Vehicle => command.Get("VehicleName"),
         ScriptFieldKind.Item => command.Get("ItemId") is "" or "-1" ? "(none)" : CommandFields.ItemName(command),
         ScriptFieldKind.Thing => command.Get("ThingName") is { Length: > 0 } name ? $"{name} at ({command.Get("X")}, {command.Get("Y")})" : "?",
         ScriptFieldKind.Spot => SpotText(command, field.Key.EndsWith("X") ? field.Key[..^1] : field.Key),

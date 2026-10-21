@@ -117,7 +117,8 @@ public enum EventCommandType
     StopMusic, FadeMusicIn, SetVolume, ResumeMapMusic,
     SaveGame, LoadGame, OpenSaveLoadScreen, AllowSaving, AllowControls, GameOver, ReturnToTitle, QuitGame, LearnSpell, CastSpell,
     DebugLog, PauseHere,
-    ShowError
+    ShowError,
+    DriveVehicle, StopDriving, TravelVehicle
 }
 
 /// <summary>

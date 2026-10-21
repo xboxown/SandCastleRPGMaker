@@ -43,6 +43,7 @@ public partial class GameTestWindow
         a[EventCommandType.FadeScreen] = FadeScreenCommand;
         h[EventCommandType.FlashScreen] = FlashScreenCommand;
         a[EventCommandType.MoveCamera] = MoveCameraCommand;
+        InitializeVehicleCommands(); // Drive Vehicle, Stop Driving, Travel Vehicle (GameTestWindow.VehicleTravel.cs)
         h[EventCommandType.CameraFollow] = c =>
         {
             _cameraFollow = CharacterDefinitionFor(c.Get("Who"));

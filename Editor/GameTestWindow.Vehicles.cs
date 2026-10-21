@@ -79,6 +79,7 @@ public partial class GameTestWindow
         _drivingFrom = from;
         _driveUnits = 0;
         PlaySound(SettingsOf(vehicle).StartSoundResourceId);
+        TakeOff(vehicle); // a flying one goes up to floor 11 (GameTestWindow.VehicleTravel.cs)
         StatusText.Text = $"You have the controls of the {TemplateOf(vehicle)?.Name ?? "vehicle"}: the direction keys drive it. {(DefinitionOf(from)?.VehicleRole == VehiclePartRole.DriverSeat ? "Get up" : "Double-click the controls again")} to stop.";
     }
 
@@ -89,6 +90,7 @@ public partial class GameTestWindow
         _driving = null;
         _drivingFrom = null;
         StatusText.Text = "You let go of the controls.";
+        if (SettingsOf(vehicle).Movement == MovementKind.Air && vehicle.Lift > 0 && !OnAutopilot(vehicle)) Land(vehicle); // comes down if it can (else it says why and stays up)
     }
 
     /// <summary>Each frame: a seat taken to drive from starts the driving; getting up from it (or the vehicle gone) stops it.</summary>
@@ -110,6 +112,7 @@ public partial class GameTestWindow
         UpdateVehicles();
         if (_driving is not { } vehicle) return false;
         if (!_map.VehicleStates.Contains(vehicle)) { _driving = null; return false; }
+        if (OnAutopilot(vehicle)) return false; // it's going somewhere by itself: the keys walk about it
         if (!TryGetActiveHeldDirection(out int dx, out int dy)) { SetRolling(vehicle, false); _driveUnits = 0; return true; }
         var want = (dx, dy) switch { (0, -1) => SpriteDirection.North, (1, 0) => SpriteDirection.East, (-1, 0) => SpriteDirection.West, _ => SpriteDirection.South };
         if (want != vehicle.Direction)

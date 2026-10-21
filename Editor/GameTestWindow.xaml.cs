@@ -1697,7 +1697,9 @@ public partial class GameTestWindow : Window
     {
         using var measured = Measure("UpdateCamera");
         // Real, continuous position, per Exult's own confirmed mechanics - the camera tracks the avatar's actual pixel position directly, not a coarse tile-center, so it naturally follows every small step of real movement rather than only jumping when the logical tile changes.
-        var (followX, followY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } followedOnMap ? (followedOnMap.PixelX, followedOnMap.PixelY) : (_playerPixelX, _playerPixelY);
+        var (followX, followY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } followedOnMap
+            ? (followedOnMap.PixelX - followedOnMap.Lift * LiftPixelShift, followedOnMap.PixelY - followedOnMap.Lift * LiftPixelShift)
+            : (_playerPixelX - _playerVisualLiftZ * LiftPixelShift, _playerPixelY - _playerVisualLiftZ * LiftPixelShift); // where they're drawn: up and to the left by their lift (high up on floor 11 in a flying vehicle, too)
         double playerCenterX = followX;
         double playerCenterY = followY;
 
@@ -1775,6 +1777,7 @@ public partial class GameTestWindow : Window
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
 
         using (Measure("UpdateClockAndCharacters")) UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
+        UpdateVehicleTravel(deltaSeconds); // vehicles on autopilot, flying ones climbing or landing (GameTestWindow.VehicleTravel.cs)
 
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);
