@@ -58,6 +58,7 @@ int platform_audio_open(int rate, AudioFill fill);   /* the rate it plays at (0:
 void platform_audio_close(void);
 void platform_audio_lock(void);
 void platform_audio_unlock(void);
+const char *platform_audio_name(void);  /* what it plays through ("AHI", "Paula", "SDL", "none") */
 
 /* A message box (the Amiga's requester): why a game can't start, started from an icon with no console to print to. */
 void platform_message(const char *heading, const char *text);

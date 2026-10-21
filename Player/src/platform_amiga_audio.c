@@ -24,6 +24,8 @@
 static AudioFill audioFill;
 static struct SignalSemaphore lock;
 static volatile int running, quit, started;
+static const char *device = "none";
+const char *platform_audio_name(void) { return device; }
 static struct Task *mainTask;
 static int16_t mixed[FRAMES * 2];
 /* The sound task's stack: the MP3 decoder takes some 17 KB a frame and the mixer 8 KB more - 16 KB overflowed it and froze the Amiga (nothing guards a stack there). */
@@ -51,6 +53,7 @@ static int run_ahi(void)
     if (!req[1]) { CloseDevice((struct IORequest *)req[0]); DeleteIORequest((struct IORequest *)req[0]); DeleteMsgPort(port); return 0; }
     CopyMem(req[0], req[1], sizeof(struct AHIRequest));
     int16_t *buffer[2] = { (int16_t *)AllocVec(FRAMES * 4, MEMF_PUBLIC), (int16_t *)AllocVec(FRAMES * 4, MEMF_PUBLIC) };
+    device = "AHI";
     started = 1;
     Signal(mainTask, SIGBREAKF_CTRL_F);
     struct AHIRequest *link = NULL;
@@ -110,6 +113,7 @@ static int run_paula(void)
             io[c][b] = (struct IOAudio *)AllocVec(sizeof(struct IOAudio), MEMF_PUBLIC);
             if (io[c][b]) CopyMem(alloc, io[c][b], sizeof(struct IOAudio));
         }
+    device = "Paula";
     started = 1;
     Signal(mainTask, SIGBREAKF_CTRL_F);
     int sent[2] = { 0, 0 }, cur = 0;

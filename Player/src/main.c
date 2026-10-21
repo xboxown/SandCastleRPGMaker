@@ -109,6 +109,7 @@ int main(int argc, char **argv)
 {
     char folder[1024] = "Game_Data";
     const char *shot = NULL, *keys = NULL, *say = NULL, *presses = NULL;
+    int noSound = 0;
     double shotAt = -1, pressedTill = -1;
     for (int i = 1; i < argc; i++)
     {
@@ -117,6 +118,7 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--say") == 0 && i + 1 < argc) say = argv[++i]; /* testing: words drawn in the game's fonts */
         else if (strcmp(argv[i], "--press") == 0 && i + 1 < argc) presses = argv[++i];
         else if (strcmp(argv[i], "--shot-at") == 0 && i + 1 < argc) shotAt = sc_strtod(argv[++i], NULL);
+        else if (!strcmp(argv[i], "nosound") || !strcmp(argv[i], "NOSOUND") || !strcmp(argv[i], "--nosound")) noSound = 1;
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
     note("Started.");
@@ -164,15 +166,21 @@ int main(int argc, char **argv)
         platform_message("Game", text);
         return 1;
     }
-    note("Window open. Running.");
-    sound_load(folder);
+    note("Window open. Starting.");
+    { FILE *quiet = fopen("nosound", "rb"); if (quiet) { fclose(quiet); noSound = 1; } } /* a file called nosound beside the game: no sound */
+    note(noSound ? "Sound off (nosound)." : "Starting the sound...");
+    sound_load(folder, !noSound);
+    note(sound_status());
     events_load();
+    note("Events ready.");
     vitals_load();
     combat_load();
     schedules_load();
     schedules_start();
+    note("Characters ready.");
     weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
+    note("Running.");
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;

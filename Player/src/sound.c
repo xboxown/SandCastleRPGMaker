@@ -179,7 +179,10 @@ static void fill(int16_t *out, int frames)
 
 /* ---------------- Starting and stopping ---------------- */
 
-void sound_load(const char *gameFolder)
+static char status[120] = "Sound: not started.";
+const char *sound_status(void) { return status; }
+
+void sound_load(const char *gameFolder, int enabled)
 {
     snprintf(folder, sizeof folder, "%s", gameFolder);
     char path[1100];
@@ -197,7 +200,10 @@ void sound_load(const char *gameFolder)
         snprintf(f->file, sizeof f->file, "%s", cJSON_GetStringValue(cJSON_GetObjectItem(s, "File")));
     }
     if (getenv("SANDCASTLE_AUDIO_DUMP")) dump = fopen(getenv("SANDCASTLE_AUDIO_DUMP"), "wb");
+    if (!soundArchive) { snprintf(status, sizeof status, "Sound: sounds.sdbx couldn't be read - no sound."); return; }
+    if (!enabled) { snprintf(status, sizeof status, "Sound: off."); return; }
     audioOn = platform_audio_open(44100, fill);
+    snprintf(status, sizeof status, "Sound: %d files, %s at %d Hz.", fileCount, platform_audio_name(), audioOn);
     if (audioOn > 1) outRate = audioOn; /* the rate the machine plays at */
 }
 

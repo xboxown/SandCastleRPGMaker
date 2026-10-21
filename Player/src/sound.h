@@ -5,7 +5,8 @@
 /* Who a sound belongs to (stopped and faded together). */
 enum { OWNER_NONE = 0, OWNER_MUSIC = 1, OWNER_AMBIENT = 2 };
 
-void sound_load(const char *gameFolder);
+void sound_load(const char *gameFolder, int enabled); /* enabled 0: "nosound" */
+const char *sound_status(void);                       /* for Game.log */
 /* A sound by its resource id (-1 = none), at its own volume, once. */
 void sound_play(int resourceId);
 /* volume -1 = its own; startFade 0 = silent (for a fade in) .. 1 */
