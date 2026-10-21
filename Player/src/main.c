@@ -17,6 +17,7 @@
 #include "screen.h"
 #include "vitals.h"
 #include "combat.h"
+#include "gumps.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -55,6 +56,13 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
+        else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
+        {
+            const char *semi = strchr(what, ';');
+            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') gumps_mouse_down(x, y); else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
+        }
+        else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else
@@ -165,7 +173,6 @@ int main(int argc, char **argv)
     schedules_start();
     weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
-    uint32_t lastClick = 0; int clickX = -100, clickY = -100;
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;
@@ -175,19 +182,13 @@ int main(int argc, char **argv)
         while (platform_poll(&e))
         {
             if (e.type == EV_QUIT) running = 0;
-            else if (e.type == EV_MOUSE_MOVE) dialog_mouse_move(e.mouseX, e.mouseY);
+            else if (e.type == EV_MOUSE_MOVE) { dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
-                uint32_t t = platform_ticks();
-                int twice = t - lastClick < 500 && abs(e.mouseX - clickX) < 4 && abs(e.mouseY - clickY) < 4;
-                lastClick = twice ? 0 : t; clickX = e.mouseX; clickY = e.mouseY;
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
-                else if (twice && !events_cinema())
-                {
-                    /* Double-click: talk to the character, use the thing under the pointer. */
-                    use_at(e.mouseX, e.mouseY);
-                }
+                else if (!vitals_game_over()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction) */
             }
+            else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
             {
                 int down = e.type == EV_KEY_DOWN;
@@ -202,7 +203,8 @@ int main(int argc, char **argv)
                     case KEY_RIGHT: held[1] = down ? ++order : 0; break;
                     case KEY_UP: held[2] = down ? ++order : 0; break;
                     case KEY_DOWN: held[3] = down ? ++order : 0; break;
-                    case KEY_ESCAPE: if (down) running = 0; break;
+                    case KEY_ESCAPE: if (down && !gumps_close_top()) running = 0; break; /* Escape closes the top window first */
+                    case KEY_I: if (down && !events_cinema() && !events_keys_forbidden()) gumps_open_paperdoll(world_actor_character(0)); break; /* Exult: I for the inventory */
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
                     case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
                     default: break;
@@ -226,6 +228,7 @@ int main(int argc, char **argv)
             weather_draw(pixels);
             world_draw_barks(pixels);
             combat_draw(pixels, worldMs);
+            gumps_draw(pixels, worldMs);
             screen_draw(pixels, now);
             dialog_draw(pixels, now);
             save_bmp(shot);
@@ -281,6 +284,7 @@ int main(int argc, char **argv)
             weather_update(seconds * 1000);
             vitals_update(seconds * 1000);
             combat_update(seconds * 1000);
+            gumps_update(seconds * 1000);
             events_player_moved();
         }
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
@@ -290,6 +294,7 @@ int main(int argc, char **argv)
         weather_draw(pixels);
         world_draw_barks(pixels);
         combat_draw(pixels, worldMs);
+        gumps_draw(pixels, worldMs);
         screen_draw(pixels, now);
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);

@@ -10,6 +10,8 @@
 #include "use.h"
 #include "events.h"
 #include "combat.h"
+#include "gumps.h"
+#include "items.h"
 #include "world.h"
 #include "sound.h"
 #include "../third_party/cJSON.h"
@@ -76,13 +78,27 @@ void use_at(int sx, int sy)
 {
     int actor, uid;
     world_hit(sx, sy, &actor, &uid);
-    if (actor > 0) { if (combat_mode()) combat_player_target(actor); else events_talk(actor); return; }
-    if (!uid) return;
+    if (actor > 0) { use_actor(actor); return; }
+    if (uid) use_thing(uid);
+}
+
+/* Exult: in combat mode, double-clicking someone attacks them (never a party member); otherwise it talks to them. */
+void use_actor(int actor)
+{
+    if (combat_mode() && !items_in_party(world_actor_character(actor))) combat_player_target(actor);
+    else events_talk(actor);
+}
+
+void use_thing(int uid)
+{
     if (combat_player_thing(uid)) return; /* combat mode: attacked (bodies and unlocked containers open as normal) */
     int objectId = world_thing_object_id(uid);
     if (objectId < 0)
     {
-        events_log_once(310, "Opening containers and reading books on the map aren't in the player yet.");
+        int category, itemId, quantity, x, y, instance;
+        world_thing_info(uid, &category, &itemId, &quantity, &x, &y, &instance);
+        if (category == 5) { gumps_open_map_container(uid); return; } /* its window */
+        if (!events_fire_item(category, itemId, TR_USE)) events_log_once(311, "Reading books isn't in the player yet.");
         return;
     }
     cJSON *def = objectDef(objectId);

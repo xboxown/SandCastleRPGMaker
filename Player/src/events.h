@@ -32,7 +32,7 @@ void events_set_variable(const char *name, double value);
 /* Things that happened: to a character (By Equip...), to everyone's belongings (By Having / Not Having An Item: every map event), to an item (By Pickup / Drop Item: its own pages). */
 void events_fire_character(int characterId, int trigger);
 void events_fire_map(int trigger);
-void events_fire_item(int category, int itemId, int trigger);
+int events_fire_item(int category, int itemId, int trigger); /* 1 when a page ran */
 
 /* Schedules: whether an event is using a character now (busy: carrying out a command; held: its event isn't over). */
 int events_actor_busy(int actor);

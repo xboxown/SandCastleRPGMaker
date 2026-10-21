@@ -79,6 +79,36 @@ cJSON *items_use_ammo(int characterId, const char *family);
 int items_use_charge(int characterId, Item *weapon, int charges, int goneWhenEmpty);
 void items_use_one(int characterId, Item *it);
 void items_spill(Item *box, int x, int y, int onFloor);
+
+/* ---- The inventory windows (gumps.c) ---- */
+Item *items_in_slot(int characterId, int slotKey);           /* built-in 0..14, custom 100 + its id */
+int items_slot_shown(int characterId, int slotKey);
+int items_loose(int characterId, Item **out, int max);       /* the backpack list */
+int items_contents(Item *container, Item ***list);
+void items_spot(const Item *it, double *x, double *y);
+void items_set_spot(Item *it, double x, double y, int autoPlaced);
+int items_unplaced(const Item *it);
+int items_auto_placed(const Item *it);
+int items_is_locked(const Item *it);
+void items_light(const Item *it, int *lit, int *spent);
+int items_stack_at_top(Item *container, Item *it);
+/* Where it is: 1 on a character (holder NULL: in a slot or loose), 2 lying on the map, 3 in a container on the map, 0 nowhere. */
+int items_where(const Item *it, int *characterId, Item **holder, int *slotKey);
+int items_carrier_of(const Item *it);
+typedef struct ItemPlace { int characterId, slotKey, index; Item *holder; } ItemPlace;
+int items_detach(Item *it, ItemPlace *from);
+void items_restore(const ItemPlace *from, Item *it);
+void items_detach_done(const ItemPlace *from, Item *it);
+int items_check_weight(int characterId, const Item *it);
+int items_fits_slot(int characterId, const Item *it, int slotKey);
+int items_slot_free(int characterId, int slotKey);
+int items_equip_at(int characterId, Item *it, int slotKey);
+int items_put_into(Item *bag, Item *it, int atSpot, double x, double y);
+Item *items_parked(int uid, int category, int itemId, int quantity);
+int items_alive(const Item *it);
+int items_use_light(Item *it);
+void items_weights(int characterId, double *carried, double *max);
+int items_stackable(int category, int itemId);
 int items_locked(const Item *it, int byDefault);
 int items_carries_key(int characterId, int keyId);
 int items_lockpick(int characterId);

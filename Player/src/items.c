@@ -9,6 +9,7 @@
 #include <string.h>
 #include <ctype.h>
 
+#define UNPLACED -100000.0
 #define MAX_QUANTITY 100 /* ObjectTypes.MaxQuantity: a stack holds up to 100 */
 
 /* EquipmentSlot, in the editor's order. */
@@ -27,6 +28,8 @@ struct Item
     int lit, spent; double burnLeft; /* a light: lit, burnt out, game minutes left (-1: not started) */
     int keys[32], keyCount;          /* a keyring: the keys on it */
     int charges;                     /* a weapon with charges: how many left (-1: not used yet) */
+    double cx, cy;                   /* its spot in a container's window (-100000: none yet) */
+    int autoPlaced;                  /* laid out in the row by the engine, not dropped at a spot */
     Item **contents; int count, cap;
 };
 
@@ -89,7 +92,7 @@ static void remove_from(Item **list, int *count, const Item *item)
 static Item *new_item(int category, int itemId, int quantity)
 {
     Item *it = (Item *)calloc(1, sizeof(Item));
-    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1;
+    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1; it->cx = it->cy = UNPLACED;
     return it;
 }
 
@@ -106,6 +109,7 @@ static Item *read_item(cJSON *j)
 {
     Item *it = new_item(num(j, "Category", CAT_OBJECT), num(j, "ItemId", -1), num(j, "Quantity", 1));
     it->instanceId = num(j, "InstanceId", 0);
+    if (cJSON_IsNumber(get(j, "ContainerX")) && cJSON_IsNumber(get(j, "ContainerY"))) { it->cx = get(j, "ContainerX")->valuedouble; it->cy = get(j, "ContainerY")->valuedouble; }
     cJSON *locked = get(j, "IsLockedRuntime"), *c;
     if (cJSON_IsBool(locked)) it->locked = cJSON_IsTrue(locked);
     it->lit = cJSON_IsTrue(get(j, "IsLitRuntime")); it->spent = cJSON_IsTrue(get(j, "IsSpentRuntime"));
@@ -908,3 +912,243 @@ void items_spill(Item *box, int x, int y, int onFloor)
     box->count = 0;
     items_free(box);
 }
+
+/* ---------------- The inventory windows (gumps.c) ---------------- */
+
+Item *items_in_slot(int characterId, int slotKey) { Carrier *k = carrier_of(characterId); return k ? in_slot(k, slotKey) : NULL; }
+
+/* A slot is there on their paperdoll (a built-in one not turned off; a custom one they have). */
+int items_slot_shown(int characterId, int slotKey)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) return 0;
+    if (slotKey < SLOT_COUNT) return slotKey >= 0 && !k->disabled[slotKey];
+    for (int i = 0; i < k->customCount; i++) if (100 + k->customIds[i] == slotKey) return 1;
+    return 0;
+}
+
+/* What they carry outside every slot (the backpack list). */
+int items_loose(int characterId, Item **out, int max)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    for (int i = 0; k && i < k->count && n < max; i++) if (!is_worn(k, k->items[i])) out[n++] = k->items[i];
+    return n;
+}
+
+int items_contents(Item *container, Item ***list) { *list = container->contents; return container->count; }
+void items_spot(const Item *it, double *x, double *y) { *x = it->cx; *y = it->cy; }
+void items_set_spot(Item *it, double x, double y, int autoPlaced) { it->cx = x; it->cy = y; it->autoPlaced = autoPlaced; }
+int items_unplaced(const Item *it) { return it->cx <= UNPLACED || it->cy <= UNPLACED; }
+int items_auto_placed(const Item *it) { return it->autoPlaced; }
+int items_is_locked(const Item *it) { return it->category == CAT_CONTAINER && items_locked(it, flag(def_of(CAT_CONTAINER, it->itemId), "IsLocked")); }
+void items_light(const Item *it, int *lit, int *spent) { *lit = it->lit; *spent = it->spent; }
+int items_stack_at_top(Item *container, Item *it)
+{
+    for (int i = 0; i < container->count; i++)
+        if (container->contents[i] == it) { memmove(&container->contents[i], &container->contents[i + 1], sizeof(Item *) * (size_t)(container->count - i - 1)); container->contents[container->count - 1] = it; return 1; }
+    return 0;
+}
+
+/* Where something is: in a slot / loose on a character (holder NULL), or inside a container. */
+static int find_in(Item **list, int count, const Item *it, Item *parent, Item **holder)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (list[i] == it) { *holder = parent; return 1; }
+        if (find_in(list[i]->contents, list[i]->count, it, list[i], holder)) return 1;
+    }
+    return 0;
+}
+
+int items_where(const Item *it, int *characterId, Item **holder, int *slotKey)
+{
+    *characterId = -1; *holder = NULL; *slotKey = -1;
+    for (int c = 0; c < carrierCount; c++)
+    {
+        Carrier *k = &carriers[c];
+        Item *h = NULL;
+        if (!find_in(k->items, k->count, it, NULL, &h)) continue;
+        *characterId = k->characterId; *holder = h;
+        if (!h) *slotKey = slot_of_item(k, it);
+        return 1;
+    }
+    for (int p = 0; p < parkedCount; p++)
+    {
+        Item *h = NULL;
+        if (parked[p].item == it) return 2; /* lying on the map */
+        if (find_in(parked[p].item->contents, parked[p].item->count, it, parked[p].item, &h)) { *holder = h; return 3; } /* in a container on the map */
+    }
+    return 0;
+}
+
+/* The character carrying it, at any depth (-1: nobody). */
+int items_carrier_of(const Item *it) { int id, slot; Item *h; return items_where(it, &id, &h, &slot) == 1 ? id : -1; }
+
+/* Taken out of wherever it is, quietly (no events yet): what's needed to put it back. */
+int items_detach(Item *it, ItemPlace *from)
+{
+    memset(from, 0, sizeof *from);
+    from->slotKey = -1;
+    int where = items_where(it, &from->characterId, &from->holder, &from->slotKey);
+    if (!where || where == 2) return 0;
+    if (from->holder)
+    {
+        for (int i = 0; i < from->holder->count; i++) if (from->holder->contents[i] == it) from->index = i;
+        remove_from(from->holder->contents, &from->holder->count, it);
+        return 1;
+    }
+    Carrier *k = carrier_of(from->characterId);
+    for (int i = 0; i < k->count; i++) if (k->items[i] == it) from->index = i;
+    remove_from(k->items, &k->count, it);
+    for (int i = 0; i < k->slotCount; i++) if (k->slots[i].instanceId == it->instanceId) { k->slots[i] = k->slots[--k->slotCount]; i--; }
+    return 1;
+}
+
+/* Put back exactly where it was (the drop was refused). */
+void items_restore(const ItemPlace *from, Item *it)
+{
+    if (from->holder)
+    {
+        Item *h = from->holder;
+        add_to(&h->contents, &h->count, &h->cap, it);
+        memmove(&h->contents[from->index + 1], &h->contents[from->index], sizeof(Item *) * (size_t)(h->count - 1 - from->index));
+        h->contents[from->index] = it;
+        return;
+    }
+    Carrier *k = carrier_of(from->characterId);
+    if (!k) return;
+    add_to(&k->items, &k->count, &k->cap, it);
+    if (from->slotKey >= 0 && k->slotCount < 64) k->slots[k->slotCount++] = (Slot){ from->slotKey, it->instanceId };
+}
+
+/* The move went through: what leaving its place means (RemoveFromCharacter: By UnEquip; no longer having it). */
+void items_detach_done(const ItemPlace *from, Item *it)
+{
+    if (from->holder || from->characterId < 0) return;
+    if (from->slotKey >= 0) { conditions_record_person_item("unequip", from->characterId, it->category, it->itemId); events_fire_character(from->characterId, TR_UNEQUIP); }
+    events_fire_map(TR_NOT_HAVING);
+}
+
+/* drag.cc Check_weight: the party can carry 2 x Strength (what's being moved is already off them). */
+int items_check_weight(int characterId, const Item *it)
+{
+    Carrier *k = carrier_of(characterId);
+    refusal[0] = 0;
+    if (!k || !(k->isPlayer || k->inParty)) return 1;
+    double carried = carried_weight(k), adding = weight_of(it), max = 2.0 * k->strength;
+    if (carried + adding <= max) return 1;
+    snprintf(refusal, sizeof refusal, "Too heavy: \"%s\" weighs %.2f, and they already carry %.2f of the %.2f they can.", items_name(it->category, it->itemId), adding, carried, max);
+    return 0;
+}
+
+/* The slot its own kind names (a weapon's or armor's EquipSlot, a container's Location, ammo's slot); -1 none. */
+static int own_slot(const Carrier *k, const Item *it)
+{
+    cJSON *d = def_of(it->category, it->itemId), *pref = NULL;
+    const char *custom = "";
+    if (it->category == CAT_CONTAINER) { pref = get(d, "PreferredEquipSlot"); custom = str(d, "PreferredCustomSlotName"); }
+    else if (it->category == CAT_OBJECT)
+    {
+        int type = num(d, "Type", 0);
+        cJSON *settings = type == OT_WEAPON ? get(d, "Weapon") : type == OT_ARMOR ? get(d, "Armor") : type == OT_AMMO ? get(d, "Ammo") : NULL;
+        if (!settings) return -1;
+        pref = get(settings, type == OT_AMMO ? "PreferredEquipSlot" : "EquipSlot");
+        custom = str(settings, type == OT_AMMO ? "PreferredCustomSlotName" : "CustomSlotName");
+    }
+    if (cJSON_IsNumber(pref)) return pref->valueint;
+    return custom[0] ? custom_slot(k, custom) : -1;
+}
+
+/* Actor::fits_in_spot: a hand holds anything; any other slot only what belongs there. */
+int items_fits_slot(int characterId, const Item *it, int slotKey)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) return 0;
+    if (slotKey == S_RIGHT || slotKey == S_LEFT) return 1;
+    return own_slot(k, it) == slotKey;
+}
+
+int items_slot_free(int characterId, int slotKey)
+{
+    Carrier *k = carrier_of(characterId);
+    return k && items_slot_shown(characterId, slotKey) && slot_free(k, slotKey);
+}
+
+/* TryEquipInSlot: into that very slot, by the hand rules - the left hand is unavailable while the right holds a two-handed thing. */
+int items_equip_at(int characterId, Item *it, int slotKey)
+{
+    Carrier *k = carrier_of(characterId);
+    refusal[0] = 0;
+    if (!k) return 0;
+    if (!items_check_weight(characterId, it)) return 0;
+    if (!items_fits_slot(characterId, it, slotKey)) { snprintf(refusal, sizeof refusal, "\"%s\" doesn't go there - only in a hand, or its own slot.", items_name(it->category, it->itemId)); return 0; }
+    int two = is_two_handed(it);
+    if (slotKey == S_LEFT && left_hand_locked(k)) { snprintf(refusal, sizeof refusal, "Left hand is unavailable - the right hand is holding a two-handed weapon."); return 0; }
+    if (slotKey == S_LEFT && two) { snprintf(refusal, sizeof refusal, "This needs both hands - put it in the right hand."); return 0; }
+    if (slotKey == S_RIGHT && two && !slot_free(k, S_LEFT)) { snprintf(refusal, sizeof refusal, "This needs both hands - unequip the left hand first."); return 0; }
+    if (!items_slot_free(characterId, slotKey)) return 0;
+    equip(k, it, slotKey);
+    return 1;
+}
+
+/* Into a container (TryPutIntoContainer): not a body, not locked, not into itself, room for it; a stack of the same joins; at a spot or none yet. 1 = it's in (or joined a stack: freed). */
+int items_put_into(Item *bag, Item *it, int atSpot, double x, double y)
+{
+    cJSON *d = def_of(CAT_CONTAINER, bag->itemId);
+    refusal[0] = 0;
+    const char *name = items_name(it->category, it->itemId);
+    if (!d) return 0;
+    if (flag(d, "IsBodyContainer")) { snprintf(refusal, sizeof refusal, "You can't put things into \"%s\" - it's a body, not a real container.", str(d, "Name")); return 0; }
+    if (items_is_locked(bag)) { snprintf(refusal, sizeof refusal, "\"%s\" is locked.", str(d, "Name")); return 0; }
+    if (bag == it || holds(it->contents, it->count, bag)) { snprintf(refusal, sizeof refusal, "\"%s\" can't go inside itself.", name); return 0; }
+    double used = 0;
+    for (int i = 0; i < bag->count; i++) used += volume_of(bag->contents[i]);
+    if (used + volume_of(it) > dbl(d, "MaxVolume"))
+    {
+        snprintf(refusal, sizeof refusal, "\"%s\" won't fit in \"%s\" - %.2f + %.2f would exceed the max volume of %.2f.", name, str(d, "Name"), used, volume_of(it), dbl(d, "MaxVolume"));
+        return 0;
+    }
+    int carrier = items_carrier_of(bag);
+    if (carrier >= 0 && !items_check_weight(carrier, it)) return 0;
+    if (combine_into(bag->contents, bag->count, it)) { items_free(it); return 1; }
+    if (it->lit && it->category == CAT_OBJECT) it->lit = 0; /* a torch put away goes out */
+    if (atSpot) { it->cx = x; it->cy = y; it->autoPlaced = 0; } else { it->cx = it->cy = UNPLACED; it->autoPlaced = 0; }
+    add_to(&bag->contents, &bag->count, &bag->cap, it);
+    return 1;
+}
+
+/* The thing parked under a map uid, left where it is (a container open on the map); made the first time. */
+Item *items_parked(int uid, int category, int itemId, int quantity)
+{
+    for (int i = 0; i < parkedCount; i++) if (parked[i].uid == uid) return parked[i].item;
+    Item *it = items_unpark(uid, category, itemId, quantity);
+    items_park(uid, it);
+    return it;
+}
+
+/* Still somewhere in the game (carried, or on the map). */
+int items_alive(const Item *it) { int id, slot; Item *h; return items_where(it, &id, &h, &slot) != 0; }
+
+/* A carried object used (double-clicked in a window): a light lit or put out. 1 = something happened. */
+int items_use_light(Item *it)
+{
+    cJSON *d = it->category == CAT_OBJECT ? def_of(CAT_OBJECT, it->itemId) : NULL;
+    if (!d || num(d, "Type", 0) != 4 || it->spent) return 0;
+    it->lit = !it->lit;
+    cJSON *light = get(d, "Light");
+    if (it->lit && it->burnLeft < 0 && num(light, "BurnMinutes", 0) > 0) it->burnLeft = num(light, "BurnMinutes", 0);
+    sound_play(num(light, it->lit ? "LitSoundResourceId" : "OffSoundResourceId", -1));
+    return 1;
+}
+
+/* The carry weight and the most they can (2 x Strength). */
+void items_weights(int characterId, double *carried, double *max)
+{
+    Carrier *k = carrier_of(characterId);
+    *carried = k ? carried_weight(k) : 0;
+    *max = k ? 2.0 * k->strength : 0;
+}
+
+/* CanCombine, for a stack on the map. */
+int items_stackable(int category, int itemId) { return can_combine(category, itemId); }

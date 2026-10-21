@@ -2379,3 +2379,91 @@ int world_get_tile(int x, int y, int onFloor)
     if (x < 0 || y < 0 || x >= mapW || y >= mapH || onFloor < 1 || onFloor > MAX_FLOORS || !floors[onFloor]) return -1;
     return floors[onFloor][y * mapW + x];
 }
+
+/* ---------------- For the inventory windows (gumps.c) ---------------- */
+
+/* A sprite scaled into a box on the screen (kept in proportion, centred). */
+void world_blit(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h)
+{
+    screen = pixels;
+    blit_box(picture, x, y, w, h);
+}
+
+/* How a carried thing looks: an object's own picture (lit, spent), a book's or container's (a locked container: its Locked picture). */
+const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked)
+{
+    if (category == 4)
+    {
+        const ObjectDef *d = def_of(itemId);
+        if (!d) return NULL;
+        if (d->type == T_LIGHT) return lit && d->lit ? d->lit : spent && d->spent ? d->spent : d->own;
+        return d->own;
+    }
+    cJSON *list = category == 5 ? get(get(get(gameJson, "Project"), "Containers"), "Containers") : get(get(gameJson, "Books"), "Books"), *o;
+    cJSON_ArrayForEach(o, list)
+        if (num(o, "Id", -2) == itemId)
+        {
+            const Sprite *lockedLook = locked && category == 5 ? sprite_find(str(o, "LockedSpriteGroup"), str(o, "LockedSpriteName")) : NULL;
+            return lockedLook ? lockedLook : sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName"));
+        }
+    return NULL;
+}
+
+/* A thing on the map as it looks now. */
+const Sprite *world_thing_sprite(int uid) { Thing *t = thing_by_uid(uid); return t ? look_of(t) : NULL; }
+
+/* The map cell under a point on the screen, on the player's floor. */
+void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor)
+{
+    *x = (int)floor((sx + cameraX) / tileW); *y = (int)floor((sy + cameraY) / tileH); *onFloor = floor_of(player.lift);
+}
+
+/* Whether the player can reach a cell from where they stand (Exult is_grabable, roughly: within 1 tile, or a short walk and a clear line). */
+int world_reachable(int x, int y, int z)
+{
+    double tx = x * tileW + tileW / 2.0, ty = y * tileH + tileH / 2.0;
+    double tiles = fmax(fabs(tx - player.px), fabs(ty - player.py)) / UNIT;
+    int px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
+    if (abs(px - x) <= 1 && abs(py - y) <= 1 && abs(z - player.lift) <= 5) return 1;
+    if (tiles > 5 * 2 + (tileW > tileH ? tileW : tileH) / UNIT || abs(z - player.lift) > 5 + LIFTS_PER_FLOOR) return 0;
+    int wx[MAX_PATH], wy[MAX_PATH];
+    int n = find_path(&player, x, y, floor_of(z), 0, 1, wx, wy, MAX_PATH - 1);
+    return n >= 0 && n <= (int)(2 * tiles + 8);
+}
+
+/* A stack on the map grows (a stackable thing dropped on it). */
+void world_thing_add_quantity(int uid, int n) { Thing *t = thing_by_uid(uid); if (t) t->quantity += n; }
+int world_thing_quantity(int uid) { Thing *t = thing_by_uid(uid); return t ? t->quantity : 0; }
+
+/* The thing of that kind on exactly that cell (not gone), or 0. */
+int world_thing_at_cell(int category, int itemId, int x, int y, int except)
+{
+    for (int i = thingCount - 1; i >= 0; i--)
+    {
+        const Thing *t = &things[i];
+        if (!t->gone && t->uid != except && t->category == category && (itemId < 0 || t->itemId == itemId) && t->x == x && t->y == y) return t->uid;
+    }
+    return 0;
+}
+
+/* Let go of by hand (drag.cc drop_on_map): its picture's top-left on the screen - the cell under its middle, and the 8-pixel offset that keeps it exactly where it was shown. */
+void world_thing_drop_at(int uid, int sx, int sy, int onFloor)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    const Picture *p = sprite_picture_at(look_of(t), 0);
+    int qw = p ? (p->width + UNIT - 1) / UNIT * UNIT : tileW, qh = p ? (p->height + UNIT - 1) / UNIT * UNIT : tileH;
+    double left = sx + cameraX, top = sy + cameraY;
+    int cx = (int)floor((left + qw / 2.0) / tileW), cy = (int)floor((top + qh / 2.0) / tileH);
+    cx = cx < 0 ? 0 : cx >= mapW ? mapW - 1 : cx; cy = cy < 0 ? 0 : cy >= mapH ? mapH - 1 : cy;
+    double defaultLeft = cx * tileW + (tileW - qw) / 2.0, defaultTop = (cy + 1) * tileH - qh;
+    world_thing_move(uid, cx, cy, onFloor);
+    t = thing_by_uid(uid);
+    t->offX = (int)floor((left - defaultLeft) / UNIT + 0.5); t->offY = (int)floor((top - defaultTop) / UNIT + 0.5);
+    Body b;
+    thing_box(t, &b);
+    if (t->body >= 0) bodies[t->body].z = -100000;
+    t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
+    if (t->body >= 0) { if (bodies[t->body].width || t->solid) thing_box(t, &bodies[t->body]); }
+    settle_all();
+}

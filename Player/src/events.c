@@ -2823,10 +2823,11 @@ void events_fire_map(int trigger)
 }
 
 /* FireDragTrigger: a container's or book's own pages (By Pickup / Drop Item). */
-void events_fire_item(int category, int itemId, int trigger)
+int events_fire_item(int category, int itemId, int trigger)
 {
     for (int i = 0; i < ownerCount; i++)
-        if (owners[i].itemCategory == category && owners[i].itemId == itemId) { fire_pages(&owners[i], trigger, -1, 0); return; }
+        if (owners[i].itemCategory == category && owners[i].itemId == itemId) return fire_pages(&owners[i], trigger, -1, 0);
+    return 0;
 }
 
 void events_log_once(int key, const char *text) { log_once(key, text); }
