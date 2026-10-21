@@ -26,6 +26,7 @@ static struct SignalSemaphore lock;
 static volatile int running, quit, started;
 static struct Task *mainTask;
 static int16_t mixed[FRAMES * 2];
+/* The sound task's stack: the MP3 decoder takes some 17 KB a frame and the mixer 8 KB more - 16 KB overflowed it and froze the Amiga (nothing guards a stack there). */
 
 void platform_audio_lock(void) { if (running) ObtainSemaphore(&lock); }
 void platform_audio_unlock(void) { if (running) ReleaseSemaphore(&lock); }
@@ -163,7 +164,7 @@ int platform_audio_open(int rate, AudioFill fill)
     mainTask = FindTask(NULL);
     SetSignal(0, SIGBREAKF_CTRL_F);
     running = 1; quit = 0; started = 0;
-    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 0, NP_StackSize, 16384, TAG_DONE);
+    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 0, NP_StackSize, 131072, TAG_DONE);
     if (!p) { running = 0; return 0; }
     while (!started) Wait(SIGBREAKF_CTRL_F);
     if (started < 0) { while (running) Wait(SIGBREAKF_CTRL_F); return 0; }

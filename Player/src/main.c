@@ -77,7 +77,7 @@ static void scripted_presses(const char *presses, double t, double *done)
 
 #ifdef __amigaos__
 /* libnix: the stack the game runs with, whatever the icon or shell gives it. */
-unsigned long __stack = 65536;
+unsigned long __stack = 262144; /* 256 KB: the MP3 decoder alone needs some 17 KB when music starts */
 #endif
 
 /* The least free memory an Amiga needs to start the game (megabytes). */
@@ -299,6 +299,7 @@ int main(int argc, char **argv)
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);
         platform_present(pixels);
+        { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); } /* how far it got, if it ever stops */
     }
     platform_audio_close();
     platform_close();
