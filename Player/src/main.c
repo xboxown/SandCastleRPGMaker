@@ -12,6 +12,11 @@
 
 static uint32_t pixels[SCREEN_W * SCREEN_H];
 
+#ifdef __amigaos__
+/* libnix: the stack the game runs with, whatever the icon or shell gives it. */
+unsigned long __stack = 65536;
+#endif
+
 /* The least free memory an Amiga needs to start the game (megabytes). */
 #ifndef GAME_MIN_RAM_MB
 #define GAME_MIN_RAM_MB 128
