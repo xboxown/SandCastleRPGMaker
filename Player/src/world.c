@@ -1954,3 +1954,27 @@ static void settle_all(void)
     int below = floor_below(here, hn, player.lift);
     if (below < player.lift) player.lift = below;
 }
+
+/* Any placed lever (of that object, -1: any) on - or off. */
+int world_lever_on(int objectId, int on)
+{
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->def || t->def->type != 22 || (objectId >= 0 && t->itemId != objectId)) continue;
+        if ((t->open != 0) == (on != 0)) return 1;
+    }
+    return 0;
+}
+
+/* Any door (of that object, -1: any) open - or closed. */
+int world_door_open_any(int objectId, int open)
+{
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->def || t->def->type != T_DOOR || (objectId >= 0 && t->itemId != objectId)) continue;
+        if ((t->open != 0) == (open != 0)) return 1;
+    }
+    return 0;
+}

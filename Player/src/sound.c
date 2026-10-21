@@ -9,6 +9,7 @@
  */
 #include "sound.h"
 #include "platform.h"
+#include "conditions.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -106,8 +107,11 @@ static int decode(Voice *v)
     return 1;
 }
 
+static volatile int stoppedIds[64]; static volatile int stoppedCount; /* sounds that ended (on the audio thread), recorded on the game's */
+
 static void close_voice(Voice *v)
 {
+    if (v->used && stoppedCount < 64) stoppedIds[stoppedCount++] = v->soundId;
     if (v->kind == DEC_WAV) drwav_uninit(&v->wav);
     else if (v->kind == DEC_MP3) drmp3_uninit(&v->mp3);
     v->used = 0; v->kind = DEC_NONE;
@@ -201,6 +205,7 @@ static Voice *start(int id, double volume, int loop, int owner, double startFade
     if (decode(v)) { v->lastL = v->buffer[0]; v->lastR = v->buffer[1]; v->used = 1; }
     else close_voice(v);
     platform_audio_unlock();
+    if (v->used) { char key[32]; snprintf(key, sizeof key, "sound:%d", id); conditions_record(key); } /* Sound played */
     return v->used ? v : NULL;
 }
 
@@ -255,10 +260,12 @@ void sound_set_volumes(double music, double sounds)
     soundVolume = sounds < 0 ? 0 : sounds > 1 ? 1 : sounds;
 }
 
-/* Each frame: fades move on. */
+/* Each frame: fades move on; sounds that ended are recorded (Sound stopped). */
 void sound_update(double ms)
 {
     platform_audio_lock();
+    for (int i = 0; i < stoppedCount; i++) { char key[32]; snprintf(key, sizeof key, "soundstop:%d", stoppedIds[i]); conditions_record(key); }
+    stoppedCount = 0;
     for (int i = 0; i < MAX_VOICES; i++)
     {
         Voice *v = &voices[i];

@@ -8,6 +8,7 @@
 #include "schedules.h"
 #include "sound.h"
 #include "weather.h"
+#include "conditions.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -328,6 +329,8 @@ static int one_stat(cJSON *entry)
 }
 
 static int warned[256];
+static const char *evaluatingName = ""; /* whose event's conditions are being looked at ("this event's page N") */
+static int lastResult = 1;             /* whether the last command that can fail worked */
 
 static void log_once(int key, const char *text)
 {
@@ -350,7 +353,7 @@ static int sub_condition(cJSON *sub, int just)
         case 5: raw = 1; break;                    /* the distance the engine assumes: 0 <= 32 */
         case 6: raw = 1; break;                    /* Always */
         case 8: raw = just == 2; break;            /* By Use Item */
-        case 15: log_once(200, "A Complex Condition uses a Game Condition - not in the player yet (taken as false)."); raw = 0; break;
+        case 15: raw = conditions_test(get(sub, "Game"), evaluatingName); break;
         default: raw = 0; break;                   /* the other item triggers: they don't happen in the player yet */
     }
     return flag(sub, "Invert") ? !raw : raw;
@@ -395,8 +398,8 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
     {
         case 0: result &= timesSoFar == 0; break;
         case 1: result &= timesSoFar < num(c, "CycleSpecificTimes", 0); break;
-        case 2:
-            if (cJSON_GetArraySize(get(c, "UntilConditions")) > 0) log_once(201, "A page cycles Until Condition Met - its game conditions aren't in the player yet (it keeps going).");
+        case 2: /* Until Condition Met: it keeps going while its Until conditions aren't all met yet */
+            if (cJSON_GetArraySize(get(c, "UntilConditions")) > 0) result &= !conditions_all(get(c, "UntilConditions"), evaluatingName);
             break;
         default: break;
     }
@@ -534,7 +537,13 @@ static int branch_true(const Cmd *c)
         parse_bool(param(c, "Value"), &expected);
         return (get_var(param(c, "SwitchName")) != 0) == expected;
     }
-    if (c->type == C_AdvancedIf) { log_once(202, "Advance IF isn't in the player yet (taken as false)."); return 0; }
+    if (c->type == C_AdvancedIf)
+    {
+        cJSON *condition = cJSON_Parse(param(c, "Condition"));
+        int result = conditions_test(condition, evaluatingName);
+        cJSON_Delete(condition);
+        return result;
+    }
     double actual = get_var(param(c, "VariableName")), target = 0;
     parse_number(param(c, "Value"), &target);
     const char *op = param(c, "Comparison");
@@ -812,11 +821,12 @@ static void give_item(Run *r, const Cmd *c)
     int n = 0;
     if (strcmp(param(c, "MustHave"), "True") == 0)
     {
-        if (!items_take(world_actor_character(giver), category, itemId, quantity, gifts, 100, &n)) { say_line(r, c, "NotHaveText", giver); return; }
+        if (!items_take(world_actor_character(giver), category, itemId, quantity, gifts, 100, &n)) { lastResult = 0; say_line(r, c, "NotHaveText", giver); return; }
     }
     else n = items_make_gifts(category, itemId, quantity, gifts, 100);
     int receiverId = world_actor_character(receiver);
     int partyHelps = items_in_party(receiverId);
+    lastResult = 1;
     int saidCant = 0, saidNobody = 0, spoken[64], spokenCount = 0;
     for (int g = 0; g < n; g++)
     {
@@ -1749,8 +1759,19 @@ static int *count_for(int uid, int page)
 
 static int fireCopy; /* the placed copy an object's pages fire for (0: not an object's) */
 
+static int fire_pages_core(Owner *o, int just, int activator, int byStepping);
+
 /* TryFireEventPages: the first page whose conditions are met runs. */
 static int fire_pages(Owner *o, int just, int activator, int byStepping)
+{
+    const char *previousName = evaluatingName;
+    evaluatingName = o->name;
+    int ran = fire_pages_core(o, just, activator, byStepping);
+    evaluatingName = previousName;
+    return ran;
+}
+
+static int fire_pages_core(Owner *o, int just, int activator, int byStepping)
 {
     for (int i = 0; i < o->pageCount; i++)
     {
@@ -1768,6 +1789,9 @@ static int fire_pages(Owner *o, int just, int activator, int byStepping)
         (*fired)++;
         if (p->list.count > 0)
         {
+            char record[160];
+            snprintf(record, sizeof record, "event:%s", o->name); conditions_record(record);              /* Event executed */
+            snprintf(record, sizeof record, "eventpage:%s:%d", o->name, i + 1); conditions_record(record); /* and its page number */
             char key[48];
             if (o->isMapEvent) snprintf(key, sizeof key, "event:%d", o->eventId);
             else if (fireCopy) snprintf(key, sizeof key, "obj:%d", world_thing_instance(fireCopy));
@@ -1843,6 +1867,7 @@ void events_update(double ms, int paused)
         int ok;
         if (r->used && r->waiting == W_ACTION && !action_tick(r, ms, &ok))
         {
+            lastResult = ok;
             hold(r, r->walker);
             r->waiting = W_NONE;
             r->act = 0;
@@ -1850,6 +1875,7 @@ void events_update(double ms, int paused)
         }
         if (r->used && r->waiting == W_WALK && !walk_tick(r, ms, &ok))
         {
+            lastResult = ok;
             hold(r, r->walker);
             if (!ok) { char t[128]; snprintf(t, sizeof t, "Someone can't find a way to (%d, %d).", r->goalX, r->goalY); game_log(t); }
             r->waiting = W_NONE;
@@ -1871,10 +1897,15 @@ void events_update(double ms, int paused)
                 Page *p = &o->pages[k];
                 if (num(p->cond, "TriggerConditionBased", 0) != T_ALWAYS || p->list.count == 0) continue;
                 if (dialog_showing()) return; /* a box went up: the rest wait for the next check */
+                evaluatingName = o->name;
                 int met = conditions_met(p->cond, T_ALWAYS, p->fired, -1), was = p->met;
+                evaluatingName = "";
                 p->met = met;
                 if (!met || was) continue;
                 p->fired++;
+                char record[160];
+                snprintf(record, sizeof record, "event:%s", o->name); conditions_record(record);
+                snprintf(record, sizeof record, "eventpage:%s:%d", o->name, k + 1); conditions_record(record);
                 char key[48];
                 snprintf(key, sizeof key, "char:%d", o->characterId);
                 start_run_as(&p->list, actor, 0, key);
@@ -1947,6 +1978,15 @@ void events_run_commands(cJSON *commands, int actor)
 int events_object_event(int uid, int trigger, int activator)
 {
     int objectId = world_thing_object_id(uid);
+    /* RecordObjectHappening: destroyed, used; a light lit, put out, burnt out */
+    if (trigger == 4) conditions_record_item("destroyed", 4, objectId);
+    if (trigger == 2) conditions_record_item("used", 4, objectId);
+    if (world_thing_type(uid) == 4)
+    {
+        if (trigger == 5) conditions_record_item("lit", 4, objectId);
+        if (trigger == 9) conditions_record_item("putout", 4, objectId);
+        if (trigger == 10) conditions_record_item("burnedout", 4, objectId);
+    }
     for (int i = 0; i < ownerCount; i++)
     {
         Owner *o = &owners[i];
@@ -1965,3 +2005,8 @@ int events_object_event(int uid, int trigger, int activator)
 }
 
 void world_furniture_event(int uid, int trigger, int actor) { events_object_event(uid, trigger, actor); }
+
+long events_total_minutes(void) { return total_minutes(); }
+int events_day(void) { return clockDay; }
+double events_variable(const char *name) { return get_var(name); }
+int events_last_result(void) { return lastResult; }

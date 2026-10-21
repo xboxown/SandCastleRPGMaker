@@ -46,6 +46,11 @@ int events_object_event(int uid, int trigger, int activator);
 int events_hour(void);
 int events_minute(void);
 
+long events_total_minutes(void);
+int events_day(void);
+double events_variable(const char *name);
+int events_last_result(void);
+
 /* Game.log (main.c). */
 void game_log(const char *line);
 

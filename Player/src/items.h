@@ -61,6 +61,12 @@ void items_set_light_state(Item *it, int lit, int spent, double burnLeft);
 int items_hand_lights(int characterId, int *brightness, int *gives);
 void items_burn_lights(double minutes);
 
+/* Game conditions: equipped, carried but not worn, how many (category -1: anything). */
+int items_equipped(int characterId, int category, int itemId);
+int items_carried_not_worn(int characterId, int category, int itemId);
+int items_count_any(int characterId, int category, int itemId);
+int items_party_count_any(int category, int itemId);
+
 /* Its name, for the log. */
 const char *items_name(int category, int itemId);
 

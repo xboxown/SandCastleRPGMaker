@@ -2,6 +2,7 @@
 #include "events.h"
 #include "world.h"
 #include "sound.h"
+#include "conditions.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -236,6 +237,7 @@ static void equip(Carrier *k, Item *it, int key)
     it->instanceId = k->nextInstanceId++;
     add_to(&k->items, &k->count, &k->cap, it);
     if (k->slotCount < 64) k->slots[k->slotCount++] = (Slot){ key, it->instanceId };
+    conditions_record_person_item("equip", k->characterId, it->category, it->itemId);
     events_fire_character(k->characterId, TR_EQUIP);
     events_fire_map(TR_HAVING);
 }
@@ -249,7 +251,7 @@ static void remove_from_character(Carrier *k, Item *it)
     int was = 0;
     for (int i = 0; i < k->slotCount; i++)
         if (k->slots[i].instanceId == it->instanceId) { k->slots[i] = k->slots[--k->slotCount]; i--; was = 1; }
-    if (was) events_fire_character(k->characterId, TR_UNEQUIP);
+    if (was) { conditions_record_person_item("unequip", k->characterId, it->category, it->itemId); events_fire_character(k->characterId, TR_UNEQUIP); }
 }
 
 static double carried_weight(const Carrier *k)
@@ -544,4 +546,58 @@ void items_burn_lights(double minutes)
 {
     if (minutes <= 0) return;
     for (int i = 0; i < carrierCount; i++) burn_in(carriers[i].items, carriers[i].count, minutes);
+}
+
+static int is_item(const Item *it, int category, int itemId) { return category < 0 || (it->category == category && it->itemId == itemId); }
+
+static int is_worn(const Carrier *k, const Item *it)
+{
+    for (int i = 0; i < k->slotCount; i++) if (k->slots[i].instanceId == it->instanceId) return 1;
+    return 0;
+}
+
+/* Equipped: in one of their slots (category -1: anything). */
+int items_equipped(int characterId, int category, int itemId)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) return 0;
+    for (int i = 0; i < k->count; i++) if (is_worn(k, k->items[i]) && is_item(k->items[i], category, itemId)) return 1;
+    return 0;
+}
+
+static int carried_in(Item **list, int count, int category, int itemId, const Carrier *k, int top)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (!(top && is_worn(k, list[i])) && is_item(list[i], category, itemId)) return 1;
+        if (carried_in(list[i]->contents, list[i]->count, category, itemId, k, 0)) return 1;
+    }
+    return 0;
+}
+
+/* Carried, not worn (inside a bag counts as carried). */
+int items_carried_not_worn(int characterId, int category, int itemId)
+{
+    Carrier *k = carrier_of(characterId);
+    return k && carried_in(k->items, k->count, category, itemId, k, 1);
+}
+
+static int count_any(Item **list, int count, int category, int itemId)
+{
+    int n = 0;
+    for (int i = 0; i < count; i++)
+    {
+        if (is_item(list[i], category, itemId)) n += list[i]->quantity > 0 ? list[i]->quantity : 1;
+        n += count_any(list[i]->contents, list[i]->count, category, itemId);
+    }
+    return n;
+}
+
+int items_count_any(int characterId, int category, int itemId) { Carrier *k = carrier_of(characterId); return k ? count_any(k->items, k->count, category, itemId) : 0; }
+
+int items_party_count_any(int category, int itemId)
+{
+    int n = 0;
+    for (int i = 0; i < carrierCount; i++) if (carriers[i].isPlayer || carriers[i].inParty) n += count_any(carriers[i].items, carriers[i].count, category, itemId);
+    return n;
 }
