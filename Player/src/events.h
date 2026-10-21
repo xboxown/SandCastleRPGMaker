@@ -1,0 +1,35 @@
+/*
+ * Events in the player, as the Windows engine runs them
+ * (EventCommandInterpreter, GameTestWindow): map events set off by stepping
+ * on, staying on and leaving their cell; talking to a character runs its
+ * Talk commands; a character's Always pages run when their conditions come
+ * true. Each page's conditions and cycle (Once, so many times, Always) are
+ * checked as BookEventConditionEvaluator does, and its commands run - Show
+ * Text and its replies, switches and variables, branches, labels, waits,
+ * Cinema Mode, Teleport, Change Pose. Commands the player can't do yet are
+ * skipped and written in Game.log.
+ */
+#ifndef SANDCASTLE_EVENTS_H
+#define SANDCASTLE_EVENTS_H
+
+/* Reads the events from the game (world_json); call after world_load. */
+void events_load(void);
+
+/* Each frame: ms passed; paused while a dialog box is up. */
+void events_update(double ms, int paused);
+
+/* After the player moved: leaving and entering map events. */
+void events_player_moved(void);
+
+/* Talking to a character (double-click): its Talk commands. */
+void events_talk(int actor);
+
+/* An event has taken the controls away (Cinema Mode). */
+int events_cinema(void);
+
+void events_set_variable(const char *name, double value);
+
+/* Game.log (main.c). */
+void game_log(const char *line);
+
+#endif

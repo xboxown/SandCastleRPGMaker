@@ -53,6 +53,19 @@ static enum PlatformKey key_of(SDL_Keycode k)
         case SDLK_RETURN: return KEY_ENTER;
         case SDLK_SPACE: return KEY_SPACE;
         case SDLK_F11: return KEY_F11;
+        case SDLK_KP_ENTER: return KEY_ENTER;
+        case SDLK_TAB: return KEY_TAB;
+        case SDLK_PAGEUP: return KEY_PAGEUP;
+        case SDLK_PAGEDOWN: return KEY_PAGEDOWN;
+        case SDLK_1: case SDLK_KP_1: return KEY_1;
+        case SDLK_2: case SDLK_KP_2: return KEY_2;
+        case SDLK_3: case SDLK_KP_3: return KEY_3;
+        case SDLK_4: case SDLK_KP_4: return KEY_4;
+        case SDLK_5: case SDLK_KP_5: return KEY_5;
+        case SDLK_6: case SDLK_KP_6: return KEY_6;
+        case SDLK_7: case SDLK_KP_7: return KEY_7;
+        case SDLK_8: case SDLK_KP_8: return KEY_8;
+        case SDLK_9: case SDLK_KP_9: return KEY_9;
         default: return KEY_OTHER;
     }
 }

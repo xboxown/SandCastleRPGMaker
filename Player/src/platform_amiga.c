@@ -116,6 +116,16 @@ static enum PlatformKey key_of(UWORD code)
         case 0x44: case 0x43: return KEY_ENTER;
         case 0x40: return KEY_SPACE;
         case 0x59: return KEY_F11; /* F10: window <-> full screen (Amiga keyboards have no F11) */
+        case 0x42: return KEY_TAB;
+        case 0x01: case 0x1D: return KEY_1; /* the row of numbers, and the keypad's */
+        case 0x02: case 0x1E: return KEY_2;
+        case 0x03: case 0x1F: return KEY_3;
+        case 0x04: case 0x2D: return KEY_4;
+        case 0x05: case 0x2E: return KEY_5;
+        case 0x06: case 0x2F: return KEY_6;
+        case 0x07: case 0x3D: return KEY_7;
+        case 0x08: case 0x3E: return KEY_8;
+        case 0x09: case 0x3F: return KEY_9;
         default: return KEY_OTHER;
     }
 }

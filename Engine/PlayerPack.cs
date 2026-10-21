@@ -47,6 +47,7 @@ public static class PlayerPack
             Sprites = g.Sprites.Select(s => new
             {
                 s.Name, s.Fps, s.Loop,
+                NineSlice = s.NineSlice.Enabled ? new { s.NineSlice.Left, s.NineSlice.Top, s.NineSlice.Right, s.NineSlice.Bottom } : null, // a dialog frame's borders
                 Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs) }).ToList()
             }).ToList()
         }).ToList();

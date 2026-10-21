@@ -3,6 +3,7 @@
 #include "platform.h"
 #include <stdlib.h>
 #include <string.h>
+#include <stdio.h>
 
 typedef struct Glyph { const Picture *picture; int left, width, advance; } Glyph;
 
@@ -35,7 +36,7 @@ static Picture builtInPictures[95];
 static void make_built_in(Font *f)
 {
     f->builtIn = 1;
-    f->cellHeight = 8;
+    f->cellHeight = 10; /* DialogBoxBuilder.FallbackLineHeight */
     f->spaceWidth = 4;
     for (int i = 0; i < 95; i++)
     {
@@ -44,11 +45,11 @@ static void make_built_in(Font *f)
         Picture *p = &builtInPictures[i];
         if (!p->pixels)
         {
-            p->width = 5; p->height = 7;
-            p->pixels = (uint32_t *)calloc(35, 4);
+            p->width = 5; p->height = 9;
+            p->pixels = (uint32_t *)calloc(45, 4);
             for (int y = 0; y < 7; y++)
                 for (int x = 0; x < 5; x++)
-                    if (src < 65 && (BUILT_IN[src][y] >> (4 - x)) & 1) p->pixels[y * 5 + x] = 0xFFFFFFFFu;
+                    if (src < 65 && (BUILT_IN[src][y] >> (4 - x)) & 1) p->pixels[(y + 1) * 5 + x] = 0xFFFFFFFFu;
         }
         builtInGlyph[i] = (Glyph){ p, 0, 5, 6 };
         f->glyphs[i] = builtInGlyph[i];
@@ -110,7 +111,9 @@ static int advance_of(const Font *f, char c)
     return g ? g->advance : f->spaceWidth;
 }
 
-int font_line_height(const Font *f) { return f->cellHeight + 1; }
+int font_line_height(const Font *f) { return f->cellHeight; }
+
+int font_space_width(const Font *f) { return f->spaceWidth; }
 
 int font_text_width(const Font *f, const char *text)
 {
@@ -146,27 +149,81 @@ void font_draw(const Font *f, uint32_t *pixels, int x, int y, const char *text, 
     }
 }
 
+/* SpriteFont.Wrap: a word, or a run of spaces, is placed as one piece; spaces starting a wrapped line are dropped and
+   those ending one trimmed; a word wider than the whole line is broken where it runs out of room. */
+typedef struct Wrapping { const Font *f; const char *text, *start, **starts; int *lengths; int lines, len, w, max; } Wrapping;
+
+static int is_blank(char c) { return c == ' ' || c == '\t'; }
+
+static void wrap_push(Wrapping *g)
+{
+    while (g->len > 0 && is_blank(g->start[g->len - 1])) { g->w -= advance_of(g->f, g->start[g->len - 1]); g->len--; }
+    if (g->lines < g->max) { g->starts[g->lines] = g->start; g->lengths[g->lines] = g->len; }
+    g->lines++; g->len = 0; g->w = 0;
+}
+
+static void wrap_append(Wrapping *g, int k)
+{
+    if (g->len == 0) g->start = &g->text[k];
+    g->len++;
+    g->w += advance_of(g->f, g->text[k]);
+}
+
 int font_wrap(const Font *f, const char *text, int width, int max, const char **starts, int *lengths)
 {
-    int lines = 0;
-    const char *line = text, *p = text;
-    int lineWidth = 0;
-    const char *lastBreak = NULL;
-    while (*p && lines < max)
+    Wrapping g = { f, text, text, starts, lengths, 0, 0, 0, max };
+    int i = 0;
+    while (text[i])
     {
-        if (*p == '\n') { starts[lines] = line; lengths[lines++] = (int)(p - line); line = ++p; lineWidth = 0; lastBreak = NULL; continue; }
-        if (*p == ' ') lastBreak = p;
-        lineWidth += advance_of(f, *p);
-        if (lineWidth > width && p > line)
+        if (text[i] == '\n') { wrap_push(&g); i++; g.start = &text[i]; continue; }
+        int isSpace = is_blank(text[i]);
+        int j = i, piece = 0;
+        while (text[j] && text[j] != '\n' && is_blank(text[j]) == isSpace) piece += advance_of(f, text[j++]);
+        if (isSpace) { if (g.len > 0) for (int k = i; k < j; k++) wrap_append(&g, k); }
+        else if (g.len == 0 || g.w + piece <= width)
         {
-            const char *end = lastBreak && lastBreak > line ? lastBreak : p;
-            starts[lines] = line; lengths[lines++] = (int)(end - line);
-            line = end; while (*line == ' ') line++;
-            p = line; lineWidth = 0; lastBreak = NULL;
-            continue;
+            if (piece > width && g.len == 0)
+                for (int k = i; k < j; k++) { if (g.len > 0 && g.w + advance_of(f, text[k]) > width) wrap_push(&g); wrap_append(&g, k); }
+            else for (int k = i; k < j; k++) wrap_append(&g, k);
         }
-        p++;
+        else { wrap_push(&g); continue; } /* the same word again on the fresh line */
+        i = j;
     }
-    if (lines < max && p > line) { starts[lines] = line; lengths[lines++] = (int)(p - line); }
-    return lines;
+    wrap_push(&g);
+    return g.lines;
+}
+
+/* Lines of text when wrapped to a width (SpriteFont.LineCount: none for no text). */
+int font_line_count(const Font *f, const char *text, int width)
+{
+    const char *s[1]; int l[1];
+    return text[0] ? font_wrap(f, text, width, 0, s, l) : 0;
+}
+
+/* The widest line when wrapped. */
+int font_block_width(const Font *f, const char *text, int width)
+{
+    const char *s[64]; int l[64];
+    int n = font_wrap(f, text, width, 64, s, l), best = 0;
+    for (int i = 0; i < n && i < 64; i++)
+    {
+        int w = 0;
+        for (int k = 0; k < l[i]; k++) w += advance_of(f, s[i][k]);
+        if (w > best) best = w;
+    }
+    return best;
+}
+
+/* Draws text wrapped to a width, line under line from (x, y); returns its height. */
+int font_draw_block(const Font *f, uint32_t *pixels, int x, int y, const char *text, int width, uint32_t colour)
+{
+    const char *s[64]; int l[64];
+    int n = font_wrap(f, text, width, 64, s, l);
+    for (int i = 0; i < n && i < 64; i++)
+    {
+        char line[512];
+        snprintf(line, sizeof line, "%.*s", l[i], s[i]);
+        font_draw(f, pixels, x, y + i * f->cellHeight, line, colour);
+    }
+    return n * f->cellHeight;
 }

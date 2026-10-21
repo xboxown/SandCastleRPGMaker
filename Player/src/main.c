@@ -7,7 +7,10 @@
 #include "platform.h"
 #include "world.h"
 #include "font.h"
+#include "dialog.h"
+#include "events.h"
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 double sc_strtod(const char *text, char **end);
@@ -27,6 +30,30 @@ static void note(const char *step)
     if (!f) return;
     fprintf(f, "%s\n", step);
     fclose(f);
+}
+
+void game_log(const char *line) { note(line); }
+
+/* Testing: a key pressed at a moment ("--press 2:E,3.5:1": Enter at 2 s, the 1 key at 3.5 s; T7 = double-click the character with id 7). */
+static void scripted_presses(const char *presses, double t, double *done)
+{
+    for (const char *k = presses; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
+    {
+        double at = sc_strtod(k, NULL);
+        const char *what = strchr(k, ':');
+        if (!what || at <= *done || at > t) continue;
+        what++;
+        if (*what == 'T') { int actor = world_actor_by_character(atoi(what + 1)); if (actor > 0) events_talk(actor); }
+        else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
+        else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
+        else
+        {
+            enum PlatformKey key = *what == 'E' ? KEY_ENTER : *what == 'S' ? KEY_SPACE : *what >= '1' && *what <= '9' ? (enum PlatformKey)(KEY_1 + (*what - '1'))
+                : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : KEY_OTHER;
+            if (dialog_showing()) dialog_key(key);
+        }
+    }
+    *done = t;
 }
 
 #ifdef __amigaos__
@@ -62,12 +89,15 @@ static void save_bmp(const char *path)
 int main(int argc, char **argv)
 {
     char folder[1024] = "Game_Data";
-    const char *shot = NULL, *keys = NULL, *say = NULL;
+    const char *shot = NULL, *keys = NULL, *say = NULL, *presses = NULL;
+    double shotAt = -1, pressedTill = -1;
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) shot = argv[++i];
         else if (strcmp(argv[i], "--keys") == 0 && i + 1 < argc) keys = argv[++i];
         else if (strcmp(argv[i], "--say") == 0 && i + 1 < argc) say = argv[++i]; /* testing: words drawn in the game's fonts */
+        else if (strcmp(argv[i], "--press") == 0 && i + 1 < argc) presses = argv[++i];
+        else if (strcmp(argv[i], "--shot-at") == 0 && i + 1 < argc) shotAt = sc_strtod(argv[++i], NULL);
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
     note("Started.");
@@ -116,6 +146,9 @@ int main(int argc, char **argv)
         return 1;
     }
     note("Window open. Running.");
+    events_load();
+    events_player_moved(); /* where the player starts: arriving doesn't set its event off */
+    uint32_t lastClick = 0; int clickX = -100, clickY = -100;
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last;
@@ -125,9 +158,28 @@ int main(int argc, char **argv)
         while (platform_poll(&e))
         {
             if (e.type == EV_QUIT) running = 0;
+            else if (e.type == EV_MOUSE_MOVE) dialog_mouse_move(e.mouseX, e.mouseY);
+            else if (e.type == EV_MOUSE_DOWN && e.button == 1)
+            {
+                uint32_t t = platform_ticks();
+                int twice = t - lastClick < 500 && abs(e.mouseX - clickX) < 4 && abs(e.mouseY - clickY) < 4;
+                lastClick = twice ? 0 : t; clickX = e.mouseX; clickY = e.mouseY;
+                if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
+                else if (twice && !events_cinema())
+                {
+                    /* Double-click: talk to the character under the pointer (Exult's Actor::activate). */
+                    int actor = world_actor_at(e.mouseX, e.mouseY);
+                    if (actor > 0) events_talk(actor);
+                }
+            }
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
             {
                 int down = e.type == EV_KEY_DOWN;
+                if (down && dialog_showing() && e.key != KEY_F11)
+                {
+                    dialog_key(e.key); /* while a box is up the keys are its own */
+                    continue;
+                }
                 switch (e.key)
                 {
                     case KEY_LEFT: held[0] = down ? ++order : 0; break;
@@ -148,6 +200,14 @@ int main(int argc, char **argv)
             if (held[0] == best) dx = -1; else if (held[1] == best) dx = 1; else if (held[2] == best) dy = -1; else dy = 1;
         }
         uint32_t now = platform_ticks();
+        if (presses) scripted_presses(presses, (now - start) / 1000.0, &pressedTill);
+        if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
+        {
+            world_draw(pixels, now);
+            dialog_draw(pixels, now);
+            save_bmp(shot);
+            break;
+        }
         if (keys) /* testing: the script's key for this moment, then the shot */
         {
             double t = (now - start) / 1000.0 - 0.5, at = 0;
@@ -165,9 +225,9 @@ int main(int argc, char **argv)
                 k++;
             }
             if (t < 0) done = 0;
-            if (done && shot) { world_draw(pixels, now); save_bmp(shot); break; }
+            if (done && shot && shotAt < 0) { world_draw(pixels, now); dialog_draw(pixels, now); save_bmp(shot); break; }
         }
-        else if (shot && now - start > 1000)
+        else if (shot && shotAt < 0 && now - start > 1000)
         {
             world_draw(pixels, now);
             if (say)
@@ -184,8 +244,16 @@ int main(int argc, char **argv)
         double seconds = (now - last) / 1000.0;
         if (seconds > 0.1) seconds = 0.1;
         last = now;
-        world_update(dx, dy, seconds);
+        int paused = dialog_showing(); /* a box up: the game waits, as in an Exult conversation */
+        events_update(seconds * 1000, paused);
+        if (!dialog_showing())
+        {
+            if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
+            world_update(dx, dy, seconds);
+            events_player_moved();
+        }
         world_draw(pixels, now);
+        dialog_draw(pixels, now);
         platform_present(pixels);
     }
     platform_close();

@@ -5,13 +5,14 @@ using System.Windows.Media;
 namespace SandcastleRpgMaker.Editor;
 
 /// <summary>The platforms a game is built for (Game > Build...).</summary>
-public enum BuildPlatform { Windows, Linux, MacModern, MacPowerPC, MorphOS, AmigaOS4, Amiga68k }
+public enum BuildPlatform { Windows, Linux, MacModern, MacPowerPC, MorphOS, AmigaOS4, Amiga68k, AmigaVampire }
 
 /// <summary>
 /// Game > Build...: which platform to build the game for. Windows is this
 /// engine itself; every other platform runs the game on the Sandcastle
 /// player (written in C: SDL on Linux, Mac, MorphOS and AmigaOS 4; RTG and
-/// AHI or Paula on Amiga 68k). Platforms whose player isn't ready yet are
+/// AHI or Paula on Amiga 68k; the Vampire build drives SAGA, AMMX and the
+/// sound hardware directly). Platforms whose player isn't ready yet are
 /// shown, greyed, with what they will need.
 /// </summary>
 internal sealed class BuildPlatformWindow : Window
@@ -28,7 +29,8 @@ internal sealed class BuildPlatformWindow : Window
         new(BuildPlatform.MacPowerPC, "Mac OS X PowerPC", "Mac OS X 10.4 or 10.5 on a G4 or G5.", false),
         new(BuildPlatform.MorphOS, "MorphOS", "MorphOS 3.x on a PowerPC Mac, Pegasos or Efika. Built as \"Game\" with its icon \"Game.info\".", false),
         new(BuildPlatform.AmigaOS4, "AmigaOS 4.x", "AmigaOS 4.1 on an X1000, X5000, A1222 or Sam board. Built as \"Game\" with its icon \"Game.info\".", false),
-        new(BuildPlatform.Amiga68k, "Amiga 68k (RTG or Vampire)", "Kickstart 3.1 or later: AmigaOS 3.1 to 3.2 with an RTG card, or ApolloOS on a Vampire (not AROS). A 68060 at least, a 68080 recommended, with an FPU (required); 128 MB of RAM at least (up to 1 GB for big games); a hard drive (no floppies). No OCS, ECS or AGA: RTG graphics, AHI or Paula sound. Runs in a Workbench window or full screen. Built as \"Game\" with its icon \"Game.info\".", false),
+        new(BuildPlatform.Amiga68k, "Amiga 68k (RTG)", "Kickstart 3.1 or later: AmigaOS 3.1 to 3.2 with an RTG card (Picasso96 or CyberGraphX), or ApolloOS (not AROS); also WinUAE and AmiKit. A 68060 at least, a 68080 recommended, with an FPU (required); 128 MB of RAM at least (up to 1 GB for big games); a hard drive (no floppies). No OCS, ECS or AGA: RTG graphics, AHI or Paula sound. Runs in a Workbench window or full screen. Built as \"Game\" with its icon \"Game.info\".", false),
+        new(BuildPlatform.AmigaVampire, "Amiga Vampire", "A Vampire (V4 Standalone, Firebird, V2 cards) only: its SAGA graphics, the 68080's AMMX and the sound hardware driven directly, for the most speed. Won't start on any other Amiga or in an emulator (use Amiga 68k (RTG) there). Kickstart 3.1 or later or ApolloOS; 128 MB of RAM at least; a hard drive. Built as \"Game\" with its icon \"Game.info\".", false),
     };
 
     public BuildPlatformWindow()

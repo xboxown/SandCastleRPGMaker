@@ -60,6 +60,13 @@ int sprites_load(const char *folder)
             s->group = copy_text(groupName);
             s->name = copy_text(cJSON_GetStringValue(cJSON_GetObjectItem(sprite, "Name")));
             s->loop = cJSON_IsTrue(cJSON_GetObjectItem(sprite, "Loop"));
+            cJSON *nine = cJSON_GetObjectItem(sprite, "NineSlice");
+            if (cJSON_IsObject(nine))
+            {
+                s->nineSlice = 1;
+                s->sliceLeft = cJSON_GetObjectItem(nine, "Left")->valueint; s->sliceTop = cJSON_GetObjectItem(nine, "Top")->valueint;
+                s->sliceRight = cJSON_GetObjectItem(nine, "Right")->valueint; s->sliceBottom = cJSON_GetObjectItem(nine, "Bottom")->valueint;
+            }
             cJSON *frames = cJSON_GetObjectItem(sprite, "Frames");
             s->frameCount = cJSON_GetArraySize(frames);
             s->frames = (Frame *)calloc((size_t)(s->frameCount > 0 ? s->frameCount : 1), sizeof(Frame));
@@ -85,6 +92,20 @@ const Sprite *sprite_find(const char *group, const char *name)
     for (int i = 0; i < spriteCount; i++)
         if (strcmp(sprites[i].name, name) == 0) return &sprites[i];
     return NULL;
+}
+
+/* A dialog frame by name (SpriteDatabase.FindDialogFrame): "None" = none, else that sprite of the group, else the group's first. */
+const Sprite *sprite_dialog_frame(const char *name)
+{
+    if (name && strcmp(name, "None") == 0) return NULL;
+    const Sprite *first = NULL;
+    for (int i = 0; i < spriteCount; i++)
+    {
+        if (strcmp(sprites[i].group, "DialogFrame") != 0) continue;
+        if (!first) first = &sprites[i];
+        if (name && strcmp(sprites[i].name, name) == 0) return &sprites[i];
+    }
+    return first;
 }
 
 const Picture *frame_picture(const Frame *frame)

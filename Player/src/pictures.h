@@ -25,6 +25,7 @@ typedef struct Sprite
 {
     char *group, *name;
     int loop;
+    int nineSlice, sliceLeft, sliceTop, sliceRight, sliceBottom; /* a dialog frame's borders that don't stretch */
     int frameCount, totalMs;
     Frame *frames;
 } Sprite;
@@ -34,6 +35,9 @@ int sprites_load(const char *folder);
 
 /* A sprite by its group and name (else the first of that name in any group, as the engine finds them). */
 const Sprite *sprite_find(const char *group, const char *name);
+
+/* A dialog frame by name: "None" = none (NULL), a name in the DialogFrame group, else its first sprite (NULL if the group is empty). */
+const Sprite *sprite_dialog_frame(const char *name);
 
 /* A frame's picture (decoded on first use; NULL if missing). */
 const Picture *frame_picture(const Frame *frame);

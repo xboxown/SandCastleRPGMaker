@@ -57,12 +57,21 @@ typedef struct Thing
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
 
+#define MAX_POSES 48
+
+typedef struct Pose { char name[48]; const Sprite *dirs[8]; } Pose;
+
 typedef struct Actor
 {
     double px, py; int lift, facing;
     int sizeX, sizeY, sizeZ;
     const Sprite *idle[8], *walking[8];
     int walkingNow;
+    int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
+    const Sprite *face;
+    Pose poses[MAX_POSES]; int poseCount;
+    int shownPose;                  /* Change Pose: the pose kept (index into poses, -1 = idle / walking) */
+    uint32_t poseSince;             /* when it began (its animation from the start) */
 } Actor;
 
 static char error_text[512], title[256];
@@ -78,6 +87,8 @@ static Actor *npcs; static int npcCount;
 static double cameraX, cameraY;
 static int unitsX = 4, unitsY = 4;
 
+static cJSON *gameJson;
+void *world_json(void) { return gameJson; }
 const char *world_error(void) { return error_text; }
 const char *world_title(void) { return title; }
 
@@ -154,6 +165,32 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
 {
     int idleId = -1, walkingId = -1;
     cJSON *p;
+    a->characterId = num(character, "Id", -1);
+    a->face = sprite_find(str(character, "FaceSpriteGroup"), str(character, "FaceSpriteName"));
+    if (!str(character, "FaceSpriteName")[0]) a->face = NULL;
+    a->shownPose = -1;
+    a->body = -1;
+    /* Every pose it has a sprite for, by the pose's name (Change Pose, Play Pose). */
+    cJSON *assigned;
+    cJSON_ArrayForEach(assigned, get(character, "PoseSprites"))
+    {
+        if (a->poseCount >= MAX_POSES) break;
+        const char *poseName = NULL;
+        cJSON_ArrayForEach(p, get(poses, "Poses")) if (num(p, "Id", -2) == atoi(assigned->string)) poseName = str(p, "Name");
+        if (!poseName) continue;
+        Pose *pose = &a->poses[a->poseCount++];
+        snprintf(pose->name, sizeof pose->name, "%s", poseName);
+        const Sprite *south = NULL, *any = NULL;
+        cJSON *d;
+        cJSON_ArrayForEach(d, get(assigned, "Directions"))
+        {
+            const Sprite *sp = link_of(d);
+            pose->dirs[dir_of(d->string)] = sp;
+            if (dir_of(d->string) == DIR_S) south = sp;
+            if (!any) any = sp;
+        }
+        for (int i = 0; i < 8; i++) if (!pose->dirs[i]) pose->dirs[i] = south ? south : any;
+    }
     cJSON_ArrayForEach(p, get(poses, "Poses"))
     {
         if (strcmp(str(p, "Name"), "Idle") == 0) idleId = num(p, "Id", -1);
@@ -416,23 +453,35 @@ int world_load(const char *folder)
         double feetY = a->py + tileH / 2.0;
         int al = (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), at = (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5);
         a->lift = standing_lift(al, at, a->sizeX, a->sizeY, num(o, "Floor", 1));
+        a->body = bodyCount;
         Body *b = &bodies[bodyCount++]; /* solid, like Exult's actors */
         b->left = al; b->top = at; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ;
     }
-    cJSON_Delete(root);
+    gameJson = root; /* kept: the events run from it */
     cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
     return 1;
 }
 
 /* ---------------- Each frame ---------------- */
 
+static int keysHeld;
+int world_keys_held(void) { return keysHeld; }
+static Actor *actor_of(int i);
+void world_walks_update(double seconds);
+void world_walk_cancel(int actor);
+int world_walking(int actor);
+
 void world_update(int dx, int dy, double seconds)
 {
-    if (dx == 0 && dy == 0) { player.walkingNow = 0; }
+    keysHeld = dx || dy;
+    if (dx || dy) world_walk_cancel(0); /* a direction key takes over from a walk an event began */
+    if (world_walking(0)) { /* walked by the event (world_walks_update) */ }
+    else if (dx == 0 && dy == 0) { player.walkingNow = 0; }
     else
     {
         player.facing = dx < 0 ? DIR_W : dx > 0 ? DIR_E : dy < 0 ? DIR_N : DIR_S;
         player.walkingNow = 1;
+        player.shownPose = -1; /* walking on: the pose an event gave is over */
         double distance = TILES_PER_SECOND * tileW * seconds;
         double nx = player.px + dx * distance, ny = player.py + dy * distance;
         int l0, t0, l1, t1;
@@ -445,6 +494,7 @@ void world_update(int dx, int dy, double seconds)
             if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; }
         }
     }
+    world_walks_update(seconds);
     /* The camera: a dead zone round the middle, following where the player is drawn (up and left by its lift). */
     double fx = player.px - player.lift * LIFT_SHIFT, fy = player.py - player.lift * LIFT_SHIFT;
     double rx = fx - cameraX, ry = fy - cameraY;
@@ -505,6 +555,7 @@ typedef struct Drawn
 {
     double key; const Picture *picture; int x, y, w, h;
     int hasBox, wall, occludes, hangs, xl, xr, yf, yn, zb, zt, flat;
+    int actor; /* the character drawn (world_actor_at), -1 for anything else */
 } Drawn;
 
 static int by_key(const void *a, const void *b)
@@ -556,7 +607,8 @@ static void set_box(Drawn *d, int left, int top, int width, int depth, int lift,
     d->zb = height == 0 ? lift - 1 : lift; d->zt = lift + (height > 1 ? height : 1) - 1; d->flat = height == 0;
 }
 
-static Drawn *drawn; static int drawnCap;
+static Drawn *drawn; static int drawnCap, drawnCount;
+static uint32_t lastMs;
 
 static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
 {
@@ -567,6 +619,7 @@ static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, 
     memset(d, 0, sizeof *d);
     d->key = floorBand * 10000000.0 + depth; /* the floor's band first, then nearer the viewer later (ComputeDepthZIndex) */
     d->picture = pic; d->x = x; d->y = y; d->w = w; d->h = h;
+    d->actor = -1;
     return d;
 }
 
@@ -633,7 +686,9 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         const Actor *a = i < 0 ? &player : &npcs[i];
         if (i >= 0 && a->lift >= ceiling) continue;
         const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
-        const Picture *pic = sprite_picture_at(s, a->walkingNow ? ms : 0);
+        uint32_t at = a->walkingNow ? ms : 0;
+        if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
+        const Picture *pic = sprite_picture_at(s, at);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
@@ -641,6 +696,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         if (!d) continue;
         double feetY = a->py + tileH / 2.0;
         set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
+        d->actor = i + 1;
     }
     /* Whatever rests on something is drawn after it (Exult: greater in z). */
     for (int pass = 0; pass < 2; pass++)
@@ -678,4 +734,310 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     }
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
     for (int i = 0; i < count; i++) blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
+    drawnCount = count;
+    lastMs = ms;
+}
+
+/* ---------------- The characters, for events ---------------- */
+
+static Actor *actor_of(int i) { return i == 0 ? &player : i > 0 && i <= npcCount ? &npcs[i - 1] : NULL; }
+
+int world_actor_count(void) { return npcCount + 1; }
+
+int world_actor_by_character(int characterId)
+{
+    if (player.characterId == characterId) return 0;
+    for (int i = 0; i < npcCount; i++) if (npcs[i].characterId == characterId) return i + 1;
+    return -1;
+}
+
+int world_actor_character(int actor) { const Actor *a = actor_of(actor); return a ? a->characterId : -1; }
+
+const Sprite *world_actor_face(int actor) { const Actor *a = actor_of(actor); return a ? a->face : NULL; }
+
+/* On the visible screen itself (GameTestWindow.IsInSight). */
+int world_actor_in_sight(int actor)
+{
+    const Actor *a = actor_of(actor);
+    return a && a->px >= cameraX && a->px <= cameraX + SCREEN_W && a->py >= cameraY && a->py <= cameraY + SCREEN_H;
+}
+
+/* The character whose picture is under a point of the screen, topmost first (as a click hits it); -1 for none. */
+int world_actor_at(int sx, int sy)
+{
+    for (int i = drawnCount - 1; i >= 0; i--)
+    {
+        const Drawn *d = &drawn[i];
+        if (sx < d->x || sy < d->y || sx >= d->x + d->w || sy >= d->y + d->h) continue;
+        const Picture *p = d->picture;
+        double s = fmin((double)d->w / p->width, (double)d->h / p->height);
+        int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5);
+        int ox = d->x + (d->w - dw) / 2, oy = d->y + (d->h - dh) / 2;
+        if (sx < ox || sy < oy || sx >= ox + dw || sy >= oy + dh) continue;
+        uint32_t c = p->pixels[(size_t)((sy - oy) * p->height / dh) * (size_t)p->width + (size_t)((sx - ox) * p->width / dw)];
+        if ((c >> 24) == 0) continue; /* see-through: what's behind is hit */
+        return d->actor;
+    }
+    return -1;
+}
+
+int world_direction_of(const char *name) { return name && name[0] ? dir_of(name) : -1; }
+
+/* Change Pose: the pose kept (and facing, -1 = as it is); 0 when it has no such pose. "Idle" / "Walking" go back to the usual. */
+int world_set_pose(int actor, const char *pose, int facing)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return 0;
+    if (facing >= 0) a->facing = facing & 7;
+    if (strcmp(pose, "Idle") == 0) { a->shownPose = -1; return 1; }
+    for (int i = 0; i < a->poseCount; i++)
+        if (strcmp(a->poses[i].name, pose) == 0) { a->shownPose = i; a->poseSince = lastMs; return 1; }
+    return 0;
+}
+
+/* Teleport: to a cell (its middle), standing on the floor it was on. */
+int world_teleport(int actor, int x, int y)
+{
+    Actor *a = actor_of(actor);
+    if (!a || x < 0 || y < 0 || x >= mapW || y >= mapH) return 0;
+    int onFloor = floor_of(a->lift);
+    a->px = x * tileW + tileW / 2.0; a->py = y * tileH + tileH / 2.0;
+    double feetY = a->py + tileH / 2.0;
+    int l = (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), t = (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5);
+    if (a->body >= 0) bodies[a->body].z = -1000; /* not in its own way */
+    a->lift = standing_lift(l, t, a->sizeX, a->sizeY, onFloor);
+    if (a->body >= 0) { Body *b = &bodies[a->body]; b->left = l; b->top = t; b->z = a->lift; }
+    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+    return 1;
+}
+
+/* The cell the player stands in, and the floor. */
+void world_player_cell(int *x, int *y, int *onFloor)
+{
+    *x = (int)floor(player.px / tileW); *y = (int)floor(player.py / tileH); *onFloor = floor_of(player.lift);
+}
+
+/* Stop and turn to the player for a conversation (GameTestWindow.TalkTo: Idle, facing the player). */
+void world_turn_to_player(int actor)
+{
+    Actor *a = actor_of(actor);
+    if (!a || actor == 0) return;
+    double dx = player.px - a->px, dy = player.py - a->py;
+    int facing = fabs(dx) > fabs(dy) ? (dx > 0 ? DIR_E : DIR_W) : (dy > 0 ? DIR_S : DIR_N);
+    world_set_pose(actor, "Idle", facing);
+}
+
+/* ---------------- Walking somewhere (Walk To Location): Exult's A* on map cells ---------------- */
+
+/* The footprint (8-pixel units) of someone whose middle is at (px, py). */
+static void foot_at(const Actor *a, double px, double py, int *l, int *t)
+{
+    double feetY = py + tileH / 2.0;
+    *l = (int)floor((px - a->sizeX * UNIT / 2.0) / UNIT + 0.5);
+    *t = (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5);
+}
+
+static double cell_cx(int x) { return x * tileW + tileW / 2.0; }
+static double cell_cy(int y) { return y * tileH + tileH / 2.0; }
+
+/* While working out a walker's way, its own body isn't in its way. */
+static int lift_own_body(Actor *a) { if (a->body < 0) return 0; int z = bodies[a->body].z; bodies[a->body].z = -100000; return z; }
+static void put_own_body(Actor *a, int z) { if (a->body >= 0) bodies[a->body].z = z; }
+
+/* CanSweep: from one point to another the way walkers go (along X, then Y), half a unit at a time, each new footprint by the walking rules. */
+static int can_sweep(const Actor *a, double fx, double fy, double tx, double ty, int fromLift, int *lift)
+{
+    *lift = fromLift;
+    double x = fx, y = fy, step = UNIT / 2.0;
+    int ll, lt;
+    foot_at(a, x, y, &ll, &lt);
+    for (int pass = 0; pass < 2; pass++)
+        for (;;)
+        {
+            double remaining = pass == 0 ? tx - x : ty - y;
+            if (fabs(remaining) < 0.01) break;
+            double move = (remaining > 0 ? 1 : -1) * fmin(step, fabs(remaining));
+            if (pass == 0) x += move; else y += move;
+            int l, t;
+            foot_at(a, x, y, &l, &t);
+            if (l == ll && t == lt) continue;
+            int nl = try_step(l, t, a->sizeX, a->sizeY, *lift, a->sizeZ);
+            if (nl < 0) return 0;
+            *lift = nl; ll = l; lt = t;
+        }
+    return 1;
+}
+
+static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
+{
+    int l, t;
+    foot_at(a, cell_cx(cx), cell_cy(cy), &l, &t);
+    *lift = try_step(l, t, a->sizeX, a->sizeY, fromLift, a->sizeZ);
+    return *lift >= 0;
+}
+
+typedef struct Node { int x, y, f, lift, cost, from, open; } Node;
+
+static int heuristic(int ax, int ay, int bx, int by) { return abs(ax - bx) + abs(ay - by); }
+
+/* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
+   Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
+static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int *pathX, int *pathY, int max)
+{
+    int own = lift_own_body(a);
+    int sx = (int)floor(a->px / tileW), sy = (int)floor(a->py / tileH);
+    int startF = goalFloor ? floor_of(a->lift) : 0;
+    if (sx == gx && sy == gy && startF == goalFloor) { put_own_body(a, own); return 0; }
+    int goalLift, goalFree;
+    if (goalFloor) goalFree = can_stand_at(a, gx, gy, base_lift(goalFloor), &goalLift) && floor_of(goalLift) == goalFloor;
+    else
+    {
+        /* anyLift: clear on the highest floor under it */
+        int l, t;
+        foot_at(a, cell_cx(gx), cell_cy(gy), &l, &t);
+        goalFree = try_step(l, t, a->sizeX, a->sizeY, standing_lift(l, t, a->sizeX, a->sizeY, MAX_FLOORS), a->sizeZ) >= 0;
+    }
+    /* Nodes: a cell on a floor (floor 0 when none is asked for). */
+    int floors = goalFloor ? MAX_FLOORS + 1 : 1, cells = mapW * mapH * floors;
+    int *index = (int *)malloc(sizeof(int) * (size_t)cells);
+    for (int i = 0; i < cells; i++) index[i] = -1;
+    int cap = 6100, count = 0;
+    Node *nodes = (Node *)malloc(sizeof(Node) * (size_t)cap);
+#define KEY(x, y, f) (((f) * mapH + (y)) * mapW + (x))
+#define H(n) (heuristic((n).x, (n).y, gx, gy) + (goalFloor ? abs((n).f - goalFloor) * LIFTS_PER_FLOOR : 0))
+    nodes[count] = (Node){ sx, sy, startF, a->lift, 0, -1, 1 };
+    index[KEY(sx, sy, startF)] = count++;
+    int nearest = 0, nearestH = H(nodes[0]), found = -1, expansions = 0;
+    while (expansions++ < 6000)
+    {
+        /* the open node with the least cost + estimate */
+        int best = -1, bestScore = 1 << 30;
+        for (int i = 0; i < count; i++)
+            if (nodes[i].open) { int s = nodes[i].cost + H(nodes[i]); if (s < bestScore) { bestScore = s; best = i; } }
+        if (best < 0) break;
+        Node cur = nodes[best];
+        nodes[best].open = 0;
+        int h = H(cur);
+        if (h < nearestH) { nearest = best; nearestH = h; }
+        if (cur.f == goalFloor && ((cur.x == gx && cur.y == gy && goalFree) || (!goalFree && heuristic(cur.x, cur.y, gx, gy) == 1 && best != 0))) { found = best; break; }
+        static const int DX[4] = { 1, -1, 0, 0 }, DY[4] = { 0, 0, 1, -1 };
+        for (int d = 0; d < 4; d++)
+        {
+            int nx = cur.x + DX[d], ny = cur.y + DY[d], lift;
+            if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
+            if (!goalFloor && index[KEY(nx, ny, 0)] >= 0 && nodes[index[KEY(nx, ny, 0)]].cost <= cur.cost + 1) continue;
+            double fx = best == 0 ? a->px : cell_cx(cur.x), fy = best == 0 ? a->py : cell_cy(cur.y);
+            if (!goalFloor && !can_stand_at(a, nx, ny, cur.lift, &lift)) continue;
+            if (!can_sweep(a, fx, fy, cell_cx(nx), cell_cy(ny), cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+            int nf = goalFloor ? floor_of(lift) : 0, k = KEY(nx, ny, nf), cost = cur.cost + 1;
+            if (index[k] >= 0 && nodes[index[k]].cost <= cost) continue;
+            if (index[k] < 0)
+            {
+                if (count == cap) { cap *= 2; nodes = (Node *)realloc(nodes, sizeof(Node) * (size_t)cap); }
+                index[k] = count++;
+            }
+            nodes[index[k]] = (Node){ nx, ny, nf, lift, cost, best, 1 };
+        }
+    }
+    int end = found >= 0 ? found : allowPartial && nearest != 0 ? nearest : -1, length = -1;
+    if (end >= 0)
+    {
+        length = 0;
+        for (int n = end; n > 0 && nodes[n].from >= 0; n = nodes[n].from) length++;
+        if (length > max) length = max;
+        int i = length;
+        for (int n = end; n > 0 && nodes[n].from >= 0 && i > 0; n = nodes[n].from) { i--; pathX[i] = nodes[n].x; pathY[i] = nodes[n].y; }
+    }
+#undef KEY
+#undef H
+    free(index); free(nodes);
+    put_own_body(a, own);
+    return length;
+}
+
+#define MAX_PATH 512
+typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; } Walk;
+static Walk *walks; /* one per actor */
+
+static Walk *walk_of(int actor)
+{
+    if (!walks) walks = (Walk *)calloc((size_t)npcCount + 1, sizeof(Walk));
+    return actor >= 0 && actor <= npcCount ? &walks[actor] : NULL;
+}
+
+/* Starts a walk there (the player: first to the middle of the cell they stand in); 0 when there's no way just now. */
+int world_walk_to(int actor, int x, int y, int goalFloor)
+{
+    Actor *a = actor_of(actor);
+    Walk *w = walk_of(actor);
+    if (!a || !w) return 0;
+    int n = find_path(a, x, y, goalFloor, actor != 0, w->x + 1, w->y + 1, MAX_PATH - 1);
+    if (n < 0) return 0;
+    w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
+    w->count = n + 1; w->at = 0; w->active = 1;
+    a->shownPose = -1;
+    return 1;
+}
+
+int world_walking(int actor) { Walk *w = walk_of(actor); return w && w->active; }
+
+void world_walk_cancel(int actor) { Walk *w = walk_of(actor); Actor *a = actor_of(actor); if (w) w->active = 0; if (a) a->walkingNow = 0; }
+
+void world_actor_cell(int actor, int *x, int *y, int *onFloor)
+{
+    Actor *a = actor_of(actor);
+    if (!a) { *x = *y = -1; *onFloor = 1; return; }
+    *x = (int)floor(a->px / tileW); *y = (int)floor(a->py / tileH); *onFloor = floor_of(a->lift);
+}
+
+/* Whether someone could stand on the cell (on that floor; 0 = any). */
+int world_can_stand(int actor, int x, int y, int onFloor)
+{
+    Actor *a = actor_of(actor);
+    if (!a || x < 0 || y < 0 || x >= mapW || y >= mapH) return 0;
+    int own = lift_own_body(a), lift, ok;
+    if (onFloor) ok = can_stand_at(a, x, y, base_lift(onFloor), &lift) && floor_of(lift) == onFloor;
+    else ok = can_stand_at(a, x, y, a->lift, &lift);
+    put_own_body(a, own);
+    return ok;
+}
+
+/* One frame of a walk: toward the next cell's middle, one axis at a time, never past it; blocked: it stops. */
+static void step_walk(int actor, double seconds)
+{
+    Actor *a = actor_of(actor);
+    Walk *w = walk_of(actor);
+    if (!a || !w || !w->active) return;
+    double budget = TILES_PER_SECOND * tileW * seconds;
+    while (budget > 0.0001)
+    {
+        if (w->at >= w->count) { w->active = 0; a->walkingNow = 0; return; }
+        double rx = cell_cx(w->x[w->at]) - a->px, ry = cell_cy(w->y[w->at]) - a->py;
+        if (fabs(rx) < 0.01 && fabs(ry) < 0.01) { a->px = cell_cx(w->x[w->at]); a->py = cell_cy(w->y[w->at]); w->at++; continue; }
+        int alongX = fabs(rx) > 0.01;
+        double remaining = alongX ? rx : ry, move = fmin(fabs(remaining), budget);
+        a->facing = alongX ? (remaining > 0 ? DIR_E : DIR_W) : (remaining > 0 ? DIR_S : DIR_N);
+        double nx = a->px + (alongX ? (remaining > 0 ? move : -move) : 0), ny = a->py + (alongX ? 0 : (remaining > 0 ? move : -move));
+        int l0, t0, l1, t1;
+        foot_at(a, a->px, a->py, &l0, &t0);
+        foot_at(a, nx, ny, &l1, &t1);
+        if (l1 != l0 || t1 != t0)
+        {
+            int own = lift_own_body(a);
+            int lift = try_step(l1, t1, a->sizeX, a->sizeY, a->lift, a->sizeZ);
+            put_own_body(a, own);
+            if (lift < 0) { w->active = 0; a->walkingNow = 0; return; } /* something in the way: stop, think again */
+            a->lift = lift;
+            if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
+        }
+        a->px = nx; a->py = ny;
+        a->walkingNow = 1;
+        budget -= move;
+    }
+}
+
+/* Each frame: everyone walking somewhere takes their step (the player's own keys cancel theirs). */
+void world_walks_update(double seconds)
+{
+    for (int i = 0; i <= npcCount; i++) step_walk(i, seconds);
 }
