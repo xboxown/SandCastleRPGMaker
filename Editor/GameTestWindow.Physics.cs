@@ -97,9 +97,13 @@ public partial class GameTestWindow
     {
         if (item is { Category: ReferencedItemCategory.Book } && BookDef(item.ItemId) is { } book) return (book.SolidOffsetX, book.SolidOffsetY);
         if (item is { Category: ReferencedItemCategory.Container } && ContainerDef(item.ItemId) is { } container) return (container.SolidOffsetX, container.SolidOffsetY);
-        if (obj is not null && ObjectDef(obj.ObjectId) is { } worldObject) return (worldObject.SolidOffsetX, worldObject.SolidOffsetY);
+        if (obj is not null && ObjectDef(obj.ObjectId) is { } worldObject) return TurnedSize(worldObject, obj.Facing, worldObject.SolidOffsetX, worldObject.SolidOffsetY);
         return (0, 0);
     }
+
+    /// <summary>A piece with turned looks (built facing South) facing East or West is turned a quarter: its two sides swap, as Exult's rotated frames swap xtiles and ytiles.</summary>
+    private static (int X, int Y) TurnedSize(WorldObject obj, SpriteDirection facing, int x, int y) =>
+        obj.TurnLooks.Count > 0 && facing is SpriteDirection.East or SpriteDirection.West ? (y, x) : (x, y);
 
     private List<Body> WorldBodies()
     {

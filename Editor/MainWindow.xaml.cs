@@ -1034,6 +1034,7 @@ public partial class MainWindow : Window
         FreeModeMenuItem.IsChecked = false;
         ZoneModeMenuItem.IsChecked = false;
         if (_houseModeItem is not null) _houseModeItem.IsChecked = false; // MainWindow.Houses.cs
+        if (_vehicleModeItem is not null) _vehicleModeItem.IsChecked = false;
         HideHouseGhost();
         _selectedZone = null;
         DrawZones(); // zones show only in Zones mode

@@ -1780,7 +1780,8 @@ public partial class GameTestWindow : Window
         UpdatePlayerFallAnimation(deltaSeconds);
 
         if (IsIncapacitated(_player)) { _heldDirectionKeys.Clear(); _wasMovingLastFrame = false; } // asleep, paralyzed or dead: can't walk
-        if (TryGetActiveHeldDirection(out int dx, out int dy))
+        if (DriveFrame(deltaSeconds)) _wasMovingLastFrame = false; // at a vehicle's controls: the keys drive it (GameTestWindow.Vehicles.cs)
+        else if (TryGetActiveHeldDirection(out int dx, out int dy))
         {
             CancelPlayerWalk(); // the keys take over from walking to a chair or bed
             CancelPendingSit();
@@ -2148,9 +2149,10 @@ public partial class GameTestWindow : Window
             var worldObject = ObjectDef(obj.ObjectId);
             if (worldObject is null) return (false, false, 1, 1, 1);
             bool flat = worldObject.Type == ObjectType.Trap || (worldObject.Type == ObjectType.Tile && !worldObject.IsSolid); // Exult: a flat shape is 0 lifts high
+            var (sx, sy) = TurnedSize(worldObject, obj.Facing, worldObject.SizeX, worldObject.SizeY); // a vehicle's piece turned a quarter: width and depth swapped
             if (worldObject.Type == ObjectType.Tile && worldObject.IsSolid) // a floor slab: things put on it rest on top
-                return (true, true, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), Math.Max(1, worldObject.SizeZ));
-            return (worldObject.IsCellStackable || flat, worldObject.AllowCellElevation && !flat, Math.Max(1, worldObject.SizeX), Math.Max(1, worldObject.SizeY), flat ? 0 : Math.Max(1, worldObject.SizeZ));
+                return (true, true, Math.Max(1, sx), Math.Max(1, sy), Math.Max(1, worldObject.SizeZ));
+            return (worldObject.IsCellStackable || flat, worldObject.AllowCellElevation && !flat, Math.Max(1, sx), Math.Max(1, sy), flat ? 0 : Math.Max(1, worldObject.SizeZ));
         }
         return (false, false, 1, 1, 1);
     }

@@ -214,6 +214,7 @@ public partial class GameTestWindow
         }
         if (obj is null) return;
         if (TryUseLockTool(obj, new MapObjectOrigin(instance))) return;
+        if (TryUseVehiclePart(instance, obj)) return; // a vehicle's controls, its driver's seat (GameTestWindow.Vehicles.cs)
         if (obj.Type == ObjectType.Spellbook && _player is not null && RefusedSpellbook(obj, _player)) return; // not everyone can read it (GameTestWindow.Magic.cs)
         if (obj.Type == ObjectType.Spellbook && _player is not null) _spellbookReader = _player;
         if (TryUseDoll(instance, obj, () => FireObjectEvent(instance, obj, BookTriggerConditionBased.ByUseItem))) return; // it opens a paperdoll

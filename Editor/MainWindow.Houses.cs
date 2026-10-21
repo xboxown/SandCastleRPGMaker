@@ -21,6 +21,9 @@ namespace SandcastleRpgMaker.Editor;
 ///    changes. Right-click one (in Houses mode) to edit its house or take it
 ///    off the map. In play every copy is real pieces, characters and events
 ///    each its own (HouseBuilder).
+///  - The Vehicles tab is the same for vehicles - houses that move (Engine/
+///    VehicleModel.cs): built facing south from objects (painted tiles don't
+///    move), with their own settings (how they move, speed, deed, sounds).
 /// </summary>
 public partial class MainWindow
 {
@@ -28,92 +31,124 @@ public partial class MainWindow
     private HouseTemplate? _editingHouse;
     private MapData? _mapBeforeHouse;
     private ListBox? _houseList;
-    private TextBlock? _houseBanner;
-    private Button? _houseBackButton;
+    private ListBox? _vehicleList;
+    /// <summary>The list plotting takes its house (or vehicle) from.</summary>
+    private ListBox? _plotList;
+    private MenuItem? _vehicleModeItem;
     private MenuItem? _houseModeItem;
     private FrameworkElement? _houseGhost;
     private (int HouseId, int Floor)? _houseGhostOf;
     private readonly List<FrameworkElement> _placedHouseVisuals = new();
 
-    private HouseTemplate? PickedHouse => (_houseList?.SelectedItem as HouseRow)?.House;
+    private HouseTemplate? PickedHouse => ((_plotList ?? _houseList)?.SelectedItem as HouseRow)?.House;
 
     private sealed record HouseRow(HouseTemplate House, bool Editing)
     {
-        public override string ToString() => $"{(Editing ? "✎ " : "")}{House.Name}   ({House.Layout.Width} x {House.Layout.Height})";
+        public override string ToString() => $"{(Editing ? "✎ " : "")}{House.Name}   ({House.Layout.Width} x {House.Layout.Height}{(House.Vehicle is { } v ? $", {v.Movement}" : "")})";
     }
 
-    /// <summary>The Houses tab (after Characters) and Mode > Houses, made once.</summary>
+    /// <summary>The Houses and Vehicles tabs (after Characters) and Mode > Houses / Vehicles, made once.</summary>
     private void BuildHousesTab()
     {
         if (_houseList is not null) return;
-        _houseList = new ListBox { Margin = new Thickness(6) };
-        _houseList.MouseDoubleClick += (_, _) => { if (PickedHouse is { } house) EditHouse(house); };
-        _houseList.SelectionChanged += (_, _) => { _houseGhostOf = null; HideHouseGhost(); };
+        _houseList = BuildTemplateTab(vehicles: false);
+        _vehicleList = BuildTemplateTab(vehicles: true);
+        _houseModeItem = new MenuItem { Header = "Houses (plot a house)", IsCheckable = true, ToolTip = "Plot the house picked in the Houses tab: a see-through picture follows the mouse - green fits, red is in the way" };
+        _houseModeItem.Click += (_, _) => EnterHouseMode(_houseList);
+        _vehicleModeItem = new MenuItem { Header = "Vehicles (plot a vehicle)", IsCheckable = true, ToolTip = "Plot the vehicle picked in the Vehicles tab: a see-through picture follows the mouse - green fits, red is in the way" };
+        _vehicleModeItem.Click += (_, _) => EnterHouseMode(_vehicleList);
+        ModeMenu.Items.Insert(ModeMenu.Items.IndexOf(ZoneModeMenuItem) + 1, _houseModeItem);
+        ModeMenu.Items.Insert(ModeMenu.Items.IndexOf(_houseModeItem) + 1, _vehicleModeItem);
+        RefreshHouseList();
+    }
+
+    /// <summary>One tab: its list, its buttons, its banner while one of its own is being edited.</summary>
+    private ListBox BuildTemplateTab(bool vehicles)
+    {
+        string kind = vehicles ? "vehicle" : "house";
+        var list = new ListBox { Margin = new Thickness(6), Tag = vehicles };
+        HouseTemplate? Picked() => (list.SelectedItem as HouseRow)?.House;
+        list.MouseDoubleClick += (_, _) => { if (Picked() is { } house) EditHouse(house); };
+        list.SelectionChanged += (_, _) => { _houseGhostOf = null; HideHouseGhost(); };
         var menu = new ContextMenu();
         void Item(string header, Action<HouseTemplate> act)
         {
             var item = new MenuItem { Header = header };
-            item.Click += (_, _) => { if (PickedHouse is { } house) act(house); };
+            item.Click += (_, _) => { if (Picked() is { } house) act(house); };
             menu.Items.Add(item);
         }
-        Item("Edit the house", EditHouse);
-        Item("Plot it on the map", _ => EnterHouseMode());
+        Item($"Edit the {kind}", EditHouse);
+        if (vehicles) Item("Settings (moves on, speed, deed, sounds)...", EditVehicleSettings);
+        Item("Plot it on the map", _ => EnterHouseMode(list));
         Item("Rename...", RenameHouse);
         Item("Resize...", ResizeHouse);
         menu.Items.Add(new Separator());
         Item("Delete...", DeleteHouse);
-        _houseList.ContextMenu = menu;
-        _houseList.PreviewMouseRightButtonDown += (_, e) =>
+        list.ContextMenu = menu;
+        list.PreviewMouseRightButtonDown += (_, e) =>
         {
-            if (e.OriginalSource is DependencyObject d && ItemsControl.ContainerFromElement(_houseList, d) is ListBoxItem item) item.IsSelected = true;
+            if (e.OriginalSource is DependencyObject d && ItemsControl.ContainerFromElement(list, d) is ListBoxItem item) item.IsSelected = true;
         };
 
         Button Small(string text, RoutedEventHandler click)
         {
-            var b = new Button { Content = text, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 0) };
+            var b = new Button { Content = text, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 0, 6, 4) };
             b.Click += click;
             return b;
         }
         var buttons = new WrapPanel { Margin = new Thickness(6, 6, 6, 0) };
-        buttons.Children.Add(Small("New House...", (_, _) => NewHouse()));
-        buttons.Children.Add(Small("Edit", (_, _) => { if (PickedHouse is { } h) EditHouse(h); }));
-        buttons.Children.Add(Small("Plot", (_, _) => EnterHouseMode()));
-        _houseBanner = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold, Foreground = Brushes.DarkGreen, Margin = new Thickness(6, 6, 6, 0), Visibility = Visibility.Collapsed };
-        _houseBackButton = Small("Back to the map", (_, _) => EndHouseEditing());
-        _houseBackButton.Margin = new Thickness(6, 4, 6, 0);
-        _houseBackButton.HorizontalAlignment = HorizontalAlignment.Left;
-        _houseBackButton.Visibility = Visibility.Collapsed;
+        buttons.Children.Add(Small(vehicles ? "New Vehicle..." : "New House...", (_, _) => NewHouse(vehicles)));
+        buttons.Children.Add(Small("Edit", (_, _) => { if (Picked() is { } h) EditHouse(h); }));
+        if (vehicles) buttons.Children.Add(Small("Settings...", (_, _) => { if (Picked() is { } h) EditVehicleSettings(h); }));
+        buttons.Children.Add(Small("Plot", (_, _) => EnterHouseMode(list)));
+        var banner = new TextBlock { TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.SemiBold, Foreground = Brushes.DarkGreen, Margin = new Thickness(6, 6, 6, 0), Visibility = Visibility.Collapsed };
+        var back = Small("Back to the map", (_, _) => EndHouseEditing());
+        back.Margin = new Thickness(6, 4, 6, 0);
+        back.HorizontalAlignment = HorizontalAlignment.Left;
+        back.Visibility = Visibility.Collapsed;
+        _templateBanners.Add((vehicles, banner, back));
         var note = new TextBlock
         {
-            Text = "Build a house once, plot it as often as you like. New House: its name and size (its foundation), then build it with the usual tools. Plot (Mode > Houses): green fits, red is in the way. Plotted copies follow every change to the house.",
+            Text = vehicles
+                ? "A vehicle is a house that moves: a ship, a cart, a carpet, a car. Build it facing south (toward you) from objects - painted tiles don't move with it. Give its pieces their roles (Object Editor > Vehicle part): a driver's seat or controls to drive it from, wheels that turn, a look for each way it can face. Settings: land, sea or air, its speed, a deed, its sounds."
+                : "Build a house once, plot it as often as you like. New House: its name and size (its foundation), then build it with the usual tools. Plot (Mode > Houses): green fits, red is in the way. Plotted copies follow every change to the house.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.7, Margin = new Thickness(6, 6, 6, 0), FontSize = 11
         };
         var panel = new DockPanel();
-        foreach (var top in new FrameworkElement[] { buttons, _houseBanner, _houseBackButton, note })
+        foreach (var top in new FrameworkElement[] { buttons, banner, back, note })
         {
             DockPanel.SetDock(top, Dock.Top);
             panel.Children.Add(top);
         }
-        panel.Children.Add(_houseList);
-        PaletteTabs.Items.Add(new TabItem { Header = "Houses", Content = panel });
+        panel.Children.Add(list);
+        PaletteTabs.Items.Add(new TabItem { Header = vehicles ? "Vehicles" : "Houses", Content = panel });
+        return list;
+    }
 
-        _houseModeItem = new MenuItem { Header = "Houses (plot a house)", IsCheckable = true, ToolTip = "Plot the house picked in the Houses tab: a see-through picture follows the mouse - green fits, red is in the way" };
-        _houseModeItem.Click += (_, _) => EnterHouseMode();
-        ModeMenu.Items.Insert(ModeMenu.Items.IndexOf(ZoneModeMenuItem) + 1, _houseModeItem);
+    private readonly List<(bool Vehicles, TextBlock Banner, Button Back)> _templateBanners = new();
+
+    private void EditVehicleSettings(HouseTemplate vehicle)
+    {
+        if (vehicle.Vehicle is null) return;
+        new VehicleSettingsWindow(vehicle.Name, vehicle.Vehicle, _objectDatabase, _resourceDatabase) { Owner = this }.ShowDialog();
         RefreshHouseList();
     }
 
     private void RefreshHouseList()
     {
-        if (_houseList is null) return;
-        var picked = PickedHouse;
-        _houseList.ItemsSource = _houses.Select(h => new HouseRow(h, ReferenceEquals(h, _editingHouse))).ToList();
-        _houseList.SelectedItem = _houseList.Items.Cast<HouseRow>().FirstOrDefault(r => ReferenceEquals(r.House, picked ?? _editingHouse));
-        if (_houseBanner is not null && _houseBackButton is not null)
+        foreach (var list in new[] { _houseList, _vehicleList })
         {
-            bool editing = _editingHouse is not null;
-            _houseBanner.Text = editing ? $"Editing the house \"{_editingHouse!.Name}\"." : "";
-            _houseBanner.Visibility = _houseBackButton.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
+            if (list is null) continue;
+            bool vehicles = list.Tag is true;
+            var picked = (list.SelectedItem as HouseRow)?.House;
+            list.ItemsSource = _houses.Where(h => (h.Vehicle is not null) == vehicles).Select(h => new HouseRow(h, ReferenceEquals(h, _editingHouse))).ToList();
+            list.SelectedItem = list.Items.Cast<HouseRow>().FirstOrDefault(r => ReferenceEquals(r.House, picked ?? _editingHouse));
+        }
+        foreach (var (vehicles, banner, back) in _templateBanners)
+        {
+            bool editing = _editingHouse is not null && (_editingHouse.Vehicle is not null) == vehicles;
+            banner.Text = editing ? $"Editing the {(vehicles ? "vehicle" : "house")} \"{_editingHouse!.Name}\"." : "";
+            banner.Visibility = back.Visibility = editing ? Visibility.Visible : Visibility.Collapsed;
         }
     }
 
@@ -126,17 +161,18 @@ public partial class MainWindow
         RefreshHouseList();
     }
 
-    private void NewHouse()
+    private void NewHouse(bool vehicle = false)
     {
+        string kind = vehicle ? "Vehicle" : "House";
         if (_tileset is null || _tilesetBitmap is null)
         {
-            MessageBox.Show(this, "Pick a tileset first (Tileset tab) - a new house is built with it.", "New House", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, $"Pick a tileset first (Tileset tab) - a new {kind.ToLowerInvariant()} is built with it.", $"New {kind}", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var ask = new MapSizeWindow("New House", $"House {_houses.Count + 1}", 8, 6) { Owner = this };
+        var ask = new MapSizeWindow($"New {kind}", $"{kind} {_houses.Count(h => (h.Vehicle is not null) == vehicle) + 1}", vehicle ? 4 : 8, vehicle ? 6 : 6) { Owner = this };
         if (ask.ShowDialog() != true) return;
         var tileset = new TilesetDefinition { TileWidth = _tileset.TileWidth, TileHeight = _tileset.TileHeight, TilesetSpriteName = _tileset.TilesetSpriteName };
-        var house = new HouseTemplate { Id = _houses.Count == 0 ? 1 : _houses.Max(h => h.Id) + 1, Name = ask.MapName, Layout = MapData.CreateEmpty(ask.MapName, ask.MapWidth, ask.MapHeight, tileset) };
+        var house = new HouseTemplate { Id = _houses.Count == 0 ? 1 : _houses.Max(h => h.Id) + 1, Name = ask.MapName, Layout = MapData.CreateEmpty(ask.MapName, ask.MapWidth, ask.MapHeight, tileset), Vehicle = vehicle ? new VehicleSettings() : null };
         _houses.Add(house);
         RefreshHouseList();
         EditHouse(house);
@@ -152,7 +188,9 @@ public partial class MainWindow
         ShowMapInEditor();
         RefreshWorldList();
         RefreshHouseList();
-        StatusText.Text = $"Editing the house \"{house.Name}\" ({house.Layout.Width} x {house.Layout.Height}): build it with the usual tools, on any floor. Back to the map (Houses tab) when it's done.";
+        StatusText.Text = house.Vehicle is not null
+            ? $"Editing the vehicle \"{house.Name}\" ({house.Layout.Width} x {house.Layout.Height}): build it facing south (toward you) from objects - painted tiles don't move with it. Back to the map (Vehicles tab) when it's done."
+            : $"Editing the house \"{house.Name}\" ({house.Layout.Width} x {house.Layout.Height}): build it with the usual tools, on any floor. Back to the map (Houses tab) when it's done.";
     }
 
     /// <summary>Back to the map the house was opened from.</summary>
@@ -212,8 +250,9 @@ public partial class MainWindow
 
     // ---------------- Plotting ----------------
 
-    private void EnterHouseMode()
+    private void EnterHouseMode(ListBox? from = null)
     {
+        if (from is not null && !ReferenceEquals(from, _plotList)) { _plotList = from; _houseGhostOf = null; HideHouseGhost(); }
         if (_editingHouse is not null)
         {
             StatusText.Text = "A house can't be plotted inside a house - go Back to the map first (Houses tab).";
@@ -222,10 +261,11 @@ public partial class MainWindow
         }
         ClearModeChecks();
         _editMode = EditMode.House;
-        if (_houseModeItem is not null) _houseModeItem.IsChecked = true;
+        bool vehicles = (_plotList ?? _houseList)?.Tag is true;
+        if ((vehicles ? _vehicleModeItem : _houseModeItem) is { } modeItem) modeItem.IsChecked = true;
         StatusText.Text = PickedHouse is { } house
             ? $"Houses mode: move over the map - \"{house.Name}\" follows the mouse; green fits, red is in the way. Click to plot it. Right-click a plotted house to edit it or take it off the map."
-            : "Houses mode: pick a house in the Houses tab first (or make one with New House).";
+            : vehicles ? "Vehicles mode: pick a vehicle in the Vehicles tab first (or make one with New Vehicle)." : "Houses mode: pick a house in the Houses tab first (or make one with New House).";
     }
 
     /// <summary>Where a house goes with the mouse on a cell: centred on it.</summary>
@@ -304,7 +344,7 @@ public partial class MainWindow
         if (_map is null || PlacedHouseAt(x, y) is not { } placed || _houses.FirstOrDefault(t => t.Id == placed.HouseId) is not { } house) return;
         var menu = new ContextMenu();
         var edit = new MenuItem { Header = $"Edit the house \"{house.Name}\"" };
-        edit.Click += (_, _) => { if (_houseList is not null) _houseList.SelectedItem = _houseList.Items.Cast<HouseRow>().FirstOrDefault(r => ReferenceEquals(r.House, house)); EditHouse(house); };
+        edit.Click += (_, _) => { var list = house.Vehicle is null ? _houseList : _vehicleList; if (list is not null) list.SelectedItem = list.Items.Cast<HouseRow>().FirstOrDefault(r => ReferenceEquals(r.House, house)); EditHouse(house); };
         var remove = new MenuItem { Header = "Take it off the map" };
         remove.Click += (_, _) => { _map.Houses.Remove(placed); DrawPlacedHouses(); StatusText.Text = $"\"{house.Name}\" taken off the map (the house itself is kept in the Houses tab)."; };
         menu.Items.Add(edit);
@@ -329,7 +369,7 @@ public partial class MainWindow
             grid.Children.Add(new Border
             {
                 Background = new SolidColorBrush(Color.FromArgb(190, 255, 255, 255)), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
-                Child = new TextBlock { Text = "🏠 " + house.Name, FontSize = 10, Margin = new Thickness(3, 0, 3, 0), Foreground = Brushes.SaddleBrown }
+                Child = new TextBlock { Text = (house.Vehicle is null ? "🏠 " : "🚗 ") + house.Name, FontSize = 10, Margin = new Thickness(3, 0, 3, 0), Foreground = Brushes.SaddleBrown }
             });
             Canvas.SetLeft(grid, placed.X * _tileset.TileWidth);
             Canvas.SetTop(grid, placed.Y * _tileset.TileHeight);

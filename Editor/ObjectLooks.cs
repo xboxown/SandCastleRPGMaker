@@ -25,7 +25,8 @@ internal static class ObjectLooks
 
     public static SpriteEntry? SpriteFor(WorldObject obj, ObjectState state, SpriteDatabase sprites)
     {
-        var own = Find(sprites, obj.SpriteGroup, obj.SpriteName);
+        // A vehicle's piece turned another way: its look for that way (Object Editor > Vehicle part > Turned looks).
+        var own = (obj.TurnLooks.TryGetValue(state.Facing, out var turned) && turned.IsSet ? Find(sprites, turned) : null) ?? Find(sprites, obj.SpriteGroup, obj.SpriteName);
         switch (obj.Type)
         {
             case ObjectType.Door:

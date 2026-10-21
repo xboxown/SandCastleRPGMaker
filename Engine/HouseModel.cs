@@ -15,6 +15,8 @@ public class HouseTemplate
     public int Id { get; set; }
     public string Name { get; set; } = "House";
     public MapData Layout { get; set; } = new();
+    /// <summary>Set for a vehicle (Vehicles tab): a house that moves.</summary>
+    public VehicleSettings? Vehicle { get; set; }
 }
 
 /// <summary>A house plotted on a map: which house, and the map cell of its top-left corner.</summary>
@@ -41,18 +43,31 @@ public static class HouseBuilder
         if (map.Houses.Count == 0) return;
         foreach (var placed in map.Houses.ToList())
             if (houses.FirstOrDefault(h => h.Id == placed.HouseId) is { } house)
-                Stamp(map, Copy(house.Layout), placed.X, placed.Y);
+            {
+                var pieces = Stamp(map, Copy(house.Layout), placed.X, placed.Y, tiles: house.Vehicle is null); // a vehicle is objects only: painted tiles can't move
+                if (house.Vehicle is null) continue;
+                // A vehicle: its footprint (the whole layout), and its pieces marked as its own.
+                int units = Math.Max(1, map.Tileset.TileWidth / 8), unitsY = Math.Max(1, map.Tileset.TileHeight / 8);
+                var state = new VehicleState
+                {
+                    Id = map.VehicleStates.Count == 0 ? 1 : map.VehicleStates.Max(v => v.Id) + 1, TemplateId = house.Id,
+                    Left = placed.X * units, Top = placed.Y * unitsY, Width = house.Layout.Width * units, Depth = house.Layout.Height * unitsY
+                };
+                foreach (var piece in pieces) piece.VehicleStateId = state.Id;
+                map.VehicleStates.Add(state);
+            }
         map.Houses.Clear(); // built: a save of this map holds the pieces, not the plots
     }
 
     private static T Copy<T>(T source) => JsonSerializer.Deserialize<T>(JsonSerializer.Serialize(source))!;
 
-    private static void Stamp(MapData map, MapData house, int ox, int oy)
+    /// <summary>The house's pieces put into the map; returns its objects (on the map, not inside others).</summary>
+    private static List<ObjectInstance> Stamp(MapData map, MapData house, int ox, int oy, bool tiles)
     {
         bool Inside(int x, int y) => x >= 0 && y >= 0 && x < map.Width && y < map.Height;
 
         // Tiles, floor by floor: the house's own over the map's (an empty house cell leaves the map's).
-        for (int floor = 1; floor <= MapFloors.MaxFloors; floor++)
+        for (int floor = 1; tiles && floor <= MapFloors.MaxFloors; floor++)
         {
             if (house.LayerForFloor(floor) is not { } layer) continue;
             MapLayer? target = null;
@@ -106,6 +121,7 @@ public static class HouseBuilder
                 foreach (var command in page.Commands) MoveWithHouse(command, ox, oy, objectIds);
             map.Events.Add(ev);
         }
+        return house.Objects.Where(o => o.ContainerInstanceId < 0).ToList();
     }
 
     /// <summary>A command of a house's event: its spot moves with the house (not one in another world), a thing of the house is its copy.</summary>

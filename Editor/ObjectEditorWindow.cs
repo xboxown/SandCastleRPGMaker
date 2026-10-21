@@ -188,6 +188,7 @@ public partial class ObjectEditorWindow : Window
         BuildLiquidSource(obj);
         BuildPaperdoll(obj);
         BuildBody(obj);
+        BuildVehiclePart(obj); // ObjectEditorWindow.Vehicle.cs
     }
 
     private void BuildTypeChooser(WorldObject obj)

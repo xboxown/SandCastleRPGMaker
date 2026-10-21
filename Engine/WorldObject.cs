@@ -132,6 +132,12 @@ public class WorldObject
     public ArmorSettings Armor { get; set; } = new();
     public MoneySettings Money { get; set; } = new();
     public FurnitureSettings Furniture { get; set; } = new();
+    /// <summary>A piece of a vehicle (Object Editor > Vehicle part): what it's for in it.</summary>
+    public VehiclePartRole VehicleRole { get; set; }
+    /// <summary>Its look facing each way, as a vehicle turns (Exult's rotated frames); built facing South. Facing East or West it's turned a quarter: its width and depth swap.</summary>
+    public Dictionary<SpriteDirection, SpriteLink> TurnLooks { get; set; } = new();
+    /// <summary>A wheel's or draft animal's look while the vehicle moves (an animation).</summary>
+    public SpriteLink MovingLook { get; set; } = new();
     public TrapSettings Trap { get; set; } = new();
     public WindowSettings Window { get; set; } = new();
     public PlantSettings Plant { get; set; } = new();
@@ -256,6 +262,8 @@ public class ObjectInstance : IHasDollState
 
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
+    /// <summary>In play: the vehicle (VehicleState.Id) this is a piece of; 0 = none.</summary>
+    public int VehicleStateId { get; set; }
 
     /// <summary>Map Editor overrides of the object's starting state (null = as the Object Editor says).</summary>
     public bool? StartsOpen { get; set; }

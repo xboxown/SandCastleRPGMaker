@@ -143,6 +143,9 @@ public class MapData
     /// <summary>Houses plotted on this map (Map Editor > Houses), each linked to its house; built into real pieces as a game starts (HouseBuilder).</summary>
     public List<PlacedHouse> Houses { get; set; } = new();
 
+    /// <summary>In play: the vehicles built from plotted ones - where each is now, and which way it faces (saved with a game).</summary>
+    public List<VehicleState> VehicleStates { get; set; } = new();
+
     /// <summary>Named areas - houses, pubs, hospitals (Map Editor > Mode > Zones); characters' schedules go to them.</summary>
     public List<MapZone> Zones { get; set; } = new();
     public int NextZoneId() => Zones.Count == 0 ? 1 : Zones.Max(z => z.Id) + 1;
