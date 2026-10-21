@@ -75,6 +75,7 @@ public partial class MainWindow
         panel.Children.Add(_worldList);
         PaletteTabs.Items.Insert(0, new TabItem { Header = "Maps", Content = panel });
         PaletteTabs.SelectedIndex = 1; // still opens on the Tileset tab
+        BuildHousesTab(); // the House Editor's tab, last (MainWindow.Houses.cs)
     }
 
     private sealed record WorldRow(MapData Map, bool Starting)
@@ -114,9 +115,13 @@ public partial class MainWindow
     /// <summary>Edit this world: its tileset, palette and map.</summary>
     private void ShowWorld(MapData world)
     {
+        bool wasHouse = _editingHouse is not null;
+        _editingHouse = null; // a map picked: no longer editing a house (MainWindow.Houses.cs)
+        _mapBeforeHouse = null;
         _map = world;
         ShowMapInEditor();
         RefreshWorldList();
+        if (wasHouse) RefreshHouseList();
         StatusText.Text = $"Editing the world \"{world.MapName}\" ({world.Width} x {world.Height}).";
     }
 

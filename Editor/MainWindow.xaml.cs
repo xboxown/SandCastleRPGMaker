@@ -48,7 +48,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone, House }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -116,6 +116,7 @@ public partial class MainWindow : Window
         ProjectSession.PosesProvider = () => _poseDatabase;
         ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
+        ProjectSession.HousesProvider = () => _houses; // MainWindow.Houses.cs
         ProjectSession.StatsProvider = () => _statDatabase;
         ProjectSession.CharactersProvider = () => _characterDatabase;
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
@@ -801,6 +802,7 @@ public partial class MainWindow : Window
         _statDatabase = StatDatabase.CreateDefault();
         _poseDatabase = PoseDatabase.CreateDefault();
         _tilePropertiesDatabase = new TilePropertiesDatabase();
+        LoadHouses(null);
 
         SetActiveProject(dialog.ProjectFilePath, dialog.ProjectId, dialog.ProjectName, dialog.Platform, dialog.CreatedAtUtc);
     }
@@ -859,6 +861,7 @@ public partial class MainWindow : Window
                 try { _objectDatabase = ObjectDatabaseSerializer.Load(oldMap.ObjectDatabasePath); } catch { /* unreadable: start with none */ }
             }
             LoadWorlds(payload.Map, payload.Worlds); // the starting world and the others (Maps tab)
+            LoadHouses(payload.Houses); // the House Editor's houses (MainWindow.Houses.cs)
             _map = payload.Map;
             if (_map is not null) ShowMapInEditor();
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
@@ -960,7 +963,8 @@ public partial class MainWindow : Window
                 Poses = _poseDatabase,
                 TileProperties = _tilePropertiesDatabase,
                 Map = _worlds.FirstOrDefault() ?? _map, // the starting world (Maps tab)
-                Worlds = _worlds.Skip(1).ToList()
+                Worlds = _worlds.Skip(1).ToList(),
+                Houses = _houses // the House Editor's houses (MainWindow.Houses.cs)
             };
             ProjectFiles.SaveManifest(_currentProjectFilePath, payload);
 
@@ -1029,6 +1033,8 @@ public partial class MainWindow : Window
         ObjectModeMenuItem.IsChecked = false;
         FreeModeMenuItem.IsChecked = false;
         ZoneModeMenuItem.IsChecked = false;
+        if (_houseModeItem is not null) _houseModeItem.IsChecked = false; // MainWindow.Houses.cs
+        HideHouseGhost();
         _selectedZone = null;
         DrawZones(); // zones show only in Zones mode
         ClearFreeSelection();
@@ -1465,6 +1471,9 @@ public partial class MainWindow : Window
         _mapEventVisuals.Clear();
         _startPositionVisual = null;
         _hoverCursorVisual = null;
+        _houseGhost = null; // gone with MapCanvas.Children.Clear() above
+        _houseGhostOf = null;
+        _placedHouseVisuals.Clear();
         _shapePreviewVisuals.Clear(); // the squares themselves are gone with MapCanvas.Children.Clear() above; this just drops the now-stale references
         _shapeStartCell = null;
         _mapItemVisuals.Clear();
@@ -1530,6 +1539,9 @@ public partial class MainWindow : Window
         // Characters standing on this map, in their poses.
         PlaceAllCharacterVisuals();
 
+        // Houses plotted on it, as their houses are now (MainWindow.Houses.cs).
+        DrawPlacedHouses();
+
         // -= before += for the same reason as the palette's own handlers -
         // BuildMapCanvas() can genuinely run more than once in a session
         // (New Map, Load Map, Open Project), and Children.Clear() only
@@ -1576,6 +1588,12 @@ public partial class MainWindow : Window
         if (_editMode == EditMode.Zone)
         {
             ZoneMode_MouseLeftButtonDown(x, y, e.ClickCount);
+            return;
+        }
+
+        if (_editMode == EditMode.House)
+        {
+            HouseMode_Click(x, y); // MainWindow.Houses.cs
             return;
         }
 
@@ -1694,6 +1712,7 @@ public partial class MainWindow : Window
         var (hoverX, hoverY) = CellFromPoint(rawPoint);
         bool inBounds = IsInsideMap(hoverX, hoverY);
         _lastHoverCell = (hoverX, hoverY);
+        if (_editMode == EditMode.House) { HouseMode_MouseMove(hoverX, hoverY); return; } // the house follows the mouse (MainWindow.Houses.cs)
 
         // Live diagnostic for Issue #2/#3: the exact raw pixel position AND the cell it resolves to, in or out of bounds - hover to the spot where the cursor disappears and this shows precisely what's being computed there.
         StatusText.Text = inBounds
@@ -1743,6 +1762,7 @@ public partial class MainWindow : Window
     private void MapCanvas_MouseLeave(object sender, MouseEventArgs e)
     {
         if (_hoverCursorVisual is not null) _hoverCursorVisual.Visibility = Visibility.Collapsed;
+        if (_houseGhost is not null) _houseGhost.Visibility = Visibility.Collapsed;
     }
 
     private void MapCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -1797,6 +1817,12 @@ public partial class MainWindow : Window
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
+
+        if (_editMode == EditMode.House)
+        {
+            HouseMode_RightClick(x, y); // MainWindow.Houses.cs
+            return;
+        }
 
         if (_editMode == EditMode.Event)
         {

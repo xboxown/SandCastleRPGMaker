@@ -154,6 +154,7 @@ public partial class GameTestWindow : Window
         Title += $" [{BuildInfo.CurrentBuild}]";
         // CRITICAL data-safety fix: _map must be an independent deep clone, never the same MapData instance the Map Editor itself holds. MapData is a reference type, so without this, any runtime change here (drag-and-drop repositioning today; deletion or anything else added later) would silently mutate the SAME object the editor shows and eventually saves - exactly the bug reported. Same proven JSON round-trip technique already used elsewhere in this project (CloneEventPages) for exactly this reason: safer than hand-cloning a type with this many nested fields, where missing just one would quietly leave a shared reference behind.
         _map = CloneMapData(map);
+        HouseBuilder.BuildInto(_map, ProjectSession.Houses); // houses plotted on it: real pieces, each copy its own (Engine/HouseModel.cs)
         _tilesetBitmap = tilesetBitmap;
         _tileWidth = tileWidth;
         _tileHeight = tileHeight;

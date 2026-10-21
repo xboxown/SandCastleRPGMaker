@@ -140,6 +140,9 @@ public class MapData
     /// <summary>This map's sounds of the time of day - birds at dawn, crickets at night (Edit > Map Ambient Sounds).</summary>
     public AmbientSounds Ambient { get; set; } = new();
 
+    /// <summary>Houses plotted on this map (Map Editor > Houses), each linked to its house; built into real pieces as a game starts (HouseBuilder).</summary>
+    public List<PlacedHouse> Houses { get; set; } = new();
+
     /// <summary>Named areas - houses, pubs, hospitals (Map Editor > Mode > Zones); characters' schedules go to them.</summary>
     public List<MapZone> Zones { get; set; } = new();
     public int NextZoneId() => Zones.Count == 0 ? 1 : Zones.Max(z => z.Id) + 1;
@@ -181,6 +184,7 @@ public class MapData
         Count(Characters.Count(c => Out(c.X, c.Y)), "placed character");
         Count(Events.Count(e => Out(e.X, e.Y)), "event");
         Count(Zones.Count(z => z.X >= width || z.Y >= height), "zone");
+        Count(Houses.Count(h => h.X >= width || h.Y >= height), "plotted house");
         int tiles = Layers.Sum(l => Enumerable.Range(0, Math.Min(l.TileIndices.Count, Width * Height)).Count(i => l.TileIndices[i] >= 0 && Out(i % Width, i / Width)));
         Count(tiles, "painted tile");
         if (StartX >= width || StartY >= height) lost.Add("the Start Position");
@@ -211,6 +215,7 @@ public class MapData
         Characters.RemoveAll(c => c.X >= width || c.Y >= height);
         Events.RemoveAll(e => e.X >= width || e.Y >= height);
         Zones.RemoveAll(z => z.X >= width || z.Y >= height);
+        Houses.RemoveAll(h => h.X >= width || h.Y >= height);
         foreach (var z in Zones) { z.Width = Math.Min(z.Width, width - z.X); z.Height = Math.Min(z.Height, height - z.Y); }
         if (StartX >= width || StartY >= height) { StartX = -1; StartY = -1; }
         Width = width;

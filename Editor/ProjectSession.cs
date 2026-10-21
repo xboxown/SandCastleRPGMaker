@@ -38,6 +38,9 @@ internal static class ProjectSession
     public static Func<PoseDatabase>? PosesProvider;
     public static PoseDatabase Poses => PosesProvider?.Invoke() ?? PoseDatabase.CreateDefault();
     public static Func<ContainerDatabase>? ContainersProvider;
+    /// <summary>The project's houses (Map Editor > Houses): built into each map as a game starts.</summary>
+    public static Func<List<HouseTemplate>>? HousesProvider;
+    public static List<HouseTemplate> Houses => HousesProvider?.Invoke() ?? new List<HouseTemplate>();
     public static Func<CurrencyDatabase>? CurrenciesProvider;
     public static CurrencyDatabase Currencies => CurrenciesProvider?.Invoke() ?? new CurrencyDatabase();
     public static Func<StatDatabase>? StatsProvider;

@@ -52,6 +52,9 @@ public class ManifestPayload
     public VideoDatabase Videos { get; set; } = new();
     /// <summary>The other worlds (Maps tab) - Map is the starting world. Older projects have none.</summary>
     public List<MapData> Worlds { get; set; } = new();
+
+    /// <summary>The houses of the House Editor (Map Editor > Houses), plotted on maps as often as you like.</summary>
+    public List<HouseTemplate> Houses { get; set; } = new();
 }
 
 /// <summary>
