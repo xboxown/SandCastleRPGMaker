@@ -10,6 +10,7 @@
 #include "sound.h"
 #include "platform.h"
 #include "conditions.h"
+#include "pack.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -32,6 +33,7 @@ char *read_whole_file(const char *path, long *length);
 typedef struct SoundFile { int id, music; double volume; char file[64]; unsigned char *data; long size; } SoundFile;
 static SoundFile *files; static int fileCount;
 static char folder[1024];
+static Archive *soundArchive;
 
 enum { DEC_NONE, DEC_WAV, DEC_MP3, DEC_8SVX };
 
@@ -157,11 +159,9 @@ void sound_load(const char *gameFolder)
 {
     snprintf(folder, sizeof folder, "%s", gameFolder);
     char path[1100];
-    snprintf(path, sizeof path, "%s/sounds.json", gameFolder);
-    char *text = read_whole_file(path, NULL);
-    cJSON *root = text ? cJSON_Parse(text) : NULL, *s;
-    free(text);
-    cJSON *list = cJSON_GetObjectItem(root, "Sounds");
+    snprintf(path, sizeof path, "%s/sounds.sdbx", gameFolder);
+    soundArchive = pack_archive_open(path);
+    cJSON *s, *list = cJSON_GetObjectItem((cJSON *)pack_archive_index(soundArchive), "Sounds");
     files = (SoundFile *)calloc((size_t)cJSON_GetArraySize(list) + 1, sizeof(SoundFile));
     cJSON_ArrayForEach(s, list)
     {
@@ -172,7 +172,6 @@ void sound_load(const char *gameFolder)
         f->volume = cJSON_IsNumber(vol) ? vol->valuedouble : 1;
         snprintf(f->file, sizeof f->file, "%s", cJSON_GetStringValue(cJSON_GetObjectItem(s, "File")));
     }
-    cJSON_Delete(root);
     if (getenv("SANDCASTLE_AUDIO_DUMP")) dump = fopen(getenv("SANDCASTLE_AUDIO_DUMP"), "wb");
     audioOn = platform_audio_open(44100, fill);
     if (audioOn > 1) outRate = audioOn; /* the rate the machine plays at */
@@ -184,9 +183,7 @@ static Voice *start(int id, double volume, int loop, int owner, double startFade
     if (!f || !audioOn) return NULL;
     if (!f->data)
     {
-        char path[1200];
-        snprintf(path, sizeof path, "%s/sounds/%s", folder, f->file);
-        f->data = (unsigned char *)read_whole_file(path, &f->size);
+        f->data = pack_archive_read(soundArchive, f->file, &f->size); /* decrypted when first played, then kept */
         if (!f->data) return NULL;
     }
     platform_audio_lock();

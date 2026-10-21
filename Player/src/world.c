@@ -17,6 +17,7 @@
 #include "world.h"
 #include "pictures.h"
 #include "font.h"
+#include "pack.h"
 #include "sound.h"
 #include "items.h"
 #include "platform.h"
@@ -68,6 +69,7 @@ typedef struct Thing
     int fixedFrame;                                  /* a frame shown instead of the animation (frame + 1; 0 = animate) - a bed's cover */
     int spent; double burnLeft;                      /* a light burnt out; the game minutes it has left (-1: not started) */
     cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
+    const Sprite *lookOverride;                      /* Change Object Look: another sprite (NULL: its own) */
     int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
 } Thing;
 
@@ -88,6 +90,7 @@ typedef struct Actor
     const Sprite *face;
     Pose poses[MAX_POSES]; int poseCount;
     int shownPose;                  /* Change Pose: the pose kept (index into poses, -1 = idle / walking) */
+    int gone;                       /* off the map (Place Character: removed, or not placed yet) */
     uint32_t poseSince;             /* when it began (its animation from the start) */
 } Actor;
 
@@ -158,6 +161,7 @@ static void read_objects(cJSON *project)
 /* ObjectLooks.SpriteFor: its look for its state and facing. */
 static const Sprite *look_of(const Thing *t)
 {
+    if (t->lookOverride) return t->lookOverride;
     const ObjectDef *d = t->def;
     if (!d) return t->sprite;
     const Sprite *own = d->turned[t->facing] ? d->turned[t->facing] : d->own;
@@ -362,14 +366,14 @@ static void player_foot(double px, double py, int *l, int *t)
 
 int world_load(const char *folder)
 {
-    if (!sprites_load(folder)) { snprintf(error_text, sizeof error_text, "Couldn't read %s/sprites.json.", folder); return 0; }
+    if (!sprites_load(folder)) { snprintf(error_text, sizeof error_text, "Couldn't read %s/sprites.sdbx (missing, damaged, or not this game's).", folder); return 0; }
     char path[1100];
-    snprintf(path, sizeof path, "%s/game.json", folder);
-    char *text = read_whole_file(path, NULL);
-    if (!text) { snprintf(error_text, sizeof error_text, "Couldn't read %s.", path); return 0; }
+    snprintf(path, sizeof path, "%s/game.sdbx", folder);
+    char *text = (char *)pack_read(path, NULL);
+    if (!text) { snprintf(error_text, sizeof error_text, "Couldn't read %s (missing, damaged, or not this game's).", path); return 0; }
     cJSON *root = cJSON_Parse(text);
     free(text);
-    if (!root) { snprintf(error_text, sizeof error_text, "game.json is damaged."); return 0; }
+    if (!root) { snprintf(error_text, sizeof error_text, "game.sdbx is damaged."); return 0; }
     cJSON *project = get(root, "Project"), *map = get(project, "Map");
     snprintf(title, sizeof title, "%s", str(get(project, "Manifest"), "ProjectName"));
     snprintf(mapName, sizeof mapName, "%s", str(get(project, "Map"), "MapName"));
@@ -495,7 +499,7 @@ int world_load(const char *folder)
     player_foot(player.px, player.py, &l, &t);
     player.lift = standing_lift(l, t, player.sizeX, player.sizeY, sf);
     cJSON *placed = get(map, "Characters");
-    npcs = (Actor *)calloc((size_t)cJSON_GetArraySize(placed) + 1, sizeof(Actor));
+    npcs = (Actor *)calloc((size_t)(cJSON_GetArraySize(placed) + cJSON_GetArraySize(characters) + 1), sizeof(Actor));
     cJSON_ArrayForEach(o, placed)
     {
         if (cJSON_IsTrue(get(o, "Dead"))) continue;
@@ -512,6 +516,20 @@ int world_load(const char *folder)
         a->body = bodyCount;
         Body *b = &bodies[bodyCount++]; /* solid, like Exult's actors */
         b->left = al; b->top = at; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ;
+    }
+    /* Everyone else (never placed on this map): off it, till Place Character brings them in. */
+    cJSON_ArrayForEach(ch, characters)
+    {
+        if (flag(ch, "IsTestPlayer")) continue;
+        int placedAlready = 0;
+        for (int i = 0; i < npcCount; i++) if (npcs[i].characterId == num(ch, "Id", -2)) placedAlready = 1;
+        if (placedAlready) continue;
+        Actor *a = &npcs[npcCount++];
+        read_actor_poses(ch, poses, a);
+        a->gone = 1;
+        a->body = bodyCount;
+        Body *b = &bodies[bodyCount++];
+        memset(b, 0, sizeof *b); b->z = -100000;
     }
     gameJson = root; /* kept: the events run from it */
     settle_all(); /* every authored thing comes to rest: stacks form in placement order */
@@ -774,7 +792,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     for (int i = -1; i < npcCount; i++)
     {
         const Actor *a = i < 0 ? &player : &npcs[i];
-        if (i >= 0 && a->lift >= ceiling) continue;
+        if (i >= 0 && (a->gone || a->lift >= ceiling)) continue;
         const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
         uint32_t at = a->walkingNow ? ms : 0;
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
@@ -1992,3 +2010,140 @@ void world_camera_center(double *x, double *y)
 }
 /* Camera Follows: someone else (0 = the player again). */
 void world_camera_follow(int actor) { cameraFollow = actor; cameraHeld = 0; }
+
+/* ---------------- Characters and things, for the event commands ---------------- */
+
+int world_actor_gone(int actor) { Actor *a = actor_of(actor); return !a || a->gone; }
+
+/* Place Character "Remove it from the map". */
+void world_actor_remove(int actor)
+{
+    Actor *a = actor_of(actor);
+    if (!a || actor == 0) return;
+    world_walk_cancel(actor);
+    a->gone = 1;
+    if (a->body >= 0) { bodies[a->body].width = bodies[a->body].depth = 0; bodies[a->body].z = -100000; }
+}
+
+/* Place Character at a cell of a floor: there (brought onto the map if it was off it), standing on that floor. */
+void world_actor_place(int actor, int x, int y, int onFloor)
+{
+    Actor *a = actor_of(actor);
+    if (!a || x < 0 || y < 0 || x >= mapW || y >= mapH) return;
+    world_walk_cancel(actor);
+    a->gone = 0;
+    a->px = x * tileW + tileW / 2.0; a->py = y * tileH + tileH / 2.0;
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    if (a->body >= 0) bodies[a->body].z = -100000;
+    a->lift = standing_lift(l, t, a->sizeX, a->sizeY, onFloor);
+    if (a->body >= 0) { Body *b = &bodies[a->body]; b->left = l; b->top = t; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ; }
+    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+}
+
+/* Change Look: someone else's look (its poses), or back to its own. */
+typedef struct SavedLook { int actor; const Sprite *idle[8], *walking[8]; Pose poses[MAX_POSES]; int poseCount; } SavedLook;
+static SavedLook savedLooks[16]; static int savedLookCount;
+
+void world_change_look(int actor, int other)
+{
+    Actor *a = actor_of(actor), *o = other >= 0 ? actor_of(other) : NULL;
+    if (!a) return;
+    int slot = -1;
+    for (int i = 0; i < savedLookCount; i++) if (savedLooks[i].actor == actor) slot = i;
+    if (!o)
+    {
+        if (slot < 0) return; /* already its own */
+        SavedLook *s = &savedLooks[slot];
+        memcpy(a->idle, s->idle, sizeof a->idle); memcpy(a->walking, s->walking, sizeof a->walking);
+        memcpy(a->poses, s->poses, sizeof a->poses); a->poseCount = s->poseCount;
+        savedLooks[slot] = savedLooks[--savedLookCount];
+    }
+    else
+    {
+        if (slot < 0 && savedLookCount < 16)
+        {
+            SavedLook *s = &savedLooks[savedLookCount++];
+            s->actor = actor;
+            memcpy(s->idle, a->idle, sizeof a->idle); memcpy(s->walking, a->walking, sizeof a->walking);
+            memcpy(s->poses, a->poses, sizeof a->poses); s->poseCount = a->poseCount;
+        }
+        memcpy(a->idle, o->idle, sizeof a->idle); memcpy(a->walking, o->walking, sizeof a->walking);
+        memcpy(a->poses, o->poses, sizeof a->poses); a->poseCount = o->poseCount;
+    }
+    a->shownPose = -1;
+}
+
+/* Change Object Look (NULL: its own again). */
+void world_thing_look(int uid, const Sprite *sprite) { Thing *t = thing_by_uid(uid); if (t) t->lookOverride = sprite; }
+
+/* Move Object: to a cell of a floor, resting on whatever is there. */
+void world_thing_move(int uid, int x, int y, int onFloor)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t || x < 0 || y < 0 || x >= mapW || y >= mapH) return;
+    t->x = x; t->y = y; t->offX = t->offY = 0;
+    Body b;
+    thing_box(t, &b);
+    if (t->body >= 0) bodies[t->body].z = -100000;
+    t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
+    t->homeFloor = onFloor;
+    if (t->body >= 0) { if (bodies[t->body].width || t->solid) thing_box(t, &bodies[t->body]); }
+    settle_all();
+}
+
+/* Set Door State: Locked (shut), Unlocked, Closed, Open. */
+void world_door_set(int uid, const char *state)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t || !t->def || t->def->type != T_DOOR) return;
+    if (!strcmp(state, "Locked")) { if (t->open) door_set_open(t, 0); t->locked = 1; }
+    else if (!strcmp(state, "Unlocked")) t->locked = 0;
+    else if (!strcmp(state, "Closed")) { if (t->open) door_set_open(t, 0); }
+    else if (!strcmp(state, "Open")) { t->locked = 0; if (!t->open) door_set_open(t, 1); }
+}
+
+/* Change Tile: a cell's tile on a floor (-1: none). The ground's walkability follows its tile; an upper floor's tile is a slab to stand on. */
+int world_set_tile(int x, int y, int onFloor, int tile)
+{
+    if (x < 0 || y < 0 || x >= mapW || y >= mapH) return 0;
+    if (onFloor < 1) onFloor = 1;
+    if (onFloor > MAX_FLOORS) onFloor = MAX_FLOORS;
+    if (!floors[onFloor])
+    {
+        floors[onFloor] = (int *)malloc(sizeof(int) * (size_t)(mapW * mapH));
+        for (int i = 0; i < mapW * mapH; i++) floors[onFloor][i] = -1;
+    }
+    int was = floors[onFloor][y * mapW + x];
+    floors[onFloor][y * mapW + x] = tile;
+    if (onFloor == 1)
+    {
+        cJSON *byKey = get(get(get(gameJson, "Project"), "TileProperties"), "ByTileKey");
+        walkable[y * mapW + x] = 1;
+        if (tile >= 0)
+        {
+            char key[200];
+            int slot = tile / 100000;
+            snprintf(key, sizeof key, "%s:%d", slot < sheetCount ? sheetNames[slot] : "", tile % 100000);
+            cJSON *props = get(byKey, key);
+            if (props && !flag(props, "Walkable")) walkable[y * mapW + x] = 0;
+        }
+        return 1;
+    }
+    /* an upper floor's slab: added, or taken away */
+    int left = x * unitsX, top = y * unitsY, z = base_lift(onFloor) - 1;
+    for (int i = slabStart; i < slabEnd; i++)
+        if (bodies[i].left == left && bodies[i].top == top && bodies[i].z == z)
+        {
+            if (tile < 0) { bodies[i].width = bodies[i].depth = 0; }
+            else { bodies[i].width = unitsX; bodies[i].depth = unitsY; }
+            return 1;
+        }
+    if (tile >= 0 && was < 0)
+    {
+        if (bodyCount + 1 >= bodyCap) { bodyCap *= 2; bodies = (Body *)realloc(bodies, sizeof(Body) * (size_t)bodyCap); }
+        Body *b = &bodies[bodyCount++];
+        b->left = left; b->top = top; b->width = unitsX; b->depth = unitsY; b->z = z; b->height = 1;
+    }
+    return 1;
+}

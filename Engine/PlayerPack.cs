@@ -5,16 +5,18 @@ namespace SandcastleRpgMaker.Engine;
 /// <summary>
 /// The game as the Sandcastle player (the C engine for Linux, Mac, MorphOS,
 /// AmigaOS 4 and Amiga 68k) reads it - written by Build for those platforms.
-/// A folder holding:
-///  - game.json: the project (maps with their houses and vehicles already
+/// Encrypted as the Windows game's files are (ProjectContainer: AES-256,
+/// stamped with the project's id), in a Game_Data folder:
+///  - game.sdbx: the project (maps with their houses and vehicles already
 ///    built in, characters, objects, settings...) and its books;
-///  - sprites.json: every sprite group, sprite and frame (its picture's
-///    file, its time), so a tile is frame N of its tileset sprite;
-///  - pictures/: each frame's picture as it was (PNG, BMP, GIF...);
-///  - sounds.json and sounds/: each sound and piece of music (its id, its
-///    file as it was - WAV, MP3, IFF 8SVX - its volume, whether it's music).
-/// Plain JSON and picture files: nothing the player can't read on any
-/// machine.
+///  - sprites.sdbx: every sprite group, sprite and frame (its picture's
+///    name, its time, its sound);
+///  - pictures.sdbx: each frame's picture as it was (PNG, BMP, GIF...);
+///  - sounds.sdbx: each sound and piece of music (its id, volume, whether
+///    it's music, and its file as it was - WAV, MP3, IFF 8SVX).
+/// pictures.sdbx and sounds.sdbx are archives (SRPK): an encrypted index,
+/// then each file encrypted on its own - the player decrypts only what it
+/// shows or plays.
 /// </summary>
 public static class PlayerPack
 {
@@ -29,18 +31,20 @@ public static class PlayerPack
         var game = JsonSerializer.Deserialize<ManifestPayload>(JsonSerializer.Serialize(project))!;
         foreach (var map in new[] { game.Map }.Concat(game.Worlds))
             if (map is not null) HouseBuilder.BuildInto(map, game.Houses);
-        File.WriteAllText(Path.Combine(folder, "game.json"), JsonSerializer.Serialize(new { Format = FormatVersion, Project = game, Books = books }, Json));
+        var id = project.Manifest.ProjectId;
+        foreach (string old in new[] { "game.json", "sprites.json", "sounds.json" }) File.Delete(Path.Combine(folder, old)); // an older, plain pack
+        foreach (string old in new[] { "pictures", "sounds" }) if (Directory.Exists(Path.Combine(folder, old))) Directory.Delete(Path.Combine(folder, old), recursive: true);
+        File.WriteAllBytes(Path.Combine(folder, "game.sdbx"), ProjectContainer.Encrypt(id, JsonSerializer.SerializeToUtf8Bytes(new { Format = FormatVersion, Project = game, Books = books }, Json)));
 
-        string pictures = Path.Combine(folder, "pictures");
-        Directory.CreateDirectory(pictures);
         int next = 0;
         var copied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+        var pictureFiles = new List<(string Name, byte[] Data)>();
         string Picture(string source)
         {
             if (string.IsNullOrEmpty(source) || !File.Exists(source)) return "";
             if (copied.TryGetValue(source, out var known)) return known;
             string name = $"{next++}{Path.GetExtension(source).ToLowerInvariant()}";
-            File.Copy(source, Path.Combine(pictures, name), overwrite: true);
+            pictureFiles.Add((name, File.ReadAllBytes(source)));
             return copied[source] = name;
         }
         var index = sprites.Groups.Select(g => new
@@ -53,20 +57,46 @@ public static class PlayerPack
                 Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs), Sound = f.SoundResourceId }).ToList()
             }).ToList()
         }).ToList();
-        File.WriteAllText(Path.Combine(folder, "sprites.json"), JsonSerializer.Serialize(new { Format = FormatVersion, Groups = index }, Json));
+        File.WriteAllBytes(Path.Combine(folder, "sprites.sdbx"), ProjectContainer.Encrypt(id, JsonSerializer.SerializeToUtf8Bytes(new { Format = FormatVersion, Groups = index }, Json)));
+        WriteArchive(Path.Combine(folder, "pictures.sdbx"), id, pictureFiles, null);
 
         // Sounds and music: the files as they are (the player reads WAV, MP3 and IFF 8SVX).
-        string soundFolder = Path.Combine(folder, "sounds");
-        Directory.CreateDirectory(soundFolder);
         var soundIndex = new List<object>();
+        var soundFiles = new List<(string Name, byte[] Data)>();
         int nextSound = 0;
         foreach (var entry in resources?.Entries.Where(e => e.Kind is ResourceKind.Sound or ResourceKind.Music) ?? Enumerable.Empty<ResourceEntry>())
         {
             if (string.IsNullOrEmpty(entry.FilePath) || !File.Exists(entry.FilePath)) continue;
             string name = $"{nextSound++}{Path.GetExtension(entry.FilePath).ToLowerInvariant()}";
-            File.Copy(entry.FilePath, Path.Combine(soundFolder, name), overwrite: true);
+            soundFiles.Add((name, File.ReadAllBytes(entry.FilePath)));
             soundIndex.Add(new { entry.Id, entry.Name, File = name, entry.Volume, Music = entry.Kind == ResourceKind.Music });
         }
-        File.WriteAllText(Path.Combine(folder, "sounds.json"), JsonSerializer.Serialize(new { Format = FormatVersion, Sounds = soundIndex }, Json));
+        WriteArchive(Path.Combine(folder, "sounds.sdbx"), id, soundFiles, soundIndex);
+    }
+
+    /// <summary>
+    /// An archive of files (SRPK): "SRPK", version, the length of the index,
+    /// the index (an encrypted container: each file's name, and where its own
+    /// encrypted container starts after the index and how long it is - and,
+    /// for sounds, the Sound list), then each file's container.
+    /// </summary>
+    private static void WriteArchive(string path, Guid id, List<(string Name, byte[] Data)> files, object? sounds)
+    {
+        var blobs = files.Select(f => ProjectContainer.Encrypt(id, f.Data)).ToList();
+        long offset = 0;
+        var entries = new List<object>();
+        for (int i = 0; i < files.Count; i++)
+        {
+            entries.Add(new { files[i].Name, Offset = offset, Length = blobs[i].Length });
+            offset += blobs[i].Length;
+        }
+        byte[] index = ProjectContainer.Encrypt(id, JsonSerializer.SerializeToUtf8Bytes(new { Format = FormatVersion, Entries = entries, Sounds = sounds }, Json));
+        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
+        using var bw = new BinaryWriter(fs);
+        bw.Write(System.Text.Encoding.ASCII.GetBytes("SRPK"));
+        bw.Write(FormatVersion);
+        bw.Write(index.Length);
+        bw.Write(index);
+        foreach (var blob in blobs) bw.Write(blob);
     }
 }

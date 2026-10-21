@@ -1,4 +1,5 @@
 #include "pictures.h"
+#include "pack.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -13,7 +14,6 @@
 
 static Sprite *sprites;
 static int spriteCount;
-static char picturesFolder[1024];
 
 static char *copy_text(const char *s)
 {
@@ -37,15 +37,18 @@ char *read_whole_file(const char *path, long *length)
     return data;
 }
 
+static Archive *pictureArchive;
+
 int sprites_load(const char *folder)
 {
     char path[1100];
-    snprintf(path, sizeof path, "%s/sprites.json", folder);
-    snprintf(picturesFolder, sizeof picturesFolder, "%s/pictures", folder);
-    char *text = read_whole_file(path, NULL);
+    snprintf(path, sizeof path, "%s/sprites.sdbx", folder);
+    char *text = (char *)pack_read(path, NULL);
     if (!text) return 0;
     cJSON *root = cJSON_Parse(text);
     free(text);
+    snprintf(path, sizeof path, "%s/pictures.sdbx", folder);
+    pictureArchive = pack_archive_open(path);
     if (!root) return 0;
     cJSON *groups = cJSON_GetObjectItem(root, "Groups"), *group, *sprite, *frame;
     int total = 0;
@@ -114,10 +117,12 @@ const Picture *frame_picture(const Frame *frame)
 {
     Frame *f = (Frame *)frame;
     if (f->picture || !f->file || !*f->file) return f->picture;
-    char path[1400];
-    snprintf(path, sizeof path, "%s/%s", picturesFolder, f->file);
+    long size;
+    unsigned char *file = pack_archive_read(pictureArchive, f->file, &size);
+    if (!file) return NULL;
     int w, h, n;
-    unsigned char *rgba = stbi_load(path, &w, &h, &n, 4);
+    unsigned char *rgba = stbi_load_from_memory(file, (int)size, &w, &h, &n, 4);
+    free(file);
     if (!rgba) return NULL;
     Picture *p = (Picture *)malloc(sizeof(Picture));
     p->width = w;

@@ -46,6 +46,14 @@ int world_indoors(void);
 void world_camera_hold(int held, double x, double y);
 void world_camera_center(double *x, double *y);
 void world_camera_follow(int actor);
+int world_actor_gone(int actor);
+void world_actor_remove(int actor);
+void world_actor_place(int actor, int x, int y, int onFloor);
+void world_change_look(int actor, int other);        /* other -1: its own look again */
+void world_thing_look(int uid, const Sprite *sprite);
+void world_thing_move(int uid, int x, int y, int onFloor);
+void world_door_set(int uid, const char *state);
+int world_set_tile(int x, int y, int onFloor, int tile);
 void world_light_state(int uid, int *lit, int *spent, double *burnLeft);
 void world_set_light_state(int uid, int lit, int spent, double burnLeft);
 int world_light_spent(int uid);

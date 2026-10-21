@@ -35,27 +35,31 @@ public static class ProjectContainer
     private const int FormatVersion = 1;
     private static readonly byte[] Magic = Encoding.ASCII.GetBytes("SRPG");
 
-    public static void Save(string path, Guid projectId, string plainText)
+    public static void Save(string path, Guid projectId, string plainText) =>
+        File.WriteAllBytes(path, Encrypt(projectId, Encoding.UTF8.GetBytes(plainText)));
+
+    /// <summary>Any bytes in this same container (magic, version, the project's id, IV, AES-256 cipher text) - the Sandcastle player reads these too.</summary>
+    public static byte[] Encrypt(Guid projectId, byte[] plainBytes)
     {
         byte[] key = DeriveKey(projectId);
         using var aes = Aes.Create();
         aes.Key = key;
         aes.GenerateIV();
-
-        byte[] plainBytes = Encoding.UTF8.GetBytes(plainText);
         byte[] cipherBytes;
         using (var encryptor = aes.CreateEncryptor())
             cipherBytes = encryptor.TransformFinalBlock(plainBytes, 0, plainBytes.Length);
-
-        using var fs = new FileStream(path, FileMode.Create, FileAccess.Write);
-        using var bw = new BinaryWriter(fs);
-        bw.Write(Magic);
-        bw.Write(FormatVersion);
-        bw.Write(projectId.ToByteArray());
-        bw.Write(aes.IV.Length);
-        bw.Write(aes.IV);
-        bw.Write(cipherBytes.Length);
-        bw.Write(cipherBytes);
+        using var ms = new MemoryStream();
+        using (var bw = new BinaryWriter(ms))
+        {
+            bw.Write(Magic);
+            bw.Write(FormatVersion);
+            bw.Write(projectId.ToByteArray());
+            bw.Write(aes.IV.Length);
+            bw.Write(aes.IV);
+            bw.Write(cipherBytes.Length);
+            bw.Write(cipherBytes);
+        }
+        return ms.ToArray();
     }
 
     public static string Load(string path, Guid expectedProjectId)
