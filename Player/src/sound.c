@@ -30,7 +30,8 @@ char *read_whole_file(const char *path, long *length);
 #define MAX_VOICES 24
 #define CHUNK 2048
 
-typedef struct SoundFile { int id, music; double volume; char file[64]; unsigned char *data; long size; } SoundFile;
+/* A sound file: kept encrypted (stream), decrypted as it plays; an 8SVX one decrypted whole when first played (data). */
+typedef struct SoundFile { int id, music; double volume; char file[64]; PackStream *stream; unsigned char *data; long size; } SoundFile;
 static SoundFile *files; static int fileCount;
 static char folder[1024];
 static Archive *soundArchive;
@@ -47,6 +48,7 @@ typedef struct Voice
     int16_t buffer[CHUNK * 2]; int buffered, at;  /* decoded frames (stereo), and where we are in them */
     double frac;                                  /* the position between frames, for resampling */
     int16_t lastL, lastR;
+    const PackStream *stream; long pos;           /* the file it's read from, and where */
 } Voice;
 
 static Voice voices[MAX_VOICES];
@@ -57,6 +59,28 @@ static FILE *dump;
 static SoundFile *file_of(int id) { for (int i = 0; i < fileCount; i++) if (files[i].id == id) return &files[i]; return NULL; }
 
 /* ---------------- Decoding ---------------- */
+
+/* The decoders read the file through these: decrypted as they read it. */
+static size_t on_read(void *user, void *out, size_t n)
+{
+    Voice *v = (Voice *)user;
+    long got = pack_stream_read(v->stream, v->pos, out, (long)n);
+    v->pos += got;
+    return (size_t)got;
+}
+
+static int seek_to(Voice *v, long offset, int origin) /* 0 from the start, 1 from here, 2 from the end */
+{
+    long length = pack_stream_length(v->stream), at = origin == 0 ? offset : origin == 1 ? v->pos + offset : length + offset;
+    if (at < 0 || at > length) return 0;
+    v->pos = at;
+    return 1;
+}
+
+static drwav_bool32 wav_seek(void *u, int offset, drwav_seek_origin o) { return (drwav_bool32)seek_to((Voice *)u, offset, o == DRWAV_SEEK_SET ? 0 : o == DRWAV_SEEK_CUR ? 1 : 2); }
+static drwav_bool32 wav_tell(void *u, drwav_int64 *cursor) { *cursor = ((Voice *)u)->pos; return DRWAV_TRUE; }
+static drmp3_bool32 mp3_seek(void *u, int offset, drmp3_seek_origin o) { return (drmp3_bool32)seek_to((Voice *)u, offset, o == DRMP3_SEEK_SET ? 0 : o == DRMP3_SEEK_CUR ? 1 : 2); }
+static drmp3_bool32 mp3_tell(void *u, drmp3_int64 *cursor) { *cursor = ((Voice *)u)->pos; return DRMP3_TRUE; }
 
 static int read_be16(const unsigned char *p) { return p[0] << 8 | p[1]; }
 static long read_be32(const unsigned char *p) { return (long)p[0] << 24 | (long)p[1] << 16 | (long)p[2] << 8 | p[3]; }
@@ -181,19 +205,28 @@ static Voice *start(int id, double volume, int loop, int owner, double startFade
 {
     SoundFile *f = file_of(id);
     if (!f || !audioOn) return NULL;
-    if (!f->data)
+    if (!f->stream)
     {
-        f->data = pack_archive_read(soundArchive, f->file, &f->size); /* decrypted when first played, then kept */
-        if (!f->data) return NULL;
+        f->stream = pack_archive_stream(soundArchive, f->file); /* read when first played, then kept - still encrypted */
+        if (!f->stream) return NULL;
+    }
+    unsigned char head[12];
+    int svx = pack_stream_read(f->stream, 0, head, 12) == 12 && !memcmp(head, "FORM", 4) && !memcmp(head + 8, "8SVX", 4);
+    if (svx && !f->data)
+    {
+        f->size = pack_stream_length(f->stream); /* 8SVX is played from memory: decrypted whole (they're small) */
+        f->data = (unsigned char *)malloc((size_t)f->size);
+        if (!f->data || pack_stream_read(f->stream, 0, f->data, f->size) != f->size) { free(f->data); f->data = NULL; return NULL; }
     }
     platform_audio_lock();
     Voice *v = NULL;
     for (int i = 0; i < MAX_VOICES && !v; i++) if (!voices[i].used) v = &voices[i];
     if (!v) { platform_audio_unlock(); return NULL; }
     memset(v, 0, sizeof *v);
-    if (drwav_init_memory(&v->wav, f->data, (size_t)f->size, NULL)) { v->kind = DEC_WAV; v->channels = v->wav.channels; v->rate = (int)v->wav.sampleRate; }
-    else if (open_8svx(v, f->data, f->size)) v->kind = DEC_8SVX;
-    else if (drmp3_init_memory(&v->mp3, f->data, (size_t)f->size, NULL)) { v->kind = DEC_MP3; v->channels = (int)v->mp3.channels; v->rate = (int)v->mp3.sampleRate; }
+    v->stream = f->stream; v->pos = 0;
+    if (svx) { if (open_8svx(v, f->data, f->size)) v->kind = DEC_8SVX; }
+    else if (drwav_init(&v->wav, on_read, wav_seek, wav_tell, v, NULL)) { v->kind = DEC_WAV; v->channels = v->wav.channels; v->rate = (int)v->wav.sampleRate; }
+    else if ((v->pos = 0, drmp3_init(&v->mp3, on_read, mp3_seek, mp3_tell, NULL, v, NULL))) { v->kind = DEC_MP3; v->channels = (int)v->mp3.channels; v->rate = (int)v->mp3.sampleRate; }
     if (v->kind == DEC_NONE || v->channels < 1 || v->rate < 1000) { if (v->kind) close_voice(v); platform_audio_unlock(); return NULL; }
     if (v->channels > 2) { /* more than stereo: only the first two are heard */ }
     v->soundId = id; v->music = f->music; v->loop = loop; v->owner = owner;

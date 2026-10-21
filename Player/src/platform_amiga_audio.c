@@ -4,7 +4,9 @@
  * audio.device - two channels (left, right), 8-bit from chip memory. A sound
  * task of its own keeps two buffers going (AHI's linked writes; queued
  * writes on Paula) and asks the mixer for each one in turn; the mixer and
- * the game share their state under a semaphore.
+ * the game share their state under a semaphore. It runs at the game's own
+ * priority and steps aside when it falls behind, so it can never take the
+ * whole machine (above Workbench it froze the Amiga when mixing was slow).
  */
 #include "platform.h"
 #include <exec/exec.h>
@@ -68,7 +70,11 @@ static int run_ahi(void)
         r->ahir_Position = 0x8000;
         r->ahir_Link = link;
         SendIO((struct IORequest *)r);
-        if (link) WaitIO((struct IORequest *)link); /* the one before has played: this one follows on */
+        if (link)
+        {
+            if (CheckIO((struct IORequest *)link)) Delay(1); /* behind: it had played already - let the rest of the machine run */
+            WaitIO((struct IORequest *)link); /* the one before has played: this one follows on */
+        }
         link = r;
         cur ^= 1;
     }
@@ -109,7 +115,11 @@ static int run_paula(void)
     UWORD period = (UWORD)(PAL_CLOCK / AMIGA_RATE);
     while (!quit)
     {
-        if (sent[cur]) { WaitIO((struct IORequest *)io[0][cur]); WaitIO((struct IORequest *)io[1][cur]); }
+        if (sent[cur])
+        {
+            if (CheckIO((struct IORequest *)io[0][cur])) Delay(1); /* behind: let the rest of the machine run */
+            WaitIO((struct IORequest *)io[0][cur]); WaitIO((struct IORequest *)io[1][cur]);
+        }
         mix_into();
         for (int i = 0; i < FRAMES; i++) { chip[0][cur][i] = (BYTE)(mixed[i * 2] >> 8); chip[1][cur][i] = (BYTE)(mixed[i * 2 + 1] >> 8); }
         for (int c = 0; c < 2; c++)
@@ -153,7 +163,7 @@ int platform_audio_open(int rate, AudioFill fill)
     mainTask = FindTask(NULL);
     SetSignal(0, SIGBREAKF_CTRL_F);
     running = 1; quit = 0; started = 0;
-    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 10, NP_StackSize, 16384, TAG_DONE);
+    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 0, NP_StackSize, 16384, TAG_DONE);
     if (!p) { running = 0; return 0; }
     while (!started) Wait(SIGBREAKF_CTRL_F);
     if (started < 0) { while (running) Wait(SIGBREAKF_CTRL_F); return 0; }

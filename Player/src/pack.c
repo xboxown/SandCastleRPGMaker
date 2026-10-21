@@ -5,10 +5,14 @@
  * SHA-256("SandcastleRpgMaker.ProjectKey.v1:" + the id as text), the id read
  * from the file itself, as the Windows game reads its own. pictures.sdbx and
  * sounds.sdbx are archives (SRPK): an encrypted index, then each file in a
- * container of its own - only what's shown or played is decrypted.
+ * container of its own - only what's shown or played is decrypted. A
+ * sound is decrypted a little at a time as it plays (CBC lets any block be
+ * decrypted with the one before it as its IV), never all at once: a 68060
+ * would spend minutes on a long piece of music before a note was heard.
+ * AES-256 decryption by lookup tables (the inverse cipher's Td tables, made
+ * at start from the S-box), many times faster than doing it byte by byte.
  */
 #include "pack.h"
-#include "../third_party/aes.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -62,6 +66,98 @@ static void sha256(const unsigned char *data, size_t n, unsigned char out[32])
     for (int i = 0; i < 8; i++) { out[i * 4] = (unsigned char)(s.h[i] >> 24); out[i * 4 + 1] = (unsigned char)(s.h[i] >> 16); out[i * 4 + 2] = (unsigned char)(s.h[i] >> 8); out[i * 4 + 3] = (unsigned char)s.h[i]; }
 }
 
+/* ---------------- AES-256 decryption (FIPS-197, table-driven) ---------------- */
+
+#define NR 14
+static uint8_t sbox[256], inv[256];
+static uint32_t Td0[256], Td1[256], Td2[256], Td3[256];
+static int tablesReady;
+
+static uint8_t xtime(uint8_t x) { return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1b : 0)); }
+static uint8_t gmul(uint8_t a, uint8_t b) { uint8_t p = 0; while (b) { if (b & 1) p ^= a; a = xtime(a); b >>= 1; } return p; }
+static uint8_t rotl8(uint8_t x, int n) { return (uint8_t)((x << n) | (x >> (8 - n))); }
+static uint32_t ror32(uint32_t x, int n) { return (x >> n) | (x << (32 - n)); }
+
+static void make_tables(void)
+{
+    if (tablesReady) return;
+    /* the S-box: the multiplicative inverse in GF(2^8), then the affine map */
+    uint8_t p = 1, q = 1;
+    do
+    {
+        p = (uint8_t)(p ^ (p << 1) ^ ((p & 0x80) ? 0x1b : 0));
+        q ^= (uint8_t)(q << 1); q ^= (uint8_t)(q << 2); q ^= (uint8_t)(q << 4);
+        if (q & 0x80) q ^= 0x09;
+        sbox[p] = (uint8_t)(q ^ rotl8(q, 1) ^ rotl8(q, 2) ^ rotl8(q, 3) ^ rotl8(q, 4) ^ 0x63);
+    } while (p != 1);
+    sbox[0] = 0x63;
+    for (int i = 0; i < 256; i++) inv[sbox[i]] = (uint8_t)i;
+    for (int i = 0; i < 256; i++)
+    {
+        uint8_t s = inv[i];
+        Td0[i] = (uint32_t)gmul(s, 14) << 24 | (uint32_t)gmul(s, 9) << 16 | (uint32_t)gmul(s, 13) << 8 | gmul(s, 11);
+        Td1[i] = ror32(Td0[i], 8); Td2[i] = ror32(Td0[i], 16); Td3[i] = ror32(Td0[i], 24);
+    }
+    tablesReady = 1;
+}
+
+static uint32_t be32(const uint8_t *b) { return (uint32_t)b[0] << 24 | (uint32_t)b[1] << 16 | (uint32_t)b[2] << 8 | b[3]; }
+static void put_be32(uint8_t *b, uint32_t v) { b[0] = (uint8_t)(v >> 24); b[1] = (uint8_t)(v >> 16); b[2] = (uint8_t)(v >> 8); b[3] = (uint8_t)v; }
+static uint32_t sub_word(uint32_t w) { return (uint32_t)sbox[w >> 24] << 24 | (uint32_t)sbox[(w >> 16) & 255] << 16 | (uint32_t)sbox[(w >> 8) & 255] << 8 | sbox[w & 255]; }
+
+/* The decryption round keys (the equivalent inverse cipher's: in reverse, the middle ones through InvMixColumns). */
+static void aes_keys(const uint8_t key[32], uint32_t dk[4 * (NR + 1)])
+{
+    make_tables();
+    uint32_t rk[4 * (NR + 1)];
+    for (int i = 0; i < 8; i++) rk[i] = be32(key + 4 * i);
+    uint8_t rcon = 1;
+    for (int i = 8; i < 4 * (NR + 1); i++)
+    {
+        uint32_t t = rk[i - 1];
+        if (i % 8 == 0) { t = sub_word((t << 8) | (t >> 24)) ^ ((uint32_t)rcon << 24); rcon = xtime(rcon); }
+        else if (i % 8 == 4) t = sub_word(t);
+        rk[i] = rk[i - 8] ^ t;
+    }
+    for (int r = 0; r <= NR; r++)
+        for (int c = 0; c < 4; c++)
+        {
+            uint32_t w = rk[4 * (NR - r) + c];
+            if (r > 0 && r < NR) w = Td0[sbox[w >> 24]] ^ Td1[sbox[(w >> 16) & 255]] ^ Td2[sbox[(w >> 8) & 255]] ^ Td3[sbox[w & 255]];
+            dk[4 * r + c] = w;
+        }
+}
+
+static void aes_decrypt_block(const uint32_t *dk, const uint8_t in[16], uint8_t out[16])
+{
+    uint32_t s0 = be32(in) ^ dk[0], s1 = be32(in + 4) ^ dk[1], s2 = be32(in + 8) ^ dk[2], s3 = be32(in + 12) ^ dk[3], t0, t1, t2, t3;
+    for (int r = 1; r < NR; r++)
+    {
+        const uint32_t *k = dk + 4 * r;
+        t0 = Td0[s0 >> 24] ^ Td1[(s3 >> 16) & 255] ^ Td2[(s2 >> 8) & 255] ^ Td3[s1 & 255] ^ k[0];
+        t1 = Td0[s1 >> 24] ^ Td1[(s0 >> 16) & 255] ^ Td2[(s3 >> 8) & 255] ^ Td3[s2 & 255] ^ k[1];
+        t2 = Td0[s2 >> 24] ^ Td1[(s1 >> 16) & 255] ^ Td2[(s0 >> 8) & 255] ^ Td3[s3 & 255] ^ k[2];
+        t3 = Td0[s3 >> 24] ^ Td1[(s2 >> 16) & 255] ^ Td2[(s1 >> 8) & 255] ^ Td3[s0 & 255] ^ k[3];
+        s0 = t0; s1 = t1; s2 = t2; s3 = t3;
+    }
+    const uint32_t *k = dk + 4 * NR;
+    put_be32(out, ((uint32_t)inv[s0 >> 24] << 24 | (uint32_t)inv[(s3 >> 16) & 255] << 16 | (uint32_t)inv[(s2 >> 8) & 255] << 8 | inv[s1 & 255]) ^ k[0]);
+    put_be32(out + 4, ((uint32_t)inv[s1 >> 24] << 24 | (uint32_t)inv[(s0 >> 16) & 255] << 16 | (uint32_t)inv[(s3 >> 8) & 255] << 8 | inv[s2 & 255]) ^ k[1]);
+    put_be32(out + 8, ((uint32_t)inv[s2 >> 24] << 24 | (uint32_t)inv[(s1 >> 16) & 255] << 16 | (uint32_t)inv[(s0 >> 8) & 255] << 8 | inv[s3 & 255]) ^ k[2]);
+    put_be32(out + 12, ((uint32_t)inv[s3 >> 24] << 24 | (uint32_t)inv[(s2 >> 16) & 255] << 16 | (uint32_t)inv[(s1 >> 8) & 255] << 8 | inv[s0 & 255]) ^ k[3]);
+}
+
+/* CBC: each block decrypted, then XORed with the cipher block before it (the IV for the first). */
+static void cbc_decrypt(const uint32_t *dk, const uint8_t *iv, const uint8_t *cipher, uint8_t *plain, long blocks)
+{
+    for (long b = 0; b < blocks; b++)
+    {
+        const uint8_t *before = b == 0 ? iv : cipher + (b - 1) * 16;
+        aes_decrypt_block(dk, cipher + b * 16, plain + b * 16);
+        for (int i = 0; i < 16; i++) plain[b * 16 + i] ^= before[i];
+    }
+}
+
 /* ---------------- Containers ---------------- */
 
 static uint32_t le32(const unsigned char *p) { return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
@@ -90,10 +186,9 @@ unsigned char *pack_decrypt(const unsigned char *data, long size, long *plainLen
     sha256((const unsigned char *)text, strlen(text), key);
     unsigned char *plain = (unsigned char *)malloc(cipherLength + 1);
     if (!plain) return NULL;
-    memcpy(plain, data + 48, cipherLength);
-    struct AES_ctx ctx;
-    AES_init_ctx_iv(&ctx, key, iv);
-    AES_CBC_decrypt_buffer(&ctx, plain, cipherLength);
+    uint32_t dk[4 * (NR + 1)];
+    aes_keys(key, dk);
+    cbc_decrypt(dk, iv, data + 48, plain, (long)cipherLength / 16);
     unsigned pad = plain[cipherLength - 1];
     if (pad < 1 || pad > 16) { free(plain); return NULL; } /* the wrong key, or damaged */
     for (unsigned i = 0; i < pad; i++) if (plain[cipherLength - 1 - i] != pad) { free(plain); return NULL; }
@@ -173,3 +268,71 @@ unsigned char *pack_archive_read(Archive *a, const char *name, long *plainLength
     }
     return NULL;
 }
+
+/* ---------------- Streams: decrypted as they're read ---------------- */
+
+struct PackStream { unsigned char *raw; const unsigned char *iv, *cipher; long plainLength; uint32_t dk[4 * (NR + 1)]; };
+
+/* Read from the archive as it is (still encrypted); the key made once; the last block decrypted for its padding (the true length). */
+PackStream *pack_archive_stream(Archive *a, const char *name)
+{
+    if (!a) return NULL;
+    for (int i = 0; i < a->count; i++)
+    {
+        if (strcmp(a->names[i], name)) continue;
+        long size = a->lengths[i];
+        FILE *f = fopen(a->path, "rb");
+        if (!f) return NULL;
+        unsigned char *raw = (unsigned char *)malloc((size_t)size);
+        int ok = raw && fseek(f, a->dataStart + a->offsets[i], SEEK_SET) == 0 && fread(raw, 1, (size_t)size, f) == (size_t)size;
+        fclose(f);
+        if (!ok || size < 48 || memcmp(raw, "SRPG", 4) || le32(raw + 4) != 1 || le32(raw + 24) != 16) { free(raw); return NULL; }
+        uint32_t cipherLength = le32(raw + 44);
+        if (cipherLength == 0 || cipherLength % 16 || 48 + (long)cipherLength > size) { free(raw); return NULL; }
+        PackStream *s = (PackStream *)calloc(1, sizeof(PackStream));
+        s->raw = raw; s->iv = raw + 28; s->cipher = raw + 48;
+        char text[80];
+        strcpy(text, "SandcastleRpgMaker.ProjectKey.v1:");
+        guid_text(raw + 8, text + strlen(text));
+        unsigned char key[32];
+        sha256((const unsigned char *)text, strlen(text), key);
+        aes_keys(key, s->dk);
+        long blocks = (long)cipherLength / 16;
+        unsigned char last[16];
+        cbc_decrypt(s->dk, blocks == 1 ? s->iv : s->cipher + (blocks - 2) * 16, s->cipher + (blocks - 1) * 16, last, 1);
+        unsigned pad = last[15];
+        if (pad < 1 || pad > 16) { free(raw); free(s); return NULL; } /* the wrong key, or damaged */
+        s->plainLength = (long)cipherLength - pad;
+        return s;
+    }
+    return NULL;
+}
+
+long pack_stream_length(const PackStream *s) { return s ? s->plainLength : 0; }
+
+/* Plain bytes from an offset: only the blocks they lie in are decrypted. Reads nothing past the end. Safe from two tasks at once (nothing in it changes). */
+long pack_stream_read(const PackStream *s, long offset, void *dst, long n)
+{
+    if (!s || offset < 0 || offset >= s->plainLength || n <= 0) return 0;
+    if (offset + n > s->plainLength) n = s->plainLength - offset;
+    unsigned char *out = (unsigned char *)dst, block[16];
+    long done = 0;
+    while (done < n)
+    {
+        long at = offset + done, b = at / 16, in = at % 16;
+        long whole = (n - done - (in ? 16 - in : 0)) / 16; /* full blocks straight into the destination */
+        if (!in && whole > 0)
+        {
+            cbc_decrypt(s->dk, b == 0 ? s->iv : s->cipher + (b - 1) * 16, s->cipher + b * 16, out + done, whole);
+            done += whole * 16;
+            continue;
+        }
+        cbc_decrypt(s->dk, b == 0 ? s->iv : s->cipher + (b - 1) * 16, s->cipher + b * 16, block, 1);
+        long take = 16 - in < n - done ? 16 - in : n - done;
+        memcpy(out + done, block + in, (size_t)take);
+        done += take;
+    }
+    return n;
+}
+
+void pack_stream_close(PackStream *s) { if (s) { free(s->raw); free(s); } }
