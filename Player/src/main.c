@@ -12,6 +12,7 @@
 #include "lighting.h"
 #include "schedules.h"
 #include "use.h"
+#include "sound.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,6 +151,7 @@ int main(int argc, char **argv)
         return 1;
     }
     note("Window open. Running.");
+    sound_load(folder);
     events_load();
     schedules_load();
     schedules_start();
@@ -157,7 +159,7 @@ int main(int argc, char **argv)
     uint32_t lastClick = 0; int clickX = -100, clickY = -100;
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
-    uint32_t last = platform_ticks(), start = last;
+    uint32_t last = platform_ticks(), start = last, worldMs = 0;
     while (running)
     {
         PlatformEvent e;
@@ -251,6 +253,7 @@ int main(int argc, char **argv)
         double seconds = (now - last) / 1000.0;
         if (seconds > 0.1) seconds = 0.1;
         last = now;
+        sound_update(seconds * 1000);
         int paused = dialog_showing(); /* a box up: the game waits, as in an Exult conversation */
         events_update(seconds * 1000, paused);
         if (!dialog_showing())
@@ -260,12 +263,14 @@ int main(int argc, char **argv)
             schedules_update(seconds * 1000);
             events_player_moved();
         }
-        world_draw(pixels, now);
+        if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
+        world_draw(pixels, worldMs);
         lighting_draw(pixels);
         world_draw_barks(pixels);
         dialog_draw(pixels, now);
         platform_present(pixels);
     }
+    platform_audio_close();
     platform_close();
     note("Closed normally.");
     return 0;

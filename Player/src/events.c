@@ -6,6 +6,7 @@
 #include "script.h"
 #include "lighting.h"
 #include "schedules.h"
+#include "sound.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -48,6 +49,20 @@ static cJSON *statsJson, *currenciesJson, *objectsJson;
 #define STD_DELAY_MS 200      /* a tick every standard delay (x the time rate): a game minute every 5 seconds */
 
 static int clockDay, clockHour = 6, clockMinute, clockTicks, timeRate = 1;
+static int ambientPlaying = -2; /* the map's ambient sound playing (-2: nothing decided yet) */
+static int ambientDawn = -1, ambientDay = -1, ambientDusk = -1, ambientNight = -1;
+static double dawnHour = 5, dayHour = 7, duskHour = 19, nightHour = 21;
+
+/* The map's ambient sound (Edit > Map Ambient Sounds): the one for this part of the day loops, giving way to the next when its hour comes. */
+static void update_ambient(void)
+{
+    double h = clockHour + clockMinute / 60.0;
+    int sound = h >= dawnHour && h < dayHour ? ambientDawn : h >= dayHour && h < duskHour ? ambientDay : h >= duskHour && h < nightHour ? ambientDusk : ambientNight;
+    if (sound == ambientPlaying) return;
+    ambientPlaying = sound;
+    sound_stop_owner(OWNER_AMBIENT);
+    if (sound >= 0) sound_play_ex(sound, -1, 1, OWNER_AMBIENT, 1);
+}
 static double clockMs;
 
 /* Returns how many hours went by (Exult re-schedules everyone on the hour). */
@@ -204,6 +219,10 @@ void events_load(void)
     cJSON *clock = get(get(project, "Settings"), "Clock");
     clockHour = num(clock, "StartHour", 6); if (clockHour < 0) clockHour = 0; if (clockHour > 23) clockHour = 23;
     timeRate = num(clock, "TimeRate", 1); if (timeRate < 1) timeRate = 1;
+    cJSON *ambient = get(map, "Ambient"), *dn = get(get(project, "Settings"), "DayNight");
+    ambientDawn = num(ambient, "DawnSoundId", -1); ambientDay = num(ambient, "DaySoundId", -1);
+    ambientDusk = num(ambient, "DuskSoundId", -1); ambientNight = num(ambient, "NightSoundId", -1);
+    dawnHour = num(dn, "DawnStartHour", 5); dayHour = num(dn, "DayStartHour", 7); duskHour = num(dn, "DuskStartHour", 19); nightHour = num(dn, "NightStartHour", 21);
     currenciesJson = get(get(project, "Currencies"), "Currencies");
     objectsJson = get(get(project, "Objects"), "Objects");
     cJSON *defs = get(get(project, "Variables"), "Variables");
@@ -1070,6 +1089,42 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_PlaySound:
+        {
+            double volume = -1;
+            if (parse_number(param(c, "Volume"), &volume)) volume = volume < 0 ? 0 : volume > 1 ? 1 : volume;
+            else volume = -1;
+            sound_play_ex(atoi(param(c, "SoundResourceId")), volume, !strcmp(param(c, "Loop"), "True"), OWNER_NONE, 1);
+            return 1;
+        }
+        case C_StopSound:
+            if (!strcmp(param(c, "SoundResourceId"), "All")) sound_stop_all();
+            else sound_stop_id(atoi(param(c, "SoundResourceId")));
+            return 1;
+        case C_PlayMusic:
+        {
+            double volume = -1;
+            if (!parse_number(param(c, "Volume"), &volume)) volume = -1;
+            sound_stop_owner(OWNER_MUSIC); /* one piece of event music at a time */
+            sound_play_ex(atoi(param(c, "MusicResourceId")), volume, !strcmp(param(c, "Loop"), "True"), OWNER_MUSIC, 1);
+            return 1;
+        }
+        case C_StopMusic:
+        {
+            double s = formula_number(c, "Seconds");
+            sound_fade(OWNER_MUSIC, s > 0 ? s : 0, 0);
+            return 1;
+        }
+        case C_FadeMusicIn:
+        {
+            int id = atoi(param(c, "SoundId"));
+            double s = formula_number(c, "Seconds");
+            sound_stop_owner(OWNER_MUSIC);
+            if (sound_play_ex(id, -1, !strcmp(param(c, "Loop"), "True"), OWNER_MUSIC, 0)) sound_fade(OWNER_MUSIC, s > 0.05 ? s : 0.05, 1);
+            return 1;
+        }
+        case C_SetVolume: sound_set_volumes(formula_number(c, "Music") / 100.0, formula_number(c, "Sounds") / 100.0); return 1;
+        case C_ResumeMapMusic: sound_stop_owner(OWNER_MUSIC); ambientPlaying = -2; return 1;
         case C_Stand:
         {
             int actor = actor_for(r, param(c, "Who"));
@@ -1753,6 +1808,7 @@ void events_update(double ms, int paused)
     if (paused) return;
     clock_advance(ms); /* the clock runs while the game does */
     lighting_update(ms);
+    update_ambient();
     /* Waits run while the game does. */
     for (int i = 0; i < MAX_RUNS; i++)
     {

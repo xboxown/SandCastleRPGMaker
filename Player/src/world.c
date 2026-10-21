@@ -17,6 +17,7 @@
 #include "world.h"
 #include "pictures.h"
 #include "font.h"
+#include "sound.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
@@ -654,6 +655,22 @@ static void set_box(Drawn *d, int left, int top, int width, int depth, int lift,
 }
 
 static Drawn *drawn; static int drawnCap, drawnCount;
+
+/* SpriteAnimator's frame sounds: a frame that has a sound plays it each time it comes round (key: a thing's uid, or -(actor + 2)). */
+typedef struct FrameSeen { int key; const Sprite *sprite; int frame; } FrameSeen;
+static FrameSeen seen[1024]; static int seenCount;
+
+static void frame_sound(int key, const Sprite *s, uint32_t ms)
+{
+    if (!s || s->frameCount <= 1) return;
+    int f = sprite_frame_at(s, ms), slot = -1;
+    for (int i = 0; i < seenCount; i++) if (seen[i].key == key) { slot = i; break; }
+    if (slot < 0) { if (seenCount >= 1024) return; slot = seenCount++; seen[slot] = (FrameSeen){ key, s, -1 }; }
+    if (seen[slot].sprite == s && seen[slot].frame == f) return;
+    int changed = seen[slot].sprite == s;
+    seen[slot].sprite = s; seen[slot].frame = f;
+    if (changed && s->frames[f].sound >= 0) sound_play(s->frames[f].sound);
+}
 static void seated_draw_order(int count);
 static uint32_t lastMs;
 
@@ -713,6 +730,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         const Thing *t = &things[i];
         if (t->gone || t->z >= ceiling) continue;
         const Sprite *ls = look_of(t);
+        if (!t->fixedFrame) frame_sound(t->uid, ls, ms);
         const Picture *pic = t->fixedFrame && ls && t->fixedFrame - 1 < ls->frameCount ? frame_picture(&ls->frames[t->fixedFrame - 1]) : sprite_picture_at(ls, ms);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
@@ -739,6 +757,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         uint32_t at = a->walkingNow ? ms : 0;
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
         const Picture *pic = sprite_picture_at(s, at);
+        frame_sound(-(i + 2), s, at);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;

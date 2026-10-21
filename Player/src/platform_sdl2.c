@@ -15,7 +15,7 @@ const char *platform_error(void) { return error_text; }
 
 int platform_open(const char *title, int fullscreen)
 {
-    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS) != 0)
+    if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0)
     {
         SDL_snprintf(error_text, sizeof error_text, "SDL couldn't start: %s", SDL_GetError());
         return 0;
@@ -121,3 +121,31 @@ long platform_free_memory_mb(void) { return SDL_GetSystemRAM(); }
 int platform_can_run(void) { return 1; }
 
 void platform_message(const char *heading, const char *text) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, heading, text, window); }
+
+/* ---------------- Sound ---------------- */
+
+static SDL_AudioDeviceID audioDevice;
+static AudioFill audioFill;
+
+static void audio_callback(void *user, Uint8 *stream, int bytes)
+{
+    (void)user;
+    audioFill((int16_t *)stream, bytes / 4);
+}
+
+int platform_audio_open(int rate, AudioFill fill)
+{
+    SDL_AudioSpec want, have;
+    SDL_zero(want);
+    want.freq = rate; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024; want.callback = audio_callback;
+    audioFill = fill;
+    audioDevice = SDL_OpenAudioDevice(NULL, 0, &want, &have, 0);
+    if (!audioDevice) return 0;
+    SDL_PauseAudioDevice(audioDevice, 0);
+    return have.freq > 0 ? have.freq : rate;
+}
+
+void platform_audio_close(void) { if (audioDevice) { SDL_CloseAudioDevice(audioDevice); audioDevice = 0; } }
+
+void platform_audio_lock(void) { if (audioDevice) SDL_LockAudioDevice(audioDevice); }
+void platform_audio_unlock(void) { if (audioDevice) SDL_UnlockAudioDevice(audioDevice); }

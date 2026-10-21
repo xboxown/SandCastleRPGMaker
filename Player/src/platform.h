@@ -52,6 +52,13 @@ long platform_free_memory_mb(void);
 /* Whether the machine can run the game at all (an Amiga: a 68060 or 68080 with its FPU); 0 with the reason in platform_error(). */
 int platform_can_run(void);
 
+/* Sound out: the mixer is asked (on another thread) for frames of 16-bit stereo at this rate. 0 when there's no sound. */
+typedef void (*AudioFill)(int16_t *stereo, int frames);
+int platform_audio_open(int rate, AudioFill fill);   /* the rate it plays at (0: no sound) */
+void platform_audio_close(void);
+void platform_audio_lock(void);
+void platform_audio_unlock(void);
+
 /* A message box (the Amiga's requester): why a game can't start, started from an icon with no console to print to. */
 void platform_message(const char *heading, const char *text);
 

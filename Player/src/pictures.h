@@ -18,6 +18,7 @@ typedef struct Frame
 {
     char *file;
     int ms;
+    int sound;        /* a sound played when this frame comes round (-1: none) */
     Picture *picture; /* decoded on first use */
 } Frame;
 
@@ -41,6 +42,9 @@ const Sprite *sprite_dialog_frame(const char *name);
 
 /* A frame's picture (decoded on first use; NULL if missing). */
 const Picture *frame_picture(const Frame *frame);
+
+/* Which frame shows at a time (ms) (as sprite_picture_at picks it). */
+int sprite_frame_at(const Sprite *sprite, uint32_t ms);
 
 /* The picture to show at a time (ms) for an animation; its first frame when not looping and past the end. */
 const Picture *sprite_picture_at(const Sprite *sprite, uint32_t ms);

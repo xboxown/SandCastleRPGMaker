@@ -10,7 +10,9 @@ namespace SandcastleRpgMaker.Engine;
 ///    built in, characters, objects, settings...) and its books;
 ///  - sprites.json: every sprite group, sprite and frame (its picture's
 ///    file, its time), so a tile is frame N of its tileset sprite;
-///  - pictures/: each frame's picture as it was (PNG, BMP, GIF...).
+///  - pictures/: each frame's picture as it was (PNG, BMP, GIF...);
+///  - sounds.json and sounds/: each sound and piece of music (its id, its
+///    file as it was - WAV, MP3, IFF 8SVX - its volume, whether it's music).
 /// Plain JSON and picture files: nothing the player can't read on any
 /// machine.
 /// </summary>
@@ -20,7 +22,7 @@ public static class PlayerPack
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
-    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites)
+    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null)
     {
         Directory.CreateDirectory(folder);
         // The project as it plays: a copy, every plotted house and vehicle built into its map (as a game starts).
@@ -48,9 +50,23 @@ public static class PlayerPack
             {
                 s.Name, s.Fps, s.Loop,
                 NineSlice = s.NineSlice.Enabled ? new { s.NineSlice.Left, s.NineSlice.Top, s.NineSlice.Right, s.NineSlice.Bottom } : null, // a dialog frame's borders
-                Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs) }).ToList()
+                Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs), Sound = f.SoundResourceId }).ToList()
             }).ToList()
         }).ToList();
         File.WriteAllText(Path.Combine(folder, "sprites.json"), JsonSerializer.Serialize(new { Format = FormatVersion, Groups = index }, Json));
+
+        // Sounds and music: the files as they are (the player reads WAV, MP3 and IFF 8SVX).
+        string soundFolder = Path.Combine(folder, "sounds");
+        Directory.CreateDirectory(soundFolder);
+        var soundIndex = new List<object>();
+        int nextSound = 0;
+        foreach (var entry in resources?.Entries.Where(e => e.Kind is ResourceKind.Sound or ResourceKind.Music) ?? Enumerable.Empty<ResourceEntry>())
+        {
+            if (string.IsNullOrEmpty(entry.FilePath) || !File.Exists(entry.FilePath)) continue;
+            string name = $"{nextSound++}{Path.GetExtension(entry.FilePath).ToLowerInvariant()}";
+            File.Copy(entry.FilePath, Path.Combine(soundFolder, name), overwrite: true);
+            soundIndex.Add(new { entry.Id, entry.Name, File = name, entry.Volume, Music = entry.Kind == ResourceKind.Music });
+        }
+        File.WriteAllText(Path.Combine(folder, "sounds.json"), JsonSerializer.Serialize(new { Format = FormatVersion, Sounds = soundIndex }, Json));
     }
 }

@@ -75,6 +75,8 @@ int sprites_load(const char *folder)
             {
                 s->frames[i].file = copy_text(cJSON_GetStringValue(cJSON_GetObjectItem(frame, "File")));
                 s->frames[i].ms = cJSON_GetObjectItem(frame, "Ms")->valueint;
+                cJSON *sound = cJSON_GetObjectItem(frame, "Sound");
+                s->frames[i].sound = cJSON_IsNumber(sound) ? sound->valueint : -1;
                 s->totalMs += s->frames[i].ms;
                 i++;
             }
@@ -139,4 +141,16 @@ const Picture *sprite_picture_at(const Sprite *sprite, uint32_t ms)
         t -= (uint32_t)sprite->frames[i].ms;
     }
     return frame_picture(&sprite->frames[0]);
+}
+
+int sprite_frame_at(const Sprite *sprite, uint32_t ms)
+{
+    if (!sprite || sprite->frameCount <= 1 || sprite->totalMs <= 0) return 0;
+    uint32_t t = ms % (uint32_t)sprite->totalMs;
+    for (int i = 0; i < sprite->frameCount; i++)
+    {
+        if (t < (uint32_t)sprite->frames[i].ms) return i;
+        t -= (uint32_t)sprite->frames[i].ms;
+    }
+    return 0;
 }
