@@ -72,6 +72,7 @@ typedef struct Thing
     cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
     const Sprite *lookOverride;                      /* Change Object Look: another sprite (NULL: its own) */
     int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
+    int hp, hpSet;                                   /* hit points left in play (Attack Object) */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -2168,7 +2169,7 @@ int world_set_tile(int x, int y, int onFloor, int tile)
 
 /* ---------------- Play Animation: a sprite played at a spot or over someone ---------------- */
 
-typedef struct Effect { int used, follows; const Sprite *sprite; double x, y; int lift; uint32_t since; } Effect;
+typedef struct Effect { int used, follows; const Sprite *sprite; double x, y; int lift; uint32_t since, until; } Effect;
 static Effect effects[16];
 
 int world_effect_start(const Sprite *sprite, int follows, int cellX, int cellY)
@@ -2177,7 +2178,7 @@ int world_effect_start(const Sprite *sprite, int follows, int cellX, int cellY)
         if (!effects[i].used)
         {
             Effect *e = &effects[i];
-            e->used = 1; e->sprite = sprite; e->follows = follows; e->since = lastMs;
+            e->used = 1; e->sprite = sprite; e->follows = follows; e->since = lastMs; e->until = 0;
             if (follows < 0)
             {
                 e->x = cellX * tileW + tileW / 2.0; e->y = cellY * tileH + tileH / 2.0;
@@ -2197,6 +2198,7 @@ static void draw_effects(uint32_t *pixels)
     {
         Effect *e = &effects[i];
         if (!e->used) continue;
+        if (e->until && lastMs >= e->until) { e->used = 0; continue; } /* played once */
         double x = e->x, y = e->y;
         int lift = e->lift;
         if (e->follows >= 0) { const Actor *a = actor_of(e->follows); if (!a) continue; x = a->px; y = a->py; lift = a->lift; }
@@ -2322,3 +2324,51 @@ void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double 
 
 /* The project's id of a character (a copy placed again: the character it's a copy of). */
 int world_character_source(int characterId) { return characterId >= 0 ? characterId % COPY_STEP : characterId; }
+
+/* ---------------- Things struck and broken (Attack Object) ---------------- */
+
+/* Its hit points in play, starting from its own (Game_object::reduce_health). */
+int world_thing_hp(int uid, int initial)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return 0;
+    if (!t->hpSet) { t->hp = initial; t->hpSet = 1; }
+    return t->hp;
+}
+
+void world_thing_set_hp(int uid, int hp) { Thing *t = thing_by_uid(uid); if (t) { t->hp = hp; t->hpSet = 1; } }
+int world_thing_z(int uid) { Thing *t = thing_by_uid(uid); return t ? t->z : 0; }
+int world_thing_floor(int uid) { Thing *t = thing_by_uid(uid); return t ? floor_of(t->z) : 1; }
+int world_thing_spent(int uid) { Thing *t = thing_by_uid(uid); return t && t->spent; }
+int world_thing_belongs_to(int uid) { Thing *t = thing_by_uid(uid); return t ? num(t->placed, "BelongsToId", -1) : -1; }
+
+/* A window's glass broken where it is: its Broken picture from now on. */
+void world_thing_break_glass(int uid, const Sprite *broken) { Thing *t = thing_by_uid(uid); if (t) { t->spent = 1; if (broken) t->lookOverride = broken; } }
+
+void world_thing_center(int uid, double *px, double *py)
+{
+    Thing *t = thing_by_uid(uid);
+    *px = t ? t->x * tileW + tileW / 2.0 : 0; *py = t ? t->y * tileH + tileH / 2.0 : 0;
+}
+
+/* Things on the map (not gone) whose cell middle is within a distance (pixels, the larger axis) of a point. */
+int world_things_near(double px, double py, double reach, int *out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < thingCount && n < max; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone) continue;
+        double x = t->x * tileW + tileW / 2.0, y = t->y * tileH + tileH / 2.0;
+        if (fmax(fabs(x - px), fabs(y - py)) <= reach) out[n++] = t->uid;
+    }
+    return n;
+}
+
+/* A sprite played once at a cell (a blast), then gone. */
+void world_effect_once(const Sprite *sprite, int cellX, int cellY)
+{
+    if (!sprite) return;
+    int id = world_effect_start(sprite, -1, cellX, cellY);
+    if (id >= 0) effects[id].until = lastMs + (uint32_t)(sprite->totalMs > 0 ? sprite->totalMs : 500);
+}

@@ -419,7 +419,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 /* ---------------- Running commands ---------------- */
 
 enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN };
-enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE, A_OPEN_DOOR, A_PICKLOCK, A_TAKE, A_EFFECT };
+enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE, A_OPEN_DOOR, A_PICKLOCK, A_TAKE, A_EFFECT, A_ATTACK_THING };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
 
@@ -1407,6 +1407,24 @@ static int execute(Run *r, const Cmd *c)
             items_park(uid, box);
             return 1;
         }
+        case C_AttackObject:
+        {
+            int actor = actor_for(r, param(c, "Who")), uid = thing_of(c), tc, ti, tq, tx, ty, tin;
+            if (actor < 0 || vitals_dead(world_actor_character(actor)) || uid < 0) { game_log("Attack Object: that thing isn't there."); lastResult = 0; return 1; }
+            world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+            if (!combat_can_break(uid))
+            {
+                char line[200];
+                snprintf(line, sizeof line, "\"%s\" can't be broken.", items_name(tc, ti));
+                game_log(line);
+                lastResult = 0;
+                return 1;
+            }
+            begin_action(r, actor, A_ATTACK_THING);
+            r->thing = uid; r->actX = tx; r->actY = ty;
+            start_walk(r, actor, tx, ty, 1);
+            return 0;
+        }
         case C_OpenDoor: case C_PicklockDoor: case C_TakeFromContainer:
         {
             int actor = actor_for(r, param(c, "Who")), uid = thing_of(c);
@@ -1749,6 +1767,23 @@ static int action_tick(Run *r, double ms, int *ok)
         if (r->waitMinutes > 0 ? total_minutes() - r->waitFromMinute < r->waitMinutes : (r->stageMs -= ms) > 0) return 1;
         world_effect_stop(r->effect);
         *ok = 1;
+        return 0;
+    }
+    if (r->act == A_ATTACK_THING)
+    {
+        if (r->stage == 0)
+        {
+            if (!world_thing_there(r->thing)) { *ok = 1; return 0; }
+            int walked;
+            if (walk_tick(r, ms, &walked)) return 1;
+            if (!walked) { game_log("Attack Object: they can't get to it."); *ok = 0; return 0; }
+            combat_attack_thing_begin(a, r->thing);
+            r->stage = 1;
+            return 1;
+        }
+        int result = combat_attack_thing_tick(a, ms);
+        if (result > 0) return 1;
+        *ok = result == 0;
         return 0;
     }
     if (r->act == A_OPEN_DOOR || r->act == A_PICKLOCK || r->act == A_TAKE)

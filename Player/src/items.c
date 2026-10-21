@@ -893,3 +893,18 @@ void items_use_one(int characterId, Item *it)
     remove_from_character(k, it);
     items_free(it);
 }
+
+/* extract_contents: everything in it put down where it stood (each keeping what it is); the empty shell freed. */
+void items_spill(Item *box, int x, int y, int onFloor)
+{
+    if (!box) return;
+    for (int i = 0; i < box->count; i++)
+    {
+        Item *it = box->contents[i];
+        int uid = world_thing_put(it->category, it->itemId, it->quantity, x, y, onFloor);
+        if (uid >= 0) items_park(uid, it);
+        else items_free(it);
+    }
+    box->count = 0;
+    items_free(box);
+}

@@ -34,6 +34,7 @@
 #include "schedules.h"
 #include "platform.h"
 #include "pictures.h"
+#include "conditions.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -71,7 +72,7 @@ typedef struct Shot
 static Fighter fighters[256];
 static Shot shots[32];
 static cJSON *project, *factionsJson, *statsJson, *settingsJson;
-static int combatMode, playerTarget = -1, playerFinishesOff, playerDex;
+static int combatMode, playerTarget = -1, playerFinishesOff, playerDex, playerThing = -1;
 static double playerStrikeMs, sightScanMs, nowMs;
 static unsigned rng = 98765u;
 static int rnd(int n) { rng = rng * 1103515245u + 12345u; return n > 0 ? (int)((rng >> 8) % (unsigned)n) : 0; }
@@ -977,7 +978,7 @@ int combat_mode(void) { return combatMode; }
 void combat_toggle_mode(void)
 {
     combatMode = !combatMode;
-    if (!combatMode) playerTarget = -1;
+    if (!combatMode) { playerTarget = -1; playerThing = -1; }
     startedBattle = 0;
     if (!combatMode && !vitals_dead(id_of(0)))
         for (int a = 1; a < world_actor_count() && a < 256; a++)
@@ -1001,10 +1002,13 @@ void combat_player_target(int actor)
         return;
     }
     playerTarget = actor;
+    playerThing = -1;
     playerFinishesOff = finishing;
     snprintf(line, sizeof line, finishing ? "Finishing off %s." : "Attacking %s.", name_of(actor));
     game_log(line);
 }
+
+static void update_fuses(double ms);
 
 static void update_player(double ms)
 {
@@ -1014,6 +1018,22 @@ static void update_player(double ms)
     {
         int foe = find_foe(0);
         if (foe >= 0 && !unconscious(foe)) playerTarget = foe;
+    }
+    if (combatMode && playerThing >= 0)
+    {
+        if (!world_thing_there(playerThing)) { playerThing = -1; return; }
+        if (incapacitated(0) || (playerStrikeMs -= ms) > 0) return;
+        playerStrikeMs = STD_DELAY;
+        if (playerDex < DEX_TO_ATTACK) { int dex = stat(0, K_DEXTERITY, 10); playerDex += dex > 1 ? dex : 1; return; }
+        int px, py, pf, tc, ti, tq, tx, ty, tin;
+        world_actor_cell(0, &px, &py, &pf);
+        world_thing_info(playerThing, &tc, &ti, &tq, &tx, &ty, &tin);
+        if (abs(tx - px) > 1 || abs(ty - py) > 1 || abs(world_thing_z(playerThing) - world_actor_lift(0)) > 4) return;
+        playerDex -= DEX_TO_ATTACK;
+        world_face_cell(0, tx, ty, "Attacking Melee");
+        pose_back(0, 2 * STD_DELAY);
+        combat_strike_thing(playerThing, 0);
+        return;
     }
     if (!combatMode || playerTarget < 0) return;
     if (dead(playerTarget) || (unconscious(playerTarget) && !(playerFinishesOff && wielded(0, NULL)))) { playerTarget = -1; playerFinishesOff = 0; return; }
@@ -1057,6 +1077,7 @@ void combat_update(double ms)
 {
     nowMs += ms;
     update_shots(ms);
+    update_fuses(ms);
     if (vitals_game_over()) return;
     update_music(ms);
     update_player(ms);
@@ -1133,4 +1154,307 @@ void combat_theft(int ownerCharacterId, int factionId)
     }
     vitals_bark(id_of(witness), 5);
     attack_player(witness, 1);
+}
+
+/* ---------------- Things: struck, broken, blown up (ObjectCombat / Mechanisms) ---------------- */
+
+enum { TYPE_DOOR = 3, TYPE_KEY = 10, TYPE_LOCKPICK = 11, TYPE_WINDOW = 12, TYPE_GLASS = 19, TYPE_EXPLOSIVE = 29 };
+
+static cJSON *container_def(int id)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(project, "Containers"), "Containers")) if (num(c, "Id", -2) == id) return c;
+    return NULL;
+}
+
+/* ObjectTypes.CanBeBroken: plants, food, keys, money, walls, stairs... never. */
+static int type_can_break(int type)
+{
+    static const int never[] = { 13, 17, 18, 31, TYPE_KEY, TYPE_LOCKPICK, 14, 5, 6, 1, 2, 24, 23, 15, 16, 20, 34 };
+    for (size_t i = 0; i < sizeof never / sizeof never[0]; i++) if (never[i] == type) return 0;
+    return 1;
+}
+
+static int object_breakable(cJSON *def)
+{
+    int type = num(def, "Type", 0);
+    if (num(def, "HitPoints", 0) <= 0 || flag(def, "CannotBeDestroyed") || !type_can_break(type)) return 0;
+    if (type == TYPE_DOOR && (num(get(def, "Door"), "RequiredKeyItemId", -1) >= 0 || flag(get(def, "Door"), "MagicallyLocked"))) return 0;
+    return 1;
+}
+
+/* Whose it is (its own Belongs To in play, else Belong To / Faction), unless it's the party's or nobody's: 1 = someone else's. */
+static int owned_by_other(cJSON *def, int belongsTo, int *owner, int *factionId)
+{
+    int ownerId = belongsTo >= 0 ? belongsTo : num(def, "BelongToId", -1);
+    *owner = -1; *factionId = -1;
+    if (ownerId >= 0)
+    {
+        int actor = world_actor_by_character(ownerId);
+        if (actor == 0 || (actor > 0 && in_party(actor)) || items_in_party(ownerId)) return 0;
+        *owner = ownerId;
+        *factionId = num(character_json(ownerId), "FactionId", -1);
+        if (*factionId < 0 && belongsTo < 0) *factionId = num(def, "FactionId", -1);
+        return 1;
+    }
+    int f = num(def, "FactionId", -1);
+    if (f < 0 || f == faction_of(0)) return 0;
+    *factionId = f;
+    return 1;
+}
+
+/* Whether blows can break it at all: an object marked breakable (or a keg that goes off), or a destructible container (not a body, not one with its own key). */
+int combat_can_break(int uid)
+{
+    int tc, ti, tq, tx, ty, tin;
+    world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+    if (tc == CAT_OBJECT)
+    {
+        cJSON *def = object_def(ti);
+        return def && (object_breakable(def) || (num(def, "Type", 0) == TYPE_EXPLOSIVE && flag(get(def, "Explosive"), "ExplodesWhenStruck")));
+    }
+    cJSON *data = tc == CAT_CONTAINER ? container_def(ti) : NULL;
+    return data && flag(data, "Destructible") && !flag(data, "IsBodyContainer") && num(data, "RequiredKeyItemId", -1) < 0;
+}
+
+static int struckOwned[64], struckCount;
+static int first_strike(int uid)
+{
+    for (int i = 0; i < struckCount; i++) if (struckOwned[i] == uid) return 0;
+    if (struckCount < 64) struckOwned[struckCount++] = uid;
+    return 1;
+}
+
+static void explode(int uid, cJSON *def, int byPlayer);
+
+/* The blow lands on an object (Game_object::reduce_health). */
+static void strike_object(int uid, cJSON *def, int damage, int striker, int byPlayer)
+{
+    int type = num(def, "Type", 0);
+    if (type == TYPE_EXPLOSIVE && flag(get(def, "Explosive"), "ExplodesWhenStruck")) { explode(uid, def, striker <= 0 && byPlayer); return; }
+    if ((type == TYPE_WINDOW && world_thing_spent(uid)) || !object_breakable(def)) { world_bark_thing(uid, "no effect", 1000); return; }
+    int defense = num(def, "Defense", 0);
+    if (defense > 0) damage -= 1 + rnd(defense);
+    if (damage <= 0) { world_bark_thing(uid, "no damage", 1000); return; }
+    int hp = world_thing_hp(uid, num(def, "HitPoints", 1)) - damage;
+    world_thing_set_hp(uid, hp);
+    if (flag(get(settingsJson, "Combat"), "ShowHitNumbers")) { char t[16]; snprintf(t, sizeof t, "-%d", damage); world_bark_thing(uid, t, 1000); }
+    int owner, factionId, crime = striker <= 0 && byPlayer && owned_by_other(def, world_thing_belongs_to(uid), &owner, &factionId);
+    if (crime && first_strike(uid)) combat_theft(owner, factionId);
+    if (hp > 0) return;
+    /* broken: gone from the world - or a window with a Broken picture, broken where it is */
+    if (uid == playerThing) playerThing = -1;
+    sound_play(num(def, "DestroyedSoundResourceId", -1));
+    events_object_event(uid, 4 /* By Destroy Item */, striker > 0 ? striker : -1);
+    cJSON *broken = get(get(def, "Window"), "BrokenSprite");
+    char line[160];
+    if (type == TYPE_WINDOW && flag(broken, "IsSet"))
+    {
+        world_thing_break_glass(uid, sprite_find(str(broken, "SpriteGroup"), str(broken, "SpriteName")));
+        snprintf(line, sizeof line, "The glass of \"%s\" breaks!", str(def, "Name"));
+    }
+    else
+    {
+        int tc, ti, tq, tx, ty, tin, fl = world_thing_floor(uid);
+        world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+        world_thing_remove(uid);
+        int shards = num(get(def, "Glass"), "ShardsObjectId", -1);
+        if (type == TYPE_GLASS && shards >= 0) world_thing_put(CAT_OBJECT, shards, 1, tx, ty, fl);
+        if (type == TYPE_GLASS) snprintf(line, sizeof line, "\"%s\" shatters!", str(def, "Name"));
+        else if (striker > 0) snprintf(line, sizeof line, "%s breaks \"%s\" down!", name_of(striker), str(def, "Name"));
+        else snprintf(line, sizeof line, "\"%s\" breaks apart.", str(def, "Name"));
+    }
+    game_log(line);
+    if (crime) combat_theft(owner, factionId);
+}
+
+/* One blow at a thing (Game_object::attacked): it always hits. Only the main character's blows are a crime. */
+void combat_strike_thing(int uid, int striker)
+{
+    if (striker < 0 || !world_thing_there(uid)) return;
+    int str3 = stat(striker, K_STRENGTH, 10) / 3, damage = (str3 > 0 ? 1 + rnd(str3) : 0) + 1; /* + 1: bare hands */
+    int tc, ti, tq, tx, ty, tin;
+    world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+    if (tc == CAT_OBJECT)
+    {
+        cJSON *def = object_def(ti);
+        if (def) strike_object(uid, def, damage, striker == 0 ? -1 : striker, striker == 0);
+        return;
+    }
+    cJSON *data = tc == CAT_CONTAINER ? container_def(ti) : NULL;
+    if (!data || !flag(data, "Destructible") || flag(data, "IsBodyContainer") || num(data, "RequiredKeyItemId", -1) >= 0) { world_bark_thing(uid, "no effect", 1000); return; }
+    int defense = num(data, "Defense", 0);
+    if (defense > 0) damage -= 1 + rnd(defense);
+    if (damage <= 0) { world_bark_thing(uid, "no damage", 1000); return; }
+    int hp = world_thing_hp(uid, num(data, "HitPoints", 1) > 1 ? num(data, "HitPoints", 1) : 1) - damage;
+    world_thing_set_hp(uid, hp);
+    if (flag(get(settingsJson, "Combat"), "ShowHitNumbers")) { char t[16]; snprintf(t, sizeof t, "-%d", damage); world_bark_thing(uid, t, 1000); }
+    int owner, factionId, crime = striker == 0 && owned_by_other(data, world_thing_belongs_to(uid), &owner, &factionId);
+    if (crime && first_strike(uid)) combat_theft(owner, factionId);
+    if (hp > 0) return;
+    /* it breaks: its sound, everything inside falls out where it stood */
+    if (uid == playerThing) playerThing = -1;
+    sound_play(num(data, "DestructibleSoundResourceId", -1));
+    int fl = world_thing_floor(uid);
+    Item *box = items_unpark(uid, tc, ti, tq);
+    int spilled = box ? items_count_in(box, -1, -1) : 0;
+    world_thing_remove(uid);
+    items_spill(box, tx, ty, fl);
+    char line[160];
+    if (spilled > 0) snprintf(line, sizeof line, "\"%s\" breaks apart - %d thing%s fall%s out.", str(data, "Name"), spilled, spilled == 1 ? "" : "s", spilled == 1 ? "s" : "");
+    else snprintf(line, sizeof line, "\"%s\" breaks apart.", str(data, "Name"));
+    game_log(line);
+    if (crime) combat_theft(owner, factionId);
+}
+
+/* Game_window::double_clicked in combat mode on a thing: attacked - except a body or an unlocked container (used as normal). 1 = attacked. */
+int combat_player_thing(int uid)
+{
+    if (!combatMode) return 0;
+    int tc, ti, tq, tx, ty, tin;
+    world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+    if (tc == CAT_CONTAINER)
+    {
+        cJSON *data = container_def(ti);
+        if (ti < 0 || !data || flag(data, "IsBodyContainer")) return 0;
+        Item *box = items_unpark(uid, tc, ti, tq);
+        int locked = items_locked(box, flag(data, "IsLocked"));
+        items_park(uid, box);
+        if (!locked) return 0;
+    }
+    playerTarget = -1;
+    playerThing = uid;
+    char line[160];
+    snprintf(line, sizeof line, "Attacking %s.", items_name(tc, ti));
+    game_log(line);
+    return 1;
+}
+
+/* ---- Explosives ---- */
+
+typedef struct Fuse { int uid, byPlayer; double left; } Fuse;
+static Fuse fuses[32]; static int fuseCount;
+
+static int fuse_of(int uid) { for (int i = 0; i < fuseCount; i++) if (fuses[i].uid == uid) return i; return -1; }
+
+static void set_fuse(int uid, double seconds, int byPlayer)
+{
+    if (fuse_of(uid) >= 0 || fuseCount >= 32) return; /* already burning */
+    fuses[fuseCount++] = (Fuse){ uid, byPlayer, seconds };
+}
+
+/* LightFuse: double-clicked (Lit By Double-Click) - its fuse burns, then the blast. */
+int combat_light_fuse(int uid)
+{
+    cJSON *def = object_def(world_thing_object_id(uid)), *e = get(def, "Explosive");
+    if (!def || num(def, "Type", 0) != TYPE_EXPLOSIVE) return 0;
+    char line[160];
+    if (cJSON_IsFalse(get(e, "LitByDoubleClick"))) { snprintf(line, sizeof line, "\"%s\" - nothing happens.", str(def, "Name")); game_log(line); return 1; }
+    if (fuse_of(uid) >= 0) return 1;
+    double seconds = get(e, "FuseSeconds") ? get(e, "FuseSeconds")->valuedouble : 3;
+    set_fuse(uid, seconds > 0.05 ? seconds : 0.05, 1);
+    conditions_record_item("ignited", CAT_OBJECT, num(def, "Id", -1));
+    sound_play(num(e, "FuseSoundResourceId", -1));
+    cJSON *lit = get(e, "LitSprite");
+    if (flag(lit, "IsSet")) world_thing_look(uid, sprite_find(str(lit, "SpriteGroup"), str(lit, "SpriteName")));
+    snprintf(line, sizeof line, "You light the fuse of \"%s\"!", str(def, "Name"));
+    game_log(line);
+    return 1;
+}
+
+/* The blast: everyone in reach hurt, breakable things struck, other explosives set off. */
+static void explode(int uid, cJSON *def, int byPlayer)
+{
+    if (!world_thing_there(uid)) return;
+    cJSON *e = get(def, "Explosive");
+    int f = fuse_of(uid);
+    if (f >= 0) fuses[f] = fuses[--fuseCount];
+    double cx, cy;
+    world_thing_center(uid, &cx, &cy);
+    int tc, ti, tq, tx, ty, tin, owner, factionId;
+    world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+    events_object_event(uid, 4 /* By Destroy Item */, -1);
+    int crime = byPlayer && owned_by_other(def, world_thing_belongs_to(uid), &owner, &factionId);
+    cJSON *blast = get(e, "ExplosionSprite");
+    if (flag(blast, "IsSet")) world_effect_once(sprite_find(str(blast, "SpriteGroup"), str(blast, "SpriteName")), tx, ty);
+    sound_play(num(e, "ExplosionSoundResourceId", -1));
+    world_thing_remove(uid);
+    double reach = num(e, "RadiusTiles", 5) * 8.0;
+    int lo = num(e, "DamageMin", 8), hi = num(e, "DamageMax", 20);
+    for (int a = 0; a < world_actor_count() && a < 256; a++)
+    {
+        if (dead(a)) continue;
+        double px, py;
+        world_actor_pixel(a, &px, &py);
+        if (fmax(fabs(px - cx), fabs(py - cy)) > reach) continue;
+        vitals_damage(id_of(a), lo + rnd((hi - lo > 0 ? hi - lo : 0) + 1), "an explosion");
+        if (byPlayer && a != 0 && !dead(a)) fight_back(a, 0);
+    }
+    int near[256];
+    int n = world_things_near(cx, cy, reach, near, 256);
+    for (int i = 0; i < n; i++)
+    {
+        cJSON *other = object_def(world_thing_object_id(near[i]));
+        if (!other || !world_thing_there(near[i])) continue;
+        if (num(other, "Type", 0) == TYPE_EXPLOSIVE) { set_fuse(near[i], 0.25, byPlayer); continue; }
+        if (object_breakable(other)) strike_object(near[i], other, lo + rnd((hi - lo > 0 ? hi - lo : 0) + 1), -1, byPlayer);
+    }
+    char line[160];
+    snprintf(line, sizeof line, "\"%s\" explodes!", str(def, "Name"));
+    game_log(line);
+    if (crime) combat_theft(owner, factionId);
+}
+
+static void update_fuses(double ms)
+{
+    for (int i = 0; i < fuseCount; i++)
+    {
+        if ((fuses[i].left -= ms / 1000) > 0) continue;
+        Fuse f = fuses[i];
+        fuses[i] = fuses[--fuseCount];
+        i--;
+        cJSON *def = object_def(world_thing_object_id(f.uid));
+        if (def && num(def, "Type", 0) == TYPE_EXPLOSIVE) explode(f.uid, def, f.byPlayer);
+    }
+}
+
+/* ---- Attack Object (the event command): blows at a fight's pace till it's gone; a minute and it still stands: given up ---- */
+
+typedef struct ThingAttack { int uid, dex, x, y; double elapsed, untilTick; } ThingAttack;
+static ThingAttack thingAttacks[256];
+
+void combat_attack_thing_begin(int actor, int uid)
+{
+    if (actor < 0 || actor >= 256) return;
+    ThingAttack *t = &thingAttacks[actor];
+    int tc, ti, tq, tin;
+    memset(t, 0, sizeof *t);
+    t->uid = uid;
+    world_thing_info(uid, &tc, &ti, &tq, &t->x, &t->y, &tin);
+}
+
+/* 1 still at it, 0 it's broken, -1 given up. */
+int combat_attack_thing_tick(int actor, double ms)
+{
+    ThingAttack *t = &thingAttacks[actor];
+    if (!world_thing_there(t->uid) || world_thing_spent(t->uid)) { world_set_pose(actor, "Idle", -1); return 0; }
+    t->elapsed += ms;
+    if (t->elapsed > 60000)
+    {
+        char line[200];
+        int tc, ti, tq, tx, ty, tin;
+        world_thing_info(t->uid, &tc, &ti, &tq, &tx, &ty, &tin);
+        snprintf(line, sizeof line, "%s gives up on \"%s\" - a minute of blows and it still stands.", name_of(actor), items_name(tc, ti));
+        game_log(line);
+        world_set_pose(actor, "Idle", -1);
+        return -1;
+    }
+    if ((t->untilTick -= ms) > 0) return 1;
+    t->untilTick = STD_DELAY;
+    if (t->dex < DEX_TO_ATTACK) { int dex = stat(actor, K_DEXTERITY, 10); t->dex += dex > 1 ? dex : 1; return 1; }
+    t->dex -= DEX_TO_ATTACK;
+    world_face_cell(actor, t->x, t->y, "Attacking Melee");
+    pose_back(actor, 2 * STD_DELAY);
+    combat_strike_thing(t->uid, actor);
+    return 1;
 }

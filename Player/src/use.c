@@ -78,6 +78,7 @@ void use_at(int sx, int sy)
     world_hit(sx, sy, &actor, &uid);
     if (actor > 0) { if (combat_mode()) combat_player_target(actor); else events_talk(actor); return; }
     if (!uid) return;
+    if (combat_player_thing(uid)) return; /* combat mode: attacked (bodies and unlocked containers open as normal) */
     int objectId = world_thing_object_id(uid);
     if (objectId < 0)
     {
@@ -92,6 +93,7 @@ void use_at(int sx, int sy)
     switch (world_thing_type(uid))
     {
         case OT_DOOR: use_door(uid, def); return;
+        case 29: if (!events_object_event(uid, TR_USE, -1)) combat_light_fuse(uid); return; /* an explosive: its fuse */
         case OT_LIGHT: use_light(uid, def); return;
         case OT_CHAIR: case OT_BED: if (!events_object_event(uid, TR_USE, -1)) world_player_sit(uid); return;
     }

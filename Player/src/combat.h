@@ -19,5 +19,11 @@ int combat_change_faction(const char *who, int factionId);
 void combat_gain_experience(int actor, int amount);
 int combat_silences_ambient(void);
 void combat_death_music(void);
+int combat_can_break(int uid);
+void combat_strike_thing(int uid, int striker);  /* striker: an actor (0 = the player: a crime if it's owned) */
+int combat_player_thing(int uid);                 /* double-click in combat mode: 1 = attacked */
+int combat_light_fuse(int uid);                   /* an explosive double-clicked: 1 = handled */
+void combat_attack_thing_begin(int actor, int uid);
+int combat_attack_thing_tick(int actor, double ms);
 
 #endif
