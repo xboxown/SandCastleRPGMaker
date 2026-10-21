@@ -42,6 +42,7 @@ int world_map_h(void);
 int world_walk_blocked(int actor);
 int world_on_screen(double px, double py, double margin);
 void world_view_center(double *x, double *y);
+int world_indoors(void);
 /* Chairs and beds: sitting / lying down, getting up, the Sit and Sleep schedules, the main character's walk-up-and-sit. */
 int world_go_to_furniture(int actor, int bed, int onlyUid);
 int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken meanwhile, 0 wasn't heading for one */

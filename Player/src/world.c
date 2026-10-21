@@ -1805,3 +1805,6 @@ static void draw_thing_barks(uint32_t *pixels)
         font_draw(f, pixels, (int)floor(left + qw / 2.0 - w / 2.0 - cameraX), (int)floor(top - font_line_height(f) - 2 - cameraY), thingBarks[i].text, 0);
     }
 }
+
+/* Under a roof (something solid over the player's head): weather isn't drawn. */
+int world_indoors(void) { return ceiling_over_player() < (1 << 30); }

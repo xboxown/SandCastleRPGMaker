@@ -28,6 +28,7 @@ static Sky overrideSky; static int overrideHour = -1;
 static Sky shown = { 0, -1 };                 /* what the sky was last set to */
 static uint32_t drawnColor; static double drawnOpacity, fromOpacity, targetOpacity, fadeMs = -1;
 static double checkMs, fadeLength = 400;
+static int weatherKind, weatherIntensity, weatherClouds, weatherCover; /* the overcast */
 
 static const double DARKNESS_LEFT[4] = { 1.0, 0.75, 0.55, 0.35 }; /* none, candle, single light, many lights */
 
@@ -124,6 +125,16 @@ void lighting_update(double ms)
     checkMs = 250;
     double nightAmount;
     Sky sky = sky_now(&nightAmount);
+    /* Overcast: weather and clouds darken the day (and the night a little more). */
+    double gloom = (weatherKind == 0 ? 0 : weatherIntensity / 100.0) + (weatherClouds ? weatherCover / 200.0 : 0);
+    gloom = clamp01(gloom) * overcastStrength;
+    if (gloom > 0.001)
+    {
+        Sky grey = { 0x20242C, gloom };
+        Sky m = mix(sky, grey, sky.opacity <= 0 ? 1 : 0.35);
+        sky.rgb = m.rgb;
+        sky.opacity = 1 - (1 - sky.opacity) * (1 - gloom);
+    }
     if (nightAmount > 0)
     {
         int gives = 0, strength = world_light_strength(&gives);
@@ -171,4 +182,10 @@ void lighting_palette(const char *hex, double opacity)
     if (!hex || !hex[0]) return;
     drawnColor = parse_colour(hex, drawnColor);
     fromOpacity = drawnOpacity; targetOpacity = clamp01(opacity); fadeMs = 0; fadeLength = 600; /* faded in over 0.6 s */
+}
+
+void lighting_weather(int kind, int intensity, int clouds, int cover)
+{
+    weatherKind = kind; weatherIntensity = intensity; weatherClouds = clouds; weatherCover = cover;
+    checkMs = 0; /* the sky darkens or brightens with it */
 }

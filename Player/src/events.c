@@ -7,6 +7,7 @@
 #include "lighting.h"
 #include "schedules.h"
 #include "sound.h"
+#include "weather.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -1089,6 +1090,16 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ChangeWeather:
+        {
+            static const char *KINDS[] = { "Clear", "Rain", "Snow", "Hail", "Storm" };
+            int k = -1;
+            for (int i = 0; i < 5; i++) if (!strcmp(param(c, "Kind"), KINDS[i])) k = i;
+            if (k < 0) return 1;
+            const char *cl = param(c, "Clouds");
+            weather_change(k, param(c, "Intensity")[0] ? atoi(param(c, "Intensity")) : 50, !strcmp(cl, "True") ? 1 : !strcmp(cl, "False") ? 0 : -1);
+            return 1;
+        }
         case C_PlaySound:
         {
             double volume = -1;

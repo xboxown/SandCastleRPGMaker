@@ -13,6 +13,7 @@
 #include "schedules.h"
 #include "use.h"
 #include "sound.h"
+#include "weather.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,6 +156,7 @@ int main(int argc, char **argv)
     events_load();
     schedules_load();
     schedules_start();
+    weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
     uint32_t lastClick = 0; int clickX = -100, clickY = -100;
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
@@ -211,7 +213,9 @@ int main(int argc, char **argv)
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
         {
             world_draw(pixels, now);
+            weather_draw_clouds(pixels);
             lighting_draw(pixels);
+            weather_draw(pixels);
             world_draw_barks(pixels);
             dialog_draw(pixels, now);
             save_bmp(shot);
@@ -261,11 +265,14 @@ int main(int argc, char **argv)
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             world_update(dx, dy, seconds);
             schedules_update(seconds * 1000);
+            weather_update(seconds * 1000);
             events_player_moved();
         }
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
         world_draw(pixels, worldMs);
+        weather_draw_clouds(pixels);
         lighting_draw(pixels);
+        weather_draw(pixels);
         world_draw_barks(pixels);
         dialog_draw(pixels, now);
         platform_present(pixels);

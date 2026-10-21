@@ -9,5 +9,6 @@ void lighting_update(double ms);
 void lighting_draw(uint32_t *pixels);   /* over the world, under the boxes */
 void lighting_period(const char *period);
 void lighting_palette(const char *hex, double opacity);
+void lighting_weather(int kind, int intensity, int clouds, int cover);
 
 #endif
