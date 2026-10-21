@@ -601,3 +601,18 @@ int items_party_count_any(int category, int itemId)
     for (int i = 0; i < carrierCount; i++) if (carriers[i].isPlayer || carriers[i].inParty) n += count_any(carriers[i].items, carriers[i].count, category, itemId);
     return n;
 }
+
+void items_set_in_party(int characterId, int join) { Carrier *k = carrier_of(characterId); if (k) k->inParty = join; }
+
+/* A container on the map: what's in it now (taken from the thing's parked contents; put back with items_park). */
+int items_count_in(const Item *container, int category, int itemId) { return container ? count_any(container->contents, container->count, category, itemId) : 0; }
+
+void items_empty(Item *container)
+{
+    for (int i = 0; i < container->count; i++) items_free(container->contents[i]);
+    container->count = 0;
+}
+
+void items_put_in(Item *container, Item *it) { add_to(&container->contents, &container->count, &container->cap, it); }
+
+void items_set_locked(Item *it, int locked) { if (it) it->locked = locked; }

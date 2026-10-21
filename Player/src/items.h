@@ -67,6 +67,12 @@ int items_carried_not_worn(int characterId, int category, int itemId);
 int items_count_any(int characterId, int category, int itemId);
 int items_party_count_any(int category, int itemId);
 
+void items_set_in_party(int characterId, int join);
+int items_count_in(const Item *container, int category, int itemId);
+void items_empty(Item *container);
+void items_put_in(Item *container, Item *it);
+void items_set_locked(Item *it, int locked);
+
 /* Its name, for the log. */
 const char *items_name(int category, int itemId);
 

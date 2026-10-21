@@ -411,7 +411,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 /* ---------------- Running commands ---------------- */
 
 enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN };
-enum { A_PICKUP = 1, A_DROP, A_SIT };
+enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
 
@@ -967,6 +967,31 @@ int events_game_function(const char *name, const Value *args, int count, Value *
     return 0;
 }
 
+/* ThingOf: the thing a command picked ("Object:<instance>:<object>" or "Item:<Category>:<id>", near X, Y); -1 if it isn't there. */
+static int thing_of(const Cmd *c)
+{
+    char kind[16], cat[16];
+    int a1, a2, x = atoi(param(c, "X")), y = atoi(param(c, "Y"));
+    if (!sscanf_like(param(c, "Thing"), kind, cat, &a1, &a2)) return -1;
+    if (!strcmp(kind, "Object")) return world_find_object(a1, a2, x, y);
+    return world_find_item(category_of(cat), a2, x, y);
+}
+
+/* A stat of a character, set (by its kind). */
+static void set_stat(int characterId, int kind, const char *value)
+{
+    cJSON *data = character_data(characterId), *s, *values = get(data, "StatValues");
+    if (!values) return;
+    cJSON_ArrayForEach(s, statsJson)
+        if (num(s, "Kind", 0) == kind)
+        {
+            char key[16];
+            snprintf(key, sizeof key, "%d", num(s, "Id", -1));
+            if (get(values, key)) cJSON_ReplaceItemInObject(values, key, cJSON_CreateString(value));
+            else cJSON_AddStringToObject(values, key, value);
+        }
+}
+
 /* Get Game Data: one thing about the game into a variable. */
 static void get_game_data(Run *r, const Cmd *c)
 {
@@ -1115,6 +1140,211 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_JoinParty:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor <= 0 || world_actor_gone(actor)) { lastResult = 0; return 1; }
+            int join = strcmp(param(c, "Value"), "Leave the party") != 0, id = world_actor_character(actor);
+            if (items_in_party(id) == join) return 1;
+            items_set_in_party(id, join);
+            schedules_join(actor, join);
+            return 1;
+        }
+        case C_ChangeSchedule:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor <= 0) return 1;
+            const char *a = param(c, "Activity");
+            const char *behavior = !strcmp(a, "Pace east-west") ? "HorizPace" : !strcmp(a, "Pace north-south") ? "VertPace" : !strcmp(a, "Eat at inn") ? "EatAtInn" : !strcmp(a, "Back to its schedule") ? "Resume" : a;
+            if (actor < 256) heldBy[actor] = 0;
+            schedules_change_behavior(actor, behavior);
+            double hours = formula_number(c, "Hours");
+            schedules_until(actor, hours > 0 && strcmp(behavior, "Resume") ? total_minutes() + (long)(hours * 60 + 0.5) : 0);
+            return 1;
+        }
+        case C_PlaceCharacter:
+        {
+            const char *who = param(c, "Who");
+            int actor = actor_for(r, who);
+            if (actor < 0 && who[0]) for (int a = 1; a < world_actor_count(); a++) if (world_actor_character(a) == atoi(who)) { actor = a; break; }
+            if (actor < 0) { lastResult = 0; return 1; }
+            if (!strcmp(param(c, "Value"), "Remove it from the map")) { world_actor_remove(actor); schedules_follow(actor, -1); return 1; }
+            if (!param(c, "X")[0] || !param(c, "Y")[0]) return 1;
+            int wasGone = world_actor_gone(actor);
+            world_actor_place(actor, atoi(param(c, "X")), atoi(param(c, "Y")), param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1);
+            if (wasGone && !items_in_party(world_actor_character(actor))) schedules_change_behavior(actor, "Resume");
+            return 1;
+        }
+        case C_TurnToFace:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor < 0) return 1;
+            const char *t = param(c, "Towards");
+            int facing = !strcmp(t, "North") ? 0 : !strcmp(t, "South") ? 4 : !strcmp(t, "East") ? 2 : !strcmp(t, "West") ? 6 : -1;
+            int other = !strcmp(t, "The main player") ? 0 : !strcmp(t, "Whoever set it off") ? (r->activator >= 0 ? r->activator : 0) : !strcmp(t, "Another character") ? actor_for(r, param(c, "Other")) : -1;
+            if (facing < 0 && other >= 0)
+            {
+                double fx, fy, ox, oy;
+                world_actor_pixel(actor, &fx, &fy); world_actor_pixel(other, &ox, &oy);
+                facing = fabs(ox - fx) > fabs(oy - fy) ? (ox > fx ? 2 : 6) : (oy > fy ? 4 : 0);
+            }
+            if (facing >= 0) world_set_pose(actor, "Idle", facing);
+            return 1;
+        }
+        case C_FollowCharacter:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor <= 0) return 1;
+            if (!strcmp(param(c, "Value"), "Stop following")) { schedules_follow(actor, -1); return 1; }
+            int leader = actor_for(r, param(c, "Other"));
+            if (leader >= 0 && leader != actor) schedules_follow(actor, leader);
+            return 1;
+        }
+        case C_ChangeName:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
+            if (data) cJSON_ReplaceItemInObject(data, "Name", cJSON_CreateString(value_text_of(formula(c, "Value"))));
+            return 1;
+        }
+        case C_ChangeLook:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor < 0) return 1;
+            if (!strcmp(param(c, "Own"), "True")) world_change_look(actor, -1);
+            else { int other = actor_for(r, param(c, "Other")); if (other >= 0 && other != actor) world_change_look(actor, other); }
+            return 1;
+        }
+        case C_SetAttackMode:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
+            if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
+            return 1;
+        }
+        case C_Resurrect:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (strcmp(param(c, "Value"), "Resurrect") != 0)
+            {
+                /* HealFully: hit points back to the most (Strength) */
+                cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
+                const char *strength = data ? stat_value(world_actor_character(actor), 1, NULL) : NULL;
+                if (data && strength) set_stat(world_actor_character(actor), 6, strength);
+                return 1;
+            }
+            lastResult = 0; /* nobody has died: nothing to bring back */
+            return 1;
+        }
+        case C_PlayPose:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor < 0) return 1;
+            const char *pose = param(c, "Pose");
+            if (!world_set_pose(actor, pose, world_direction_of(param(c, "Facing")))) { lastResult = 0; return 1; }
+            if (strcmp(pose, "Sit") && strcmp(pose, "Sleeping") && world_seated(actor)) { world_stand_up(actor); world_set_pose(actor, pose, world_direction_of(param(c, "Facing"))); }
+            begin_action(r, actor, A_POSE);
+            double amount = 1;
+            if (!parse_number(param(c, "Duration"), &amount) || amount < 0.01) amount = amount < 0.01 ? 0.01 : 1;
+            const char *unit = param(c, "Unit");
+            r->stage = 0; r->waitMinutes = 0;
+            if (!strcmp(unit, "Seconds")) r->stageMs = amount * 1000;
+            else if (!strcmp(unit, "Minutes") || !strcmp(unit, "Hours")) { r->waitFromMinute = total_minutes(); r->waitMinutes = (int)(strcmp(unit, "Hours") ? amount : amount * 60); r->stageMs = 1e30; }
+            else r->stageMs = world_pose_length(actor, pose); /* until its animation has played once */
+            return 0;
+        }
+        case C_CreateObject:
+        {
+            int category = category_of(param(c, "Category")), itemId = atoi(param(c, "ItemId"));
+            if (category < 0 || itemId < 0 || !param(c, "X")[0]) return 1;
+            int quantity = (int)formula_number(c, "Quantity");
+            Item *gifts[100];
+            int n = items_make_gifts(category, itemId, quantity > 0 ? quantity : 1, gifts, 100);
+            int f = param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1;
+            for (int i = 0; i < n; i++)
+            {
+                int uid = world_thing_put(items_category(gifts[i]), items_item_id(gifts[i]), items_quantity(gifts[i]), atoi(param(c, "X")), atoi(param(c, "Y")), f);
+                if (uid >= 0) items_park(uid, gifts[i]); else items_free(gifts[i]);
+            }
+            return 1;
+        }
+        case C_DeleteObject: { int uid = thing_of(c); if (uid >= 0) { items_free(items_unpark(uid, -1, -1, 1)); world_thing_remove(uid); } else lastResult = 0; return 1; }
+        case C_MoveObject:
+        {
+            int uid = thing_of(c);
+            if (uid < 0 || !param(c, "ToX")[0]) { lastResult = 0; return 1; }
+            world_thing_move(uid, atoi(param(c, "ToX")), atoi(param(c, "ToY")), param(c, "ToFloor")[0] ? atoi(param(c, "ToFloor")) : 1);
+            return 1;
+        }
+        case C_ChangeObjectLook:
+        {
+            int uid = thing_of(c);
+            if (uid < 0 || world_thing_object_id(uid) < 0) { lastResult = 0; return 1; }
+            world_thing_look(uid, !strcmp(param(c, "Own"), "True") ? NULL : sprite_find(param(c, "SpriteGroup"), param(c, "SpriteName")));
+            return 1;
+        }
+        case C_SetDoorState:
+        {
+            int uid = thing_of(c);
+            if (uid < 0) { lastResult = 0; return 1; }
+            if (world_thing_type(uid) == 3) world_door_set(uid, param(c, "Value"));
+            else
+            {
+                /* a container on the map: its lock */
+                int tc, ti, tq, tx, ty, tin;
+                world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+                if (tc == CAT_CONTAINER && (!strcmp(param(c, "Value"), "Locked") || !strcmp(param(c, "Value"), "Unlocked")))
+                {
+                    Item *box = items_unpark(uid, tc, ti, tq);
+                    items_set_locked(box, !strcmp(param(c, "Value"), "Locked"));
+                    items_park(uid, box);
+                }
+            }
+            return 1;
+        }
+        case C_CountItems:
+        {
+            int category = category_of(param(c, "Category")), itemId = atoi(param(c, "ItemId")), count = 0;
+            if (category < 0) { lastResult = 0; return 1; }
+            const char *where = param(c, "Where");
+            if (!strcmp(where, "The whole party")) count = items_party_count_any(category, itemId);
+            else if (!strcmp(where, "A container on the map"))
+            {
+                int uid = thing_of(c), tc, ti, tq, tx, ty, tin;
+                if (uid < 0) { lastResult = 0; return 1; }
+                world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+                Item *box = items_unpark(uid, tc, ti, tq);
+                count = items_count_in(box, category, itemId);
+                items_park(uid, box);
+            }
+            else { int actor = actor_for(r, param(c, "Who")); if (actor < 0) { lastResult = 0; return 1; } count = items_count_any(world_actor_character(actor), category, itemId); }
+            set_named(param(c, "Variable"), value_number(count));
+            return 1;
+        }
+        case C_SetContainerContents:
+        {
+            int uid = thing_of(c), tc, ti, tq, tx, ty, tin;
+            if (uid < 0) { lastResult = 0; return 1; }
+            world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+            if (tc != CAT_CONTAINER) { lastResult = 0; return 1; }
+            Item *box = items_unpark(uid, tc, ti, tq);
+            if (!strcmp(param(c, "Empty"), "True")) items_empty(box);
+            int category = category_of(param(c, "Category")), itemId = atoi(param(c, "ItemId"));
+            if (category >= 0 && itemId >= 0)
+            {
+                Item *gifts[100];
+                int q = (int)formula_number(c, "Quantity"), n = items_make_gifts(category, itemId, q > 0 ? q : 1, gifts, 100);
+                for (int i = 0; i < n; i++) items_put_in(box, gifts[i]);
+            }
+            items_park(uid, box);
+            return 1;
+        }
+        case C_ChangeTile:
+        {
+            if (!param(c, "X")[0] || !param(c, "Y")[0]) return 1;
+            world_set_tile(atoi(param(c, "X")), atoi(param(c, "Y")), param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1, (int)formula_number(c, "TileIndex"));
+            return 1;
+        }
         case C_ShakeScreen:
         {
             int intensity = param(c, "Intensity")[0] ? atoi(param(c, "Intensity")) : 5;
@@ -1388,6 +1618,15 @@ static int pose_once(Run *r, int actor, double ms)
 static int action_tick(Run *r, double ms, int *ok)
 {
     int a = r->walker;
+    if (r->act == A_POSE)
+    {
+        /* Play Pose: shown for its time (or till its animation has played once), then standing again */
+        if (r->waitMinutes > 0 ? total_minutes() - r->waitFromMinute < r->waitMinutes : (r->stageMs -= ms) > 0) return 1;
+        r->waitMinutes = 0;
+        if (!world_seated(a)) world_set_pose(a, "Idle", -1);
+        *ok = 1;
+        return 0;
+    }
     if (r->act == A_SIT)
     {
         /* SitCommand: head for the chair (round the table), sit; 5 tries */

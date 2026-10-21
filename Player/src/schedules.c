@@ -18,6 +18,7 @@
 #include "events.h"
 #include "world.h"
 #include "platform.h"
+#include "items.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -43,10 +44,11 @@ typedef struct Npc
     int retries, phase, paceDirection, bestDistance;
     double waitMs;
     int walking;               /* on a path it was given */
-    int dormant, missedHour;
+    int dormant, missedHour, joined;
 } Npc;
 
 static Npc *npcs; static int npcCount;
+static int leaderOf[256];          /* per actor: the actor it follows + 1 (0: nobody) */
 static int lastHour = -1;
 
 static unsigned rng = 1234567u;
@@ -329,12 +331,18 @@ static int keep_dormant(Npc *n)
 
 void schedules_start(void)
 {
+    for (int a = 1; a < world_actor_count() && a < 256; a++)
+        if (!world_actor_gone(a) && items_in_party(world_actor_character(a))) { leaderOf[a] = 1; Npc *n = npc_of(a); if (n) n->joined = 1; }
     lastHour = events_hour();
     for (int i = 0; i < npcCount; i++) update_schedule(&npcs[i], lastHour / 3, -1);
 }
 
+static void update_followers(double ms);
+int schedules_following(int actor);
+
 void schedules_update(double ms)
 {
+    update_followers(ms);
     int hour = events_hour();
     if (lastHour < 0) lastHour = hour;
     if (hour != lastHour)
@@ -345,6 +353,7 @@ void schedules_update(double ms)
         {
             Npc *n = &npcs[i];
             if (events_actor_held(n->actor)) { n->missedHour = 1; continue; }
+            if (n->joined || schedules_following(n->actor)) continue;
             if (n->activity == S_WAIT) continue;
             update_schedule(n, hour / 3, hour % 3 == 0 ? -1 : 0);
         }
@@ -352,7 +361,7 @@ void schedules_update(double ms)
     for (int i = 0; i < npcCount; i++)
     {
         Npc *n = &npcs[i];
-        if (!n->entryCount) continue;
+        if (!n->entryCount || n->joined || schedules_following(n->actor)) continue; /* the party and followers have no schedule */
         if (keep_dormant(n)) continue;
         if (events_actor_busy(n->actor) || events_actor_held(n->actor)) { n->walking = 0; continue; } /* an event has them: their schedule waits */
         if (n->walking)
@@ -408,3 +417,65 @@ int schedules_change_behavior(int actor, const char *behavior)
         }
     return 0;
 }
+
+/* ---------------- Followers (Join Party, Follow) and timed schedules (Change Schedule) ---------------- */
+
+static long untilMinute[256];      /* per actor: when a Change Schedule for some hours ends (0: never) */
+static double followThinkMs;
+
+/* Join Party / Leave: a party member has no schedule (Exult) and walks with the main character; one who leaves goes back to its day. */
+void schedules_join(int actor, int join)
+{
+    Npc *n = npc_of(actor);
+    if (actor <= 0 || actor >= 256) return;
+    leaderOf[actor] = 0;
+    world_walk_cancel(actor);
+    if (!n) return;
+    n->walking = 0;
+    if (join)
+    {
+        n->entry = NULL; n->activity = 0; n->walkingToSchedule = 0; n->waitMs = -1;
+        leaderOf[actor] = 0 + 1; /* the main character */
+        n->entryCount = n->entryCount; /* its timetable is kept for when it leaves */
+        n->joined = 1;
+    }
+    else
+    {
+        n->joined = 0;
+        update_schedule(n, events_hour() / 3, 0);
+    }
+}
+
+/* Follow: walk after someone (leader -1: stop following). */
+void schedules_follow(int actor, int leader)
+{
+    Npc *n = npc_of(actor);
+    if (actor <= 0 || actor >= 256) return;
+    if (leader < 0) { leaderOf[actor] = 0; world_walk_cancel(actor); if (n) n->walking = 0; return; }
+    if (n) { n->entry = NULL; n->activity = 0; n->walkingToSchedule = 0; }
+    leaderOf[actor] = leader + 1;
+}
+
+void schedules_until(int actor, long minute) { if (actor > 0 && actor < 256) untilMinute[actor] = minute; }
+
+/* UpdateFollowers: every 2/5 s, a follower more than 2 cells from its leader walks up beside it. */
+static void update_followers(double ms)
+{
+    if ((followThinkMs -= ms) > 0) return;
+    followThinkMs = 400;
+    long now = events_total_minutes();
+    for (int a = 1; a < 256 && a < world_actor_count(); a++)
+    {
+        if (untilMinute[a] && now >= untilMinute[a]) { untilMinute[a] = 0; schedules_change_behavior(a, "Resume"); }
+        int leader = leaderOf[a] - 1;
+        if (leader < 0 || world_actor_gone(a) || world_actor_gone(leader)) continue;
+        if (events_actor_busy(a)) continue; /* carrying out an event's command: it isn't pulled back */
+        int lx, ly, lf, x, y, f;
+        world_actor_cell(leader, &lx, &ly, &lf);
+        world_actor_cell(a, &x, &y, &f);
+        if ((abs(lx - x) > abs(ly - y) ? abs(lx - x) : abs(ly - y)) <= 2) continue;
+        if (!world_walking(a)) world_walk_to(a, lx, ly, lf, 1);
+    }
+}
+
+int schedules_following(int actor) { return actor > 0 && actor < 256 && leaderOf[actor]; }
