@@ -10,6 +10,7 @@
 #include "weather.h"
 #include "conditions.h"
 #include "screen.h"
+#include "vitals.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -914,12 +915,9 @@ int events_game_function(const char *name, const Value *args, int count, Value *
     Run *r = functionRun;
     int who = script_actor(r, count > 0 ? args[0] : value_text("Self"));
     int id = who >= 0 ? world_actor_character(who) : -1;
-    if (!strcmp(name, "hp") || !strcmp(name, "maxhp"))
-    {
-        const char *v = who >= 0 ? stat_value(id, !strcmp(name, "hp") ? 6 : 1, NULL) : NULL;
-        *out = value_number(v ? atoi(v) : 0);
-        return 1;
-    }
+    if (!strcmp(name, "hp")) { int hp = 0; *out = value_number(who >= 0 && vitals_hp(id, &hp) ? hp : 0); return 1; }
+    if (!strcmp(name, "maxhp")) { *out = value_number(who >= 0 ? vitals_max_hp(id) : 0); return 1; }
+    if (!strcmp(name, "food")) { *out = value_number(who >= 0 ? vitals_food(id) : 0); return 1; }
     if (!strcmp(name, "stat"))
     {
         const char *v = who >= 0 && count >= 2 ? stat_value(id, 0, value_text_of(args[1])) : NULL;
@@ -935,7 +933,7 @@ int events_game_function(const char *name, const Value *args, int count, Value *
         return 1;
     }
     if (!strcmp(name, "name")) { cJSON *d = character_data(id); *out = value_text(d ? str(d, "Name") : ""); return 1; }
-    if (!strcmp(name, "isdead")) { *out = value_number(0); return 1; } /* nobody dies in the player yet */
+    if (!strcmp(name, "isdead")) { *out = value_number(id >= 0 && vitals_dead(id)); return 1; }
     if (!strcmp(name, "inparty")) { *out = value_number(who >= 0 && items_in_party(id)); return 1; }
     if (!strcmp(name, "partysize"))
     {
@@ -1020,6 +1018,7 @@ static void get_game_data(Run *r, const Cmd *c)
     else if (!strcmp(what, "Item count")) v = value_number(who >= 0 && category_of(param(c, "Category")) >= 0 ? items_count(world_actor_character(who), category_of(param(c, "Category")), atoi(param(c, "ItemId"))) : 0);
     else if (!strcmp(what, "Name")) events_game_function("name", args, 1, &v);
     else if (!strcmp(what, "Is dead")) events_game_function("isdead", args, 1, &v);
+    else if (!strcmp(what, "Food level")) events_game_function("food", args, 1, &v);
     else if (!strcmp(what, "Is in party")) events_game_function("inparty", args, 1, &v);
     else if (!strcmp(what, "Party size")) events_game_function("partysize", args, 0, &v);
     else if (!strcmp(what, "Hour")) v = value_number(clockHour);
@@ -1147,6 +1146,52 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ChangeHp:
+        {
+            /* Change HP: up (never past the most), down (a hurt: the flash; it can kill only if allowed - else knocked out at worst), or set */
+            int actor = actor_for(r, param(c, "Who")), id = actor >= 0 ? world_actor_character(actor) : -1, hp;
+            if (id < 0 || vitals_dead(id) || !vitals_hp(id, &hp)) { lastResult = 0; return 1; }
+            int amount = (int)floor(formula_number(c, "Amount") + 0.5);
+            const char *op = param(c, "Operation");
+            int target = !strcmp(op, "Subtract") ? hp - amount : !strcmp(op, "Set") ? amount : hp + amount, max = vitals_max_hp(id);
+            if (target > (max > hp ? max : hp)) target = max > hp ? max : hp;
+            if (target < hp)
+            {
+                if (strcmp(param(c, "CanKill"), "True") && target < -(max / 3)) target = -(max / 3); /* knocked out at worst */
+                vitals_damage(id, hp - target, "an event");
+            }
+            else vitals_set_hp(id, target);
+            return 1;
+        }
+        case C_KillCharacter:
+        {
+            /* a fatal blow 0.05 s later - the hit flash - and death */
+            int actor = actor_for(r, param(c, "Who")), id = actor >= 0 ? world_actor_character(actor) : -1, hp;
+            if (id < 0 || vitals_dead(id)) { lastResult = 0; return 1; }
+            int max = vitals_max_hp(id);
+            vitals_hp(id, &hp);
+            vitals_damage(id, hp + max / 3 + 1, "an event");
+            if (!vitals_dead(id)) vitals_kill(id, "an event");
+            return 1;
+        }
+        case C_ChangeFoodLevel:
+        {
+            const char *who = param(c, "Who");
+            int actor = actor_for(r, who[0] ? who : "Activator");
+            if (actor >= 0) vitals_change_food(world_actor_character(actor), param(c, "Operation"), atoi(param(c, "Value")));
+            return 1;
+        }
+        case C_ModifyAilments: case C_ChangeState:
+        {
+            const char *who = param(c, "Who");
+            int actor = actor_for(r, who[0] ? who : "Activator");
+            int ailment = vitals_ailment_of(param(c, c->type == C_ChangeState ? "State" : "Ailment"));
+            if (actor < 0 || !ailment) { lastResult = 0; return 1; }
+            int cure = c->type == C_ChangeState ? !strcmp(param(c, "Value"), "Off") : !strcmp(param(c, "Action"), "Cure");
+            if (cure) vitals_cure(world_actor_character(actor), ailment);
+            else lastResult = vitals_inflict(world_actor_character(actor), ailment);
+            return 1;
+        }
         case C_JoinParty:
         {
             int actor = actor_for(r, param(c, "Who"));
@@ -1235,9 +1280,8 @@ static int execute(Run *r, const Cmd *c)
             if (strcmp(param(c, "Value"), "Resurrect") != 0)
             {
                 /* HealFully: hit points back to the most (Strength) */
-                cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
-                const char *strength = data ? stat_value(world_actor_character(actor), 1, NULL) : NULL;
-                if (data && strength) set_stat(world_actor_character(actor), 6, strength);
+                if (actor < 0 || vitals_dead(world_actor_character(actor))) { lastResult = 0; return 1; }
+                vitals_heal_fully(world_actor_character(actor));
                 return 1;
             }
             lastResult = 0; /* nobody has died: nothing to bring back */
@@ -2399,6 +2443,8 @@ void events_update(double ms, int paused)
 void events_talk(int actor)
 {
     int id = world_actor_character(actor);
+    if (vitals_incapacitated(id) && !vitals_dead(id)) { game_log("They can't answer right now."); return; }
+    if (schedules_sleeping(actor) && !items_in_party(id)) return; /* Actor::activate: asleep - nothing happens */
     for (int i = 0; i < ownerCount; i++)
     {
         Owner *o = &owners[i];
@@ -2492,3 +2538,6 @@ long events_total_minutes(void) { return total_minutes(); }
 int events_day(void) { return clockDay; }
 double events_variable(const char *name) { return get_var(name); }
 int events_last_result(void) { return lastResult; }
+
+/* Knocked out: whoever was attacking it looks for someone else (combat). */
+void events_knocked_out(int characterId) { (void)characterId; }

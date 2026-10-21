@@ -1375,8 +1375,11 @@ static void draw_thing_barks(uint32_t *pixels);
 /* Drawn over everything: centred over the head, 2 pixels above the picture (GameTextLabel in the InGameFont). */
 static void draw_effects(uint32_t *pixels);
 
+static void draw_hit_outline(uint32_t *pixels);
+
 void world_draw_barks(uint32_t *pixels)
 {
+    draw_hit_outline(pixels);
     draw_effects(pixels);
     draw_thing_barks(pixels);
     const Font *f = font_get("InGameFont");
@@ -2191,4 +2194,68 @@ static void draw_effects(uint32_t *pixels)
         screen = pixels;
         blit_box(pic, (int)floor(x - qw / 2.0 - lift * LIFT_SHIFT - cameraX), (int)floor(y + tileH / 2.0 - qh - lift * LIFT_SHIFT - cameraY), qw, qh);
     }
+}
+
+/* ---------------- Hits, bodies, tiles (for vitals) ---------------- */
+
+static int outlineActor = -1; static uint32_t outlineUntil;
+
+/* Exult's hit: a red outline round the character's frame for 200 ms. */
+void world_hit_outline(int actor) { outlineActor = actor; outlineUntil = lastMs + 200; }
+
+/* The outline, drawn round the frame the character shows now (every see-through pixel touching a solid one). */
+static void draw_hit_outline(uint32_t *pixels)
+{
+    if (outlineActor < 0 || lastMs >= outlineUntil) return;
+    for (int i = 0; i < drawnCount; i++)
+    {
+        const Drawn *d = &drawn[i];
+        if (d->actor != outlineActor) continue;
+        const Picture *p = d->picture;
+        double s = fmin((double)d->w / p->width, (double)d->h / p->height);
+        int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5), ox = d->x + (d->w - dw) / 2, oy = d->y + (d->h - dh) / 2;
+#define SOLID(x, y) ((x) >= 0 && (y) >= 0 && (x) < dw && (y) < dh && (p->pixels[(size_t)((y) * p->height / dh) * (size_t)p->width + (size_t)((x) * p->width / dw)] >> 24) > 127)
+        for (int y = -1; y <= dh; y++)
+            for (int x = -1; x <= dw; x++)
+            {
+                if (SOLID(x, y) || !(SOLID(x - 1, y) || SOLID(x + 1, y) || SOLID(x, y - 1) || SOLID(x, y + 1))) continue;
+                int sx = ox + x, sy = oy + y;
+                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = 0xFFE01010u;
+            }
+#undef SOLID
+    }
+}
+
+/* A body where someone fell: a container on the map looking like them (their Body pose), not solid, walked over. Its uid. */
+int world_put_body(int actor, int x, int y, int onFloor)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return -1;
+    if (thingCount >= thingCap) { thingCap *= 2; things = (Thing *)realloc(things, sizeof(Thing) * (size_t)thingCap); }
+    Thing *t = &things[thingCount];
+    memset(t, 0, sizeof *t);
+    t->uid = nextUid++; t->category = 5; t->itemId = -1000 - a->characterId; t->quantity = 1; t->burnLeft = -1;
+    t->x = x; t->y = y; t->facing = a->facing;
+    const Sprite *body = NULL;
+    for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Body")) body = a->poses[i].dirs[a->facing];
+    t->sprite = body ? body : a->idle[a->facing];
+    t->sizeX = a->sizeX; t->sizeY = a->sizeY; t->sizeZ = 1;
+    t->homeFloor = onFloor;
+    Body b;
+    thing_box(t, &b);
+    t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
+    t->body = -1;
+    thingCount++;
+    return t->uid;
+}
+
+/* The key of the tile a floor shows at a cell ("sheet:local"), for Tile Properties; 0 if none. */
+int world_tile_key(int x, int y, int onFloor, char *key, size_t size)
+{
+    if (onFloor < 1 || onFloor > MAX_FLOORS || !floors[onFloor] || x < 0 || y < 0 || x >= mapW || y >= mapH) return 0;
+    int tile = floors[onFloor][y * mapW + x];
+    if (tile < 0) return 0;
+    int slot = tile / 100000;
+    snprintf(key, size, "%s:%d", slot < sheetCount ? sheetNames[slot] : "", tile % 100000);
+    return 1;
 }

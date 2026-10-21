@@ -51,6 +51,8 @@ int events_day(void);
 double events_variable(const char *name);
 int events_last_result(void);
 
+void events_knocked_out(int characterId);
+
 /* Game.log (main.c). */
 void game_log(const char *line);
 

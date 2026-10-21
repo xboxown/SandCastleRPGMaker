@@ -72,6 +72,7 @@ int items_count_in(const Item *container, int category, int itemId);
 void items_empty(Item *container);
 void items_put_in(Item *container, Item *it);
 void items_set_locked(Item *it, int locked);
+Item *items_strip(int characterId);
 int items_locked(const Item *it, int byDefault);
 int items_carries_key(int characterId, int keyId);
 int items_lockpick(int characterId);

@@ -781,3 +781,14 @@ int items_take_from(Item *container, int characterId, int category, int itemId, 
 }
 
 int items_locked(const Item *it, int byDefault) { return it->locked >= 0 ? it->locked : byDefault; }
+
+/* Actor::die: everything it carried - worn or in the pack - out of it, into one container (the body's). NULL if it carried nothing. */
+Item *items_strip(int characterId)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k || !k->count) return NULL;
+    Item *body = new_item(CAT_CONTAINER, -1, 1);
+    for (int i = 0; i < k->count; i++) add_to(&body->contents, &body->count, &body->cap, k->items[i]);
+    k->count = 0; k->slotCount = 0;
+    return body;
+}

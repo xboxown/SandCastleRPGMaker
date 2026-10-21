@@ -19,6 +19,7 @@
 #include "world.h"
 #include "platform.h"
 #include "items.h"
+#include "vitals.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -364,6 +365,7 @@ void schedules_update(double ms)
         if (!n->entryCount || n->joined || schedules_following(n->actor)) continue; /* the party and followers have no schedule */
         if (keep_dormant(n)) continue;
         if (events_actor_busy(n->actor) || events_actor_held(n->actor)) { n->walking = 0; continue; } /* an event has them: their schedule waits */
+        if (world_actor_gone(n->actor) || vitals_incapacitated(n->characterId)) continue; /* dead, knocked out, asleep or paralyzed: does nothing */
         if (n->walking)
         {
             if (world_walking(n->actor)) continue;
@@ -479,3 +481,5 @@ static void update_followers(double ms)
 }
 
 int schedules_following(int actor) { return actor > 0 && actor < 256 && leaderOf[actor]; }
+
+int schedules_sleeping(int actor) { Npc *n = npc_of(actor); return n && n->activity == S_SLEEP; }

@@ -10,5 +10,6 @@ int schedules_change_behavior(int actor, const char *behavior);
 void schedules_join(int actor, int join);
 void schedules_follow(int actor, int leader);     /* leader -1: stop following */
 void schedules_until(int actor, long minute);
+int schedules_sleeping(int actor);
 
 #endif

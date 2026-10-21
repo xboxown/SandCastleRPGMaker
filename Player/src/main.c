@@ -15,6 +15,7 @@
 #include "sound.h"
 #include "weather.h"
 #include "screen.h"
+#include "vitals.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -155,6 +156,7 @@ int main(int argc, char **argv)
     note("Window open. Running.");
     sound_load(folder);
     events_load();
+    vitals_load();
     schedules_load();
     schedules_start();
     weather_load();
@@ -266,9 +268,11 @@ int main(int argc, char **argv)
         if (!dialog_showing())
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
+            if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
             world_update(dx, dy, seconds);
             schedules_update(seconds * 1000);
             weather_update(seconds * 1000);
+            vitals_update(seconds * 1000);
             events_player_moved();
         }
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
