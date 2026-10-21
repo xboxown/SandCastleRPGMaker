@@ -14,6 +14,7 @@
 #include "use.h"
 #include "sound.h"
 #include "weather.h"
+#include "screen.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -217,6 +218,7 @@ int main(int argc, char **argv)
             lighting_draw(pixels);
             weather_draw(pixels);
             world_draw_barks(pixels);
+            screen_draw(pixels, now);
             dialog_draw(pixels, now);
             save_bmp(shot);
             break;
@@ -258,6 +260,7 @@ int main(int argc, char **argv)
         if (seconds > 0.1) seconds = 0.1;
         last = now;
         sound_update(seconds * 1000);
+        screen_update(seconds * 1000);
         int paused = dialog_showing(); /* a box up: the game waits, as in an Exult conversation */
         events_update(seconds * 1000, paused);
         if (!dialog_showing())
@@ -274,7 +277,9 @@ int main(int argc, char **argv)
         lighting_draw(pixels);
         weather_draw(pixels);
         world_draw_barks(pixels);
+        screen_draw(pixels, now);
         dialog_draw(pixels, now);
+        screen_shake_apply(pixels);
         platform_present(pixels);
     }
     platform_audio_close();

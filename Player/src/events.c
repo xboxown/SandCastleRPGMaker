@@ -9,6 +9,7 @@
 #include "sound.h"
 #include "weather.h"
 #include "conditions.h"
+#include "screen.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -329,6 +330,7 @@ static int one_stat(cJSON *entry)
 }
 
 static int warned[256];
+static uint32_t screenNow;
 static const char *evaluatingName = ""; /* whose event's conditions are being looked at ("this event's page N") */
 static int lastResult = 1;             /* whether the last command that can fail worked */
 
@@ -408,7 +410,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 
 /* ---------------- Running commands ---------------- */
 
-enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD };
+enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN };
 enum { A_PICKUP = 1, A_DROP, A_SIT };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
@@ -433,6 +435,7 @@ typedef struct Run
     CallFrame *callers; int depth;       /* the lists that called Common Events, innermost last */
     char owner[48];                  /* whose event it is (self switches): "event:3", "char:2", "global" */
     int ownerUid;                    /* an object's placed copy whose event it is (Sleep On Bed "Under") */
+    double screenMs, screenTotal; int cameraBack; double camFromX, camFromY, camToX, camToY; int camera; /* Fade Screen / Move Camera running */
     const Cmd *untilCmd; double untilWaited, untilTimeout; /* Wait Until */
     int activator, byStepping;   /* whoever set it off (an actor; -1 = the player), and whether by walking over it */
     int returns[16][2], returnCount;
@@ -1112,6 +1115,53 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ShakeScreen:
+        {
+            int intensity = param(c, "Intensity")[0] ? atoi(param(c, "Intensity")) : 5;
+            double seconds = 1;
+            if (!parse_number(param(c, "DurationSeconds"), &seconds)) seconds = 1;
+            screen_shake(intensity, seconds);
+            return 1;
+        }
+        case C_FlashScreen: screen_flash(screen_parse_colour(param(c, "Color"), 0xFFFFFF), formula_number(c, "Seconds")); return 1;
+        case C_FadeScreen:
+        {
+            double seconds = formula_number(c, "Seconds");
+            double total = screen_fade(screen_parse_colour(param(c, "Color"), 0), strcmp(param(c, "Value"), "In") != 0, seconds > 0 ? seconds : 0);
+            if (total <= 0) return 1;
+            r->camera = 0; r->screenMs = 0; r->screenTotal = total;
+            r->waiting = W_SCREEN; /* the event waits till the fade is done */
+            return 0;
+        }
+        case C_MoveCamera:
+        {
+            int back = !strcmp(param(c, "Value"), "Back to the player");
+            double fx, fy, tx, ty;
+            world_camera_center(&fx, &fy);
+            if (back) { int px, py, f; world_actor_cell(0, &px, &py, &f); world_actor_pixel(0, &tx, &ty); }
+            else { if (!param(c, "X")[0] || !param(c, "Y")[0]) return 1; tx = atoi(param(c, "X")) * world_tile_w() + world_tile_w() / 2.0; ty = atoi(param(c, "Y")) * world_tile_h() + world_tile_h() / 2.0; }
+            world_camera_follow(0);
+            double seconds = formula_number(c, "Seconds");
+            if (seconds <= 0) { world_camera_hold(!back, tx, ty); return 1; }
+            r->camera = 1; r->cameraBack = back; r->camFromX = fx; r->camFromY = fy; r->camToX = tx; r->camToY = ty;
+            r->screenMs = 0; r->screenTotal = seconds * 1000;
+            r->waiting = W_SCREEN;
+            return 0;
+        }
+        case C_CameraFollow:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            world_camera_follow(actor > 0 ? actor : 0);
+            return 1;
+        }
+        case C_ShowPicture:
+        {
+            const Sprite *s = sprite_find(param(c, "SpriteGroup"), param(c, "SpriteName"));
+            if (!s) return 1;
+            screen_show_picture((int)formula_number(c, "Number"), s, formula_number(c, "X"), formula_number(c, "Y"), formula_number(c, "Opacity") / 100.0, screenNow);
+            return 1;
+        }
+        case C_ErasePicture: screen_erase_picture((int)formula_number(c, "Number")); return 1;
         case C_ChangeWeather:
         {
             static const char *KINDS[] = { "Clear", "Rain", "Snow", "Hail", "Storm" };
@@ -1838,10 +1888,23 @@ void events_update(double ms, int paused)
         stayMs += 1000;
         if (eventUnder) fire_pages(eventUnder, T_STAY, -1, 0);
     }
-    /* Every frame, paused or not: long loops go on, Wait Untils are checked. */
+    /* Every frame, paused or not: long loops go on, Wait Untils are checked, fades and camera moves go on. */
+    screenNow += (uint32_t)ms;
     for (int i = 0; i < MAX_RUNS; i++)
     {
         Run *r = &runs[i];
+        if (r->used && r->waiting == W_SCREEN)
+        {
+            r->screenMs += ms;
+            double t = r->screenMs >= r->screenTotal ? 1 : r->screenMs / r->screenTotal;
+            if (r->camera)
+            {
+                double e = t * t * (3 - 2 * t); /* ease in and out */
+                world_camera_hold(1, r->camFromX + (r->camToX - r->camFromX) * e, r->camFromY + (r->camToY - r->camFromY) * e);
+                if (t >= 1 && r->cameraBack) world_camera_hold(0, 0, 0);
+            }
+            if (t >= 1) { r->waiting = W_NONE; continue_run(r); }
+        }
         if (r->used && r->waiting == W_YIELD) { r->waiting = W_NONE; continue_run(r); }
         if (r->used && r->waiting == W_UNTIL)
         {

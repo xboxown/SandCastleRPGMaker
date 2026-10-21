@@ -523,6 +523,7 @@ int world_load(const char *folder)
 /* ---------------- Each frame ---------------- */
 
 static int keysHeld;
+static int cameraFollow, cameraHeld; static double holdX, holdY;
 static void player_sit_update(double seconds);
 int world_seated(int actor);
 void world_stand_up(int actor);
@@ -535,7 +536,7 @@ int world_walking(int actor);
 
 void world_update(int dx, int dy, double seconds)
 {
-    keysHeld = dx || dy;
+    if (seconds > 0) keysHeld = dx || dy;
     if (dx || dy) { if (world_seated(0)) world_stand_up(0); world_cancel_player_sit(); } /* moving gets up again */
     player_sit_update(seconds);
     if (dx || dy) world_walk_cancel(0); /* a direction key takes over from a walk an event began */
@@ -559,13 +560,16 @@ void world_update(int dx, int dy, double seconds)
         }
     }
     world_walks_update(seconds);
-    /* The camera: a dead zone round the middle, following where the player is drawn (up and left by its lift). */
-    double fx = player.px - player.lift * LIFT_SHIFT, fy = player.py - player.lift * LIFT_SHIFT;
+    /* The camera: a dead zone round the middle, following where the player (or whoever it follows) is drawn (up and left by its lift). */
+    const Actor *followed = cameraFollow > 0 ? actor_of(cameraFollow) : NULL;
+    if (!followed) followed = &player;
+    double fx = followed->px - followed->lift * LIFT_SHIFT, fy = followed->py - followed->lift * LIFT_SHIFT;
     double rx = fx - cameraX, ry = fy - cameraY;
     if (rx < SCREEN_W / 2.0 - DEAD_HALF_W) cameraX -= SCREEN_W / 2.0 - DEAD_HALF_W - rx;
     else if (rx > SCREEN_W / 2.0 + DEAD_HALF_W) cameraX += rx - (SCREEN_W / 2.0 + DEAD_HALF_W);
     if (ry < SCREEN_H / 2.0 - DEAD_HALF_H) cameraY -= SCREEN_H / 2.0 - DEAD_HALF_H - ry;
     else if (ry > SCREEN_H / 2.0 + DEAD_HALF_H) cameraY += ry - (SCREEN_H / 2.0 + DEAD_HALF_H);
+    if (cameraHeld) { cameraX = holdX - SCREEN_W / 2.0; cameraY = holdY - SCREEN_H / 2.0; } /* Move Camera: centred on its spot */
     double worldW = mapW * tileW, worldH = mapH * tileH;
     cameraX = worldW <= SCREEN_W ? (worldW - SCREEN_W) / 2 : fmin(fmax(cameraX, 0), worldW - SCREEN_W);
     cameraY = worldH <= SCREEN_H ? (worldH - SCREEN_H) / 2 : fmin(fmax(cameraY, 0), worldH - SCREEN_H);
@@ -1978,3 +1982,13 @@ int world_door_open_any(int objectId, int open)
     }
     return 0;
 }
+
+/* Move Camera: the world spot the view is centred on (held = 0: it follows as usual again). */
+void world_camera_hold(int held, double x, double y) { cameraHeld = held; holdX = x; holdY = y; world_update(0, 0, 0); }
+void world_camera_center(double *x, double *y)
+{
+    if (cameraHeld) { *x = holdX; *y = holdY; return; }
+    *x = cameraX + SCREEN_W / 2.0; *y = cameraY + SCREEN_H / 2.0;
+}
+/* Camera Follows: someone else (0 = the player again). */
+void world_camera_follow(int actor) { cameraFollow = actor; cameraHeld = 0; }
