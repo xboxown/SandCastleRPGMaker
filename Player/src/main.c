@@ -9,6 +9,7 @@
 #include "font.h"
 #include "dialog.h"
 #include "events.h"
+#include "lighting.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -204,6 +205,8 @@ int main(int argc, char **argv)
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
         {
             world_draw(pixels, now);
+            lighting_draw(pixels);
+            world_draw_barks(pixels);
             dialog_draw(pixels, now);
             save_bmp(shot);
             break;
@@ -253,6 +256,8 @@ int main(int argc, char **argv)
             events_player_moved();
         }
         world_draw(pixels, now);
+        lighting_draw(pixels);
+        world_draw_barks(pixels);
         dialog_draw(pixels, now);
         platform_present(pixels);
     }

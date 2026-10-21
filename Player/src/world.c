@@ -47,6 +47,7 @@ typedef struct ObjectDef
     const Sprite *facing[8], *turned[8];
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
+    int brightness, gives;            /* a light: how bright, what it gives (Exult levels, the dusk look, daylight) */
 } ObjectDef;
 
 typedef struct Thing
@@ -129,6 +130,7 @@ static void read_objects(cJSON *project)
         d->open = link_of(get(door, "OpenSprite")); d->doorStartsOpen = flag(door, "StartsOpen");
         d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
         d->lit = link_of(get(light, "LitSprite")); d->lightStartsLit = flag(light, "StartsLit");
+        d->brightness = num(light, "Brightness", 0); d->gives = num(light, "Gives", 0);
         cJSON_ArrayForEach(f, furniture) d->facing[dir_of(f->string)] = link_of(get(f, "Sprite"));
         cJSON_ArrayForEach(f, turn) d->turned[dir_of(f->string)] = link_of(f);
     }
@@ -1320,3 +1322,24 @@ void world_draw_barks(uint32_t *pixels)
 
 const char *world_map_name(void) { return mapName; }
 int world_actor_facing(int actor) { Actor *a = actor_of(actor); return a ? a->facing : DIR_S; }
+
+/* LightAround: Get_light_strength summed over the lit lights on screen (6 tiles round it too), and the strongest kind among them. */
+int world_light_strength(int *gives)
+{
+    int total = 0;
+    *gives = 0;
+    double margin = 6 * UNIT;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || !t->lit || !t->def || t->def->type != T_LIGHT) continue;
+        double x = t->x * tileW + tileW / 2.0, y = t->y * tileH + tileH / 2.0;
+        if (x < cameraX - margin || x > cameraX + SCREEN_W + margin || y < cameraY - margin || y > cameraY + SCREEN_H + margin) continue;
+        int dx = (int)fabs(floor((x - player.px) / UNIT + 0.5)), dy = (int)fabs(floor((y - player.py) / UNIT + 0.5));
+        int strength = 75 - 2 * dx - 3 * dy;
+        if (strength <= 0) continue;
+        total += strength * t->def->brightness;
+        if (strength * t->def->brightness > 0 && t->def->gives > *gives) *gives = t->def->gives;
+    }
+    return total;
+}

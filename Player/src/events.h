@@ -34,6 +34,10 @@ void events_fire_character(int characterId, int trigger);
 void events_fire_map(int trigger);
 void events_fire_item(int category, int itemId, int trigger);
 
+/* The game clock (Exult's: from System Settings > Clock). */
+int events_hour(void);
+int events_minute(void);
+
 /* Game.log (main.c). */
 void game_log(const char *line);
 

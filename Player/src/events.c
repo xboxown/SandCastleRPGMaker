@@ -4,6 +4,7 @@
 #include "world.h"
 #include "items.h"
 #include "script.h"
+#include "lighting.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -39,6 +40,44 @@ static VarDef *varDefs; static int varDefCount;
 
 static cJSON *playerCharacter; /* the main player's character (its stats) */
 static cJSON *statsJson, *currenciesJson, *objectsJson;
+
+/* ---------------- The game clock (GameClock: Exult's) ---------------- */
+
+#define TICKS_PER_MINUTE 25   /* Exult: 25 ticks a game minute */
+#define STD_DELAY_MS 200      /* a tick every standard delay (x the time rate): a game minute every 5 seconds */
+
+static int clockDay, clockHour = 6, clockMinute, clockTicks, timeRate = 1;
+static double clockMs;
+
+/* Returns how many hours went by (Exult re-schedules everyone on the hour). */
+static int clock_advance(double ms)
+{
+    int hours = 0;
+    clockMs += ms;
+    while (clockMs >= STD_DELAY_MS)
+    {
+        clockMs -= STD_DELAY_MS;
+        clockTicks += timeRate;
+        clockMinute += clockTicks / TICKS_PER_MINUTE;
+        clockTicks %= TICKS_PER_MINUTE;
+        while (clockMinute >= 60) { clockMinute -= 60; if (++clockHour >= 24) { clockHour -= 24; clockDay++; } hours++; }
+    }
+    return hours;
+}
+
+/* Time passes at once (Set Time, resting). */
+static int clock_advance_minutes(int minutes)
+{
+    int hours = 0;
+    clockMinute += minutes > 0 ? minutes : 0;
+    while (clockMinute >= 60) { clockMinute -= 60; if (++clockHour >= 24) { clockHour -= 24; clockDay++; } hours++; }
+    return hours;
+}
+
+static long total_minutes(void) { return (long)clockDay * 1440 + clockHour * 60 + clockMinute; }
+
+int events_hour(void) { return clockHour; }
+int events_minute(void) { return clockMinute; }
 
 /* Common Events (System Settings): a named list of commands, run from anywhere with Call Common Event. */
 typedef struct Common { int id; const char *name; cJSON *parameters; List list; } Common;
@@ -144,10 +183,14 @@ void events_load(void)
             read_pages(o, get(e, "EventPages"));
         }
     items_load();
+    lighting_load();
     cJSON *common = get(get(project, "Settings"), "CommonEvents");
     commons = (Common *)calloc((size_t)cJSON_GetArraySize(common) + 1, sizeof(Common));
     cJSON_ArrayForEach(e, common) commons[commonCount++] = (Common){ num(e, "Id", -1), str(e, "Name"), get(e, "Parameters"), read_list(get(e, "Commands")) };
     statsJson = get(get(project, "Stats"), "Stats");
+    cJSON *clock = get(get(project, "Settings"), "Clock");
+    clockHour = num(clock, "StartHour", 6); if (clockHour < 0) clockHour = 0; if (clockHour > 23) clockHour = 23;
+    timeRate = num(clock, "TimeRate", 1); if (timeRate < 1) timeRate = 1;
     currenciesJson = get(get(project, "Currencies"), "Currencies");
     objectsJson = get(get(project, "Objects"), "Objects");
     cJSON *defs = get(get(project, "Variables"), "Variables");
@@ -346,6 +389,7 @@ typedef struct Run
     int returns[16][2], returnCount;
     int waiting; double timerMs;
     int walker, goalX, goalY, goalFloor, tries, best, beside; /* Walk To Location; beside: up to a thing */
+    long waitFromMinute; int waitMinutes;  /* Wait in game minutes / hours: from when, how long */
     int act, stage, thing, actX, actY, category, itemId, quantity, atSpot; double stageMs; /* Pickup / Drop Item */
     int cinema;
     /* a Show Text with replies waiting: where it is, where its branches end */
@@ -837,12 +881,9 @@ int events_game_function(const char *name, const Value *args, int count, Value *
         *out = value_number(script_self_switch(key));
         return 1;
     }
-    if (!strcmp(name, "hour") || !strcmp(name, "minute") || !strcmp(name, "day"))
-    {
-        log_once(206, "hour() / minute() / day() wait for the game clock in the player (0 till then).");
-        *out = value_number(0);
-        return 1;
-    }
+    if (!strcmp(name, "hour")) { *out = value_number(clockHour); return 1; }
+    if (!strcmp(name, "minute")) { *out = value_number(clockMinute); return 1; }
+    if (!strcmp(name, "day")) { *out = value_number(clockDay); return 1; }
     if (!strcmp(name, "combat") || !strcmp(name, "paperdollopen")) { *out = value_number(0); return 1; }
     return 0;
 }
@@ -870,7 +911,9 @@ static void get_game_data(Run *r, const Cmd *c)
     else if (!strcmp(what, "Is dead")) events_game_function("isdead", args, 1, &v);
     else if (!strcmp(what, "Is in party")) events_game_function("inparty", args, 1, &v);
     else if (!strcmp(what, "Party size")) events_game_function("partysize", args, 0, &v);
-    else if (!strcmp(what, "Hour") || !strcmp(what, "Minute") || !strcmp(what, "Day")) events_game_function("hour", args, 0, &v);
+    else if (!strcmp(what, "Hour")) v = value_number(clockHour);
+    else if (!strcmp(what, "Minute")) v = value_number(clockMinute);
+    else if (!strcmp(what, "Day")) v = value_number(clockDay);
     else if (!strcmp(what, "Map name")) v = value_text(world_map_name());
     else if (!strcmp(what, "Leader's name")) { args[0] = value_text("Player"); events_game_function("name", args, 1, &v); }
     else if (!strcmp(what, "Facing")) events_game_function("facing", args, 1, &v);
@@ -919,9 +962,17 @@ static int execute(Run *r, const Cmd *c)
             double v = 1;
             if (!parse_number(amount, &v)) v = 1;
             if (v < 0) v = 0;
-            if (unit[0] && strcmp(unit, "Seconds") != 0) { log_once(203, "Wait in game minutes or hours isn't in the player yet (the clock comes later) - not waited."); return 1; }
             r->waiting = W_TIMER;
             r->timerMs = v * 1000;
+            r->waitMinutes = 0;
+            if (!strcmp(unit, "Minutes") || !strcmp(unit, "Hours"))
+            {
+                /* Lasting: by the game clock */
+                r->waitFromMinute = total_minutes();
+                r->waitMinutes = (int)(strcmp(unit, "Hours") == 0 ? v * 60 : v);
+                if (r->waitMinutes < 1) r->waitMinutes = 1;
+                r->timerMs = 1e30;
+            }
             return 0;
         }
         case C_WalkToLocation: case C_WalkToFloorLocation:
@@ -982,6 +1033,29 @@ static int execute(Run *r, const Cmd *c)
             const char *words = value_text_of(formula(c, "Value"));
             double seconds = formula_number(c, "Seconds");
             if (actor >= 0) world_bark(actor, words, (int)((seconds > 0.5 ? seconds : 0.5) * 1000));
+            return 1;
+        }
+        case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ApplyPaletteColor:
+        {
+            int percent = atoi(param(c, "OpacityPercent"));
+            if (!param(c, "OpacityPercent")[0]) percent = 40;
+            lighting_palette(param(c, "Hex"), percent / 100.0);
+            return 1;
+        }
+        case C_SetTime:
+        {
+            int amount = (int)floor(formula_number(c, "Hour") + 0.5), minutes;
+            const char *how = param(c, "Value");
+            if (!strcmp(how, "Advance by minutes")) minutes = amount > 0 ? amount : 0;
+            else if (!strcmp(how, "Advance by hours")) minutes = (amount > 0 ? amount : 0) * 60;
+            else
+            {
+                int h = amount < 0 ? 0 : amount > 23 ? 23 : amount, m = (int)formula_number(c, "Minute");
+                m = m < 0 ? 0 : m > 59 ? 59 : m;
+                minutes = (((h * 60 + m) - (clockHour * 60 + clockMinute)) % 1440 + 1440) % 1440; /* forward to that time of day */
+            }
+            if (minutes > 0) clock_advance_minutes(minutes);
             return 1;
         }
         case C_ControlSelfSwitch:
@@ -1569,11 +1643,14 @@ void events_update(double ms, int paused)
         }
     }
     if (paused) return;
+    clock_advance(ms); /* the clock runs while the game does */
+    lighting_update(ms);
     /* Waits run while the game does. */
     for (int i = 0; i < MAX_RUNS; i++)
     {
         Run *r = &runs[i];
-        if (r->used && r->waiting == W_TIMER && (r->timerMs -= ms) <= 0) { r->waiting = W_NONE; continue_run(r); }
+        if (r->used && r->waiting == W_TIMER && r->waitMinutes > 0 && total_minutes() - r->waitFromMinute >= r->waitMinutes) { r->waiting = W_NONE; r->waitMinutes = 0; continue_run(r); }
+        if (r->used && r->waiting == W_TIMER && r->waitMinutes == 0 && (r->timerMs -= ms) <= 0) { r->waiting = W_NONE; continue_run(r); }
         int ok;
         if (r->used && r->waiting == W_ACTION && !action_tick(r, ms, &ok))
         {
