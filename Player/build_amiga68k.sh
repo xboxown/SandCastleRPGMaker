@@ -6,7 +6,9 @@ cd "$(dirname "$0")"
 GCC=${AMIGA_GCC:-$HOME/amiga/bin/m68k-amigaos-gcc}
 mkdir -p build/amiga68k
 # strtod -> sc_strtod (src/numbers.c): libnix's number reading uses FMOVECR, which a 68040/68060 can't run without 68060.library.
-"$GCC" -noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall -Wno-unused-function -Wno-format-truncation -Dstrtod=sc_strtod \
-  -o build/amiga68k/Game \
-  src/main.c src/world.c src/pictures.c src/font.c src/numbers.c src/platform_amiga.c third_party/cJSON.c -lm
+FLAGS="-noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall -Wno-unused-function -Wno-format-truncation -Dstrtod=sc_strtod"
+# The real main is src/amiga_start.c (no floating point: it checks the FPU is on before anything uses it); main.c's becomes game_main.
+"$GCC" $FLAGS -Dmain=game_main -c src/main.c -o build/amiga68k/main.o
+"$GCC" $FLAGS -o build/amiga68k/Game \
+  src/amiga_start.c build/amiga68k/main.o src/world.c src/pictures.c src/font.c src/numbers.c src/platform_amiga.c third_party/cJSON.c -lm
 echo "built build/amiga68k/Game"

@@ -17,7 +17,11 @@ static uint32_t pixels[SCREEN_W * SCREEN_H];
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
 static void note(const char *step)
 {
+#ifdef __amigaos__
+    static int fresh = 0; /* amiga_start.c began Game.log */
+#else
     static int fresh = 1;
+#endif
     FILE *f = fopen("Game.log", fresh ? "w" : "a");
     fresh = 0;
     if (!f) return;
