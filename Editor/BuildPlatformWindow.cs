@@ -28,7 +28,7 @@ internal sealed class BuildPlatformWindow : Window
         new(BuildPlatform.MacPowerPC, "Mac OS X PowerPC", "Mac OS X 10.4 or 10.5 on a G4 or G5.", false),
         new(BuildPlatform.MorphOS, "MorphOS", "MorphOS 3.x on a PowerPC Mac, Pegasos or Efika. Built as \"Game\" with its icon \"Game.info\".", false),
         new(BuildPlatform.AmigaOS4, "AmigaOS 4.x", "AmigaOS 4.1 on an X1000, X5000, A1222 or Sam board. Built as \"Game\" with its icon \"Game.info\".", false),
-        new(BuildPlatform.Amiga68k, "Amiga 68k (RTG or Vampire)", "AmigaOS 3.x with an RTG card, or ApolloOS on a Vampire (not AROS). A 68060 at least, a 68080 recommended; 128 MB of RAM at least (up to 1 GB for big games); a hard drive (no floppies). No OCS, ECS or AGA: RTG graphics, AHI or Paula sound. Runs in a Workbench window or full screen. Built as \"Game\" with its icon \"Game.info\".", false),
+        new(BuildPlatform.Amiga68k, "Amiga 68k (RTG or Vampire)", "Kickstart 3.1 or later: AmigaOS 3.1 to 3.2 with an RTG card, or ApolloOS on a Vampire (not AROS). A 68060 at least, a 68080 recommended, with an FPU (required); 128 MB of RAM at least (up to 1 GB for big games); a hard drive (no floppies). No OCS, ECS or AGA: RTG graphics, AHI or Paula sound. Runs in a Workbench window or full screen. Built as \"Game\" with its icon \"Game.info\".", false),
     };
 
     public BuildPlatformWindow()

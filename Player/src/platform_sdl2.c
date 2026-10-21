@@ -105,4 +105,6 @@ void platform_toggle_fullscreen(void)
 
 long platform_free_memory_mb(void) { return SDL_GetSystemRAM(); }
 
+int platform_can_run(void) { return 1; }
+
 void platform_message(const char *heading, const char *text) { SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, heading, text, window); }

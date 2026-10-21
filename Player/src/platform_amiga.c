@@ -5,6 +5,7 @@
  * too) - in a window on an RTG Workbench, or full screen on an RTG screen of
  * its own (F10 switches). The 320 x 200 frame is doubled to 640 x 400.
  * Keys and mouse through Intuition; time through timer.device.
+ * Kickstart 3.1 (V40) at least: its libraries and devices are what's used.
  * Build: m68k-amigaos-gcc -noixemul -m68060 (runs on the 68080 too).
  */
 #include "platform.h"
@@ -24,6 +25,7 @@
 #include <stdio.h>
 
 #define SCALE 2
+#define KICKSTART_31 40 /* Kickstart 3.1: version 40 of its libraries */
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -74,10 +76,10 @@ static void close_display(void)
 int platform_open(const char *gameTitle, int wantFullscreen)
 {
     snprintf(title, sizeof title, "%s", gameTitle);
-    IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 39);
-    GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", 39);
+    IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", KICKSTART_31);
+    GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", KICKSTART_31);
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
-    if (!IntuitionBase || !GfxBase) { snprintf(error_text, sizeof error_text, "AmigaOS 3.0 or later is needed."); return 0; }
+    if (!IntuitionBase || !GfxBase) { snprintf(error_text, sizeof error_text, "Kickstart 3.1 or later is needed."); return 0; }
     if (!CyberGfxBase) { snprintf(error_text, sizeof error_text, "cybergraphics.library 41 or later is needed: an RTG graphics card (Picasso96 or CyberGraphX) or a Vampire."); return 0; }
     timerPort = CreateMsgPort();
     timerRequest = timerPort ? (struct timerequest *)CreateIORequest(timerPort, sizeof(struct timerequest)) : NULL;
@@ -182,12 +184,22 @@ void platform_toggle_fullscreen(void)
     if (!open_display()) { fullscreen = !fullscreen; open_display(); }
 }
 
+/* A 68060 (or a Vampire's 68080) with its FPU: the game is built for it and uses floating point throughout. */
+int platform_can_run(void)
+{
+    if (SysBase->LibNode.lib_Version < KICKSTART_31) { snprintf(error_text, sizeof error_text, "This game needs Kickstart 3.1 or later - this Amiga has an older one."); return 0; }
+    UWORD flags = SysBase->AttnFlags;
+    if (!(flags & AFF_68040)) { snprintf(error_text, sizeof error_text, "This game needs a 68060 or a 68080 (Vampire) - this Amiga's processor is older."); return 0; }
+    if (!(flags & (AFF_68881 | AFF_FPU40))) { snprintf(error_text, sizeof error_text, "This game needs a floating-point unit (FPU): a full 68060, or a Vampire with an FPU core. This processor has none."); return 0; }
+    return 1;
+}
+
 long platform_free_memory_mb(void) { return (long)(AvailMem(MEMF_ANY | MEMF_LARGEST) / (1024 * 1024)); }
 
 /* The Amiga's own requester, for a game that can't start (not enough RAM, no RTG). */
 void platform_message(const char *heading, const char *text)
 {
     struct EasyStruct es = { sizeof(struct EasyStruct), 0, (UBYTE *)heading, (UBYTE *)text, (UBYTE *)"OK" };
-    if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 36);
+    if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 36); /* any that can show a requester - even to say the Kickstart is too old */
     if (IntuitionBase) EasyRequestArgs(NULL, &es, NULL, NULL);
 }

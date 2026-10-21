@@ -48,6 +48,11 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--say") == 0 && i + 1 < argc) say = argv[++i]; /* testing: words drawn in the game's fonts */
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
+    if (!platform_can_run())
+    {
+        platform_message("This Amiga can't run the game", platform_error());
+        return 20;
+    }
 #ifdef __amigaos__
     /* An Amiga needs the game's memory free before it starts (128 MB at least; the user's rule: say so, don't crash). */
     long freeMb = platform_free_memory_mb();

@@ -48,6 +48,9 @@ void platform_toggle_fullscreen(void);
 /* Free memory, in megabytes (-1 if unknown). The Amiga checks a game's needs against it. */
 long platform_free_memory_mb(void);
 
+/* Whether the machine can run the game at all (an Amiga: a 68060 or 68080 with its FPU); 0 with the reason in platform_error(). */
+int platform_can_run(void);
+
 /* A message box (the Amiga's requester): why a game can't start, started from an icon with no console to print to. */
 void platform_message(const char *heading, const char *text);
 

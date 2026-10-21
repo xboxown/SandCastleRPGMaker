@@ -148,7 +148,7 @@ public static class SplashScene
         P(on, data, null, skin, width);
     }
 
-    public static Canvas Build()
+    public static Canvas Build(bool title = true)
     {
         var scene = new Canvas { Width = Width, Height = Height, ClipToBounds = true };
         Sky(scene);
@@ -156,8 +156,28 @@ public static class SplashScene
         Sand(scene);
         Castle(scene);
         Kids(scene);
-        TitleAndFooter(scene);
+        if (title) TitleAndFooter(scene);
         return scene;
+    }
+
+    /// <summary>The scene as a square icon (Game.info on the Amiga, MorphOS, AmigaOS 4): the boy and his sand castle, size x size, 0xAARRGGBB.</summary>
+    public static uint[] IconPixels(int size)
+    {
+        var scene = Build(title: false);
+        scene.Measure(new Size(Width, Height));
+        scene.Arrange(new Rect(0, 0, Width, Height));
+        scene.UpdateLayout();
+        var whole = new RenderTargetBitmap((int)Width, (int)Height, 96, 96, PixelFormats.Pbgra32);
+        whole.Render(scene);
+        var square = new CroppedBitmap(whole, new Int32Rect(150, 130, 320, 320)); // the boy and the castle's tower
+        var small = new TransformedBitmap(square, new ScaleTransform(size / 320.0, size / 320.0));
+        var straight = new FormatConvertedBitmap(small, PixelFormats.Bgra32, null, 0);
+        var bytes = new byte[size * size * 4];
+        straight.CopyPixels(bytes, size * 4, 0);
+        var pixels = new uint[size * size];
+        for (int i = 0; i < pixels.Length; i++)
+            pixels[i] = (uint)bytes[i * 4 + 3] << 24 | (uint)bytes[i * 4 + 2] << 16 | (uint)bytes[i * 4 + 1] << 8 | bytes[i * 4];
+        return pixels;
     }
 
     private static void Sky(Canvas s)
