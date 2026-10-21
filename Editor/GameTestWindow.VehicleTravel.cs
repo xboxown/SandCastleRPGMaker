@@ -45,6 +45,12 @@ public partial class GameTestWindow
         _execContext.GameHandlers[EventCommandType.DriveVehicle] = DriveVehicleCommand;
         _execContext.GameHandlers[EventCommandType.StopDriving] = _ => { if (_driving is null) return false; StopDriving(); return true; };
         _execContext.GameActions[EventCommandType.TravelVehicle] = TravelVehicleCommand;
+        _execContext.GameHandlers[EventCommandType.SetVehicleSpeed] = command =>
+        {
+            if (VehicleFor(command) is not { } vehicle) return false;
+            vehicle.Speed = Math.Clamp(FormulaNumber(command, "Speed"), 0, 60);
+            return true;
+        };
     }
 
     /// <summary>The vehicle a command names: the built copy of it nearest the player.</summary>
@@ -127,7 +133,7 @@ public partial class GameTestWindow
                 pilot.Units = 0;
                 continue;
             }
-            pilot.Units += Math.Max(0.5, SettingsOf(vehicle).CellsPerSecond) * UnitsPerTileX * deltaSeconds;
+            pilot.Units += SpeedOf(vehicle) * UnitsPerTileX * deltaSeconds;
             while (pilot.Units >= 1 && Math.Abs(alongX ? pilot.ToX - (vehicle.Left + vehicle.Width / 2.0) : pilot.ToY - (vehicle.Top + vehicle.Depth / 2.0)) >= 1)
             {
                 pilot.Units -= 1;

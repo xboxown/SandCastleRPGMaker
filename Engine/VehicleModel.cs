@@ -22,6 +22,8 @@ public class VehicleSettings
     public int StartSoundResourceId { get; set; } = -1;
     public int MovingSoundResourceId { get; set; } = -1;
     public int StopSoundResourceId { get; set; } = -1;
+    /// <summary>A PaperDoll Editor paperdoll that is its dashboard (a radio, a start button, a destination list, a glovebox): opened from its controls, and on sitting in its driver's seat. Its buttons' events drive it (Drive Vehicle, Travel Vehicle, Set Vehicle Speed, Stop Driving...). -1 = none.</summary>
+    public int DashboardDollId { get; set; } = -1;
 }
 
 /// <summary>What a piece of a vehicle is for (Object Editor > Vehicle part).</summary>
@@ -50,4 +52,6 @@ public class VehicleState
     public int Lift { get; set; }
     /// <summary>North, East, South or West - built facing South.</summary>
     public SpriteDirection Direction { get; set; } = SpriteDirection.South;
+    /// <summary>Its speed now (Set Vehicle Speed - a gas pedal, a gear), map cells a second; 0 = its own (Settings).</summary>
+    public double Speed { get; set; }
 }

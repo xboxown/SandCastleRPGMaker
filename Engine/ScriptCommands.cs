@@ -318,6 +318,8 @@ public static class ScriptCommands
         new(EventCommandType.StopDriving, "Stop Driving", World, "Vehicles", "Takes the controls from the player. A flying vehicle comes down - if the ground under it is clear and level; otherwise it stays up.", Array.Empty<ScriptField>(), "", HasWindow: false),
         new(EventCommandType.TravelVehicle, "Travel Vehicle", World, "Vehicles", "The vehicle goes to a spot by itself (Final Fantasy's airship): everyone aboard can walk about it, talk and open things on the way. A flying one takes off, flies over everything and lands there if it can. Blocked on the way, it stops.",
             new[] { new ScriptField("Vehicle", "Vehicle", ScriptFieldKind.Vehicle), new("X", "To (its middle there)", ScriptFieldKind.Spot), Check("Wait", "The event waits till it gets there", true) }, "{VehicleName} to ({X}, {Y})"),
+        new(EventCommandType.SetVehicleSpeed, "Set Vehicle Speed", World, "Vehicles", "How fast a vehicle goes from now on, in map cells a second (walking is about 3) - a dashboard's gas pedal or gear buttons. 0 = its own speed (Vehicles tab > Settings).",
+            new[] { new ScriptField("Vehicle", "Vehicle", ScriptFieldKind.Vehicle), F("Speed", "Speed (map cells a second, formula)", def: "5") }, "{VehicleName}: {Speed}"),
 
         // ---- 12. Testing helpers ----
         new(EventCommandType.DebugLog, "Debug Log", Loops, "Testing", "Writes a line into the Game Test log (F9 shows it) - with values: \"i = \" + i. A built game ignores it.",

@@ -57,6 +57,13 @@ internal sealed class VehicleSettingsWindow : Window
         rows.Children.Add(Sound("Sound while it moves (loops)", () => settings.MovingSoundResourceId, v => settings.MovingSoundResourceId = v));
         rows.Children.Add(Sound("Sound as it stops", () => settings.StopSoundResourceId, v => settings.StopSoundResourceId = v));
 
+        var dolls = new List<DollDesign> { new() { Id = -1, Name = "(No dashboard)" } };
+        dolls.AddRange(objects.DollDesigns.OrderBy(d => d.Name));
+        var dashboard = new ComboBox { Width = 300, HorizontalAlignment = HorizontalAlignment.Left, ItemsSource = dolls, DisplayMemberPath = "Name" };
+        dashboard.SelectedItem = dolls.FirstOrDefault(d => d.Id == settings.DashboardDollId) ?? dolls[0];
+        dashboard.SelectionChanged += (_, _) => settings.DashboardDollId = (dashboard.SelectedItem as DollDesign)?.Id ?? -1;
+        rows.Children.Add(Row("Dashboard (a paperdoll)", dashboard, "Made in the PaperDoll Editor: a radio, a start button, a list of destinations, a glovebox... It opens from the vehicle's controls (instead of taking them at once) and on sitting in its driver's seat. Its buttons' events drive it: Drive Vehicle, Travel Vehicle, Set Vehicle Speed, Stop Driving, Play Sound..."));
+
         var close = new Button { Content = "Close", Width = 80, IsDefault = true, IsCancel = true, HorizontalAlignment = HorizontalAlignment.Right };
         close.Click += (_, _) => { speed.MoveFocus(new System.Windows.Input.TraversalRequest(System.Windows.Input.FocusNavigationDirection.Next)); Close(); };
         rows.Children.Add(close);

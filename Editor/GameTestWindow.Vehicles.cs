@@ -46,9 +46,10 @@ public partial class GameTestWindow
         switch (obj.VehicleRole)
         {
             case VehiclePartRole.Controls:
+                if (!HasDeedFor(vehicle)) return true;
+                if (OpenDashboard(vehicle)) return true; // its dashboard paperdoll: its buttons drive it
                 if (_driving == vehicle) { StopDriving(); return true; }
                 if (_driving is not null) StopDriving();
-                if (!HasDeedFor(vehicle)) return true;
                 BeginDriving(vehicle, instance);
                 return true;
             case VehiclePartRole.DriverSeat:
@@ -72,6 +73,17 @@ public partial class GameTestWindow
         if (settings.NeedDeedText.Length > 0) ShowFloatingTextOver(_playerImage, settings.NeedDeedText, 3000);
         return false;
     }
+
+    /// <summary>The vehicle's dashboard paperdoll, if it has one (Vehicles tab > Settings).</summary>
+    private bool OpenDashboard(VehicleState vehicle)
+    {
+        if (SettingsOf(vehicle).DashboardDollId is not (>= 0 and var id) || _objects.DollDesigns.FirstOrDefault(d => d.Id == id) is not { } design) return false;
+        OpenForm(design, modal: false, answered: null, fresh: false);
+        return true;
+    }
+
+    /// <summary>Its speed now: set by Set Vehicle Speed, else its own.</summary>
+    private static double SpeedOf(VehicleState vehicle) => vehicle.Speed > 0 ? vehicle.Speed : Math.Max(0.5, SettingsOf(vehicle).CellsPerSecond);
 
     private void BeginDriving(VehicleState vehicle, ObjectInstance from)
     {
@@ -99,7 +111,7 @@ public partial class GameTestWindow
         if (_seatToDriveFrom is { } seat && PlayerSeated && _seats.TryGetValue(_player!, out var sitting) && ReferenceEquals(sitting.Furniture, seat))
         {
             _seatToDriveFrom = null;
-            if (VehicleOf(seat) is { } vehicle) BeginDriving(vehicle, seat);
+            if (VehicleOf(seat) is { } vehicle) { BeginDriving(vehicle, seat); OpenDashboard(vehicle); }
         }
         else if (_seatToDriveFrom is not null && _pendingSit is null && !PlayerSeated) _seatToDriveFrom = null; // walked off instead
         if (_driving is not null && _drivingFrom is { } from && DefinitionOf(from)?.VehicleRole == VehiclePartRole.DriverSeat
@@ -121,7 +133,7 @@ public partial class GameTestWindow
             _driveUnits = 0;
             return true; // the turn is this frame's move
         }
-        _driveUnits += Math.Max(0.5, SettingsOf(vehicle).CellsPerSecond) * UnitsPerTileX * deltaSeconds;
+        _driveUnits += SpeedOf(vehicle) * UnitsPerTileX * deltaSeconds;
         bool moved = false;
         while (_driveUnits >= 1)
         {
