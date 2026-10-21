@@ -33,12 +33,24 @@ int world_teleport(int actor, int x, int y);
 void world_player_cell(int *x, int *y, int *onFloor);
 void world_turn_to_player(int actor);
 /* Walk To Location: a way there (A* by Exult's walking rules), walked at the player's pace; 0 when there's none just now. floor 0 = any. */
-int world_walk_to(int actor, int x, int y, int floor);
+int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);
 int world_keys_held(void); /* a direction key held (it takes over from an event's walk) */
 void world_walk_cancel(int actor);
 void world_actor_cell(int actor, int *x, int *y, int *onFloor);
 int world_can_stand(int actor, int x, int y, int onFloor);
+/* Things on the map (uid: a thing's own number while the game runs; category: Book 3, Object 4, Container 5). */
+int world_find_object(int instanceId, int objectId, int x, int y);
+int world_find_item(int category, int itemId, int x, int y);
+int world_thing_there(int uid);
+void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x, int *y, int *instanceId);
+void world_thing_remove(int uid);
+int world_thing_put(int category, int itemId, int quantity, int x, int y, int onFloor);
+int world_pose_length(int actor, const char *pose);
+void world_face_cell(int actor, int x, int y, const char *pose);
+/* Words over someone's head for a while (Show Bark), drawn by world_draw_barks over everything. */
+void world_bark(int actor, const char *text, int ms);
+void world_draw_barks(uint32_t *pixels);
 /* The game (game.json) as read, kept while the game runs (a cJSON root). */
 void *world_json(void);
 

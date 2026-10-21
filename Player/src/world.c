@@ -16,6 +16,7 @@
  */
 #include "world.h"
 #include "pictures.h"
+#include "font.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
@@ -45,6 +46,7 @@ typedef struct ObjectDef
     const Sprite *own, *open, *lit;
     const Sprite *facing[8], *turned[8];
     int doorStartsOpen, lightStartsLit, occludes;
+    int doorStartsLocked, openOffX, openOffY;
 } ObjectDef;
 
 typedef struct Thing
@@ -53,6 +55,9 @@ typedef struct Thing
     const Sprite *sprite;            /* a book's or container's picture */
     int x, y, z, offX, offY, facing, open, lit;
     int sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, hangs;
+    int uid, category, itemId, quantity, instanceId; /* what it is (ReferencedItemCategory: Book 3, Object 4, Container 5) */
+    int body, gone;                                  /* its solid box (-1: none); picked up / taken away */
+    int locked;                                      /* a door: locked (IsLockedRuntime) */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -68,6 +73,7 @@ typedef struct Actor
     const Sprite *idle[8], *walking[8];
     int walkingNow;
     int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
+    int human;                      /* Exult: only the sentient open doors */
     const Sprite *face;
     Pose poses[MAX_POSES]; int poseCount;
     int shownPose;                  /* Change Pose: the pose kept (index into poses, -1 = idle / walking) */
@@ -121,6 +127,7 @@ static void read_objects(cJSON *project)
         d->own = sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName"));
         cJSON *door = get(o, "Door"), *light = get(o, "Light"), *furniture = get(get(o, "Furniture"), "Facings"), *turn = get(o, "TurnLooks"), *f;
         d->open = link_of(get(door, "OpenSprite")); d->doorStartsOpen = flag(door, "StartsOpen");
+        d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
         d->lit = link_of(get(light, "LitSprite")); d->lightStartsLit = flag(light, "StartsLit");
         cJSON_ArrayForEach(f, furniture) d->facing[dir_of(f->string)] = link_of(get(f, "Sprite"));
         cJSON_ArrayForEach(f, turn) d->turned[dir_of(f->string)] = link_of(f);
@@ -155,9 +162,16 @@ static void thing_box(const Thing *t, Body *b)
     if (t->def && t->def->type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0) { b->z = t->z - 1; b->height = 1; } /* an upper floor's floor tile: a slab */
 }
 
-static void add_thing_body(const Thing *t)
+static int nextUid = 1, thingCap, bodyCap;
+static cJSON *containersJson, *booksJson;
+
+static void add_thing_body(Thing *t)
 {
-    if (!t->solid || t->hangs) return;
+    t->body = -1;
+    int door = t->def && t->def->type == T_DOOR && t->def->solid;
+    if ((!t->solid && !door) || t->hangs) return;
+    t->body = bodyCount;
+    if (door && !t->solid) { Body *b = &bodies[bodyCount++]; memset(b, 0, sizeof *b); b->z = -100000; return; } /* open: no box till it closes */
     thing_box(t, &bodies[bodyCount++]);
 }
 
@@ -166,6 +180,7 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
     int idleId = -1, walkingId = -1;
     cJSON *p;
     a->characterId = num(character, "Id", -1);
+    a->human = !cJSON_IsFalse(get(character, "IsHuman"));
     a->face = sprite_find(str(character, "FaceSpriteGroup"), str(character, "FaceSpriteName"));
     if (!str(character, "FaceSpriteName")[0]) a->face = NULL;
     a->shownPose = -1;
@@ -374,8 +389,10 @@ int world_load(const char *folder)
     /* Things: objects on the map, placed books and containers. */
     cJSON *objects = get(map, "Objects"), *items = get(map, "Items"), *o;
     int capacity = cJSON_GetArraySize(objects) + cJSON_GetArraySize(items) + 1;
-    things = (Thing *)calloc((size_t)capacity, sizeof(Thing));
-    bodies = (Body *)calloc((size_t)capacity + (size_t)(mapW * mapH * MAX_FLOORS), sizeof(Body));
+    thingCap = capacity + 64;
+    bodyCap = capacity + 64 + mapW * mapH * MAX_FLOORS + cJSON_GetArraySize(get(map, "Characters"));
+    things = (Thing *)calloc((size_t)thingCap, sizeof(Thing));
+    bodies = (Body *)calloc((size_t)bodyCap, sizeof(Body));
     cJSON_ArrayForEach(o, objects)
     {
         if (num(o, "ContainerInstanceId", -1) >= 0) continue;
@@ -383,9 +400,12 @@ int world_load(const char *folder)
         if (!d) continue;
         Thing *t = &things[thingCount++];
         t->def = d;
+        t->uid = nextUid++; t->category = 4; t->itemId = d->id; t->instanceId = num(o, "InstanceId", 0);
+        t->quantity = num(o, "Quantity", 1) > 0 ? num(o, "Quantity", 1) : 1;
         t->x = num(o, "X", 0); t->y = num(o, "Y", 0); t->z = num(o, "Z", 0);
         t->offX = num(o, "OffsetX", 0); t->offY = num(o, "OffsetY", 0); t->facing = num(o, "Facing", DIR_S) & 7;
-        cJSON *so = get(o, "StartsOpen"), *sl = get(o, "StartsLit");
+        cJSON *so = get(o, "StartsOpen"), *sl = get(o, "StartsLit"), *sk = get(o, "StartsLocked"), *lr = get(o, "IsLockedRuntime");
+        t->locked = d->type == T_DOOR && (cJSON_IsBool(lr) ? cJSON_IsTrue(lr) : cJSON_IsBool(sk) ? cJSON_IsTrue(sk) : d->doorStartsLocked);
         t->open = d->type == T_DOOR && (cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->doorStartsOpen);
         t->lit = d->type == T_LIGHT && (cJSON_IsBool(sl) ? cJSON_IsTrue(sl) : d->lightStartsLit);
         int turned = (d->turned[0] || d->turned[2] || d->turned[4] || d->turned[6]) && (t->facing == DIR_E || t->facing == DIR_W);
@@ -400,6 +420,7 @@ int world_load(const char *folder)
         add_thing_body(t);
     }
     cJSON *containers = get(get(project, "Containers"), "Containers"), *books = get(get(root, "Books"), "Books");
+    containersJson = containers; booksJson = books;
     cJSON_ArrayForEach(o, items)
     {
         int category = num(o, "Category", 0), id = num(o, "ItemId", -1);
@@ -409,6 +430,7 @@ int world_load(const char *folder)
         cJSON_ArrayForEach(c, source) if (num(c, "Id", -2) == id) data = c;
         if (!data) continue;
         Thing *t = &things[thingCount++];
+        t->uid = nextUid++; t->category = category; t->itemId = id; t->quantity = 1; t->instanceId = num(o, "InstanceId", 0);
         t->sprite = sprite_find(str(data, "SpriteGroup"), str(data, "SpriteName"));
         t->x = num(o, "X", 0); t->y = num(o, "Y", 0); t->z = num(o, "Z", 0); t->offX = num(o, "OffsetX", 0); t->offY = num(o, "OffsetY", 0);
         t->sizeX = num(data, "SizeX", 1); t->sizeY = num(data, "SizeY", 1); t->sizeZ = num(data, "SizeZ", 1);
@@ -664,12 +686,13 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < thingCount; i++)
     {
         const Thing *t = &things[i];
-        if (t->z >= ceiling) continue;
+        if (t->gone || t->z >= ceiling) continue;
         const Picture *pic = sprite_picture_at(look_of(t), ms);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT;
         int top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
+        if (t->def && t->def->type == T_DOOR && t->open) { left += t->def->openOffX; top += t->def->openOffY; } /* ShiftOpenDoor: hanging from its hinge */
         int flat = t->def && (t->def->type == T_TRAP || (t->def->type == T_TILE && !t->def->solid));
         Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - (flat ? 1000 : 0), pic, left - cx, top - cy, qw, qh, &count);
         if (!d) continue;
@@ -877,19 +900,40 @@ static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
 }
 
 typedef struct Node { int x, y, f, lift, cost, from, open; } Node;
+static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max);
 
 static int heuristic(int ax, int ay, int bx, int by) { return abs(ax - bx) + abs(ay - by); }
 
 /* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
    Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
-static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int *pathX, int *pathY, int max)
+static void doors_passable(const Actor *a, int passable)
+{
+    if (!a->human) return;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->locked || t->body < 0) continue;
+        if (passable) bodies[t->body].z -= 1000000; else bodies[t->body].z += 1000000;
+    }
+}
+
+static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max)
+{
+    doors_passable(a, 1); /* WorldBodiesForPathing: closed unlocked doors will be opened on the way */
+    int length = find_path_core(a, gx, gy, goalFloor, allowPartial, besideOnly, pathX, pathY, max);
+    doors_passable(a, 0);
+    return length;
+}
+
+static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max)
 {
     int own = lift_own_body(a);
     int sx = (int)floor(a->px / tileW), sy = (int)floor(a->py / tileH);
     int startF = goalFloor ? floor_of(a->lift) : 0;
-    if (sx == gx && sy == gy && startF == goalFloor) { put_own_body(a, own); return 0; }
+    if (sx == gx && sy == gy && startF == goalFloor && !besideOnly) { put_own_body(a, own); return 0; }
     int goalLift, goalFree;
-    if (goalFloor) goalFree = can_stand_at(a, gx, gy, base_lift(goalFloor), &goalLift) && floor_of(goalLift) == goalFloor;
+    if (besideOnly) goalFree = 0; /* heading for a thing: end beside it, never on it */
+    else if (goalFloor) goalFree = can_stand_at(a, gx, gy, base_lift(goalFloor), &goalLift) && floor_of(goalLift) == goalFloor;
     else
     {
         /* anyLift: clear on the highest floor under it */
@@ -919,7 +963,7 @@ static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, 
         nodes[best].open = 0;
         int h = H(cur);
         if (h < nearestH) { nearest = best; nearestH = h; }
-        if (cur.f == goalFloor && ((cur.x == gx && cur.y == gy && goalFree) || (!goalFree && heuristic(cur.x, cur.y, gx, gy) == 1 && best != 0))) { found = best; break; }
+        if (cur.f == goalFloor && ((cur.x == gx && cur.y == gy && goalFree) || (!goalFree && heuristic(cur.x, cur.y, gx, gy) == 1 && (best != 0 || besideOnly)))) { found = best; break; }
         static const int DX[4] = { 1, -1, 0, 0 }, DY[4] = { 0, 0, 1, -1 };
         for (int d = 0; d < 4; d++)
         {
@@ -956,7 +1000,7 @@ static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, 
 }
 
 #define MAX_PATH 512
-typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; } Walk;
+typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose; } Walk;
 static Walk *walks; /* one per actor */
 
 static Walk *walk_of(int actor)
@@ -966,12 +1010,12 @@ static Walk *walk_of(int actor)
 }
 
 /* Starts a walk there (the player: first to the middle of the cell they stand in); 0 when there's no way just now. */
-int world_walk_to(int actor, int x, int y, int goalFloor)
+int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
 {
     Actor *a = actor_of(actor);
     Walk *w = walk_of(actor);
     if (!a || !w) return 0;
-    int n = find_path(a, x, y, goalFloor, actor != 0, w->x + 1, w->y + 1, MAX_PATH - 1);
+    int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, MAX_PATH - 1);
     if (n < 0) return 0;
     w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
     w->count = n + 1; w->at = 0; w->active = 1;
@@ -1002,6 +1046,63 @@ int world_can_stand(int actor, int x, int y, int onFloor)
     return ok;
 }
 
+static Thing *thing_by_uid(int uid);
+
+static void door_set_open(Thing *t, int open)
+{
+    t->open = open;
+    t->solid = t->def->solid && !open;
+    if (t->body < 0) return;
+    if (open) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
+    else thing_box(t, &bodies[t->body]);
+}
+
+/* NpcOpensDoor: a human walking into a closed, unlocked door opens it (and will close it behind). */
+static int open_door_in_way(Actor *a, Walk *w, int l, int t)
+{
+    if (!a->human || a == &player) return 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *d = &things[i];
+        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->locked || d->body < 0) continue;
+        if (!overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
+        door_set_open(d, 1);
+        w->doorToClose = d->uid;
+        return 1;
+    }
+    return 0;
+}
+
+/* CloseDoorsBehindNpcs: once clear of the doorway (a tile all round), the door is closed again - unless someone is in it. */
+static void close_doors_behind(void)
+{
+    for (int i = 0; i <= npcCount; i++)
+    {
+        Walk *w = walk_of(i);
+        Actor *a = actor_of(i);
+        if (!w || !a || !w->doorToClose) continue;
+        Thing *d = thing_by_uid(w->doorToClose);
+        if (!d || !d->open) { w->doorToClose = 0; continue; }
+        Body b;
+        thing_box(d, &b);
+        int l, t;
+        foot_at(a, a->px, a->py, &l, &t);
+        Body doorway = { b.left - 1, b.top - 1, b.width + 2, b.depth + 2, 0, 0 };
+        if (overlaps(&doorway, l, t, a->sizeX, a->sizeY)) continue;
+        int blocked = 0;
+        for (int k = 0; k <= npcCount && !blocked; k++)
+        {
+            Actor *o = actor_of(k);
+            int ol, ot;
+            foot_at(o, o->px, o->py, &ol, &ot);
+            if (overlaps(&b, ol, ot, o->sizeX, o->sizeY)) blocked = 1;
+        }
+        if (blocked) continue; /* someone in the doorway: next frame */
+        door_set_open(d, 0);
+        w->doorToClose = 0;
+    }
+}
+
 /* One frame of a walk: toward the next cell's middle, one axis at a time, never past it; blocked: it stops. */
 static void step_walk(int actor, double seconds)
 {
@@ -1026,6 +1127,7 @@ static void step_walk(int actor, double seconds)
             int own = lift_own_body(a);
             int lift = try_step(l1, t1, a->sizeX, a->sizeY, a->lift, a->sizeZ);
             put_own_body(a, own);
+            if (lift < 0 && open_door_in_way(a, w, l1, t1)) return; /* a closed, unlocked door: opened, on next frame */
             if (lift < 0) { w->active = 0; a->walkingNow = 0; return; } /* something in the way: stop, think again */
             a->lift = lift;
             if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
@@ -1040,4 +1142,177 @@ static void step_walk(int actor, double seconds)
 void world_walks_update(double seconds)
 {
     for (int i = 0; i <= npcCount; i++) step_walk(i, seconds);
+    close_doors_behind();
+}
+
+/* ---------------- Things on the map, for items (Pickup / Drop / Give Item) ---------------- */
+
+static Thing *thing_by_uid(int uid)
+{
+    for (int i = 0; i < thingCount; i++) if (things[i].uid == uid && !things[i].gone) return &things[i];
+    return NULL;
+}
+
+static int cells_apart(int ax, int ay, int bx, int by) { int dx = abs(ax - bx), dy = abs(ay - by); return dx > dy ? dx : dy; }
+
+/* ThingOf: an object - the very one if it's still there, else the same kind of object within 2 cells of where it was. */
+int world_find_object(int instanceId, int objectId, int x, int y)
+{
+    int best = -1, bestApart = 3;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->category != 4 || t->itemId != objectId) continue;
+        if (t->instanceId == instanceId) return t->uid;
+        int apart = cells_apart(t->x, t->y, x, y);
+        if (apart <= 2 && apart < bestApart) { bestApart = apart; best = t->uid; }
+    }
+    return best;
+}
+
+/* ThingOf: a book or container of that kind within 2 cells of where it was, the nearest. */
+int world_find_item(int category, int itemId, int x, int y)
+{
+    int best = -1, bestApart = 3;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->category != category || t->itemId != itemId) continue;
+        int apart = cells_apart(t->x, t->y, x, y);
+        if (apart <= 2 && apart < bestApart) { bestApart = apart; best = t->uid; }
+    }
+    return best;
+}
+
+int world_thing_there(int uid) { return thing_by_uid(uid) != NULL; }
+
+void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x, int *y, int *instanceId)
+{
+    const Thing *t = thing_by_uid(uid);
+    *category = t ? t->category : -1; *itemId = t ? t->itemId : -1; *quantity = t ? t->quantity : 0;
+    *x = t ? t->x : -1; *y = t ? t->y : -1; *instanceId = t ? t->instanceId : 0;
+}
+
+/* SettleWorld for what rested on a thing taken away: it comes down onto whatever is under it now (on its floor). */
+static void settle_over(int left, int top, int width, int depth, int topLift)
+{
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || t->hangs || (t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == T_TILE || t->def->type == 12 || t->def->type == T_TRAP))) continue;
+        Body b;
+        thing_box(t, &b);
+        if (t->z != topLift || !overlaps(&b, left, top, width, depth)) continue;
+        if (t->body >= 0) bodies[t->body].z = -100000;
+        int lift = standing_lift(b.left, b.top, b.width, b.depth, floor_of(t->z));
+        if (t->body >= 0) bodies[t->body].z = lift;
+        if (lift < t->z)
+        {
+            int was = t->z;
+            t->z = lift;
+            settle_over(b.left, b.top, b.width, b.depth, was + b.height);
+        }
+    }
+}
+
+/* Picked up: off the map (what rested on it comes down). */
+void world_thing_remove(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    t->gone = 1;
+    Body b;
+    thing_box(t, &b);
+    if (t->body >= 0) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
+    settle_over(b.left, b.top, b.width, b.depth, b.z + b.height);
+}
+
+/* Put down at a cell (PutDownAt): resting on whatever is there, on that floor. Returns its uid (-1 if it can't be shown). */
+int world_thing_put(int category, int itemId, int quantity, int x, int y, int onFloor)
+{
+    if (thingCount >= thingCap) { thingCap *= 2; things = (Thing *)realloc(things, sizeof(Thing) * (size_t)thingCap); }
+    if (bodyCount + 1 >= bodyCap) { bodyCap *= 2; bodies = (Body *)realloc(bodies, sizeof(Body) * (size_t)bodyCap); }
+    Thing *t = &things[thingCount];
+    memset(t, 0, sizeof *t);
+    t->uid = nextUid++; t->category = category; t->itemId = itemId; t->quantity = quantity > 0 ? quantity : 1;
+    t->x = x; t->y = y; t->facing = DIR_S;
+    if (category == 4)
+    {
+        const ObjectDef *d = def_of(itemId);
+        if (!d) return -1;
+        t->def = d;
+        t->sizeX = d->sizeX; t->sizeY = d->sizeY;
+        int flat = d->type == T_TRAP || (d->type == T_TILE && !d->solid);
+        t->sizeZ = flat ? 0 : d->sizeZ;
+        t->solid = d->solid; t->solidOffX = d->solidOffX; t->solidOffY = d->solidOffY;
+        t->open = d->type == T_DOOR && d->doorStartsOpen; t->lit = d->type == T_LIGHT && d->lightStartsLit;
+    }
+    else
+    {
+        cJSON *data = NULL, *c;
+        cJSON *source = category == 5 ? containersJson : booksJson;
+        cJSON_ArrayForEach(c, source) if (num(c, "Id", -2) == itemId) data = c;
+        if (!data) return -1;
+        t->sprite = sprite_find(str(data, "SpriteGroup"), str(data, "SpriteName"));
+        t->sizeX = num(data, "SizeX", 1); t->sizeY = num(data, "SizeY", 1); t->sizeZ = num(data, "SizeZ", 1);
+        t->solid = flag(data, "IsSolid"); t->solidOffX = num(data, "SolidOffsetX", 0); t->solidOffY = num(data, "SolidOffsetY", 0);
+    }
+    if (t->sizeX < 1) t->sizeX = 1;
+    if (t->sizeY < 1) t->sizeY = 1;
+    Body b;
+    thing_box(t, &b);
+    t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
+    thingCount++;
+    add_thing_body(t);
+    return t->uid;
+}
+
+/* How long a pose plays once as they face now (PoseLengthMs): its frames' times, 500 when it has none. */
+int world_pose_length(int actor, const char *pose)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return 500;
+    for (int i = 0; i < a->poseCount; i++)
+        if (strcmp(a->poses[i].name, pose) == 0 && a->poses[i].dirs[a->facing]) return a->poses[i].dirs[a->facing]->totalMs > 0 ? a->poses[i].dirs[a->facing]->totalMs : 500;
+    return 500;
+}
+
+/* FaceCell: turned toward a cell, in a pose. */
+void world_face_cell(int actor, int x, int y, const char *pose)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return;
+    double dx = x * tileW + tileW / 2.0 - a->px, dy = y * tileH + tileH / 2.0 - a->py;
+    world_set_pose(actor, pose, fabs(dx) > fabs(dy) ? (dx > 0 ? DIR_E : DIR_W) : (dy > 0 ? DIR_S : DIR_N));
+}
+
+/* ---------------- Words over someone's head (Show Bark, ShowFloatingText) ---------------- */
+
+typedef struct Bark { int actor; char text[160]; uint32_t until; } Bark;
+static Bark barks[16];
+
+void world_bark(int actor, const char *text, int ms)
+{
+    int slot = 0;
+    for (int i = 0; i < 16; i++) if (barks[i].until <= lastMs) { slot = i; break; }
+    barks[slot].actor = actor;
+    snprintf(barks[slot].text, sizeof barks[slot].text, "%s", text);
+    barks[slot].until = lastMs + (uint32_t)(ms > 0 ? ms : 1000);
+}
+
+/* Drawn over everything: centred over the head, 2 pixels above the picture (GameTextLabel in the InGameFont). */
+void world_draw_barks(uint32_t *pixels)
+{
+    const Font *f = font_get("InGameFont");
+    for (int i = 0; i < 16; i++)
+    {
+        if (barks[i].until <= lastMs || !barks[i].text[0]) continue;
+        const Actor *a = actor_of(barks[i].actor);
+        if (!a) continue;
+        const Picture *pic = sprite_picture_at(a->idle[a->facing], 0);
+        int h = pic ? (pic->height + UNIT - 1) / UNIT * UNIT : tileH;
+        int w = font_text_width(f, barks[i].text);
+        int x = (int)floor(a->px - cameraX - w / 2.0), y = (int)floor(a->py + tileH / 2.0 - h - font_line_height(f) - 2 - a->lift * LIFT_SHIFT - cameraY);
+        font_draw(f, pixels, x, y, barks[i].text, 0);
+    }
 }
