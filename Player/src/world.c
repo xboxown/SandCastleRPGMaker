@@ -67,6 +67,8 @@ typedef struct Thing
     int locked;                                      /* a door: locked (IsLockedRuntime) */
     int fixedFrame;                                  /* a frame shown instead of the animation (frame + 1; 0 = animate) - a bed's cover */
     int spent; double burnLeft;                      /* a light burnt out; the game minutes it has left (-1: not started) */
+    cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
+    int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -181,7 +183,8 @@ static void thing_box(const Thing *t, Body *b)
     if (t->def && t->def->type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0) { b->z = t->z - 1; b->height = 1; } /* an upper floor's floor tile: a slab */
 }
 
-static int nextUid = 1, thingCap, bodyCap;
+static int nextUid = 1, thingCap, bodyCap, slabStart, slabEnd;
+static void settle_all(void);
 static void spawn_bed_covers(void);
 static cJSON *containersJson, *booksJson;
 
@@ -439,6 +442,8 @@ int world_load(const char *folder)
         t->solid = d->solid && !(d->type == T_DOOR && t->open);
         t->solidOffX = turned ? d->solidOffY : d->solidOffX; t->solidOffY = turned ? d->solidOffX : d->solidOffY;
         t->hangs = flag(o, "HangsOnWall");
+        t->elevates = d->elevates; t->liesUnder = flag(o, "LiesUnder"); t->wallSetPiece = flag(o, "WallSetPiece"); t->vehicle = num(o, "VehicleStateId", 0) > 0;
+        t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
         if (t->sizeX < 1) t->sizeX = 1;
         if (t->sizeY < 1) t->sizeY = 1;
         add_thing_body(t);
@@ -455,14 +460,18 @@ int world_load(const char *folder)
         if (!data) continue;
         Thing *t = &things[thingCount++];
         t->uid = nextUid++; t->category = category; t->itemId = id; t->quantity = 1; t->instanceId = num(o, "InstanceId", 0);
+        t->placed = o;
         t->sprite = sprite_find(str(data, "SpriteGroup"), str(data, "SpriteName"));
         t->x = num(o, "X", 0); t->y = num(o, "Y", 0); t->z = num(o, "Z", 0); t->offX = num(o, "OffsetX", 0); t->offY = num(o, "OffsetY", 0);
         t->sizeX = num(data, "SizeX", 1); t->sizeY = num(data, "SizeY", 1); t->sizeZ = num(data, "SizeZ", 1);
         t->solid = flag(data, "IsSolid"); t->solidOffX = num(data, "SolidOffsetX", 0); t->solidOffY = num(data, "SolidOffsetY", 0);
         t->hangs = flag(o, "HangsOnWall");
+        t->elevates = flag(data, "AllowElevation"); t->liesUnder = flag(o, "LiesUnder");
+        t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
         add_thing_body(t);
     }
     /* Upper floors' painted tiles: slabs one lift thick under their floor's height (BuildFloorSlabs). */
+    slabStart = bodyCount;
     for (int f = 2; f <= MAX_FLOORS; f++)
         if (floors[f])
             for (int y = 0; y < mapH; y++)
@@ -474,6 +483,7 @@ int world_load(const char *folder)
                         b->z = base_lift(f) - 1; b->height = 1;
                     }
 
+    slabEnd = bodyCount;
     /* The main player (the character marked as the test player) at the Start Position; the others where they're placed. */
     cJSON *characters = get(get(project, "Characters"), "Characters"), *poses = get(project, "Poses"), *ch;
     cJSON_ArrayForEach(ch, characters)
@@ -504,6 +514,7 @@ int world_load(const char *folder)
         b->left = al; b->top = at; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ;
     }
     gameJson = root; /* kept: the events run from it */
+    settle_all(); /* every authored thing comes to rest: stacks form in placement order */
     spawn_bed_covers();
     cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
     return 1;
@@ -1247,28 +1258,6 @@ void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x
     *x = t ? t->x : -1; *y = t ? t->y : -1; *instanceId = t ? t->instanceId : 0;
 }
 
-/* SettleWorld for what rested on a thing taken away: it comes down onto whatever is under it now (on its floor). */
-static void settle_over(int left, int top, int width, int depth, int topLift)
-{
-    for (int i = 0; i < thingCount; i++)
-    {
-        Thing *t = &things[i];
-        if (t->gone || t->hangs || (t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == T_TILE || t->def->type == 12 || t->def->type == T_TRAP))) continue;
-        Body b;
-        thing_box(t, &b);
-        if (t->z != topLift || !overlaps(&b, left, top, width, depth)) continue;
-        if (t->body >= 0) bodies[t->body].z = -100000;
-        int lift = standing_lift(b.left, b.top, b.width, b.depth, floor_of(t->z));
-        if (t->body >= 0) bodies[t->body].z = lift;
-        if (lift < t->z)
-        {
-            int was = t->z;
-            t->z = lift;
-            settle_over(b.left, b.top, b.width, b.depth, was + b.height);
-        }
-    }
-}
-
 /* Picked up: off the map (what rested on it comes down). */
 void world_thing_remove(int uid)
 {
@@ -1278,7 +1267,8 @@ void world_thing_remove(int uid)
     Body b;
     thing_box(t, &b);
     if (t->body >= 0) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
-    settle_over(b.left, b.top, b.width, b.depth, b.z + b.height);
+    (void)b;
+    settle_all(); /* whatever rested on it falls */
 }
 
 /* Put down at a cell (PutDownAt): resting on whatever is there, on that floor. Returns its uid (-1 if it can't be shown). */
@@ -1316,8 +1306,12 @@ int world_thing_put(int category, int itemId, int quantity, int x, int y, int on
     Body b;
     thing_box(t, &b);
     t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
+    t->homeFloor = onFloor;
+    if (category == 4) t->elevates = t->def->elevates;
+    else { cJSON *data = NULL, *c; cJSON *source = category == 5 ? containersJson : booksJson; cJSON_ArrayForEach(c, source) if (num(c, "Id", -2) == itemId) data = c; t->elevates = flag(data, "AllowElevation"); }
     thingCount++;
     add_thing_body(t);
+    settle_all();
     return t->uid;
 }
 
@@ -1868,4 +1862,95 @@ void world_burn_lights(double minutes)
         sound_play(t->def->spentSound);
         world_furniture_event(t->uid, 10, -1); /* By Stay */
     }
+}
+
+/* A placed container's own contents (Map Editor: Ctrl + double-click), or NULL. */
+void *world_thing_own_contents(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    cJSON *own = t && t->placed ? get(t->placed, "OwnContents") : NULL;
+    if (cJSON_IsArray(own)) return own;
+    /* opened in the editor's play test before: its live contents */
+    cJSON *live = t && t->placed && num(t->placed, "InstanceId", 0) != 0 ? get(t->placed, "Contents") : NULL;
+    return cJSON_IsArray(live) ? live : NULL;
+}
+
+/* ---------------- Gravity (SettleAll, Map_chunk::gravity) ---------------- */
+
+typedef struct SettleBody { int left, top, w, d, z, h, elevates, surface, floorOnly, liesUnder, hangs, fixed, index; Thing *t; } SettleBody;
+
+static int by_lift(const void *a, const void *b)
+{
+    const SettleBody *p = (const SettleBody *)a, *q = (const SettleBody *)b;
+    return p->z != q->z ? (p->z < q->z ? -1 : 1) : (p->index < q->index ? -1 : p->index > q->index ? 1 : 0);
+}
+
+static int sb_overlaps(const SettleBody *b, const SettleBody *f) { return b->left < f->left + f->w && f->left < b->left + b->w && b->top < f->top + f->d && f->top < b->top + b->d; }
+
+/* BelowCeilingOf: a support starting below the next floor's slab of the floor at this lift. */
+static int below_ceiling(const SettleBody *support, int lift) { return support->z < base_lift(floor_of(lift < 0 ? 0 : lift)) + LIFTS_PER_FLOOR - 1; }
+
+static void settle_all(void)
+{
+    int n = 0, cap = thingCount + (slabEnd - slabStart) + 1;
+    SettleBody *all = (SettleBody *)calloc((size_t)cap, sizeof(SettleBody)), *settled = (SettleBody *)calloc((size_t)cap, sizeof(SettleBody));
+    for (int i = slabStart; i < slabEnd; i++)
+    {
+        /* an upper floor's painted tiles: a slab, a floor */
+        Body *b = &bodies[i];
+        all[n] = (SettleBody){ b->left, b->top, b->width, b->depth, b->z, b->height, 1, 1, 1, 0, 0, 1, n, NULL };
+        n++;
+    }
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone) continue;
+        Body b;
+        thing_box(t, &b);
+        int type = t->def ? t->def->type : -1;
+        int slab = t->def && type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0;
+        SettleBody *s = &all[n];
+        *s = (SettleBody){ b.left, b.top, b.width, b.depth, b.z, b.height, t->elevates || slab, slab || type == 32 /* Table */ || (type == T_TILE && t->def->solid),
+                           slab || (type == T_TILE && t->def->solid), t->liesUnder, t->hangs, 0, n, t };
+        /* a tile has no gravity (a floor, a roof); hung on the wall, a wall set's piece, a vehicle's piece: they stay where they are */
+        s->fixed = type == T_TILE || t->hangs || t->wallSetPiece || t->vehicle;
+        n++;
+    }
+    qsort(all, (size_t)n, sizeof(SettleBody), by_lift);
+    int count = 0;
+    for (int i = 0; i < n; i++)
+    {
+        SettleBody body = all[i];
+        if (body.fixed || !body.t) { settled[count++] = body; continue; }
+        int floorBase = base_lift(body.t->homeFloor), z = 0;
+        for (int k = 0; k < count; k++)
+        {
+            const SettleBody *b = &settled[k];
+            /* never held up by the floor above, nor by something put underneath or hung on the wall, nor by a floor below */
+            if (!below_ceiling(b, body.z) || b->liesUnder || b->hangs || b->z < floorBase - 1 || !sb_overlaps(b, &body)) continue;
+            int top = b->z + b->h;
+            if (body.liesUnder) { if (b->floorOnly && top > z) z = top; }       /* put underneath: on the floor itself, under the table */
+            else if (body.elevates) { if (b->elevates && top > z) z = top; }    /* on top of the highest elevating thing */
+            else if (b->surface && top > z) z = top;                              /* lying flat: on a surface - a table top is a floor */
+        }
+        if (z < floorBase) z = floorBase; /* never below the floor it was put on */
+        Thing *t = body.t;
+        if (z != t->z)
+        {
+            t->z = z;
+            if (t->body >= 0 && bodies[t->body].width > 0) { Body nb; thing_box(t, &nb); bodies[t->body] = nb; }
+        }
+        body.z = t->body >= 0 ? z : z;
+        if (t->def && t->def->type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0) body.z = t->z - 1;
+        settled[count++] = body;
+    }
+    free(all); free(settled);
+    /* ApplyGravityToPlayer: the player comes down onto what's under them */
+    int l, tp;
+    player_foot(player.px, player.py, &l, &tp);
+    const Body *here[512];
+    int hn = 0;
+    for (int i = 0; i < bodyCount && hn < 512; i++) if (overlaps(&bodies[i], l, tp, player.sizeX, player.sizeY)) here[hn++] = &bodies[i];
+    int below = floor_below(here, hn, player.lift);
+    if (below < player.lift) player.lift = below;
 }

@@ -450,7 +450,12 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
 {
     for (int i = 0; i < parkedCount; i++)
         if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; return it; }
-    return items_make(category, itemId, quantity);
+    /* never carried: SeedContentsOf - its own contents if the Map Editor gave it some, else its Starting Contents */
+    cJSON *own = (cJSON *)world_thing_own_contents(uid), *c;
+    if (category != CAT_CONTAINER || !own) return items_make(category, itemId, quantity);
+    Item *it = new_item(category, itemId, quantity);
+    cJSON_ArrayForEach(c, own) add_to(&it->contents, &it->count, &it->cap, read_item(c));
+    return it;
 }
 
 /* Put back where it was found (a pick-up that was refused). */
