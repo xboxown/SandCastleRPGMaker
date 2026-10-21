@@ -136,6 +136,7 @@ static void audio_callback(void *user, Uint8 *stream, int bytes)
 }
 
 const char *platform_audio_name(void) { return "SDL"; }
+void platform_audio_route(int which) { (void)which; }
 
 int platform_audio_open(int rate, AudioFill fill)
 {

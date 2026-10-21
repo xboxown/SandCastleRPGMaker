@@ -119,6 +119,8 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--press") == 0 && i + 1 < argc) presses = argv[++i];
         else if (strcmp(argv[i], "--shot-at") == 0 && i + 1 < argc) shotAt = sc_strtod(argv[++i], NULL);
         else if (!strcmp(argv[i], "nosound") || !strcmp(argv[i], "NOSOUND") || !strcmp(argv[i], "--nosound")) noSound = 1;
+        else if (!strcmp(argv[i], "paula") || !strcmp(argv[i], "PAULA")) platform_audio_route(1);
+        else if (!strcmp(argv[i], "ahi") || !strcmp(argv[i], "AHI")) platform_audio_route(2);
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
     note("Started.");
@@ -168,6 +170,8 @@ int main(int argc, char **argv)
     }
     note("Window open. Starting.");
     { FILE *quiet = fopen("nosound", "rb"); if (quiet) { fclose(quiet); noSound = 1; } } /* a file called nosound beside the game: no sound */
+    { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula only (paula)."); } } /* a file called paula: audio.device, never AHI */
+    { FILE *p = fopen("ahi", "rb"); if (p) { fclose(p); platform_audio_route(2); note("Sound through AHI only (ahi)."); } }
     note(noSound ? "Sound off (nosound)." : "Starting the sound...");
     sound_load(folder, !noSound);
     note(sound_status());

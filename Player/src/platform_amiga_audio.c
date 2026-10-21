@@ -15,6 +15,7 @@
 #include <devices/audio.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
+#include <clib/alib_protos.h>
 #include <string.h>
 
 #define AMIGA_RATE 22050           /* half CD rate: the 68060 / 68080 keeps the game's speed */
@@ -25,6 +26,8 @@ static AudioFill audioFill;
 static struct SignalSemaphore lock;
 static volatile int running, quit, started;
 static const char *device = "none";
+static int route; /* 0: AHI, else Paula; 1: Paula only; 2: AHI only */
+void platform_audio_route(int which) { route = which; }
 const char *platform_audio_name(void) { return device; }
 static struct Task *mainTask;
 static int16_t mixed[FRAMES * 2];
@@ -154,7 +157,9 @@ static int run_paula(void)
 
 static void sound_task(void)
 {
-    if (!run_ahi() && !run_paula()) { started = -1; Signal(mainTask, SIGBREAKF_CTRL_F); }
+    int played = route == 1 ? run_paula() : run_ahi();
+    if (!played && route == 0) played = run_paula();
+    if (!played) { started = -1; Signal(mainTask, SIGBREAKF_CTRL_F); }
     Forbid();
     running = 0;
     Signal(mainTask, SIGBREAKF_CTRL_F);

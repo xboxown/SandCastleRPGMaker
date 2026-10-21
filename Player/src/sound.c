@@ -11,6 +11,7 @@
 #include "platform.h"
 #include "conditions.h"
 #include "pack.h"
+void game_log(const char *line);
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -202,6 +203,7 @@ void sound_load(const char *gameFolder, int enabled)
     if (getenv("SANDCASTLE_AUDIO_DUMP")) dump = fopen(getenv("SANDCASTLE_AUDIO_DUMP"), "wb");
     if (!soundArchive) { snprintf(status, sizeof status, "Sound: sounds.sdbx couldn't be read - no sound."); return; }
     if (!enabled) { snprintf(status, sizeof status, "Sound: off."); return; }
+    game_log("Sound archive read. Starting the sound task...");
     audioOn = platform_audio_open(44100, fill);
     snprintf(status, sizeof status, "Sound: %d files, %s at %d Hz.", fileCount, platform_audio_name(), audioOn);
     if (audioOn > 1) outRate = audioOn; /* the rate the machine plays at */
