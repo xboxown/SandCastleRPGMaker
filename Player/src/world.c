@@ -44,7 +44,7 @@ typedef struct ObjectDef
     int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile;
     const Sprite *own, *open, *lit;
     const Sprite *facing[8], *turned[8];
-    int doorStartsOpen, lightStartsLit;
+    int doorStartsOpen, lightStartsLit, occludes;
 } ObjectDef;
 
 typedef struct Thing
@@ -106,6 +106,7 @@ static void read_objects(cJSON *project)
         d->solidOffX = num(o, "SolidOffsetX", 0); d->solidOffY = num(o, "SolidOffsetY", 0);
         d->stackable = flag(o, "IsCellStackable"); d->elevates = flag(o, "AllowCellElevation");
         d->floorTile = flag(o, "IsFloorTile");
+        d->occludes = flag(o, "Occludes");
         d->own = sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName"));
         cJSON *door = get(o, "Door"), *light = get(o, "Light"), *furniture = get(get(o, "Furniture"), "Facings"), *turn = get(o, "TurnLooks"), *f;
         d->open = link_of(get(door, "OpenSprite")); d->doorStartsOpen = flag(door, "StartsOpen");
@@ -134,15 +135,19 @@ static const Sprite *look_of(const Thing *t)
     }
 }
 
-static void add_thing_body(const Thing *t)
+static void thing_box(const Thing *t, Body *b)
 {
-    if (!t->solid || t->hangs) return;
-    Body *b = &bodies[bodyCount++];
     b->left = t->x * unitsX + (int)floor((unitsX - t->sizeX) / 2.0) + t->offX + t->solidOffX; /* FootprintAt */
     b->top = (t->y + 1) * unitsY - t->sizeY + t->offY + t->solidOffY;
     b->width = t->sizeX; b->depth = t->sizeY;
     b->z = t->z; b->height = t->sizeZ;
     if (t->def && t->def->type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0) { b->z = t->z - 1; b->height = 1; } /* an upper floor's floor tile: a slab */
+}
+
+static void add_thing_body(const Thing *t)
+{
+    if (!t->solid || t->hangs) return;
+    thing_box(t, &bodies[bodyCount++]);
 }
 
 static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
@@ -495,23 +500,74 @@ static const Picture *tile_picture(int tile, uint32_t ms)
     return frame_picture(&sheet->frames[local]);
 }
 
-typedef struct Drawn { int floorBand; double depth; const Picture *picture; int x, y, w, h; } Drawn;
+/* What's drawn: its picture where it goes, and (for Exult's compare) its box - x and y in 8-pixel units, z in lifts. */
+typedef struct Drawn
+{
+    double key; const Picture *picture; int x, y, w, h;
+    int hasBox, wall, occludes, hangs, xl, xr, yf, yn, zb, zt, flat;
+} Drawn;
 
-static int by_depth(const void *a, const void *b)
+static int by_key(const void *a, const void *b)
 {
     const Drawn *p = (const Drawn *)a, *q = (const Drawn *)b;
-    if (p->floorBand != q->floorBand) return p->floorBand - q->floorBand;
-    return p->depth < q->depth ? -1 : p->depth > q->depth ? 1 : 0;
+    return p->key < q->key ? -1 : p->key > q->key ? 1 : 0;
+}
+
+/* objs.cc Compare_ranges */
+static void compare_ranges(int from1, int to1, int from2, int to2, int *cmp, int *overlap)
+{
+    if (to1 < from2) { *overlap = 0; *cmp = -1; }
+    else if (to2 < from1) { *overlap = 0; *cmp = 1; }
+    else { *overlap = 1; *cmp = from1 < from2 ? -1 : from1 > from2 ? 1 : to1 < to2 ? 1 : to1 > to2 ? -1 : 0; }
+}
+
+/* objs.cc Game_object::compare: -1 if a is drawn before b, 1 after, 0 either way. */
+static int exult_compare(const Drawn *a, const Drawn *b)
+{
+    if (a->x >= b->x + b->w || b->x >= a->x + a->w || a->y >= b->y + b->h || b->y >= a->y + a->h) return 0;
+    int xcmp, xover, ycmp, yover, zcmp, zover;
+    compare_ranges(a->xl, a->xr, b->xl, b->xr, &xcmp, &xover);
+    compare_ranges(a->yf, a->yn, b->yf, b->yn, &ycmp, &yover);
+    compare_ranges(a->zb, a->zt, b->zb, b->zt, &zcmp, &zover);
+    if (xcmp == 0 && ycmp == 0 && zcmp == 0) return a->w < b->w && a->h < b->h ? -1 : a->w > b->w && a->h > b->h ? 1 : 0;
+    if (xover && yover && zover) { if (a->flat) return b->flat ? 0 : -1; if (b->flat) return 1; }
+    if (xcmp >= 0 && ycmp >= 0 && zcmp >= 0) return 1;
+    if (xcmp <= 0 && ycmp <= 0 && zcmp <= 0) return -1;
+    if (yover)
+    {
+        if (xover) return zcmp;
+        if (zover) return xcmp;
+        if (zcmp == 0) return xcmp;
+        if (xcmp == zcmp) return xcmp;
+        if (a->zt / 5 < b->zb / 5 && b->occludes) return -1;
+        if (b->zt / 5 < a->zb / 5 && a->occludes) return 1;
+        return 0;
+    }
+    if (xover) { if (zover || zcmp == 0) return ycmp; return ycmp == zcmp ? ycmp : 0; }
+    if (xcmp == -1) { if (ycmp == -1) return zover || zcmp <= 0 ? -1 : 0; }
+    else if (ycmp == 1) { if (zover || zcmp >= 0) return 1; if (a->zt / 5 < b->zb / 5) return -1; return 0; }
+    return 0;
+}
+
+static void set_box(Drawn *d, int left, int top, int width, int depth, int lift, int height)
+{
+    d->hasBox = 1;
+    d->xl = left; d->xr = left + width - 1; d->yf = top; d->yn = top + depth - 1;
+    d->zb = height == 0 ? lift - 1 : lift; d->zt = lift + (height > 1 ? height : 1) - 1; d->flat = height == 0;
 }
 
 static Drawn *drawn; static int drawnCap;
 
-static void add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
+static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
 {
-    if (!pic) return;
-    if (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H) return;
+    if (!pic) return NULL;
+    if (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H) return NULL;
     if (*count >= drawnCap) { drawnCap = drawnCap ? drawnCap * 2 : 1024; drawn = (Drawn *)realloc(drawn, sizeof(Drawn) * (size_t)drawnCap); }
-    drawn[(*count)++] = (Drawn){ floorBand, depth, pic, x, y, w, h };
+    Drawn *d = &drawn[(*count)++];
+    memset(d, 0, sizeof *d);
+    d->key = floorBand * 10000000.0 + depth; /* the floor's band first, then nearer the viewer later (ComputeDepthZIndex) */
+    d->picture = pic; d->x = x; d->y = y; d->w = w; d->h = h;
+    return d;
 }
 
 /* Exult's roofs: something solid over the player's head - everything from its height up isn't drawn. */
@@ -548,7 +604,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
             {
                 int tile = floors[f][y * mapW + x];
                 if (tile < 0) continue;
-                add_drawn(f - 1, (x + y) * 100.0 + lift - 1 - 50, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count);
+                add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count); /* a floor: before everything standing on it */
             }
     }
     /* Things: bottom-centred on their cell, in a box rounded up to 8 pixels, up and left by their lift. */
@@ -562,7 +618,14 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT;
         int top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
         int flat = t->def && (t->def->type == T_TRAP || (t->def->type == T_TILE && !t->def->solid));
-        add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - (flat ? 1000 : 0), pic, left - cx, top - cy, qw, qh, &count);
+        Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - (flat ? 1000 : 0), pic, left - cx, top - cy, qw, qh, &count);
+        if (!d) continue;
+        Body b;
+        thing_box(t, &b);
+        set_box(d, b.left, b.top, b.width, b.depth, b.z, flat ? 0 : b.height);
+        d->wall = t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == 12 /* Window */);
+        d->occludes = t->def && t->def->occludes;
+        d->hangs = t->hangs;
     }
     /* Characters and the player. */
     for (int i = -1; i < npcCount; i++)
@@ -574,8 +637,45 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
-        add_drawn(floor_of(a->lift) - 1, (a->px / tileW + a->py / tileH) * 100.0 + a->lift, pic, left - cx, top - cy, qw, qh, &count);
+        Drawn *d = add_drawn(floor_of(a->lift) - 1, (a->px / tileW + a->py / tileH) * 100.0 + a->lift, pic, left - cx, top - cy, qw, qh, &count);
+        if (!d) continue;
+        double feetY = a->py + tileH / 2.0;
+        set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
     }
-    qsort(drawn, (size_t)count, sizeof(Drawn), by_depth);
+    /* Whatever rests on something is drawn after it (Exult: greater in z). */
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < count; i++)
+        {
+            Drawn *d = &drawn[i];
+            if (!d->hasBox || d->wall) continue;
+            for (int j = 0; j < count; j++)
+            {
+                const Drawn *u = &drawn[j];
+                if (j == i || !u->hasBox || u->zt + 1 > d->zb || u->xr < d->xl || d->xr < u->xl || u->yn < d->yf || d->yn < u->yf) continue;
+                if (u->key + 0.5 > d->key) d->key = u->key + 0.5;
+            }
+        }
+    /* Walls, doors and windows: whatever is near them is drawn before or after them as Exult decides (OrderAmongWalls); hung on a wall: over it. */
+    for (int i = 0; i < count; i++)
+    {
+        Drawn *d = &drawn[i];
+        if (!d->hasBox || d->wall) continue;
+        double lowest = 1e30, key = d->key;
+        for (int j = 0; j < count; j++)
+        {
+            const Drawn *w = &drawn[j];
+            if (!w->wall) continue;
+            if (d->hangs)
+            {
+                if (!(d->x >= w->x + w->w || w->x >= d->x + d->w || d->y >= w->y + w->h || w->y >= d->y + d->h) && w->key + 0.25 > key) key = w->key + 0.25;
+                continue;
+            }
+            int cmp = exult_compare(d, w);
+            if (cmp > 0 && w->key + 0.25 > key) key = w->key + 0.25;
+            else if (cmp < 0 && w->key - 0.25 < lowest) lowest = w->key - 0.25;
+        }
+        d->key = key < lowest ? key : lowest;
+    }
+    qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
     for (int i = 0; i < count; i++) blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
 }
