@@ -34,6 +34,14 @@ void world_player_cell(int *x, int *y, int *onFloor);
 void world_turn_to_player(int actor);
 const char *world_map_name(void);
 int world_light_strength(int *gives);
+void world_actor_pixel(int actor, double *px, double *py);
+int world_tile_w(void);
+int world_tile_h(void);
+int world_map_w(void);
+int world_map_h(void);
+int world_walk_blocked(int actor);
+int world_on_screen(double px, double py, double margin);
+void world_view_center(double *x, double *y);
 int world_actor_facing(int actor);
 /* Walk To Location: a way there (A* by Exult's walking rules), walked at the player's pace; 0 when there's none just now. floor 0 = any. */
 int world_walk_to(int actor, int x, int y, int floor, int beside);

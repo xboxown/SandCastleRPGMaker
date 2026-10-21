@@ -34,6 +34,13 @@ void events_fire_character(int characterId, int trigger);
 void events_fire_map(int trigger);
 void events_fire_item(int category, int itemId, int trigger);
 
+/* Schedules: whether an event is using a character now (busy: carrying out a command; held: its event isn't over). */
+int events_actor_busy(int actor);
+int events_actor_held(int actor);
+void events_log_once(int key, const char *text);
+#include "../third_party/cJSON.h"
+void events_run_commands(cJSON *commands, int actor);
+
 /* The game clock (Exult's: from System Settings > Clock). */
 int events_hour(void);
 int events_minute(void);

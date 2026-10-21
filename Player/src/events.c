@@ -5,6 +5,7 @@
 #include "items.h"
 #include "script.h"
 #include "lighting.h"
+#include "schedules.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -399,6 +400,26 @@ typedef struct Run
 #define MAX_RUNS 32
 static Run runs[MAX_RUNS];
 
+/* Characters an event moved, whose event is still going: they stay where it left them (no schedule) till it's over. */
+static int heldBy[256]; /* per actor: the run's number + 1, 0 = free */
+
+static void hold(Run *r, int actor) { if (actor > 0 && actor < 256) heldBy[actor] = (int)(r - runs) + 1; }
+
+/* ReleaseHeldBy: everyone the run held goes back to their schedule. */
+static void release_held(Run *r)
+{
+    for (int a = 1; a < 256; a++) if (heldBy[a] == (int)(r - runs) + 1) { heldBy[a] = 0; schedules_let_go(a); }
+}
+
+int events_actor_held(int actor) { return actor > 0 && actor < 256 && heldBy[actor]; }
+
+/* Carrying out an event's command (walking there, picking up): its schedule waits. */
+int events_actor_busy(int actor)
+{
+    for (int i = 0; i < MAX_RUNS; i++) if (runs[i].used && (runs[i].waiting == W_WALK || runs[i].waiting == W_ACTION) && runs[i].walker == actor) return 1;
+    return 0;
+}
+
 int events_cinema(void)
 {
     for (int i = 0; i < MAX_RUNS; i++) if (runs[i].used && runs[i].cinema) return 1;
@@ -530,7 +551,7 @@ static Picked *picked_of(const Cmd *showText, int id)
     return &picked[pickedCount++];
 }
 
-static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; }
+static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; release_held(r); }
 
 /* ---------------- Formulas in commands ---------------- */
 
@@ -1036,6 +1057,14 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ChangeBehavior:
+        {
+            const char *who = param(c, "CharacterId");
+            int actor = actor_for(r, who[0] ? who : "Activator");
+            if (actor > 0 && actor < 256) heldBy[actor] = 0; /* told what to do now: no longer waiting for its event to end */
+            if (actor > 0) schedules_change_behavior(actor, param(c, "Behavior"));
+            return 1;
+        }
         case C_ApplyPaletteColor:
         {
             int percent = atoi(param(c, "OpacityPercent"));
@@ -1654,12 +1683,14 @@ void events_update(double ms, int paused)
         int ok;
         if (r->used && r->waiting == W_ACTION && !action_tick(r, ms, &ok))
         {
+            hold(r, r->walker);
             r->waiting = W_NONE;
             r->act = 0;
             continue_run(r);
         }
         if (r->used && r->waiting == W_WALK && !walk_tick(r, ms, &ok))
         {
+            hold(r, r->walker);
             if (!ok) { char t[128]; snprintf(t, sizeof t, "Someone can't find a way to (%d, %d).", r->goalX, r->goalY); game_log(t); }
             r->waiting = W_NONE;
             continue_run(r);
@@ -1732,4 +1763,22 @@ void events_fire_item(int category, int itemId, int trigger)
 {
     for (int i = 0; i < ownerCount; i++)
         if (owners[i].itemCategory == category && owners[i].itemId == itemId) { fire_pages(&owners[i], trigger, -1, 0); return; }
+}
+
+void events_log_once(int key, const char *text) { log_once(key, text); }
+
+/* A Custom schedule's commands, run as that character's own (Self = them). */
+typedef struct CustomList { cJSON *source; List list; } CustomList;
+static CustomList customs[64]; static int customCount;
+
+void events_run_commands(cJSON *commands, int actor)
+{
+    if (!cJSON_GetArraySize(commands)) return;
+    const List *l = NULL;
+    for (int i = 0; i < customCount; i++) if (customs[i].source == commands) l = &customs[i].list;
+    if (!l && customCount < 64) { customs[customCount].source = commands; customs[customCount].list = read_list(commands); l = &customs[customCount++].list; }
+    if (!l) return;
+    char key[48];
+    snprintf(key, sizeof key, "char:%d", world_actor_character(actor));
+    start_run_as(l, actor, 0, key);
 }

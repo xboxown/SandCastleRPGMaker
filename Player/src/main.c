@@ -10,6 +10,7 @@
 #include "dialog.h"
 #include "events.h"
 #include "lighting.h"
+#include "schedules.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,6 +149,8 @@ int main(int argc, char **argv)
     }
     note("Window open. Running.");
     events_load();
+    schedules_load();
+    schedules_start();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
     uint32_t lastClick = 0; int clickX = -100, clickY = -100;
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
@@ -253,6 +256,7 @@ int main(int argc, char **argv)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             world_update(dx, dy, seconds);
+            schedules_update(seconds * 1000);
             events_player_moved();
         }
         world_draw(pixels, now);

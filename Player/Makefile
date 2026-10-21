@@ -4,7 +4,7 @@
 # Run:  ./SandcastlePlayer <the game's data folder>   (default: Game_Data beside it)
 CC ?= cc
 CFLAGS ?= -std=c99 -O2 -Wall -Wno-unused-function
-SRC = src/main.c src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/numbers.c src/platform_sdl2.c third_party/cJSON.c
+SRC = src/main.c src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/schedules.c src/numbers.c src/platform_sdl2.c third_party/cJSON.c
 
 SandcastlePlayer: $(SRC) src/*.h
 	$(CC) $(CFLAGS) $(shell sdl2-config --cflags) -o $@ $(SRC) $(shell sdl2-config --libs) -lm

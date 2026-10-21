@@ -1003,7 +1003,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
 }
 
 #define MAX_PATH 512
-typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose; } Walk;
+typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose, blocked; } Walk;
 static Walk *walks; /* one per actor */
 
 static Walk *walk_of(int actor)
@@ -1131,7 +1131,7 @@ static void step_walk(int actor, double seconds)
             int lift = try_step(l1, t1, a->sizeX, a->sizeY, a->lift, a->sizeZ);
             put_own_body(a, own);
             if (lift < 0 && open_door_in_way(a, w, l1, t1)) return; /* a closed, unlocked door: opened, on next frame */
-            if (lift < 0) { w->active = 0; a->walkingNow = 0; return; } /* something in the way: stop, think again */
+            if (lift < 0) { w->active = 0; w->blocked = 1; a->walkingNow = 0; return; } /* something in the way: stop, think again */
             a->lift = lift;
             if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
         }
@@ -1343,3 +1343,17 @@ int world_light_strength(int *gives)
     }
     return total;
 }
+
+void world_actor_pixel(int actor, double *px, double *py) { Actor *a = actor_of(actor); *px = a ? a->px : 0; *py = a ? a->py : 0; }
+int world_tile_w(void) { return tileW; }
+int world_tile_h(void) { return tileH; }
+int world_map_w(void) { return mapW; }
+int world_map_h(void) { return mapH; }
+/* Whether its last walk was stopped by something in the way (asked once: the answer is cleared). */
+int world_walk_blocked(int actor) { Walk *w = walk_of(actor); int b = w && w->blocked; if (w) w->blocked = 0; return b; }
+/* On the screen, enlarged by margin pixels all round. */
+int world_on_screen(double px, double py, double margin)
+{
+    return px >= cameraX - margin && px <= cameraX + SCREEN_W + margin && py >= cameraY - margin && py <= cameraY + SCREEN_H + margin;
+}
+void world_view_center(double *x, double *y) { *x = cameraX + SCREEN_W / 2.0; *y = cameraY + SCREEN_H / 2.0; }
