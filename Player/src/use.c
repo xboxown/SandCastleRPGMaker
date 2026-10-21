@@ -62,8 +62,10 @@ static void use_door(int uid, cJSON *def)
 static void use_light(int uid, cJSON *def)
 {
     if (events_object_event(uid, TR_USE, -1)) return;
+    if (world_light_spent(uid)) return; /* burnt out: it can't be lit */
     int lit = !world_light_lit(uid);
     world_light_set(uid, lit);
+    if (lit) world_light_lit_now(uid);
     cJSON *light = cJSON_GetObjectItem(def, "Light");
     sound_play(sound_of(light, lit ? "LitSoundResourceId" : "OffSoundResourceId"));
     events_object_event(uid, lit ? TR_AFTER_READ : TR_ENTER, -1);

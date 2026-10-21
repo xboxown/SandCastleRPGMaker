@@ -43,6 +43,11 @@ int world_walk_blocked(int actor);
 int world_on_screen(double px, double py, double margin);
 void world_view_center(double *x, double *y);
 int world_indoors(void);
+void world_light_state(int uid, int *lit, int *spent, double *burnLeft);
+void world_set_light_state(int uid, int lit, int spent, double burnLeft);
+int world_light_spent(int uid);
+void world_light_lit_now(int uid);
+void world_burn_lights(double minutes);
 /* Chairs and beds: sitting / lying down, getting up, the Sit and Sleep schedules, the main character's walk-up-and-sit. */
 int world_go_to_furniture(int actor, int bed, int onlyUid);
 int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken meanwhile, 0 wasn't heading for one */

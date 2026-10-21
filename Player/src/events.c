@@ -82,6 +82,18 @@ static int clock_advance(double ms)
     return hours;
 }
 
+/* Lights burn down by the game clock. */
+static long burnedTo = -1;
+static void burn_lights(void)
+{
+    long now = (long)clockDay * 1440 + clockHour * 60 + clockMinute;
+    if (burnedTo < 0) burnedTo = now;
+    if (now <= burnedTo) return;
+    world_burn_lights((double)(now - burnedTo));
+    items_burn_lights((double)(now - burnedTo));
+    burnedTo = now;
+}
+
 /* Time passes at once (Set Time, resting). */
 static int clock_advance_minutes(int minutes)
 {
@@ -783,7 +795,7 @@ static void put_down(Item *item, int atActor, int x, int y)
     world_actor_cell(atActor, &ax, &ay, &f);
     if (x < 0) { x = ax; y = ay; }
     int uid = world_thing_put(items_category(item), items_item_id(item), items_quantity(item), x, y, f);
-    if (uid >= 0) items_park(uid, item);
+    if (uid >= 0) { int lit, spent; double burn; items_light_state(item, &lit, &spent, &burn); world_set_light_state(uid, lit, spent, burn); items_park(uid, item); }
     else items_free(item);
 }
 
@@ -1356,6 +1368,7 @@ static int action_tick(Run *r, double ms, int *ok)
         world_thing_info(r->thing, &category, &itemId, &quantity, &x, &y, &instance);
         if (!items_can_lift(category, itemId)) { game_log("Pickup Item: that's too heavy to move."); *ok = 0; return 0; }
         Item *item = items_unpark(r->thing, category, itemId, quantity);
+        { int lit, spent; double burn; world_light_state(r->thing, &lit, &spent, &burn); items_set_light_state(item, lit, spent, burn); } /* a torch's flame goes with it */
         if (!items_give_to(who, item))
         {
             game_log(items_refusal());
@@ -1818,6 +1831,7 @@ void events_update(double ms, int paused)
     }
     if (paused) return;
     clock_advance(ms); /* the clock runs while the game does */
+    burn_lights();
     lighting_update(ms);
     update_ambient();
     /* Waits run while the game does. */

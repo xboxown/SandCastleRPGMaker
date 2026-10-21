@@ -18,6 +18,7 @@
 #include "pictures.h"
 #include "font.h"
 #include "sound.h"
+#include "items.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
@@ -45,11 +46,12 @@ typedef struct Link { const Sprite *sprite; } Link;
 typedef struct ObjectDef
 {
     int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile;
-    const Sprite *own, *open, *lit;
+    const Sprite *own, *open, *lit, *spent;
     const Sprite *facing[8], *turned[8];
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
     int brightness, gives;            /* a light: how bright, what it gives (Exult levels, the dusk look, daylight) */
+    int burnMinutes, spentSound;      /* how long it burns (0: for ever), and the sound when it's spent */
     int spotCount[8]; double spotX[8][8], spotY[8][8]; /* a chair's seats / a bed's sleeping places, per facing (picture pixels) */
     int coverId;                      /* a bed's cover object (-1: none) */
 } ObjectDef;
@@ -64,6 +66,7 @@ typedef struct Thing
     int body, gone;                                  /* its solid box (-1: none); picked up / taken away */
     int locked;                                      /* a door: locked (IsLockedRuntime) */
     int fixedFrame;                                  /* a frame shown instead of the animation (frame + 1; 0 = animate) - a bed's cover */
+    int spent; double burnLeft;                      /* a light burnt out; the game minutes it has left (-1: not started) */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -136,6 +139,7 @@ static void read_objects(cJSON *project)
         d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
         d->lit = link_of(get(light, "LitSprite")); d->lightStartsLit = flag(light, "StartsLit");
         d->brightness = num(light, "Brightness", 0); d->gives = num(light, "Gives", 0);
+        d->spent = link_of(get(light, "SpentSprite")); d->burnMinutes = num(light, "BurnMinutes", 0); d->spentSound = num(light, "SpentSoundResourceId", -1);
         cJSON_ArrayForEach(f, furniture)
         {
             int dir = dir_of(f->string);
@@ -158,7 +162,7 @@ static const Sprite *look_of(const Thing *t)
     switch (d->type)
     {
         case T_DOOR: return t->open && d->open ? d->open : own;
-        case T_LIGHT: return t->lit && d->lit ? d->lit : own;
+        case T_LIGHT: return t->lit && d->lit ? d->lit : t->spent && d->spent ? d->spent : own;
         case T_CHAIR: case T_BED:
             if (d->facing[t->facing]) return d->facing[t->facing];
             if (d->facing[DIR_S]) return d->facing[DIR_S];
@@ -424,7 +428,10 @@ int world_load(const char *folder)
         cJSON *so = get(o, "StartsOpen"), *sl = get(o, "StartsLit"), *sk = get(o, "StartsLocked"), *lr = get(o, "IsLockedRuntime");
         t->locked = d->type == T_DOOR && (cJSON_IsBool(lr) ? cJSON_IsTrue(lr) : cJSON_IsBool(sk) ? cJSON_IsTrue(sk) : d->doorStartsLocked);
         t->open = d->type == T_DOOR && (cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->doorStartsOpen);
-        t->lit = d->type == T_LIGHT && (cJSON_IsBool(sl) ? cJSON_IsTrue(sl) : d->lightStartsLit);
+        cJSON *litNow = get(o, "IsLitRuntime");
+        t->lit = d->type == T_LIGHT && (cJSON_IsBool(litNow) ? cJSON_IsTrue(litNow) : cJSON_IsBool(sl) ? cJSON_IsTrue(sl) : d->lightStartsLit);
+        t->spent = flag(o, "IsSpentRuntime");
+        t->burnLeft = get(o, "BurnLeftRuntime") && cJSON_IsNumber(get(o, "BurnLeftRuntime")) ? get(o, "BurnLeftRuntime")->valuedouble : -1;
         int turned = (d->turned[0] || d->turned[2] || d->turned[4] || d->turned[6]) && (t->facing == DIR_E || t->facing == DIR_W);
         t->sizeX = turned ? d->sizeY : d->sizeX; t->sizeY = turned ? d->sizeX : d->sizeY;
         int flat = d->type == T_TRAP || (d->type == T_TILE && !d->solid);
@@ -1282,7 +1289,7 @@ int world_thing_put(int category, int itemId, int quantity, int x, int y, int on
     Thing *t = &things[thingCount];
     memset(t, 0, sizeof *t);
     t->uid = nextUid++; t->category = category; t->itemId = itemId; t->quantity = quantity > 0 ? quantity : 1;
-    t->x = x; t->y = y; t->facing = DIR_S;
+    t->x = x; t->y = y; t->facing = DIR_S; t->burnLeft = -1;
     if (category == 4)
     {
         const ObjectDef *d = def_of(itemId);
@@ -1387,6 +1394,21 @@ int world_light_strength(int *gives)
         if (strength <= 0) continue;
         total += strength * t->def->brightness;
         if (strength * t->def->brightness > 0 && t->def->gives > *gives) *gives = t->def->gives;
+    }
+    /* every lit light a party member holds in a hand */
+    for (int a = 0; a <= npcCount; a++)
+    {
+        Actor *who = actor_of(a);
+        if (!items_in_party(who->characterId)) continue;
+        int dx = (int)fabs(floor((who->px - player.px) / UNIT + 0.5)), dy = (int)fabs(floor((who->py - player.py) / UNIT + 0.5));
+        int strength = 75 - 2 * dx - 3 * dy;
+        if (strength <= 0) continue;
+        int brightness[2], lightGives[2], n = items_hand_lights(who->characterId, brightness, lightGives);
+        for (int k = 0; k < n; k++)
+        {
+            total += strength * brightness[k];
+            if (strength * brightness[k] > 0 && lightGives[k] > *gives) *gives = lightGives[k];
+        }
     }
     return total;
 }
@@ -1808,3 +1830,42 @@ static void draw_thing_barks(uint32_t *pixels)
 
 /* Under a roof (something solid over the player's head): weather isn't drawn. */
 int world_indoors(void) { return ceiling_over_player() < (1 << 30); }
+
+/* A light's state, to carry it with the light (picked up, put down). */
+void world_light_state(int uid, int *lit, int *spent, double *burnLeft)
+{
+    Thing *t = thing_by_uid(uid);
+    *lit = t && t->lit; *spent = t && t->spent; *burnLeft = t ? t->burnLeft : -1;
+}
+
+void world_set_light_state(int uid, int lit, int spent, double burnLeft)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    t->lit = lit; t->spent = spent; t->burnLeft = burnLeft;
+}
+
+int world_light_spent(int uid) { Thing *t = thing_by_uid(uid); return t && t->spent; }
+
+/* Lit: it starts burning (its Burn Minutes) if it hasn't yet. */
+void world_light_lit_now(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (t && t->def && t->def->burnMinutes > 0 && t->burnLeft < 0) t->burnLeft = t->def->burnMinutes;
+}
+
+/* BurnLights for the map: every lit light burns down with the game clock; burnt out, it's spent (its sound, its By Stay event). */
+void world_burn_lights(double minutes)
+{
+    if (minutes <= 0) return;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->lit || t->burnLeft < 0 || !t->def || t->def->type != T_LIGHT) continue;
+        t->burnLeft -= minutes;
+        if (t->burnLeft > 0) continue;
+        t->lit = 0; t->spent = 1;
+        sound_play(t->def->spentSound);
+        world_furniture_event(t->uid, 10, -1); /* By Stay */
+    }
+}

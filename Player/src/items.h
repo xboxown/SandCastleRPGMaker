@@ -55,6 +55,12 @@ int items_party_count(int category, int itemId);
 #include "../third_party/cJSON.h"
 double items_party_money(cJSON *objects, cJSON *currencies);
 
+/* Lights: their state carried with them; lit ones in hands (for the dark); burning down. */
+void items_light_state(const Item *it, int *lit, int *spent, double *burnLeft);
+void items_set_light_state(Item *it, int lit, int spent, double burnLeft);
+int items_hand_lights(int characterId, int *brightness, int *gives);
+void items_burn_lights(double minutes);
+
 /* Its name, for the log. */
 const char *items_name(int category, int itemId);
 

@@ -1,6 +1,7 @@
 #include "items.h"
 #include "events.h"
 #include "world.h"
+#include "sound.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,7 @@ struct Item
 {
     int instanceId, category, itemId, quantity;
     int locked;              /* -1 as its kind says, else 0 / 1 (IsLockedRuntime) */
+    int lit, spent; double burnLeft; /* a light: lit, burnt out, game minutes left (-1: not started) */
     Item **contents; int count, cap;
 };
 
@@ -83,7 +85,7 @@ static void remove_from(Item **list, int *count, const Item *item)
 static Item *new_item(int category, int itemId, int quantity)
 {
     Item *it = (Item *)calloc(1, sizeof(Item));
-    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1;
+    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1;
     return it;
 }
 
@@ -102,6 +104,8 @@ static Item *read_item(cJSON *j)
     it->instanceId = num(j, "InstanceId", 0);
     cJSON *locked = get(j, "IsLockedRuntime"), *c;
     if (cJSON_IsBool(locked)) it->locked = cJSON_IsTrue(locked);
+    it->lit = cJSON_IsTrue(get(j, "IsLitRuntime")); it->spent = cJSON_IsTrue(get(j, "IsSpentRuntime"));
+    it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     cJSON_ArrayForEach(c, get(j, "Contents")) add_to(&it->contents, &it->count, &it->cap, read_item(c));
     return it;
 }
@@ -492,4 +496,47 @@ double items_party_money(cJSON *objects, cJSON *currencies)
     for (int i = 0; i < carrierCount; i++)
         if (carriers[i].isPlayer || carriers[i].inParty) total += money_in(carriers[i].items, carriers[i].count, currencies);
     return total;
+}
+
+/* A light's state, carried with it. */
+void items_light_state(const Item *it, int *lit, int *spent, double *burnLeft) { *lit = it->lit; *spent = it->spent; *burnLeft = it->burnLeft; }
+void items_set_light_state(Item *it, int lit, int spent, double burnLeft) { it->lit = lit; it->spent = spent; it->burnLeft = burnLeft; }
+
+/* The lit lights in a character's hands: how bright, what they give. */
+int items_hand_lights(int characterId, int *brightness, int *gives)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    if (!k) return 0;
+    static const int HANDS[2] = { S_RIGHT, S_LEFT };
+    for (int h = 0; h < 2; h++)
+    {
+        Item *it = in_slot(k, HANDS[h]);
+        cJSON *d = it && it->lit && it->category == CAT_OBJECT ? def_of(CAT_OBJECT, it->itemId) : NULL;
+        if (!d || num(d, "Type", 0) != 4) continue;
+        brightness[n] = num(get(d, "Light"), "Brightness", 0); gives[n] = num(get(d, "Light"), "Gives", 0); n++;
+    }
+    return n;
+}
+
+/* BurnLights for carried lights: burnt out, it's spent (its sound). */
+static void burn_in(Item **list, int count, double minutes)
+{
+    for (int i = 0; i < count; i++)
+    {
+        Item *it = list[i];
+        if (it->lit && it->burnLeft >= 0)
+        {
+            cJSON *d = def_of(it->category, it->itemId);
+            it->burnLeft -= minutes;
+            if (it->burnLeft <= 0) { it->lit = 0; it->spent = 1; sound_play(num(get(d, "Light"), "SpentSoundResourceId", -1)); }
+        }
+        burn_in(it->contents, it->count, minutes);
+    }
+}
+
+void items_burn_lights(double minutes)
+{
+    if (minutes <= 0) return;
+    for (int i = 0; i < carrierCount; i++) burn_in(carriers[i].items, carriers[i].count, minutes);
 }
