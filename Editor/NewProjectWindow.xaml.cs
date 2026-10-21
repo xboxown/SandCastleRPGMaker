@@ -25,32 +25,7 @@ public partial class NewProjectWindow : Window
     public NewProjectWindow()
     {
         InitializeComponent();
-        PopulatePlatforms();
         UpdatePreviews();
-    }
-
-    private void PopulatePlatforms()
-    {
-        void Add(string label, bool enabled, string? tooltip = null)
-        {
-            var item = new ComboBoxItem { Content = label, IsEnabled = enabled };
-            if (tooltip is not null) item.ToolTip = tooltip;
-            PlatformCombo.Items.Add(item);
-        }
-
-        Add("Windows", true);
-        Add("Macintosh (PPC / x86 / 2026 Apple chip) (Not Implemented Yet)", false);
-        Add("Linux (Not Implemented Yet)", false);
-        Add("HTML5 (Not Implemented Yet)", false);
-        Add("PlayStation 3 (Not Implemented Yet)", false);
-        Add("PlayStation 2 (Not Implemented Yet)", false);
-        Add("PlayStation 4 (Not Implemented Yet)", false);
-        Add("Amiga 68k (68020-68060, OCS to AGA, Kickstart 1.3-3.1) (Not Implemented Yet)", false,
-            "Will configure custom chipset/RAM/Kickstart/CPU (WinUAE-style) and the hardware limits that come with them, once this platform is implemented.");
-        Add("Vamperized Amiga 68k (Not Implemented Yet)", false);
-        Add("MorphOS (PPC Mac) (Not Implemented Yet)", false);
-
-        PlatformCombo.SelectedIndex = 0;
     }
 
     private void ProjectNameBox_TextChanged(object sender, TextChangedEventArgs e) => UpdatePreviews();
@@ -119,12 +94,6 @@ public partial class NewProjectWindow : Window
             return;
         }
 
-        if (PlatformCombo.SelectedItem is not ComboBoxItem { IsEnabled: true } platformItem)
-        {
-            MessageBox.Show("That platform isn't implemented yet - pick Windows for now.", "New Project", MessageBoxButton.OK, MessageBoxImage.Warning);
-            return;
-        }
-
         string projectFolder = Path.Combine(location, folderName);
         if (Directory.Exists(projectFolder) && Directory.EnumerateFileSystemEntries(projectFolder).Any())
         {
@@ -145,7 +114,7 @@ public partial class NewProjectWindow : Window
             {
                 ProjectId = id,
                 ProjectName = projectName,
-                Platform = platformItem.Content?.ToString() ?? "Windows",
+                Platform = "All", // the platform is chosen at Build
                 CreatedAtUtc = DateTime.UtcNow
             };
 

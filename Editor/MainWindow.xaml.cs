@@ -1230,6 +1230,8 @@ public partial class MainWindow : Window
             MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        var platform = new BuildPlatformWindow { Owner = this }; // which platform (BuildPlatformWindow.cs)
+        if (platform.ShowDialog() != true || platform.Picked != BuildPlatform.Windows) return;
         if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         if (!SaveProject()) return;
 

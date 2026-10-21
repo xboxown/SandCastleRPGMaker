@@ -23,10 +23,8 @@
         </Grid>
         <TextBlock x:Name="FullPathPreviewText" Margin="0,0,0,14" Opacity="0.7" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap"/>
 
-        <TextBlock Text="Which platform to target?" FontWeight="SemiBold" Margin="0,0,0,4"/>
-        <ComboBox x:Name="PlatformCombo" Margin="0,0,0,4"/>
         <TextBlock Margin="0,0,0,16" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
-                   Text="Platform choice will determine build limitations (max sprites, colors, sprite/map size, etc). Only Windows is available right now - everything else is reserved for later."/>
+                   Text="One project for every platform: you choose Windows, Linux, Mac, MorphOS, AmigaOS 4 or Amiga 68k when you build the game (Game > Build...)."/>
 
         <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
             <Button Content="Create" Width="90" Margin="4" Click="CreateButton_Click" IsDefault="True"/>
