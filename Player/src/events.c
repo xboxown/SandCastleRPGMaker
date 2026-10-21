@@ -3,6 +3,8 @@
 #include "dialog.h"
 #include "world.h"
 #include "items.h"
+#include "script.h"
+#include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,17 +28,21 @@ typedef struct Owner
     int itemCategory, itemId;   /* a container's or book's own pages (By Pickup / Drop Item) */
     Page *pages; int pageCount;
     List talk;
+    int eventId;                /* a map event's Id */
+    cJSON *data;                /* the character's (or item's) own data */
 } Owner;
 
 static Owner *owners; static int ownerCount;
-
-typedef struct Var { char *name; double value; } Var;
-static Var *vars; static int varCount, varCap;
 
 typedef struct VarDef { int id, type; const char *name; } VarDef;
 static VarDef *varDefs; static int varDefCount;
 
 static cJSON *playerCharacter; /* the main player's character (its stats) */
+static cJSON *statsJson, *currenciesJson, *objectsJson;
+
+/* Common Events (System Settings): a named list of commands, run from anywhere with Call Common Event. */
+typedef struct Common { int id; const char *name; cJSON *parameters; List list; } Common;
+static Common *commons; static int commonCount;
 
 /* How many times each reply was picked (a reply's Cycle). */
 typedef struct Picked { const Cmd *showText; int replyId, count; } Picked;
@@ -51,20 +57,8 @@ static const char *param(const Cmd *c, const char *k) { return str(c->params, k)
 
 /* ---------------- Variables and switches (one store by name, as the engine's) ---------------- */
 
-static double get_var(const char *name)
-{
-    for (int i = 0; i < varCount; i++) if (strcmp(vars[i].name, name) == 0) return vars[i].value;
-    return 0;
-}
-
-static void set_var(const char *name, double value)
-{
-    for (int i = 0; i < varCount; i++) if (strcmp(vars[i].name, name) == 0) { vars[i].value = value; return; }
-    if (varCount == varCap) { varCap = varCap ? varCap * 2 : 64; vars = (Var *)realloc(vars, sizeof(Var) * (size_t)varCap); }
-    size_t n = strlen(name) + 1;
-    vars[varCount].name = (char *)malloc(n); memcpy(vars[varCount].name, name, n);
-    vars[varCount++].value = value;
-}
+static double get_var(const char *name) { return script_get_number(name); }
+static void set_var(const char *name, double value) { script_set_number(name, value); }
 
 static int parse_number(const char *s, double *out)
 {
@@ -127,7 +121,7 @@ void events_load(void)
     cJSON_ArrayForEach(e, events)
     {
         Owner *o = &owners[ownerCount++];
-        o->name = str(e, "Name"); o->isMapEvent = 1;
+        o->name = str(e, "Name"); o->isMapEvent = 1; o->eventId = num(e, "Id", 0); o->data = e;
         o->x = num(e, "X", 0); o->y = num(e, "Y", 0); o->floor = num(e, "Floor", 1);
         o->characterId = -1;
         read_pages(o, get(e, "EventPages"));
@@ -135,7 +129,7 @@ void events_load(void)
     cJSON_ArrayForEach(e, characters)
     {
         Owner *o = &owners[ownerCount++];
-        o->name = str(e, "Name"); o->characterId = num(e, "Id", -1);
+        o->name = str(e, "Name"); o->characterId = num(e, "Id", -1); o->data = e;
         read_pages(o, get(e, "EventPages"));
         o->talk = read_list(get(e, "TalkCommands"));
         if (flag(e, "IsTestPlayer")) playerCharacter = e;
@@ -150,6 +144,12 @@ void events_load(void)
             read_pages(o, get(e, "EventPages"));
         }
     items_load();
+    cJSON *common = get(get(project, "Settings"), "CommonEvents");
+    commons = (Common *)calloc((size_t)cJSON_GetArraySize(common) + 1, sizeof(Common));
+    cJSON_ArrayForEach(e, common) commons[commonCount++] = (Common){ num(e, "Id", -1), str(e, "Name"), get(e, "Parameters"), read_list(get(e, "Commands")) };
+    statsJson = get(get(project, "Stats"), "Stats");
+    currenciesJson = get(get(project, "Currencies"), "Currencies");
+    objectsJson = get(get(project, "Objects"), "Objects");
     cJSON *defs = get(get(project, "Variables"), "Variables");
     varDefs = (VarDef *)calloc((size_t)(cJSON_GetArraySize(defs) + 1), sizeof(VarDef));
     cJSON_ArrayForEach(e, defs) varDefs[varDefCount++] = (VarDef){ num(e, "Id", -1), num(e, "Type", 0), str(e, "Name") };
@@ -317,14 +317,31 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 
 /* ---------------- Running commands ---------------- */
 
-enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION };
+enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD };
 enum { A_PICKUP = 1, A_DROP };
+
+typedef struct Loop { const Cmd *opener; int count, total; } Loop;
+
+/* A command list being run - the event's own, or a Common Event it called (Root: the event's own). */
+typedef struct CallFrame
+{
+    const List *list;
+    int pc;
+    int returns[16][2], returnCount;
+    Loop loops[16]; int loopCount;
+} CallFrame;
+
+#define MAX_CALL_DEPTH 40
 
 typedef struct Run
 {
     int used;
     const List *list;
     int pc;
+    Loop loops[16]; int loopCount;
+    CallFrame *callers; int depth;       /* the lists that called Common Events, innermost last */
+    char owner[48];                  /* whose event it is (self switches): "event:3", "char:2", "global" */
+    const Cmd *untilCmd; double untilWaited, untilTimeout; /* Wait Until */
     int activator, byStepping;   /* whoever set it off (an actor; -1 = the player), and whether by walking over it */
     int returns[16][2], returnCount;
     int waiting; double timerMs;
@@ -469,7 +486,58 @@ static Picked *picked_of(const Cmd *showText, int id)
     return &picked[pickedCount++];
 }
 
-static void end_run(Run *r) { r->used = 0; r->cinema = 0; }
+static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; }
+
+/* ---------------- Formulas in commands ---------------- */
+
+/* A command's formula box: its value (a box set to "Words": the words as typed). Errors go to Game.log; the value is then 0. */
+static Value formula(const Cmd *c, const char *key)
+{
+    char mode[64];
+    snprintf(mode, sizeof mode, "%sMode", key);
+    if (strcmp(param(c, mode), "Words") == 0) return value_text(param(c, key));
+    Value v;
+    char error[200];
+    if (!script_eval(param(c, key), &v, error, sizeof error))
+    {
+        char line[320];
+        snprintf(line, sizeof line, "Script error in %s: %s", c->type >= 0 && c->type < C_COUNT ? COMMAND_NAMES[c->type] : "a formula", error);
+        game_log(line);
+        return value_number(0);
+    }
+    return v;
+}
+
+static double formula_number(const Cmd *c, const char *key) { return value_number_of(formula(c, key)); }
+
+static Value value_of_text(const char *f)
+{
+    Value v;
+    char error[200];
+    if (!script_eval(f, &v, error, sizeof error))
+    {
+        char line[320];
+        snprintf(line, sizeof line, "Script error in Formula: %s", error);
+        game_log(line);
+        return value_number(0);
+    }
+    return v;
+}
+
+/* While / Wait Until: its formula, or a game condition (Advance IF's - not in the player yet). */
+static int condition_of(const Cmd *c)
+{
+    if (strcmp(param(c, "Mode"), "Game") == 0) { log_once(205, "A While / Wait Until on a game condition isn't in the player yet (taken as false)."); return 0; }
+    return value_truth(formula(c, "Formula"));
+}
+
+/* Sets a variable if a name was given (an optional counter left empty is skipped). */
+static void set_named(const char *name, Value v)
+{
+    const char *t = name;
+    while (*t == ' ') t++;
+    if (*t) script_set(name, v);
+}
 
 static void reply_chosen(void *context, int id)
 {
@@ -567,31 +635,6 @@ static int category_of(const char *name)
     return strcmp(name, "Object") == 0 ? CAT_OBJECT : strcmp(name, "Container") == 0 ? CAT_CONTAINER : strcmp(name, "Book") == 0 ? CAT_BOOK : -1;
 }
 
-/* A formula's value as words. The player reads quoted words, numbers and variable names so far (the full formula language comes with the script commands). */
-static void formula_text(const char *f, char *out, size_t size)
-{
-    while (*f == ' ') f++;
-    size_t n = strlen(f);
-    while (n && f[n - 1] == ' ') n--;
-    if (n >= 2 && f[0] == '"' && f[n - 1] == '"')
-    {
-        size_t k = 0;
-        for (size_t i = 1; i + 1 < n && k + 1 < size; i++)
-        {
-            if (f[i] == '"' && f[i + 1] == '"' && i + 2 < n) { out[k++] = '"'; i++; continue; } /* "" inside: one quote */
-            out[k++] = f[i];
-        }
-        out[k] = 0;
-        return;
-    }
-    char name[96];
-    snprintf(name, sizeof name, "%.*s", (int)n, f);
-    double v;
-    if (parse_number(name, &v)) { snprintf(out, size, "%.15g", v); return; }
-    log_once(204, "A formula the player can't read yet was taken as a variable's value (full formulas come with the script commands).");
-    snprintf(out, size, "%.15g", get_var(name));
-}
-
 static void start_walk(Run *r, int actor, int x, int y, int beside)
 {
     r->walker = actor; r->goalX = x; r->goalY = y; r->goalFloor = 0; r->beside = beside;
@@ -684,6 +727,155 @@ static void give_item(Run *r, const Cmd *c)
         if (!partyHelps && !saidCant) { say_line(r, c, "CantCarryText", giver); saidCant = 1; }
         put_down(gifts[g], receiver, -1, -1);
     }
+}
+
+/* "Player", "Self" / "Activator", a character's id, or its name (ScriptCharacter). */
+static int script_actor(const Run *r, Value who)
+{
+    const char *t = value_text_of(who);
+    while (*t == ' ') t++;
+    if (!*t || !strcmp(t, "Self") || !strcmp(t, "self") || !strcmp(t, "Activator")) return r && r->activator >= 0 ? r->activator : 0;
+    if (!strcmp(t, "Player") || !strcmp(t, "player")) return 0;
+    double id;
+    if (value_try_number(who, &id)) return world_actor_by_character((int)id);
+    for (int i = 0; i < ownerCount; i++)
+        if (!owners[i].isMapEvent && owners[i].itemCategory == 0)
+        {
+            const char *a = owners[i].name, *b = t;
+            while (*a && *b && ((*a | 32) == (*b | 32))) { a++; b++; }
+            if (!*a && !*b) return world_actor_by_character(owners[i].characterId);
+        }
+    return -1;
+}
+
+static cJSON *character_data(int characterId)
+{
+    for (int i = 0; i < ownerCount; i++) if (!owners[i].isMapEvent && owners[i].itemCategory == 0 && owners[i].characterId == characterId) return owners[i].data;
+    return NULL;
+}
+
+/* A stat by its kind (Hits 6, Strength 1...), or by name; NULL when none. */
+static const char *stat_value(int characterId, int kind, const char *name)
+{
+    cJSON *s, *values = get(character_data(characterId), "StatValues");
+    cJSON_ArrayForEach(s, statsJson)
+    {
+        int match = name ? (strlen(name) && !strcmp(str(s, "Name"), name)) : num(s, "Kind", 0) == kind;
+        if (name && !match)
+        {
+            const char *a = str(s, "Name"), *b = name;
+            while (*a && *b && ((*a | 32) == (*b | 32))) { a++; b++; }
+            match = !*a && !*b;
+        }
+        if (!match) continue;
+        char key[16];
+        snprintf(key, sizeof key, "%d", num(s, "Id", -1));
+        cJSON *v = get(values, key);
+        return cJSON_IsString(v) ? v->valuestring : NULL;
+    }
+    return NULL;
+}
+
+static Run *functionRun; /* whose event a formula is worked out for */
+
+/* The game's formula functions (GameTestWindow.GameFunction). */
+int events_game_function(const char *name, const Value *args, int count, Value *out)
+{
+    Run *r = functionRun;
+    int who = script_actor(r, count > 0 ? args[0] : value_text("Self"));
+    int id = who >= 0 ? world_actor_character(who) : -1;
+    if (!strcmp(name, "hp") || !strcmp(name, "maxhp"))
+    {
+        const char *v = who >= 0 ? stat_value(id, !strcmp(name, "hp") ? 6 : 1, NULL) : NULL;
+        *out = value_number(v ? atoi(v) : 0);
+        return 1;
+    }
+    if (!strcmp(name, "stat"))
+    {
+        const char *v = who >= 0 && count >= 2 ? stat_value(id, 0, value_text_of(args[1])) : NULL;
+        double n;
+        *out = !v ? value_number(0) : (value_try_number(value_text(v), &n) ? value_number(n) : value_text(v));
+        return 1;
+    }
+    if (!strcmp(name, "x") || !strcmp(name, "y") || !strcmp(name, "floorof"))
+    {
+        int x = -1, y = -1, f = 1;
+        if (who >= 0) world_actor_cell(who, &x, &y, &f);
+        *out = value_number(name[0] == 'x' ? x : name[0] == 'y' ? y : f);
+        return 1;
+    }
+    if (!strcmp(name, "name")) { cJSON *d = character_data(id); *out = value_text(d ? str(d, "Name") : ""); return 1; }
+    if (!strcmp(name, "isdead")) { *out = value_number(0); return 1; } /* nobody dies in the player yet */
+    if (!strcmp(name, "inparty")) { *out = value_number(who >= 0 && items_in_party(id)); return 1; }
+    if (!strcmp(name, "partysize"))
+    {
+        int n = 0;
+        for (int a = 0; a < world_actor_count(); a++) if (items_in_party(world_actor_character(a))) n++;
+        *out = value_number(n);
+        return 1;
+    }
+    if (!strcmp(name, "facing")) { static const char *F[8] = { "North", "NorthEast", "East", "SouthEast", "South", "SouthWest", "West", "NorthWest" }; int f = who >= 0 ? world_actor_facing(who) : 4; *out = value_text(F[f & 7]); return 1; }
+    if (!strcmp(name, "gold")) { *out = value_number(items_party_money(objectsJson, currenciesJson)); return 1; }
+    if (!strcmp(name, "items"))
+    {
+        int n = 0;
+        cJSON *o;
+        if (count >= 1)
+            cJSON_ArrayForEach(o, objectsJson)
+            {
+                const char *a = str(o, "Name"), *b = value_text_of(args[0]);
+                while (*a && *b && ((*a | 32) == (*b | 32))) { a++; b++; }
+                if (!*a && !*b) n += items_party_count(CAT_OBJECT, num(o, "Id", -1));
+            }
+        *out = value_number(n);
+        return 1;
+    }
+    if (!strcmp(name, "self"))
+    {
+        char key[64];
+        snprintf(key, sizeof key, "%s|%c", r ? r->owner : "global", count > 0 ? (char)(value_text_of(args[0])[0] & ~32) : 'A');
+        *out = value_number(script_self_switch(key));
+        return 1;
+    }
+    if (!strcmp(name, "hour") || !strcmp(name, "minute") || !strcmp(name, "day"))
+    {
+        log_once(206, "hour() / minute() / day() wait for the game clock in the player (0 till then).");
+        *out = value_number(0);
+        return 1;
+    }
+    if (!strcmp(name, "combat") || !strcmp(name, "paperdollopen")) { *out = value_number(0); return 1; }
+    return 0;
+}
+
+/* Get Game Data: one thing about the game into a variable. */
+static void get_game_data(Run *r, const Cmd *c)
+{
+    int who = actor_for(r, param(c, "Who"));
+    char whoKey[16];
+    snprintf(whoKey, sizeof whoKey, "%d", who >= 0 ? world_actor_character(who) : -1);
+    if (who == 0) snprintf(whoKey, sizeof whoKey, "Player");
+    Value args[2] = { value_text(whoKey), value_text(param(c, "StatName")) }, v;
+    const char *what = param(c, "What");
+    functionRun = r;
+    int ok = 1;
+    if (!strcmp(what, "X (cell)")) events_game_function("x", args, 1, &v);
+    else if (!strcmp(what, "Y (cell)")) events_game_function("y", args, 1, &v);
+    else if (!strcmp(what, "Floor")) events_game_function("floorof", args, 1, &v);
+    else if (!strcmp(what, "HP")) events_game_function("hp", args, 1, &v);
+    else if (!strcmp(what, "Max HP")) events_game_function("maxhp", args, 1, &v);
+    else if (!strcmp(what, "Stat")) events_game_function("stat", args, 2, &v);
+    else if (!strcmp(what, "Gold (all money)")) events_game_function("gold", args, 0, &v);
+    else if (!strcmp(what, "Item count")) v = value_number(who >= 0 && category_of(param(c, "Category")) >= 0 ? items_count(world_actor_character(who), category_of(param(c, "Category")), atoi(param(c, "ItemId"))) : 0);
+    else if (!strcmp(what, "Name")) events_game_function("name", args, 1, &v);
+    else if (!strcmp(what, "Is dead")) events_game_function("isdead", args, 1, &v);
+    else if (!strcmp(what, "Is in party")) events_game_function("inparty", args, 1, &v);
+    else if (!strcmp(what, "Party size")) events_game_function("partysize", args, 0, &v);
+    else if (!strcmp(what, "Hour") || !strcmp(what, "Minute") || !strcmp(what, "Day")) events_game_function("hour", args, 0, &v);
+    else if (!strcmp(what, "Map name")) v = value_text(world_map_name());
+    else if (!strcmp(what, "Leader's name")) { args[0] = value_text("Player"); events_game_function("name", args, 1, &v); }
+    else if (!strcmp(what, "Facing")) events_game_function("facing", args, 1, &v);
+    else ok = 0;
+    if (ok) set_named(param(c, "Variable"), v);
 }
 
 /* A command that isn't control flow; 0 = it waits (the run stops here till it's done). */
@@ -787,11 +979,46 @@ static int execute(Run *r, const Cmd *c)
         case C_ShowBark:
         {
             int actor = actor_for(r, param(c, "Who"));
-            char words[200];
-            formula_text(param(c, "Value"), words, sizeof words);
-            double seconds = 0.5;
-            parse_number(param(c, "Seconds"), &seconds);
+            const char *words = value_text_of(formula(c, "Value"));
+            double seconds = formula_number(c, "Seconds");
             if (actor >= 0) world_bark(actor, words, (int)((seconds > 0.5 ? seconds : 0.5) * 1000));
+            return 1;
+        }
+        case C_ControlSelfSwitch:
+        {
+            char key[64], letter[8];
+            const char *l = param(c, "Letter");
+            while (*l == ' ') l++;
+            snprintf(letter, sizeof letter, "%c", *l ? (char)((*l >= 'a' && *l <= 'z') ? *l - 32 : *l) : 'A');
+            snprintf(key, sizeof key, "%s|%s", r->owner, letter);
+            script_set_self_switch(key, strcmp(param(c, "Value"), "Off") != 0);
+            return 1;
+        }
+        case C_GetGameData:
+            get_game_data(r, c);
+            return 1;
+        case C_RemoveItem:
+        {
+            int category = category_of(param(c, "Category")), itemId = atoi(param(c, "ItemId"));
+            int wanted = (int)formula_number(c, "Quantity");
+            if (category < 0) return 1;
+            if (wanted < 1) wanted = 1;
+            int left = wanted;
+            Item *taken[100];
+            for (int a = 0; a < world_actor_count() && left > 0; a++)
+            {
+                int id = world_actor_character(a);
+                if (strcmp(param(c, "FromParty"), "True") == 0 ? !items_in_party(id) : a != actor_for(r, param(c, "Who"))) continue;
+                while (left > 0)
+                {
+                    int have = items_count(id, category, itemId);
+                    if (have <= 0) break;
+                    int n, take = have < left ? have : left;
+                    if (!items_take(id, category, itemId, take, taken, 100, &n)) break;
+                    for (int k = 0; k < n; k++) items_free(taken[k]);
+                    left -= take;
+                }
+            }
             return 1;
         }
         case C_Teleport:
@@ -919,14 +1146,118 @@ static int action_tick(Run *r, double ms, int *ok)
     return 0;
 }
 
-/* EventCommandInterpreter.Run: on from r->pc till the list ends or something waits. */
+/* ---------------- Loops and Common Events (ScriptRunState) ---------------- */
+
+static int closer_of(int type) { return type == C_While ? C_EndWhile : type == C_RepeatTimes ? C_EndRepeat : type == C_ForEach ? C_EndForEach : type == C_SelectCase ? C_EndSelect : -1; }
+static int opener_of(int type) { return type == C_EndWhile ? C_While : type == C_EndRepeat ? C_RepeatTimes : type == C_EndForEach ? C_ForEach : type == C_EndSelect ? C_SelectCase : -1; }
+static int is_loop_opener(int type) { return type == C_While || type == C_RepeatTimes || type == C_ForEach; }
+
+/* An opener's End line (same indent, after it); the list's end when it's missing. */
+static int find_closer(const List *l, int open)
+{
+    int closer = closer_of(l->cmds[open].type), indent = l->cmds[open].indent;
+    for (int j = open + 1; j < l->count; j++) if (l->cmds[j].indent == indent && l->cmds[j].type == closer) return j;
+    return l->count - 1;
+}
+
+/* An End line's opener (same indent, before it), or -1. */
+static int find_opener(const List *l, int close)
+{
+    int opener = opener_of(l->cmds[close].type), indent = l->cmds[close].indent;
+    for (int j = close - 1; j >= 0; j--) if (l->cmds[j].indent == indent && l->cmds[j].type == opener) return j;
+    return -1;
+}
+
+/* The loop a line is inside (the nearest While / Repeat / For Each whose End is after it), or -1. */
+static int enclosing_loop(const List *l, int index)
+{
+    int indent = l->cmds[index].indent;
+    for (int j = index - 1; j >= 0; j--)
+    {
+        if (l->cmds[j].indent >= indent || !is_loop_opener(l->cmds[j].type)) continue;
+        if (find_closer(l, j) > index) return j;
+        indent = l->cmds[j].indent;
+    }
+    return -1;
+}
+
+static Loop *loop_of(Run *r, const Cmd *opener)
+{
+    for (int i = 0; i < r->loopCount; i++) if (r->loops[i].opener == opener) return &r->loops[i];
+    if (r->loopCount >= 16) return &r->loops[15];
+    Loop *l = &r->loops[r->loopCount++];
+    l->opener = opener; l->count = l->total = 0;
+    return l;
+}
+
+static void clear_loop(Run *r, const Cmd *opener)
+{
+    for (int i = 0; i < r->loopCount; i++) if (r->loops[i].opener == opener) { r->loops[i] = r->loops[--r->loopCount]; return; }
+}
+
+/* For Each: element (or cell) number loop->count into its variables; 0 once past the last. */
+static int for_each_step(const Cmd *c, Loop *loop)
+{
+    const char *name = param(c, "Array");
+    char formula[200];
+    snprintf(formula, sizeof formula, "{%s}", name);
+    Value all = value_of_text(formula);
+    if (strcmp(param(c, "Of"), "Cell of a grid") == 0)
+    {
+        if (all.kind != V_GRID) { char t[200]; snprintf(t, sizeof t, "Script error in For Each: there is no grid called \"%s\"", name); game_log(t); return 0; }
+        Value cols = value_of_text(strcat(strcpy(formula, "columns({"), name) ? strcat(formula, "})") : formula);
+        Value total = value_of_text(strcat(strcat(strcpy(formula, "length({"), name), "})"));
+        int w = (int)value_number_of(cols) > 0 ? (int)value_number_of(cols) : 1;
+        if (loop->count >= (int)value_number_of(total)) return 0;
+        char at[256];
+        snprintf(at, sizeof at, "{%s}[%d, %d]", name, loop->count % w, loop->count / w);
+        set_named(param(c, "Variable"), value_of_text(at));
+        set_named(param(c, "Index"), value_number(loop->count % w));
+        set_named(param(c, "Index2"), value_number(loop->count / w));
+        return 1;
+    }
+    if (all.kind != V_LIST) { char t[200]; snprintf(t, sizeof t, "Script error in For Each: there is no array called \"%s\"", name); game_log(t); return 0; }
+    Value total = value_of_text(strcat(strcat(strcpy(formula, "length({"), name), "})"));
+    if (loop->count >= (int)value_number_of(total)) return 0;
+    char at[256];
+    snprintf(at, sizeof at, "{%s}[%d]", name, loop->count);
+    set_named(param(c, "Variable"), value_of_text(at));
+    set_named(param(c, "Index"), value_number(loop->count));
+    return 1;
+}
+
+/* Into a Common Event: the caller's place kept, the common list from its start. */
+static void call_common(Run *r, const Common *common)
+{
+    if (!r->callers) r->callers = (CallFrame *)calloc(MAX_CALL_DEPTH + 1, sizeof(CallFrame));
+    CallFrame *f = &r->callers[r->depth++];
+    f->list = r->list; f->pc = r->pc;
+    memcpy(f->returns, r->returns, sizeof f->returns); f->returnCount = r->returnCount;
+    memcpy(f->loops, r->loops, sizeof f->loops); f->loopCount = r->loopCount;
+    r->list = &common->list; r->pc = 0; r->returnCount = 0; r->loopCount = 0;
+}
+
+/* Out of a Common Event (its last line, End or Return): back to the caller - 0 when this was the event's own list (the run is over). */
+static int return_from(Run *r)
+{
+    if (r->depth == 0) return 0;
+    CallFrame *f = &r->callers[--r->depth];
+    r->list = f->list; r->pc = f->pc;
+    memcpy(r->returns, f->returns, sizeof r->returns); r->returnCount = f->returnCount;
+    memcpy(r->loops, f->loops, sizeof r->loops); r->loopCount = f->loopCount;
+    return 1;
+}
+
+/* EventCommandInterpreter.Run: on from r->pc till the list ends or something waits (2000 steps a frame at most: a long loop goes on next frame). */
 static void continue_run(Run *r)
 {
-    const List *l = r->list;
     int guard = 0;
+    functionRun = r;
     while (r->used && r->waiting == W_NONE)
     {
-        if (r->pc >= l->count || ++guard > 100000) { end_run(r); return; }
+        const List *l = r->list;
+        if (++guard > 2000) { r->waiting = W_YIELD; return; }
+        if (r->pc >= l->count) { if (return_from(r)) continue; end_run(r); return; }
         /* The end of a pinned reply's branch: back to its Show Text. */
         int pin = -1;
         for (int k = r->returnCount - 1; k >= 0; k--) if (r->returns[k][0] == r->pc) { pin = k; break; }
@@ -935,12 +1266,163 @@ static void continue_run(Run *r)
         const Cmd *c = &l->cmds[r->pc];
         switch (c->type)
         {
-            case C_End: case C_ReturnFromCommon: end_run(r); return;
+            case C_End: case C_ReturnFromCommon:
+                if (c->type == C_ReturnFromCommon)
+                {
+                    const char *v = param(c, "Value");
+                    while (*v == ' ') v++;
+                    if (*v) script_set("Result", formula(c, "Value"));
+                }
+                script_arena_reset();
+                if (return_from(r)) continue;
+                end_run(r);
+                return;
+
+            /* ---- Loops ---- */
+            case C_While:
+            {
+                int go = condition_of(c);
+                script_arena_reset();
+                r->pc = go ? r->pc + 1 : find_closer(l, r->pc) + 1;
+                continue;
+            }
+            case C_EndWhile:
+                r->pc = find_opener(l, r->pc); /* back to its While, which checks again */
+                if (r->pc < 0) r->pc = l->count;
+                continue;
+            case C_RepeatTimes:
+            {
+                int total = (int)floor(formula_number(c, "Count"));
+                script_arena_reset();
+                Loop *loop = loop_of(r, c);
+                loop->count = 1; loop->total = total;
+                if (total < 1) { clear_loop(r, c); r->pc = find_closer(l, r->pc) + 1; continue; }
+                set_named(param(c, "Variable"), value_number(1));
+                r->pc++;
+                continue;
+            }
+            case C_EndRepeat:
+            {
+                int open = find_opener(l, r->pc);
+                if (open < 0) { r->pc++; continue; }
+                Loop *loop = loop_of(r, &l->cmds[open]);
+                if (++loop->count <= loop->total) { set_named(param(&l->cmds[open], "Variable"), value_number(loop->count)); r->pc = open + 1; }
+                else { clear_loop(r, &l->cmds[open]); r->pc++; }
+                continue;
+            }
+            case C_ForEach:
+            {
+                Loop *loop = loop_of(r, c);
+                loop->count = 0;
+                if (for_each_step(c, loop)) r->pc++;
+                else { clear_loop(r, c); r->pc = find_closer(l, r->pc) + 1; }
+                script_arena_reset();
+                continue;
+            }
+            case C_EndForEach:
+            {
+                int open = find_opener(l, r->pc);
+                if (open < 0) { r->pc++; continue; }
+                Loop *loop = loop_of(r, &l->cmds[open]);
+                loop->count++;
+                if (for_each_step(&l->cmds[open], loop)) r->pc = open + 1;
+                else { clear_loop(r, &l->cmds[open]); r->pc++; }
+                script_arena_reset();
+                continue;
+            }
+            case C_BreakLoop:
+            {
+                int open = enclosing_loop(l, r->pc);
+                if (open < 0) { r->pc++; continue; }
+                clear_loop(r, &l->cmds[open]);
+                r->pc = find_closer(l, open) + 1;
+                continue;
+            }
+            case C_NextLoop:
+            {
+                int open = enclosing_loop(l, r->pc);
+                r->pc = open < 0 ? r->pc + 1 : find_closer(l, open); /* its End moves the loop on */
+                continue;
+            }
+
+            /* ---- Select Case ---- */
+            case C_SelectCase:
+            {
+                Value value = formula(c, "Formula");
+                if (value.kind == V_TEXT) value = value_text(value.s);
+                int indent = c->indent, target = -1, otherwise = -1, end = l->count - 1;
+                for (int j = r->pc + 1; j < l->count; j++)
+                {
+                    if (l->cmds[j].indent != indent) continue;
+                    int t = l->cmds[j].type;
+                    if (t == C_EndSelect) { end = j; break; }
+                    if (t == C_CaseElse && otherwise < 0) otherwise = j + 1;
+                    if (t == C_Case && target < 0)
+                    {
+                        static char parts[64][256];
+                        int n = script_split_list(param(&l->cmds[j], "Formula"), parts, 64);
+                        for (int k = 0; k < n && target < 0; k++) if (value_compare(value_of_text(parts[k]), value) == 0) target = j + 1;
+                    }
+                }
+                script_arena_reset();
+                r->pc = target >= 0 ? target : otherwise >= 0 ? otherwise : end + 1;
+                continue;
+            }
+            case C_Case: case C_CaseElse:
+            {
+                /* the end of the Case that ran: on past End Select */
+                int end = -1;
+                for (int j = r->pc + 1; j < l->count && end < 0; j++) if (l->cmds[j].indent == c->indent && l->cmds[j].type == C_EndSelect) end = j;
+                r->pc = end < 0 ? l->count : end + 1;
+                continue;
+            }
+            case C_EndSelect: r->pc++; continue;
+
+            case C_WaitUntil:
+            {
+                int met = condition_of(c);
+                script_arena_reset();
+                r->pc++;
+                if (met) continue;
+                r->untilCmd = c; r->untilWaited = 0;
+                r->untilTimeout = 0;
+                parse_number(param(c, "Timeout"), &r->untilTimeout);
+                if (r->untilTimeout < 0) r->untilTimeout = 0;
+                r->waiting = W_UNTIL;
+                return;
+            }
+
+            case C_CallCommonEvent:
+            {
+                int id = atoi(param(c, "CommonEventId"));
+                const Common *common = NULL;
+                for (int k = 0; k < commonCount; k++) if (commons[k].id == id) common = &commons[k];
+                r->pc++;
+                if (!common) { game_log("Call Common Event: it isn't there any more - going on."); continue; }
+                if (r->depth >= MAX_CALL_DEPTH)
+                {
+                    char t[200];
+                    snprintf(t, sizeof t, "Script error in Call Common Event: \"%s\" calls Common Events more than %d deep (one calling itself?)", common->name, MAX_CALL_DEPTH);
+                    game_log(t);
+                    continue;
+                }
+                static char parts[64][256];
+                int n = script_split_list(param(c, "Args"), parts, 64);
+                Value values[64];
+                for (int k = 0; k < n; k++) { values[k] = value_of_text(parts[k]); }
+                int k = 0;
+                cJSON *p;
+                cJSON_ArrayForEach(p, common->parameters) { if (k < n && cJSON_IsString(p)) set_named(p->valuestring, values[k]); k++; }
+                script_arena_reset();
+                call_common(r, common);
+                continue;
+            }
+
             case C_ConditionalBranchSwitch: case C_ConditionalBranchVariable: case C_AdvancedIf:
                 r->pc = branch_true(c) ? r->pc + 1 : find_else_or_end(l, r->pc) + 1;
                 continue;
             case C_Else: r->pc = find_end_branch(l, r->pc) + 1; continue;
-            case C_EndBranch: case C_Label: case C_Comment: case C_EndChoices: r->pc++; continue;
+            case C_EndBranch: case C_Label: case C_EndChoices: r->pc++; continue;
             case C_GoToLabel:
             {
                 const char *name = param(c, "LabelName");
@@ -974,13 +1456,23 @@ static void continue_run(Run *r)
                 /* fall through */
             default:
                 r->pc++;
-                if (!execute(r, c)) return;
+                functionRun = r;
+                if (script_data_command(c->type, c->params)) continue; /* variables, texts, arrays, grids, the debug log */
+                {
+                    int goesOn = execute(r, c);
+                    script_arena_reset();
+                    if (!goesOn) return;
+                }
                 continue;
         }
     }
 }
 
-static void start_run(const List *list, int activator, int byStepping)
+static void start_run_as(const List *list, int activator, int byStepping, const char *owner);
+
+static void start_run(const List *list, int activator, int byStepping) { start_run_as(list, activator, byStepping, NULL); }
+
+static void start_run_as(const List *list, int activator, int byStepping, const char *owner)
 {
     if (!list->count) return;
     for (int i = 0; i < MAX_RUNS; i++)
@@ -989,6 +1481,9 @@ static void start_run(const List *list, int activator, int byStepping)
             Run *r = &runs[i];
             memset(r, 0, sizeof *r);
             r->used = 1; r->list = list; r->activator = activator; r->byStepping = byStepping;
+            if (owner) snprintf(r->owner, sizeof r->owner, "%s", owner);
+            else if (activator > 0) snprintf(r->owner, sizeof r->owner, "char:%d", world_actor_character(activator));
+            else snprintf(r->owner, sizeof r->owner, "global");
             continue_run(r);
             return;
         }
@@ -1011,7 +1506,15 @@ static int fire_pages(Owner *o, int just, int activator, int byStepping)
         }
         if (!conditions_met(c, just, p->fired, -1)) continue;
         p->fired++;
-        if (p->list.count > 0) { start_run(&p->list, activator, byStepping); return 1; }
+        if (p->list.count > 0)
+        {
+            char key[48];
+            if (o->isMapEvent) snprintf(key, sizeof key, "event:%d", o->eventId);
+            else if (o->itemCategory) snprintf(key, sizeof key, "itemdef:%d:%d", o->itemCategory, o->itemId);
+            else snprintf(key, sizeof key, "char:%d", o->characterId);
+            start_run_as(&p->list, activator, byStepping, key);
+            return 1;
+        }
     }
     return 0;
 }
@@ -1049,6 +1552,21 @@ void events_update(double ms, int paused)
     {
         stayMs += 1000;
         if (eventUnder) fire_pages(eventUnder, T_STAY, -1, 0);
+    }
+    /* Every frame, paused or not: long loops go on, Wait Untils are checked. */
+    for (int i = 0; i < MAX_RUNS; i++)
+    {
+        Run *r = &runs[i];
+        if (r->used && r->waiting == W_YIELD) { r->waiting = W_NONE; continue_run(r); }
+        if (r->used && r->waiting == W_UNTIL)
+        {
+            r->untilWaited += ms;
+            int timedOut = r->untilTimeout > 0 && r->untilWaited >= r->untilTimeout * 1000;
+            functionRun = r;
+            int met = !timedOut && condition_of(r->untilCmd);
+            script_arena_reset();
+            if (timedOut || met) { r->waiting = W_NONE; continue_run(r); }
+        }
     }
     if (paused) return;
     /* Waits run while the game does. */
@@ -1089,7 +1607,9 @@ void events_update(double ms, int paused)
                 p->met = met;
                 if (!met || was) continue;
                 p->fired++;
-                start_run(&p->list, actor, 0);
+                char key[48];
+                snprintf(key, sizeof key, "char:%d", o->characterId);
+                start_run_as(&p->list, actor, 0, key);
             }
         }
     }

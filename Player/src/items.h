@@ -49,6 +49,12 @@ void items_park(int uid, Item *item);
 Item *items_unpark(int uid, int category, int itemId, int quantity);
 void items_repark(int uid, Item *item);
 
+/* How many of it they carry / the party carries (stacks counted), and the party's money in the first currency's units. */
+int items_count(int characterId, int category, int itemId);
+int items_party_count(int category, int itemId);
+#include "../third_party/cJSON.h"
+double items_party_money(cJSON *objects, cJSON *currencies);
+
 /* Its name, for the log. */
 const char *items_name(int category, int itemId);
 

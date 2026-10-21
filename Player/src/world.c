@@ -80,7 +80,7 @@ typedef struct Actor
     uint32_t poseSince;             /* when it began (its animation from the start) */
 } Actor;
 
-static char error_text[512], title[256];
+static char error_text[512], title[256], mapName[128];
 static int mapW, mapH, tileW = 32, tileH = 32;
 static int *floors[MAX_FLOORS + 1]; /* floors[1] = the ground; NULL = none painted */
 static char sheetNames[8][128]; static int sheetCount;
@@ -349,6 +349,7 @@ int world_load(const char *folder)
     if (!root) { snprintf(error_text, sizeof error_text, "game.json is damaged."); return 0; }
     cJSON *project = get(root, "Project"), *map = get(project, "Map");
     snprintf(title, sizeof title, "%s", str(get(project, "Manifest"), "ProjectName"));
+    snprintf(mapName, sizeof mapName, "%s", str(get(project, "Map"), "MapName"));
     if (!map) { snprintf(error_text, sizeof error_text, "The game has no map."); return 0; }
     read_objects(project);
 
@@ -1316,3 +1317,6 @@ void world_draw_barks(uint32_t *pixels)
         font_draw(f, pixels, x, y, barks[i].text, 0);
     }
 }
+
+const char *world_map_name(void) { return mapName; }
+int world_actor_facing(int actor) { Actor *a = actor_of(actor); return a ? a->facing : DIR_S; }

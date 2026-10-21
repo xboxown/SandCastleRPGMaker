@@ -32,6 +32,8 @@ int world_set_pose(int actor, const char *pose, int facing);
 int world_teleport(int actor, int x, int y);
 void world_player_cell(int *x, int *y, int *onFloor);
 void world_turn_to_player(int actor);
+const char *world_map_name(void);
+int world_actor_facing(int actor);
 /* Walk To Location: a way there (A* by Exult's walking rules), walked at the player's pace; 0 when there's none just now. floor 0 = any. */
 int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);

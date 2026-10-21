@@ -451,3 +451,45 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
 
 /* Put back where it was found (a pick-up that was refused). */
 void items_repark(int uid, Item *item) { items_park(uid, item); }
+
+int items_count(int characterId, int category, int itemId)
+{
+    Carrier *k = carrier_of(characterId);
+    return k ? count_in(k->items, k->count, category, itemId) : 0;
+}
+
+int items_party_count(int category, int itemId)
+{
+    int n = 0;
+    for (int i = 0; i < carrierCount; i++)
+        if (carriers[i].isPlayer || carriers[i].inParty) n += count_in(carriers[i].items, carriers[i].count, category, itemId);
+    return n;
+}
+
+/* PartyMoney: every coin the party carries, a Money object's count times its currency's worth. */
+static double money_in(Item **list, int count, cJSON *currencies)
+{
+    double total = 0;
+    for (int i = 0; i < count; i++)
+    {
+        cJSON *d = list[i]->category == CAT_OBJECT ? def_of(CAT_OBJECT, list[i]->itemId) : NULL;
+        if (d && num(d, "Type", 0) == OT_MONEY)
+        {
+            double worth = 1;
+            cJSON *c;
+            cJSON_ArrayForEach(c, currencies) if (num(c, "Id", -2) == num(get(d, "Money"), "CurrencyId", -1)) worth = dbl(c, "Value");
+            total += (list[i]->quantity > 0 ? list[i]->quantity : 1) * worth;
+        }
+        total += money_in(list[i]->contents, list[i]->count, currencies);
+    }
+    return total;
+}
+
+double items_party_money(cJSON *objects, cJSON *currencies)
+{
+    (void)objects;
+    double total = 0;
+    for (int i = 0; i < carrierCount; i++)
+        if (carriers[i].isPlayer || carriers[i].inParty) total += money_in(carriers[i].items, carriers[i].count, currencies);
+    return total;
+}
