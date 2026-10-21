@@ -1,4 +1,5 @@
 #include "script.h"
+#include "world.h"
 #include "commands.h"
 #include <ctype.h>
 #include <math.h>
@@ -995,6 +996,28 @@ static void execute(void)
             set_var("Variable", value_number(r));
             break;
         }
+        case C_GridFromMap:
+        {
+            /* the tiles of a map area into a grid (-1 = none) */
+            int x0 = atoi(param("X")), y0 = atoi(param("Y")), fl = param("Floor")[0] ? atoi(param("Floor")) : 1;
+            ScriptGrid *g = new_grid(name_of("Grid"), clampi(I("Width"), 1, 2000), clampi(I("Height"), 1, 2000), value_number(-1));
+            for (int y = 0; y < g->rows; y++)
+                for (int x = 0; x < g->cols; x++) *cell(g, x, y) = value_number(world_get_tile(x0 + x, y0 + y, fl));
+            break;
+        }
+        case C_GridToMap:
+        {
+            /* a grid back onto the map: each cell a tile (below 0: left as it is) */
+            int x0 = atoi(param("X")), y0 = atoi(param("Y")), fl = param("Floor")[0] ? atoi(param("Floor")) : 1;
+            ScriptGrid *g = grid_of(name_of("Grid"));
+            for (int y = 0; y < g->rows; y++)
+                for (int x = 0; x < g->cols; x++)
+                {
+                    int tile = (int)value_number_of(*cell(g, x, y));
+                    if (tile >= 0) world_set_tile(x0 + x, y0 + y, fl, tile);
+                }
+            break;
+        }
         case C_CreateGrid: new_grid(name_of("Grid"), clampi(I("Columns"), 0, 2000), clampi(I("Rows"), 0, 2000), E("Fill")); break;
         case C_SetCell: { ScriptGrid *g = grid_of(name_of("Grid")); int x = I("X"), y = I("Y"); put(cell(g, x, y), E("Value")); break; }
         case C_GetCell: { ScriptGrid *g = grid_of(name_of("Grid")); int x = I("X"), y = I("Y"); set_var("Variable", *cell(g, x, y)); break; }
@@ -1084,7 +1107,7 @@ int script_data_command(int type, cJSON *params)
         case C_Calculate: case C_TextOperation: case C_SwapVariables: case C_CreateArray: case C_SetElement: case C_GetElement: case C_AddToArray:
         case C_InsertAt: case C_RemoveAt: case C_ArrayLength: case C_FindInArray: case C_ReorderArray: case C_FillArray: case C_ClearArray:
         case C_CopyArray: case C_ArrayStatistic: case C_CreateGrid: case C_SetCell: case C_GetCell: case C_FillGrid: case C_GridSize:
-        case C_ResizeGrid: case C_FindInGrid: case C_GridLineToArray: case C_ArrayToGridLine: case C_DebugLog: case C_Comment:
+        case C_ResizeGrid: case C_FindInGrid: case C_GridLineToArray: case C_ArrayToGridLine: case C_DebugLog: case C_Comment: case C_GridFromMap: case C_GridToMap:
             break;
         default: return 0;
     }

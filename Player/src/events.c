@@ -481,11 +481,19 @@ int events_actor_busy(int actor)
     return 0;
 }
 
+static int savingForbidden, combatForbidden, keysForbidden, controlsLocked, quitRequested;
+
 int events_cinema(void)
 {
+    if (controlsLocked) return 1; /* Allow Controls > Forbidden: as in Cinema Mode */
     for (int i = 0; i < MAX_RUNS; i++) if (runs[i].used && runs[i].cinema) return 1;
     return 0;
 }
+
+int events_saving_forbidden(void) { return savingForbidden; }
+int events_combat_forbidden(void) { return combatForbidden; }
+int events_keys_forbidden(void) { return keysForbidden; }
+int events_quit_requested(void) { return quitRequested; }
 
 static void continue_run(Run *r);
 
@@ -888,6 +896,226 @@ static cJSON *character_data(int characterId)
 }
 
 /* A stat by its kind (Hits 6, Strength 1...), or by name; NULL when none. */
+/* ---------------- Change Stat, Reset Stat, Train ---------------- */
+
+static cJSON *project_json(void) { return get((cJSON *)world_json(), "Project"); }
+
+static cJSON *stat_by_id(int id)
+{
+    cJSON *s;
+    cJSON_ArrayForEach(s, statsJson) if (num(s, "Id", -2) == id) return s;
+    return NULL;
+}
+
+static const char *stat_text(int characterId, cJSON *stat)
+{
+    char key[16];
+    snprintf(key, sizeof key, "%d", num(stat, "Id", -1));
+    const char *v = cJSON_GetStringValue(get(get(character_data(characterId), "StatValues"), key));
+    return v ? v : "";
+}
+
+static void set_stat_text(int characterId, cJSON *stat, const char *value)
+{
+    cJSON *values = get(character_data(characterId), "StatValues");
+    if (!values) return;
+    char key[16];
+    snprintf(key, sizeof key, "%d", num(stat, "Id", -1));
+    if (get(values, key)) cJSON_ReplaceItemInObject(values, key, cJSON_CreateString(value));
+    else cJSON_AddStringToObject(values, key, value);
+}
+
+static int stat_int(int characterId, cJSON *stat)
+{
+    char *end;
+    const char *v = stat_text(characterId, stat);
+    long n = strtol(v, &end, 10);
+    return *v && !*end ? (int)n : 0;
+}
+
+/* SetIntStat: never below 0; Hits going down is a hurt (the flash; at 0 a knock-out or death); more experience may level up. */
+static void set_stat_int(int characterId, cJSON *stat, int value, const char *cause)
+{
+    if (value < 0) value = 0;
+    int old = stat_int(characterId, stat), kind = num(stat, "Kind", 0);
+    if (kind == 6 && value < old) { vitals_damage(characterId, old - value, cause); return; }
+    char text[16];
+    snprintf(text, sizeof text, "%d", value);
+    set_stat_text(characterId, stat, text);
+    if (kind == 9) { int actor = world_actor_by_character(characterId); if (actor >= 0) combat_gain_experience(actor, 0); } /* CheckLevel */
+}
+
+typedef struct StatChange { int characterId, delta; cJSON *stat; char before[128], after[128]; long until; } StatChange;
+static StatChange statChanges[128]; static int statChangeCount;
+
+static void add_stat_change(int characterId, cJSON *stat, int delta, const char *before, const char *after, long until)
+{
+    if (statChangeCount >= 128) return;
+    StatChange *s = &statChanges[statChangeCount++];
+    s->characterId = characterId; s->stat = stat; s->delta = delta; s->until = until;
+    snprintf(s->before, sizeof s->before, "%s", before ? before : "");
+    snprintf(s->after, sizeof s->after, "%s", after ? after : "");
+}
+
+/* A Change Stat taken back: an Integer stat moves back by what it moved; a String stat goes back if nothing changed it since. */
+static void take_back(int i)
+{
+    StatChange s = statChanges[i];
+    memmove(&statChanges[i], &statChanges[i + 1], sizeof(StatChange) * (size_t)(statChangeCount - i - 1));
+    statChangeCount--;
+    if (vitals_dead(s.characterId)) return;
+    if (num(s.stat, "Type", 0) == 1) { if (!strcmp(stat_text(s.characterId, s.stat), s.after)) set_stat_text(s.characterId, s.stat, s.before); return; }
+    set_stat_int(s.characterId, s.stat, stat_int(s.characterId, s.stat) - s.delta, "a change of stats wearing off");
+}
+
+static void expire_stat_changes(void)
+{
+    long now = total_minutes();
+    for (int i = statChangeCount - 1; i >= 0; i--) if (statChanges[i].until >= 0 && now >= statChanges[i].until) take_back(i);
+}
+
+/* Everyone in the party, as actors (the main character first). */
+static int party_actors(int *out, int max)
+{
+    int n = 0;
+    for (int a = 0; a < world_actor_count() && n < max; a++)
+        if (!world_actor_gone(a) && (a == 0 || items_in_party(world_actor_character(a)))) out[n++] = a;
+    return n;
+}
+
+/* TakeFromParty: this many of an object out of what the party carries, whoever has them. */
+static void party_take(int objectId, int quantity)
+{
+    int party[32], n = party_actors(party, 32);
+    for (int i = 0; i < n && quantity > 0; i++)
+    {
+        int id = world_actor_character(party[i]), have = items_count_any(id, CAT_OBJECT, objectId);
+        int take = have < quantity ? have : quantity;
+        if (take <= 0) continue;
+        Item *out[100]; int got = 0;
+        if (items_take(id, CAT_OBJECT, objectId, take, out, 100, &got)) { for (int k = 0; k < got; k++) items_free(out[k]); quantity -= take; }
+    }
+}
+
+/* The Money objects of a currency. */
+static int money_objects(int currencyId, int *out, int max)
+{
+    int n = 0;
+    cJSON *o;
+    cJSON_ArrayForEach(o, get(get(project_json(), "Objects"), "Objects"))
+        if (num(o, "Type", -1) == 6 && num(get(o, "Money"), "CurrencyId", -2) == currencyId && n < max) out[n++] = num(o, "Id", -1);
+    return n;
+}
+
+/* Ultima 7's trainers: training points (else "thou dost need more experience"), then the price, then the gains. */
+static void train(Run *r, const Cmd *c)
+{
+    int trainee = actor_for(r, param(c, "Trainee")), id = trainee >= 0 ? world_actor_character(trainee) : -1;
+    const char *who = param(c, "Trainer");
+    int trainer = who[0] ? actor_for(r, who) : -1;
+    if (id < 0 || vitals_dead(id)) { lastResult = 0; return; }
+    int points = atoi(param(c, "Points")), price = atoi(param(c, "Price"));
+    if (points < 0) points = 0;
+    if (price < 0) price = 0;
+    cJSON *pointsStat = NULL, *s;
+    cJSON_ArrayForEach(s, statsJson) if (num(s, "Kind", 0) == 10) pointsStat = s;
+    char line[200];
+    if (points > 0 && (!pointsStat || stat_int(id, pointsStat) < points))
+    {
+        snprintf(line, sizeof line, "%s hasn't enough training points (%d of %d).", str(character_data(id), "Name"), pointsStat ? stat_int(id, pointsStat) : 0, points);
+        game_log(line);
+        say_line(r, c, "NoExperienceText", trainer);
+        lastResult = 0;
+        return;
+    }
+    int ids[32], n = param(c, "CurrencyId")[0] ? money_objects(atoi(param(c, "CurrencyId")), ids, 32) : 0, have = 0;
+    for (int i = 0; i < n; i++) have += items_party_count_any(CAT_OBJECT, ids[i]);
+    if (price > 0 && have < price)
+    {
+        snprintf(line, sizeof line, "The party hasn't enough money (%d of %d).", have, price);
+        game_log(line);
+        say_line(r, c, "NoMoneyText", trainer);
+        lastResult = 0;
+        return;
+    }
+    int owed = price;
+    for (int i = 0; i < n && owed > 0; i++)
+    {
+        int count = items_party_count_any(CAT_OBJECT, ids[i]), take = count < owed ? count : owed;
+        if (take > 0) { party_take(ids[i], take); owed -= take; }
+    }
+    if (pointsStat && points > 0) { char t[16]; snprintf(t, sizeof t, "%d", stat_int(id, pointsStat) - points); set_stat_text(id, pointsStat, t); }
+    cJSON *p;
+    snprintf(line, sizeof line, "%s trains:", str(character_data(id), "Name"));
+    cJSON_ArrayForEach(p, c->params)
+    {
+        if (strncmp(p->string, "Gain_", 5)) continue;
+        cJSON *stat = stat_by_id(atoi(p->string + 5));
+        int gain = atoi(cJSON_GetStringValue(p) ? cJSON_GetStringValue(p) : "0");
+        if (!stat || num(stat, "Type", 0) != 0 || gain <= 0) continue;
+        char t[16];
+        snprintf(t, sizeof t, "%d", stat_int(id, stat) + gain);
+        set_stat_text(id, stat, t);
+        size_t len = strlen(line);
+        snprintf(line + len, sizeof line - len, " %s +%d", str(stat, "Name"), gain);
+    }
+    game_log(line);
+    say_line(r, c, "Description", trainer);
+    char key[32];
+    snprintf(key, sizeof key, "trained:%d", world_character_source(id));
+    conditions_record(key);
+}
+
+/* Exchange Currency: the party's money of one currency into another, by the rate (and the changer's cut). */
+static int exchange_currency(int fromId, int toId, const char *amount)
+{
+    cJSON *currencies = get(get(project_json(), "Currencies"), "Currencies"), *from = NULL, *to = NULL, *cu;
+    cJSON_ArrayForEach(cu, currencies) { if (num(cu, "Id", -2) == fromId) from = cu; if (num(cu, "Id", -2) == toId) to = cu; }
+    if (!from || !to) return 0;
+    int fromIds[32], nf = money_objects(fromId, fromIds, 32), toIds[1], nt = money_objects(toId, toIds, 1);
+    char line[200];
+    if (!nf || !nt) { snprintf(line, sizeof line, "Exchange Currency: there's no Money object of %s (Object Editor).", str(nf ? to : from, "Name")); game_log(line); return 0; }
+    int have = 0;
+    for (int i = 0; i < nf; i++) have += items_party_count_any(CAT_OBJECT, fromIds[i]);
+    int give = !strcmp(amount, "All") ? have : atoi(amount) < have ? atoi(amount) : have;
+    if (give <= 0) { snprintf(line, sizeof line, "You have no %s to change.", str(from, "Name")); game_log(line); return 0; }
+    /* RateOf: the pair's own rate (or the reverse), else by the currencies' values */
+    double rate = 0, cut = 0;
+    cJSON *rt;
+    cJSON_ArrayForEach(rt, get(get(project_json(), "Currencies"), "Rates"))
+    {
+        double v = get(rt, "Rate") ? get(rt, "Rate")->valuedouble : 0;
+        if (v <= 0 || rate > 0) continue;
+        if (num(rt, "FromId", -2) == fromId && num(rt, "ToId", -2) == toId) { rate = v; cut = get(rt, "CutPercent") ? get(rt, "CutPercent")->valuedouble : 0; }
+    }
+    if (rate <= 0)
+        cJSON_ArrayForEach(rt, get(get(project_json(), "Currencies"), "Rates"))
+        {
+            double v = get(rt, "Rate") ? get(rt, "Rate")->valuedouble : 0;
+            if (v > 0 && rate <= 0 && num(rt, "FromId", -2) == toId && num(rt, "ToId", -2) == fromId) { rate = 1 / v; cut = get(rt, "CutPercent") ? get(rt, "CutPercent")->valuedouble : 0; }
+        }
+    if (rate <= 0)
+    {
+        double fv = get(from, "Value") ? get(from, "Value")->valuedouble : 1, tv = get(to, "Value") ? get(to, "Value")->valuedouble : 1;
+        rate = tv > 0 ? fv / tv : 1;
+    }
+    cut = cut < 0 ? 0 : cut > 100 ? 100 : cut;
+    int receive = (int)floor(give * rate * (1 - cut / 100.0)), left = give;
+    for (int i = 0; i < nf && left > 0; i++)
+    {
+        int count = items_party_count_any(CAT_OBJECT, fromIds[i]), take = count < left ? count : left;
+        if (take > 0) { party_take(fromIds[i], take); left -= take; }
+    }
+    if (receive > 0)
+    {
+        Item *money = items_make(CAT_OBJECT, toIds[0], receive);
+        if (!items_give_to(world_actor_character(0), money)) put_down(money, 0, -1, -1);
+    }
+    snprintf(line, sizeof line, "You change %d %s into %d %s.", give, str(from, "Name"), receive, str(to, "Name"));
+    game_log(line);
+    return 1;
+}
+
 static const char *stat_value(int characterId, int kind, const char *name)
 {
     cJSON *s, *values = get(character_data(characterId), "StatValues");
@@ -1148,6 +1376,70 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_ChangeStat:
+        {
+            int actor = actor_for(r, param(c, "Who")), id = actor >= 0 ? world_actor_character(actor) : -1;
+            cJSON *stat = stat_by_id(atoi(param(c, "StatId")));
+            if (id < 0 || vitals_dead(id) || !stat || !param(c, "StatId")[0]) { lastResult = 0; return 1; }
+            long until = -1;
+            int duration = atoi(param(c, "Duration"));
+            if (!strcmp(param(c, "Temporary"), "True") && duration > 0) until = total_minutes() + (!strcmp(param(c, "Unit"), "Hours") ? duration * 60L : duration);
+            if (num(stat, "Type", 0) == 1 /* String */)
+            {
+                const char *before = stat_text(id, stat);
+                char old[256];
+                snprintf(old, sizeof old, "%s", before);
+                set_stat_text(id, stat, param(c, "Value"));
+                add_stat_change(id, stat, 0, old, param(c, "Value"), until);
+            }
+            else
+            {
+                char *end;
+                long amount = strtol(param(c, "Value"), &end, 10);
+                if (end == param(c, "Value") || *end) { lastResult = 0; return 1; }
+                int old = stat_int(id, stat);
+                const char *op = param(c, "Operation");
+                set_stat_int(id, stat, !strcmp(op, "Set") ? (int)amount : !strcmp(op, "Subtract") ? old - (int)amount : old + (int)amount, "a change of stats");
+                int delta = stat_int(id, stat) - old; /* what it really moved (0 is the floor) */
+                if (delta) add_stat_change(id, stat, delta, NULL, NULL, until);
+            }
+            return 1;
+        }
+        case C_ResetStat:
+        {
+            int actor = actor_for(r, param(c, "Who")), id = actor >= 0 ? world_actor_character(actor) : -1;
+            if (id < 0) { lastResult = 0; return 1; }
+            const char *which = param(c, "StatId");
+            for (int i = statChangeCount - 1; i >= 0; i--) /* newest first, so a String stat ends as it began */
+                if (statChanges[i].characterId == id && (!strcmp(which, "All") || num(statChanges[i].stat, "Id", -1) == atoi(which))) take_back(i);
+            return 1;
+        }
+        case C_Train: train(r, c); return 1;
+        case C_ExchangeCurrency: lastResult = exchange_currency(atoi(param(c, "FromId")), atoi(param(c, "ToId")), param(c, "Amount")); return 1;
+        case C_PauseHere: return 1; /* a shipped game: it just goes on */
+        case C_AllowSaving: savingForbidden = !strcmp(param(c, "Value"), "Forbidden"); return 1;
+        case C_AllowControls:
+        {
+            int forbid = !strcmp(param(c, "Value"), "Forbidden");
+            const char *what = param(c, "What");
+            if (!strcmp(what, "Combat mode")) { combatForbidden = forbid; if (forbid && combat_mode()) combat_toggle_mode(); }
+            else if (!strcmp(what, "Keys")) keysForbidden = forbid;
+            else controlsLocked = forbid;
+            return 1;
+        }
+        case C_QuitGame: quitRequested = 1; return 1;
+        case C_ShowError:
+        {
+            Value detail = formula(c, "Detail");
+            game_error((int)formula_number(c, "Number"), value_text_of(detail));
+            return 1;
+        }
+        case C_GameOver:
+            if (combat_mode()) combat_toggle_mode();
+            vitals_set_game_over();
+            combat_death_music();
+            game_log("Game over.");
+            return 1;
         case C_Attack:
         {
             const char *who = param(c, "Attacker"), *whom = param(c, "Target");
@@ -2394,6 +2686,7 @@ void events_player_moved(void)
 
 void events_update(double ms, int paused)
 {
+    expire_stat_changes();
     /* By Stay: each second while the player stands on it (a timer of its own - it runs while a box is up too). */
     if ((stayMs -= ms) <= 0)
     {

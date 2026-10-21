@@ -54,6 +54,7 @@ void world_thing_look(int uid, const Sprite *sprite);
 void world_thing_move(int uid, int x, int y, int onFloor);
 void world_door_set(int uid, const char *state);
 int world_set_tile(int x, int y, int onFloor, int tile);
+int world_get_tile(int x, int y, int onFloor);
 int world_effect_start(const Sprite *sprite, int follows, int cellX, int cellY);   /* follows: an actor, or -1 for the cell */
 void world_effect_stop(int id);
 void world_hit_outline(int actor);

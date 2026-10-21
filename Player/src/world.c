@@ -2372,3 +2372,10 @@ void world_effect_once(const Sprite *sprite, int cellX, int cellY)
     int id = world_effect_start(sprite, -1, cellX, cellY);
     if (id >= 0) effects[id].until = lastMs + (uint32_t)(sprite->totalMs > 0 ? sprite->totalMs : 500);
 }
+
+/* The tile a floor shows at a cell (-1: none), as Change Tile sets it. */
+int world_get_tile(int x, int y, int onFloor)
+{
+    if (x < 0 || y < 0 || x >= mapW || y >= mapH || onFloor < 1 || onFloor > MAX_FLOORS || !floors[onFloor]) return -1;
+    return floors[onFloor][y * mapW + x];
+}

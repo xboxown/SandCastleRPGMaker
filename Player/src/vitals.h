@@ -14,6 +14,7 @@ int vitals_unconscious(int characterId);
 int vitals_incapacitated(int characterId);
 int vitals_food(int characterId);
 int vitals_game_over(void);
+void vitals_set_game_over(void);
 int vitals_has(int characterId, int ailment);
 int vitals_inflict(int characterId, int ailment);
 void vitals_cure(int characterId, int ailment);

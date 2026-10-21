@@ -52,6 +52,12 @@ double events_variable(const char *name);
 int events_last_result(void);
 
 void events_knocked_out(int characterId);
+int events_saving_forbidden(void);
+int events_combat_forbidden(void);
+int events_keys_forbidden(void);   /* Allow Controls > Keys: only walking */
+int events_quit_requested(void);
+/* An error by number (System Settings > Errors): its words, the maker's else the engine's. */
+void game_error(int number, const char *detail);
 
 /* Game.log (main.c). */
 void game_log(const char *line);

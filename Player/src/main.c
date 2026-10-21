@@ -204,7 +204,7 @@ int main(int argc, char **argv)
                     case KEY_DOWN: held[3] = down ? ++order : 0; break;
                     case KEY_ESCAPE: if (down) running = 0; break;
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
-                    case KEY_C: if (down && !vitals_game_over()) combat_toggle_mode(); break; /* Exult: C for combat */
+                    case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
                     default: break;
                 }
             }
@@ -271,6 +271,7 @@ int main(int argc, char **argv)
         screen_update(seconds * 1000);
         int paused = dialog_showing(); /* a box up: the game waits, as in an Exult conversation */
         events_update(seconds * 1000, paused);
+        if (events_quit_requested()) running = 0; /* Quit Game */
         if (!dialog_showing())
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */

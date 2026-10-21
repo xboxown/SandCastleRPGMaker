@@ -547,3 +547,6 @@ void vitals_update(double ms)
         update_tile_effects(v, ms);
     }
 }
+
+/* Game Over (the command): from now on the player can do nothing. */
+void vitals_set_game_over(void) { gameOver = 1; }
