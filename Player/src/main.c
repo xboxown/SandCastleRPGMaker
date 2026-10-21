@@ -170,7 +170,7 @@ int main(int argc, char **argv)
     }
     note("Window open. Starting.");
     { FILE *quiet = fopen("nosound", "rb"); if (quiet) { fclose(quiet); noSound = 1; } } /* a file called nosound beside the game: no sound */
-    { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula only (paula)."); } } /* a file called paula: audio.device, never AHI */
+    { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula (paula)."); } } /* a file called paula: audio.device, never AHI */
     { FILE *p = fopen("ahi", "rb"); if (p) { fclose(p); platform_audio_route(2); note("Sound through AHI only (ahi)."); } }
     note(noSound ? "Sound off (nosound)." : "Starting the sound...");
     sound_load(folder, !noSound);

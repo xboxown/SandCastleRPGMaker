@@ -1,7 +1,7 @@
 /*
- * Sound out on the Amiga 68k: AHI (ahi.device: any sound card, or Paula
- * through AHI's own drivers) when it's there, else Paula itself through
- * audio.device - two channels (left, right), 8-bit from chip memory. A sound
+ * Sound out on the Amiga 68k: Paula itself through audio.device by default
+ * (8-bit, its own crisp sound - chosen for this build; the Vampire build has
+ * its own); AHI (ahi.device) only when asked for ("ahi") - two channels (left, right), 8-bit from chip memory. A sound
  * task of its own keeps two buffers going (AHI's linked writes; queued
  * writes on Paula) and asks the mixer for each one in turn; the mixer and
  * the game share their state under a semaphore. It runs at the game's own
@@ -26,7 +26,7 @@ static AudioFill audioFill;
 static struct SignalSemaphore lock;
 static volatile int running, quit, started;
 static const char *device = "none";
-static int route; /* 0: AHI, else Paula; 1: Paula only; 2: AHI only */
+static int route = 1; /* the 68k build plays through Paula (8-bit, its own sound - the user's choice); 2: AHI only (an "ahi" file or argument); 0: AHI, else Paula */
 void platform_audio_route(int which) { route = which; }
 const char *platform_audio_name(void) { return device; }
 static struct Task *mainTask;
