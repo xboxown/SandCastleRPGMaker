@@ -119,6 +119,7 @@ static void start_path(Npc *n, int x, int y)
 static void set_schedule_and_loc(Npc *n, const Entry *e, int x, int y, int delayMs)
 {
     if (n->entry == e && (n->walkingToSchedule || (n->activity == e->type && tile_distance(n->actor, x, y) <= 16))) return; /* don't interrupt */
+    world_stand_up(n->actor); /* off the chair / out of bed */
     stop_walking(n);
     n->entry = e; n->destX = x; n->destY = y;
     n->activity = 0;
@@ -162,8 +163,14 @@ static void begin_activity(Npc *n)
     switch (e->type)
     {
         case S_SLEEP:
-            /* Sleep_schedule: a bed within 24 tiles (beds come with furniture); none: lies down here */
-            if (!world_set_pose(n->actor, "Sleeping", facing)) world_set_pose(n->actor, "Idle", facing);
+            /* Sleep_schedule: the nearest free bed within 24 tiles; none: lies down here */
+            if (world_go_to_furniture(n->actor, 1, 0)) n->walking = world_walking(n->actor);
+            else if (!world_set_pose(n->actor, "Sleeping", facing)) world_set_pose(n->actor, "Idle", facing);
+            break;
+        case S_SIT:
+            world_set_pose(n->actor, "Idle", facing);
+            if (world_go_to_furniture(n->actor, 0, 0)) n->walking = world_walking(n->actor);
+            else n->waitMs = 1000 + rnd(1000); /* Sit_schedule: none free, try again */
             break;
         case S_DANCE: world_set_pose(n->actor, "Dancing", facing); n->waitMs = 2 * STD_DELAY; break;
         case S_LOITER: case S_WANDER: world_set_pose(n->actor, "Idle", facing); n->waitMs = rnd(2000); break;
@@ -172,7 +179,7 @@ static void begin_activity(Npc *n)
             world_set_pose(n->actor, "Idle", facing);
             events_run_commands(e->custom, n->actor);
             break;
-        case S_SIT: case S_WAITER: case S_EAT: case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
+        case S_WAITER: case S_EAT: case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
             events_log_once(301, "Sit, Waiter, Eat at Inn and the work schedules aren't in the player yet - they stand at their spot.");
             world_set_pose(n->actor, "Idle", facing);
             break;
@@ -263,6 +270,17 @@ static void now_what(Npc *n)
         case S_HPACE: pace(n, 1); break;
         case S_VPACE: pace(n, 0); break;
         case S_DANCE: dance(n); break;
+        case S_SIT:
+            if (!world_seated(n->actor))
+            {
+                if (world_go_to_furniture(n->actor, 0, 0)) n->walking = world_walking(n->actor);
+                else n->waitMs = 1000 + rnd(1000);
+            }
+            break;
+        case S_SLEEP:
+            if (!world_seated(n->actor) && !world_go_to_furniture(n->actor, 1, 0)) world_set_pose(n->actor, "Sleeping", -1); /* no bed: the floor */
+            else if (!world_seated(n->actor)) n->walking = world_walking(n->actor);
+            break;
         default: break;
     }
 }
@@ -271,6 +289,9 @@ static void now_what(Npc *n)
 static void finish_path(Npc *n)
 {
     n->walking = 0;
+    int seat = world_arrive_furniture(n->actor); /* was heading for a seat or bed: sits / lies down */
+    if (seat > 0) return;
+    if (seat < 0) { n->waitMs = 1000 + rnd(1000); return; } /* taken meanwhile: look again shortly */
     world_set_pose(n->actor, n->activity == S_DANCE ? "Dancing" : "Idle", -1);
     n->waitMs = n->activity == S_LOITER ? 2 * STD_DELAY + rnd(2000) : n->activity == S_WANDER ? rnd(2000) : n->activity == S_DANCE ? 2 * STD_DELAY : STD_DELAY;
     /* stopped walking: it stands a moment, long enough to be clicked */

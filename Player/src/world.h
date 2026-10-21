@@ -42,6 +42,31 @@ int world_map_h(void);
 int world_walk_blocked(int actor);
 int world_on_screen(double px, double py, double margin);
 void world_view_center(double *x, double *y);
+/* Chairs and beds: sitting / lying down, getting up, the Sit and Sleep schedules, the main character's walk-up-and-sit. */
+int world_go_to_furniture(int actor, int bed, int onlyUid);
+int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken meanwhile, 0 wasn't heading for one */
+void world_stand_up(int actor);
+int world_seated(int actor);
+int world_seated_on(int actor);
+int world_player_sit(int uid);
+int world_player_sitting_down(void);
+void world_cancel_player_sit(void);
+void world_hit(int sx, int sy, int *actor, int *uid);
+int world_thing_type(int uid);
+/* A chair's or bed's own event pages (By Enter / By Exit when someone sits or gets up) - events.c. */
+void world_furniture_event(int uid, int trigger, int actor);
+/* Using things: doors, lights, covers. */
+int world_thing_object_id(int uid);
+int world_thing_instance(int uid);
+void world_door_state(int uid, int *open, int *locked);
+void world_door_open(int uid);
+int world_door_close(int uid);                    /* 0: someone is in the doorway */
+void world_door_set_locked(int uid, int locked);
+int world_light_lit(int uid);
+void world_light_set(int uid, int lit);
+int world_bed_under_cover(int uid);
+int world_nearest_bed(void);
+void world_bark_thing(int uid, const char *text, int ms);
 int world_actor_facing(int actor);
 /* Walk To Location: a way there (A* by Exult's walking rules), walked at the player's pace; 0 when there's none just now. floor 0 = any. */
 int world_walk_to(int actor, int x, int y, int floor, int beside);

@@ -11,6 +11,7 @@
 #include "events.h"
 #include "lighting.h"
 #include "schedules.h"
+#include "use.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -47,6 +48,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         what++;
         if (*what == 'T') { int actor = world_actor_by_character(atoi(what + 1)); if (actor > 0) events_talk(actor); }
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
+        else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else
         {
@@ -171,9 +173,8 @@ int main(int argc, char **argv)
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
                 else if (twice && !events_cinema())
                 {
-                    /* Double-click: talk to the character under the pointer (Exult's Actor::activate). */
-                    int actor = world_actor_at(e.mouseX, e.mouseY);
-                    if (actor > 0) events_talk(actor);
+                    /* Double-click: talk to the character, use the thing under the pointer. */
+                    use_at(e.mouseX, e.mouseY);
                 }
             }
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)

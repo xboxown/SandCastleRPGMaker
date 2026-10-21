@@ -25,6 +25,7 @@
 #include <string.h>
 
 char *read_whole_file(const char *path, long *length);
+void game_log(const char *line);
 
 #define UNIT 8
 #define LIFT_SHIFT 4
@@ -48,6 +49,8 @@ typedef struct ObjectDef
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
     int brightness, gives;            /* a light: how bright, what it gives (Exult levels, the dusk look, daylight) */
+    int spotCount[8]; double spotX[8][8], spotY[8][8]; /* a chair's seats / a bed's sleeping places, per facing (picture pixels) */
+    int coverId;                      /* a bed's cover object (-1: none) */
 } ObjectDef;
 
 typedef struct Thing
@@ -59,6 +62,7 @@ typedef struct Thing
     int uid, category, itemId, quantity, instanceId; /* what it is (ReferencedItemCategory: Book 3, Object 4, Container 5) */
     int body, gone;                                  /* its solid box (-1: none); picked up / taken away */
     int locked;                                      /* a door: locked (IsLockedRuntime) */
+    int fixedFrame;                                  /* a frame shown instead of the animation (frame + 1; 0 = animate) - a bed's cover */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -131,7 +135,15 @@ static void read_objects(cJSON *project)
         d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
         d->lit = link_of(get(light, "LitSprite")); d->lightStartsLit = flag(light, "StartsLit");
         d->brightness = num(light, "Brightness", 0); d->gives = num(light, "Gives", 0);
-        cJSON_ArrayForEach(f, furniture) d->facing[dir_of(f->string)] = link_of(get(f, "Sprite"));
+        cJSON_ArrayForEach(f, furniture)
+        {
+            int dir = dir_of(f->string);
+            d->facing[dir] = link_of(get(f, "Sprite"));
+            cJSON *spot;
+            cJSON_ArrayForEach(spot, get(f, "Spots"))
+                if (d->spotCount[dir] < 8) { d->spotX[dir][d->spotCount[dir]] = get(spot, "X") ? get(spot, "X")->valuedouble : 0; d->spotY[dir][d->spotCount[dir]++] = get(spot, "Y") ? get(spot, "Y")->valuedouble : 0; }
+        }
+        d->coverId = num(get(o, "Furniture"), "CoverObjectId", -1);
         cJSON_ArrayForEach(f, turn) d->turned[dir_of(f->string)] = link_of(f);
     }
 }
@@ -165,6 +177,7 @@ static void thing_box(const Thing *t, Body *b)
 }
 
 static int nextUid = 1, thingCap, bodyCap;
+static void spawn_bed_covers(void);
 static cJSON *containersJson, *booksJson;
 
 static void add_thing_body(Thing *t)
@@ -483,6 +496,7 @@ int world_load(const char *folder)
         b->left = al; b->top = at; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ;
     }
     gameJson = root; /* kept: the events run from it */
+    spawn_bed_covers();
     cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
     return 1;
 }
@@ -490,6 +504,10 @@ int world_load(const char *folder)
 /* ---------------- Each frame ---------------- */
 
 static int keysHeld;
+static void player_sit_update(double seconds);
+int world_seated(int actor);
+void world_stand_up(int actor);
+void world_cancel_player_sit(void);
 int world_keys_held(void) { return keysHeld; }
 static Actor *actor_of(int i);
 void world_walks_update(double seconds);
@@ -499,6 +517,8 @@ int world_walking(int actor);
 void world_update(int dx, int dy, double seconds)
 {
     keysHeld = dx || dy;
+    if (dx || dy) { if (world_seated(0)) world_stand_up(0); world_cancel_player_sit(); } /* moving gets up again */
+    player_sit_update(seconds);
     if (dx || dy) world_walk_cancel(0); /* a direction key takes over from a walk an event began */
     if (world_walking(0)) { /* walked by the event (world_walks_update) */ }
     else if (dx == 0 && dy == 0) { player.walkingNow = 0; }
@@ -581,6 +601,7 @@ typedef struct Drawn
     double key; const Picture *picture; int x, y, w, h;
     int hasBox, wall, occludes, hangs, xl, xr, yf, yn, zb, zt, flat;
     int actor; /* the character drawn (world_actor_at), -1 for anything else */
+    int thing; /* the thing drawn (its uid), 0 for anything else */
 } Drawn;
 
 static int by_key(const void *a, const void *b)
@@ -633,6 +654,7 @@ static void set_box(Drawn *d, int left, int top, int width, int depth, int lift,
 }
 
 static Drawn *drawn; static int drawnCap, drawnCount;
+static void seated_draw_order(int count);
 static uint32_t lastMs;
 
 static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
@@ -690,7 +712,8 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     {
         const Thing *t = &things[i];
         if (t->gone || t->z >= ceiling) continue;
-        const Picture *pic = sprite_picture_at(look_of(t), ms);
+        const Sprite *ls = look_of(t);
+        const Picture *pic = t->fixedFrame && ls && t->fixedFrame - 1 < ls->frameCount ? frame_picture(&ls->frames[t->fixedFrame - 1]) : sprite_picture_at(ls, ms);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT;
@@ -705,6 +728,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         d->wall = t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == 12 /* Window */);
         d->occludes = t->def && t->def->occludes;
         d->hangs = t->hangs;
+        d->thing = t->uid;
     }
     /* Characters and the player. */
     for (int i = -1; i < npcCount; i++)
@@ -758,6 +782,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         }
         d->key = key < lowest ? key : lowest;
     }
+    seated_draw_order(count);
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
     for (int i = 0; i < count; i++) blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
     drawnCount = count;
@@ -1008,7 +1033,7 @@ static Walk *walks; /* one per actor */
 
 static Walk *walk_of(int actor)
 {
-    if (!walks) walks = (Walk *)calloc((size_t)npcCount + 1, sizeof(Walk));
+    if (!walks) walks = (Walk *)calloc((size_t)(npcCount + 1), sizeof(Walk));
     return actor >= 0 && actor <= npcCount ? &walks[actor] : NULL;
 }
 
@@ -1303,9 +1328,12 @@ void world_bark(int actor, const char *text, int ms)
     barks[slot].until = lastMs + (uint32_t)(ms > 0 ? ms : 1000);
 }
 
+static void draw_thing_barks(uint32_t *pixels);
+
 /* Drawn over everything: centred over the head, 2 pixels above the picture (GameTextLabel in the InGameFont). */
 void world_draw_barks(uint32_t *pixels)
 {
+    draw_thing_barks(pixels);
     const Font *f = font_get("InGameFont");
     for (int i = 0; i < 16; i++)
     {
@@ -1357,3 +1385,404 @@ int world_on_screen(double px, double py, double margin)
     return px >= cameraX - margin && px <= cameraX + SCREEN_W + margin && py >= cameraY - margin && py <= cameraY + SCREEN_H + margin;
 }
 void world_view_center(double *x, double *y) { *x = cameraX + SCREEN_W / 2.0; *y = cameraY + SCREEN_H / 2.0; }
+
+/* ---------------- Chairs and beds (GameTestWindow.Furniture, from Exult's Sit / Sleep schedules) ---------------- */
+
+typedef struct Seat { int uid, spot, bed; double fromX, fromY; int fromLift; } Seat;
+static Seat *seats;       /* per actor: uid 0 = not seated */
+static Seat *heading;     /* per actor: the chair or bed it's walking to */
+
+static void seats_ready(void)
+{
+    if (!seats) { seats = (Seat *)calloc((size_t)npcCount + 2, sizeof(Seat)); heading = (Seat *)calloc((size_t)npcCount + 2, sizeof(Seat)); }
+}
+
+/* ResolveDirection: the facing whose look and spots are used - its own, else South, else any set. */
+static int furniture_facing(const ObjectDef *d, int facing)
+{
+    if (d->facing[facing]) return facing;
+    if (d->facing[DIR_S]) return DIR_S;
+    for (int i = 0; i < 8; i++) if (d->facing[i]) return i;
+    return -1;
+}
+
+static int spot_count(const Thing *t)
+{
+    int f = furniture_facing(t->def, t->facing);
+    if (f < 0) return 0;
+    return t->def->spotCount[f] > 0 ? t->def->spotCount[f] : 1; /* none set: one in the middle of its picture */
+}
+
+/* Where someone in this spot has their feet (world pixels, without the lift shift), and the lift. */
+static int spot_position(const Thing *t, int spot, double *x, double *y, int *lift)
+{
+    const Picture *pic = sprite_picture_at(look_of(t), 0);
+    if (!pic || spot < 0 || spot >= spot_count(t)) return 0;
+    int f = furniture_facing(t->def, t->facing);
+    double sx = pic->width / 2.0, sy = pic->height;
+    if (t->def->spotCount[f] > 0) { sx = t->def->spotX[f][spot]; sy = t->def->spotY[f][spot]; }
+    int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
+    double left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT, top = (t->y + 1) * tileH - qh + t->offY * UNIT;
+    double scale = fmin((double)qw / pic->width, (double)qh / pic->height);
+    double insetX = (qw - pic->width * scale) / 2, insetY = (qh - pic->height * scale) / 2;
+    *x = left + insetX + sx * scale; *y = top + insetY + sy * scale; *lift = t->z;
+    return 1;
+}
+
+static int spot_taken(int uid, int spot, int except)
+{
+    for (int a = 0; a <= npcCount; a++)
+        if (a != except && ((seats[a].uid == uid && seats[a].spot == spot) || (heading[a].uid == uid && heading[a].spot == spot))) return 1;
+    return 0;
+}
+
+static int nearest_free_spot(const Thing *t, double x, double y, int who)
+{
+    int best = -1;
+    double bestDistance = 1e30;
+    for (int i = 0; i < spot_count(t); i++)
+    {
+        double px, py; int lift;
+        if (spot_taken(t->uid, i, who) || !spot_position(t, i, &px, &py, &lift)) continue;
+        double d = fabs(px - x) + fabs(py - y);
+        if (d < bestDistance) { bestDistance = d; best = i; }
+    }
+    return best;
+}
+
+static Thing *cover_of(const Thing *bed)
+{
+    if (!bed->def || bed->def->coverId < 0) return NULL;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *c = &things[i];
+        if (!c->gone && c->category == 4 && c->itemId == bed->def->coverId && c->x == bed->x && c->y == bed->y) return c;
+    }
+    return NULL;
+}
+
+/* Exult Sleep_schedule: the cover turned down over a sleeper (its second frame), or the bed made again (its first). */
+static void set_cover(const Thing *bed, int turnedDown) { Thing *c = cover_of(bed); if (c) c->fixedFrame = turnedDown ? 2 : 1; }
+
+static int someone_on(int uid) { for (int a = 0; a <= npcCount; a++) if (seats[a].uid == uid) return 1; return 0; }
+
+/* Sits or lies them down on the spot. */
+static void take_seat(int actor, Thing *t, int spot)
+{
+    Actor *a = actor_of(actor);
+    double x, y; int lift;
+    if (!a || !spot_position(t, spot, &x, &y, &lift)) return;
+    int bed = t->def->type == T_BED;
+    seats[actor] = (Seat){ t->uid, spot, bed, a->px, a->py, a->lift };
+    a->px = x; a->py = y - tileH / 2.0; a->lift = lift;
+    if (a->body >= 0) bodies[a->body].z = -100000; /* in the chair: not in anyone's way as a standing body */
+    int f = furniture_facing(t->def, t->facing);
+    world_set_pose(actor, bed ? "Sleeping" : "Sit", f >= 0 ? f : t->facing);
+    if (bed) set_cover(t, 1);
+    world_furniture_event(t->uid, 9, actor); /* By Enter on the chair or bed */
+}
+
+/* Gets up: back where they stood, standing; a bed is made again. */
+void world_stand_up(int actor)
+{
+    seats_ready();
+    heading[actor].uid = 0;
+    Seat s = seats[actor];
+    if (!s.uid) return;
+    seats[actor].uid = 0;
+    Thing *t = thing_by_uid(s.uid);
+    if (t && s.bed && !someone_on(s.uid)) set_cover(t, 0);
+    Actor *a = actor_of(actor);
+    a->px = s.fromX; a->py = s.fromY; a->lift = s.fromLift;
+    if (a->body >= 0)
+    {
+        int l, tp;
+        foot_at(a, a->px, a->py, &l, &tp);
+        bodies[a->body].left = l; bodies[a->body].top = tp; bodies[a->body].z = a->lift;
+    }
+    world_set_pose(actor, "Idle", -1);
+    if (t) world_furniture_event(t->uid, 11, actor); /* By Exit */
+}
+
+int world_seated(int actor) { seats_ready(); return seats[actor].uid != 0; }
+int world_seated_on(int actor) { seats_ready(); return seats[actor].uid; }
+
+/* Sit_schedule / Sleep_schedule: the nearest free chair (any distance) or bed (within 24 tiles) it can walk to - heading there. 0 if none. */
+int world_go_to_furniture(int actor, int bed, int onlyUid)
+{
+    seats_ready();
+    Actor *a = actor_of(actor);
+    if (!a || !a->human) return 0; /* a rat doesn't take a chair or a bed */
+    int cx = (int)floor(a->px / tileW), cy = (int)floor(a->py / tileH);
+    int range = bed ? (int)floor(24 * 8.0 / tileW + 0.5) : 1 << 30;
+    /* the candidates, nearest first */
+    static int uids[2048], dists[2048];
+    int n = 0;
+    for (int i = 0; i < thingCount && n < 2048; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->def || t->def->type != (bed ? T_BED : T_CHAIR) || (onlyUid && t->uid != onlyUid)) continue;
+        int ax = abs(t->x - cx), ay = abs(t->y - cy);
+        if ((ax > ay ? ax : ay) > range) continue;
+        int d = ax + ay, k = n++;
+        while (k > 0 && dists[k - 1] > d) { uids[k] = uids[k - 1]; dists[k] = dists[k - 1]; k--; }
+        uids[k] = t->uid; dists[k] = d;
+    }
+    for (int i = 0; i < n; i++)
+    {
+        Thing *t = thing_by_uid(uids[i]);
+        int spot = nearest_free_spot(t, a->px, a->py, actor);
+        double px, py; int lift;
+        if (spot < 0 || !spot_position(t, spot, &px, &py, &lift)) continue;
+        int gx = (int)floor(px / tileW), gy = (int)floor((py - 1) / tileH);
+        heading[actor] = (Seat){ t->uid, spot, bed, 0, 0, 0 };
+        if (abs(cx - gx) + abs(cy - gy) <= 1) { world_arrive_furniture(actor); return 1; }
+        if (world_walk_to(actor, gx, gy, 0, 1)) return 1;
+        heading[actor].uid = 0; /* not reachable: the next one */
+    }
+    return 0;
+}
+
+/* Reached the chair or bed it was heading for: sits or lies down (if the spot is still free). 0 when it wasn't heading for one. */
+int world_arrive_furniture(int actor)
+{
+    seats_ready();
+    Seat h = heading[actor];
+    if (!h.uid) return 0;
+    heading[actor].uid = 0;
+    Thing *t = thing_by_uid(h.uid);
+    double x, y; int lift;
+    if (!t || spot_taken(h.uid, h.spot, actor) || !spot_position(t, h.spot, &x, &y, &lift)) return -1; /* taken meanwhile: look again shortly */
+    take_seat(actor, t, h.spot);
+    return 1;
+}
+
+/* ---- The main character: double-clicking a chair or bed - walk up, look at it, turn its way, sit (Exult's sit_down) ---- */
+
+typedef struct PendingSit { int uid, phase; double waitMs, targetX, targetY; } PendingSit;
+static PendingSit pendingSit; /* phase 0 = none, 4 = walking there, 3 = last steps, 1 = looking, 2 = turned */
+
+int world_player_sit(int uid)
+{
+    seats_ready();
+    Thing *t = thing_by_uid(uid);
+    if (!t || !t->def || (t->def->type != T_CHAIR && t->def->type != T_BED)) return 0;
+    if (seats[0].uid) world_stand_up(0);
+    int spot = nearest_free_spot(t, player.px, player.py + tileH / 2.0, 0);
+    double x, y; int lift;
+    if (spot < 0 || !spot_position(t, spot, &x, &y, &lift)) return 0;
+    int gx = (int)floor(x / tileW), gy = (int)floor((y - 1) / tileH), px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
+    pendingSit = (PendingSit){ uid, 4, 0, x, y - tileH / 2.0 };
+    if (abs(px - gx) + abs(py - gy) <= 1) { pendingSit.phase = 3; return 1; }
+    if (!world_walk_to(0, gx, gy, 0, 1)) { pendingSit.phase = 0; return 0; }
+    return 1;
+}
+
+int world_player_sitting_down(void) { return pendingSit.phase != 0; }
+
+static void player_sit_update(double seconds)
+{
+    if (!pendingSit.phase) return;
+    Thing *t = thing_by_uid(pendingSit.uid);
+    if (!t) { pendingSit.phase = 0; return; }
+    if (pendingSit.phase == 4) { if (!world_walking(0)) pendingSit.phase = 3; return; }
+    if (pendingSit.phase == 3)
+    {
+        /* the last steps: toward the seat, one axis at a time; there (or stopped by the chair) - look at it */
+        double rx = pendingSit.targetX - player.px, ry = pendingSit.targetY - player.py;
+        int alongX = fabs(rx) > 0.5;
+        if (!alongX && fabs(ry) <= 0.5) goto look;
+        double remaining = fabs(alongX ? rx : ry), step = fmin(TILES_PER_SECOND * tileW * seconds, remaining);
+        if (step <= 0) return;
+        double nx = player.px + (alongX ? (rx > 0 ? step : -step) : 0), ny = player.py + (alongX ? 0 : (ry > 0 ? step : -step));
+        int l0, t0, l1, t1;
+        player_foot(player.px, player.py, &l0, &t0);
+        player_foot(nx, ny, &l1, &t1);
+        int lift = l1 == l0 && t1 == t0 ? player.lift : try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
+        if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; player.facing = alongX ? (rx > 0 ? DIR_E : DIR_W) : (ry > 0 ? DIR_S : DIR_N); player.walkingNow = 1; return; }
+        if (alongX && fabs(ry) > 0.5) { pendingSit.targetX = player.px; return; }
+    look:
+        player.walkingNow = 0;
+        {
+            const Picture *pic = sprite_picture_at(look_of(t), 0);
+            double cx = t->x * tileW + tileW / 2.0, cy = (t->y + 1) * tileH;
+            (void)pic;
+            double dx = cx - player.px, dy = cy - (player.py + tileH / 2.0);
+            player.facing = fabs(dx) > fabs(dy) ? (dx > 0 ? DIR_E : DIR_W) : (dy > 0 ? DIR_S : DIR_N);
+        }
+        player.shownPose = -1;
+        pendingSit.phase = 1; pendingSit.waitMs = 1000;
+        return;
+    }
+    if ((pendingSit.waitMs -= seconds * 1000) > 0) return;
+    if (pendingSit.phase == 1)
+    {
+        int f = furniture_facing(t->def, t->facing);
+        player.facing = f >= 0 ? f : t->facing; /* turn the way the chair faces */
+        pendingSit.phase = 2; pendingSit.waitMs = 300;
+        return;
+    }
+    pendingSit.phase = 0;
+    /* not actually beside it (the way was blocked): no jumping onto it from across a table */
+    if (fabs(player.px - pendingSit.targetX) > tileW * 1.5 || fabs(player.py - pendingSit.targetY) > tileH * 1.5) { game_log("You can't reach it from here."); return; }
+    int spot = nearest_free_spot(t, player.px, player.py + tileH / 2.0, 0);
+    if (spot < 0) return;
+    take_seat(0, t, spot);
+    if (t->def->type == T_BED) game_log("Sleeping the hours away (the hours slider) isn't in the player yet.");
+}
+
+/* At the start of play: a bed with a cover gets it laid on it (its own object). */
+static void spawn_bed_covers(void)
+{
+    int count = thingCount;
+    for (int i = 0; i < count; i++)
+    {
+        Thing *bed = &things[i];
+        if (bed->gone || !bed->def || bed->def->type != T_BED || bed->def->coverId < 0 || !def_of(bed->def->coverId) || cover_of(bed)) continue;
+        int bx = bed->x, by = bed->y, bz = bed->z, ox = bed->offX, oy = bed->offY, facing = bed->facing;
+        int uid = world_thing_put(4, things[i].def->coverId, 1, bx, by, floor_of(bz));
+        Thing *c = thing_by_uid(uid);
+        if (c) { c->z = bz; c->offX = ox; c->offY = oy; c->facing = facing; c->fixedFrame = 1; }
+    }
+}
+
+void world_cancel_player_sit(void) { pendingSit.phase = 0; }
+
+/* Someone sitting or lying is drawn over their chair or bed, and a bed's cover over its sleeper (or over the empty bed). */
+static void seated_draw_order(int count)
+{
+    seats_ready();
+    for (int i = 0; i < count; i++)
+    {
+        Drawn *d = &drawn[i];
+        if (d->actor < 0 || d->actor > npcCount || !seats[d->actor].uid) continue;
+        Thing *f = thing_by_uid(seats[d->actor].uid);
+        for (int j = 0; j < count; j++)
+            if (drawn[j].thing == seats[d->actor].uid && drawn[j].key + 0.5 > d->key) d->key = drawn[j].key + 0.5;
+        Thing *c = f && seats[d->actor].bed ? cover_of(f) : NULL;
+        if (c) for (int j = 0; j < count; j++) if (drawn[j].thing == c->uid) drawn[j].key = d->key + 0.25;
+    }
+    for (int i = 0; i < count; i++)
+    {
+        Thing *bed = drawn[i].thing ? thing_by_uid(drawn[i].thing) : NULL;
+        if (!bed || !bed->def || bed->def->type != T_BED || someone_on(bed->uid)) continue;
+        Thing *c = cover_of(bed);
+        if (c) for (int j = 0; j < count; j++) if (drawn[j].thing == c->uid && drawn[j].key < drawn[i].key + 0.5) drawn[j].key = drawn[i].key + 0.5;
+    }
+}
+
+/* What a click lands on: the topmost character (actor) or thing (uid) whose picture is under the point. */
+void world_hit(int sx, int sy, int *actor, int *uid)
+{
+    *actor = -1; *uid = 0;
+    for (int i = drawnCount - 1; i >= 0; i--)
+    {
+        const Drawn *d = &drawn[i];
+        if (sx < d->x || sy < d->y || sx >= d->x + d->w || sy >= d->y + d->h) continue;
+        const Picture *p = d->picture;
+        double s = fmin((double)d->w / p->width, (double)d->h / p->height);
+        int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5);
+        int ox = d->x + (d->w - dw) / 2, oy = d->y + (d->h - dh) / 2;
+        if (sx < ox || sy < oy || sx >= ox + dw || sy >= oy + dh) continue;
+        uint32_t c = p->pixels[(size_t)((sy - oy) * p->height / dh) * (size_t)p->width + (size_t)((sx - ox) * p->width / dw)];
+        if ((c >> 24) == 0) continue;
+        if (d->actor >= 0) { *actor = d->actor; return; }
+        if (d->thing) { *uid = d->thing; return; }
+        return; /* the ground or a floor: nothing to use */
+    }
+}
+
+/* What kind of thing it is (ObjectType for objects; -1 for books and containers). */
+int world_thing_type(int uid) { Thing *t = thing_by_uid(uid); return t && t->def ? t->def->type : -1; }
+
+/* ---------------- Using things on the map (doors, lights, covers) ---------------- */
+
+int world_thing_object_id(int uid) { Thing *t = thing_by_uid(uid); return t && t->category == 4 ? t->itemId : -1; }
+int world_thing_instance(int uid) { Thing *t = thing_by_uid(uid); return t ? t->instanceId : 0; }
+
+void world_door_state(int uid, int *open, int *locked)
+{
+    Thing *t = thing_by_uid(uid);
+    *open = t && t->open; *locked = t && t->locked;
+}
+
+void world_door_open(int uid) { Thing *t = thing_by_uid(uid); if (t && t->def && t->def->type == T_DOOR && !t->open) door_set_open(t, 1); }
+
+/* TryCloseDoor: closes it - unless someone is standing in the doorway. */
+int world_door_close(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t || !t->def || t->def->type != T_DOOR || !t->open) return 1;
+    Body b;
+    thing_box(t, &b);
+    for (int k = 0; k <= npcCount; k++)
+    {
+        Actor *o = actor_of(k);
+        int l, tp;
+        foot_at(o, o->px, o->py, &l, &tp);
+        if (overlaps(&b, l, tp, o->sizeX, o->sizeY)) return 0;
+    }
+    door_set_open(t, 0);
+    return 1;
+}
+
+void world_door_set_locked(int uid, int locked) { Thing *t = thing_by_uid(uid); if (t) t->locked = locked; }
+
+int world_light_lit(int uid) { Thing *t = thing_by_uid(uid); return t && t->lit; }
+void world_light_set(int uid, int lit) { Thing *t = thing_by_uid(uid); if (t) t->lit = lit; }
+
+/* The bed a cover lies on, or 0. */
+int world_bed_under_cover(int uid)
+{
+    Thing *c = thing_by_uid(uid);
+    if (!c) return 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *b = &things[i];
+        if (b != c && !b->gone && b->def && b->def->type == T_BED && b->def->coverId == c->itemId && cover_of(b) == c) return b->uid;
+    }
+    return 0;
+}
+
+/* The nearest bed to the player (Sleep On Bed "Nearest"), or 0. */
+int world_nearest_bed(void)
+{
+    int best = 0, bestD = 1 << 30, px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *b = &things[i];
+        if (b->gone || !b->def || b->def->type != T_BED) continue;
+        int d = abs(b->x - px) + abs(b->y - py);
+        if (d < bestD) { bestD = d; best = b->uid; }
+    }
+    return best;
+}
+
+/* Words over a thing for a while ("Locked"). */
+typedef struct ThingBark { int uid; char text[64]; uint32_t until; } ThingBark;
+static ThingBark thingBarks[8];
+
+void world_bark_thing(int uid, const char *text, int ms)
+{
+    int slot = 0;
+    for (int i = 0; i < 8; i++) if (thingBarks[i].until <= lastMs) { slot = i; break; }
+    thingBarks[slot].uid = uid;
+    snprintf(thingBarks[slot].text, sizeof thingBarks[slot].text, "%s", text);
+    thingBarks[slot].until = lastMs + (uint32_t)(ms > 0 ? ms : 1000);
+}
+
+static void draw_thing_barks(uint32_t *pixels)
+{
+    const Font *f = font_get("InGameFont");
+    for (int i = 0; i < 8; i++)
+    {
+        if (thingBarks[i].until <= lastMs) continue;
+        Thing *t = thing_by_uid(thingBarks[i].uid);
+        if (!t) continue;
+        const Picture *pic = sprite_picture_at(look_of(t), 0);
+        int qw = pic ? (pic->width + UNIT - 1) / UNIT * UNIT : tileW, qh = pic ? (pic->height + UNIT - 1) / UNIT * UNIT : tileH;
+        int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT, top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
+        int w = font_text_width(f, thingBarks[i].text);
+        font_draw(f, pixels, (int)floor(left + qw / 2.0 - w / 2.0 - cameraX), (int)floor(top - font_line_height(f) - 2 - cameraY), thingBarks[i].text, 0);
+    }
+}

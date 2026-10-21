@@ -10,5 +10,5 @@ FLAGS="-noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall 
 # The real main is src/amiga_start.c (no floating point: it checks the FPU is on before anything uses it); main.c's becomes game_main.
 "$GCC" $FLAGS -Dmain=game_main -c src/main.c -o build/amiga68k/main.o
 "$GCC" $FLAGS -o build/amiga68k/Game \
-  src/amiga_start.c build/amiga68k/main.o src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/schedules.c src/numbers.c src/platform_amiga.c third_party/cJSON.c -lm
+  src/amiga_start.c build/amiga68k/main.o src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/schedules.c src/use.c src/sound.c src/numbers.c src/platform_amiga.c third_party/cJSON.c -lm
 echo "built build/amiga68k/Game"

@@ -40,6 +40,7 @@ int events_actor_held(int actor);
 void events_log_once(int key, const char *text);
 #include "../third_party/cJSON.h"
 void events_run_commands(cJSON *commands, int actor);
+int events_object_event(int uid, int trigger, int activator);
 
 /* The game clock (Exult's: from System Settings > Clock). */
 int events_hour(void);

@@ -174,11 +174,23 @@ void events_load(void)
         o->talk = read_list(get(e, "TalkCommands"));
         if (flag(e, "IsTestPlayer")) playerCharacter = e;
     }
+    cJSON *objectList = get(get(project, "Objects"), "Objects");
+    owners = (Owner *)realloc(owners, sizeof(Owner) * (size_t)(ownerCount + cJSON_GetArraySize(containers) + cJSON_GetArraySize(books) + cJSON_GetArraySize(objectList) + 1));
+    cJSON_ArrayForEach(e, objectList)
+    {
+        if (!cJSON_GetArraySize(get(e, "EventPages"))) continue;
+        Owner *o = &owners[ownerCount++];
+        memset(o, 0, sizeof *o);
+        o->name = str(e, "Name"); o->characterId = -1; o->data = e;
+        o->itemCategory = CAT_OBJECT; o->itemId = num(e, "Id", -1);
+        read_pages(o, get(e, "EventPages"));
+    }
     for (int pass = 0; pass < 2; pass++)
         for (cJSON *source = pass == 0 ? containers : books; source; source = NULL)
         cJSON_ArrayForEach(e, source)
         {
             Owner *o = &owners[ownerCount++];
+            memset(o, 0, sizeof *o);
             o->name = str(e, "Name"); o->characterId = -1;
             o->itemCategory = pass == 0 ? CAT_CONTAINER : CAT_BOOK; o->itemId = num(e, "Id", -1);
             read_pages(o, get(e, "EventPages"));
@@ -362,7 +374,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 /* ---------------- Running commands ---------------- */
 
 enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD };
-enum { A_PICKUP = 1, A_DROP };
+enum { A_PICKUP = 1, A_DROP, A_SIT };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
 
@@ -385,6 +397,7 @@ typedef struct Run
     Loop loops[16]; int loopCount;
     CallFrame *callers; int depth;       /* the lists that called Common Events, innermost last */
     char owner[48];                  /* whose event it is (self switches): "event:3", "char:2", "global" */
+    int ownerUid;                    /* an object's placed copy whose event it is (Sleep On Bed "Under") */
     const Cmd *untilCmd; double untilWaited, untilTimeout; /* Wait Until */
     int activator, byStepping;   /* whoever set it off (an actor; -1 = the player), and whether by walking over it */
     int returns[16][2], returnCount;
@@ -1057,6 +1070,36 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_Stand:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor >= 0) world_stand_up(actor);
+            return 1;
+        }
+        case C_SleepOnBed:
+        {
+            /* "Under": the bed the running event's object is (or lies on, a cover); else the nearest */
+            int bed = 0;
+            if (strcmp(param(c, "Which"), "Nearest") != 0 && r->ownerUid)
+            {
+                bed = world_thing_type(r->ownerUid) == 8 ? r->ownerUid : world_bed_under_cover(r->ownerUid);
+            }
+            if (!bed) bed = world_nearest_bed();
+            if (!bed) { game_log("Sleep On Bed: there's no bed."); return 1; }
+            world_player_sit(bed);
+            return 1;
+        }
+        case C_Sit:
+        {
+            int actor = actor_for(r, param(c, "Who")), x = atoi(param(c, "X")), y = atoi(param(c, "Y")), a1, a2;
+            char kind[16], cat[16];
+            int uid = sscanf_like(param(c, "Thing"), kind, cat, &a1, &a2) && !strcmp(kind, "Object") ? world_find_object(a1, a2, x, y) : -1;
+            if (actor < 0) return 1;
+            if (uid < 0 || world_thing_type(uid) != 7) { game_log("Sit: that chair isn't there."); return 1; }
+            begin_action(r, actor, A_SIT);
+            r->thing = uid; r->tries = 0; r->stageMs = 0;
+            return 0;
+        }
         case C_ChangeBehavior:
         {
             const char *who = param(c, "CharacterId");
@@ -1207,6 +1250,26 @@ static int pose_once(Run *r, int actor, double ms)
 static int action_tick(Run *r, double ms, int *ok)
 {
     int a = r->walker;
+    if (r->act == A_SIT)
+    {
+        /* SitCommand: head for the chair (round the table), sit; 5 tries */
+        if (world_seated(a)) { *ok = world_seated_on(a) == r->thing; return 0; }
+        if (a == 0)
+        {
+            if (world_keys_held()) { *ok = 0; return 0; }
+            if (!r->tries) { r->tries = 1; if (!world_player_sit(r->thing)) { *ok = 0; return 0; } return 1; }
+            if (world_player_sitting_down() || world_walking(0)) return 1;
+            *ok = 0;
+            return 0;
+        }
+        if (world_walking(a)) return 1;
+        if (world_arrive_furniture(a) > 0) return 1;
+        if ((r->stageMs -= ms) > 0) return 1;
+        if (++r->tries > 5) { game_log("Sit: they can't get a seat."); *ok = 0; return 0; }
+        world_stand_up(a);
+        if (!world_go_to_furniture(a, 0, r->thing)) r->stageMs = 700;
+        return 1;
+    }
     if (r->stage == 0)
     {
         if (r->act == A_PICKUP && !world_thing_there(r->thing)) { *ok = 0; return 0; } /* gone meanwhile */
@@ -1593,12 +1656,27 @@ static void start_run_as(const List *list, int activator, int byStepping, const 
     game_log("More than 32 events at once - one didn't run.");
 }
 
+/* How many times each page fired, for each placed copy of an object (every copy is its own). */
+typedef struct CopyCount { int uid, page, count; } CopyCount;
+static CopyCount *copyCounts; static int copyCountN, copyCountCap;
+
+static int *count_for(int uid, int page)
+{
+    for (int i = 0; i < copyCountN; i++) if (copyCounts[i].uid == uid && copyCounts[i].page == page) return &copyCounts[i].count;
+    if (copyCountN == copyCountCap) { copyCountCap = copyCountCap ? copyCountCap * 2 : 64; copyCounts = (CopyCount *)realloc(copyCounts, sizeof(CopyCount) * (size_t)copyCountCap); }
+    copyCounts[copyCountN] = (CopyCount){ uid, page, 0 };
+    return &copyCounts[copyCountN++].count;
+}
+
+static int fireCopy; /* the placed copy an object's pages fire for (0: not an object's) */
+
 /* TryFireEventPages: the first page whose conditions are met runs. */
 static int fire_pages(Owner *o, int just, int activator, int byStepping)
 {
     for (int i = 0; i < o->pageCount; i++)
     {
         Page *p = &o->pages[i];
+        int *fired = fireCopy ? count_for(fireCopy, i) : &p->fired;
         cJSON *c = p->cond;
         /* By Enter / Stay / Exit "stepped on by": the player is the one stepping here. */
         const char *by = str(c, "SteppedOnBy");
@@ -1607,12 +1685,13 @@ static int fire_pages(Owner *o, int just, int activator, int byStepping)
         {
             if (strcmp(by, "Player") != 0 && strcmp(by, "Party") != 0 && atoi(by) != world_actor_character(0)) continue;
         }
-        if (!conditions_met(c, just, p->fired, -1)) continue;
-        p->fired++;
+        if (!conditions_met(c, just, *fired, -1)) continue;
+        (*fired)++;
         if (p->list.count > 0)
         {
             char key[48];
             if (o->isMapEvent) snprintf(key, sizeof key, "event:%d", o->eventId);
+            else if (fireCopy) snprintf(key, sizeof key, "obj:%d", world_thing_instance(fireCopy));
             else if (o->itemCategory) snprintf(key, sizeof key, "itemdef:%d:%d", o->itemCategory, o->itemId);
             else snprintf(key, sizeof key, "char:%d", o->characterId);
             start_run_as(&p->list, activator, byStepping, key);
@@ -1782,3 +1861,26 @@ void events_run_commands(cJSON *commands, int actor)
     snprintf(key, sizeof key, "char:%d", world_actor_character(actor));
     start_run_as(l, actor, 0, key);
 }
+
+/* An object's own pages for something that happened to one placed copy of it (By Use, By Enter when someone sits...). 1 if a page with commands ran. */
+int events_object_event(int uid, int trigger, int activator)
+{
+    int objectId = world_thing_object_id(uid);
+    for (int i = 0; i < ownerCount; i++)
+    {
+        Owner *o = &owners[i];
+        if (o->itemCategory != CAT_OBJECT || o->itemId != objectId) continue;
+        int before = 0;
+        for (int k = 0; k < MAX_RUNS; k++) before += runs[k].used;
+        fireCopy = uid;
+        int ran = fire_pages(o, trigger, activator > 0 ? activator : -1, activator > 0);
+        fireCopy = 0;
+        if (ran)
+            for (int k = 0; k < MAX_RUNS; k++) if (runs[k].used && !strncmp(runs[k].owner, "obj:", 4)) runs[k].ownerUid = runs[k].ownerUid ? runs[k].ownerUid : uid;
+        (void)before;
+        return ran;
+    }
+    return 0;
+}
+
+void world_furniture_event(int uid, int trigger, int actor) { events_object_event(uid, trigger, actor); }
