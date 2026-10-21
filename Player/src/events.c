@@ -11,6 +11,7 @@
 #include "conditions.h"
 #include "screen.h"
 #include "vitals.h"
+#include "combat.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -60,6 +61,7 @@ static double dawnHour = 5, dayHour = 7, duskHour = 19, nightHour = 21;
 /* The map's ambient sound (Edit > Map Ambient Sounds): the one for this part of the day loops, giving way to the next when its hour comes. */
 static void update_ambient(void)
 {
+    if (combat_silences_ambient()) { if (ambientPlaying != -3) { sound_stop_owner(OWNER_AMBIENT); ambientPlaying = -3; } return; } /* combat music in its place */
     double h = clockHour + clockMinute / 60.0;
     int sound = h >= dawnHour && h < dayHour ? ambientDawn : h >= dayHour && h < duskHour ? ambientDay : h >= duskHour && h < nightHour ? ambientDusk : ambientNight;
     if (sound == ambientPlaying) return;
@@ -1146,6 +1148,21 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;
+        case C_Attack:
+        {
+            const char *who = param(c, "Attacker"), *whom = param(c, "Target");
+            lastResult = combat_attack(actor_for(r, who[0] ? who : "Activator"), actor_for(r, whom[0] ? whom : "Player"));
+            return 1;
+        }
+        case C_ChangeFaction:
+        {
+            const char *who = param(c, "CharacterId");
+            lastResult = who[0] && combat_change_faction(who, atoi(param(c, "FactionId")));
+            return 1;
+        }
+        case C_ChangeFactionRelationship:
+            combat_change_relation(atoi(param(c, "ViewerFactionId")), atoi(param(c, "TargetFactionId")), param(c, "Operation"), atoi(param(c, "Value")), !strcmp(param(c, "BothWays"), "True"));
+            return 1;
         case C_ChangeHp:
         {
             /* Change HP: up (never past the most), down (a hurt: the flash; it can kill only if allowed - else knocked out at worst), or set */

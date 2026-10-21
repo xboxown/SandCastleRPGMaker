@@ -57,6 +57,10 @@ int world_set_tile(int x, int y, int onFloor, int tile);
 int world_effect_start(const Sprite *sprite, int follows, int cellX, int cellY);   /* follows: an actor, or -1 for the cell */
 void world_effect_stop(int id);
 void world_hit_outline(int actor);
+int world_actor_lift(int actor);
+int world_character_source(int characterId);
+int world_line_clear(double fromX, double fromY, int fromLift, double toX, double toY);
+void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double y, int lift, uint32_t ms);
 int world_put_body(int actor, int x, int y, int onFloor);
 #include <stddef.h>
 int world_tile_key(int x, int y, int onFloor, char *key, size_t size);

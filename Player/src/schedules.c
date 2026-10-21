@@ -20,6 +20,7 @@
 #include "platform.h"
 #include "items.h"
 #include "vitals.h"
+#include "combat.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -366,6 +367,7 @@ void schedules_update(double ms)
         if (keep_dormant(n)) continue;
         if (events_actor_busy(n->actor) || events_actor_held(n->actor)) { n->walking = 0; continue; } /* an event has them: their schedule waits */
         if (world_actor_gone(n->actor) || vitals_incapacitated(n->characterId)) continue; /* dead, knocked out, asleep or paralyzed: does nothing */
+        if (combat_busy(n->actor)) { n->walking = 0; continue; } /* fighting, fleeing or hounding: its schedule waits */
         if (n->walking)
         {
             if (world_walking(n->actor)) continue;
@@ -471,7 +473,7 @@ static void update_followers(double ms)
         if (untilMinute[a] && now >= untilMinute[a]) { untilMinute[a] = 0; schedules_change_behavior(a, "Resume"); }
         int leader = leaderOf[a] - 1;
         if (leader < 0 || world_actor_gone(a) || world_actor_gone(leader)) continue;
-        if (events_actor_busy(a)) continue; /* carrying out an event's command: it isn't pulled back */
+        if (events_actor_busy(a) || combat_busy(a)) continue; /* carrying out an event's command, or fighting: it isn't pulled back */
         int lx, ly, lf, x, y, f;
         world_actor_cell(leader, &lx, &ly, &lf);
         world_actor_cell(a, &x, &y, &f);
@@ -483,3 +485,12 @@ static void update_followers(double ms)
 int schedules_following(int actor) { return actor > 0 && actor < 256 && leaderOf[actor]; }
 
 int schedules_sleeping(int actor) { Npc *n = npc_of(actor); return n && n->activity == S_SLEEP; }
+
+/* A fight over: back to its normal schedule. */
+void schedules_resume(int actor)
+{
+    Npc *n = npc_of(actor);
+    if (!n || !n->entryCount || n->joined || schedules_following(actor)) return;
+    n->walking = 0;
+    update_schedule(n, events_hour() / 3, 0);
+}

@@ -16,6 +16,7 @@
 #include "weather.h"
 #include "screen.h"
 #include "vitals.h"
+#include "combat.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -53,6 +54,8 @@ static void scripted_presses(const char *presses, double t, double *done)
         if (*what == 'T') { int actor = world_actor_by_character(atoi(what + 1)); if (actor > 0) events_talk(actor); }
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
+        else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else
         {
@@ -157,6 +160,7 @@ int main(int argc, char **argv)
     sound_load(folder);
     events_load();
     vitals_load();
+    combat_load();
     schedules_load();
     schedules_start();
     weather_load();
@@ -200,6 +204,7 @@ int main(int argc, char **argv)
                     case KEY_DOWN: held[3] = down ? ++order : 0; break;
                     case KEY_ESCAPE: if (down) running = 0; break;
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
+                    case KEY_C: if (down && !vitals_game_over()) combat_toggle_mode(); break; /* Exult: C for combat */
                     default: break;
                 }
             }
@@ -220,6 +225,7 @@ int main(int argc, char **argv)
             lighting_draw(pixels);
             weather_draw(pixels);
             world_draw_barks(pixels);
+            combat_draw(pixels, worldMs);
             screen_draw(pixels, now);
             dialog_draw(pixels, now);
             save_bmp(shot);
@@ -273,6 +279,7 @@ int main(int argc, char **argv)
             schedules_update(seconds * 1000);
             weather_update(seconds * 1000);
             vitals_update(seconds * 1000);
+            combat_update(seconds * 1000);
             events_player_moved();
         }
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
@@ -281,6 +288,7 @@ int main(int argc, char **argv)
         lighting_draw(pixels);
         weather_draw(pixels);
         world_draw_barks(pixels);
+        combat_draw(pixels, worldMs);
         screen_draw(pixels, now);
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);

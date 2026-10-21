@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 
 #define MAX_QUANTITY 100 /* ObjectTypes.MaxQuantity: a stack holds up to 100 */
 
@@ -25,6 +26,7 @@ struct Item
     int locked;              /* -1 as its kind says, else 0 / 1 (IsLockedRuntime) */
     int lit, spent; double burnLeft; /* a light: lit, burnt out, game minutes left (-1: not started) */
     int keys[32], keyCount;          /* a keyring: the keys on it */
+    int charges;                     /* a weapon with charges: how many left (-1: not used yet) */
     Item **contents; int count, cap;
 };
 
@@ -87,7 +89,7 @@ static void remove_from(Item **list, int *count, const Item *item)
 static Item *new_item(int category, int itemId, int quantity)
 {
     Item *it = (Item *)calloc(1, sizeof(Item));
-    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1;
+    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1;
     return it;
 }
 
@@ -791,4 +793,103 @@ Item *items_strip(int characterId)
     for (int i = 0; i < k->count; i++) add_to(&body->contents, &body->count, &body->cap, k->items[i]);
     k->count = 0; k->slotCount = 0;
     return body;
+}
+
+/* ---------------- Weapons, armor, ammo (combat) ---------------- */
+
+static int object_type(const Item *it) { return it->category == CAT_OBJECT ? num(def_of(CAT_OBJECT, it->itemId), "Type", -1) : -1; }
+
+/* Actor::get_weapon: the weapon in hand (right, then left), else one worn in its own slot. NULL: bare hands. */
+cJSON *items_weapon(int characterId, Item **item)
+{
+    Carrier *k = carrier_of(characterId);
+    if (item) *item = NULL;
+    if (!k) return NULL;
+    Item *r = in_slot(k, S_RIGHT), *l = in_slot(k, S_LEFT), *found = NULL;
+    if (r && object_type(r) == 35) found = r;
+    else if (l && object_type(l) == 35) found = l;
+    else for (int i = 0; i < k->count && !found; i++) if (is_worn(k, k->items[i]) && object_type(k->items[i]) == 35) found = k->items[i];
+    if (!found) return NULL;
+    if (item) *item = found;
+    return def_of(CAT_OBJECT, found->itemId);
+}
+
+/* Armor worn anywhere (a shield in a hand counts, as in Exult). */
+int items_armor(int characterId, cJSON **out, int max)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    for (int i = 0; k && i < k->count && n < max; i++)
+        if (is_worn(k, k->items[i]) && object_type(k->items[i]) == 36) out[n++] = def_of(CAT_OBJECT, k->items[i]->itemId);
+    return n;
+}
+
+static int same_family(const char *a, const char *b)
+{
+    while (*a == ' ') a++;
+    while (*b == ' ') b++;
+    size_t la = strlen(a), lb = strlen(b);
+    while (la && a[la - 1] == ' ') la--;
+    while (lb && b[lb - 1] == ' ') lb--;
+    if (la != lb) return 0;
+    for (size_t i = 0; i < la; i++) if (tolower((unsigned char)a[i]) != tolower((unsigned char)b[i])) return 0;
+    return 1;
+}
+
+static int is_ammo_of(const Item *it, const char *family)
+{
+    if (object_type(it) != 5) return 0;
+    return same_family(str(get(def_of(CAT_OBJECT, it->itemId), "Ammo"), "Family"), family);
+}
+
+static Item *ammo_inside(Item *container, const char *family, Item **holder)
+{
+    for (int i = 0; i < container->count; i++)
+    {
+        if (is_ammo_of(container->contents[i], family)) { *holder = container; return container->contents[i]; }
+        if (container->contents[i]->count)
+        {
+            Item *deeper = ammo_inside(container->contents[i], family, holder);
+            if (deeper) return deeper;
+        }
+    }
+    return NULL;
+}
+
+/* One of a family used up - in a slot first (a quiver), then the pack, then inside what's carried. Its definition, or NULL when there's none. */
+cJSON *items_use_ammo(int characterId, const char *family)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) return NULL;
+    Item *found = NULL, *holder = NULL;
+    for (int i = 0; i < k->count && !found; i++) if (is_worn(k, k->items[i]) && is_ammo_of(k->items[i], family)) found = k->items[i];
+    for (int i = 0; i < k->count && !found; i++) if (is_ammo_of(k->items[i], family)) found = k->items[i];
+    for (int i = 0; i < k->count && !found; i++) if (k->items[i]->count) found = ammo_inside(k->items[i], family, &holder);
+    if (!found) return NULL;
+    cJSON *def = def_of(CAT_OBJECT, found->itemId);
+    if (found->quantity > 1) found->quantity--;
+    else if (holder) { remove_from(holder->contents, &holder->count, found); items_free(found); }
+    else { remove_from_character(k, found); items_free(found); }
+    return def;
+}
+
+/* A charge used: 0 when there's none left. Empty and marked so, the weapon is gone. */
+int items_use_charge(int characterId, Item *weapon, int charges, int goneWhenEmpty)
+{
+    if (!weapon) return 0;
+    if (weapon->charges < 0) weapon->charges = charges > 0 ? charges : 0;
+    if (weapon->charges <= 0) return 0;
+    weapon->charges--;
+    if (weapon->charges <= 0 && goneWhenEmpty) { Carrier *k = carrier_of(characterId); if (k) { remove_from_character(k, weapon); items_free(weapon); } }
+    return 1;
+}
+
+/* One of a stack (or the thing itself) out of their hands: thrown. */
+void items_use_one(int characterId, Item *it)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k || !it) return;
+    if (it->quantity > 1) { it->quantity--; return; }
+    remove_from_character(k, it);
+    items_free(it);
 }

@@ -55,6 +55,7 @@ static enum PlatformKey key_of(SDL_Keycode k)
         case SDLK_F11: return KEY_F11;
         case SDLK_KP_ENTER: return KEY_ENTER;
         case SDLK_TAB: return KEY_TAB;
+        case SDLK_c: return KEY_C;
         case SDLK_PAGEUP: return KEY_PAGEUP;
         case SDLK_PAGEDOWN: return KEY_PAGEDOWN;
         case SDLK_1: case SDLK_KP_1: return KEY_1;

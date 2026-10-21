@@ -31,6 +31,7 @@ char *read_whole_file(const char *path, long *length);
 void game_log(const char *line);
 
 #define UNIT 8
+#define COPY_STEP 1000000
 #define LIFT_SHIFT 4
 #define LIFTS_PER_FLOOR 5
 #define MAX_FLOORS 9
@@ -506,6 +507,17 @@ int world_load(const char *folder)
         cJSON *who = NULL;
         cJSON_ArrayForEach(ch, characters) if (num(ch, "Id", -2) == num(o, "CharacterId", -1)) { who = ch; break; }
         if (!who || flag(who, "IsTestPlayer")) continue;
+        /* The same character placed more than once: every copy after the first is its own instance (a prefab) - its own
+           health, belongings and fights. Its runtime id: the character's + 1000000 x n, so lookups by id still find the first. */
+        int copies = 0;
+        for (int i = 0; i < npcCount; i++) if (npcs[i].characterId % COPY_STEP == num(who, "Id", -2)) copies++;
+        if (copies)
+        {
+            cJSON *copy = cJSON_Duplicate(who, 1);
+            cJSON_ReplaceItemInObject(copy, "Id", cJSON_CreateNumber(num(who, "Id", -2) + COPY_STEP * copies));
+            cJSON_AddItemToArray(characters, copy);
+            who = copy;
+        }
         Actor *a = &npcs[npcCount++];
         read_actor_poses(who, poses, a);
         a->px = num(o, "X", 0) * tileW + tileW / 2.0; a->py = num(o, "Y", 0) * tileH + tileH / 2.0;
@@ -2259,3 +2271,54 @@ int world_tile_key(int x, int y, int onFloor, char *key, size_t size)
     snprintf(key, size, "%s:%d", slot < sheetCount ? sheetNames[slot] : "", tile % 100000);
     return 1;
 }
+
+/* ---------------- For combat ---------------- */
+
+int world_actor_lift(int actor) { Actor *a = actor_of(actor); return a ? a->lift : 0; }
+
+/*
+ * HasLineOfSight: nothing solid taller than eye level (3 lifts above the
+ * feet) on the straight line between two feet positions. Characters and
+ * windows don't block sight. Only the solids in the line's box are tried.
+ */
+int world_line_clear(double fx, double fy, int fromLift, double tx, double ty)
+{
+    static const Body *solids[512];
+    int n = 0;
+    int left = (int)floor(fmin(fx, tx) / UNIT) - 1, right = (int)ceil(fmax(fx, tx) / UNIT) + 1;
+    int top = (int)floor((fmin(fy, ty) + tileH / 2.0) / UNIT) - 2, bottom = (int)ceil((fmax(fy, ty) + tileH / 2.0) / UNIT) + 2;
+    for (int i = 0; i < thingCount && n < 512; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->body < 0 || (t->def && t->def->type == 12 /* a window */)) continue;
+        const Body *b = &bodies[t->body];
+        if (b->z + b->height <= fromLift + 3 || b->z > fromLift + 3) continue;
+        if (b->left >= right || b->left + b->width <= left || b->top >= bottom || b->top + b->depth <= top) continue;
+        solids[n++] = b;
+    }
+    if (!n) return 1;
+    double length = fmax(fabs(tx - fx), fabs(ty - fy));
+    int steps = (int)(length / 4);
+    if (steps < 1) steps = 1;
+    for (int i = 1; i < steps; i++)
+    {
+        double x = fx + (tx - fx) * i / steps, y = fy + (ty - fy) * i / steps + tileH / 2.0 - UNIT / 2.0;
+        int ux = (int)floor(x / UNIT), uy = (int)floor(y / UNIT);
+        for (int k = 0; k < n; k++)
+            if (ux >= solids[k]->left && ux < solids[k]->left + solids[k]->width && uy >= solids[k]->top && uy < solids[k]->top + solids[k]->depth) return 0;
+    }
+    return 1;
+}
+
+/* A sprite at a map position and lift (a shot in the air). */
+void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double y, int lift, uint32_t ms)
+{
+    const Picture *pic = sprite_picture_at(sprite, ms);
+    if (!pic) return;
+    int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
+    screen = pixels;
+    blit_box(pic, (int)floor(x - qw / 2.0 - lift * LIFT_SHIFT - cameraX), (int)floor(y + tileH / 2.0 - qh - lift * LIFT_SHIFT - cameraY), qw, qh);
+}
+
+/* The project's id of a character (a copy placed again: the character it's a copy of). */
+int world_character_source(int characterId) { return characterId >= 0 ? characterId % COPY_STEP : characterId; }

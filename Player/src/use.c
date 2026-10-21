@@ -9,6 +9,7 @@
  */
 #include "use.h"
 #include "events.h"
+#include "combat.h"
 #include "world.h"
 #include "sound.h"
 #include "../third_party/cJSON.h"
@@ -75,7 +76,7 @@ void use_at(int sx, int sy)
 {
     int actor, uid;
     world_hit(sx, sy, &actor, &uid);
-    if (actor > 0) { events_talk(actor); return; }
+    if (actor > 0) { if (combat_mode()) combat_player_target(actor); else events_talk(actor); return; }
     if (!uid) return;
     int objectId = world_thing_object_id(uid);
     if (objectId < 0)

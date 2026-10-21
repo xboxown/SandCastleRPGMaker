@@ -27,6 +27,7 @@
 #include "world.h"
 #include "screen.h"
 #include "schedules.h"
+#include "combat.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -221,7 +222,7 @@ static void die(int characterId, const char *cause)
     Vital *v = vital_of(characterId);
     if (!v || v->dead) return;
     char key[32];
-    snprintf(key, sizeof key, "killed:%d", characterId); conditions_record(key); /* Character killed */
+    snprintf(key, sizeof key, "killed:%d", world_character_source(characterId)); conditions_record(key); /* Character killed */
     conditions_record("killed:*");
     int actor = actor_of_character(characterId);
     if (actor >= 0) world_stand_up(actor);
@@ -232,6 +233,7 @@ static void die(int characterId, const char *cause)
         /* the main character: no built-in message - its own By Death events decide; from then on the player can do nothing */
         if (!world_set_pose(0, "Body", -1)) world_set_pose(0, "Idle", -1);
         gameOver = 1;
+        combat_death_music();
         char line[128];
         snprintf(line, sizeof line, "You have died (%s).", cause);
         game_log(line);
