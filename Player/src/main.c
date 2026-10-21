@@ -6,10 +6,16 @@
  */
 #include "platform.h"
 #include "world.h"
+#include "font.h"
 #include <stdio.h>
 #include <string.h>
 
 static uint32_t pixels[SCREEN_W * SCREEN_H];
+
+/* The least free memory an Amiga needs to start the game (megabytes). */
+#ifndef GAME_MIN_RAM_MB
+#define GAME_MIN_RAM_MB 128
+#endif
 
 /* Testing: the frame as a 24-bit BMP (--shot), arrow keys held by a script (--keys "R:1.5,U:0.5"). */
 static void save_bmp(const char *path)
@@ -34,21 +40,39 @@ static void save_bmp(const char *path)
 int main(int argc, char **argv)
 {
     char folder[1024] = "Game_Data";
-    const char *shot = NULL, *keys = NULL;
+    const char *shot = NULL, *keys = NULL, *say = NULL;
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--shot") == 0 && i + 1 < argc) shot = argv[++i];
         else if (strcmp(argv[i], "--keys") == 0 && i + 1 < argc) keys = argv[++i];
+        else if (strcmp(argv[i], "--say") == 0 && i + 1 < argc) say = argv[++i]; /* testing: words drawn in the game's fonts */
         else snprintf(folder, sizeof folder, "%s", argv[i]);
     }
+#ifdef __amigaos__
+    /* An Amiga needs the game's memory free before it starts (128 MB at least; the user's rule: say so, don't crash). */
+    long freeMb = platform_free_memory_mb();
+    if (freeMb >= 0 && freeMb < GAME_MIN_RAM_MB)
+    {
+        char text[256];
+        snprintf(text, sizeof text, "This game needs %d MB of free memory;\nonly %ld MB is free.\n\nClose other programs, or add memory.", GAME_MIN_RAM_MB, freeMb);
+        platform_message("Not enough memory", text);
+        return 20;
+    }
+#endif
     if (!world_load(folder))
     {
-        fprintf(stderr, "The game couldn't start: %s\n", world_error());
+        char text[700];
+        snprintf(text, sizeof text, "The game couldn't start:\n%s", world_error());
+        fprintf(stderr, "%s\n", text);
+        platform_message("Game", text);
         return 1;
     }
     if (!platform_open(world_title()[0] ? world_title() : "Game", 0))
     {
-        fprintf(stderr, "The game couldn't open its window: %s\n", platform_error());
+        char text[400];
+        snprintf(text, sizeof text, "The game couldn't open its window:\n%s", platform_error());
+        fprintf(stderr, "%s\n", text);
+        platform_message("Game", text);
         return 1;
     }
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
@@ -102,7 +126,20 @@ int main(int argc, char **argv)
             if (t < 0) done = 0;
             if (done && shot) { world_draw(pixels, now); save_bmp(shot); break; }
         }
-        else if (shot && now - start > 1000) { world_draw(pixels, now); save_bmp(shot); break; }
+        else if (shot && now - start > 1000)
+        {
+            world_draw(pixels, now);
+            if (say)
+            {
+                const Font *a = font_get("InGameFont"), *b = font_get("DialogFont");
+                font_draw(a, pixels, 6, 6, say, 0);
+                const char *starts[8]; int lengths[8];
+                int n = font_wrap(b, say, 150, 8, starts, lengths);
+                for (int l = 0; l < n; l++) { char line[256]; snprintf(line, sizeof line, "%.*s", lengths[l], starts[l]); font_draw(b, pixels, 6, 30 + l * font_line_height(b), line, 0); }
+            }
+            save_bmp(shot);
+            break;
+        }
         double seconds = (now - last) / 1000.0;
         if (seconds > 0.1) seconds = 0.1;
         last = now;
