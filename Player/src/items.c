@@ -24,6 +24,7 @@ struct Item
     int instanceId, category, itemId, quantity;
     int locked;              /* -1 as its kind says, else 0 / 1 (IsLockedRuntime) */
     int lit, spent; double burnLeft; /* a light: lit, burnt out, game minutes left (-1: not started) */
+    int keys[32], keyCount;          /* a keyring: the keys on it */
     Item **contents; int count, cap;
 };
 
@@ -106,6 +107,8 @@ static Item *read_item(cJSON *j)
     cJSON *locked = get(j, "IsLockedRuntime"), *c;
     if (cJSON_IsBool(locked)) it->locked = cJSON_IsTrue(locked);
     it->lit = cJSON_IsTrue(get(j, "IsLitRuntime")); it->spent = cJSON_IsTrue(get(j, "IsSpentRuntime"));
+    cJSON *key;
+    cJSON_ArrayForEach(key, get(j, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(key)) it->keys[it->keyCount++] = key->valueint;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     cJSON_ArrayForEach(c, get(j, "Contents")) add_to(&it->contents, &it->count, &it->cap, read_item(c));
     return it;
@@ -616,3 +619,165 @@ void items_empty(Item *container)
 void items_put_in(Item *container, Item *it) { add_to(&container->contents, &container->count, &container->cap, it); }
 
 void items_set_locked(Item *it, int locked) { if (it) it->locked = locked; }
+
+/* CarriesKeyFor: their key for it, loose or on a keyring they carry (its keys: KeyIdsRuntime). */
+static int has_key_in(Item **list, int count, int keyId)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (list[i]->category == CAT_OBJECT && list[i]->itemId == keyId) return 1;
+        for (int k = 0; k < list[i]->keyCount; k++) if (list[i]->keys[k] == keyId) return 1;
+        if (has_key_in(list[i]->contents, list[i]->count, keyId)) return 1;
+    }
+    return 0;
+}
+
+int items_carries_key(int characterId, int keyId)
+{
+    Carrier *k = carrier_of(characterId);
+    return keyId >= 0 && k && has_key_in(k->items, k->count, keyId);
+}
+
+/* A lockpick they carry (its object id), or -1. */
+static int lockpick_in(Item **list, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        cJSON *d = list[i]->category == CAT_OBJECT ? def_of(CAT_OBJECT, list[i]->itemId) : NULL;
+        if (d && num(d, "Type", 0) == OT_LOCKPICK) return list[i]->itemId;
+        int inner = lockpick_in(list[i]->contents, list[i]->count);
+        if (inner >= 0) return inner;
+    }
+    return -1;
+}
+
+int items_lockpick(int characterId) { Carrier *k = carrier_of(characterId); return k ? lockpick_in(k->items, k->count) : -1; }
+
+/* SlotToReady: its own slot (weapon, armor, ammo, a container's Location), else the right hand. */
+static int slot_to_ready(Carrier *k, Item *it)
+{
+    cJSON *d = def_of(it->category, it->itemId), *pref = NULL, *section = NULL;
+    int key = -1;
+    if (it->category == CAT_CONTAINER) section = d;
+    else if (it->category == CAT_OBJECT)
+    {
+        int type = num(d, "Type", 0);
+        section = type == OT_AMMO ? get(d, "Ammo") : type == OT_WEAPON ? get(d, "Weapon") : type == 36 ? get(d, "Armor") : NULL;
+    }
+    if (section)
+    {
+        pref = get(section, it->category == CAT_CONTAINER || (it->category == CAT_OBJECT && num(d, "Type", 0) == OT_AMMO) ? "PreferredEquipSlot" : "EquipSlot");
+        const char *custom = str(section, it->category == CAT_CONTAINER || num(d, "Type", 0) == OT_AMMO ? "PreferredCustomSlotName" : "CustomSlotName");
+        key = cJSON_IsNumber(pref) ? pref->valueint : custom[0] ? custom_slot(k, custom) : -1;
+    }
+    if (key >= 0 && key < SLOT_COUNT && k->disabled[key]) key = -1; /* a slot turned off isn't there */
+    return key >= 0 ? key : S_RIGHT;
+}
+
+/* TryStowInBag: off a slot into the Backpack, then the Pouch, if it fits; 0 = no bag has room. */
+static int stow_in_bag(Carrier *k, int fromSlot, Item *it)
+{
+    static const int BAGS[2] = { S_BACKPACK, S_POUCH };
+    for (int b = 0; b < 2; b++)
+    {
+        if (BAGS[b] == fromSlot) continue;
+        Item *bag = in_slot(k, BAGS[b]);
+        if (!bag || bag->category != CAT_CONTAINER || bag == it || !container_accepts(bag, it)) continue;
+        remove_from_character(k, it);
+        if (combine_into(bag->contents, bag->count, it)) items_free(it);
+        else add_to(&bag->contents, &bag->count, &bag->cap, it);
+        return 1;
+    }
+    return 0;
+}
+
+static int slot_of_item(const Carrier *k, const Item *it)
+{
+    for (int i = 0; i < k->slotCount; i++) if (k->slots[i].instanceId == it->instanceId) return k->slots[i].key;
+    return -1;
+}
+
+/* StowOrDrop: off a slot into a bag, else out of their hands - returned to be put down at their feet. */
+static Item *stow_or_drop(Carrier *k, int slot, Item *it)
+{
+    if (stow_in_bag(k, slot, it)) return NULL;
+    remove_from_character(k, it);
+    return it;
+}
+
+/* Equip Equipment: readies one they carry (not readied yet) in its slot; what's in the way comes off into the pack, or out (dropped[]). */
+int items_equip(int characterId, int category, int itemId, Item **dropped, int *droppedCount)
+{
+    Carrier *k = carrier_of(characterId);
+    *droppedCount = 0;
+    if (!k) return 0;
+    Found found[256];
+    int n = 0;
+    find_all(&k->items, &k->count, category, itemId, found, &n, 256);
+    int pick = -1;
+    for (int i = 0; i < n && pick < 0; i++) if (!(found[i].list == &k->items && slot_of_item(k, found[i].item) >= 0)) pick = i;
+    if (pick < 0) pick = n > 0 ? 0 : -1;
+    if (pick < 0) return 0;
+    Item *it = found[pick].item;
+    int slot = slot_to_ready(k, it);
+    if (found[pick].list == &k->items && slot_of_item(k, it) == slot) return 1; /* already there */
+    int clear[2] = { slot, -1 };
+    if (is_two_handed(it) && slot == S_RIGHT) clear[1] = S_LEFT;
+    if (slot == S_LEFT && left_hand_locked(k)) clear[1] = S_RIGHT;
+    for (int c = 0; c < 2; c++)
+    {
+        if (clear[c] < 0) continue;
+        Item *occupant = in_slot(k, clear[c]);
+        if (occupant && occupant != it) { Item *out = stow_or_drop(k, clear[c], occupant); if (out) dropped[(*droppedCount)++] = out; }
+    }
+    /* out of where it was, into the slot */
+    if (found[pick].list == &k->items) remove_from_character(k, it);
+    else remove_from(*found[pick].list, found[pick].count, it);
+    equip(k, it, slot);
+    return 1;
+}
+
+/* Unequip Equipment: off its slot into the pack, else out (returned to be put down). 0 if not worn or held. */
+int items_unequip(int characterId, int category, int itemId, Item **dropped)
+{
+    Carrier *k = carrier_of(characterId);
+    *dropped = NULL;
+    if (!k) return 0;
+    for (int i = 0; i < k->count; i++)
+    {
+        Item *it = k->items[i];
+        int slot = slot_of_item(k, it);
+        if (slot < 0 || it->category != category || it->itemId != itemId) continue;
+        *dropped = stow_or_drop(k, slot, it);
+        return 1;
+    }
+    return 0;
+}
+
+/* Pick Item From Container: out of a container's contents into their hands / pack (each by Actor::add); how many were taken. */
+int items_take_from(Item *container, int characterId, int category, int itemId, int quantity)
+{
+    int any = category < 0 || itemId < 0, taken = 0, left = quantity;
+    for (int i = 0; i < container->count; i++)
+    {
+        Item *it = container->contents[i];
+        if (!any && (it->category != category || it->itemId != itemId)) continue;
+        if (!any && left <= 0) break;
+        int have = it->quantity > 0 ? it->quantity : 1;
+        if (!any && have > left)
+        {
+            Item *part = new_item(it->category, it->itemId, left);
+            it->quantity = have - left;
+            if (items_give_to(characterId, part)) { taken += left; left = 0; }
+            else { it->quantity = have; items_free(part); }
+            continue;
+        }
+        remove_from(container->contents, &container->count, it);
+        if (!items_give_to(characterId, it)) { add_to(&container->contents, &container->count, &container->cap, it); /* too heavy / no room: it stays */ continue; }
+        i--;
+        taken += have; left -= have;
+    }
+    return taken;
+}
+
+int items_locked(const Item *it, int byDefault) { return it->locked >= 0 ? it->locked : byDefault; }

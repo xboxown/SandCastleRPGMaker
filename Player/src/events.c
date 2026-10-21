@@ -330,6 +330,11 @@ static int one_stat(cJSON *entry)
 }
 
 static int warned[256];
+/* Play Animation not waited for: it plays on by itself till its time is up. */
+typedef struct EffectTimer { int used, id; double ms; int minutes; long fromMinute; } EffectTimer;
+#define MAX_EFFECT_TIMERS 16
+static EffectTimer effectTimers[MAX_EFFECT_TIMERS];
+static void unlock_door(int uid, cJSON *door, const char *record);
 static uint32_t screenNow;
 static const char *evaluatingName = ""; /* whose event's conditions are being looked at ("this event's page N") */
 static int lastResult = 1;             /* whether the last command that can fail worked */
@@ -411,7 +416,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 /* ---------------- Running commands ---------------- */
 
 enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN };
-enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE };
+enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE, A_OPEN_DOOR, A_PICKLOCK, A_TAKE, A_EFFECT };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
 
@@ -435,6 +440,7 @@ typedef struct Run
     CallFrame *callers; int depth;       /* the lists that called Common Events, innermost last */
     char owner[48];                  /* whose event it is (self switches): "event:3", "char:2", "global" */
     int ownerUid;                    /* an object's placed copy whose event it is (Sleep On Bed "Under") */
+    int effect;                      /* Play Animation running */
     double screenMs, screenTotal; int cameraBack; double camFromX, camFromY, camToX, camToY; int camera; /* Fade Screen / Move Camera running */
     const Cmd *untilCmd; double untilWaited, untilTimeout; /* Wait Until */
     int activator, byStepping;   /* whoever set it off (an actor; -1 = the player), and whether by walking over it */
@@ -450,6 +456,7 @@ typedef struct Run
 
 #define MAX_RUNS 32
 static Run runs[MAX_RUNS];
+static int door_or_container(Run *r, double ms, int *ok);
 
 /* Characters an event moved, whose event is still going: they stay where it left them (no schedule) till it's over. */
 static int heldBy[256]; /* per actor: the run's number + 1, 0 = free */
@@ -1339,6 +1346,64 @@ static int execute(Run *r, const Cmd *c)
             items_park(uid, box);
             return 1;
         }
+        case C_OpenDoor: case C_PicklockDoor: case C_TakeFromContainer:
+        {
+            int actor = actor_for(r, param(c, "Who")), uid = thing_of(c);
+            int wanted = c->type == C_TakeFromContainer ? 5 : 3, tc, ti, tq, tx, ty, tin;
+            world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+            if (actor < 0 || uid < 0 || (wanted == 3 ? world_thing_type(uid) != 3 : tc != CAT_CONTAINER))
+            {
+                game_log(c->type == C_OpenDoor ? "Open Door: that door isn't there." : c->type == C_PicklockDoor ? "Picklock Door: that door isn't there." : "Pick Item From Container: that container isn't there.");
+                lastResult = 0;
+                return 1;
+            }
+            begin_action(r, actor, c->type == C_OpenDoor ? A_OPEN_DOOR : c->type == C_PicklockDoor ? A_PICKLOCK : A_TAKE);
+            r->thing = uid; r->actX = tx; r->actY = ty;
+            r->category = category_of(param(c, "Category")); r->itemId = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+            r->quantity = atoi(param(c, "Quantity")) > 0 ? atoi(param(c, "Quantity")) : 1;
+            start_walk(r, actor, tx, ty, 1);
+            return 0;
+        }
+        case C_EquipItem: case C_UnequipItem:
+        {
+            int actor = actor_for(r, param(c, "Who")), category = category_of(param(c, "Category")), itemId = atoi(param(c, "ItemId"));
+            if (actor < 0 || category < 0) { lastResult = 0; return 1; }
+            Item *dropped[4];
+            int n = 0, ok;
+            if (c->type == C_EquipItem) ok = items_equip(world_actor_character(actor), category, itemId, dropped, &n);
+            else { ok = items_unequip(world_actor_character(actor), category, itemId, dropped); n = ok && dropped[0] ? 1 : 0; }
+            for (int i = 0; i < n; i++) put_down(dropped[i], actor, -1, -1); /* no room in a bag: at their feet */
+            lastResult = ok;
+            if (!ok) game_log(c->type == C_EquipItem ? "Equip: they haven't got it to ready." : "Unequip: they aren't wearing or holding it.");
+            return 1;
+        }
+        case C_PlayAnimation:
+        {
+            const Sprite *s = sprite_find(param(c, "SpriteGroup"), param(c, "SpriteName"));
+            if (!s || s->frameCount == 0) { game_log("Play Animation: there's no such sprite with frames."); lastResult = 0; return 1; }
+            int follows = -1;
+            if (!strcmp(param(c, "Where"), "Character")) { follows = actor_for(r, param(c, "Who")); if (follows < 0) { lastResult = 0; return 1; } }
+            else if (!param(c, "X")[0] || !param(c, "Y")[0]) { lastResult = 0; return 1; }
+            int id = world_effect_start(s, follows, atoi(param(c, "X")), atoi(param(c, "Y")));
+            if (id < 0) return 1;
+            double amount = 1;
+            if (!parse_number(param(c, "Duration"), &amount) || amount < 0.01) amount = amount < 0.01 ? 0.01 : 1;
+            const char *unit = param(c, "Unit");
+            /* Lasting: real seconds, game minutes / hours, or so many times through */
+            begin_action(r, -1000, A_EFFECT);
+            r->effect = id; r->waitMinutes = 0;
+            if (!strcmp(unit, "Seconds")) r->stageMs = amount * 1000;
+            else if (!strcmp(unit, "Minutes") || !strcmp(unit, "Hours")) { r->waitFromMinute = total_minutes(); r->waitMinutes = (int)(strcmp(unit, "Hours") ? amount : amount * 60); r->stageMs = 1e30; }
+            else r->stageMs = s->totalMs * (amount < 1 ? 1 : (int)(amount + 0.5));
+            if (!strcmp(param(c, "Wait"), "False"))
+            {
+                /* not waited for: it plays on by itself */
+                for (int k = 0; k < MAX_EFFECT_TIMERS; k++) if (!effectTimers[k].used) { effectTimers[k] = (EffectTimer){ 1, id, r->stageMs, r->waitMinutes, r->waitFromMinute }; break; }
+                r->waiting = W_NONE; r->act = 0;
+                return 1;
+            }
+            return 0;
+        }
         case C_ChangeTile:
         {
             if (!param(c, "X")[0] || !param(c, "Y")[0]) return 1;
@@ -1618,6 +1683,27 @@ static int pose_once(Run *r, int actor, double ms)
 static int action_tick(Run *r, double ms, int *ok)
 {
     int a = r->walker;
+    if (r->act == A_EFFECT)
+    {
+        if (r->waitMinutes > 0 ? total_minutes() - r->waitFromMinute < r->waitMinutes : (r->stageMs -= ms) > 0) return 1;
+        world_effect_stop(r->effect);
+        *ok = 1;
+        return 0;
+    }
+    if (r->act == A_OPEN_DOOR || r->act == A_PICKLOCK || r->act == A_TAKE)
+    {
+        if (r->stage == 0)
+        {
+            if (!world_thing_there(r->thing)) { *ok = 0; return 0; }
+            int walked;
+            if (walk_tick(r, ms, &walked)) return 1;
+            if (!walked) { *ok = 0; return 0; }
+            world_face_cell(a, r->actX, r->actY, "Idle");
+            r->stage = 1; r->stageMs = r->act == A_TAKE ? -1 : 0;
+            return 1;
+        }
+        return door_or_container(r, ms, ok);
+    }
     if (r->act == A_POSE)
     {
         /* Play Pose: shown for its time (or till its animation has played once), then standing again */
@@ -1790,6 +1876,97 @@ static int return_from(Run *r)
     memcpy(r->returns, f->returns, sizeof r->returns); r->returnCount = f->returnCount;
     memcpy(r->loops, f->loops, sizeof r->loops); r->loopCount = f->loopCount;
     return 1;
+}
+
+/* Open Door / Picklock Door / Pick Item From Container, once beside it. 1 = still going. */
+static int door_or_container(Run *r, double ms, int *ok)
+{
+    int a = r->walker, who = world_actor_character(a);
+    cJSON *def = NULL, *o;
+    cJSON_ArrayForEach(o, objectsJson) if (num(o, "Id", -2) == world_thing_object_id(r->thing)) def = o;
+    cJSON *door = get(def, "Door");
+    int open, locked;
+    world_door_state(r->thing, &open, &locked);
+    if (r->act == A_OPEN_DOOR)
+    {
+        if (r->stage == 1)
+        {
+            if (!open && locked)
+            {
+                if (flag(door, "MagicallyLocked") || !items_carries_key(who, num(door, "RequiredKeyItemId", -1)))
+                {
+                    sound_play(num(door, "LockedRattleSoundResourceId", -1));
+                    world_bark_thing(r->thing, "Locked", 1000);
+                    game_log(flag(door, "MagicallyLocked") ? "Open Door: it's magically locked." : "Open Door: they have no key for it.");
+                    *ok = 0;
+                    return 0;
+                }
+                unlock_door(r->thing, door, "unlockkey"); /* keyring.uc UseKeyOnDoor */
+                r->stageMs = 400;
+            }
+            r->stage = 2;
+            return 1;
+        }
+        if ((r->stageMs -= ms) > 0) return 1;
+        world_door_state(r->thing, &open, &locked);
+        if (!open) { world_door_open(r->thing); sound_play(num(door, "OpenSoundResourceId", -1)); events_object_event(r->thing, 5, a > 0 ? a : -1); }
+        *ok = 1;
+        return 0;
+    }
+    if (r->act == A_PICKLOCK)
+    {
+        /* UseLockpickOnDoor, again and again: Dexterity against the lock; a failure breaks that lockpick */
+        if (!locked) { world_set_pose(a, "Idle", -1); *ok = 1; return 0; }
+        if (flag(door, "MagicallyLocked")) { game_log("Picklock Door: it's magically locked - no lockpick opens it."); *ok = 0; return 0; }
+        if ((r->stageMs -= ms) > 0) return 1;
+        int pick = items_lockpick(who);
+        if (pick < 0) { world_set_pose(a, "Idle", -1); game_log("Picklock Door: no lockpick left, and it's still locked."); *ok = 0; return 0; }
+        world_face_cell(a, r->actX, r->actY, "Picking");
+        int length = world_pose_length(a, "Picking");
+        r->stageMs = length > 1500 ? length : 1500;
+        const char *dex = stat_value(who, 2, NULL);
+        int chance = ((dex ? atoi(dex) : 10) - num(door, "PickLockDifficulty", 0)) * 5 + 50;
+        chance = chance < 5 ? 5 : chance > 95 ? 95 : chance;
+        static unsigned rng = 777u;
+        rng = rng * 1103515245u + 12345u;
+        if ((int)((rng >> 8) % 100) < chance) { unlock_door(r->thing, door, "picklocked"); return 1; } /* done next time round (unlocked) */
+        Item *broken[1]; int n;
+        if (items_take(who, CAT_OBJECT, pick, 1, broken, 1, &n)) for (int i = 0; i < n; i++) items_free(broken[i]); /* it breaks */
+        sound_play(num(door, "LockpickBrokeSoundResourceId", -1));
+        events_object_event(r->thing, 11, a > 0 ? a : -1); /* By Exit */
+        return 1;
+    }
+    /* Pick Item From Container: the Picking pose, then out of it into their hands / pack */
+    if (r->stage == 1) { if (pose_once(r, a, ms)) return 1; r->stage = 2; }
+    int tc, ti, tq, tx, ty, tin;
+    world_thing_info(r->thing, &tc, &ti, &tq, &tx, &ty, &tin);
+    cJSON *data = NULL, *ct;
+    cJSON_ArrayForEach(ct, get(get(get((cJSON *)world_json(), "Project"), "Containers"), "Containers")) if (num(ct, "Id", -2) == ti) data = ct;
+    Item *box = items_unpark(r->thing, tc, ti, tq);
+    if (items_locked(box, flag(data, "IsLocked")))
+    {
+        items_park(r->thing, box);
+        sound_play(num(data, "LockedRattleSoundResourceId", -1));
+        game_log("Pick Item From Container: it's locked.");
+        *ok = 0;
+        return 0;
+    }
+    int taken = items_take_from(box, who, r->category, r->itemId, r->quantity);
+    items_park(r->thing, box);
+    if (!taken) game_log("Pick Item From Container: they take nothing from it.");
+    *ok = taken > 0;
+    return 0;
+}
+
+/* Unlocked: its sound, "Unlocked" over it, the record (Advance IF) and its By Stay event. */
+static void unlock_door(int uid, cJSON *door, const char *record)
+{
+    world_door_set_locked(uid, 0);
+    int unlock = num(door, "UnlockSoundResourceId", -1);
+    sound_play(unlock >= 0 ? unlock : num(door, "LockSoundResourceId", -1));
+    world_bark_thing(uid, "Unlocked", 1000);
+    conditions_record_item(record, CAT_OBJECT, world_thing_object_id(uid));
+    events_object_event(uid, 10, -1);
 }
 
 /* EventCommandInterpreter.Run: on from r->pc till the list ends or something waits (2000 steps a frame at most: a long loop goes on next frame). */
@@ -2157,6 +2334,9 @@ void events_update(double ms, int paused)
     }
     if (paused) return;
     clock_advance(ms); /* the clock runs while the game does */
+    for (int k = 0; k < MAX_EFFECT_TIMERS; k++)
+        if (effectTimers[k].used && (effectTimers[k].minutes > 0 ? total_minutes() - effectTimers[k].fromMinute >= effectTimers[k].minutes : (effectTimers[k].ms -= ms) <= 0))
+        { world_effect_stop(effectTimers[k].id); effectTimers[k].used = 0; }
     burn_lights();
     lighting_update(ms);
     update_ambient();

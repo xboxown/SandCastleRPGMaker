@@ -1373,8 +1373,11 @@ void world_bark(int actor, const char *text, int ms)
 static void draw_thing_barks(uint32_t *pixels);
 
 /* Drawn over everything: centred over the head, 2 pixels above the picture (GameTextLabel in the InGameFont). */
+static void draw_effects(uint32_t *pixels);
+
 void world_draw_barks(uint32_t *pixels)
 {
+    draw_effects(pixels);
     draw_thing_barks(pixels);
     const Font *f = font_get("InGameFont");
     for (int i = 0; i < 16; i++)
@@ -2146,4 +2149,46 @@ int world_set_tile(int x, int y, int onFloor, int tile)
         b->left = left; b->top = top; b->width = unitsX; b->depth = unitsY; b->z = z; b->height = 1;
     }
     return 1;
+}
+
+/* ---------------- Play Animation: a sprite played at a spot or over someone ---------------- */
+
+typedef struct Effect { int used, follows; const Sprite *sprite; double x, y; int lift; uint32_t since; } Effect;
+static Effect effects[16];
+
+int world_effect_start(const Sprite *sprite, int follows, int cellX, int cellY)
+{
+    for (int i = 0; i < 16; i++)
+        if (!effects[i].used)
+        {
+            Effect *e = &effects[i];
+            e->used = 1; e->sprite = sprite; e->follows = follows; e->since = lastMs;
+            if (follows < 0)
+            {
+                e->x = cellX * tileW + tileW / 2.0; e->y = cellY * tileH + tileH / 2.0;
+                e->lift = standing_lift(cellX * unitsX, cellY * unitsY, unitsX, unitsY, floor_of(player.lift)); /* on whatever is there, on the player's floor */
+            }
+            return i;
+        }
+    return -1;
+}
+
+void world_effect_stop(int id) { if (id >= 0 && id < 16) effects[id].used = 0; }
+
+/* Over the world (just under the words over heads): bottom-centre on the feet line, up-left by its lift. */
+static void draw_effects(uint32_t *pixels)
+{
+    for (int i = 0; i < 16; i++)
+    {
+        Effect *e = &effects[i];
+        if (!e->used) continue;
+        double x = e->x, y = e->y;
+        int lift = e->lift;
+        if (e->follows >= 0) { const Actor *a = actor_of(e->follows); if (!a) continue; x = a->px; y = a->py; lift = a->lift; }
+        const Picture *pic = sprite_picture_at(e->sprite, lastMs - e->since);
+        if (!pic) continue;
+        int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
+        screen = pixels;
+        blit_box(pic, (int)floor(x - qw / 2.0 - lift * LIFT_SHIFT - cameraX), (int)floor(y + tileH / 2.0 - qh - lift * LIFT_SHIFT - cameraY), qw, qh);
+    }
 }
