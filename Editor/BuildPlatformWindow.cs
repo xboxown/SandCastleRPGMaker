@@ -23,8 +23,8 @@ internal sealed class BuildPlatformWindow : Window
     private static readonly Choice[] Choices =
     {
         new(BuildPlatform.Windows, "Windows", "Windows 10 or 11, 64-bit, with the free Microsoft .NET 8 Desktop Runtime.", true),
-        new(BuildPlatform.Linux, "Linux", "64-bit Linux (Ubuntu and the like) with SDL2.", false),
-        new(BuildPlatform.MacModern, "Mac (Intel and Apple chips)", "macOS 10.13 or later, on an Intel or Apple (M-series) Mac.", false),
+        new(BuildPlatform.Linux, "Linux (preview)", "64-bit Linux (Ubuntu and the like) with SDL2. Preview: writes the game's data for the Sandcastle player (the repo's Player folder: make, then run it on that folder) - so far it draws the world and you walk in it.", true),
+        new(BuildPlatform.MacModern, "Mac - Intel and Apple chips (preview)", "macOS 10.13 or later, on an Intel or Apple (M-series) Mac. Preview, as Linux.", true),
         new(BuildPlatform.MacPowerPC, "Mac OS X PowerPC", "Mac OS X 10.4 or 10.5 on a G4 or G5.", false),
         new(BuildPlatform.MorphOS, "MorphOS", "MorphOS 3.x on a PowerPC Mac, Pegasos or Efika. Built as \"Game\" with its icon \"Game.info\".", false),
         new(BuildPlatform.AmigaOS4, "AmigaOS 4.x", "AmigaOS 4.1 on an X1000, X5000, A1222 or Sam board. Built as \"Game\" with its icon \"Game.info\".", false),

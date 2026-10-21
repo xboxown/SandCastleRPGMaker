@@ -942,7 +942,31 @@ public partial class MainWindow : Window
             // .msrp is re-saved every time too now, not written once and
             // left alone - it's a real, growing data file (factions,
             // variables, stats, tile properties), not a one-time manifest.
-            var payload = new ManifestPayload
+            var payload = CurrentPayload();
+            ProjectFiles.SaveManifest(_currentProjectFilePath, payload);
+
+            MarkSpritesIntegrated();
+            MarkAudiosIntegrated();
+
+            StatusText.Text = $"Project saved to {_currentProjectFolder}";
+            return true;
+        }
+        catch (ProjectFileException ex)
+        {
+            MessageBox.Show(ex.Message, "Save Project", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        catch (Exception ex)
+        {
+            MessageBox.Show($"Could not save the project: {ex.Message}", "Save Project", MessageBoxButton.OK, MessageBoxImage.Error);
+        }
+        return false;
+    }
+
+    /// <summary>The project as it's saved (and as the Sandcastle player gets it).</summary>
+    private ManifestPayload CurrentPayload()
+    {
+        {
+            return new ManifestPayload
             {
                 Manifest = new ProjectManifest
                 {
@@ -966,23 +990,7 @@ public partial class MainWindow : Window
                 Worlds = _worlds.Skip(1).ToList(),
                 Houses = _houses // the House Editor's houses (MainWindow.Houses.cs)
             };
-            ProjectFiles.SaveManifest(_currentProjectFilePath, payload);
-
-            MarkSpritesIntegrated();
-            MarkAudiosIntegrated();
-
-            StatusText.Text = $"Project saved to {_currentProjectFolder}";
-            return true;
         }
-        catch (ProjectFileException ex)
-        {
-            MessageBox.Show(ex.Message, "Save Project", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        catch (Exception ex)
-        {
-            MessageBox.Show($"Could not save the project: {ex.Message}", "Save Project", MessageBoxButton.OK, MessageBoxImage.Error);
-        }
-        return false;
     }
 
     /// <summary>Common finish line for both New and Open: record which project is active and unlock everything except Save was previously locked behind.</summary>
@@ -1231,7 +1239,8 @@ public partial class MainWindow : Window
             return;
         }
         var platform = new BuildPlatformWindow { Owner = this }; // which platform (BuildPlatformWindow.cs)
-        if (platform.ShowDialog() != true || platform.Picked != BuildPlatform.Windows) return;
+        if (platform.ShowDialog() != true) return;
+        if (platform.Picked != BuildPlatform.Windows) { BuildForPlayer(platform.Picked); return; } // the Sandcastle player's platforms (MainWindow.PlayerBuild.cs)
         if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         if (!SaveProject()) return;
 
