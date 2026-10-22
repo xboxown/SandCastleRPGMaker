@@ -5,6 +5,7 @@
  */
 #include "events.h"
 #include "world.h"
+#include "dolls.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <string.h>
@@ -43,10 +44,16 @@ void error_describe(int number, const char *detail, char *out, size_t size)
     out[n] = 0;
 }
 
-void game_error(int number, const char *detail)
+/* GameError: its words in Game.log; the error paperdoll, if the game has one (modal, %errnum / %errdescrp / %errdetail filled in). */
+int game_error_shown(int number, const char *detail, int token)
 {
     char words[400], line[460];
     error_describe(number, detail ? detail : "", words, sizeof words);
     snprintf(line, sizeof line, "Error %d: %s", number, words);
     game_log(line);
+    cJSON *errors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Errors");
+    cJSON *id = cJSON_GetObjectItem(errors, "DollDesignId");
+    return cJSON_IsNumber(id) && dolls_error(id->valueint, number, words, detail ? detail : "", token);
 }
+
+void game_error(int number, const char *detail) { game_error_shown(number, detail, 0); }

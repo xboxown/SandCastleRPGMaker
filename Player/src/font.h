@@ -29,4 +29,7 @@ int font_draw_block(const Font *font, uint32_t *pixels, int x, int y, const char
 /* Word-wrapped into lines no wider than width ('\n' breaks a line); returns how many lines; their starts and lengths go into starts/lengths (up to max). */
 int font_wrap(const Font *font, const char *text, int width, int max, const char **starts, int *lengths);
 
+/* Into any picture of bw x bh: wrapped to width (0: one line), scaled, tinted (0: its own colours); its height. */
+int font_draw_into(const Font *font, uint32_t *buf, int bw, int bh, int x, int y, const char *text, uint32_t colour, int scale, int width);
+
 #endif

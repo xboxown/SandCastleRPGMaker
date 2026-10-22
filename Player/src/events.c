@@ -12,6 +12,7 @@
 #include "screen.h"
 #include "vitals.h"
 #include "combat.h"
+#include "dolls.h"
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
@@ -418,7 +419,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 
 /* ---------------- Running commands ---------------- */
 
-enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN };
+enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN, W_DOLL };
 enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE, A_OPEN_DOOR, A_PICKLOCK, A_TAKE, A_EFFECT, A_ATTACK_THING };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
@@ -455,10 +456,23 @@ typedef struct Run
     int cinema;
     /* a Show Text with replies waiting: where it is, where its branches end */
     int choiceAt, afterBranches, choicePinned[DIALOG_MAX_REPLIES], choiceIds[DIALOG_MAX_REPLIES], choiceCount;
+    void *doll;                      /* the paperdoll whose part's (or object's) event this is: "this paperdoll" */
+    int answerToken;                 /* waiting for a paperdoll's answer (Open Paperdoll, Show Error) */
 } Run;
 
 #define MAX_RUNS 32
 static Run runs[MAX_RUNS];
+
+/* Who hears a paperdoll's answer: a run waiting for it, and / or a variable for it. */
+typedef struct Answer { int used; Run *run; char variable[64]; } Answer;
+static Answer answers[64];
+static void *dollContext, *lastDoll; /* the paperdoll events started now belong to; the last one (commands after a box is read) */
+static int new_answer(Run *r, const char *variable)
+{
+    for (int i = 0; i < 64; i++)
+        if (!answers[i].used) { answers[i].used = 1; answers[i].run = r; snprintf(answers[i].variable, sizeof answers[i].variable, "%s", variable); return i + 1; }
+    return 0;
+}
 static int door_or_container(Run *r, double ms, int *ok);
 
 /* Characters an event moved, whose event is still going: they stay where it left them (no schedule) till it's over. */
@@ -1430,8 +1444,60 @@ static int execute(Run *r, const Cmd *c)
         case C_QuitGame: quitRequested = 1; return 1;
         case C_ShowError:
         {
+            /* the error box (System Settings > Errors): the event goes on once it's closed */
             Value detail = formula(c, "Detail");
-            game_error((int)formula_number(c, "Number"), value_text_of(detail));
+            int token = new_answer(r, "");
+            if (game_error_shown((int)formula_number(c, "Number"), value_text_of(detail), token)) { r->waiting = W_DOLL; r->answerToken = token; return 0; }
+            answers[token - 1].used = 0;
+            return 1;
+        }
+        case C_OpenPaperdoll:
+        {
+            /* any PaperDoll Editor paperdoll, modal or not; waits for it to close if asked; its answer (Yes / OK = 1, else 0) into a variable */
+            int wait = !strcmp(param(c, "Wait"), "True");
+            const char *variable = param(c, "AnswerVariable");
+            int asks = wait || variable[0], token = asks ? new_answer(wait ? r : NULL, variable) : 0;
+            if (!dolls_open_form(atoi(param(c, "DesignId")), !strcmp(param(c, "Modal"), "True"), !strcmp(param(c, "Fresh"), "True"), token, 0))
+            {
+                char line[200];
+                snprintf(line, sizeof line, "Open Paperdoll: \"%s\" isn't in the PaperDoll Editor any more.", param(c, "DesignName"));
+                game_log(line);
+                if (token) answers[token - 1].used = 0;
+                lastResult = 0;
+                return 1;
+            }
+            if (wait) { r->waiting = W_DOLL; r->answerToken = token; return 0; }
+            return 1;
+        }
+        case C_Paperdoll:
+            lastResult = dolls_paperdoll_command(r->doll ? r->doll : lastDoll, param(c, "Action"), param(c, "PartId")[0] ? atoi(param(c, "PartId")) : -1, param(c, "PartName"), c->params);
+            return 1;
+        case C_ClosePaperdoll:
+            lastResult = dolls_close_command(param(c, "Which"), r->doll ? r->doll : lastDoll, param(c, "DesignId")[0] ? atoi(param(c, "DesignId")) : -1);
+            return 1;
+        case C_MovePaperdoll:
+            lastResult = dolls_move_command(r->doll ? r->doll : lastDoll, param(c, "DesignId")[0] ? atoi(param(c, "DesignId")) : -1, !strcmp(param(c, "Move"), "True"),
+                                            formula_number(c, "X"), formula_number(c, "Y"), !strcmp(param(c, "Front"), "True"));
+            return 1;
+        case C_ShowHidePart: case C_SetPartLook: case C_SetPartText: case C_SetPartValue: case C_GetPartValue: case C_FillListFromArray:
+        case C_GetPickedChoice: case C_EnablePart: case C_MovePart: case C_PutItemInSlot: case C_TakeItemFromSlot: case C_FocusTextBox:
+        {
+            static const char *NAMES[][2] = { { "", "" } };
+            (void)NAMES;
+            const char *name = c->type == C_ShowHidePart ? "ShowHidePart" : c->type == C_SetPartLook ? "SetPartLook" : c->type == C_SetPartText ? "SetPartText"
+                : c->type == C_SetPartValue ? "SetPartValue" : c->type == C_GetPartValue ? "GetPartValue" : c->type == C_FillListFromArray ? "FillListFromArray"
+                : c->type == C_GetPickedChoice ? "GetPickedChoice" : c->type == C_EnablePart ? "EnablePart" : c->type == C_MovePart ? "MovePart"
+                : c->type == C_PutItemInSlot ? "PutItemInSlot" : c->type == C_TakeItemFromSlot ? "TakeItemFromSlot" : "FocusTextBox";
+            Value v = value_number(0);
+            const char *text = param(c, "Value");
+            int isText = 0;
+            if (c->type == C_SetPartLook) { v = formula(c, "Look"); isText = v.kind == V_TEXT; text = value_text_of(v); }
+            else if (c->type == C_SetPartText || c->type == C_SetPartValue) { v = formula(c, "Value"); isText = v.kind == V_TEXT; text = value_text_of(v); }
+            else if (c->type == C_PutItemInSlot) v = formula(c, "Quantity");
+            double number = value_number_of(v);
+            if (c->type == C_SetPartLook && !isText) number = value_number_of(v);
+            lastResult = dolls_script_command(name, r->doll ? r->doll : lastDoll, param(c, "DesignId")[0] ? atoi(param(c, "DesignId")) : -1, param(c, "PartName"), text, number, isText,
+                                              c->type == C_MovePart ? formula_number(c, "X") : 0, c->type == C_MovePart ? formula_number(c, "Y") : 0, c->type == C_MovePart ? formula_number(c, "Seconds") : 0, c->params);
             return 1;
         }
         case C_GameOver:
@@ -2593,6 +2659,8 @@ static void start_run_as(const List *list, int activator, int byStepping, const 
             if (owner) snprintf(r->owner, sizeof r->owner, "%s", owner);
             else if (activator > 0) snprintf(r->owner, sizeof r->owner, "char:%d", world_actor_character(activator));
             else snprintf(r->owner, sizeof r->owner, "global");
+            r->doll = dollContext;
+            if (dollContext) lastDoll = dollContext;
             continue_run(r);
             return;
         }
@@ -2887,3 +2955,81 @@ int events_last_result(void) { return lastResult; }
 
 /* Knocked out: whoever was attacking it looks for someone else (combat). */
 void events_knocked_out(int characterId) { (void)characterId; }
+
+/* ---------------- Paperdolls ---------------- */
+
+void events_set_doll_context(void *doll) { dollContext = doll; }
+
+/* A paperdoll answered (Yes / OK = 1; No / Cancel, Escape, closed = 0): its variable, and the event waiting on it goes on. */
+void events_doll_answered(int token, int yes)
+{
+    if (token < 1 || token > 64 || !answers[token - 1].used) return;
+    Answer a = answers[token - 1];
+    answers[token - 1].used = 0;
+    if (a.variable[0]) set_var(a.variable, yes ? 1 : 0);
+    if (a.run && a.run->used && a.run->waiting == W_DOLL && a.run->answerToken == token) { a.run->waiting = W_NONE; a.run->answerToken = 0; continue_run(a.run); }
+}
+
+/* Each part's page counts, per copy of the paperdoll. */
+typedef struct DollCount { const void *state; const cJSON *pages; int page, count; } DollCount;
+static DollCount *dollCounts; static int dollCountN, dollCountCap;
+static int *doll_count(const void *state, const cJSON *pages, int page)
+{
+    for (int i = 0; i < dollCountN; i++) if (dollCounts[i].state == state && dollCounts[i].pages == pages && dollCounts[i].page == page) return &dollCounts[i].count;
+    if (dollCountN == dollCountCap) { dollCountCap = dollCountCap ? dollCountCap * 2 : 64; dollCounts = (DollCount *)realloc(dollCounts, sizeof(DollCount) * (size_t)dollCountCap); }
+    dollCounts[dollCountN] = (DollCount){ state, pages, page, 0 };
+    return &dollCounts[dollCountN++].count;
+}
+
+/* Their lists, read once per part. */
+typedef struct DollPages { const cJSON *pages; Page *list; int count; } DollPages;
+static DollPages *dollPages; static int dollPagesN, dollPagesCap;
+
+/*
+ * FireDollPartEvent: the first of a part's pages whose conditions are met
+ * runs, with this paperdoll as "this paperdoll". A page set to an item (Put
+ * In, Taken Out, Combined With An Item) runs only for that item; one set to a
+ * part (Combined With A Part) only for that part.
+ */
+int events_fire_doll(cJSON *pages, int trigger, void *state, int part, int itemCategory, int itemId, int combinedPartId)
+{
+    DollPages *dp = NULL;
+    for (int i = 0; i < dollPagesN; i++) if (dollPages[i].pages == pages) dp = &dollPages[i];
+    if (!dp)
+    {
+        if (dollPagesN == dollPagesCap) { dollPagesCap = dollPagesCap ? dollPagesCap * 2 : 16; dollPages = (DollPages *)realloc(dollPages, sizeof(DollPages) * (size_t)dollPagesCap); }
+        dp = &dollPages[dollPagesN++];
+        dp->pages = pages; dp->count = cJSON_GetArraySize(pages);
+        dp->list = (Page *)calloc((size_t)dp->count + 1, sizeof(Page));
+        int i = 0;
+        cJSON *p;
+        cJSON_ArrayForEach(p, pages) { dp->list[i].cond = get(p, "Conditions"); dp->list[i].list = read_list(get(p, "Commands")); i++; }
+    }
+    for (int i = 0; i < dp->count; i++)
+    {
+        cJSON *c = dp->list[i].cond;
+        if (num(c, "TriggerConditionBased", 0) == trigger)
+        {
+            cJSON *want = get(c, "TriggerItemReference");
+            if ((trigger == 3 || trigger == 6 || trigger == 17) && want && num(want, "ItemId", -1) >= 0 && itemId >= 0
+                && (num(want, "Category", -1) != itemCategory || num(want, "ItemId", -1) != itemId)) continue;
+            if (trigger == 18 && num(c, "CombinedPartId", -1) >= 0 && num(c, "CombinedPartId", -1) != combinedPartId) continue;
+        }
+        int *fired = doll_count(state, pages, i);
+        if (!conditions_met(c, trigger, *fired, -1)) continue;
+        (*fired)++;
+        if (dp->list[i].list.count > 0)
+        {
+            char key[48];
+            snprintf(key, sizeof key, "doll:%p:%d", state, part);
+            void *before = dollContext;
+            dollContext = state;
+            start_run_as(&dp->list[i].list, -1, 0, key);
+            dollContext = before;
+            return 1;
+        }
+    }
+    return 0;
+}
+
+void events_request_quit(void) { quitRequested = 1; }

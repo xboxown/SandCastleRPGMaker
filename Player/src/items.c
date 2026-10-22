@@ -3,6 +3,7 @@
 #include "world.h"
 #include "sound.h"
 #include "conditions.h"
+#include "dolls.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -30,6 +31,7 @@ struct Item
     int charges;                     /* a weapon with charges: how many left (-1: not used yet) */
     double cx, cy;                   /* its spot in a container's window (-100000: none yet) */
     int autoPlaced;                  /* laid out in the row by the engine, not dropped at a spot */
+    void *doll;                      /* its paperdoll as it was left (PaperDoll Editor), NULL: never opened */
     Item **contents; int count, cap;
 };
 
@@ -101,6 +103,7 @@ void items_free(Item *item)
     if (!item) return;
     for (int i = 0; i < item->count; i++) items_free(item->contents[i]);
     free(item->contents);
+    if (item->doll) dolls_free_state(item->doll);
     free(item);
 }
 
@@ -1152,3 +1155,45 @@ void items_weights(int characterId, double *carried, double *max)
 
 /* CanCombine, for a stack on the map. */
 int items_stackable(int category, int itemId) { return can_combine(category, itemId); }
+
+void *items_doll(const Item *it) { return it->doll; }
+void items_set_doll(Item *it, void *doll) { it->doll = doll; }
+
+/* The map thing a parked item is (0: it isn't on the map). */
+int items_parked_uid(const Item *it) { for (int i = 0; i < parkedCount; i++) if (parked[i].item == it) return parked[i].uid; return 0; }
+
+/* Turned into another object where it is (Paperdoll > Turn into): its paperdoll starts again. */
+void items_become(Item *it, int itemId) { it->itemId = itemId; if (it->doll) { dolls_free_state(it->doll); it->doll = NULL; } }
+
+/* One of it used up (a stack one less; the last one gone), wherever it is carried. */
+void items_use_up_one(Item *it)
+{
+    if (it->quantity > 1) { it->quantity--; return; }
+    ItemPlace from;
+    if (items_detach(it, &from)) { items_detach_done(&from, it); items_free(it); }
+}
+
+/* The item whose paperdoll this is (carried or parked on the map), and its map uid (0 when carried). */
+static Item *with_doll(Item **list, int count, const void *doll)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (list[i]->doll == doll) return list[i];
+        Item *inner = with_doll(list[i]->contents, list[i]->count, doll);
+        if (inner) return inner;
+    }
+    return NULL;
+}
+
+Item *items_find_doll(const void *doll, int *uid)
+{
+    *uid = 0;
+    for (int c = 0; c < carrierCount; c++) { Item *it = with_doll(carriers[c].items, carriers[c].count, doll); if (it) return it; }
+    for (int p = 0; p < parkedCount; p++)
+    {
+        if (parked[p].item->doll == doll) { *uid = parked[p].uid; return parked[p].item; }
+        Item *it = with_doll(parked[p].item->contents, parked[p].item->count, doll);
+        if (it) return it;
+    }
+    return NULL;
+}

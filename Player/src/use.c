@@ -11,6 +11,7 @@
 #include "events.h"
 #include "combat.h"
 #include "gumps.h"
+#include "dolls.h"
 #include "items.h"
 #include "world.h"
 #include "sound.h"
@@ -103,6 +104,13 @@ void use_thing(int uid)
     }
     cJSON *def = objectDef(objectId);
     if (!def) return;
+    cJSON *dollId = cJSON_GetObjectItem(def, "DollDesignId");
+    if (cJSON_IsNumber(dollId) && dollId->valueint >= 0)
+    {
+        int category, itemId, quantity, x, y, instance;
+        world_thing_info(uid, &category, &itemId, &quantity, &x, &y, &instance);
+        if (dolls_use_item(items_parked(uid, category, itemId, quantity), uid)) return; /* its paperdoll (its own By Use first) */
+    }
     /* a bed's cover lies over the bed: double-clicking it means the bed */
     int bed = world_bed_under_cover(uid);
     if (bed && !has_commands(def)) { world_player_sit(bed); return; }

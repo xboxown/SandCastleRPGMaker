@@ -29,6 +29,7 @@
 #include "dialog.h"
 #include "platform.h"
 #include "pictures.h"
+#include "dolls.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -45,16 +46,20 @@
 #define UNIT 8
 
 enum { G_DOLL = 1, G_PACK, G_BOX };
-enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT };
+enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT, T_DOLL_PART, T_DOLL_ITEM, T_DOLL_BODY };
 enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_ENTER = 9 };
 
 static const char *SLOT_NAMES[15] = { "Head", "Neck", "Body", "Arms", "Gloves", "Belt", "Back", "Legs", "Feet", "RightHand", "LeftHand", "Ring1", "Ring2", "Backpack", "Pouch" };
 
 typedef struct Gump { int kind, x, y, characterId, uid; Item *box; cJSON *data; } Gump;
-typedef struct Target { int kind, gump, slotKey, uid, actor; Item *item; } Target;
+typedef struct Target { int kind, gump, slotKey, uid, actor; Item *item; int doll, part; } Target;
+typedef struct Drag { int fromMap, uid, category, itemId, quantity; Item *item; DollState *dollState; int dollPart, dollIndex, partDoll, partDragged; } Drag;
+static Drag drag;
+
 
 static Gump gumps[24]; static int gumpCount;           /* in drawing order: the last is on top */
 static Target pressed, lastClick, pendingIdentify;
+static int movingDoll = -1;
 static int pressing, dragging, movingGump = -1, pressX, pressY, mouseX, mouseY, grabX, grabY, moveDX, moveDY;
 static double sinceClick = 1e9, identifyIn = -1;
 static const Sprite *ghost;
@@ -241,7 +246,7 @@ static void close_gump(int i)
 }
 
 int gumps_open(void) { return gumpCount; }
-int gumps_close_top(void) { if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
+int gumps_close_top(void) { if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
 
 /* A map container double-clicked: its window (a never-opened one with its starting contents). */
 void gumps_open_map_container(int uid)
@@ -280,6 +285,10 @@ static void draw_readout(uint32_t *pixels, const Gump *g, cJSON *r, const char *
 }
 
 static int being_dragged(const Item *it) { return dragging && pressed.item == it; }
+int gumps_dragging_item(const Item *it) { return being_dragged(it); }
+int gumps_dragging_doll_part(const void *state, int part) { return dragging && drag.partDragged && drag.dollState == state && drag.dollPart == part; }
+const DollState *gumps_drag_doll_state(void) { return dragging && !drag.partDragged ? drag.dollState : NULL; }
+int gumps_drag_doll_part(void) { return dragging && drag.dollState && !drag.partDragged ? drag.dollPart : -1; }
 
 static void draw_doll(uint32_t *pixels, const Gump *g)
 {
@@ -406,6 +415,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         else if (gumps[i].kind == G_BOX) draw_box(pixels, &gumps[i]);
         else draw_pack(pixels, &gumps[i]);
     }
+    dolls_draw(pixels, ms); /* PaperDoll Editor paperdolls, over the inventory windows */
     const Font *f = font_get("InGameFont");
     for (int i = 0; i < 8; i++) if (labels[i].until > ms && labels[i].text[0]) font_draw(f, pixels, labels[i].x, labels[i].y, labels[i].text, 0);
     if (dragging && ghost)
@@ -433,7 +443,14 @@ static void show_label(const char *text, int x, int y)
 
 static Target hit(int x, int y)
 {
-    Target t = { T_NONE, -1, -1, 0, -1, NULL };
+    Target t = { T_NONE, -1, -1, 0, -1, NULL, -1, -1 };
+    {
+        int w, p;
+        Item *it;
+        int on = dolls_hit(x, y, &w, &p, &it);
+        if (on) { t.kind = on == 1 ? T_DOLL_PART : on == 2 ? T_DOLL_ITEM : T_DOLL_BODY; t.doll = w; t.part = p; t.item = it; return t; }
+        if (dolls_modal_open()) return t; /* a modal paperdoll: nothing else can be clicked */
+    }
     for (int gi = gumpCount - 1; gi >= 0; gi--)
     {
         Gump *g = &gumps[gi];
@@ -502,7 +519,7 @@ static Target hit(int x, int y)
 
 static int same_target(const Target *a, const Target *b)
 {
-    return a->kind == b->kind && a->gump == b->gump && a->slotKey == b->slotKey && a->uid == b->uid && a->actor == b->actor && a->item == b->item;
+    return a->kind == b->kind && a->gump == b->gump && a->slotKey == b->slotKey && a->uid == b->uid && a->actor == b->actor && a->item == b->item && a->doll == b->doll && a->part == b->part;
 }
 
 /* ---------------- Click and double click ---------------- */
@@ -533,6 +550,12 @@ static void identify(const Target *t)
             world_bark(t->actor, t->actor == 0 && !n[0] ? "Yourself" : n, 2000);
             break;
         }
+        case T_DOLL_PART:
+            if (t->doll < dolls_window_count() && dolls_part_name(t->doll, t->part)[0]) { show_label(dolls_part_name(t->doll, t->part), mouseX, mouseY - 12); game_log(dolls_part_name(t->doll, t->part)); }
+            break;
+        case T_DOLL_ITEM:
+            if (t->item && t->doll < dolls_window_count()) { item_label(t->item, name, sizeof name); show_label(name, mouseX, mouseY - 12); game_log(name); }
+            break;
         case T_SLOT: case T_ROW: case T_BOX_ITEM:
             if (t->item && items_alive(t->item) && t->gump < gumpCount)
             {
@@ -549,6 +572,7 @@ static void use_carried(Item *it)
 {
     int category = items_category(it), id = items_item_id(it);
     if (category == CAT_CONTAINER) { open_box(it, 0); return; }
+    if (category == CAT_OBJECT && dolls_use_item(it, 0)) return; /* its paperdoll (its own By Use first) */
     if (events_fire_item(category, id, TR_USE)) return;
     if (category == CAT_OBJECT && items_use_light(it)) return;
     if (category == CAT_BOOK) events_log_once(311, "Reading books isn't in the player yet.");
@@ -579,12 +603,25 @@ static void use_target(const Target *t)
             break;
         }
         case T_ROW: case T_BOX_ITEM: if (t->item && items_alive(t->item)) use_carried(t->item); break;
+        case T_DOLL_PART: if (t->doll < dolls_window_count()) dolls_double_click(t->doll, t->part); break;
+        case T_DOLL_ITEM: if (t->item) use_carried(t->item); break;
     }
 }
 
 static void click_released(const Target *t)
 {
     if (t->kind == T_EXIT) { close_gump(t->gump); return; }
+    if (t->kind == T_DOLL_PART && t->doll < dolls_window_count() && dolls_part_acts_on_click(t->doll, t->part))
+    {
+        /* buttons, switches, sliders, controls act at once; a second click in time is a double click too (a save loads) */
+        int twice = lastClick.kind != T_NONE && same_target(&lastClick, t) && sinceClick < DOUBLE_CLICK_MS;
+        dolls_click(t->doll, t->part, mouseX, mouseY);
+        identifyIn = -1;
+        if (twice) { lastClick.kind = T_NONE; if (t->doll < dolls_window_count()) dolls_double_click(t->doll, t->part); }
+        else { lastClick = *t; sinceClick = 0; }
+        return;
+    }
+    if (t->kind == T_DOLL_BODY) { lastClick.kind = T_NONE; return; }
     if (t->kind == T_GUMP || t->kind == T_NONE) { lastClick.kind = T_NONE; return; }
     if (lastClick.kind != T_NONE && same_target(&lastClick, t) && sinceClick < DOUBLE_CLICK_MS)
     {
@@ -601,8 +638,6 @@ static void click_released(const Target *t)
 
 /* ---------------- Dragging ---------------- */
 
-typedef struct Drag { int fromMap, uid, category, itemId, quantity; Item *item; } Drag;
-static Drag drag;
 
 static int start_drag(const Target *t)
 {
@@ -616,6 +651,22 @@ static int start_drag(const Target *t)
         if (!world_reachable(x, y, world_thing_z(t->uid))) { game_log("You can't reach that from here."); return 0; }
         drag.fromMap = 1; drag.uid = t->uid;
         ghost = world_thing_sprite(t->uid);
+    }
+    else if (t->kind == T_DOLL_ITEM && t->item)
+    {
+        drag.item = t->item; drag.dollState = dolls_window_state(t->doll); drag.dollPart = t->part;
+        drag.category = items_category(t->item); drag.itemId = items_item_id(t->item); drag.quantity = items_quantity(t->item);
+        ghost = item_look(t->item);
+    }
+    else if (t->kind == T_DOLL_PART && dolls_part_draggable(t->doll, t->part) && dolls_part_look(t->doll, t->part))
+    {
+        /* a part dragged onto another (a key part onto a keyhole): it goes back when let go */
+        drag.partDragged = 1; drag.partDoll = t->doll; drag.dollPart = t->part; drag.dollState = dolls_window_state(t->doll);
+        ghost = dolls_part_look(t->doll, t->part);
+        const Picture *gp = sprite_now(ghost);
+        grabX = gp ? gp->width / 2 : 8; grabY = gp ? gp->height / 2 : 8;
+        identifyIn = -1; lastClick.kind = T_NONE;
+        return 1;
     }
     else if ((t->kind == T_SLOT || t->kind == T_ROW || t->kind == T_BOX_ITEM) && t->item)
     {
@@ -641,18 +692,21 @@ static int start_drag(const Target *t)
 /* The dragged thing in hand: off its map spot (kept parked till it lands) or out of where it was carried. */
 static Item *lift(ItemPlace *from)
 {
+    if (drag.dollState) { drag.dollIndex = dolls_take_item(drag.dollState, drag.dollPart, drag.item); return drag.dollIndex >= 0 ? drag.item : NULL; }
     if (drag.fromMap) return items_unpark(drag.uid, drag.category, drag.itemId, world_thing_quantity(drag.uid));
     return items_detach(drag.item, from) ? drag.item : NULL;
 }
 
 static void put_back(Item *it, const ItemPlace *from)
 {
+    if (drag.dollState) { dolls_restore_item(drag.dollState, drag.dollPart, it, drag.dollIndex); return; }
     if (drag.fromMap) items_repark(drag.uid, it);
     else items_restore(from, it);
 }
 
 static void landed(Item *it, const ItemPlace *from)
 {
+    if (drag.dollState) { dolls_item_taken(drag.dollState, drag.dollPart, drag.item); return; } /* taken out of a paperdoll's slot: By Taken Out */
     if (drag.fromMap) world_thing_remove(drag.uid);
     else items_detach_done(from, it);
 }
@@ -819,9 +873,42 @@ static int drop_on_map(void)
     return 1;
 }
 
+/* For a paperdoll's drop: the dragged thing lifted, put back, landed. */
+static ItemPlace dollFrom;
+static Item *doll_lift(void) { return lift(&dollFrom); }
+static void doll_put_back(Item *it) { put_back(it, &dollFrom); }
+static void doll_landed(Item *it) { landed(it, &dollFrom); }
+static int dropping;
+
+/* Paperdoll > Use up the item just combined: one of the dragged thing, while its drop is going on. */
+int gumps_use_up_combined(void)
+{
+    if (!dropping) return 0;
+    if (drag.dollState) { Item *it = drag.item; if (items_quantity(it) > 1) { items_use_up_one(it); return 1; } int i = dolls_take_item(drag.dollState, drag.dollPart, it); if (i >= 0) items_free(it); return 1; }
+    if (drag.fromMap)
+    {
+        if (world_thing_quantity(drag.uid) > 1) world_thing_add_quantity(drag.uid, -1);
+        else { items_free(items_unpark(drag.uid, drag.category, drag.itemId, 1)); world_thing_remove(drag.uid); }
+        return 1;
+    }
+    items_use_up_one(drag.item);
+    return 1;
+}
+
 static void drop(void)
 {
     Target under = hit(mouseX, mouseY);
+    if (drag.partDragged) { if (under.kind == T_DOLL_PART || under.kind == T_DOLL_ITEM || under.kind == T_DOLL_BODY) { if (under.doll == drag.partDoll) dolls_part_dropped(drag.partDoll, drag.dollPart, mouseX, mouseY); } return; }
+    if (under.kind == T_DOLL_PART || under.kind == T_DOLL_ITEM || under.kind == T_DOLL_BODY)
+    {
+        char name[96];
+        snprintf(name, sizeof name, "%s", items_name(drag.category, drag.itemId));
+        const DollState *payloadDoll = drag.item ? (const DollState *)items_doll(drag.item) : NULL;
+        dropping = 1;
+        dolls_drop(under.doll, mouseX, mouseY, mouseX - grabX, mouseY - grabY, drag.category, drag.itemId, doll_lift, doll_put_back, doll_landed, payloadDoll, name);
+        dropping = 0;
+        return;
+    }
     if (under.gump >= 0 && under.kind != T_THING && under.kind != T_ACTOR)
     {
         Gump *g = &gumps[under.gump];
@@ -847,6 +934,8 @@ int gumps_mouse_down(int x, int y)
     if (events_cinema()) return 1;
     pressed = hit(x, y);
     pressing = 1; dragging = 0; pressX = x; pressY = y;
+    if (pressed.doll >= 0) { int top = dolls_to_front(pressed.doll); pressed.doll = top; }
+    if (pressed.kind == T_DOLL_BODY) { movingDoll = pressed.doll; moveDX = x - dolls_window_x(movingDoll); moveDY = y - dolls_window_y(movingDoll); pressing = 0; return 1; }
     if (pressed.kind == T_GUMP) { movingGump = to_front(pressed.gump); moveDX = x - gumps[movingGump].x; moveDY = y - gumps[movingGump].y; pressing = 0; return 1; }
     if (pressed.gump >= 0) { int top = to_front(pressed.gump); if (pressed.kind != T_EXIT) pressed.gump = top; else pressed.gump = top; }
     return 1;
@@ -856,6 +945,7 @@ void gumps_mouse_move(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (movingGump >= 0 && movingGump < gumpCount) { gumps[movingGump].x = x - moveDX; gumps[movingGump].y = y - moveDY; return; }
+    if (movingDoll >= 0 && movingDoll < dolls_window_count()) { dolls_move_window(movingDoll, x - moveDX, y - moveDY); return; }
     if (!pressing || dragging) return;
     if (abs(x - pressX) <= DRAG_SLOP && abs(y - pressY) <= DRAG_SLOP) return; /* Exult: wait for greater motion */
     if (start_drag(&pressed)) dragging = 1;
@@ -866,9 +956,10 @@ void gumps_mouse_up(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (movingGump >= 0) { movingGump = -1; return; }
+    if (movingDoll >= 0) { movingDoll = -1; return; }
     if (!pressing) return;
     pressing = 0;
-    if (dragging) { dragging = 0; drop(); ghost = NULL; return; }
+    if (dragging) { dragging = 0; drop(); ghost = NULL; memset(&drag, 0, sizeof drag); return; }
     click_released(&pressed);
 }
 
@@ -876,6 +967,7 @@ void gumps_mouse_up(int x, int y)
 void gumps_update(double ms)
 {
     sinceClick += ms;
+    dolls_update(ms);
     if (identifyIn >= 0 && (identifyIn -= ms) < 0) { identifyIn = -1; identify(&pendingIdentify); }
     for (int i = gumpCount - 1; i >= 0; i--)
     {
@@ -883,4 +975,34 @@ void gumps_update(double ms)
         int gone = g->kind == G_BOX ? (g->uid > 0 ? !world_thing_there(g->uid) : !items_alive(g->box)) : vitals_dead(g->characterId) || world_actor_by_character(g->characterId) < 0;
         if (gone) close_gump(i);
     }
+}
+
+/* Paperdoll > Turn into: the object whose paperdoll this is becomes another, where it is (on the map or carried). */
+int gumps_turn_into(const void *state, int objectId)
+{
+    int uid;
+    Item *it = items_find_doll(state, &uid);
+    if (!it || objectId < 0) return 0;
+    char line[200];
+    snprintf(line, sizeof line, "\"%s\" becomes \"%s\".", items_name(items_category(it), items_item_id(it)), items_name(CAT_OBJECT, objectId));
+    if (uid > 0)
+    {
+        int c, i, q, x, y, n, fl = world_thing_floor(uid);
+        world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+        Item *own = items_unpark(uid, c, i, q);
+        world_thing_remove(uid);
+        items_become(own, objectId);
+        int newUid = world_thing_put(CAT_OBJECT, objectId, q, x, y, fl);
+        if (newUid >= 0) items_park(newUid, own); else items_free(own);
+    }
+    else items_become(it, objectId);
+    game_log(line);
+    return 1;
+}
+
+/* The Title Screen's buttons (and Quit on any paperdoll). */
+void gumps_title_button(int kind)
+{
+    if (kind == 30) { events_request_quit(); return; } /* Quit */
+    events_log_once(312, "The Title Screen isn't in the player yet.");
 }

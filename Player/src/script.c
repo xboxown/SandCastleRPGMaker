@@ -1122,3 +1122,16 @@ int script_data_command(int type, cJSON *params)
     script_arena_reset();
     return 1;
 }
+
+/* For paperdolls: whether anything has set this variable yet; an array's items as words (-1: no such array). */
+int script_has_variable(const char *name) { return find(&numbers, name) != NULL || find(&texts, name) != NULL; }
+
+int script_array_texts(const char *name, char (*out)[96], int max)
+{
+    Named *n = find(&lists, name);
+    if (!n) return -1;
+    ScriptList *l = (ScriptList *)n->data;
+    int count = 0;
+    for (int i = 0; i < l->count && count < max; i++) snprintf(out[count++], 96, "%s", value_text_of(l->items[i]));
+    return count;
+}

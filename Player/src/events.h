@@ -52,10 +52,17 @@ double events_variable(const char *name);
 int events_last_result(void);
 
 void events_knocked_out(int characterId);
+/* Paperdolls: a part's own pages; the paperdoll an object's events act on; an answer heard. */
+int events_fire_doll(cJSON *pages, int trigger, void *state, int part, int itemCategory, int itemId, int combinedPartId);
+void events_set_doll_context(void *doll);
+void events_doll_answered(int token, int yes);
+/* The error box shown (System Settings > Errors has one): token hears when it closes. 0: no box (the words went to Game.log). */
+int game_error_shown(int number, const char *detail, int token);
 int events_saving_forbidden(void);
 int events_combat_forbidden(void);
 int events_keys_forbidden(void);   /* Allow Controls > Keys: only walking */
 int events_quit_requested(void);
+void events_request_quit(void);
 /* An error by number (System Settings > Errors): its words, the maker's else the engine's. */
 void game_error(int number, const char *detail);
 

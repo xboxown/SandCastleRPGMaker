@@ -43,6 +43,9 @@ void script_set_self_switch(const char *key, int on);
 /* The data commands (Calculate, Text Operation, arrays, grids, Debug Log...); 0 when it isn't one of them. Errors go to Game.log. */
 int script_data_command(int type, cJSON *params);
 
+int script_has_variable(const char *name);
+int script_array_texts(const char *name, char (*out)[96], int max);
+
 /* Frees the texts formulas made (after each command). */
 void script_arena_reset(void);
 

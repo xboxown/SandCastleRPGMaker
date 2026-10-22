@@ -18,6 +18,7 @@
 #include "vitals.h"
 #include "combat.h"
 #include "gumps.h"
+#include "dolls.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -176,6 +177,7 @@ int main(int argc, char **argv)
     sound_load(folder, !noSound);
     note(sound_status());
     events_load();
+    dolls_load();
     note("Events ready.");
     vitals_load();
     combat_load();
@@ -201,9 +203,11 @@ int main(int argc, char **argv)
                 else if (!vitals_game_over()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction) */
             }
             else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
+            else if (e.type == EV_TEXT) dolls_key(0, e.ch); /* a letter for a paperdoll's text box */
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
             {
                 int down = e.type == EV_KEY_DOWN;
+                if (down && !dialog_showing() && e.key != KEY_F11 && dolls_key(e.key, 0)) continue; /* typing, or a modal paperdoll: nothing else hears it */
                 if (down && dialog_showing() && e.key != KEY_F11)
                 {
                     dialog_key(e.key); /* while a box is up the keys are its own */

@@ -57,6 +57,7 @@ static enum PlatformKey key_of(SDL_Keycode k)
         case SDLK_TAB: return KEY_TAB;
         case SDLK_c: return KEY_C;
         case SDLK_i: return KEY_I;
+        case SDLK_BACKSPACE: return KEY_BACKSPACE;
         case SDLK_PAGEUP: return KEY_PAGEUP;
         case SDLK_PAGEDOWN: return KEY_PAGEDOWN;
         case SDLK_1: case SDLK_KP_1: return KEY_1;
@@ -92,6 +93,9 @@ int platform_poll(PlatformEvent *event)
                 event->button = e.button.button == SDL_BUTTON_RIGHT ? 2 : 1;
                 event->mouseX = e.button.x; event->mouseY = e.button.y; /* logical size: already in game pixels */
                 return 1;
+            case SDL_TEXTINPUT:
+                if ((unsigned char)e.text.text[0] < 32 || (unsigned char)e.text.text[0] > 126) break; /* letters typed (a paperdoll's text box) */
+                event->type = EV_TEXT; event->ch = e.text.text[0]; return 1;
             case SDL_MOUSEMOTION:
                 event->type = EV_MOUSE_MOVE; event->mouseX = e.motion.x; event->mouseY = e.motion.y; return 1;
             default: break;

@@ -21,6 +21,10 @@
 #include <proto/cybergraphics.h>
 #include <proto/timer.h>
 #include <proto/dos.h>
+#include <proto/keymap.h>
+#include <devices/inputevent.h>
+struct Library *KeymapBase;
+static int pendingText; /* a letter typed, given as EV_TEXT after its key */
 #include <string.h>
 #include <stdio.h>
 
@@ -79,6 +83,7 @@ int platform_open(const char *gameTitle, int wantFullscreen)
     IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", KICKSTART_31);
     GfxBase = (struct GfxBase *)OpenLibrary((CONST_STRPTR)"graphics.library", KICKSTART_31);
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
+    KeymapBase = OpenLibrary((CONST_STRPTR)"keymap.library", 37); /* the letters typed, by the user's keymap */
     if (!IntuitionBase || !GfxBase) { snprintf(error_text, sizeof error_text, "Kickstart 3.1 or later is needed."); return 0; }
     if (!CyberGfxBase) { snprintf(error_text, sizeof error_text, "cybergraphics.library 41 or later is needed: an RTG graphics card (Picasso96 or CyberGraphX) or a Vampire."); return 0; }
     timerPort = CreateMsgPort();
@@ -100,6 +105,7 @@ void platform_close(void)
     if (timerRequest) DeleteIORequest((struct IORequest *)timerRequest);
     if (timerPort) DeleteMsgPort(timerPort);
     if (CyberGfxBase) CloseLibrary(CyberGfxBase);
+    if (KeymapBase) { CloseLibrary(KeymapBase); KeymapBase = NULL; }
     if (GfxBase) CloseLibrary((struct Library *)GfxBase);
     if (IntuitionBase) CloseLibrary((struct Library *)IntuitionBase);
 }
@@ -119,6 +125,7 @@ static enum PlatformKey key_of(UWORD code)
         case 0x42: return KEY_TAB;
         case 0x33: return KEY_C;
         case 0x17: return KEY_I;
+        case 0x41: return KEY_BACKSPACE;
         case 0x01: case 0x1D: return KEY_1; /* the row of numbers, and the keypad's */
         case 0x02: case 0x1E: return KEY_2;
         case 0x03: case 0x1F: return KEY_3;
@@ -135,10 +142,21 @@ static enum PlatformKey key_of(UWORD code)
 int platform_poll(PlatformEvent *event)
 {
     struct IntuiMessage *m;
+    if (pendingText) { event->type = EV_TEXT; event->ch = pendingText; pendingText = 0; return 1; }
     while (window && (m = (struct IntuiMessage *)GetMsg(window->UserPort)))
     {
         ULONG cls = m->Class;
         UWORD code = m->Code;
+        if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && KeymapBase)
+        {
+            /* the letter this key makes, by the keymap (shift, dead keys) */
+            struct InputEvent ie;
+            memset(&ie, 0, sizeof ie);
+            ie.ie_Class = IECLASS_RAWKEY; ie.ie_Code = code; ie.ie_Qualifier = m->Qualifier;
+            ie.ie_EventAddress = m->IAddress ? (APTR)*((ULONG *)m->IAddress) : NULL;
+            char buf[4];
+            if (MapRawKey(&ie, (STRPTR)buf, 4, NULL) == 1 && (unsigned char)buf[0] >= 32 && (unsigned char)buf[0] <= 126) pendingText = buf[0];
+        }
         int mx = m->MouseX - (screen ? 0 : window->BorderLeft), my = m->MouseY - (screen ? 0 : window->BorderTop);
         ReplyMsg((struct Message *)m);
         event->type = EV_NONE;

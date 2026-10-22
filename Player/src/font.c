@@ -227,3 +227,40 @@ int font_draw_block(const Font *f, uint32_t *pixels, int x, int y, const char *t
     }
     return n * f->cellHeight;
 }
+
+/* Into any picture (a paperdoll drawn at its own size): text wrapped to a width (0: no wrapping), each glyph pixel a scale x scale block, tinted (0: its own colours). Returns its height. */
+int font_draw_into(const Font *f, uint32_t *buf, int bw, int bh, int x, int y, const char *text, uint32_t colour, int scale, int width)
+{
+    if (scale < 1) scale = 1;
+    const char *s[64]; int l[64];
+    int n = width > 0 ? font_wrap(f, text, width / scale, 64, s, l) : 1;
+    if (width <= 0) { s[0] = text; l[0] = (int)strcspn(text, "\n"); }
+    for (int line = 0; line < n && line < 64; line++)
+    {
+        int cx = x, cy = y + line * f->cellHeight * scale;
+        for (int k = 0; k < l[line]; k++)
+        {
+            char ch = s[line][k];
+            const Glyph *g = ch == ' ' || ch == '\t' ? NULL : glyph_of(f, ch);
+            if (g && g->picture)
+            {
+                const Picture *p = g->picture;
+                for (int j = 0; j < p->height; j++)
+                    for (int i = 0; i < g->width; i++)
+                    {
+                        uint32_t c = p->pixels[j * p->width + g->left + i];
+                        if ((c >> 24) < 128) continue;
+                        uint32_t out = colour ? (colour | 0xFF000000u) : (c | 0xFF000000u);
+                        for (int dy = 0; dy < scale; dy++)
+                        {
+                            int py = cy + (j + (f->cellHeight - p->height)) * scale + dy;
+                            if (py < 0 || py >= bh) continue;
+                            for (int dx = 0; dx < scale; dx++) { int px = cx + i * scale + dx; if (px >= 0 && px < bw) buf[py * bw + px] = out; }
+                        }
+                    }
+            }
+            cx += advance_of(f, ch) * scale;
+        }
+    }
+    return n * f->cellHeight * scale;
+}

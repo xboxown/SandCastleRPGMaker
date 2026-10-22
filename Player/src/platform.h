@@ -17,15 +17,16 @@
 enum PlatformKey
 {
     KEY_NONE, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESCAPE, KEY_ENTER, KEY_SPACE, KEY_F11, KEY_TAB, KEY_PAGEUP, KEY_PAGEDOWN,
-    KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_C, KEY_I, KEY_OTHER
+    KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_C, KEY_I, KEY_BACKSPACE, KEY_OTHER
 };
 
 typedef struct PlatformEvent
 {
-    enum { EV_NONE, EV_QUIT, EV_KEY_DOWN, EV_KEY_UP, EV_MOUSE_DOWN, EV_MOUSE_UP, EV_MOUSE_MOVE } type;
+    enum { EV_NONE, EV_QUIT, EV_KEY_DOWN, EV_KEY_UP, EV_MOUSE_DOWN, EV_MOUSE_UP, EV_MOUSE_MOVE, EV_TEXT } type;
     enum PlatformKey key;
     int mouseX, mouseY;   /* in screen pixels (0..319, 0..199) */
     int button;           /* 1 left, 2 right */
+    int ch;               /* EV_TEXT: the character typed (printable ASCII) */
 } PlatformEvent;
 
 /* Opens the game's window (or screen) titled so; 0 on failure (the reason in platform_error()). */
