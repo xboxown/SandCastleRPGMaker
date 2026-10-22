@@ -21,6 +21,11 @@ int gumps_drag_doll_part(void);
 int gumps_use_up_combined(void);
 void gumps_label(const char *text);
 void gumps_reset(void);
+/* Choosing a target (Get_click): the next press picks someone (actor), something on the map (uid) or carried (item), or a spot. */
+typedef struct GumpsPick { int actor, uid, cellX, cellY, floor, ground; Item *item; } GumpsPick;
+void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const GumpsPick *pick), void *context);
+int gumps_choosing(void);
+void gumps_cancel_choosing(void);
 int gumps_turn_into(const void *state, int objectId);
 
 #endif

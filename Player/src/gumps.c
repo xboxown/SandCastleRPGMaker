@@ -18,6 +18,7 @@
  *    refused drop leaves the thing where it was.
  */
 #include "gumps.h"
+#include "magic.h"
 #include "world.h"
 #include "items.h"
 #include "events.h"
@@ -65,6 +66,8 @@ static double sinceClick = 1e9, identifyIn = -1;
 static const Sprite *ghost;
 typedef struct Label { char text[64]; int x, y; uint32_t until; } Label;
 static Label labels[8];
+static void (*choosing)(void *context, const GumpsPick *pick);
+static void *choosingContext;
 static uint32_t nowMs;
 
 static cJSON *get(cJSON *o, const char *k) { return o ? cJSON_GetObjectItem(o, k) : NULL; }
@@ -246,7 +249,7 @@ static void close_gump(int i)
 }
 
 int gumps_open(void) { return gumpCount; }
-int gumps_close_top(void) { if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
+int gumps_close_top(void) { if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
 
 /* A map container double-clicked: its window (a never-opened one with its starting contents). */
 void gumps_open_map_container(int uid)
@@ -423,6 +426,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         const Picture *p = sprite_now(ghost);
         if (p) world_blit(pixels, p, mouseX - grabX, mouseY - grabY, quantize(p->width), quantize(p->height));
     }
+    magic_draw_book(pixels, ms); /* the open spellbook, over every window */
 }
 
 static void show_label(const char *text, int x, int y)
@@ -573,6 +577,7 @@ static void use_carried(Item *it)
     int category = items_category(it), id = items_item_id(it);
     if (category == CAT_CONTAINER) { open_box(it, 0); return; }
     if (category == CAT_OBJECT && dolls_use_item(it, 0)) return; /* its paperdoll (its own By Use first) */
+    if (category == CAT_OBJECT && magic_use_carried(it)) return; /* a potion, food, a useable object, a spellbook */
     if (events_fire_item(category, id, TR_USE)) return;
     if (category == CAT_OBJECT && items_use_light(it)) return;
     if (category == CAT_BOOK) events_log_once(311, "Reading books isn't in the player yet.");
@@ -928,10 +933,14 @@ static void drop(void)
 
 /* ---------------- The mouse ---------------- */
 
+static int pick_target(int x, int y);
+
 int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (events_cinema()) return 1;
+    if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
+    if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */
     pressed = hit(x, y);
     pressing = 1; dragging = 0; pressX = x; pressY = y;
     if (pressed.doll >= 0) { int top = dolls_to_front(pressed.doll); pressed.doll = top; }
@@ -1006,3 +1015,44 @@ void gumps_label(const char *text) { show_label(text, SCREEN_W / 2, SCREEN_H - 2
 
 /* A new game: every window closed, nothing in hand. */
 void gumps_reset(void) { gumpCount = 0; memset(&drag, 0, sizeof drag); pressing = dragging = 0; movingGump = movingDoll = -1; lastClick.kind = pendingIdentify.kind = T_NONE; identifyIn = -1; memset(labels, 0, sizeof labels); }
+
+/* ---------------- Choosing a target (Get_click: "Who drinks it?", "Cast on whom?") ---------------- */
+
+
+void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const GumpsPick *pick), void *context)
+{
+    identifyIn = -1;
+    choosing = chosen; choosingContext = context;
+    char line[200];
+    snprintf(line, sizeof line, "%s (Escape to cancel)", prompt);
+    game_log(line);
+    gumps_label(prompt);
+}
+
+int gumps_choosing(void) { return choosing != NULL; }
+void gumps_cancel_choosing(void) { choosing = NULL; }
+
+/* The next press while choosing picks: someone, something (on the map or carried), or the spot. */
+static int pick_target(int x, int y)
+{
+    if (!choosing) return 0;
+    void (*chosen)(void *, const GumpsPick *) = choosing;
+    choosing = NULL;
+    Target t = hit(x, y);
+    GumpsPick p;
+    memset(&p, 0, sizeof p);
+    p.actor = -1;
+    world_screen_cell(x, y, &p.cellX, &p.cellY, &p.floor);
+    if (t.kind == T_ACTOR) p.actor = t.actor;
+    else if (t.kind == T_THING) p.uid = t.uid;
+    else if ((t.kind == T_SLOT || t.kind == T_ROW) && t.gump >= 0 && t.gump < gumpCount)
+    {
+        if (t.item) p.item = t.item; else p.actor = world_actor_by_character(gumps[t.gump].characterId); /* a paperdoll's body: its character */
+        if (!t.item && p.actor < 0) p.actor = -1;
+    }
+    else if (t.kind == T_GUMP && t.gump >= 0 && t.gump < gumpCount && gumps[t.gump].kind == G_DOLL) p.actor = world_actor_by_character(gumps[t.gump].characterId);
+    else if (t.kind == T_BOX_ITEM || t.kind == T_DOLL_ITEM) p.item = t.item;
+    if (p.actor < 0 && !p.uid && !p.item && t.kind == T_NONE) p.ground = 1;
+    chosen(choosingContext, &p);
+    return 1;
+}

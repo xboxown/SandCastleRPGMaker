@@ -594,3 +594,37 @@ void vitals_restore(cJSON *runtime)
     }
     gameOver = flag(runtime, "GameOver");
 }
+
+/* A character made in play (Summon): its own vitals, at full health. */
+void vitals_add(int characterId)
+{
+    vitals = (Vital *)realloc(vitals, sizeof(Vital) * (size_t)(vitalCount + 1));
+    Vital *v = &vitals[vitalCount++];
+    memset(v, 0, sizeof *v);
+    v->characterId = characterId;
+    v->food = MAX_FOOD;
+    vitals_heal_fully(characterId);
+}
+
+/* ResurrectDead: it lives again where its body lies, with what's still in it; the body is gone. */
+int vitals_resurrect(int characterId)
+{
+    Vital *v = vital_of(characterId);
+    int actor = world_actor_by_character(characterId), uid = world_body_of(characterId);
+    if (!v || !v->dead || actor <= 0 || !uid) return 0;
+    int c, i, q, x, y, n, fl = world_thing_floor(uid);
+    world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+    Item *body = items_unpark(uid, c, i, q), *back[256];
+    int count = items_take_all(body, back, 256);
+    for (int k = 0; k < count; k++) items_add_loose(characterId, back[k]);
+    items_free(body);
+    world_thing_remove(uid);
+    v->dead = 0; v->unconscious = 0;
+    world_actor_place(actor, x, y, fl);
+    world_set_pose(actor, "Idle", -1);
+    vitals_heal_fully(characterId);
+    char line[160];
+    snprintf(line, sizeof line, "%s lives again!", cJSON_GetStringValue(get(character_json(characterId), "Name")) ? cJSON_GetStringValue(get(character_json(characterId), "Name")) : "Someone");
+    game_log(line);
+    return 1;
+}

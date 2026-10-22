@@ -24,6 +24,8 @@ void vitals_heal_fully(int characterId);
 int vitals_bark(int characterId, int kind);
 #include "../third_party/cJSON.h"
 void vitals_save(cJSON *runtime);
+void vitals_add(int characterId);
+int vitals_resurrect(int characterId);
 void vitals_restore(cJSON *runtime);        /* VerboseKind: Hungry 0 .. Uneasy 10 */
 
 #endif

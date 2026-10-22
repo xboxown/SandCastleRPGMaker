@@ -89,6 +89,8 @@ cJSON *world_thing_placed(int uid);
 int world_thing_count(void);
 int world_thing_uid_at(int i);
 const char *world_actor_name(int actor);
+int world_add_actor(cJSON *character, int x, int y, int onFloor);
+int world_body_of(int characterId);
 int world_line_clear(double fromX, double fromY, int fromLift, double toX, double toY);
 void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double y, int lift, uint32_t ms);
 int world_put_body(int actor, int x, int y, int onFloor);

@@ -19,6 +19,18 @@ int combat_change_faction(const char *who, int factionId);
 void combat_gain_experience(int actor, int amount);
 int combat_silences_ambient(void);
 void combat_death_music(void);
+#include "pictures.h"
+int combat_launch(const Sprite *sprite, int from, int target, double tx, double ty, void (*arrive)(void *, int, double, double), void *context);
+void combat_fight_back(int defender, int attacker);
+void combat_start(int actor, int target);
+int combat_target_of(int actor);
+void combat_flee(int actor, int from);
+void combat_calm(int actor);
+int combat_line_clear(int a, int b);
+double combat_tiles_between(int a, int b);
+int combat_friends(int a, int b);
+void combat_owned_theft(int uid);
+void combat_strike_object(int uid, int damage);
 #include "../third_party/cJSON.h"
 void combat_save(cJSON *runtime);
 void combat_restore(cJSON *runtime);

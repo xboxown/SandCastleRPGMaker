@@ -26,6 +26,7 @@
  *  - Combat music (System Settings > Combat), as Exult plays it.
  */
 #include "combat.h"
+#include "magic.h"
 #include "world.h"
 #include "vitals.h"
 #include "items.h"
@@ -67,6 +68,7 @@ typedef struct Shot
     const Sprite *sprite;
     double x, y, dx, dy, left, lift;
     cJSON *weapon, *ammo, *thrown;
+    void (*arrive)(void *context, int victim, double x, double y); void *context; /* a spell's missile: what it does where it lands */
 } Shot;
 
 static Fighter fighters[256];
@@ -619,6 +621,8 @@ static void combat_now_what(int actor)
         f->waitMs = STD_DELAY;
         return;
     }
+    /* A mage casts (Exult: an NPC with its spellbook casts in a fight) - a heal when badly hurt, else a spell at the foe */
+    if (magic_combat_spell(actor, target)) { f->dexPoints -= DEX_TO_ATTACK; f->waitMs = 1200 + STD_DELAY; return; }
     Item *held = NULL;
     cJSON *weapon = wielded(actor, &held);
     int reach = in_reach(actor, target);
@@ -927,6 +931,15 @@ static int shoot(int attacker, int target, Item *weaponItem, cJSON *weapon)
 /* A shot reaches where its target was: the hit is rolled now; a thrown weapon lands there. */
 static void shot_arrives(Shot *s)
 {
+    if (s->arrive)
+    {
+        int hit = s->target >= 0 && !dead(s->target) ? s->target : -1;
+        double vx, vy;
+        if (hit >= 0) { world_actor_pixel(hit, &vx, &vy); if (fabs(vx - s->x) > 12 || fabs(vy - s->y) > 12) hit = -1; }
+        s->used = 0;
+        s->arrive(s->context, hit, s->x, s->y);
+        return;
+    }
     int victim = s->target;
     double vx, vy;
     if (!dead(victim))
@@ -1079,7 +1092,7 @@ void combat_update(double ms)
         if (f->poseBackMs > 0 && (f->poseBackMs -= ms) <= 0 && !world_walking(a) && !incapacitated(a)) world_set_pose(a, "Idle", -1);
         if (dead(a)) { f->inCombat = f->hounding = 0; continue; }
         if (!f->inCombat && !f->hounding) continue;
-        if (incapacitated(a) || events_actor_busy(a) || events_actor_held(a)) continue;
+        if (incapacitated(a) || events_actor_busy(a) || events_actor_held(a) || magic_frozen(a)) continue; /* Time Stop: still */
         chase_check(a);
         if (world_walking(a)) continue;
         if ((f->waitMs -= ms) > 0) continue;
@@ -1463,4 +1476,52 @@ void combat_load(void)
     combatMode = 0; playerTarget = -1; playerThing = -1; playerDex = 0;
     memset(shots, 0, sizeof shots); fuseCount = 0; struckCount = 0; theftWarnings = 0; theftChunkX = theftChunkY = -1;
     cue = startedBattle = nearDeath = 0; memset(thingAttacks, 0, sizeof thingAttacks);
+}
+
+/* A missile (a spell's Projectile) flying from someone towards a point; what happens where it lands is the caller's. */
+int combat_launch(const Sprite *sprite, int from, int target, double tx, double ty, void (*arrive)(void *, int, double, double), void *context)
+{
+    Shot *s = NULL;
+    for (int i = 0; i < 32 && !s; i++) if (!shots[i].used) s = &shots[i];
+    if (!s) return 0;
+    memset(s, 0, sizeof *s);
+    double ax, ay;
+    world_actor_pixel(from, &ax, &ay);
+    int cx, cy;
+    world_actor_cell(from, &cx, &cy, &s->floor);
+    double length = sqrt((tx - ax) * (tx - ax) + (ty - ay) * (ty - ay));
+    if (length < 1) length = 1;
+    s->used = 1; s->attacker = from; s->target = target; s->sprite = sprite;
+    s->x = ax; s->y = ay; s->dx = (tx - ax) / length; s->dy = (ty - ay) / length; s->left = length;
+    s->lift = world_actor_lift(from) + 2;
+    s->arrive = arrive; s->context = context;
+    return 1;
+}
+
+/* For magic: a harmful spell is an attack (the victim fights back); a summoned helper starts fighting at once. */
+void combat_fight_back(int defender, int attacker) { fight_back(defender, attacker); }
+void combat_start(int actor, int target) { start_combat(actor, target); }
+int combat_target_of(int actor) { return target_of(actor); }
+void combat_flee(int actor, int from) { if (actor <= 0 || actor >= 256) return; Fighter *f = &fighters[actor]; f->inCombat = 1; f->fleeing = 1; f->fleeFrom = from; f->waitMs = 0; }
+void combat_calm(int actor) { if (actor > 0 && actor < 256) { fighters[actor].fleeing = 0; fighters[actor].fleeFrom = -1; } }
+int combat_line_clear(int a, int b) { double ax, ay, bx, by; world_actor_pixel(a, &ax, &ay); world_actor_pixel(b, &bx, &by); return world_line_clear(ax, ay, world_actor_lift(a), bx, by); }
+double combat_tiles_between(int a, int b) { return tiles_between(a, b); }
+int combat_friends(int a, int b) { return a == b || (in_party(a) && in_party(b)) || (faction_of(a) >= 0 && (faction_of(a) == faction_of(b) || attitude(a, b) == F_ALLY)); }
+
+/* Eaten or drunk where it lies (stealItem): a crime when it's someone else's. */
+void combat_owned_theft(int uid)
+{
+    int c, i, q, x, y, n, owner, factionId;
+    world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+    cJSON *def = c == CAT_OBJECT ? object_def(i) : NULL;
+    if (def && owned_by_other(def, world_thing_belongs_to(uid), &owner, &factionId)) combat_theft(owner, factionId);
+}
+
+/* A spell's (or a scroll's) damage on a thing: struck for that much, by the player. */
+void combat_strike_object(int uid, int damage)
+{
+    int c, i, q, x, y, n;
+    world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+    cJSON *def = c == CAT_OBJECT ? object_def(i) : NULL;
+    if (def) strike_object(uid, def, damage, -1, 1);
 }

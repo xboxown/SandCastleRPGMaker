@@ -20,6 +20,7 @@
 #include "gumps.h"
 #include "dolls.h"
 #include "save.h"
+#include "magic.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -158,7 +159,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     cJSON *old = (cJSON *)world_json();
     /* the last game, let go of */
     sound_stop_all();
-    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset();
+    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
@@ -400,6 +401,7 @@ int main(int argc, char **argv)
             weather_update(seconds * 1000);
             vitals_update(seconds * 1000);
             combat_update(seconds * 1000);
+            magic_update(seconds * 1000);
             gumps_update(seconds * 1000);
             events_player_moved();
         }

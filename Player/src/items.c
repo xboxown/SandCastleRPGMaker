@@ -32,6 +32,7 @@ struct Item
     double cx, cy;                   /* its spot in a container's window (-100000: none yet) */
     int autoPlaced;                  /* laid out in the row by the engine, not dropped at a spot */
     void *doll;                      /* its paperdoll as it was left (PaperDoll Editor), NULL: never opened */
+    char **learned; int learnedCount; /* a spellbook: the spells this copy has learned (LearnedSpellsRuntime) */
     Item **contents; int count, cap;
 };
 
@@ -104,8 +105,12 @@ void items_free(Item *item)
     for (int i = 0; i < item->count; i++) items_free(item->contents[i]);
     free(item->contents);
     if (item->doll) dolls_free_state(item->doll);
+    for (int i = 0; i < item->learnedCount; i++) free(item->learned[i]);
+    free(item->learned);
     free(item);
 }
+
+void items_learn_spell(Item *it, const char *name);
 
 /* An inventory entry from the game (InventoryItemInstance), with what's inside. */
 static Item *read_item(cJSON *j)
@@ -120,6 +125,8 @@ static Item *read_item(cJSON *j)
     cJSON_ArrayForEach(key, get(j, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(key)) it->keys[it->keyCount++] = key->valueint;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     it->charges = num(j, "ChargesRuntime", -1);
+    cJSON *spell;
+    cJSON_ArrayForEach(spell, get(j, "LearnedSpellsRuntime")) if (cJSON_IsString(spell)) items_learn_spell(it, spell->valuestring);
     if (cJSON_IsObject(get(j, "DollRuntime"))) it->doll = dolls_state_from_json(get(j, "DollRuntime")); /* its paperdoll as it was left */
     cJSON_ArrayForEach(c, get(j, "Contents")) add_to(&it->contents, &it->count, &it->cap, read_item(c));
     return it;
@@ -1226,6 +1233,7 @@ cJSON *items_item_json(const Item *it)
     if (it->locked >= 0) cJSON_AddBoolToObject(j, "IsLockedRuntime", it->locked);
     if (it->keyCount) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
     cJSON_AddNumberToObject(j, "ChargesRuntime", it->charges);
+    if (it->learnedCount) { cJSON *spells = cJSON_CreateArray(); for (int i = 0; i < it->learnedCount; i++) cJSON_AddItemToArray(spells, cJSON_CreateString(it->learned[i])); cJSON_AddItemToObject(j, "LearnedSpellsRuntime", spells); }
     if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
     return j;
 }
@@ -1296,4 +1304,76 @@ Item *items_body_from_json(cJSON *contents)
     cJSON *c;
     cJSON_ArrayForEach(c, contents) add_to(&box->contents, &box->count, &box->cap, read_item(c));
     return box;
+}
+
+/* Loose on a character (in no slot): what a body held goes back to its owner. */
+void items_add_loose(int characterId, Item *it)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) { items_free(it); return; }
+    it->instanceId = k->nextInstanceId++;
+    add_to(&k->items, &k->count, &k->cap, it);
+}
+
+/* Every item a container holds, taken out of it (the shell left empty). */
+int items_take_all(Item *container, Item **out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < container->count && n < max; i++) out[n++] = container->contents[i];
+    container->count = 0;
+    return n;
+}
+
+/* A character made in play (Summon): its own carrier. */
+void items_add_carrier(cJSON *character)
+{
+    carriers = (Carrier *)realloc(carriers, sizeof(Carrier) * (size_t)(carrierCount + 1));
+    Carrier *k = &carriers[carrierCount++];
+    memset(k, 0, sizeof *k);
+    k->characterId = num(character, "Id", -1);
+    k->strength = 10;
+    k->nextInstanceId = 1;
+}
+
+/* A spellbook copy's learned spells (Learn Spell; LearnedSpellsRuntime), by name, any case. */
+int items_knows_spell(const Item *it, const char *name)
+{
+    if (!it) return 0;
+    for (int i = 0; i < it->learnedCount; i++)
+    {
+        const char *a = it->learned[i], *b = name;
+        while (*a && *b && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+        if (!*a && !*b) return 1;
+    }
+    return 0;
+}
+
+void items_learn_spell(Item *it, const char *name)
+{
+    if (!it || !name || items_knows_spell(it, name)) return;
+    it->learned = (char **)realloc(it->learned, sizeof(char *) * (size_t)(it->learnedCount + 1));
+    size_t n = strlen(name) + 1;
+    it->learned[it->learnedCount] = (char *)malloc(n);
+    memcpy(it->learned[it->learnedCount++], name, n);
+}
+
+/* A useable object's charges left (-1: not used yet), and spent (used up but kept). */
+int items_charges(const Item *it) { return it ? it->charges : -1; }
+void items_set_charges(Item *it, int charges) { if (it) it->charges = charges; }
+int items_spent(const Item *it) { return it && it->spent; }
+void items_set_spent(Item *it, int spent) { if (it) it->spent = spent; }
+
+static void collect_objects(Item *it, Item **out, int *n, int max)
+{
+    if (*n < max && it->category == CAT_OBJECT) out[(*n)++] = it;
+    for (int i = 0; i < it->count; i++) collect_objects(it->contents[i], out, n, max);
+}
+
+/* Every object a character carries, anywhere on them (in bags too). */
+int items_carried_objects(int characterId, Item **out, int max)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    if (k) for (int i = 0; i < k->count; i++) collect_objects(k->items[i], out, &n, max);
+    return n;
 }

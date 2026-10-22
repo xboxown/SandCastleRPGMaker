@@ -28,6 +28,7 @@ static Sky overrideSky; static int overrideHour = -1;
 static Sky shown = { 0, -1 };                 /* what the sky was last set to */
 static uint32_t drawnColor; static double drawnOpacity, fromOpacity, targetOpacity, fadeMs = -1;
 static double checkMs, fadeLength = 400;
+static double specialLight; /* game minutes of a light spell's glow left */
 static int weatherKind, weatherIntensity, weatherClouds, weatherCover; /* the overcast */
 
 static const double DARKNESS_LEFT[4] = { 1.0, 0.75, 0.55, 0.35 }; /* none, candle, single light, many lights */
@@ -139,6 +140,7 @@ void lighting_update(double ms)
     if (nightAmount > 0)
     {
         int gives = 0, strength = world_light_strength(&gives);
+        if (specialLight > 0 && strength < 640) strength = 640; /* a light spell: as many lights (add_special_light) */
         if (strength > 0)
         {
             if (gives == 2) sky.opacity *= 1 - nightAmount;            /* full daylight */
@@ -190,3 +192,7 @@ void lighting_weather(int kind, int intensity, int clouds, int cover)
     weatherKind = kind; weatherIntensity = intensity; weatherClouds = clouds; weatherCover = cover;
     checkMs = 0; /* the sky darkens or brightens with it */
 }
+
+/* A light spell (or potion): the night lit as by many lights for that many game minutes; counted down by the minute. */
+void lighting_special(double minutes) { if (minutes > specialLight) specialLight = minutes; checkMs = 0; }
+void lighting_minutes_passed(double minutes) { if (specialLight > 0) { specialLight -= minutes; if (specialLight < 0) specialLight = 0; } }

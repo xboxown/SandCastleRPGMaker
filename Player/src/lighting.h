@@ -11,4 +11,7 @@ void lighting_period(const char *period);
 void lighting_palette(const char *hex, double opacity);
 void lighting_weather(int kind, int intensity, int clouds, int cover);
 
+void lighting_special(double minutes);
+void lighting_minutes_passed(double minutes);
+
 #endif

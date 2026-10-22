@@ -1,4 +1,5 @@
 #include "events.h"
+#include "magic.h"
 #include "commands.h"
 #include "dialog.h"
 #include "world.h"
@@ -1650,6 +1651,22 @@ static int execute(Run *r, const Cmd *c)
             if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
             return 1;
         }
+        case C_LearnSpell:
+        case C_CastSpell:
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            char name[96];
+            snprintf(name, sizeof name, "%s", value_text_of(formula(c, "Value")));
+            char *s = name, *e;
+            while (*s == ' ') s++;
+            for (e = s + strlen(s); e > s && e[-1] == ' '; ) *--e = 0;
+            if (actor < 0 || vitals_dead(world_actor_character(actor))) { lastResult = 0; return 1; }
+            if (c->type == C_LearnSpell) { lastResult = magic_learn_spell(actor, s); return 1; }
+            int other = param(c, "Other")[0] ? actor_for(r, param(c, "Other")) : -1;
+            const char *who = param(c, "Who");
+            lastResult = magic_cast_named(actor, s, other, r->doll ? r->doll : lastDoll, !who[0] || !strcmp(who, "Activator"));
+            return 1;
+        }
         case C_Resurrect:
         {
             int actor = actor_for(r, param(c, "Who"));
@@ -1660,7 +1677,9 @@ static int execute(Run *r, const Cmd *c)
                 vitals_heal_fully(world_actor_character(actor));
                 return 1;
             }
-            lastResult = 0; /* nobody has died: nothing to bring back */
+            /* back from death, where the body lies (the main character's death ends the game: load a save) */
+            int id = actor >= 0 ? world_actor_character(actor) : atoi(param(c, "Who"));
+            lastResult = id != world_actor_character(0) && vitals_resurrect(id);
             return 1;
         }
         case C_PlayPose:

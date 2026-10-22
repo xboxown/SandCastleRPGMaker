@@ -15,6 +15,7 @@
  * Party members and the main player don't follow schedules.
  */
 #include "schedules.h"
+#include "magic.h"
 #include "events.h"
 #include "world.h"
 #include "platform.h"
@@ -369,6 +370,7 @@ void schedules_update(double ms)
         Npc *n = &npcs[i];
         if (!n->entryCount || n->joined || schedules_following(n->actor)) continue; /* the party and followers have no schedule */
         if (keep_dormant(n)) continue;
+        if (magic_frozen(n->actor)) continue; /* Time Stop */
         if (events_actor_busy(n->actor) || events_actor_held(n->actor)) { n->walking = 0; continue; } /* an event has them: their schedule waits */
         if (world_actor_gone(n->actor) || vitals_incapacitated(n->characterId)) continue; /* dead, knocked out, asleep or paralyzed: does nothing */
         if (combat_busy(n->actor)) { n->walking = 0; continue; } /* fighting, fleeing or hounding: its schedule waits */

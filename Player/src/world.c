@@ -15,6 +15,7 @@
  *    drawn, held inside the map.
  */
 #include "world.h"
+#include "magic.h"
 #include "pictures.h"
 #include "font.h"
 #include "pack.h"
@@ -1252,7 +1253,7 @@ static void step_walk(int actor, double seconds)
 /* Each frame: everyone walking somewhere takes their step (the player's own keys cancel theirs). */
 void world_walks_update(double seconds)
 {
-    for (int i = 0; i <= npcCount; i++) step_walk(i, seconds);
+    for (int i = 0; i <= npcCount; i++) if (!magic_frozen(i)) step_walk(i, seconds); /* Time Stop: everyone but the party stands still */
     close_doors_behind();
 }
 
@@ -2610,3 +2611,38 @@ void world_reset(void)
     gameJson = NULL;
 }
 
+
+/* ---------------- Characters added in play (Summon, Clone) and bodies ---------------- */
+
+/* A character brought onto the map now: its own actor, standing at a cell of a floor. Its index (-1: couldn't). */
+int world_add_actor(cJSON *character, int x, int y, int onFloor)
+{
+    if (!character || x < 0 || y < 0 || x >= mapW || y >= mapH) return -1;
+    npcs = (Actor *)realloc(npcs, sizeof(Actor) * (size_t)(npcCount + 1));
+    Actor *a = &npcs[npcCount];
+    memset(a, 0, sizeof *a);
+    read_actor_poses(character, get(get(gameJson, "Project"), "Poses"), a);
+    a->facing = DIR_S;
+    a->body = -1;
+    if (bodyCount + 1 >= bodyCap) { bodyCap = bodyCap * 2 + 16; bodies = (Body *)realloc(bodies, sizeof(Body) * (size_t)bodyCap); }
+    a->body = bodyCount;
+    Body *b = &bodies[bodyCount++];
+    memset(b, 0, sizeof *b); b->z = -100000;
+    npcCount++;
+    if (walks) { walks = (Walk *)realloc(walks, sizeof(Walk) * (size_t)(npcCount + 1)); memset(&walks[npcCount], 0, sizeof(Walk)); }
+    if (seats)
+    {
+        seats = (Seat *)realloc(seats, sizeof(Seat) * (size_t)(npcCount + 2)); heading = (Seat *)realloc(heading, sizeof(Seat) * (size_t)(npcCount + 2));
+        memset(&seats[npcCount], 0, sizeof(Seat) * 2); memset(&heading[npcCount], 0, sizeof(Seat) * 2);
+    }
+    a->gone = 1;
+    world_actor_place(npcCount, x, y, onFloor);
+    return npcCount;
+}
+
+/* The body a dead character lies in (0: none). */
+int world_body_of(int characterId)
+{
+    for (int i = 0; i < thingCount; i++) if (!things[i].gone && things[i].category == 5 && things[i].itemId == -1000 - characterId) return things[i].uid;
+    return 0;
+}
