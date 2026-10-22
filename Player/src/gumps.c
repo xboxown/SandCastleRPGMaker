@@ -19,6 +19,7 @@
  */
 #include "gumps.h"
 #include "books.h"
+#include "traps.h"
 #include "prompt.h"
 #include "mechanisms.h"
 #include "magic.h"
@@ -924,6 +925,7 @@ static int drop_on_map(void)
         items_free(it);
         sound_play(num(get(get(project(), "Settings"), "Sounds"), "DropOnMapSoundId", -1));
         events_fire_item(drag.category, drag.itemId, TR_DROP);
+        traps_dropped(stack, drag.category, drag.itemId); /* By Item Dropped On It */
         return 1;
     }
     /* a closed container there (one that doesn't take things on top) takes it */
@@ -935,9 +937,11 @@ static int drop_on_map(void)
         cJSON *data = container_def(i);
         if (data && !flag(data, "AllowElevation")) return drop_into(items_parked(box, c, i, q), 0, 0, 0);
     }
+    int put = 0;
     if (drag.fromMap)
     {
         world_thing_drop_at(drag.uid, mouseX - grabX, mouseY - grabY, fl);
+        put = drag.uid;
     }
     else
     {
@@ -949,9 +953,11 @@ static int drop_on_map(void)
         items_park(newUid, it);
         world_thing_drop_at(newUid, mouseX - grabX, mouseY - grabY, fl); /* exactly where it was shown */
         landed(it, &from);
+        put = newUid;
     }
     sound_play(num(get(get(project(), "Settings"), "Sounds"), "DropOnMapSoundId", -1));
     events_fire_item(drag.category, drag.itemId, TR_DROP);
+    if (put && world_thing_there(put)) traps_dropped(put, drag.category, drag.itemId); /* By Item Dropped On It: tiles under it, what it rests on, the cell's event */
     return 1;
 }
 

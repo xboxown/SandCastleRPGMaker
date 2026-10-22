@@ -71,6 +71,9 @@ void events_request_quit(void);
 void events_request_restart(int toTitle);   /* New Game during play (0), Return To Title (1) */
 int events_restart_requested(void);
 int events_has_combine(int category, int itemId);
+int events_has_trigger(int category, int itemId, int trigger);
+int events_dropped_on(int uid, int category, int itemId);
+int events_dropped_at_cell(int x, int y, int lift, int category, int itemId);
 int events_combine(int uid, int ontoCategory, int ontoId, int category, int itemId);
 int events_world_trip(int *world, int *hasSpot, int *x, int *y, int *floorOf); /* a Change Map to another world, due now */        /* 1 new game, 2 to the title */
 void events_clear_restart(void);

@@ -15,6 +15,7 @@
  *    drawn, held inside the map.
  */
 #include "world.h"
+#include "vitals.h"
 #include "magic.h"
 #include "mechanisms.h"
 #include "pictures.h"
@@ -67,6 +68,7 @@ typedef struct ObjectDef
     const Sprite *working, *laidOut, *usedUp;                                     /* a crafting station at work; a bedroll laid out; a useable object used up */
     int liquidFood[8]; const Sprite *liquidLook[8]; int liquidCount, liquidStart; /* a liquid container: its look per liquid; what it starts full of */
     int stairsKind, risesToward; cJSON *design;                                   /* stairs (0) or a ladder (1); a designed staircase (Staircase Designer) */
+    int trapHidden;                                                               /* a hidden trap: unseen till sprung */
 } ObjectDef;
 
 typedef struct Thing
@@ -87,6 +89,7 @@ typedef struct Thing
     int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
     int bodyN;                                       /* how many boxes it has from body on (stairs: a box a step) */
     int owner;                                       /* who it belongs to now, set in play (+1; 0: as placed) */
+    int sprung;                                      /* a trap that has gone off (TrapSprungRuntime): a hidden one shows from then on */
     int stage; double grow;                          /* a plant: its stage, the game minutes grown towards the next */
     int liquid;                                      /* a liquid container: what it holds (a liquid Food's id, -1: empty) */
     cJSON *steps;                                    /* a designed staircase: its steps for its facing */
@@ -187,6 +190,7 @@ static void read_objects(cJSON *project)
         cJSON_ArrayForEach(lv, get(liquid, "Liquids")) if (d->liquidCount < 8) { d->liquidFood[d->liquidCount] = num(lv, "FoodId", -1); d->liquidLook[d->liquidCount++] = link_of(get(lv, "Sprite")); }
         d->liquidStart = num(liquid, "StartsFullOfId", -1);
         d->stairsKind = num(stairs, "Kind", 0); d->risesToward = num(stairs, "RisesToward", 0);
+        d->trapHidden = flag(get(o, "Trap"), "Hidden");
         if (d->type == T_STAIRS && d->stairsKind == 0 && num(stairs, "DesignId", -1) >= 0)
         {
             cJSON *design;
@@ -529,6 +533,7 @@ int world_build(cJSON *root)
         cJSON *litNow = get(o, "IsLitRuntime");
         t->lit = d->type == T_LIGHT && (cJSON_IsBool(litNow) ? cJSON_IsTrue(litNow) : cJSON_IsBool(sl) ? cJSON_IsTrue(sl) : d->lightStartsLit);
         t->spent = flag(o, "IsSpentRuntime");
+        t->sprung = flag(o, "TrapSprungRuntime");
         cJSON *openNow = get(o, "IsOpenRuntime");
         if (d->type == T_WINDOW) t->open = d->winShutters && (cJSON_IsBool(openNow) ? cJSON_IsTrue(openNow) : cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->winStartsOpen);
         if (d->type == T_LEVER) t->open = d->leverKind != 2 && (cJSON_IsBool(openNow) ? cJSON_IsTrue(openNow) : cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->leverStartsOn);
@@ -721,6 +726,13 @@ void world_update(int dx, int dy, double seconds)
 static uint32_t *screen;
 
 /* A picture fitted (keeping its shape, centred, nearest pixel) into a box at (x, y). */
+typedef struct Puddle { int ux, uy, lift, frame, mirrored; const Sprite *blood; } Puddle;
+static Puddle puddles[128]; static int puddleCount;
+typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
+static Bleeding bleeding[32]; static int bleedingCount;
+static void draw_status_outlines(uint32_t *pixels);
+static int blitOpacity = 255, blitMirror; /* the next blits: how see-through (invisible in the party), mirrored (blood) */
+
 static void blit_box(const Picture *p, int x, int y, int bw, int bh)
 {
     if (!p || p->width <= 0 || p->height <= 0) return;
@@ -736,7 +748,8 @@ static void blit_box(const Picture *p, int x, int y, int bw, int bh)
         {
             int sx = ox + i;
             if (sx < 0 || sx >= SCREEN_W) continue;
-            uint32_t c = row[i * p->width / dw], a = c >> 24;
+            uint32_t c = row[(blitMirror ? dw - 1 - i : i) * p->width / dw], a = c >> 24;
+            if (blitOpacity < 255) a = a * (uint32_t)blitOpacity / 255;
             if (a == 0) continue;
             uint32_t *d = &screen[sy * SCREEN_W + sx];
             if (a == 255) { *d = c; continue; }
@@ -765,6 +778,7 @@ typedef struct Drawn
     double key; const Picture *picture; int x, y, w, h;
     int hasBox, wall, occludes, hangs, xl, xr, yf, yn, zb, zt, flat;
     int actor; /* the character drawn (world_actor_at), -1 for anything else */
+    int opacity, mirror; /* 0: opaque, else 1..254 (an invisible party member: a shimmer); a mirrored picture */
     int thing; /* the thing drawn (its uid), 0 for anything else */
 } Drawn;
 
@@ -892,6 +906,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     {
         const Thing *t = &things[i];
         if (t->gone || t->z >= ceiling) continue;
+        if (t->def && t->def->type == T_TRAP && t->def->trapHidden && !t->sprung) continue; /* a hidden trap: unseen till it goes off */
         if (t->steps)
         {
             cJSON *step;
@@ -939,11 +954,23 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         d->hangs = t->hangs;
         d->thing = t->uid;
     }
+    /* Blood: puddles on the ground, under everything standing there. */
+    for (int i = 0; i < puddleCount; i++)
+    {
+        Puddle *pd = &puddles[i];
+        const Picture *pic = pd->blood && pd->frame < pd->blood->frameCount ? frame_picture(&pd->blood->frames[pd->frame]) : NULL;
+        if (!pic || pd->lift >= ceiling) continue;
+        double px = pd->ux * 8 + 4.0, py = pd->uy * 8 + 4.0;
+        Drawn *d = add_drawn(floor_of(pd->lift) - 1, (px / tileW + py / tileH) * 100.0 + pd->lift - 50, pic, (int)(px - pic->width / 2.0) - pd->lift * LIFT_SHIFT - cx, (int)(py - pic->height / 2.0) - pd->lift * LIFT_SHIFT - cy, pic->width, pic->height, &count);
+        if (d) d->mirror = pd->mirrored;
+    }
     /* Characters and the player. */
     for (int i = -1; i < npcCount; i++)
     {
         const Actor *a = i < 0 ? &player : &npcs[i];
         if (i >= 0 && (a->gone || a->lift >= ceiling)) continue;
+        int invisible = vitals_has(a->characterId, 32), shimmer = invisible && (i < 0 || items_in_party(a->characterId));
+        if (invisible && !shimmer) continue; /* ShowInvisibility: unseen */
         const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
         uint32_t at = a->walkingNow ? ms : 0;
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
@@ -954,6 +981,7 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
         Drawn *d = add_drawn(floor_of(a->lift) - 1, (a->px / tileW + a->py / tileH) * 100.0 + a->lift, pic, left - cx, top - cy, qw, qh, &count);
         if (!d) continue;
+        if (shimmer) d->opacity = 102; /* 40% */
         double feetY = a->py + tileH / 2.0;
         set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
         d->actor = i + 1;
@@ -994,7 +1022,13 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     }
     seated_draw_order(count);
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
-    for (int i = 0; i < count; i++) blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
+    for (int i = 0; i < count; i++)
+    {
+        blitOpacity = drawn[i].opacity ? drawn[i].opacity : 255; blitMirror = drawn[i].mirror;
+        blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
+    }
+    blitOpacity = 255; blitMirror = 0;
+    draw_status_outlines(pixels);
     drawnCount = count;
     lastMs = ms;
 }
@@ -2659,6 +2693,7 @@ static cJSON *thing_json(const Thing *t, int instanceId, cJSON *(*extra)(int uid
         if (t->def && t->def->type == T_DOOR) set_bool(e, "IsLockedRuntime", t->locked);
         if (t->def && t->def->type == T_LIGHT) { set_bool(e, "IsLitRuntime", t->lit); set_bool(e, "StartsLit", t->lit); }
         set_bool(e, "IsSpentRuntime", t->spent);
+        if (t->def && t->def->type == T_TRAP) set_bool(e, "TrapSprungRuntime", t->sprung);
         if (t->def && (t->def->type == T_WINDOW || t->def->type == T_LEVER || t->def->type == T_BEDROLL)) set_bool(e, "IsOpenRuntime", t->open);
         if (t->def && t->def->type == T_PLANT) { set_num(e, "StartStage", t->stage); set_num(e, "FrameRuntime", t->stage); set_num(e, "GrowMinutesRuntime", t->grow); }
         if (t->def && t->def->type == T_LIQUID) { set_num(e, "LiquidIdRuntime", t->liquid); set_num(e, "StartsFullOfId", t->liquid); }
@@ -2755,6 +2790,7 @@ void world_reset(void)
 {
     for (int f = 0; f <= MAX_FLOORS; f++) { free(floors[f]); floors[f] = NULL; }
     free(walkable); free(water); water = NULL; walkable = NULL;
+    puddleCount = 0; bleedingCount = 0;
     free(defs); defs = NULL; defCount = 0;
     free(things); things = NULL; thingCount = 0;
     free(bodies); bodies = NULL; bodyCount = 0;
@@ -3112,3 +3148,129 @@ void world_lock_own_doors(int actor, int cells)
 
 /* Whether a character is heading for a chair or bed it hasn't reached yet. */
 int world_heading_to_seat(int actor) { seats_ready(); return actor >= 0 && actor <= npcCount && heading[actor].uid != 0; }
+
+/* ---------------- Traps' state; a thing's facing; the camera ---------------- */
+
+int world_trap_sprung(int uid) { Thing *t = thing_by_uid(uid); return t && t->sprung; }
+void world_trap_set_sprung(int uid) { Thing *t = thing_by_uid(uid); if (t) t->sprung = 1; }
+int world_thing_facing(int uid) { Thing *t = thing_by_uid(uid); return t ? t->facing : DIR_S; }
+void world_camera(double *x, double *y) { *x = floor(cameraX); *y = floor(cameraY); }
+
+/* ---------------- Status outlines (Actor::paint: charmed, paralyzed, protected, cursed, poisoned) ---------------- */
+
+static uint32_t status_colour(int characterId)
+{
+    if (vitals_dead(characterId) || vitals_has(characterId, 32)) return 0;
+    if (vitals_has(characterId, 8)) return 0xFF78A0FCu;  /* charmed: light blue */
+    if (vitals_has(characterId, 4)) return 0xFFC46CC4u;  /* paralyzed: purple */
+    if (vitals_has(characterId, 64)) return 0xFFF8F8DCu; /* protected: pale white */
+    if (vitals_has(characterId, 16)) return 0xFFF8F814u; /* cursed: yellow */
+    if (vitals_has(characterId, 1)) return 0xFF10FC10u;  /* poisoned: green */
+    return 0;
+}
+
+static void draw_status_outlines(uint32_t *pixels)
+{
+    for (int i = 0; i < drawnCount; i++)
+    {
+        const Drawn *d = &drawn[i];
+        if (d->actor < 0) continue;
+        if (d->actor == outlineActor && lastMs < outlineUntil) continue; /* the red hit outline instead, for its moment */
+        Actor *a = actor_of(d->actor);
+        uint32_t colour = a ? status_colour(a->characterId) : 0;
+        if (!colour) continue;
+        const Picture *p = d->picture;
+        double s = fmin((double)d->w / p->width, (double)d->h / p->height);
+        int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5), ox = d->x + (d->w - dw) / 2, oy = d->y + (d->h - dh) / 2;
+#define SOLID(x, y) ((x) >= 0 && (y) >= 0 && (x) < dw && (y) < dh && (p->pixels[(size_t)((y) * p->height / dh) * (size_t)p->width + (size_t)((x) * p->width / dw)] >> 24) > 127)
+        for (int y = -1; y <= dh; y++)
+            for (int x = -1; x <= dw; x++)
+            {
+                if (SOLID(x, y) || !(SOLID(x - 1, y) || SOLID(x + 1, y) || SOLID(x, y - 1) || SOLID(x, y + 1))) continue;
+                int sx = ox + x, sy = oy + y;
+                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = colour;
+            }
+#undef SOLID
+    }
+}
+
+/* ---------------- Bleeding (actors.cc reduce_health / bleed, npctime.cc Npc_bleed_timer) ---------------- */
+
+static double puddleSweepMs;
+static uint32_t bloodRng = 2718281828u;
+static int blood_rnd(int n) { bloodRng ^= bloodRng << 13; bloodRng ^= bloodRng >> 17; bloodRng ^= bloodRng << 5; return n > 0 ? (int)(((uint64_t)bloodRng * (uint32_t)n) >> 32) : 0; }
+
+static const Sprite *blood_of(int actor)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return NULL;
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(get(gameJson, "Project"), "Characters"), "Characters"))
+        if (num(c, "Id", -2) == a->characterId)
+        {
+            const char *name = str(c, "BloodSpriteName");
+            const Sprite *s = name[0] ? sprite_find("Blood", name) : NULL;
+            return s && s->frameCount ? s : NULL;
+        }
+    return NULL;
+}
+
+static void feet_unit(Actor *a, int *ux, int *uy) { *ux = (int)floor(a->px / UNIT); *uy = (int)floor((a->py + tileH / 2.0 - 1) / UNIT); }
+
+/* Actor::bleed: the puddle on this tile grows, else a new small one. */
+static void bleed(int actor)
+{
+    Actor *a = actor_of(actor);
+    const Sprite *blood = blood_of(actor);
+    if (!a || !blood) return;
+    int ux, uy, last = (blood->frameCount < 4 ? blood->frameCount : 4) - 1;
+    feet_unit(a, &ux, &uy);
+    for (int i = 0; i < puddleCount; i++)
+        if (puddles[i].ux == ux && puddles[i].uy == uy && puddles[i].lift == a->lift)
+        {
+            if (puddles[i].frame < last) { puddles[i].frame++; puddles[i].mirrored = blood_rnd(2); }
+            return;
+        }
+    if (puddleCount >= 128) return;
+    puddles[puddleCount++] = (Puddle){ ux, uy, a->lift, blood_rnd(last + 1 < 2 ? last + 1 : 2), blood_rnd(2), blood }; /* "Lets start with a smaller pool." */
+}
+
+/* reduce_health: a blow of this much may start the character bleeding (rand() % 10 < damage, not with 2 puddles round it already). */
+void world_maybe_bleed(int actor, int damage)
+{
+    Actor *a = actor_of(actor);
+    if (!a || !blood_of(actor) || vitals_dead(a->characterId)) return;
+    int ux, uy, nearby = 0;
+    feet_unit(a, &ux, &uy);
+    for (int i = 0; i < puddleCount; i++) nearby += abs(puddles[i].ux - ux) <= 1 && abs(puddles[i].uy - uy) <= 1;
+    if (blood_rnd(10) >= damage || nearby >= 2) return;
+    for (int i = 0; i < bleedingCount; i++) if (bleeding[i].actor == actor) return;
+    if (bleedingCount >= 32) return;
+    int hp = 0;
+    vitals_hp(a->characterId, &hp);
+    bleeding[bleedingCount++] = (Bleeding){ actor, hp, 60000 + blood_rnd(120000), 500 + blood_rnd(500) };
+    bleed(actor); /* drips at once */
+}
+
+/* Npc_bleed_timer: a drip every 0.5-1 s for 1-3 minutes - healing or dying stops it; far-off puddles are let go. */
+void world_update_bleeding(double ms)
+{
+    for (int i = 0; i < bleedingCount; i++)
+    {
+        Bleeding *b = &bleeding[i];
+        Actor *a = actor_of(b->actor);
+        int hp = 0;
+        if (a) vitals_hp(a->characterId, &hp);
+        b->left -= ms;
+        if (!a || a->gone || vitals_dead(a->characterId) || hp > b->lastHp || b->left <= 0) { bleeding[i--] = bleeding[--bleedingCount]; continue; }
+        b->lastHp = hp;
+        if ((b->next -= ms) > 0) continue;
+        b->next = 500 + blood_rnd(500);
+        bleed(b->actor);
+    }
+    if ((puddleSweepMs -= ms) > 0) return;
+    puddleSweepMs = 2000;
+    double cx = cameraX + SCREEN_W / 2.0, cy = cameraY + SCREEN_H / 2.0;
+    for (int i = 0; i < puddleCount; i++)
+        if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) puddles[i--] = puddles[--puddleCount];
+}

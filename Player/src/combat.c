@@ -836,6 +836,7 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
         if (attacker == 0) snprintf(cause, sizeof cause, "slain by you");
         else snprintf(cause, sizeof cause, "slain by %s", name_of(attacker));
         vitals_damage(id_of(defender), damage, cause);
+        world_maybe_bleed(defender, damage); /* reduce_health: it may start bleeding */
         if (willDie && vitals_dead(id_of(defender)))
         {
             if (attacker == 0) { char line[160]; snprintf(line, sizeof line, "You have slain %s.", name_of(defender)); game_log(line); }

@@ -2879,7 +2879,7 @@ static int fireCopy; /* the placed copy an object's pages fire for (0: not an ob
 
 static int fire_pages_core(Owner *o, int just, int activator, int byStepping);
 #define T_COMBINE_ITEM 17
-static int combining, combineCategory, combineItemId; /* By Combine Item: what was dropped on it */
+static int combining, combineCategory, combineItemId; /* By Combine Item (and By Item Dropped On It): what was dropped on it */
 
 /* TryFireEventPages: the first page whose conditions are met runs. */
 static int fire_pages(Owner *o, int just, int activator, int byStepping)
@@ -2905,7 +2905,7 @@ static int fire_pages_core(Owner *o, int just, int activator, int byStepping)
         {
             if (strcmp(by, "Player") != 0 && strcmp(by, "Party") != 0 && atoi(by) != world_actor_character(0)) continue;
         }
-        if (combining && just == T_COMBINE_ITEM && trigger == T_COMBINE_ITEM)
+        if (combining && just == trigger && (just == T_COMBINE_ITEM || just == 3))
         {
             /* a page for one thing only: that thing must be what was dropped */
             cJSON *want = get(c, "TriggerItemReference");
@@ -3374,6 +3374,38 @@ int events_combine(int uid, int ontoCategory, int ontoId, int category, int item
 {
     combining = 1; combineCategory = category; combineItemId = itemId;
     int ran = uid > 0 ? events_object_event(uid, T_COMBINE_ITEM, -1) : events_fire_item(ontoCategory, ontoId, T_COMBINE_ITEM);
+    combining = 0;
+    return ran;
+}
+
+/* Whether a thing's kind has pages for this trigger. */
+int events_has_trigger(int category, int itemId, int trigger)
+{
+    for (int i = 0; i < ownerCount; i++)
+    {
+        Owner *o = &owners[i];
+        if (o->itemCategory != category || o->itemId != itemId) continue;
+        for (int k = 0; k < o->pageCount; k++) if (num(o->pages[k].cond, "TriggerConditionBased", 0) == trigger) return 1;
+    }
+    return 0;
+}
+
+/* By Item Dropped On It on a placed thing: pages for that item (or for any) answer. */
+int events_dropped_on(int uid, int category, int itemId)
+{
+    combining = 1; combineCategory = category; combineItemId = itemId;
+    int ran = events_object_event(uid, 3, -1);
+    combining = 0;
+    return ran;
+}
+
+/* By Drop Item on the map event of a cell (something put down there). */
+int events_dropped_at_cell(int x, int y, int lift, int category, int itemId)
+{
+    Owner *o = event_at(x, y, lift / 5 + 1);
+    if (!o) return 0;
+    combining = 1; combineCategory = category; combineItemId = itemId;
+    int ran = fire_pages(o, 3, -1, 0);
     combining = 0;
     return ran;
 }
