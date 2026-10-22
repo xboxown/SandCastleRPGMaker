@@ -1,4 +1,5 @@
 #include "items.h"
+#include "books.h"
 #include "events.h"
 #include "world.h"
 #include "sound.h"
@@ -71,6 +72,7 @@ static cJSON *def_of(int category, int itemId)
 
 const char *items_name(int category, int itemId)
 {
+    if (category == CAT_BOOK && books_setting(itemId, "Name")) return books_setting(itemId, "Name");
     cJSON *d = def_of(category, itemId);
     return d ? str(d, "Name") : category == CAT_CONTAINER ? "container" : category == CAT_BOOK ? "book" : "object";
 }

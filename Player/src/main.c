@@ -24,6 +24,7 @@
 #include "mechanisms.h"
 #include "vehicles.h"
 #include "video.h"
+#include "books.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -68,6 +69,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
         else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
@@ -267,7 +269,8 @@ static int rebuild(cJSON *root, cJSON *runtime)
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
     events_load();
-    if (runtime) { events_restore(runtime); script_restore(runtime); }
+    if (runtime) { events_restore(runtime); script_restore(runtime); books_restore(runtime); }
+    else books_reset();
     dolls_load();
     vitals_load();
     if (runtime) vitals_restore(runtime);
@@ -495,14 +498,14 @@ int main(int argc, char **argv)
         screen_update(seconds * 1000);
         int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
         video_update(seconds * 1000);
-        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
+        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing() || books_open(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
         { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
-        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing())
+        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing() && !books_open())
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */

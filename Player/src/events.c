@@ -3,6 +3,7 @@
 #include "magic.h"
 #include "vehicles.h"
 #include "video.h"
+#include "books.h"
 #include "commands.h"
 #include "dialog.h"
 #include "world.h"
@@ -1695,6 +1696,33 @@ static int execute(Run *r, const Cmd *c)
             int actor = actor_for(r, param(c, "Who"));
             cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
             if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
+            return 1;
+        }
+        case C_ChangeSelfBookContent:
+        case C_ChangeExternalBookContent:
+        {
+            /* one frame's text on one page, only in play (the book's own words are never touched) */
+            int book = -1;
+            if (c->type == C_ChangeSelfBookContent) { if (!strncmp(r->owner, "itemdef:3:", 10)) book = atoi(r->owner + 10); }
+            else if (param(c, "TargetBookId")[0]) book = atoi(param(c, "TargetBookId"));
+            const char *text = param(c, "ReplacementText");
+            if (book < 0 || !param(c, "PageIndex")[0] || !param(c, "FrameId")[0] || !text[0]) { lastResult = 0; return 1; }
+            books_change_content(book, atoi(param(c, "PageIndex")), atoi(param(c, "FrameId")), text);
+            return 1;
+        }
+        case C_ChangeBookSettings:
+        {
+            static const char *FIELDS[] = { "Name", "Weight", "Volume", "Price", "Destructible", "CanBeSold", "CanBeTraded", "CanBeDropped", "CanBePicked", "IsStackable", "AllowElevation" };
+            int book = param(c, "TargetBookId")[0] ? atoi(param(c, "TargetBookId")) : -1, any = 0;
+            for (int i = 0; book >= 0 && i < 11; i++)
+            {
+                char on[48], value[48];
+                snprintf(on, sizeof on, "Override_%s", FIELDS[i]); snprintf(value, sizeof value, "Value_%s", FIELDS[i]);
+                if (strcmp(param(c, on), "True")) continue;
+                books_change_setting(book, FIELDS[i], param(c, value));
+                any = 1;
+            }
+            lastResult = any;
             return 1;
         }
         case C_PlayVideo:

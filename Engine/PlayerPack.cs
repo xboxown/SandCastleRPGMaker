@@ -24,7 +24,7 @@ public static class PlayerPack
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
-    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null, VideoDatabase? videos = null)
+    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null, VideoDatabase? videos = null, Func<string, string>? richText = null)
     {
         Directory.CreateDirectory(folder);
         // The project as it plays: a copy, every plotted house and vehicle built into its map (as a game starts).
@@ -34,7 +34,9 @@ public static class PlayerPack
         var id = project.Manifest.ProjectId;
         foreach (string old in new[] { "game.json", "sprites.json", "sounds.json" }) File.Delete(Path.Combine(folder, old)); // an older, plain pack
         foreach (string old in new[] { "pictures", "sounds" }) if (Directory.Exists(Path.Combine(folder, old))) Directory.Delete(Path.Combine(folder, old), recursive: true);
-        File.WriteAllBytes(Path.Combine(folder, "game.sdbx"), ProjectContainer.Encrypt(id, JsonSerializer.SerializeToUtf8Bytes(new { Format = FormatVersion, Project = game, Books = books }, Json)));
+        var whole = JsonSerializer.SerializeToNode(new { Format = FormatVersion, Project = game, Books = books }, Json)!;
+        if (richText is not null) PlainBookText(whole, richText);
+        File.WriteAllBytes(Path.Combine(folder, "game.sdbx"), ProjectContainer.Encrypt(id, System.Text.Encoding.UTF8.GetBytes(whole.ToJsonString(Json))));
 
         int next = 0;
         var copied = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
@@ -84,6 +86,30 @@ public static class PlayerPack
             videoIndex.Add(new { video.Id, video.Name, File = name, video.Codec, video.Width, video.Height });
         }
         if (videoFiles.Count > 0) WriteArchive(Path.Combine(folder, "videos.sdbx"), id, videoFiles, videoIndex);
+    }
+
+    /// <summary>
+    /// Book text as the player reads it: every page's frame text, and every
+    /// Change Book Content's replacement, turned from rich text (XAML) into
+    /// plain paragraphs by richText (the editor's converter); the whole-book
+    /// stream the pages were cut from isn't needed.
+    /// </summary>
+    private static void PlainBookText(System.Text.Json.Nodes.JsonNode node, Func<string, string> richText)
+    {
+        if (node is System.Text.Json.Nodes.JsonArray array) { foreach (var item in array) if (item is not null) PlainBookText(item, richText); return; }
+        if (node is not System.Text.Json.Nodes.JsonObject obj) return;
+        if (obj["FrameTexts"] is System.Text.Json.Nodes.JsonObject texts)
+            foreach (var key in texts.Select(kv => kv.Key).ToList())
+                texts[key] = richText(texts[key]?.GetValue<string>() ?? "");
+        if (obj.ContainsKey("FullContentXaml")) obj["FullContentXaml"] = "";
+        if (obj["Type"] is System.Text.Json.Nodes.JsonValue type && type.TryGetValue(out int t)
+            && (t == (int)EventCommandType.ChangeSelfBookContent || t == (int)EventCommandType.ChangeExternalBookContent)
+            && obj["Parameters"] is System.Text.Json.Nodes.JsonObject parameters && parameters["ReplacementXaml"] is { } replacement)
+        {
+            parameters["ReplacementText"] = richText(replacement.GetValue<string>());
+            parameters.Remove("ReplacementXaml");
+        }
+        foreach (var child in obj.Select(kv => kv.Value).ToList()) if (child is not null) PlainBookText(child, richText);
     }
 
     /// <summary>

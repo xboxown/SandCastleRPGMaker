@@ -18,6 +18,7 @@
  *    refused drop leaves the thing where it was.
  */
 #include "gumps.h"
+#include "books.h"
 #include "mechanisms.h"
 #include "magic.h"
 #include "world.h"
@@ -250,7 +251,7 @@ static void close_gump(int i)
 }
 
 int gumps_open(void) { return gumpCount; }
-int gumps_close_top(void) { if (mechanisms_map_click()) return 1; if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
+int gumps_close_top(void) { if (books_escape()) return 1; if (mechanisms_map_click()) return 1; if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
 
 /* A map container double-clicked: its window (a never-opened one with its starting contents). */
 void gumps_open_map_container(int uid)
@@ -428,6 +429,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         if (p) world_blit(pixels, p, mouseX - grabX, mouseY - grabY, quantize(p->width), quantize(p->height));
     }
     magic_draw_book(pixels, ms); /* the open spellbook, over every window */
+    books_draw(pixels, ms); /* a book being read */
     mechanisms_draw(pixels); /* a map being looked at */
 }
 
@@ -583,7 +585,7 @@ static void use_carried(Item *it)
     if (category == CAT_OBJECT && magic_use_carried(it)) return; /* a potion, food, a useable object, a spellbook */
     if (events_fire_item(category, id, TR_USE)) return;
     if (category == CAT_OBJECT && items_use_light(it)) return;
-    if (category == CAT_BOOK) events_log_once(311, "Reading books isn't in the player yet.");
+    if (category == CAT_BOOK) books_read(id); /* no By Use page of its own: it's read */
 }
 
 static void use_target(const Target *t)
@@ -949,6 +951,7 @@ int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (events_cinema()) return 1;
+    if (books_click()) return 1; /* a book being read: the next page */
     if (mechanisms_click(x, y)) return 1; /* the sleep slider, a map being looked at, the party asleep */
     if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
     if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */

@@ -29,10 +29,14 @@ public partial class MainWindow
         {
             Mouse.OverrideCursor = Cursors.Wait;
             if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, recursive: true);
-            PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase);
+            PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
             StatusText.Text = $"Game data built: {target}";
-            MessageBox.Show($"The game's data is in:\n{target}\n\nPreview: on the {(platform == BuildPlatform.Linux ? "Linux" : "Mac")} machine, build the Sandcastle player from the Player folder (make), put Game_Data beside it and run it. " +
-                "So far the player draws the world and lets you walk in it - events, characters, sound and the rest follow.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+            string machine = platform switch
+            {
+                BuildPlatform.Linux => "Linux", BuildPlatform.MacModern => "Mac", BuildPlatform.MacPowerPC => "PowerPC Mac", BuildPlatform.MorphOS => "MorphOS",
+                BuildPlatform.AmigaOS4 => "AmigaOS 4", BuildPlatform.Amiga68k => "Amiga (68k)", BuildPlatform.AmigaVampire => "Amiga (Vampire)", _ => platform.ToString()
+            };
+            MessageBox.Show($"The game's data is in:\n{target}\n\nOn the {machine}, put Game_Data beside the Sandcastle player for that machine (built from the Player folder) and run the player.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex)
         {

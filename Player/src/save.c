@@ -13,6 +13,7 @@
  * lists the folders, newest first.
  */
 #include "save.h"
+#include "books.h"
 #include "world.h"
 #include "items.h"
 #include "events.h"
@@ -212,6 +213,7 @@ static cJSON *capture(void)
     combat_save(runtime);
     weather_save(runtime);
     conditions_save(runtime);
+    books_save(runtime);
     if (worldStates) cJSON_AddItemToObject(runtime, "WorldStates", cJSON_Duplicate(worldStates, 1)); /* the other worlds as they were left */
     cJSON_AddItemToObject(root, "Runtime", runtime);
     return root;

@@ -8,6 +8,7 @@
  *    anything else: nothing happens.
  */
 #include "use.h"
+#include "books.h"
 #include "vehicles.h"
 #include "mechanisms.h"
 #include "magic.h"
@@ -102,7 +103,7 @@ void use_thing(int uid)
         int category, itemId, quantity, x, y, instance;
         world_thing_info(uid, &category, &itemId, &quantity, &x, &y, &instance);
         if (category == 5) { gumps_open_map_container(uid); return; } /* its window */
-        if (!events_fire_item(category, itemId, TR_USE)) events_log_once(311, "Reading books isn't in the player yet.");
+        if (!events_fire_item(category, itemId, TR_USE)) books_read(itemId); /* no By Use page of its own: it's read */
         return;
     }
     cJSON *def = objectDef(objectId);
