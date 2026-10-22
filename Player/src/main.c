@@ -23,6 +23,7 @@
 #include "magic.h"
 #include "mechanisms.h"
 #include "vehicles.h"
+#include "video.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -73,7 +74,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
         {
             const char *semi = strchr(what, ';');
-            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') gumps_mouse_down(x, y); else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
+            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) gumps_mouse_down(x, y); } else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
         }
         else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
         else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) dolls_key(0, t[q]); } /* Lname: letters typed */
@@ -128,6 +129,7 @@ void dolls_request_load(const char *folder, const char *name) { snprintf(loadFol
 /* LoadGame: the game built anew from a save, as a new game is built from the project, then what was only in play put back
    (the clock, the main character's exact spot, variables, hunger and ailments, fired events, weather). The last game is let go. */
 static int rebuild(cJSON *root, cJSON *runtime);
+static int title_with_intro(void);
 
 static int load_game(const char *folder, const char *name)
 {
@@ -156,7 +158,7 @@ static int new_game(int toTitle)
     free(text);
     if (!root) { game_error(303, "game.sdbx"); return 0; }
     int ok = rebuild(root, NULL);
-    if (ok > 0) { note(toTitle ? "Back to the Title Screen." : "A new game."); if (toTitle) dolls_open_title(); }
+    if (ok > 0) { note(toTitle ? "Back to the Title Screen." : "A new game."); if (toTitle) title_with_intro(); }
     return ok;
 }
 
@@ -238,11 +240,25 @@ static int travel(int worldId, int hasSpot, int x, int y, int floorOf)
     return ok;
 }
 
+/* The title, after its intro video if it has one (System Settings > Title Screen). 1 = there's a title (now, or when the video ends). */
+static int introPending; /* the title's intro video playing: as the title, nothing in the world goes on */
+static void intro_done(int ok, void *context) { (void)ok; (void)context; introPending = 0; if (dolls_open_title()) note("Title Screen."); }
+
+static int title_with_intro(void)
+{
+    cJSON *title = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Title");
+    cJSON *intro = cJSON_GetObjectItem(title, "IntroVideoId"), *design = cJSON_GetObjectItem(title, "DollDesignId");
+    if (cJSON_IsNumber(intro) && intro->valueint >= 0 && video_exists(intro->valueint) && cJSON_IsNumber(design) && dolls_design_exists(design->valueint))
+        return introPending = video_play(intro->valueint, 1, 1.0, intro_done, NULL);
+    return dolls_open_title();
+}
+
 /* The last game let go of; the game built from root (a save's: then runtime puts back what was only in play). -1: it can't go on. */
 static int rebuild(cJSON *root, cJSON *runtime)
 {
     cJSON *old = (cJSON *)world_json();
     /* the last game, let go of */
+    video_stop();
     sound_stop_all();
     gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
@@ -350,7 +366,7 @@ int main(int argc, char **argv)
     { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula (paula)."); } } /* a file called paula: audio.device, never AHI */
     { FILE *p = fopen("ahi", "rb"); if (p) { fclose(p); platform_audio_route(2); note("Sound through AHI only (ahi)."); } }
     note(noSound ? "Sound off (nosound)." : "Starting the sound...");
-    sound_load(folder, !noSound);
+    sound_load(folder, !noSound); video_load(folder);
     note(sound_status());
     events_load();
     dolls_load();
@@ -363,7 +379,7 @@ int main(int argc, char **argv)
     weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
     note("Running.");
-    if (!noTitle && dolls_open_title()) note("Title Screen."); /* System Settings > Title Screen: before play, the game waits */
+    if (!noTitle && title_with_intro() && dolls_title_open()) note("Title Screen."); /* System Settings > Title Screen: before play, the game waits */
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;
@@ -376,6 +392,7 @@ int main(int argc, char **argv)
             else if (e.type == EV_MOUSE_MOVE) { dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
+                if (video_input(1)) continue; /* a click skips a video */
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
                 else if (!vitals_game_over() || dolls_window_count()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
             }
@@ -385,6 +402,7 @@ int main(int argc, char **argv)
             {
                 int down = e.type == EV_KEY_DOWN;
                 if (down && !dialog_showing() && e.key != KEY_F11 && dolls_key(e.key, 0)) continue; /* typing, or a modal paperdoll: nothing else hears it */
+                if (down && e.key != KEY_F11 && video_input(e.key == KEY_ESCAPE || e.key == KEY_SPACE || e.key == KEY_ENTER)) continue; /* a video playing: these skip it */
                 if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* the sleep slider */
                 if (down && dialog_showing() && e.key != KEY_F11)
                 {
@@ -433,6 +451,7 @@ int main(int argc, char **argv)
             gumps_draw(pixels, worldMs);
             screen_draw(pixels, now);
             dialog_draw(pixels, now);
+            video_draw(pixels);
             save_bmp(shot);
             break;
         }
@@ -474,15 +493,16 @@ int main(int argc, char **argv)
         last = now;
         sound_update(seconds * 1000);
         screen_update(seconds * 1000);
-        int title = dolls_title_open(); /* the Title Screen: nothing in the world goes on behind it */
-        int paused = dialog_showing() || title || mechanisms_pausing(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
+        int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
+        video_update(seconds * 1000);
+        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
         { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
-        if (!dialog_showing() && !title)
+        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing())
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
@@ -514,6 +534,7 @@ int main(int argc, char **argv)
         if (!title) screen_draw(pixels, now);
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);
+        video_draw(pixels); /* a video over everything */
         platform_present(pixels);
         { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); } /* how far it got, if it ever stops */
     }

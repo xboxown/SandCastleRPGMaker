@@ -2,6 +2,7 @@
 #include "save.h"
 #include "magic.h"
 #include "vehicles.h"
+#include "video.h"
 #include "commands.h"
 #include "dialog.h"
 #include "world.h"
@@ -19,6 +20,7 @@
 #include <math.h>
 #include "../third_party/cJSON.h"
 #include <stdio.h>
+#include <stdint.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -644,6 +646,9 @@ static Picked *picked_of(const Cmd *showText, int id)
 }
 
 static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; release_held(r); }
+
+/* A video the event waits on has ended (or couldn't be played): it goes on. */
+static void video_done(int ok, void *context) { events_doll_answered((int)(intptr_t)context, ok); }
 
 /* ---------------- Change Map ---------------- */
 
@@ -1691,6 +1696,21 @@ static int execute(Run *r, const Cmd *c)
             cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
             if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
             return 1;
+        }
+        case C_PlayVideo:
+        {
+            /* the commands after it wait till it ends, is skipped, or can't be played here */
+            double volume = param(c, "Volume")[0] ? sc_strtod(param(c, "Volume"), NULL) / 100 : 1;
+            int token = new_answer(r, "");
+            if (!video_play(atoi(param(c, "VideoId")), strcmp(param(c, "Skippable"), "False") != 0, volume, video_done, (void *)(intptr_t)token))
+            {
+                answers[token - 1].used = 0;
+                lastResult = 0;
+                return 1;
+            }
+            if (!answers[token - 1].used) return 1; /* over already (it couldn't be played) */
+            r->waiting = W_DOLL; r->answerToken = token;
+            return 0;
         }
         case C_DriveVehicle: lastResult = vehicles_drive_command(atoi(param(c, "Vehicle"))); return 1;
         case C_StopDriving: lastResult = vehicles_stop_command(); return 1;

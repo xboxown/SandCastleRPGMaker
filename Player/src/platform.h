@@ -61,6 +61,13 @@ void platform_audio_lock(void);
 void platform_audio_unlock(void);
 const char *platform_audio_name(void);
 
+/* Videos: the machine's own decoder (Windows: Media Foundation); 0 from open where there's none. */
+int platform_video_open(const char *path, int *width, int *height);
+int platform_video_next(uint32_t *frame, double *seconds);                 /* the next frame (width x height) and its time; 0 at the end */
+int platform_video_audio(int16_t *out, int max, int *rate, int *channels);  /* the next sound decoded (interleaved 16-bit frames) */
+int platform_video_audio_ended(void);
+void platform_video_close(void);
+
 /* Folders for the saves: made (1 if it's there now), removed when empty. */
 int platform_make_dir(const char *path);
 int platform_remove_dir(const char *path);

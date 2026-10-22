@@ -19,6 +19,7 @@ const char *save_screenshot_path(const char *folder, char *out, size_t size);
 
 cJSON *save_capture(void);
 void save_set_world_states(cJSON *states);
-int save_has_world(int id);   /* a world visited and left */
+int save_has_world(int id);
+const char *save_folder(void);   /* a world visited and left */
 
 #endif

@@ -29,7 +29,7 @@ public partial class MainWindow
         {
             Mouse.OverrideCursor = Cursors.Wait;
             if (System.IO.Directory.Exists(target)) System.IO.Directory.Delete(target, recursive: true);
-            PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase);
+            PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase);
             StatusText.Text = $"Game data built: {target}";
             MessageBox.Show($"The game's data is in:\n{target}\n\nPreview: on the {(platform == BuildPlatform.Linux ? "Linux" : "Mac")} machine, build the Sandcastle player from the Player folder (make), put Game_Data beside it and run it. " +
                 "So far the player draws the world and lets you walk in it - events, characters, sound and the rest follow.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);

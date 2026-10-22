@@ -24,7 +24,7 @@ public static class PlayerPack
 
     private static readonly JsonSerializerOptions Json = new() { WriteIndented = false };
 
-    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null)
+    public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null, VideoDatabase? videos = null)
     {
         Directory.CreateDirectory(folder);
         // The project as it plays: a copy, every plotted house and vehicle built into its map (as a game starts).
@@ -72,6 +72,18 @@ public static class PlayerPack
             soundIndex.Add(new { entry.Id, entry.Name, File = name, entry.Volume, Music = entry.Kind == ResourceKind.Music });
         }
         WriteArchive(Path.Combine(folder, "sounds.sdbx"), id, soundFiles, soundIndex);
+
+        // Videos (Play Video, the title's intro): the .mp4 files as they are - the player has them played by the machine's own decoder.
+        var videoIndex = new List<object>();
+        var videoFiles = new List<(string Name, byte[] Data)>();
+        foreach (var video in videos?.Videos ?? new List<VideoEntry>())
+        {
+            if (string.IsNullOrEmpty(video.FilePath) || !File.Exists(video.FilePath)) continue;
+            string name = $"{videoIndex.Count}{Path.GetExtension(video.FilePath).ToLowerInvariant()}";
+            videoFiles.Add((name, File.ReadAllBytes(video.FilePath)));
+            videoIndex.Add(new { video.Id, video.Name, File = name, video.Codec, video.Width, video.Height });
+        }
+        if (videoFiles.Count > 0) WriteArchive(Path.Combine(folder, "videos.sdbx"), id, videoFiles, videoIndex);
     }
 
     /// <summary>

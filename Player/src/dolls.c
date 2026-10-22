@@ -36,6 +36,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+double sc_strtod(const char *text, char **end);
 #include <ctype.h>
 
 enum
@@ -269,7 +270,7 @@ static void write_variable(cJSON *part, PartState *r)
     if (k == K_TEXTBOX)
     {
         char *end;
-        double v = strtod(r->text, &end);
+        double v = sc_strtod(r->text, &end);
         if (r->text[0] && !*end) events_set_variable(name, v);
         else if (flag(part, "NumbersOnly")) events_set_variable(name, 0);
         return;
@@ -1919,3 +1920,5 @@ void dolls_reset(void)
     formCount = 0; slideCount = 0;
     designs = NULL;
 }
+
+int dolls_design_exists(int id) { return dolls_design(id) != NULL; }

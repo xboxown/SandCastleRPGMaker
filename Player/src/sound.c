@@ -56,6 +56,8 @@ static Voice voices[MAX_VOICES];
 static double musicVolume = 1, soundVolume = 1;
 static int audioOn, outRate = 44100;
 static FILE *dump;
+#define STREAM_FRAMES 65536
+static int16_t stream[STREAM_FRAMES * 2]; static volatile int streamRead, streamCount; static int streamOn, streamVolume = 256; static double streamFrac;
 
 static SoundFile *file_of(int id) { for (int i = 0; i < fileCount; i++) if (files[i].id == id) return &files[i]; return NULL; }
 
@@ -174,6 +176,12 @@ static void fill(int16_t *out, int frames)
             v->frac += step;
         }
     }
+    if (streamOn) /* a video's sound */
+        for (int i = 0; i < frames && streamCount > 0; i++)
+        {
+            mix[i * 2] += stream[streamRead * 2] * streamVolume >> 8; mix[i * 2 + 1] += stream[streamRead * 2 + 1] * streamVolume >> 8;
+            streamRead = (streamRead + 1) % STREAM_FRAMES; streamCount--;
+        }
     for (int i = 0; i < frames * 2; i++) out[i] = (int16_t)(mix[i] > 32767 ? 32767 : mix[i] < -32768 ? -32768 : mix[i]);
     if (dump) fwrite(out, 4, (size_t)frames, dump); /* testing: SANDCASTLE_AUDIO_DUMP=file - what was heard, raw 16-bit stereo */
 }
@@ -317,3 +325,40 @@ void sound_update(double ms)
 }
 
 int sound_is_music(int resourceId) { SoundFile *f = file_of(resourceId); return f && f->music; }
+
+/* ---------------- A video's sound ---------------- */
+
+void sound_stream_begin(double volume)
+{
+    platform_audio_lock();
+    streamOn = 1; streamRead = streamCount = 0; streamFrac = 0;
+    streamVolume = (int)(volume * soundVolume * 256 + 0.5);
+    platform_audio_unlock();
+}
+
+/* Decoded sound in: resampled to the output rate (straight lines between), mono made stereo. */
+void sound_stream_push(const int16_t *pcm, int frames, int rate, int channels)
+{
+    if (!streamOn || !audioOn || rate <= 0 || channels <= 0) return;
+    double step = (double)rate / outRate;
+    platform_audio_lock();
+    int write = (streamRead + streamCount) % STREAM_FRAMES;
+    for (double f = streamFrac; f < frames - 1 && streamCount < STREAM_FRAMES; f += step)
+    {
+        int i = (int)f;
+        double t = f - i;
+        const int16_t *a = pcm + (size_t)i * channels, *b = pcm + (size_t)(i + 1) * channels;
+        int l = (int)(a[0] + (b[0] - a[0]) * t), r = channels > 1 ? (int)(a[1] + (b[1] - a[1]) * t) : l;
+        stream[write * 2] = (int16_t)l; stream[write * 2 + 1] = (int16_t)r;
+        write = (write + 1) % STREAM_FRAMES; streamCount++;
+        streamFrac = f;
+    }
+    streamFrac = streamFrac + step - (frames - 1);
+    if (streamFrac < 0) streamFrac = 0;
+    platform_audio_unlock();
+}
+
+/* Seconds of it waiting to be heard (no sound at all: none). */
+double sound_stream_buffered(void) { return audioOn && streamOn ? (double)streamCount / outRate : 0; }
+
+void sound_stream_end(void) { platform_audio_lock(); streamOn = 0; streamCount = 0; platform_audio_unlock(); }

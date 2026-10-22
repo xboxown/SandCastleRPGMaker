@@ -324,3 +324,5 @@ char *save_read(const char *folder, char *error, size_t errorSize)
 }
 
 const char *save_screenshot_path(const char *folder, char *out, size_t size) { path_in(out, size, folder, "shot.png"); return out; }
+
+const char *save_folder(void) { return savesFolder; }
