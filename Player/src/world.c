@@ -17,6 +17,7 @@
 #include "world.h"
 #include "vitals.h"
 #include "magic.h"
+#include "combat.h"
 #include "mechanisms.h"
 #include "pictures.h"
 #include "font.h"
@@ -38,6 +39,8 @@ void game_log(const char *line);
 #define LIFT_SHIFT 4
 #define LIFTS_PER_FLOOR 5
 #define MAX_FLOORS 9
+#define FLY_LIFT (MAX_FLOORS * LIFTS_PER_FLOOR) /* "floor 10": above every floor, out of reach of any blow */
+#define SKY_LIFT (FLY_LIFT + 20)
 #define TILES_PER_SECOND 4.5
 #define DEAD_HALF_W 60
 #define DEAD_HALF_H 40
@@ -109,6 +112,9 @@ typedef struct Actor
     int walkingNow;
     int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
     int human;                      /* Exult: only the sentient open doors */
+    int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies) */
+    int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
+    double climbMs;                 /* a flier climbing or dropping a lift at a time */
     const Sprite *face;
     Pose poses[MAX_POSES]; int poseCount;
     int shownPose;                  /* Change Pose: the pose kept (index into poses, -1 = idle / walking) */
@@ -291,6 +297,8 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
     cJSON *p;
     a->characterId = num(character, "Id", -1);
     a->human = !cJSON_IsFalse(get(character, "IsHuman"));
+    a->movement = num(character, "Movement", 0);
+    a->flyPrefer = FLY_LIFT;
     a->face = sprite_find(str(character, "FaceSpriteGroup"), str(character, "FaceSpriteName"));
     if (!str(character, "FaceSpriteName")[0]) a->face = NULL;
     a->shownPose = -1;
@@ -680,6 +688,8 @@ void world_walks_update(double seconds);
 void world_walk_cancel(int actor);
 int world_walking(int actor);
 
+static int ask_aside(int walker, int l, int t, int dx, int dy);
+
 void world_update(int dx, int dy, double seconds)
 {
     if (seconds > 0) keysHeld = dx || dy;
@@ -703,6 +713,7 @@ void world_update(int dx, int dy, double seconds)
         {
             int lift = try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
             if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; }
+            else ask_aside(0, l1, t1, dx, dy); /* Actor::is_really_blocked: a character in the way is asked to move aside */
         }
     }
     world_walks_update(seconds);
@@ -725,7 +736,6 @@ void world_update(int dx, int dy, double seconds)
 
 static uint32_t *screen;
 
-/* A picture fitted (keeping its shape, centred, nearest pixel) into a box at (x, y). */
 typedef struct Puddle { int ux, uy, lift, frame, mirrored; const Sprite *blood; } Puddle;
 static Puddle puddles[128]; static int puddleCount;
 typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
@@ -733,6 +743,7 @@ static Bleeding bleeding[32]; static int bleedingCount;
 static void draw_status_outlines(uint32_t *pixels);
 static int blitOpacity = 255, blitMirror; /* the next blits: how see-through (invisible in the party), mirrored (blood) */
 
+/* A picture fitted (keeping its shape, centred, nearest pixel) into a box at (x, y). */
 static void blit_box(const Picture *p, int x, int y, int bw, int bh)
 {
     if (!p || p->width <= 0 || p->height <= 0) return;
@@ -1139,6 +1150,86 @@ static double cell_cy(int y) { return y * tileH + tileH / 2.0; }
 static int lift_own_body(Actor *a) { if (a->body < 0) return 0; int z = bodies[a->body].z; bodies[a->body].z = -100000; return z; }
 static void put_own_body(Actor *a, int z) { if (a->body >= 0) bodies[a->body].z = z; }
 
+/* ---------------- Land, sea and air (GameTestWindow.Movement) ---------------- */
+
+static Actor *actor_of(int i);
+void world_walk_cancel(int actor);
+
+/* The free bands of lifts over a footprint: [low, high) with nothing solid in them, ground to sky. */
+static int free_bands(int l, int t, int w, int d, int *lows, int *highs, int max)
+{
+    static const Body *solids[2048];
+    int ns = 0, n = 0, cursor = 0;
+    for (int i = 0; i < bodyCount && ns < 2048; i++) if (overlaps(&bodies[i], l, t, w, d) && bodies[i].height > 0) solids[ns++] = &bodies[i];
+    for (int i = 1; i < ns; i++) for (int k = i; k > 0 && solids[k]->z < solids[k - 1]->z; k--) { const Body *x = solids[k]; solids[k] = solids[k - 1]; solids[k - 1] = x; }
+    for (int i = 0; i < ns; i++)
+    {
+        if (solids[i]->z > cursor && n < max) { lows[n] = cursor; highs[n] = solids[i]->z; n++; }
+        if (solids[i]->z + solids[i]->height > cursor) cursor = solids[i]->z + solids[i]->height;
+    }
+    if (cursor < SKY_LIFT && n < max) { lows[n] = cursor; highs[n] = SKY_LIFT; n++; }
+    return n;
+}
+
+/* A swimmer's step: every unit under it Water (Tile Properties), room for its height - it never leaves the water. */
+static int sea_step(const Actor *a, int l, int t, int lift)
+{
+    if (l < 0 || t < 0 || l + a->sizeX > mapW * unitsX || t + a->sizeY > mapH * unitsY || !water) return -1;
+    for (int y = t; y < t + a->sizeY; y++)
+        for (int x = l; x < l + a->sizeX; x++) if (!water[(y / unitsY) * mapW + x / unitsX]) return -1;
+    static const Body *solids[1024];
+    int ns = 0;
+    for (int i = 0; i < bodyCount && ns < 1024; i++) if (overlaps(&bodies[i], l, t, a->sizeX, a->sizeY)) solids[ns++] = &bodies[i];
+    return is_clear(solids, ns, lift, a->sizeZ) ? lift : -1;
+}
+
+/* A flier's step: from its band over the old footprint to a band over the new one where they overlap by its height,
+   entering as high as the overlap lets it (floor 10 under the open sky, or down at a floor it's headed for). */
+static int air_step(const Actor *a, int fl, int ft, int l, int t, int lift)
+{
+    if (l < 0 || t < 0 || l + a->sizeX > mapW * unitsX || t + a->sizeY > mapH * unitsY) return -1;
+    int lows[64], highs[64], n = free_bands(fl, ft, a->sizeX, a->sizeY, lows, highs, 64), low = -1, high = -1;
+    for (int i = 0; i < n; i++) if (lift >= lows[i] && lift < highs[i]) { low = lows[i]; high = highs[i]; }
+    if (low < 0) return -1;
+    int nlows[64], nhighs[64], nn = free_bands(l, t, a->sizeX, a->sizeY, nlows, nhighs, 64), best = -1;
+    for (int i = 0; i < nn; i++)
+    {
+        int lo = low > nlows[i] ? low : nlows[i], hi = high < nhighs[i] ? high : nhighs[i];
+        if (hi - lo < a->sizeZ) continue; /* no room to get across */
+        int at = a->flyPrefer < lo ? lo : a->flyPrefer > hi - a->sizeZ ? hi - a->sizeZ : a->flyPrefer;
+        if (best < 0 || abs(at - a->flyPrefer) < abs(best - a->flyPrefer)) best = at;
+    }
+    return best;
+}
+
+/* A character's step onto a new footprint by how it moves: the lift it'd be at, or -1. */
+static int mover_step(const Actor *a, int fl, int ft, int l, int t, int lift)
+{
+    if (a->movement == 1) return sea_step(a, l, t, lift);
+    if (a->movement == 2) return air_step(a, fl, ft, l, t, lift);
+    return try_step(l, t, a->sizeX, a->sizeY, lift, a->sizeZ);
+}
+
+/* A flier that can't fly (knocked out, asleep, paralyzed, killed) falls onto whatever is under it. */
+static void fall_if_grounded(int actor)
+{
+    Actor *a = actor_of(actor);
+    if (!a || a->gone || a->movement != 2 || a->lift <= 0) return;
+    int hp = 1;
+    vitals_hp(a->characterId, &hp);
+    if (!vitals_dead(a->characterId) && hp > 0 && !vitals_has(a->characterId, 2 | 4)) return;
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    static const Body *under[1024];
+    int n = 0;
+    for (int i = 0; i < bodyCount && n < 1024; i++) if (i != a->body && overlaps(&bodies[i], l, t, a->sizeX, a->sizeY)) under[n++] = &bodies[i];
+    int ground = floor_below(under, n, a->lift);
+    if (ground >= a->lift) return;
+    world_walk_cancel(actor);
+    a->lift = ground;
+    if (a->body >= 0) bodies[a->body].z = ground;
+}
+
 /* CanSweep: from one point to another the way walkers go (along X, then Y), half a unit at a time, each new footprint by the walking rules. */
 static int can_sweep(const Actor *a, double fx, double fy, double tx, double ty, int fromLift, int *lift)
 {
@@ -1156,7 +1247,7 @@ static int can_sweep(const Actor *a, double fx, double fy, double tx, double ty,
             int l, t;
             foot_at(a, x, y, &l, &t);
             if (l == ll && t == lt) continue;
-            int nl = try_step(l, t, a->sizeX, a->sizeY, *lift, a->sizeZ);
+            int nl = mover_step(a, ll, lt, l, t, *lift);
             if (nl < 0) return 0;
             *lift = nl; ll = l; lt = t;
         }
@@ -1167,7 +1258,20 @@ static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
 {
     int l, t;
     foot_at(a, cell_cx(cx), cell_cy(cy), &l, &t);
-    *lift = try_step(l, t, a->sizeX, a->sizeY, fromLift, a->sizeZ);
+    if (a->movement == 2)
+    {
+        /* a flier: any free band with room over the cell - the one nearest the height it's at */
+        int lows[64], highs[64], n = free_bands(l, t, a->sizeX, a->sizeY, lows, highs, 64), best = -1;
+        for (int i = 0; i < n; i++)
+            if (highs[i] - lows[i] >= a->sizeZ)
+            {
+                int at = fromLift < lows[i] ? lows[i] : fromLift > highs[i] - a->sizeZ ? highs[i] - a->sizeZ : fromLift;
+                if (best < 0 || abs(at - fromLift) < abs(best - fromLift)) best = at;
+            }
+        *lift = best;
+        return best >= 0;
+    }
+    *lift = a->movement == 1 ? sea_step(a, l, t, fromLift) : try_step(l, t, a->sizeX, a->sizeY, fromLift, a->sizeZ);
     return *lift >= 0;
 }
 
@@ -1176,8 +1280,6 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
 
 static int heuristic(int ax, int ay, int bx, int by) { return abs(ax - bx) + abs(ay - by); }
 
-/* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
-   Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
 static int door_sound(const Thing *d, const char *key)
 {
     cJSON *o;
@@ -1203,6 +1305,8 @@ static void doors_passable(const Actor *a, int passable)
     }
 }
 
+/* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
+   Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
 static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max)
 {
     doors_passable(a, 1); /* WorldBodiesForPathing: closed unlocked doors will be opened on the way */
@@ -1257,8 +1361,18 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
             if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
             if (!goalFloor && index[KEY(nx, ny, 0)] >= 0 && nodes[index[KEY(nx, ny, 0)]].cost <= cur.cost + 1) continue;
             double fx = best == 0 ? a->px : cell_cx(cur.x), fy = best == 0 ? a->py : cell_cy(cur.y);
-            if (!goalFloor && !can_stand_at(a, nx, ny, cur.lift, &lift)) continue;
-            if (!can_sweep(a, fx, fy, cell_cx(nx), cell_cy(ny), cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+            if (a->movement)
+            {
+                int fl, ft, l, t;
+                foot_at(a, fx, fy, &fl, &ft);
+                foot_at(a, cell_cx(nx), cell_cy(ny), &l, &t);
+                if ((lift = mover_step(a, fl, ft, l, t, cur.lift)) < 0) continue;
+            }
+            else
+            {
+                if (!goalFloor && !can_stand_at(a, nx, ny, cur.lift, &lift)) continue;
+                if (!can_sweep(a, fx, fy, cell_cx(nx), cell_cy(ny), cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+            }
             int nf = goalFloor ? floor_of(lift) : 0, k = KEY(nx, ny, nf), cost = cur.cost + 1;
             if (index[k] >= 0 && nodes[index[k]].cost <= cost) continue;
             if (index[k] < 0)
@@ -1301,6 +1415,7 @@ int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
     Actor *a = actor_of(actor);
     Walk *w = walk_of(actor);
     if (!a || !w) return 0;
+    a->flyPrefer = goalFloor ? base_lift(goalFloor) : FLY_LIFT;
     int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, MAX_PATH - 1);
     if (n < 0) return 0;
     w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
@@ -1422,9 +1537,20 @@ static void step_walk(int actor, double seconds)
         if (l1 != l0 || t1 != t0)
         {
             int own = lift_own_body(a);
-            int lift = try_step(l1, t1, a->sizeX, a->sizeY, a->lift, a->sizeZ);
+            int lift = mover_step(a, l0, t0, l1, t1, a->lift);
             put_own_body(a, own);
+            if (a->movement == 2 && lift >= 0 && lift != a->lift)
+            {
+                /* ClimbToward: up or down a lift every 25 ms, inside its own cell, then the step */
+                a->climbMs += seconds * 1000;
+                while (a->climbMs >= 25 && a->lift != lift) { a->climbMs -= 25; a->lift += lift > a->lift ? 1 : -1; }
+                if (a->body >= 0) bodies[a->body].z = a->lift;
+                a->walkingNow = 1;
+                if (a->lift != lift) return;
+                a->climbMs = 0;
+            }
             if (lift < 0 && open_door_in_way(a, w, l1, t1)) return; /* a closed, unlocked door: opened, on next frame */
+            if (lift < 0 && ask_aside(actor, l1, t1, alongX ? (remaining > 0 ? 1 : -1) : 0, alongX ? 0 : (remaining > 0 ? 1 : -1))) return; /* someone in the way moved aside (or swapped): on next frame */
             if (lift < 0) { w->active = 0; w->blocked = 1; a->walkingNow = 0; return; } /* something in the way: stop, think again */
             a->lift = lift;
             if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
@@ -1439,6 +1565,7 @@ static void step_walk(int actor, double seconds)
 void world_walks_update(double seconds)
 {
     for (int i = 0; i <= npcCount; i++) if (!magic_frozen(i)) step_walk(i, seconds); /* Time Stop: everyone but the party stands still */
+    for (int i = 1; i <= npcCount; i++) fall_if_grounded(i);
     close_doors_behind();
 }
 
@@ -3273,4 +3400,86 @@ void world_update_bleeding(double ms)
     double cx = cameraX + SCREEN_W / 2.0, cy = cameraY + SCREEN_H / 2.0;
     for (int i = 0; i < puddleCount; i++)
         if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) puddles[i--] = puddles[--puddleCount];
+}
+
+/* ---------------- Characters in each other's way (actors.cc Actor::move_aside, objs.cc swap_positions) ---------------- */
+
+/* Puts a character straight onto a cell (Game_object::move) - its body too. */
+static void put_on_cell(int actor, int x, int y)
+{
+    Actor *a = actor_of(actor);
+    Walk *w = walk_of(actor);
+    if (!a) return;
+    a->px = cell_cx(x); a->py = cell_cy(y);
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    if (a->body >= 0) bodies[a->body].z = -1000;
+    a->lift = standing_lift(l, t, a->sizeX, a->sizeY, floor_of(a->lift));
+    if (a->body >= 0) { Body *b = &bodies[a->body]; b->left = l; b->top = t; b->z = a->lift; }
+    if (actor != 0 && w) { w->active = 0; a->walkingNow = 0; } /* thinks again from there */
+}
+
+/* Whether the character could stand on that cell now (on its floor). */
+static int free_cell(int actor, int x, int y)
+{
+    Actor *a = actor_of(actor);
+    if (x < 0 || y < 0 || x >= mapW || y >= mapH) return 0;
+    int own = lift_own_body(a), lift, ok = can_stand_at(a, x, y, a->lift, &lift) && abs(lift - a->lift) <= 1;
+    put_own_body(a, own);
+    return ok;
+}
+
+/* Actor::move_aside: the blocker steps to a free cell at right angles to the walker's way (one side, then the other), else a free diagonal;
+   with nowhere to go they swap places, if the same size. Fighting, walking, sitting, lying or down: it stays an obstacle.
+   The player moves aside too, like Exult's avatar, but only while standing still and not in combat mode. */
+static int move_aside(int blocker, int walker, int dx, int dy)
+{
+    Actor *b = actor_of(blocker), *wa = actor_of(walker);
+    if (!b || !wa || b->gone || vitals_dead(b->characterId) || vitals_has(b->characterId, 2 | 4) || world_seated(blocker)) return 0;
+    if (blocker == 0 ? (keysHeld || world_walking(0) || combat_mode()) : (world_walking(blocker) || combat_busy(blocker))) return 0;
+    int bx = (int)floor(b->px / tileW), by = (int)floor(b->py / tileH);
+    const int ax[6] = { -dy, dy, 1, 1, -1, -1 }, ay[6] = { dx, -dx, 1, -1, 1, -1 };
+    for (int i = 0; i < 6; i++)
+    {
+        int x = bx + ax[i], y = by + ay[i];
+        if (!free_cell(blocker, x, y)) continue;
+        if (blocker == 0) { put_on_cell(0, x, y); return 1; }
+        Walk *w = walk_of(blocker);
+        w->x[0] = bx; w->y[0] = by; w->x[1] = x; w->y[1] = y; /* steps there, then carries on with what it was doing */
+        w->count = 2; w->at = 0; w->active = 1; w->blocked = 0;
+        return 1;
+    }
+    if (blocker == 0)
+        for (int k = 0; k < 2; k++) /* a narrow way with no room beside (a one-wide stair): on along it, ahead of the walker - or back behind it */
+        {
+            int x = bx + (k ? -dx : dx), y = by + (k ? -dy : dy);
+            if ((x == (int)floor(wa->px / tileW) && y == (int)floor(wa->py / tileH)) || !free_cell(0, x, y)) continue;
+            put_on_cell(0, x, y);
+            return 1;
+        }
+    if (b->sizeX != wa->sizeX || b->sizeY != wa->sizeY) return 0;
+    int wx = (int)floor(wa->px / tileW), wy = (int)floor(wa->py / tileH);
+    if (wx == bx && wy == by) return 0;
+    put_on_cell(blocker, wx, wy);
+    put_on_cell(walker, bx, by);
+    if (walker != 0) { Walk *w = walk_of(walker); if (w) { w->active = 0; wa->walkingNow = 0; } } /* swapped: thinks again from its new place */
+    return 1;
+}
+
+/* Actor::is_really_blocked: the character whose body takes up the walker's next footprint is asked to move aside. */
+static int ask_aside(int walker, int l, int t, int dx, int dy)
+{
+    Actor *wa = actor_of(walker);
+    if (!wa || (!dx && !dy)) return 0;
+    Body next = { l, t, wa->sizeX, wa->sizeY, 0, 0 };
+    for (int k = 0; k <= npcCount; k++)
+    {
+        Actor *o = actor_of(k);
+        if (k == walker || !o || o->gone) continue;
+        int ol, ot;
+        foot_at(o, o->px, o->py, &ol, &ot);
+        if (!overlaps(&next, ol, ot, o->sizeX, o->sizeY) || !(o->lift < wa->lift + wa->sizeZ && wa->lift < o->lift + o->sizeZ)) continue;
+        return move_aside(k, walker, dx, dy);
+    }
+    return 0;
 }
