@@ -197,6 +197,8 @@ int save_list(SaveInfo *out, int max)
 /* ---------------- Capturing and writing ---------------- */
 
 /* The game as it is now: its own data, everything changed written back into it, and what's only in play. */
+static cJSON *worldStates;
+
 static cJSON *capture(void)
 {
     cJSON *root = cJSON_Duplicate((cJSON *)world_json(), 1), *project = get(root, "Project");
@@ -210,9 +212,16 @@ static cJSON *capture(void)
     combat_save(runtime);
     weather_save(runtime);
     conditions_save(runtime);
+    if (worldStates) cJSON_AddItemToObject(runtime, "WorldStates", cJSON_Duplicate(worldStates, 1)); /* the other worlds as they were left */
     cJSON_AddItemToObject(root, "Runtime", runtime);
     return root;
 }
+
+cJSON *save_capture(void) { return capture(); }
+
+/* The worlds visited and left (by world id): kept from a save, or from Change Map. Takes it. */
+void save_set_world_states(cJSON *states) { cJSON_Delete(worldStates); worldStates = states; }
+int save_has_world(int id) { char key[16]; snprintf(key, sizeof key, "%d", id); return worldStates && cJSON_GetObjectItem(worldStates, key) != NULL; }
 
 static void game_time_text(char *out, size_t size)
 {

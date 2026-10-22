@@ -160,6 +160,84 @@ static int new_game(int toTitle)
     return ok;
 }
 
+static cJSON *get_(cJSON *o, const char *k) { return o ? cJSON_GetObjectItem(o, k) : NULL; }
+static int num_(cJSON *o, const char *k, int fallback) { cJSON *v = get_(o, k); return cJSON_IsNumber(v) ? v->valueint : fallback; }
+static void setn(cJSON *o, const char *k, double v) { if (get_(o, k)) cJSON_ReplaceItemInObject(o, k, cJSON_CreateNumber(v)); else cJSON_AddNumberToObject(o, k, v); }
+
+/* Change Map to another world (GameTestWindow.Worlds): the game as it is now, the world left remembered as it was, the party
+   taken along to the other one (as it was left, or fresh), and the game goes on there as a loaded game does. */
+static int travel(int worldId, int hasSpot, int x, int y, int floorOf)
+{
+    cJSON *root = save_capture(), *project = get_(root, "Project"), *runtime = get_(root, "Runtime");
+    cJSON *states = get_(runtime, "WorldStates");
+    if (!states) { states = cJSON_CreateObject(); cJSON_AddItemToObject(runtime, "WorldStates", states); }
+    cJSON *leaving = cJSON_DetachItemFromObject(project, "Map"), *w, *arriving = NULL;
+    /* the party goes with the main character: out of this world's placements */
+    cJSON *party = cJSON_CreateArray(), *placed = get_(leaving, "Characters");
+    for (int i = cJSON_GetArraySize(placed) - 1; i >= 0; i--)
+    {
+        cJSON *pc = cJSON_GetArrayItem(placed, i);
+        int id = num_(pc, "CharacterId", -1);
+        if (items_in_party(id) && !vitals_dead(id)) cJSON_AddItemToArray(party, cJSON_DetachItemFromArray(placed, i));
+    }
+    /* the events and things of the world left: what of their pages has fired stays with it */
+    cJSON *fired = get_(runtime, "FiredPages"), *kept = cJSON_CreateArray();
+    for (int i = cJSON_GetArraySize(fired) - 1; i >= 0; i--)
+    {
+        const char *owner = cJSON_GetStringValue(get_(cJSON_GetArrayItem(fired, i), "Owner"));
+        if (owner && (!strncmp(owner, "Event:", 6) || !strncmp(owner, "Object:", 7))) cJSON_AddItemToArray(kept, cJSON_DetachItemFromArray(fired, i));
+    }
+    cJSON_DeleteItemFromObject(leaving, "FiredPagesRuntime");
+    cJSON_AddItemToObject(leaving, "FiredPagesRuntime", kept);
+    int leavingId = num_(leaving, "Id", 0);
+    if (leavingId <= 0) leavingId = num_(cJSON_GetArrayItem(get_(project, "Worlds"), 0), "Id", 1); /* a save from before worlds: the starting world */
+    char key[16];
+    snprintf(key, sizeof key, "%d", leavingId);
+    cJSON_DeleteItemFromObject(states, key);
+    cJSON_AddItemToObject(states, key, leaving);
+    snprintf(key, sizeof key, "%d", worldId);
+    arriving = cJSON_DetachItemFromObject(states, key);
+    if (!arriving) cJSON_ArrayForEach(w, get_(project, "Worlds")) if (num_(w, "Id", -1) == worldId) { arriving = cJSON_Duplicate(w, 1); break; }
+    if (!arriving) { cJSON_Delete(party); cJSON_Delete(root); return 0; }
+    int width = num_(arriving, "Width", 1), height = num_(arriving, "Height", 1);
+    if (!hasSpot) { x = num_(arriving, "StartX", -1); y = num_(arriving, "StartY", -1); floorOf = num_(arriving, "StartFloor", 1); }
+    if (x < 0 || y < 0 || x >= width || y >= height) { x = width / 2; y = height / 2; }
+    if (floorOf < 1) floorOf = 1;
+    if (floorOf > 9) floorOf = 9;
+    setn(arriving, "StartX", x); setn(arriving, "StartY", y); setn(arriving, "StartFloor", floorOf);
+    /* the party beside them */
+    cJSON *there = get_(arriving, "Characters");
+    if (!there) { there = cJSON_CreateArray(); cJSON_AddItemToObject(arriving, "Characters", there); }
+    int nextId = 1, n = 0;
+    cJSON_ArrayForEach(w, there) if (num_(w, "Id", 0) >= nextId) nextId = num_(w, "Id", 0) + 1;
+    while (cJSON_GetArraySize(party) > 0)
+    {
+        cJSON *pc = cJSON_DetachItemFromArray(party, 0);
+        int px = x + n % 3 - 1, py = y + 1 + n / 3;
+        setn(pc, "Id", nextId++);
+        setn(pc, "X", px < 0 ? 0 : px >= width ? width - 1 : px); setn(pc, "Y", py < 0 ? 0 : py >= height ? height - 1 : py); setn(pc, "Floor", floorOf);
+        cJSON_AddItemToArray(there, pc);
+        n++;
+    }
+    cJSON_Delete(party);
+    cJSON *back = cJSON_DetachItemFromObject(arriving, "FiredPagesRuntime"); /* its own, as they were left */
+    if (back && fired) while (cJSON_GetArraySize(back) > 0) cJSON_AddItemToArray(fired, cJSON_DetachItemFromArray(back, 0));
+    cJSON_Delete(back);
+    cJSON_AddItemToObject(project, "Map", arriving);
+    /* the main character at the spot; the new world's own weather; not fighting */
+    cJSON *tileset = get_(arriving, "Tileset");
+    int tw = num_(tileset, "TileWidth", 32), th = num_(tileset, "TileHeight", 32);
+    setn(runtime, "PlayerPixelX", x * tw + tw / 2.0); setn(runtime, "PlayerPixelY", y * th + th / 2.0); setn(runtime, "PlayerLift", (floorOf - 1) * 5);
+    cJSON_DeleteItemFromObject(runtime, "Weather");
+    if (get_(runtime, "CombatMode")) cJSON_ReplaceItemInObject(runtime, "CombatMode", cJSON_CreateFalse());
+    const char *name = cJSON_GetStringValue(get_(arriving, "MapName"));
+    char line[200];
+    snprintf(line, sizeof line, "You arrive in %s.", name ? name : "another world");
+    int ok = rebuild(root, runtime);
+    if (ok > 0) { note(line); screen_fade(0, 1, 0); screen_fade(0, 0, 0.5); } /* black, then the world fades in */
+    return ok;
+}
+
 /* The last game let go of; the game built from root (a save's: then runtime puts back what was only in play). -1: it can't go on. */
 static int rebuild(cJSON *root, cJSON *runtime)
 {
@@ -168,6 +246,8 @@ static int rebuild(cJSON *root, cJSON *runtime)
     sound_stop_all();
     gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
+    /* the worlds left behind (a save's, or none: a new game) */
+    save_set_world_states(runtime && cJSON_GetObjectItem(runtime, "WorldStates") ? cJSON_Duplicate(cJSON_GetObjectItem(runtime, "WorldStates"), 1) : NULL);
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
     events_load();
@@ -400,6 +480,7 @@ int main(int argc, char **argv)
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
+        { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
         if (!dialog_showing() && !title)
         {

@@ -1,4 +1,5 @@
 #include "events.h"
+#include "save.h"
 #include "magic.h"
 #include "vehicles.h"
 #include "commands.h"
@@ -643,6 +644,45 @@ static Picked *picked_of(const Cmd *showText, int id)
 }
 
 static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; release_held(r); }
+
+/* ---------------- Change Map ---------------- */
+
+typedef struct Arrival { int on, x, y, floor; double ms; } Arrival;
+static Arrival arrival;      /* a Change Map in this world, fading: where the party goes when the screen is dark */
+typedef struct WorldTrip { int on, world, hasSpot, x, y, floor; double ms; } WorldTrip;
+static WorldTrip worldTrip;  /* to another world: 1 fading out, 2 main goes now */
+
+static int world_exists(int id)
+{
+    cJSON *w;
+    cJSON_ArrayForEach(w, get(get((cJSON *)world_json(), "Project"), "Worlds")) if (num(w, "Id", -1) == id) return 1;
+    return save_has_world(id); /* the starting world, left behind */
+}
+
+/* The main character there, the party beside them (Change Map in this world). */
+static void arrive_at(int x, int y, int floorOf)
+{
+    world_actor_place(0, x, y, floorOf);
+    world_camera_hold(0, 0, 0); world_camera_follow(0);
+    int n = 0;
+    for (int a = 1; a < world_actor_count(); a++)
+    {
+        if (world_actor_gone(a) || !items_in_party(world_actor_character(a)) || vitals_dead(world_actor_character(a))) continue;
+        int sx = x + n % 3 - 1, sy = y + 1 + n / 3;
+        if (sx < 0 || sy < 0 || sx >= world_map_w() || sy >= world_map_h()) { sx = x; sy = y; }
+        world_actor_place(a, sx, sy, floorOf);
+        n++;
+    }
+    events_player_moved();
+}
+
+int events_world_trip(int *world, int *hasSpot, int *x, int *y, int *floorOf)
+{
+    if (worldTrip.on != 2) return 0;
+    *world = worldTrip.world; *hasSpot = worldTrip.hasSpot; *x = worldTrip.x; *y = worldTrip.y; *floorOf = worldTrip.floor;
+    memset(&worldTrip, 0, sizeof worldTrip);
+    return 1;
+}
 
 /* ---------------- Formulas in commands ---------------- */
 
@@ -2074,6 +2114,29 @@ static int execute(Run *r, const Cmd *c)
             }
             return 1;
         }
+        case C_ChangeMap:
+        {
+            /* to another world (Maps tab): the party goes there as a loaded game does; this event goes no further */
+            int world = atoi(param(c, "World")), fade = !strcmp(param(c, "Fade"), "True");
+            int hasSpot = param(c, "X")[0] && param(c, "Y")[0], x = atoi(param(c, "X")), y = atoi(param(c, "Y"));
+            int floorOf = param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1;
+            if (world > 0 && world != num(get(get((cJSON *)world_json(), "Project"), "Map"), "Id", 0))
+            {
+                if (!world_exists(world)) { snprintf(text, sizeof text, "Change Map: there's no world #%d any more (Maps tab).", world); game_log(text); lastResult = 0; return 1; }
+                worldTrip = (WorldTrip){ 1, world, hasSpot, x, y, floorOf, fade ? 400 : 0 };
+                if (fade) screen_fade(0, 1, 0.4);
+                r->waiting = W_DOLL; r->answerToken = 0; /* never goes on: the game is rebuilt there */
+                return 0;
+            }
+            if (!hasSpot || x < 0 || y < 0 || x >= world_map_w() || y >= world_map_h()) { lastResult = 0; return 1; }
+            if (!fade) { arrive_at(x, y, floorOf); return 1; }
+            /* fading: out, there, in - the event waits for all of it */
+            arrival = (Arrival){ 1, x, y, floorOf, 400 };
+            screen_fade(0, 1, 0.4);
+            r->camera = 0; r->screenMs = 0; r->screenTotal = 800;
+            r->waiting = W_SCREEN;
+            return 0;
+        }
         case C_Teleport:
         {
             int actor = actor_for(r, param(c, "Who"));
@@ -2792,6 +2855,8 @@ void events_player_moved(void)
 void events_update(double ms, int paused)
 {
     expire_stat_changes();
+    if (arrival.on && (arrival.ms -= ms) <= 0) { arrival.on = 0; arrive_at(arrival.x, arrival.y, arrival.floor); screen_fade(0, 0, 0.4); }
+    if (worldTrip.on == 1 && (worldTrip.ms -= ms) <= 0) worldTrip.on = 2; /* main takes the party there now */
     /* By Stay: each second while the player stands on it (a timer of its own - it runs while a box is up too). */
     if ((stayMs -= ms) <= 0)
     {
@@ -3176,6 +3241,7 @@ void events_reset(void)
     clockDay = 0; clockHour = 6; clockMinute = 0; clockTicks = 0; timeRate = 1; clockMs = 0;
     ambientPlaying = -2; burnedTo = -1;
     playerCharacter = NULL;
+    memset(&arrival, 0, sizeof arrival);
 }
 
 /* New Game (1) / Return To Title (2): asked of main, done between frames. */

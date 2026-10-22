@@ -69,7 +69,8 @@ int events_keys_forbidden(void);   /* Allow Controls > Keys: only walking */
 int events_quit_requested(void);
 void events_request_quit(void);
 void events_request_restart(int toTitle);   /* New Game during play (0), Return To Title (1) */
-int events_restart_requested(void);        /* 1 new game, 2 to the title */
+int events_restart_requested(void);
+int events_world_trip(int *world, int *hasSpot, int *x, int *y, int *floorOf); /* a Change Map to another world, due now */        /* 1 new game, 2 to the title */
 void events_clear_restart(void);
 /* An error by number (System Settings > Errors): its words, the maker's else the engine's. */
 void game_error(int number, const char *detail);

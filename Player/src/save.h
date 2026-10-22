@@ -1,6 +1,7 @@
 /* Saved games: written and listed beside the game, encrypted with the game's key (GameSaveStore). */
 #ifndef SANDCASTLE_SAVE_H
 #define SANDCASTLE_SAVE_H
+#include "../third_party/cJSON.h"
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,5 +16,9 @@ int save_write(const char *name, int slot, const char *overwrite, char *error, s
 int save_delete(const char *folder);
 char *save_read(const char *folder, char *error, size_t errorSize);
 const char *save_screenshot_path(const char *folder, char *out, size_t size);
+
+cJSON *save_capture(void);
+void save_set_world_states(cJSON *states);
+int save_has_world(int id);   /* a world visited and left */
 
 #endif
