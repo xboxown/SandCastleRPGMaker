@@ -25,6 +25,7 @@
 #include "vehicles.h"
 #include "video.h"
 #include "books.h"
+#include "prompt.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -80,7 +81,7 @@ static void scripted_presses(const char *presses, double t, double *done)
             if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) gumps_mouse_down(x, y); } else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
         }
         else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
-        else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) dolls_key(0, t[q]); } /* Lname: letters typed */
+        else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) if (!prompt_key(0, t[q])) dolls_key(0, t[q]); } /* Lname: letters typed */
         else if (*what == 'F') { save_take_screenshot(pixels); dolls_open_save_screen(); } /* F: S pressed (the Save/Load screen) */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
@@ -89,7 +90,7 @@ static void scripted_presses(const char *presses, double t, double *done)
             enum PlatformKey key = *what == 'E' ? KEY_ENTER : *what == 'S' ? KEY_SPACE : *what >= '1' && *what <= '9' ? (enum PlatformKey)(KEY_1 + (*what - '1'))
                 : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : KEY_OTHER;
             if (dialog_showing()) dialog_key(key);
-            else if (!dolls_key(key, 0)) mechanisms_key(key); /* the sleep slider */
+            else if (!prompt_key(key, 0) && !dolls_key(key, 0)) mechanisms_key(key); /* a question, a paperdoll, the sleep slider */
         }
     }
     *done = t;
@@ -262,6 +263,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     cJSON *old = (cJSON *)world_json();
     /* the last game, let go of */
     video_stop();
+    prompt_reset();
     sound_stop_all();
     gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
@@ -399,13 +401,27 @@ int main(int argc, char **argv)
                 if (video_input(1)) continue; /* a click skips a video */
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
                 else if (!vitals_game_over() || dolls_window_count()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
+                else
+                {
+                    /* the game over: a double click on the main character's body opens Save/Load (to load a game) */
+                    static uint32_t lastDeadClick;
+                    int actor, uid;
+                    world_hit(e.mouseX, e.mouseY, &actor, &uid);
+                    uint32_t at = platform_ticks();
+                    if (actor == 0 || (uid && world_body_of(world_actor_character(0)) == uid))
+                    {
+                        if (at - lastDeadClick < 400) { save_take_screenshot(pixels); dolls_open_save_screen(); lastDeadClick = 0; }
+                        else lastDeadClick = at;
+                    }
+                }
             }
             else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
-            else if (e.type == EV_TEXT) dolls_key(0, e.ch); /* a letter for a paperdoll's text box */
+            else if (e.type == EV_TEXT) { if (!prompt_key(0, e.ch)) dolls_key(0, e.ch); } /* a letter for a question's box, or a paperdoll's text box */
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
             {
                 int down = e.type == EV_KEY_DOWN;
                 if (down && !dialog_showing() && e.key != KEY_F11 && dolls_key(e.key, 0)) continue; /* typing, or a modal paperdoll: nothing else hears it */
+                if (down && e.key != KEY_F11 && prompt_key(e.key, 0)) continue; /* a question being answered */
                 if (down && e.key != KEY_F11 && video_input(e.key == KEY_ESCAPE || e.key == KEY_SPACE || e.key == KEY_ENTER)) continue; /* a video playing: these skip it */
                 if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* the sleep slider */
                 if (down && dialog_showing() && e.key != KEY_F11)
@@ -426,6 +442,7 @@ int main(int argc, char **argv)
                     case KEY_I: if (down && !events_cinema() && !events_keys_forbidden()) gumps_next_inventory(); break; /* Exult: I for the party's inventories, one after another */
                     case KEY_Z: if (down && !events_cinema() && !events_keys_forbidden()) gumps_next_stats(); break; /* Exult: Z for their stats */
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
+                    case KEY_CTRL_Q: if (down) dolls_ask_to_quit(); break; /* Ctrl+Q: the Quit prompt, any time */
                     case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
                     default: break;
                 }
@@ -500,14 +517,14 @@ int main(int argc, char **argv)
         screen_update(seconds * 1000);
         int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
         video_update(seconds * 1000);
-        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing() || books_open(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
+        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
         { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
-        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing() && !books_open())
+        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing() && !books_open() && !prompt_open())
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */

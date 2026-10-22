@@ -53,4 +53,7 @@ const Picture *sprite_picture_at(const Sprite *sprite, uint32_t ms);
 Picture *picture_from_file(const char *path);
 void picture_free(Picture *p);
 
+void sprite_frame_sound(const Sprite *s, uint32_t ms);
+void sprite_frame_sounds_reset(void);
+
 #endif

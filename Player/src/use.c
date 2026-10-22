@@ -90,7 +90,9 @@ void use_at(int sx, int sy)
 /* Exult: in combat mode, double-clicking someone attacks them (never a party member); otherwise it talks to them. */
 void use_actor(int actor)
 {
-    if (combat_mode() && !items_in_party(world_actor_character(actor))) combat_player_target(actor);
+    int id = world_actor_character(actor);
+    if (gumps_pausing() && items_in_party(id)) { gumps_open_paperdoll(id); return; } /* Actor::activate: show_party_inv while gumps show */
+    if (combat_mode() && !gumps_pausing() && !items_in_party(id)) combat_player_target(actor); /* Game_window::double_clicked: no combat in gump mode */
     else events_talk(actor);
 }
 

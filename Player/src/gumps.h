@@ -31,5 +31,6 @@ void gumps_close_container(const Item *box);
 void gumps_next_stats(void);       /* Z */
 void gumps_next_inventory(void);   /* I */
 int gumps_save_screen_wanted(void); /* the disk button was clicked */
+int gumps_pausing(void);            /* gump mode: the world waits */
 
 #endif

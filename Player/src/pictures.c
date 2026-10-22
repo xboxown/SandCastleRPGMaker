@@ -185,3 +185,21 @@ Picture *picture_from_file(const char *path)
 }
 
 void picture_free(Picture *p) { if (p) { free(p->pixels); free(p); } }
+
+/* SpriteAnimator's frame sounds for a window's pictures (paperdolls, inventories): a frame with a sound plays it each time it comes round. */
+#include "sound.h"
+typedef struct Heard { const Sprite *sprite; int frame; } Heard;
+static Heard heard[256]; static int heardCount;
+
+void sprite_frame_sound(const Sprite *s, uint32_t ms)
+{
+    if (!s || s->frameCount <= 1) return;
+    int f = sprite_frame_at(s, ms), slot = -1;
+    for (int i = 0; i < heardCount; i++) if (heard[i].sprite == s) { slot = i; break; }
+    if (slot < 0) { if (heardCount >= 256) return; slot = heardCount++; heard[slot] = (Heard){ s, f }; return; } /* first seen: its first frame isn't a change */
+    if (heard[slot].frame == f) return;
+    heard[slot].frame = f;
+    if (s->frames[f].sound >= 0) sound_play(s->frames[f].sound);
+}
+
+void sprite_frame_sounds_reset(void) { heardCount = 0; }

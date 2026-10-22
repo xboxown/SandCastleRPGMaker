@@ -148,7 +148,7 @@ int platform_poll(PlatformEvent *event)
     while (window && (m = (struct IntuiMessage *)GetMsg(window->UserPort)))
     {
         ULONG cls = m->Class;
-        UWORD code = m->Code;
+        UWORD code = m->Code, qualifier = m->Qualifier;
         if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && KeymapBase)
         {
             /* the letter this key makes, by the keymap (shift, dead keys) */
@@ -171,6 +171,7 @@ int platform_poll(PlatformEvent *event)
                 if ((code & 0x7F) >= 0x68) break; /* not a key */
                 event->type = (code & IECODE_UP_PREFIX) ? EV_KEY_UP : EV_KEY_DOWN;
                 event->key = key_of(code);
+                if ((code & 0x7F) == 0x10 && (qualifier & IEQUALIFIER_CONTROL)) event->key = KEY_CTRL_Q; /* Ctrl+Q: the Quit prompt */
                 return 1;
             case IDCMP_MOUSEBUTTONS:
                 if (code == SELECTDOWN || code == MENUDOWN) { event->type = EV_MOUSE_DOWN; event->button = code == MENUDOWN ? 2 : 1; return 1; }

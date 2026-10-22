@@ -19,6 +19,7 @@
  */
 #include "gumps.h"
 #include "books.h"
+#include "prompt.h"
 #include "mechanisms.h"
 #include "magic.h"
 #include "world.h"
@@ -96,7 +97,7 @@ static cJSON *container_def(int id)
     return NULL;
 }
 
-static const Picture *sprite_now(const Sprite *s) { return s ? sprite_picture_at(s, nowMs) : NULL; }
+static const Picture *sprite_now(const Sprite *s) { if (s) sprite_frame_sound(s, nowMs); return s ? sprite_picture_at(s, nowMs) : NULL; }
 static int quantize(int n) { return (n + UNIT - 1) / UNIT * UNIT; }
 
 static const Sprite *item_look(const Item *it)
@@ -450,6 +451,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
     magic_draw_book(pixels, ms); /* the open spellbook, over every window */
     books_draw(pixels, ms); /* a book being read */
     mechanisms_draw(pixels); /* a map being looked at */
+    prompt_draw(pixels, ms); /* a question being answered */
 }
 
 static void show_label(const char *text, int x, int y)
@@ -991,6 +993,7 @@ int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (events_cinema()) return 1;
+    if (prompt_click(x, y, platform_ticks())) return 1; /* a question being answered */
     if (books_click()) return 1; /* a book being read: the next page */
     if (mechanisms_click(x, y)) return 1; /* the sleep slider, a map being looked at, the party asleep */
     if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
@@ -1376,3 +1379,7 @@ void gumps_next_inventory(void)
     static int next;
     if (n) { next = (next + 1) % n; gumps_open_paperdoll(party[next]); }
 }
+
+/* Exult's gump mode (gumps pause the game): an inventory, a container, a stats paperdoll, a paperdoll of the PaperDoll Editor,
+   the spellbook, a map being looked at, a target being chosen - the world waits. (Dialog boxes, books, videos and the rest pause it on their own.) */
+int gumps_pausing(void) { return gumpCount > 0 || dolls_window_count() > 0 || choosing != NULL || magic_book_open() || mechanisms_map_open(); }

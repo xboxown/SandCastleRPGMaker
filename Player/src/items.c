@@ -1406,3 +1406,18 @@ int items_holds(const Item *container, const Item *it)
 /* A carried liquid container's liquid: its own once set, else as it starts (fallback). */
 int items_liquid(const Item *it, int fallback) { return it && it->liquidSet ? it->liquid : fallback; }
 void items_set_liquid(Item *it, int liquid) { if (it) { it->liquid = liquid; it->liquidSet = 1; } }
+
+static void collect_all(Item *it, Item **out, int *n, int max)
+{
+    if (*n < max) out[(*n)++] = it;
+    for (int i = 0; i < it->count; i++) collect_all(it->contents[i], out, n, max);
+}
+
+/* Everything a character carries, at any depth, in order (Select Item's list). */
+int items_carried_all(int characterId, Item **out, int max)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    if (k) for (int i = 0; i < k->count; i++) collect_all(k->items[i], out, &n, max);
+    return n;
+}

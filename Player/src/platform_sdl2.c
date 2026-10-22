@@ -87,7 +87,9 @@ int platform_poll(PlatformEvent *event)
             case SDL_QUIT: event->type = EV_QUIT; return 1;
             case SDL_KEYDOWN:
                 if (e.key.repeat) break;
-                event->type = EV_KEY_DOWN; event->key = key_of(e.key.keysym.sym); return 1;
+                event->type = EV_KEY_DOWN; event->key = key_of(e.key.keysym.sym);
+                if (e.key.keysym.sym == SDLK_q && (e.key.keysym.mod & KMOD_CTRL)) event->key = KEY_CTRL_Q; /* Ctrl+Q: the Quit prompt */
+                return 1;
             case SDL_KEYUP:
                 event->type = EV_KEY_UP; event->key = key_of(e.key.keysym.sym); return 1;
             case SDL_MOUSEBUTTONDOWN:

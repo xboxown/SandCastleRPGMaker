@@ -307,7 +307,7 @@ static const Sprite *look_sprite(cJSON *part, int look)
 }
 
 static const Picture *frame0(const Sprite *s) { return s && s->frameCount ? frame_picture(&s->frames[0]) : NULL; }
-static const Picture *now_picture(const Sprite *s) { return s ? sprite_picture_at(s, nowMs) : NULL; }
+static const Picture *now_picture(const Sprite *s) { if (s) sprite_frame_sound(s, nowMs); return s ? sprite_picture_at(s, nowMs) : NULL; }
 
 static const Font *font_of(cJSON *part) { const char *n = str(part, "FontName"); return font_get(n[0] ? n : "InGameFont"); }
 static int scale_of_text(cJSON *part) { int s = num(part, "TextScale", 1); return s < 1 ? 1 : s; }
@@ -871,6 +871,9 @@ static void answer(int wi, int yes)
 }
 
 /* A Quit button (or Ctrl+Q): the Quit prompt (System Settings > Save / Load) asks first; Yes quits. */
+static void ask_to_quit(void);
+void dolls_ask_to_quit(void) { ask_to_quit(); }
+
 static void ask_to_quit(void)
 {
     int prompt = num(get(get(project(), "Settings"), "Quit"), "DollDesignId", -1);

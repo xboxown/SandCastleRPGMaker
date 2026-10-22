@@ -131,6 +131,7 @@ void items_set_charges(Item *it, int charges);
 int items_spent(const Item *it);
 void items_set_spent(Item *it, int spent);
 int items_carried_objects(int characterId, Item **out, int max);
+int items_carried_all(int characterId, Item **out, int max);
 int items_keys_set(const Item *it);
 void items_mark_keys_set(Item *it);
 int items_key_count(const Item *it);

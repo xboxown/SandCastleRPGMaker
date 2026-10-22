@@ -4,6 +4,7 @@
 #include "vehicles.h"
 #include "video.h"
 #include "books.h"
+#include "prompt.h"
 #include "commands.h"
 #include "dialog.h"
 #include "world.h"
@@ -650,6 +651,25 @@ static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->c
 
 /* A video the event waits on has ended (or couldn't be played): it goes on. */
 static void video_done(int ok, void *context) { events_doll_answered((int)(intptr_t)context, ok); }
+
+static Value value_of_text(const char *f);
+
+/* Input Number / Input Text / Select Item answered: the variables set, the event waiting goes on. */
+typedef struct Asking { int token, numbers; char variable[64], idVariable[64]; } Asking;
+static Asking asking;
+
+static void prompt_done(int ok, const char *text, int id, void *context)
+{
+    (void)context;
+    if (ok && asking.variable[0])
+    {
+        if (asking.numbers) script_set_number(asking.variable, sc_strtod(text, NULL));
+        else script_set(asking.variable, value_text(text));
+    }
+    if (asking.idVariable[0]) script_set_number(asking.idVariable, ok ? id : -1);
+    if (!ok && asking.variable[0] && asking.idVariable[0]) script_set(asking.variable, value_text("")); /* Select Item cancelled: "" and -1 */
+    events_doll_answered(asking.token, ok);
+}
 
 /* ---------------- Change Map ---------------- */
 
@@ -1697,6 +1717,32 @@ static int execute(Run *r, const Cmd *c)
             cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
             if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
             return 1;
+        }
+        case C_InputNumber:
+        case C_InputText:
+        case C_SelectItem:
+        {
+            /* the game waits for the answer (Enter: OK, Escape: cancel) */
+            memset(&asking, 0, sizeof asking);
+            asking.token = new_answer(r, "");
+            asking.numbers = c->type == C_InputNumber;
+            snprintf(asking.variable, sizeof asking.variable, "%s", param(c, "Variable"));
+            if (c->type == C_SelectItem)
+            {
+                snprintf(asking.idVariable, sizeof asking.idVariable, "%s", param(c, "IdVariable"));
+                prompt_ask(PROMPT_LIST, param(c, "Prompt"), "", 1, prompt_done, NULL);
+                Item *all[128];
+                int n = items_carried_all(world_actor_character(0), all, 128);
+                for (int k = 0; k < n; k++) prompt_add_row(items_name(items_category(all[k]), items_item_id(all[k])), items_item_id(all[k]));
+            }
+            else
+            {
+                int longest = (int)formula_number(c, asking.numbers ? "Digits" : "Letters");
+                const char *start = asking.numbers ? value_text_of(value_of_text(param(c, "Variable"))) : value_text_of(formula(c, "Start"));
+                prompt_ask(asking.numbers ? PROMPT_NUMBER : PROMPT_TEXT, param(c, "Prompt"), start, longest, prompt_done, NULL);
+            }
+            r->waiting = W_DOLL; r->answerToken = asking.token;
+            return 0;
         }
         case C_ChangeSelfBookContent:
         case C_ChangeExternalBookContent:
