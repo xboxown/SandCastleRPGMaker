@@ -63,6 +63,8 @@ int sprites_load(const char *folder)
             s->group = copy_text(groupName);
             s->name = copy_text(cJSON_GetStringValue(cJSON_GetObjectItem(sprite, "Name")));
             s->loop = cJSON_IsTrue(cJSON_GetObjectItem(sprite, "Loop"));
+            cJSON *ox = cJSON_GetObjectItem(sprite, "OriginX"), *oy = cJSON_GetObjectItem(sprite, "OriginY");
+            s->originX = cJSON_IsNumber(ox) ? ox->valueint : 0; s->originY = cJSON_IsNumber(oy) ? oy->valueint : 0;
             cJSON *nine = cJSON_GetObjectItem(sprite, "NineSlice");
             if (cJSON_IsObject(nine))
             {

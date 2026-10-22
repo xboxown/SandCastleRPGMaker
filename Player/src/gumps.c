@@ -18,6 +18,7 @@
  *    refused drop leaves the thing where it was.
  */
 #include "gumps.h"
+#include "video.h"
 #include "books.h"
 #include "traps.h"
 #include "prompt.h"
@@ -667,7 +668,7 @@ static void use_target(const Target *t)
         {
             int category, itemId, quantity, x, y, instance;
             world_thing_info(t->uid, &category, &itemId, &quantity, &x, &y, &instance);
-            if (!world_reachable(x, y, world_thing_z(t->uid))) { game_log("You can't reach that from here."); return; } /* Game_window::double_clicked: blocked */
+            if (!world_reachable(x, y, world_thing_z(t->uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; } /* Game_window::double_clicked: blocked */
             use_thing(t->uid);
             break;
         }
@@ -730,8 +731,8 @@ static int start_drag(const Target *t)
     {
         int x, y, instance;
         world_thing_info(t->uid, &drag.category, &drag.itemId, &drag.quantity, &x, &y, &instance);
-        if (!items_can_lift(drag.category, drag.itemId) || drag.itemId <= -1000) { game_log("That's too heavy to move."); return 0; }
-        if (!world_reachable(x, y, world_thing_z(t->uid))) { game_log("You can't reach that from here."); return 0; }
+        if (!items_can_lift(drag.category, drag.itemId) || drag.itemId <= -1000) { gumps_refuse(P_TOO_HEAVY, "That's too heavy to move."); return 0; }
+        if (!world_reachable(x, y, world_thing_z(t->uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
         drag.fromMap = 1; drag.uid = t->uid;
         ghost = world_thing_sprite(t->uid);
     }
@@ -757,7 +758,7 @@ static int start_drag(const Target *t)
         {
             int c, i, q, x, y, n;
             world_thing_info(gumps[t->gump].uid, &c, &i, &q, &x, &y, &n);
-            if (!world_reachable(x, y, world_thing_z(gumps[t->gump].uid))) { game_log("That's out of reach."); return 0; }
+            if (!world_reachable(x, y, world_thing_z(gumps[t->gump].uid))) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
         }
         drag.item = t->item;
         drag.category = items_category(t->item); drag.itemId = items_item_id(t->item); drag.quantity = items_quantity(t->item);
@@ -840,7 +841,7 @@ static int drop_on_box(int gi, const Target *under)
     {
         int c, i, q, x, y, n;
         world_thing_info(g->uid, &c, &i, &q, &x, &y, &n);
-        if (!world_reachable(x, y, world_thing_z(g->uid))) { game_log("That's out of reach."); return 0; }
+        if (!world_reachable(x, y, world_thing_z(g->uid))) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
     }
     double s = scale_of(g), fx = (mouseX - grabX - g->x) / s, fy = (mouseY - grabY - g->y) / s;
     double ax, ay, aw, ah;
@@ -854,7 +855,7 @@ static int drop_on_box(int gi, const Target *under)
         Item *holder;
         if (items_where(drag.item, &ch, &holder, &slot) && holder == g->box)
         {
-            if (flag(g->data, "IsBodyContainer")) { game_log("Things can be taken out of a body, but not put back in."); return 0; }
+            if (flag(g->data, "IsBodyContainer")) { gumps_refuse(P_WONT_FIT, "Things can be taken out of a body, but not put back in."); return 0; }
             items_set_spot(drag.item, fx, fy, 0); /* moved within the window: on top of the pile */
             items_stack_at_top(g->box, drag.item);
             sound_play(num(g->data, "NavigateSoundResourceId", -1));
@@ -900,7 +901,7 @@ static int drop_on_doll(int gi, const Target *under)
 
 static int drop_on_map(void)
 {
-    if (mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H) { game_log("You can't drop that there."); return 0; }
+    if (mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H) { gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
     int actor, uid;
     world_hit(mouseX, mouseY, &actor, &uid);
     /* onto the avatar, or a party member standing there: theirs */
@@ -908,10 +909,10 @@ static int drop_on_map(void)
     if (actor > 0 && items_in_party(world_actor_character(actor)) && !vitals_dead(world_actor_character(actor))) return drop_on_character(world_actor_character(actor));
     int x, y, fl;
     world_screen_cell(mouseX, mouseY, &x, &y, &fl); /* the ghost's middle */
-    if (x < 0 || y < 0 || x >= world_map_w() || y >= world_map_h()) { game_log("You can't drop that there."); return 0; }
+    if (x < 0 || y < 0 || x >= world_map_w() || y >= world_map_h()) { gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
     int px, py, pf;
     world_actor_cell(0, &px, &py, &pf);
-    if (!world_reachable(x, y, world_actor_lift(0))) { game_log("You can't reach that from here."); return 0; }
+    if (!world_reachable(x, y, world_actor_lift(0))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
     if (drag.fromMap && !world_thing_there(drag.uid)) return 0;
     /* a stack of the same stackable thing there grows */
     int stack = drag.category == CAT_OBJECT ? world_thing_at_cell(CAT_OBJECT, drag.itemId, x, y, drag.fromMap ? drag.uid : 0) : 0;
@@ -949,7 +950,7 @@ static int drop_on_map(void)
         Item *it = lift(&from);
         if (!it) return 0;
         int newUid = world_thing_put(items_category(it), items_item_id(it), items_quantity(it), x, y, fl);
-        if (newUid < 0) { put_back(it, &from); game_log("You can't drop that there."); return 0; }
+        if (newUid < 0) { put_back(it, &from); gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
         items_park(newUid, it);
         world_thing_drop_at(newUid, mouseX - grabX, mouseY - grabY, fl); /* exactly where it was shown */
         landed(it, &from);
@@ -1029,7 +1030,7 @@ static void drop(void)
         world_thing_info(under.uid, &c, &i, &q, &x, &y, &n);
         if ((!drag.fromMap || drag.uid != under.uid) && events_has_combine(c, i))
         {
-            if (!world_reachable(x, y, world_thing_z(under.uid))) { game_log("You can't reach that from here."); return; }
+            if (!world_reachable(x, y, world_thing_z(under.uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; }
             dropping = 1;
             int ran = events_combine(under.uid, c, i, drag.category, drag.itemId); /* its pages run; "Use up the item just combined" works while they do */
             dropping = 0;
@@ -1437,3 +1438,45 @@ void gumps_next_inventory(void)
 /* Exult's gump mode (gumps pause the game): an inventory, a container, a stats paperdoll, a paperdoll of the PaperDoll Editor,
    the spellbook, a map being looked at, a target being chosen - the world waits. (Dialog boxes, books, videos and the rest pause it on their own.) */
 int gumps_pausing(void) { return gumpCount > 0 || dolls_window_count() > 0 || choosing != NULL || magic_book_open() || mechanisms_map_open(); }
+
+/* ---------------- The engine's own mouse pointer (GameTestWindow.Pointer; Exult mouse.cc) ----------------
+   The system's pointer is off; a sprite pointer is drawn over everything, its hot spot at the sprite's Origin.
+   Resting: the hand (green select while choosing a target, the attack pointer in combat mode); a refusal
+   flashes another pointer for 600 ms (Mouse::flash_shape), with its first frame's sound. No sprite: a black square. */
+
+static const char *POINTER_NAMES[] = { "Hand", "RedX", "GreenSelect", "TooHeavy", "OutOfRange", "OutOfAmmo", "WontFit", "GreenSquare", "Blocked", "Attack" };
+static int flashKind = -1; static uint32_t flashUntil, pointerNow;
+
+static const Sprite *pointer_sprite(int kind)
+{
+    cJSON *link = get(get(get(get(project(), "Settings"), "MousePointers"), "Sprites"), POINTER_NAMES[kind]);
+    const char *name = str(link, "SpriteName");
+    return name[0] ? sprite_find(str(link, "SpriteGroup"), name) : NULL;
+}
+
+void gumps_flash_pointer(int kind)
+{
+    if (kind < 0 || kind > P_ATTACK) return;
+    flashKind = kind; flashUntil = pointerNow + 600;
+    const Sprite *s = pointer_sprite(kind);
+    if (s && s->frameCount > 0 && s->frames[0].sound >= 0) sound_play(s->frames[0].sound);
+}
+
+/* A refusal the player should see and feel: the message, and the matching Exult pointer flashed. */
+void gumps_refuse(int kind, const char *message) { game_log(message); gumps_flash_pointer(kind); }
+
+void gumps_draw_pointer(uint32_t *pixels, uint32_t ms)
+{
+    pointerNow = ms;
+    if (video_playing() || mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H) return;
+    int kind = flashKind >= 0 && ms < flashUntil ? flashKind : choosing ? P_GREEN_SELECT : combat_mode() ? P_ATTACK : P_HAND;
+    if (ms >= flashUntil) flashKind = -1;
+    cJSON *settings = get(get(project(), "Settings"), "MousePointers");
+    int w = num(settings, "Width", 0), h = num(settings, "Height", 0);
+    if (w <= 0 || h <= 0) { w = 16; h = 16; }
+    const Sprite *s = pointer_sprite(kind);
+    const Picture *pic = s ? sprite_picture_at(s, ms) : NULL;
+    if (pic) { sprite_frame_sound(s, ms); world_blit(pixels, pic, mouseX - s->originX, mouseY - s->originY, w, h); return; }
+    for (int y = mouseY; y < mouseY + h && y < SCREEN_H; y++)
+        for (int x = mouseX; x < mouseX + w && x < SCREEN_W; x++) pixels[y * SCREEN_W + x] = 0xFF000000u;
+}

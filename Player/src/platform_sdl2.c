@@ -29,6 +29,7 @@ int platform_open(const char *title, int fullscreen)
     if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
     if (!renderer) { SDL_snprintf(error_text, sizeof error_text, "No renderer: %s", SDL_GetError()); return 0; }
     SDL_RenderSetLogicalSize(renderer, SCREEN_W, SCREEN_H);
+    SDL_ShowCursor(SDL_DISABLE); /* the game draws its own pointer */
     frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_W, SCREEN_H);
     if (!frame) { SDL_snprintf(error_text, sizeof error_text, "No texture: %s", SDL_GetError()); return 0; }
     return 1;

@@ -49,6 +49,8 @@ static char error_text[256];
 
 const char *platform_error(void) { return error_text; }
 
+static UWORD *blankPointer; /* Intuition's pointer, blanked: the game draws its own */
+
 static int open_display(void)
 {
     if (fullscreen)
@@ -68,12 +70,15 @@ static int open_display(void)
                                 WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE,
                                 WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
     if (!window) { snprintf(error_text, sizeof error_text, "The game's window couldn't open (an RTG Workbench in 15, 16, 24 or 32 bits is needed)."); return 0; }
+    /* the game draws its own pointer: Intuition's is blanked over the window (a 1-line empty sprite in chip memory) */
+    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_CHIP | MEMF_CLEAR);
+    if (blankPointer) SetPointer(window, blankPointer, 1, 16, 0, 0);
     return 1;
 }
 
 static void close_display(void)
 {
-    if (window) { CloseWindow(window); window = NULL; }
+    if (window) { if (blankPointer) ClearPointer(window); CloseWindow(window); window = NULL; }
     if (screen) { CloseScreen(screen); screen = NULL; }
 }
 
@@ -101,6 +106,7 @@ void platform_close(void)
 {
     close_display();
     if (scaled) FreeVec(scaled);
+    if (blankPointer) { FreeMem(blankPointer, 12); blankPointer = NULL; }
     if (TimerBase) CloseDevice((struct IORequest *)timerRequest);
     if (timerRequest) DeleteIORequest((struct IORequest *)timerRequest);
     if (timerPort) DeleteMsgPort(timerPort);

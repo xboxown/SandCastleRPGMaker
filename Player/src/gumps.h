@@ -33,4 +33,10 @@ void gumps_next_inventory(void);   /* I */
 int gumps_save_screen_wanted(void); /* the disk button was clicked */
 int gumps_pausing(void);            /* gump mode: the world waits */
 
+/* The engine's own mouse pointer (System Settings > Mouse Pointers). */
+enum { P_HAND, P_RED_X, P_GREEN_SELECT, P_TOO_HEAVY, P_OUT_OF_RANGE, P_OUT_OF_AMMO, P_WONT_FIT, P_GREEN_SQUARE, P_BLOCKED, P_ATTACK };
+void gumps_flash_pointer(int kind);
+void gumps_refuse(int kind, const char *message);
+void gumps_draw_pointer(uint32_t *pixels, uint32_t ms);
+
 #endif

@@ -1257,19 +1257,19 @@ int dolls_drop(int wi, int x, int y, int topLeftX, int topLeftY, int category, i
         if (ran) return 2;
     }
     int i = part_at_point(w, dx, dy, (1ul << K_SLOT) | (1ul << K_AREA), -1, 0);
-    if (i < 0) { snprintf(line, sizeof line, "\"%s\" doesn't go there.", name); game_log(line); return 0; }
+    if (i < 0) { snprintf(line, sizeof line, "\"%s\" doesn't go there.", name); gumps_refuse(P_WONT_FIT, line); return 0; }
     cJSON *part = part_at(w->design, i);
     PartState *r = &w->state->parts[i];
-    if (payloadDoll == w->state) { snprintf(line, sizeof line, "\"%s\" can't go inside itself.", name); game_log(line); return 0; }
+    if (payloadDoll == w->state) { snprintf(line, sizeof line, "\"%s\" can't go inside itself.", name); gumps_refuse(P_RED_X, line); return 0; }
     if (gumps_drag_doll_state() == w->state && gumps_drag_doll_part() == i)
     {
         if (kind_of(part) != K_AREA) return 0; /* back where it came from */
     }
     else
     {
-        if (kind_of(part) == K_SLOT && !dolls_fit_for(part, category, itemId)) { snprintf(line, sizeof line, "\"%s\" doesn't fit in \"%s\".", name, str(part, "Name")); game_log(line); return 0; }
+        if (kind_of(part) == K_SLOT && !dolls_fit_for(part, category, itemId)) { snprintf(line, sizeof line, "\"%s\" doesn't fit in \"%s\".", name, str(part, "Name")); gumps_refuse(P_WONT_FIT, line); return 0; }
         int cap = num(part, "Capacity", 1);
-        if (r->itemCount >= (cap > 1 ? cap : 1)) { snprintf(line, sizeof line, "\"%s\" is full.", str(part, "Name")); game_log(line); return 0; }
+        if (r->itemCount >= (cap > 1 ? cap : 1)) { snprintf(line, sizeof line, "\"%s\" is full.", str(part, "Name")); gumps_refuse(P_WONT_FIT, line); return 0; }
     }
     Item *it = lift();
     if (!it) return 0;
@@ -1371,7 +1371,7 @@ int dolls_paperdoll_command(DollState *s, const char *action, int partId, const 
         for (int c = 3; c <= 5; c++) if (!strcmp(str(params, "ItemCategory"), CATS[c])) category = c;
         if (category < 0 || !str(params, "ItemId")[0]) return 0;
         int cap = num(part, "Capacity", 1);
-        if (r->itemCount >= (cap > 1 ? cap : 1)) { snprintf(line, sizeof line, "\"%s\" is full.", str(part, "Name")); game_log(line); return 0; }
+        if (r->itemCount >= (cap > 1 ? cap : 1)) { snprintf(line, sizeof line, "\"%s\" is full.", str(part, "Name")); gumps_refuse(P_WONT_FIT, line); return 0; }
         dolls_restore_item(s, i, items_make(category, atoi(str(params, "ItemId")), 1), -1);
     }
     else if (!strcmp(action, "UseUpItems")) { for (int k = 0; k < r->itemCount; k++) items_free(r->items[k]); r->itemCount = 0; }

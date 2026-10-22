@@ -480,6 +480,7 @@ int main(int argc, char **argv)
             screen_draw(pixels, now);
             dialog_draw(pixels, now);
             video_draw(pixels);
+            gumps_draw_pointer(pixels, now);
             save_bmp(shot);
             break;
         }
@@ -568,6 +569,7 @@ int main(int argc, char **argv)
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);
         video_draw(pixels); /* a video over everything */
+        gumps_draw_pointer(pixels, now); /* the pointer over everything */
         platform_present(pixels);
         { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); } /* how far it got, if it ever stops */
     }

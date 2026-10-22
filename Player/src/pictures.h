@@ -29,6 +29,7 @@ typedef struct Sprite
     int nineSlice, sliceLeft, sliceTop, sliceRight, sliceBottom; /* a dialog frame's borders that don't stretch */
     int frameCount, totalMs;
     Frame *frames;
+    int originX, originY; /* the Origin: a pointer's hot spot */
 } Sprite;
 
 /* Reads <folder>/sprites.json; 0 on failure. */
