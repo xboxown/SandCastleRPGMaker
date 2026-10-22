@@ -1500,6 +1500,7 @@ static int execute(Run *r, const Cmd *c)
                                               c->type == C_MovePart ? formula_number(c, "X") : 0, c->type == C_MovePart ? formula_number(c, "Y") : 0, c->type == C_MovePart ? formula_number(c, "Seconds") : 0, c->params);
             return 1;
         }
+        case C_ReturnToTitle: events_request_restart(1); return 0; /* the game ends here: this event goes no further */
         case C_GameOver:
             if (combat_mode()) combat_toggle_mode();
             vitals_set_game_over();
@@ -3140,3 +3141,9 @@ void events_reset(void)
     ambientPlaying = -2; burnedTo = -1;
     playerCharacter = NULL;
 }
+
+/* New Game (1) / Return To Title (2): asked of main, done between frames. */
+static int restartRequested;
+void events_request_restart(int toTitle) { restartRequested = toTitle ? 2 : 1; }
+int events_restart_requested(void) { return restartRequested; }
+void events_clear_restart(void) { restartRequested = 0; }

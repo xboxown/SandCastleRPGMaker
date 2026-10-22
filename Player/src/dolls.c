@@ -884,7 +884,7 @@ static void title_button(int wi, int kind)
     {
         case K_NEWGAME:
             if (wins[wi]->title) dolls_close_window(wi); /* the game begins */
-            else events_log_once(313, "New Game during play isn't in the player yet.");
+            else events_request_restart(0); /* during play: a fresh game */
             break;
         case K_CONTINUE:
         {

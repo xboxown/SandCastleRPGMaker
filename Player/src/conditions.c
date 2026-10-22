@@ -234,6 +234,7 @@ void conditions_restore(cJSON *runtime)
 {
     cJSON *e;
     historyCount = 0;
+    if (!runtime) return; /* a new game: nothing has happened */
     cJSON_ArrayForEach(e, get(runtime, "Happenings"))
     {
         Happening *h = find(str(e, "Key"));
