@@ -75,7 +75,7 @@ static int tile_distance(int actor, int x, int y)
 {
     double px, py;
     world_actor_pixel(actor, &px, &py);
-    double dx = fabs(x * world_tile_w() + world_tile_w() / 2.0 - px), dy = fabs(y * world_tile_h() + world_tile_h() / 2.0 - py);
+    double dx = fabs(world_wrap_dx(x * world_tile_w() + world_tile_w() / 2.0 - px)), dy = fabs(world_wrap_dy(y * world_tile_h() + world_tile_h() / 2.0 - py));
     return (int)floor(fmax(dx, dy) / 8 + 0.5);
 }
 

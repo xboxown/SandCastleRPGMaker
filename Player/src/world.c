@@ -124,6 +124,7 @@ typedef struct Actor
 
 static char error_text[512], title[256], mapName[128];
 static int mapW, mapH, tileW = 32, tileH = 32;
+static int wraps; /* Maps tab: "Wraps around the edges" (Ultima V / VI): off the east edge and back on the west */
 static int *floors[MAX_FLOORS + 1]; /* floors[1] = the ground; NULL = none painted */
 static char sheetNames[8][128]; static int sheetCount;
 static unsigned char *walkable; /* per ground cell */
@@ -135,6 +136,36 @@ static Actor player;
 static Actor *npcs; static int npcCount;
 static double cameraX, cameraY;
 static int unitsX = 4, unitsY = 4;
+
+/* ---------------- A map that wraps around (GameTestWindow.Wrap) ---------------- */
+
+static double short_way(double d, double size)
+{
+    if (size <= 0) return d;
+    d = fmod(d, size);
+    if (d > size / 2) d -= size; else if (d < -size / 2) d += size;
+    return d;
+}
+double world_wrap_dx(double dx) { return wraps ? short_way(dx, mapW * tileW) : dx; }
+double world_wrap_dy(double dy) { return wraps ? short_way(dy, mapH * tileH) : dy; }
+int world_wrap_cells_x(int d) { return wraps ? (int)short_way(d, mapW) : d; }
+int world_wrap_cells_y(int d) { return wraps ? (int)short_way(d, mapH) : d; }
+int world_wraps(void) { return wraps; }
+
+static void foot_at(const struct Actor *a, double px, double py, int *l, int *t);
+
+/* Someone over the seam: back onto the map on the other side (the player takes the camera with them). */
+static void wrap_actor(struct Actor *a, int isPlayer)
+{
+    if (!wraps) return;
+    double w = mapW * tileW, h = mapH * tileH, dx = 0, dy = 0;
+    if (a->px < 0) dx = w; else if (a->px >= w) dx = -w;
+    if (a->py < 0) dy = h; else if (a->py >= h) dy = -h;
+    if (dx == 0 && dy == 0) return;
+    a->px += dx; a->py += dy;
+    if (isPlayer) { cameraX += dx; cameraY += dy; }
+    if (a->body >= 0) { int l, t; foot_at(a, a->px, a->py, &l, &t); bodies[a->body].left = l; bodies[a->body].top = t; }
+}
 
 static cJSON *gameJson;
 void *world_json(void) { return gameJson; }
@@ -426,6 +457,28 @@ static int ground_walkable(int l, int t, int w, int d)
 /* TryStepActor for the player: the lift they'd stand at, or -1 if they can't. */
 static int try_step(int l, int t, int w, int d, int lift, int height)
 {
+    int W = mapW * unitsX, H = mapH * unitsY;
+    if (wraps && (l < 0 || t < 0 || l + w > W || t + d > H) && w <= W && d <= H)
+    {
+        /* TryStepAcrossSeam: over the seam of a map that wraps around, each piece on either side must take it; it stands at the highest */
+        if (l < -W || t < -H || l > 2 * W || t > 2 * H) return -1;
+        int xs[2][2], ys[2][2], nx = 0, ny = 0, highest = -1;
+        if (l < 0) { xs[nx][0] = l + W; xs[nx++][1] = W; xs[nx][0] = 0; xs[nx++][1] = l + w; }
+        else if (l + w > W) { xs[nx][0] = l; xs[nx++][1] = W; xs[nx][0] = 0; xs[nx++][1] = l + w - W; }
+        else { xs[nx][0] = l; xs[nx++][1] = l + w; }
+        if (t < 0) { ys[ny][0] = t + H; ys[ny++][1] = H; ys[ny][0] = 0; ys[ny++][1] = t + d; }
+        else if (t + d > H) { ys[ny][0] = t; ys[ny++][1] = H; ys[ny][0] = 0; ys[ny++][1] = t + d - H; }
+        else { ys[ny][0] = t; ys[ny++][1] = t + d; }
+        for (int i = 0; i < nx; i++)
+            for (int k = 0; k < ny; k++)
+            {
+                if (xs[i][1] <= xs[i][0] || ys[k][1] <= ys[k][0]) continue;
+                int part = try_step(xs[i][0], ys[k][0], xs[i][1] - xs[i][0], ys[k][1] - ys[k][0], lift, height);
+                if (part < 0) return -1;
+                if (part > highest) highest = part;
+            }
+        return highest;
+    }
     if (l < 0 || t < 0 || l + w > mapW * unitsX || t + d > mapH * unitsY) return -1;
     static const Body *here[512], *solids[2048];
     int ns = 0;
@@ -480,6 +533,7 @@ int world_build(cJSON *root)
     read_objects(project);
 
     mapW = num(map, "Width", 1); mapH = num(map, "Height", 1);
+    wraps = flag(map, "WrapsAround");
     cJSON *tileset = get(map, "Tileset"), *e;
     tileW = num(tileset, "TileWidth", 32); tileH = num(tileset, "TileHeight", 32);
     unitsX = tileW / UNIT > 0 ? tileW / UNIT : 1; unitsY = tileH / UNIT > 0 ? tileH / UNIT : 1;
@@ -712,7 +766,7 @@ void world_update(int dx, int dy, double seconds)
         else
         {
             int lift = try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
-            if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; }
+            if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; wrap_actor(&player, 1); }
             else ask_aside(0, l1, t1, dx, dy); /* Actor::is_really_blocked: a character in the way is asked to move aside */
         }
     }
@@ -728,8 +782,8 @@ void world_update(int dx, int dy, double seconds)
     else if (ry > SCREEN_H / 2.0 + DEAD_HALF_H) cameraY += ry - (SCREEN_H / 2.0 + DEAD_HALF_H);
     if (cameraHeld) { cameraX = holdX - SCREEN_W / 2.0; cameraY = holdY - SCREEN_H / 2.0; } /* Move Camera: centred on its spot */
     double worldW = mapW * tileW, worldH = mapH * tileH;
-    cameraX = worldW <= SCREEN_W ? (worldW - SCREEN_W) / 2 : fmin(fmax(cameraX, 0), worldW - SCREEN_W);
-    cameraY = worldH <= SCREEN_H ? (worldH - SCREEN_H) / 2 : fmin(fmax(cameraY, 0), worldH - SCREEN_H);
+    if (!(wraps && worldW > SCREEN_W)) cameraX = worldW <= SCREEN_W ? (worldW - SCREEN_W) / 2 : fmin(fmax(cameraX, 0), worldW - SCREEN_W);
+    if (!(wraps && worldH > SCREEN_H)) cameraY = worldH <= SCREEN_H ? (worldH - SCREEN_H) / 2 : fmin(fmax(cameraY, 0), worldH - SCREEN_H);
 }
 
 /* ---------------- Drawing ---------------- */
@@ -885,7 +939,42 @@ static int ceiling_over_player(void)
     return ceiling;
 }
 
+static void draw_world_once(uint32_t *pixels, uint32_t ms);
+
+/* The world - and on a map that wraps around, the land beyond an edge drawn in the gap, one map-width (or height) along. */
 void world_draw(uint32_t *pixels, uint32_t ms)
+{
+    double w = mapW * tileW, h = mapH * tileH, cx = floor(cameraX), cy = floor(cameraY);
+    int ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0; double shiftX = 0, shiftY = 0;
+    if (wraps && w > SCREEN_W) { if (cx < 0) { ax1 = (int)-cx; shiftX = w; } else if (cx + SCREEN_W > w) { ax0 = (int)(w - cx); ax1 = SCREEN_W; shiftX = -w; } }
+    if (wraps && h > SCREEN_H) { if (cy < 0) { ay1 = (int)-cy; shiftY = h; } else if (cy + SCREEN_H > h) { ay0 = (int)(h - cy); ay1 = SCREEN_H; shiftY = -h; } }
+    if (ax1 <= ax0 && ay1 <= ay0) { draw_world_once(pixels, ms); return; }
+    static uint32_t *across; /* the gaps, drawn first (the world's own drawing last: what's clicked and outlined is its) */
+    if (!across) across = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    static uint32_t *scratch;
+    if (!scratch) scratch = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    if (!across || !scratch) { draw_world_once(pixels, ms); return; }
+    double keepX = cameraX, keepY = cameraY;
+    struct { int x0, x1, y0, y1; double sx, sy; } gaps[3] = {
+        { ax0, ax1, 0, SCREEN_H, shiftX, 0 },          /* across */
+        { 0, SCREEN_W, ay0, ay1, 0, shiftY },          /* up or down */
+        { ax0, ax1, ay0, ay1, shiftX, shiftY } };      /* the corner */
+    for (int g = 0; g < 3; g++)
+    {
+        if (gaps[g].x1 <= gaps[g].x0 || gaps[g].y1 <= gaps[g].y0) continue;
+        cameraX = keepX + gaps[g].sx; cameraY = keepY + gaps[g].sy;
+        draw_world_once(scratch, ms);
+        for (int y = gaps[g].y0; y < gaps[g].y1; y++) memcpy(across + y * SCREEN_W + gaps[g].x0, scratch + y * SCREEN_W + gaps[g].x0, sizeof(uint32_t) * (size_t)(gaps[g].x1 - gaps[g].x0));
+    }
+    cameraX = keepX; cameraY = keepY;
+    draw_world_once(pixels, ms);
+    for (int g = 0; g < 3; g++)
+        for (int y = gaps[g].y0; y < gaps[g].y1; y++)
+            if (gaps[g].x1 > gaps[g].x0) memcpy(pixels + y * SCREEN_W + gaps[g].x0, across + y * SCREEN_W + gaps[g].x0, sizeof(uint32_t) * (size_t)(gaps[g].x1 - gaps[g].x0));
+    screen = pixels;
+}
+
+static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
     for (int i = 0; i < SCREEN_W * SCREEN_H; i++) pixels[i] = 0xFF000000u;
@@ -1278,7 +1367,7 @@ static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
 typedef struct Node { int x, y, f, lift, cost, from, open; } Node;
 static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max);
 
-static int heuristic(int ax, int ay, int bx, int by) { return abs(ax - bx) + abs(ay - by); }
+static int heuristic(int ax, int ay, int bx, int by) { return abs(world_wrap_cells_x(ax - bx)) + abs(world_wrap_cells_y(ay - by)); }
 
 static int door_sound(const Thing *d, const char *key)
 {
@@ -1358,6 +1447,8 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
         for (int d = 0; d < 4; d++)
         {
             int nx = cur.x + DX[d], ny = cur.y + DY[d], lift;
+            double toX = cell_cx(cur.x) + DX[d] * tileW, toY = cell_cy(cur.y) + DY[d] * tileH; /* the next cell's middle, over the seam if it's there */
+            if (wraps) { nx = (nx + mapW) % mapW; ny = (ny + mapH) % mapH; }
             if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
             if (!goalFloor && index[KEY(nx, ny, 0)] >= 0 && nodes[index[KEY(nx, ny, 0)]].cost <= cur.cost + 1) continue;
             double fx = best == 0 ? a->px : cell_cx(cur.x), fy = best == 0 ? a->py : cell_cy(cur.y);
@@ -1371,7 +1462,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
             else
             {
                 if (!goalFloor && !can_stand_at(a, nx, ny, cur.lift, &lift)) continue;
-                if (!can_sweep(a, fx, fy, cell_cx(nx), cell_cy(ny), cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+                if (!can_sweep(a, fx, fy, toX, toY, cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
             }
             int nf = goalFloor ? floor_of(lift) : 0, k = KEY(nx, ny, nf), cost = cur.cost + 1;
             if (index[k] >= 0 && nodes[index[k]].cost <= cost) continue;
@@ -1525,7 +1616,7 @@ static void step_walk(int actor, double seconds)
     while (budget > 0.0001)
     {
         if (w->at >= w->count) { w->active = 0; a->walkingNow = 0; return; }
-        double rx = cell_cx(w->x[w->at]) - a->px, ry = cell_cy(w->y[w->at]) - a->py;
+        double rx = world_wrap_dx(cell_cx(w->x[w->at]) - a->px), ry = world_wrap_dy(cell_cy(w->y[w->at]) - a->py);
         if (fabs(rx) < 0.01 && fabs(ry) < 0.01) { a->px = cell_cx(w->x[w->at]); a->py = cell_cy(w->y[w->at]); w->at++; continue; }
         int alongX = fabs(rx) > 0.01;
         double remaining = alongX ? rx : ry, move = fmin(fabs(remaining), budget);
@@ -1556,6 +1647,7 @@ static void step_walk(int actor, double seconds)
             if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
         }
         a->px = nx; a->py = ny;
+        wrap_actor(a, actor == 0);
         a->walkingNow = 1;
         budget -= move;
     }

@@ -229,7 +229,7 @@ static double tiles_between(int a, int b)
     double ax, ay, bx, by;
     world_actor_pixel(a, &ax, &ay);
     world_actor_pixel(b, &bx, &by);
-    return fmax(fabs(ax - bx), fabs(ay - by)) / 8;
+    return fmax(fabs(world_wrap_dx(ax - bx)), fabs(world_wrap_dy(ay - by))) / 8; /* the short way round a map that wraps */
 }
 
 /* Melee reach: neighbouring cells (diagonals too), within a few lifts. */
@@ -238,7 +238,7 @@ static int in_reach(int a, int b)
     int ax, ay, af, bx, by, bf;
     world_actor_cell(a, &ax, &ay, &af);
     world_actor_cell(b, &bx, &by, &bf);
-    return abs(ax - bx) <= 1 && abs(ay - by) <= 1 && abs(world_actor_lift(a) - world_actor_lift(b)) <= 4;
+    return abs(world_wrap_cells_x(ax - bx)) <= 1 && abs(world_wrap_cells_y(ay - by)) <= 1 && abs(world_actor_lift(a) - world_actor_lift(b)) <= 4;
 }
 
 /* Can see: within half a screen and nothing tall in between; the invisible are unseen by those not on their side. */
@@ -249,6 +249,7 @@ static int can_see(int viewer, int other)
     double vx, vy, ox, oy;
     world_actor_pixel(viewer, &vx, &vy);
     world_actor_pixel(other, &ox, &oy);
+    ox = vx + world_wrap_dx(ox - vx); oy = vy + world_wrap_dy(oy - vy); /* its nearest image, over the seam if that's nearer */
     if (fabs(vx - ox) > SCREEN_W / 2 || fabs(vy - oy) > SCREEN_H / 2) return 0;
     return world_line_clear(vx, vy, world_actor_lift(viewer), ox, oy);
 }
@@ -258,7 +259,7 @@ static int facing_towards(int from, int to)
     double fx, fy, tx, ty;
     world_actor_pixel(from, &fx, &fy);
     world_actor_pixel(to, &tx, &ty);
-    double dx = tx - fx, dy = ty - fy, a = atan2(dy, dx) * 180 / 3.14159265358979;
+    double dx = world_wrap_dx(tx - fx), dy = world_wrap_dy(ty - fy), a = atan2(dy, dx) * 180 / 3.14159265358979;
     /* 8 directions, N = 0 clockwise; east is 0 degrees, south 90 */
     int sector = (int)floor((a + 90 + 22.5 + 360) / 45) % 8;
     return sector;

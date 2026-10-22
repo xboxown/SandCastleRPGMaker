@@ -75,6 +75,12 @@ void world_trap_set_sprung(int uid);
 int world_thing_facing(int uid);
 void world_camera(double *x, double *y);
 void world_maybe_bleed(int actor, int damage);
+/* A map that wraps around: distances the short way round (pixels, cells). */
+double world_wrap_dx(double dx);
+double world_wrap_dy(double dy);
+int world_wrap_cells_x(int d);
+int world_wrap_cells_y(int d);
+int world_wraps(void);
 void world_update_bleeding(double ms);
 void world_set_key_check(int (*check)(int actor, int doorUid));
 void world_lock_own_doors(int actor, int cells);

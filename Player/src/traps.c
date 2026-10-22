@@ -176,6 +176,7 @@ static void update_flying(double ms)
         for (int k = 0; k < parts && f->used; k++)
         {
             f->x += f->vx * seconds / parts; f->y += f->vy * seconds / parts; f->travelled += step / parts;
+            if (world_wraps()) { double w = world_map_w() * world_tile_w(), h = world_map_h() * world_tile_h(); f->x = f->x < 0 ? f->x + w : f->x >= w ? f->x - w : f->x; f->y = f->y < 0 ? f->y + h : f->y >= h ? f->y - h : f->y; }
             if (check_hit(f)) break;
             if (f->travelled / 8 >= range || f->x < 0 || f->y < 0 || f->x >= world_map_w() * world_tile_w() || f->y >= world_map_h() * world_tile_h()) { end_flight(f, -1); break; }
         }
