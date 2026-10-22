@@ -1000,9 +1000,3 @@ int gumps_turn_into(const void *state, int objectId)
     return 1;
 }
 
-/* The Title Screen's buttons (and Quit on any paperdoll). */
-void gumps_title_button(int kind)
-{
-    if (kind == 30) { events_request_quit(); return; } /* Quit */
-    events_log_once(312, "The Title Screen isn't in the player yet.");
-}

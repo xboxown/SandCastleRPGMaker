@@ -17,6 +17,8 @@ void dolls_update(double ms);
 /* Opening: an object's (its own By Use first; 1 = it has a paperdoll), a form (token: who hears the answer), the error box. */
 int dolls_use_item(Item *it, int uid);
 int dolls_open_form(int designId, int modal, int fresh, int token, int title);
+int dolls_open_title(void);                         /* 0: the game has no Title Screen */
+int dolls_title_open(void);
 int dolls_error(int designId, int number, const char *words, const char *detail, int token);
 
 /* The windows (drawn over the inventory windows; a modal one over everything). */

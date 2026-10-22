@@ -20,6 +20,5 @@ const struct DollState *gumps_drag_doll_state(void);
 int gumps_drag_doll_part(void);
 int gumps_use_up_combined(void);
 int gumps_turn_into(const void *state, int objectId);
-void gumps_title_button(int kind);
 
 #endif

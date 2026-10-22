@@ -110,7 +110,7 @@ int main(int argc, char **argv)
 {
     char folder[1024] = "Game_Data";
     const char *shot = NULL, *keys = NULL, *say = NULL, *presses = NULL;
-    int noSound = 0;
+    int noSound = 0, noTitle = 0;
     double shotAt = -1, pressedTill = -1;
     for (int i = 1; i < argc; i++)
     {
@@ -120,6 +120,7 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--press") == 0 && i + 1 < argc) presses = argv[++i];
         else if (strcmp(argv[i], "--shot-at") == 0 && i + 1 < argc) shotAt = sc_strtod(argv[++i], NULL);
         else if (!strcmp(argv[i], "nosound") || !strcmp(argv[i], "NOSOUND") || !strcmp(argv[i], "--nosound")) noSound = 1;
+        else if (!strcmp(argv[i], "--notitle")) noTitle = 1; /* testing: straight into the game */
         else if (!strcmp(argv[i], "paula") || !strcmp(argv[i], "PAULA")) platform_audio_route(1);
         else if (!strcmp(argv[i], "ahi") || !strcmp(argv[i], "AHI")) platform_audio_route(2);
         else snprintf(folder, sizeof folder, "%s", argv[i]);
@@ -187,6 +188,7 @@ int main(int argc, char **argv)
     weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
     note("Running.");
+    if (!noTitle && dolls_open_title()) note("Title Screen."); /* System Settings > Title Screen: before play, the game waits */
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;
@@ -238,11 +240,15 @@ int main(int argc, char **argv)
         if (presses) scripted_presses(presses, (now - start) / 1000.0, &pressedTill);
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
         {
-            world_draw(pixels, now);
-            weather_draw_clouds(pixels);
-            lighting_draw(pixels);
-            weather_draw(pixels);
-            world_draw_barks(pixels);
+            if (dolls_title_open()) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+            else
+            {
+                world_draw(pixels, now);
+                weather_draw_clouds(pixels);
+                lighting_draw(pixels);
+                weather_draw(pixels);
+                world_draw_barks(pixels);
+            }
             combat_draw(pixels, worldMs);
             gumps_draw(pixels, worldMs);
             screen_draw(pixels, now);
@@ -288,10 +294,12 @@ int main(int argc, char **argv)
         last = now;
         sound_update(seconds * 1000);
         screen_update(seconds * 1000);
-        int paused = dialog_showing(); /* a box up: the game waits, as in an Exult conversation */
-        events_update(seconds * 1000, paused);
+        int title = dolls_title_open(); /* the Title Screen: nothing in the world goes on behind it */
+        int paused = dialog_showing() || title; /* a box up: the game waits, as in an Exult conversation */
+        if (!title) events_update(seconds * 1000, paused);
+        else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
-        if (!dialog_showing())
+        if (!dialog_showing() && !title)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
@@ -304,14 +312,18 @@ int main(int argc, char **argv)
             events_player_moved();
         }
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
-        world_draw(pixels, worldMs);
-        weather_draw_clouds(pixels);
-        lighting_draw(pixels);
-        weather_draw(pixels);
-        world_draw_barks(pixels);
-        combat_draw(pixels, worldMs);
-        gumps_draw(pixels, worldMs);
-        screen_draw(pixels, now);
+        if (title) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H); /* the world isn't seen behind the title */
+        else
+        {
+            world_draw(pixels, worldMs);
+            weather_draw_clouds(pixels);
+            lighting_draw(pixels);
+            weather_draw(pixels);
+            world_draw_barks(pixels);
+            combat_draw(pixels, worldMs);
+        }
+        gumps_draw(pixels, title ? now : worldMs);
+        if (!title) screen_draw(pixels, now);
         dialog_draw(pixels, now);
         screen_shake_apply(pixels);
         platform_present(pixels);

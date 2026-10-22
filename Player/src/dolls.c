@@ -46,6 +46,8 @@ enum
 enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_COMBINE_ITEM = 17, TR_COMBINE_PART = 18 };
 #define BOX_H 240.0
 #define PRESS_MS 160
+#define OWNER_TITLE 5
+#define ANSWER_QUIT -1
 
 typedef struct PartState
 {
@@ -75,6 +77,7 @@ static DollWin *wins[16]; static int winCount;   /* drawing order: the last on t
 static DollState *forms[64]; static int formIds[64], formCount;
 static int nextSoundOwner = 1000;
 static uint32_t nowMs;
+static void title_button(int wi, int kind);
 typedef struct Slide { DollState *state; int part; double fx, fy, tx, ty, ms, total; } Slide;
 static Slide slides[16]; static int slideCount;
 
@@ -576,6 +579,8 @@ static void draw_items(DollWin *win, cJSON *part, PartState *r, int px, int py)
     }
 }
 
+static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, int x, int y, int fade);
+
 static void render(DollWin *win)
 {
     cJSON *d = win->design;
@@ -594,9 +599,45 @@ static void render(DollWin *win)
         cJSON *lid = closed_lid_over(win->state, part);
         if (lid && !cJSON_IsFalse(get(lid, "HidesWhatItCovers"))) continue;
         if (k == K_SAVEBUTTON && vitals_game_over()) continue;
-        int x = r->moved ? (int)r->x : num(part, "X", 0), y = r->moved ? (int)r->y : num(part, "Y", 0), fade = r->disabled;
+        int x = r->moved ? (int)r->x : num(part, "X", 0), y = r->moved ? (int)r->y : num(part, "Y", 0), fade = 0;
         if (gumps_dragging_doll_part(win->state, i)) continue;
-        if (is_control_kind(k)) { if (win->openList != i) draw_control(win, part, r, x, y, fade); continue; }
+        /* disabled (Enable / Disable Part): drawn on a layer of its own, then laid on at 45% - greyed */
+        static uint32_t *layer; static int layerSize;
+        uint32_t *under = cv;
+        if (r->disabled)
+        {
+            if (layerSize < w * h) { free(layer); layer = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)(w * h)); layerSize = w * h; }
+            memset(layer, 0, sizeof(uint32_t) * (size_t)(w * h));
+            cv = layer;
+        }
+        draw_part(win, d, part, r, i, x, y, fade);
+        if (r->disabled)
+        {
+            cv = under;
+            for (int p = 0; p < w * h; p++)
+            {
+                uint32_t c = layer[p], a = (c >> 24) * 115 / 255;
+                if (!a) continue;
+                uint32_t *dst = &cv[p], da = *dst >> 24;
+                uint32_t rr = (((c >> 16) & 255) * a + ((*dst >> 16) & 255) * (255 - a)) / 255, gg = (((c >> 8) & 255) * a + ((*dst >> 8) & 255) * (255 - a)) / 255, bb = ((c & 255) * a + (*dst & 255) * (255 - a)) / 255;
+                *dst = ((a + da * (255 - a) / 255) << 24) | (rr << 16) | (gg << 8) | bb;
+            }
+        }
+    }
+    /* an open drop-down over everything */
+    if (win->openList >= 0 && win->openList < win->state->partCount)
+    {
+        cJSON *part = part_at(d, win->openList);
+        PartState *r = &win->state->parts[win->openList];
+        draw_control(win, part, r, r->moved ? (int)r->x : num(part, "X", 0), r->moved ? (int)r->y : num(part, "Y", 0), 0);
+    }
+}
+
+static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, int x, int y, int fade)
+{
+    int k = kind_of(part);
+    {
+        if (is_control_kind(k)) { if (win->openList != i) draw_control(win, part, r, x, y, fade); return; }
         int pw, ph;
         size_of_part(part, r->look, &pw, &ph);
         char buf[300];
@@ -653,16 +694,15 @@ static void render(DollWin *win)
             }
         }
     }
-    /* an open drop-down over everything */
-    if (win->openList >= 0 && win->openList < win->state->partCount)
-    {
-        cJSON *part = part_at(d, win->openList);
-        PartState *r = &win->state->parts[win->openList];
-        draw_control(win, part, r, r->moved ? (int)r->x : num(part, "X", 0), r->moved ? (int)r->y : num(part, "Y", 0), 0);
-    }
 }
 
-static double dolls_scale(const DollWin *w) { (void)w; return 200.0 / BOX_H; }
+/* A window's size on screen: as a container's (200 / 240); the Title Screen fills the view. */
+static double dolls_scale(const DollWin *w)
+{
+    if (!w->title) return 200.0 / BOX_H;
+    double sx = SCREEN_W / (double)(num(w->design, "Width", 320) > 1 ? num(w->design, "Width", 320) : 1), sy = SCREEN_H / (double)(num(w->design, "Height", 240) > 1 ? num(w->design, "Height", 240) : 1);
+    return sx < sy ? sx : sy;
+}
 
 void dolls_window_size(int i, int *w, int *h)
 {
@@ -728,7 +768,8 @@ void dolls_close_window(int i)
     memmove(&wins[i], &wins[i + 1], sizeof(DollWin *) * (size_t)(winCount - i - 1));
     winCount--;
     sound_play(num(w->design, "CloseSoundResourceId", -1));
-    if (w->answerToken) events_doll_answered(w->answerToken, 0); /* an unanswered question is a no */
+    if (w->title) sound_stop_owner(OWNER_TITLE); /* the game begins */
+    if (w->answerToken > 0) events_doll_answered(w->answerToken, 0); /* an unanswered question is a no */
     free(w->canvas);
     free(w);
 }
@@ -771,7 +812,7 @@ int dolls_open_form(int designId, int modal, int fresh, int token, int title)
     DollState *s = form_state(design, fresh);
     DollWin *w = open_window(s, design, modal, title);
     if (!w) return 0;
-    if (token) { int before = w->answerToken; w->answerToken = token; if (before) events_doll_answered(before, 0); } /* opened again while asking: the first asker hears no */
+    if (token) { int before = w->answerToken; w->answerToken = token; if (before > 0) events_doll_answered(before, 0); } /* opened again while asking: the first asker hears no */
     if (modal && !w->modal) w->modal = 1;
     return 1;
 }
@@ -802,7 +843,45 @@ static void answer(int wi, int yes)
     int token = w->answerToken;
     w->answerToken = 0;
     dolls_close_window(wi);
-    if (token) events_doll_answered(token, yes);
+    if (token == ANSWER_QUIT && yes) events_request_quit(); /* the Quit prompt */
+    else if (token > 0) events_doll_answered(token, yes);
+}
+
+/* A Quit button (or Ctrl+Q): the Quit prompt (System Settings > Save / Load) asks first; Yes quits. */
+static void ask_to_quit(void)
+{
+    int prompt = num(get(get(project(), "Settings"), "Quit"), "DollDesignId", -1);
+    if (dolls_design(prompt) && dolls_open_form(prompt, 1, 1, 0, 0)) { wins[winCount - 1]->answerToken = ANSWER_QUIT; return; }
+    events_request_quit();
+}
+
+/* New Game, Continue, Load Game, Quit - on the Title Screen or any paperdoll. */
+static void title_button(int wi, int kind)
+{
+    switch (kind)
+    {
+        case K_NEWGAME:
+            if (wins[wi]->title) dolls_close_window(wi); /* the game begins */
+            else events_log_once(313, "New Game during play isn't in the player yet.");
+            break;
+        case K_CONTINUE: game_log("There's no saved game to continue."); break;
+        case K_LOADGAME: events_log_once(314, "The Save/Load screen isn't in the player yet."); break;
+        case K_QUIT: ask_to_quit(); break;
+    }
+}
+
+int dolls_title_open(void) { for (int i = 0; i < winCount; i++) if (wins[i]->title) return 1; return 0; }
+
+/* The Title Screen (System Settings > Title Screen): filling the view before play, with its music; Continue greyed with no save. 0 = the game has none. */
+int dolls_open_title(void)
+{
+    cJSON *title = get(get(project(), "Settings"), "Title");
+    int id = num(title, "DollDesignId", -1);
+    if (!dolls_design(id) || !dolls_open_form(id, 1, 1, 0, 1)) return 0;
+    DollWin *w = wins[winCount - 1];
+    for (int i = 0; i < w->state->partCount; i++) if (kind_of(part_at(w->design, i)) == K_CONTINUE) w->state->parts[i].disabled = 1; /* nothing saved to continue */
+    if (num(title, "MusicId", -1) >= 0) sound_play_ex(num(title, "MusicId", -1), -1, !cJSON_IsFalse(get(title, "MusicLoops")), OWNER_TITLE, 1);
+    return 1;
 }
 
 /* ---------------- What's under the mouse ---------------- */
@@ -1073,7 +1152,7 @@ void dolls_update(double ms)
         int now = find_win(s);
         if (now < 0) break;
         if (action == K_CONFIRM || action == K_CANCEL) { answer(now, action == K_CONFIRM); break; }
-        gumps_title_button(action); /* New Game, Continue, Load Game, Quit */
+        title_button(now, action); /* New Game, Continue, Load Game, Quit */
         break;
     }
     for (int i = 0; i < slideCount; i++)
