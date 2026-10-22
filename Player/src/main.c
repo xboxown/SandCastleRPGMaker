@@ -76,19 +76,20 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
         else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
         else if (*what == 'Z') gumps_next_stats(); /* Z: the stats paperdoll */
-        else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); int dbgHp = 0; vitals_hp(world_actor_character(a), &dbgHp); char line[160]; snprintf(line, sizeof line, "DBG actor %d char %d at (%d,%d) floor %d gone %d food %d hp %d", a, world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a)), dbgHp); note(line); } } /* Q: where everyone is (testing) */
+        else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); int dbgHp = 0; vitals_hp(world_actor_character(a), &dbgHp); char line[160]; snprintf(line, sizeof line, "DBG actor %d char %d at (%d,%d) floor %d gone %d food %d hp %d seat %d", a, world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a)), dbgHp, world_seated_on(a)); note(line); } } /* Q: where everyone is (testing) */
         else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
         else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
         {
             const char *semi = strchr(what, ';');
-            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) gumps_mouse_down(x, y); } else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
+            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) gumps_mouse_down(x, y); } else if (*what == 'V') { platform_warp_mouse(x, y); gumps_mouse_move(x, y); } else gumps_mouse_up(x, y); }
         }
         else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
         else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) if (!prompt_key(0, t[q])) dolls_key(0, t[q]); } /* Lname: letters typed */
         else if (*what == 'F') { save_take_screenshot(pixels); dolls_open_save_screen(); } /* F: S pressed (the Save/Load screen) */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
+        else if (*what == 'P') { int actor = world_actor_by_character(atoi(what + 1)); if (actor > 0 && !items_in_party(atoi(what + 1))) { items_set_in_party(atoi(what + 1), 1); schedules_join(actor, 1); } } /* P2: character 2 joins the party */
         else if (*what == 'N') { int id = atoi(what + 1); const char *a = strchr(what, ';'), *b = a ? strchr(a + 1, ';') : NULL; int actor = world_actor_by_character(id); if (b && actor > 0) world_teleport(actor, atoi(a + 1), atoi(b + 1)); } /* N2;12;12: character 2 put at (12, 12) */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else

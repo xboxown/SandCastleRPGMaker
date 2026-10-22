@@ -60,6 +60,8 @@ typedef struct Npc
 
 static Npc *npcs; static int npcCount;
 static int leaderOf[256];          /* per actor: the actor it follows + 1 (0: nobody) */
+static unsigned char sittingWithPlayer[256]; /* party members who sat because the main character did */
+static double seatLookAgainAt[256], followClockMs;
 static long untilMinute[256];      /* per actor: when a Change Schedule for some hours ends (0: never) */
 static double followThinkMs;
 static int lastHour = -1;
@@ -88,7 +90,7 @@ void schedules_load(void)
     cJSON *project = get((cJSON *)world_json(), "Project"), *c;
     cJSON *characters = get(get(project, "Characters"), "Characters");
     free(npcs); npcCount = 0; lastHour = -1; followThinkMs = 0;
-    memset(leaderOf, 0, sizeof leaderOf); memset(untilMinute, 0, sizeof untilMinute);
+    memset(leaderOf, 0, sizeof leaderOf); memset(untilMinute, 0, sizeof untilMinute); memset(sittingWithPlayer, 0, sizeof sittingWithPlayer); memset(seatLookAgainAt, 0, sizeof seatLookAgainAt);
     npcs = (Npc *)calloc((size_t)world_actor_count() + 1, sizeof(Npc));
     for (int a = 1; a < world_actor_count(); a++)
     {
@@ -512,9 +514,42 @@ void schedules_follow(int actor, int leader)
 
 void schedules_until(int actor, long minute) { if (actor > 0 && actor < 256) untilMinute[actor] = minute; }
 
+/* GameTestWindow.SitsWithPlayer: the main character sat down on a chair - a party member following them looks for a seat too,
+   as Exult's Sit_schedule::set_action does: the closest chair within 24 tiles with a free seat it can walk to, walked to and
+   sat on. None free: it stays standing near them (following as before) and looks again every 1-2 seconds (Sit_schedule::now_what:
+   try again later). The main character getting up: those who sat with them get up and follow. 1 while sitting or on the way. */
+static int sits_with_player(int a)
+{
+    int playerSits = world_seated(0) && !world_in_bed(0);
+    if (!playerSits)
+    {
+        seatLookAgainAt[a] = 0;
+        if (sittingWithPlayer[a])
+        {
+            sittingWithPlayer[a] = 0;
+            if (world_heading_to_seat(a)) world_walk_cancel(a);
+            world_stand_up(a);
+        }
+        return 0;
+    }
+    if (!items_in_party(world_actor_character(a))) return 0;
+    if (world_seated(a) || world_heading_to_seat(a)) sittingWithPlayer[a] = 1; /* gets up with them, however it came to sit */
+    if (world_seated(a)) return 1;
+    if (world_heading_to_seat(a))
+    {
+        if (!world_walking(a) && world_arrive_furniture(a) < 0) { seatLookAgainAt[a] = followClockMs + 1000 + rand() % 1000; return 0; } /* taken meanwhile */
+        return 1;
+    }
+    if (seatLookAgainAt[a] > followClockMs) return 0; /* none free last time: standing near, as before */
+    if (world_go_to_chair_within(a, 24)) { sittingWithPlayer[a] = 1; seatLookAgainAt[a] = 0; return 1; }
+    seatLookAgainAt[a] = followClockMs + 1000 + rand() % 1000;
+    return 0;
+}
+
 /* UpdateFollowers: every 2/5 s, a follower more than 2 cells from its leader walks up beside it. */
 static void update_followers(double ms)
 {
+    followClockMs += ms;
     if ((followThinkMs -= ms) > 0) return;
     followThinkMs = 400;
     long now = events_total_minutes();
@@ -524,6 +559,7 @@ static void update_followers(double ms)
         int leader = leaderOf[a] - 1;
         if (leader < 0 || world_actor_gone(a) || world_actor_gone(leader)) continue;
         if (events_actor_busy(a) || combat_busy(a)) continue; /* carrying out an event's command, or fighting: it isn't pulled back */
+        if (leader == 0 && sits_with_player(a)) continue; /* sitting with them, or on the way to a chair */
         int lx, ly, lf, x, y, f;
         world_actor_cell(leader, &lx, &ly, &lf);
         world_actor_cell(a, &x, &y, &f);

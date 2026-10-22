@@ -120,6 +120,7 @@ void platform_present(const uint32_t *pixels)
 }
 
 uint32_t platform_ticks(void) { return SDL_GetTicks(); }
+void platform_warp_mouse(int x, int y) { (void)x; (void)y; } /* testing only: the Windows test leaves the desktop's mouse alone */
 double platform_ms_precise(void) { static Uint64 start; if (!start) start = SDL_GetPerformanceCounter(); return (double)(SDL_GetPerformanceCounter() - start) * 1000.0 / (double)SDL_GetPerformanceFrequency(); }
 void platform_sleep(uint32_t ms) { SDL_Delay(ms); }
 

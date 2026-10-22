@@ -14,6 +14,10 @@ public partial class GameTestWindow
     /// <summary>Follow: who walks after whom (re-pathing each 2/5 s while more than 2 cells away).</summary>
     private readonly Dictionary<MapCharacter, CharacterDefinition> _followers = new(ReferenceEqualityComparer.Instance);
     private double _followThinkMs;
+    /// <summary>Party members who went to sit because the main character sat down (they get up with them); when each may look for a free seat again.</summary>
+    private readonly HashSet<MapCharacter> _sittingWithPlayer = new(ReferenceEqualityComparer.Instance);
+    private readonly Dictionary<MapCharacter, double> _seatLookAgainAt = new(ReferenceEqualityComparer.Instance);
+    private double _followClockMs;
     /// <summary>Change Schedule for some hours: the game minute its own schedule comes back.</summary>
     private readonly Dictionary<MapCharacter, long> _scheduleUntil = new(ReferenceEqualityComparer.Instance);
     /// <summary>Characters taken off the map (Place / Remove Character), to be placed again.</summary>
@@ -199,6 +203,7 @@ public partial class GameTestWindow
     private void UpdateFollowers(double elapsedMs)
     {
         if (_followers.Count == 0 && _scheduleUntil.Count == 0) return;
+        _followClockMs += elapsedMs;
         _followThinkMs -= elapsedMs;
         if (_followThinkMs > 0) return;
         _followThinkMs = 400;
@@ -209,11 +214,41 @@ public partial class GameTestWindow
         {
             if (!_mapCharacters.Contains(follower) || IsDead(follower.Character) || IsDead(leader)) { _followers.Remove(follower); continue; }
             if (IsIncapacitated(follower.Character) || follower.Npc.InCombat || IsScripted(follower.Character)) continue; // carrying out an event's command (walking to a pumpkin...): it isn't pulled back
+            if (leader == _player && SitsWithPlayer(follower)) continue; // sitting with them, or on the way to a chair
             var target = CellOf(leader);
             var at = follower.Placement;
             if (CellsApart(target, (at.X, at.Y)) <= 2) continue; // the short way round a map that wraps around: they follow over the seam
             if (FindPath(follower, target, allowPartial: true, besideOnly: true, goalFloor: MapFloors.FloorOfLift(LiftOf(leader))) is { Count: > 0 } path) StartPath(follower, path);
         }
+    }
+
+    /// <summary>
+    /// The main character sat down on a chair: a party member following them looks for a seat too, as Exult's
+    /// Sit_schedule::set_action does - the closest chair within 24 tiles with a free seat it can walk to, walked to and
+    /// sat on. None free: it stays standing near them (following as before) and looks again every 1-2 seconds
+    /// (Sit_schedule::now_what: try again later). The main character getting up: those who sat with them get up and follow.
+    /// True while it is sitting or on its way to a seat.
+    /// </summary>
+    private bool SitsWithPlayer(MapCharacter follower)
+    {
+        var me = follower.Character;
+        bool playerSits = _player is not null && _seats.TryGetValue(_player, out var seat) && !seat.Bed;
+        if (!playerSits)
+        {
+            _seatLookAgainAt.Remove(follower);
+            if (_sittingWithPlayer.Remove(follower) && (_seats.ContainsKey(me) || _headingToSeat.ContainsKey(me)))
+            {
+                if (_headingToSeat.ContainsKey(me)) StopWalking(follower);
+                StandUp(me);
+            }
+            return false;
+        }
+        if (!me.IsInParty) return false;
+        if (_seats.ContainsKey(me) || _headingToSeat.ContainsKey(me)) { _sittingWithPlayer.Add(follower); return true; } // gets up with them, however it came to sit
+        if (_seatLookAgainAt.TryGetValue(follower, out var at) && _followClockMs < at) return false; // none free last time: standing near, as before
+        if (GoToFurniture(follower, bed: false, maxTiles: 24)) { _sittingWithPlayer.Add(follower); _seatLookAgainAt.Remove(follower); return true; }
+        _seatLookAgainAt[follower] = _followClockMs + 1000 + Rng.Next(1000);
+        return false;
     }
 
     private bool ChangeLookCommand(EventCommand command)

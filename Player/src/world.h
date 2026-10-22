@@ -158,6 +158,7 @@ int world_lever_on(int objectId, int on);
 int world_door_open_any(int objectId, int open);
 /* Chairs and beds: sitting / lying down, getting up, the Sit and Sleep schedules, the main character's walk-up-and-sit. */
 int world_go_to_furniture(int actor, int bed, int onlyUid);
+int world_go_to_chair_within(int actor, int tiles);   /* the closest free chair it can reach within that many tiles */
 int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken meanwhile, 0 wasn't heading for one */
 void world_stand_up(int actor);
 int world_seated(int actor);

@@ -42,7 +42,8 @@ void platform_present(const uint32_t *pixels);
 
 /* Milliseconds since some fixed moment. */
 uint32_t platform_ticks(void);
-double platform_ms_precise(void);   /* milliseconds since starting, to a fraction (the timing diary in Game.log) */
+double platform_ms_precise(void);
+void platform_warp_mouse(int x, int y);   /* testing: the system's pointer put there (game pixels) */   /* milliseconds since starting, to a fraction (the timing diary in Game.log) */
 void platform_sleep(uint32_t ms);
 
 /* Window <-> full screen. */

@@ -2115,13 +2115,18 @@ int world_seated_on(int actor) { seats_ready(); return seats[actor].uid; }
 int world_in_bed(int actor) { seats_ready(); return seats[actor].uid != 0 && seats[actor].bed; }
 
 /* Sit_schedule / Sleep_schedule: the nearest free chair (any distance) or bed (within 24 tiles) it can walk to - heading there. 0 if none. */
-int world_go_to_furniture(int actor, int bed, int onlyUid)
+static int go_to_furniture(int actor, int bed, int onlyUid, int maxTiles);
+int world_go_to_furniture(int actor, int bed, int onlyUid) { return go_to_furniture(actor, bed, onlyUid, 0); }
+/* A party member sitting with the main character: only chairs within so many tiles (Exult find_closest: 24). */
+int world_go_to_chair_within(int actor, int tiles) { return go_to_furniture(actor, 0, 0, tiles); }
+
+static int go_to_furniture(int actor, int bed, int onlyUid, int maxTiles)
 {
     seats_ready();
     Actor *a = actor_of(actor);
     if (!a || !a->human) return 0; /* a rat doesn't take a chair or a bed */
     int cx = (int)floor(a->px / tileW), cy = (int)floor(a->py / tileH);
-    int range = bed ? (int)floor(24 * 8.0 / tileW + 0.5) : 1 << 30;
+    int range = maxTiles > 0 ? (int)floor(maxTiles * 8.0 / tileW + 0.5) : bed ? (int)floor(24 * 8.0 / tileW + 0.5) : 1 << 30;
     /* the candidates, nearest first */
     static int uids[2048], dists[2048];
     int n = 0;

@@ -230,11 +230,12 @@ public partial class GameTestWindow
     // ---------- NPCs (Sit and Sleep schedules) ----------
 
     /// <summary>Sit_schedule / Sleep_schedule: the nearest free chair (any distance) or bed (within 24 tiles) the NPC can walk to - heading there. False if none.</summary>
-    private bool GoToFurniture(MapCharacter mapCharacter, bool bed)
+    /// <param name="maxTiles">How far to look (a chair otherwise any distance); a party member sitting with the main character: 24 tiles (Exult find_closest).</param>
+    private bool GoToFurniture(MapCharacter mapCharacter, bool bed, int? maxTiles = null)
     {
         var me = mapCharacter.Character;
         if (!me.IsHuman) return false; // a rat doesn't take a chair or a bed: it stands, or sleeps where it is
-        int range = bed ? CellsForTiles(24) : int.MaxValue;
+        int range = maxTiles is { } tiles ? CellsForTiles(tiles) : bed ? CellsForTiles(24) : int.MaxValue;
         var candidates = _map.Objects
             .Where(o => o.ContainerInstanceId < 0 && DefinitionOf(o)?.Type == (bed ? ObjectType.Bed : ObjectType.Chair))
             .Where(o => Math.Max(Math.Abs(o.X - mapCharacter.Placement.X), Math.Abs(o.Y - mapCharacter.Placement.Y)) <= range)

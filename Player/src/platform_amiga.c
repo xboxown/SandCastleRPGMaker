@@ -75,10 +75,7 @@ static char error_text[256];
 const char *platform_error(void) { return error_text; }
 
 static UWORD *blankPointer; /* Intuition's pointer, blanked: the game draws its own */
-#ifndef __MORPHOS__
-static struct BitMap *blankBitMap; /* the blank pointer as a pointerclass object (Intuition V39+: RTG pointers too) */
-static Object *blankObject;
-#endif
+#define BLANK_POINTER_BYTES ((2 + 16 * 2 + 2) * 2) /* its control words, 16 lines of two words, the end */
 
 /* The mouse kept inside the game: while its window is active the pointer can't leave it (moved back with an
    IECLASS_POINTERPOS input event). F9 lets it go (and takes it again); the game closing lets it go. */
@@ -91,16 +88,10 @@ static void hide_pointer(void)
 #ifdef __MORPHOS__
     SetWindowPointer(window, WA_PointerType, POINTERTYPE_INVISIBLE, TAG_DONE);
 #else
-    if (IntuitionBase->LibNode.lib_Version >= 39)
-    {
-        if (!blankBitMap) blankBitMap = AllocBitMap(16, 1, 2, BMF_CLEAR, NULL);
-        if (blankBitMap && !blankObject)
-            blankObject = NewObject(NULL, (CONST_STRPTR)POINTERCLASS, POINTERA_BitMap, (ULONG)blankBitMap, POINTERA_WordWidth, 1,
-                                    POINTERA_XResolution, POINTERXRESN_SCREENRES, POINTERA_YResolution, POINTERYRESN_SCREENRESASPECT, TAG_DONE);
-        if (blankObject) { SetWindowPointer(window, WA_Pointer, (ULONG)blankObject, TAG_DONE); return; }
-    }
-    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_CHIP | MEMF_CLEAR); /* a 1-line empty sprite in chip memory */
-    if (blankPointer) SetPointer(window, blankPointer, 1, 16, 0, 0);
+    /* A whole 16 x 16 sprite with every pixel see-through (SetPointer, which every Amiga system has): a 1-line one was
+       ignored by some RTG drivers (the Vampire's), which went on showing the Workbench's pointer over the game. */
+    if (!blankPointer) blankPointer = (UWORD *)AllocMem(BLANK_POINTER_BYTES, MEMF_CHIP | MEMF_CLEAR); /* in chip memory */
+    if (blankPointer) SetPointer(window, blankPointer, 16, 16, 0, 0);
 #endif
 }
 
@@ -190,11 +181,7 @@ void platform_close(void)
 {
     close_display();
     if (scaled) FreeVec(scaled);
-    if (blankPointer) { FreeMem(blankPointer, 12); blankPointer = NULL; }
-#ifndef __MORPHOS__
-    if (blankObject) { DisposeObject(blankObject); blankObject = NULL; }
-    if (blankBitMap) { FreeBitMap(blankBitMap); blankBitMap = NULL; }
-#endif
+    if (blankPointer) { FreeMem(blankPointer, BLANK_POINTER_BYTES); blankPointer = NULL; }
     if (inputOpen) CloseDevice((struct IORequest *)inputRequest);
     if (inputRequest) DeleteIORequest((struct IORequest *)inputRequest);
     if (inputPort) DeleteMsgPort(inputPort);
@@ -265,7 +252,7 @@ int platform_poll(PlatformEvent *event)
         switch (cls)
         {
             case IDCMP_CLOSEWINDOW: event->type = EV_QUIT; return 1;
-            case IDCMP_ACTIVEWINDOW: windowActive = 1; break;
+            case IDCMP_ACTIVEWINDOW: windowActive = 1; hide_pointer(); break; /* again each time: some systems give the window the default pointer back */
             case IDCMP_INACTIVEWINDOW: windowActive = 0; break; /* Amiga-tabbed away: the mouse is free */
             case IDCMP_RAWKEY:
                 if ((code & 0x7F) >= 0x68) break; /* not a key */
@@ -466,6 +453,8 @@ uint32_t platform_ticks(void)
     unsigned long long b = ((unsigned long long)now.ev_hi << 32) | now.ev_lo;
     return (uint32_t)((b - a) * 1000ULL / (eclockRate ? eclockRate : 1));
 }
+
+void platform_warp_mouse(int x, int y) { warp_mouse(x * scale, y * scale); }
 
 double platform_ms_precise(void)
 {
