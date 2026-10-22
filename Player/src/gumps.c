@@ -406,11 +406,42 @@ static void draw_box(uint32_t *pixels, const Gump *g)
     }
 }
 
+/* ObjectDisplayName: "Spent torch", "Broken window", "Used wand" once so; "12 Arrows" for a stack; "Bucket of water" for a full liquid container. */
+static void display_name(int category, int itemId, int quantity, int spent, int liquid, char *out, size_t size)
+{
+    const char *name = items_name(category, itemId);
+    char base[96];
+    cJSON *def = NULL, *o;
+    if (category == CAT_OBJECT) cJSON_ArrayForEach(o, get(get(project(), "Objects"), "Objects")) if (num(o, "Id", -2) == itemId) { def = o; break; }
+    int type = num(def, "Type", -1);
+    const char *prefix = spent && type == 4 ? "Spent " : spent && type == 12 ? "Broken " : spent && type == 21 ? "Used " : NULL;
+    if (prefix)
+    {
+        int n = snprintf(base, sizeof base, "%s%s", prefix, name);
+        for (int k = (int)strlen(prefix); k < n && k < (int)sizeof base; k++) if (base[k] >= 'A' && base[k] <= 'Z') base[k] = (char)(base[k] + 32);
+    }
+    else snprintf(base, sizeof base, "%s", name);
+    if (type == 33 && liquid >= 0)
+    {
+        char what[64];
+        snprintf(what, sizeof what, "%s", items_name(CAT_OBJECT, liquid));
+        for (char *k = what; *k; k++) if (*k >= 'A' && *k <= 'Z') *k = (char)(*k + 32);
+        size_t at = strlen(base);
+        snprintf(base + at, sizeof base - at, " of %s", what);
+    }
+    if (quantity > 1) snprintf(out, size, "%d %s", quantity, base);
+    else snprintf(out, size, "%s", base);
+}
+
 static void item_label(const Item *it, char *out, size_t size)
 {
-    int q = items_quantity(it);
-    if (q > 1) snprintf(out, size, "%s x%d", items_name(items_category(it), items_item_id(it)), q);
-    else snprintf(out, size, "%s", items_name(items_category(it), items_item_id(it)));
+    int start = -1;
+    if (items_category(it) == CAT_OBJECT)
+    {
+        cJSON *o;
+        cJSON_ArrayForEach(o, get(get(project(), "Objects"), "Objects")) if (num(o, "Id", -2) == items_item_id(it)) start = num(get(o, "Liquid"), "StartsFullOfId", -1);
+    }
+    display_name(items_category(it), items_item_id(it), items_quantity(it), items_spent(it), items_liquid(it, start), out, size);
 }
 
 static void draw_pack(uint32_t *pixels, const Gump *g)
@@ -576,8 +607,7 @@ static const char *thing_name(int uid, char *buf, size_t size)
         snprintf(buf, size, "Body of %s", str(character_json(-1000 - itemId), "Name"));
         return buf;
     }
-    if (quantity > 1) snprintf(buf, size, "%d %s", quantity, items_name(category, itemId));
-    else snprintf(buf, size, "%s", items_name(category, itemId));
+    display_name(category, itemId, quantity, category == CAT_OBJECT && world_thing_spent(uid), category == CAT_OBJECT ? world_thing_liquid(uid) : -1, buf, size);
     return buf;
 }
 
@@ -961,6 +991,14 @@ static void drop(void)
         dropping = 0;
         return;
     }
+    if (under.gump >= 0 && (under.kind == T_BOX_ITEM || under.kind == T_ROW || under.kind == T_SLOT) && under.item && under.item != drag.item
+        && events_has_combine(items_category(under.item), items_item_id(under.item)))
+    {
+        dropping = 1;
+        int ran = events_combine(0, items_category(under.item), items_item_id(under.item), drag.category, drag.itemId);
+        dropping = 0;
+        if (ran) return;
+    }
     if (under.gump >= 0 && under.kind != T_THING && under.kind != T_ACTOR)
     {
         Gump *g = &gumps[under.gump];
@@ -981,6 +1019,16 @@ static void drop(void)
         int sown = mechanisms_drop_on(under.uid, drag.category, drag.itemId);
         dropping = 0;
         if (sown) return;
+        int c, i, q, x, y, n;
+        world_thing_info(under.uid, &c, &i, &q, &x, &y, &n);
+        if ((!drag.fromMap || drag.uid != under.uid) && events_has_combine(c, i))
+        {
+            if (!world_reachable(x, y, world_thing_z(under.uid))) { game_log("You can't reach that from here."); return; }
+            dropping = 1;
+            int ran = events_combine(under.uid, c, i, drag.category, drag.itemId); /* its pages run; "Use up the item just combined" works while they do */
+            dropping = 0;
+            if (ran) return;
+        }
     }
     drop_on_map();
 }

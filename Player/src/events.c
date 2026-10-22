@@ -4,6 +4,7 @@
 #include "vehicles.h"
 #include "video.h"
 #include "books.h"
+#include "gumps.h"
 #include "prompt.h"
 #include "commands.h"
 #include "dialog.h"
@@ -1538,6 +1539,7 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_Paperdoll:
+            if (!strcmp(param(c, "Action"), "UseUpCombined") && !r->doll) { lastResult = gumps_use_up_combined(); return 1; } /* an object's By Combine Item: what was dropped on it */
             lastResult = dolls_paperdoll_command(r->doll ? r->doll : lastDoll, param(c, "Action"), param(c, "PartId")[0] ? atoi(param(c, "PartId")) : -1, param(c, "PartName"), c->params);
             return 1;
         case C_ClosePaperdoll:
@@ -2876,6 +2878,8 @@ static int *count_for(int uid, int page)
 static int fireCopy; /* the placed copy an object's pages fire for (0: not an object's) */
 
 static int fire_pages_core(Owner *o, int just, int activator, int byStepping);
+#define T_COMBINE_ITEM 17
+static int combining, combineCategory, combineItemId; /* By Combine Item: what was dropped on it */
 
 /* TryFireEventPages: the first page whose conditions are met runs. */
 static int fire_pages(Owner *o, int just, int activator, int byStepping)
@@ -2900,6 +2904,12 @@ static int fire_pages_core(Owner *o, int just, int activator, int byStepping)
         if (by[0] && o->isMapEvent && (just == T_ENTER || just == T_STAY || just == T_EXIT) && trigger == just)
         {
             if (strcmp(by, "Player") != 0 && strcmp(by, "Party") != 0 && atoi(by) != world_actor_character(0)) continue;
+        }
+        if (combining && just == T_COMBINE_ITEM && trigger == T_COMBINE_ITEM)
+        {
+            /* a page for one thing only: that thing must be what was dropped */
+            cJSON *want = get(c, "TriggerItemReference");
+            if (cJSON_IsObject(want) && num(want, "ItemId", -1) >= 0 && (num(want, "Category", -1) != combineCategory || num(want, "ItemId", -1) != combineItemId)) continue;
         }
         if (!conditions_met(c, just, *fired, -1)) continue;
         (*fired)++;
@@ -3346,3 +3356,24 @@ void events_clear_restart(void) { restartRequested = 0; }
 
 /* Resting: the hours pass at once (lights burn down by them as the clock moves on). */
 void events_advance_minutes(int minutes) { clock_advance_minutes(minutes); }
+
+/* Whether a thing's kind has By Combine Item pages (something dropped on it does something). */
+int events_has_combine(int category, int itemId)
+{
+    for (int i = 0; i < ownerCount; i++)
+    {
+        Owner *o = &owners[i];
+        if (o->itemCategory != category || o->itemId != itemId) continue;
+        for (int k = 0; k < o->pageCount; k++) if (num(o->pages[k].cond, "TriggerConditionBased", 0) == T_COMBINE_ITEM) return 1;
+    }
+    return 0;
+}
+
+/* Something (category, itemId) dropped onto a thing - placed (uid) or carried (its kind): its By Combine Item pages, those for anything or for this. 1 = one ran. */
+int events_combine(int uid, int ontoCategory, int ontoId, int category, int itemId)
+{
+    combining = 1; combineCategory = category; combineItemId = itemId;
+    int ran = uid > 0 ? events_object_event(uid, T_COMBINE_ITEM, -1) : events_fire_item(ontoCategory, ontoId, T_COMBINE_ITEM);
+    combining = 0;
+    return ran;
+}
