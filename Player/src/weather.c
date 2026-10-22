@@ -7,6 +7,7 @@
  * looping. Not drawn while the main character is under a roof. It can come
  * and go by itself, hour by hour. It stops while the game is paused.
  */
+#include "blend.h"
 #include "weather.h"
 #include "events.h"
 #include "lighting.h"
@@ -24,7 +25,7 @@ enum { W_CLEAR, W_RAIN, W_SNOW, W_HAIL, W_STORM };
 #define MAX_CLOUDS 20
 
 typedef struct Particle { double x, y, vx, vy, phase; } Particle;
-typedef struct Cloud { double x, y, w, h; } Cloud;
+typedef struct Cloud { double x, y, w, h; unsigned char *mask; int mw, mh; } Cloud; /* mask: its shadow's alpha a pixel (made once for its size) */
 
 static int kind, intensity = 50, clouds, cloudCover = 40, wind = 2, changes, changeChance, rainSound = -1, thunderSound = -1;
 static int mapKind;
@@ -143,7 +144,8 @@ void weather_update(double ms)
 static void blend(uint32_t *d, uint32_t rgb, int a)
 {
     uint32_t c = *d, k = (uint32_t)(255 - a);
-    *d = 0xFF000000u | (((((c >> 16) & 255) * k + ((rgb >> 16) & 255) * (uint32_t)a) / 255) << 16) | (((((c >> 8) & 255) * k + ((rgb >> 8) & 255) * (uint32_t)a) / 255) << 8) | (((c & 255) * k + (rgb & 255) * (uint32_t)a) / 255);
+    (void)k;
+    *d = blend_px(c, rgb, (uint32_t)a);
 }
 
 /* Cloud shadows: soft dark ellipses over the land (under the sky's light). */
@@ -153,19 +155,36 @@ void weather_draw_clouds(uint32_t *pixels)
     double cx, cy;
     world_view_center(&cx, &cy);
     double left = cx - SCREEN_W / 2.0, top = cy - SCREEN_H / 2.0;
+    uint32_t shadow = world_shade_colour(0xFF000000u) & 0xFFFFFFu; /* black, under the sky's light (drawn before it) */
     for (int i = 0; i < cloudCount; i++)
     {
-        const Cloud *c = &cloudList[i];
-        double ox = c->x - left, oy = c->y - top, rx = c->w / 2, ry = c->h / 2, mx = ox + rx, my = oy + ry;
-        int x0 = (int)ox < 0 ? 0 : (int)ox, x1 = (int)(ox + c->w) > SCREEN_W ? SCREEN_W : (int)(ox + c->w);
-        int y0 = (int)oy < 0 ? 0 : (int)oy, y1 = (int)(oy + c->h) > SCREEN_H ? SCREEN_H : (int)(oy + c->h);
+        Cloud *c = &cloudList[i];
+        int w = (int)c->w, h = (int)c->h;
+        if (w <= 0 || h <= 0) continue;
+        if (!c->mask || c->mw != w || c->mh != h)
+        {
+            /* RadialGradientBrush: 70 alpha black in the middle, none at the edge - worked out once for this size */
+            free(c->mask);
+            c->mask = (unsigned char *)malloc((size_t)w * (size_t)h);
+            if (!c->mask) continue;
+            c->mw = w; c->mh = h;
+            double rx = w / 2.0, ry = h / 2.0;
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    double ex = (x + 0.5 - rx) / rx, ey = (y + 0.5 - ry) / ry, r = sqrt(ex * ex + ey * ey);
+                    c->mask[y * w + x] = r >= 1 ? 0 : (unsigned char)(70 * (1 - r));
+                }
+        }
+        int ox = (int)floor(c->x - left), oy = (int)floor(c->y - top);
+        int x0 = ox < 0 ? -ox : 0, x1 = ox + w > SCREEN_W ? SCREEN_W - ox : w;
+        int y0 = oy < 0 ? -oy : 0, y1 = oy + h > SCREEN_H ? SCREEN_H - oy : h;
         for (int y = y0; y < y1; y++)
-            for (int x = x0; x < x1; x++)
-            {
-                double ex = (x + 0.5 - mx) / rx, ey = (y + 0.5 - my) / ry, r = sqrt(ex * ex + ey * ey);
-                if (r >= 1) continue;
-                blend(&pixels[y * SCREEN_W + x], 0, (int)(70 * (1 - r))); /* RadialGradientBrush: 70 alpha black in the middle, none at the edge */
-            }
+        {
+            const unsigned char *m = c->mask + y * w;
+            uint32_t *d = &pixels[(oy + y) * SCREEN_W + ox];
+            for (int x = x0; x < x1; x++) if (m[x]) d[x] = blend_px(d[x], shadow, m[x]);
+        }
     }
 }
 

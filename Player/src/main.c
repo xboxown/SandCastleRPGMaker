@@ -39,6 +39,7 @@
 double sc_strtod(const char *text, char **end);
 
 static uint32_t pixels[SCREEN_W * SCREEN_H];
+void main_take_screenshot(void) { save_take_screenshot(pixels); }
 
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
 static void note(const char *step)
@@ -59,6 +60,7 @@ void game_log(const char *line) { note(line); }
 
 /* Testing: a key pressed at a moment ("--press 2:E,3.5:1": Enter at 2 s, the 1 key at 3.5 s; T7 = double-click the character with id 7). */
 static int testDx, testDy; /* testing: a direction held by --press "J..." */
+static int forceWindow; /* "window" / --window: a window, not full screen */
 
 static void scripted_presses(const char *presses, double t, double *done)
 {
@@ -87,6 +89,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) if (!prompt_key(0, t[q])) dolls_key(0, t[q]); } /* Lname: letters typed */
         else if (*what == 'F') { save_take_screenshot(pixels); dolls_open_save_screen(); } /* F: S pressed (the Save/Load screen) */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
+        else if (*what == 'N') { int id = atoi(what + 1); const char *a = strchr(what, ';'), *b = a ? strchr(a + 1, ';') : NULL; int actor = world_actor_by_character(id); if (b && actor > 0) world_teleport(actor, atoi(a + 1), atoi(b + 1)); } /* N2;12;12: character 2 put at (12, 12) */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else
         {
@@ -127,6 +130,33 @@ static void save_bmp(const char *path)
             fwrite(px, 1, 3, f);
         }
     fclose(f);
+}
+
+/* The timing diary: every 10 seconds Game.log says the frame rate and where a frame's time went (so a slow
+   machine can say why). Parts: 0 keys and sounds, 1 events, 2 the world going on, 3 the world drawn,
+   4 clouds and light, 5 weather, 6 barks/fights/traps, 7 windows/boxes/pointer, 8 put on the screen. */
+#define TIMING_PARTS 9
+static double timingMs[TIMING_PARTS], timingMark, timingFrom;
+static int timingFrames;
+static void timing(int part) { double t = platform_ms_precise(); timingMs[part] += t - timingMark; timingMark = t; }
+static void timing_frame_done(void)
+{
+    timingFrames++;
+    double span = timingMark - timingFrom;
+    if (span < 10000) return;
+    static const char *NAMES[TIMING_PARTS] = { "input", "events", "update", "world", "light", "weather", "barks", "windows", "present" };
+    char line[400];
+    /* tenths as whole numbers: the Amiga's C library prints some floating-point numbers wrongly */
+    int fps10 = (int)(timingFrames * 10000.0 / span + 0.5);
+    int n = snprintf(line, sizeof line, "Timing: %d.%d fps, ms a frame -", fps10 / 10, fps10 % 10);
+    for (int i = 0; i < TIMING_PARTS && n < (int)sizeof line; i++) { int t10 = (int)(timingMs[i] * 10 / timingFrames + 0.5); n += snprintf(line + n, sizeof line - n, " %s %d.%d", NAMES[i], t10 / 10, t10 % 10); }
+    int things, drawnNow;
+    world_draw_stats(&things, &drawnNow);
+    if (n < (int)sizeof line) snprintf(line + n, sizeof line - n, " (%d things, %d drawn)", things, drawnNow);
+    note(line);
+    for (int i = 0; i < TIMING_PARTS; i++) timingMs[i] = 0;
+    timingFrames = 0;
+    timingFrom = timingMark;
 }
 
 /* A save to load (the Save/Load screen, Continue): done between frames, the game built anew from it. */
@@ -321,6 +351,7 @@ int main(int argc, char **argv)
         else if (strcmp(argv[i], "--shot-at") == 0 && i + 1 < argc) shotAt = sc_strtod(argv[++i], NULL);
         else if (!strcmp(argv[i], "nosound") || !strcmp(argv[i], "NOSOUND") || !strcmp(argv[i], "--nosound")) noSound = 1;
         else if (!strcmp(argv[i], "--notitle")) noTitle = 1; /* testing: straight into the game */
+        else if (!strcmp(argv[i], "--window") || !strcmp(argv[i], "window") || !strcmp(argv[i], "WINDOW")) forceWindow = 1; /* in a window whatever the game's setting */
         else if (!strcmp(argv[i], "paula") || !strcmp(argv[i], "PAULA")) platform_audio_route(1);
         else if (!strcmp(argv[i], "ahi") || !strcmp(argv[i], "AHI")) platform_audio_route(2);
         else snprintf(folder, sizeof folder, "%s", argv[i]);
@@ -361,7 +392,11 @@ int main(int argc, char **argv)
         return 1;
     }
     note("Loaded. Opening the window...");
-    if (!platform_open(world_title()[0] ? world_title() : "Game", 0))
+    /* System Settings > Game Window: in a window, or full screen (DisplaySettings.Mode 1) */
+    cJSON *display = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Display");
+    cJSON *mode = cJSON_GetObjectItem(display, "Mode");
+    int fullScreen = cJSON_IsNumber(mode) && mode->valueint == 1 && !forceWindow;
+    if (!platform_open(world_title()[0] ? world_title() : "Game", fullScreen))
     {
         char text[400];
         snprintf(text, sizeof text, "The game couldn't open its window:\n%s", platform_error());
@@ -394,6 +429,7 @@ int main(int argc, char **argv)
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;
+    timingMark = timingFrom = platform_ms_precise();
     while (running)
     {
         PlatformEvent e;
@@ -440,7 +476,7 @@ int main(int argc, char **argv)
                     case KEY_RIGHT: held[1] = down ? ++order : 0; break;
                     case KEY_UP: held[2] = down ? ++order : 0; break;
                     case KEY_DOWN: held[3] = down ? ++order : 0; break;
-                    case KEY_ESCAPE: if (down && !gumps_close_top()) running = 0; break; /* Escape closes the top window first */
+                    case KEY_ESCAPE: if (down) gumps_close_top(); break; /* Escape closes the topmost window only - it never quits (Ctrl+Q asks) */
                     case KEY_S: /* Exult: S for the Save/Load screen (the view as it is now is its screenshot) */
                         if (down && !dolls_title_open() && !dolls_modal_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); }
                         break;
@@ -470,7 +506,6 @@ int main(int argc, char **argv)
             {
                 world_draw(pixels, now);
                 weather_draw_clouds(pixels);
-                lighting_draw(pixels);
                 weather_draw(pixels);
                 world_draw_barks(pixels);
             }
@@ -524,14 +559,23 @@ int main(int argc, char **argv)
         screen_update(seconds * 1000);
         int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
         video_update(seconds * 1000);
+        timing(0);
         int paused = dialog_showing() || title || mechanisms_pausing() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
+        timing(1);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
         { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
-        if (!dialog_showing() && !title && !video_playing() && !mechanisms_pausing() && !books_open() && !prompt_open())
+        /* Exult's "gumps pause the game" (GameTestWindow.UpdateGamePause): as it pauses, a direction held is let go and the
+           avatar stands where it is - the key has to be pressed again (so an event's Walk To isn't taken for the player taking over). */
+        static int wasPaused, wasCinema;
+        int cinemaNow = events_cinema(); /* Cinema Mode starting lets go of the keys too (GameTestWindow.Cinema) */
+        if ((paused && !wasPaused) || (cinemaNow && !wasCinema)) { for (int i = 0; i < 4; i++) held[i] = 0; testDx = testDy = 0; world_keys_let_go(); }
+        wasPaused = paused; wasCinema = cinemaNow;
+        if (paused) dx = dy = 0;
+        if (!paused)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
@@ -547,22 +591,26 @@ int main(int argc, char **argv)
             work_update(seconds * 1000);
             traps_update(seconds * 1000);
             world_update_bleeding(seconds * 1000);
-            gumps_update(seconds * 1000);
             events_player_moved();
         }
+        if (!title) gumps_update(seconds * 1000); /* the windows themselves go on while the game waits (dragging, their animations) */
         mechanisms_frame(seconds * 1000); /* the sleep fade runs while the world waits */
         if (gumps_save_screen_wanted() && !dolls_title_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); } /* the paperdoll's disk */
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
+        timing(2);
         if (title) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H); /* the world isn't seen behind the title */
         else
         {
             world_draw(pixels, worldMs);
+            timing(3);
             weather_draw_clouds(pixels);
-            lighting_draw(pixels);
+            timing(4);
             weather_draw(pixels);
+            timing(5);
             world_draw_barks(pixels);
             combat_draw(pixels, worldMs);
             traps_draw(pixels, worldMs);
+            timing(6);
         }
         gumps_draw(pixels, title ? now : worldMs);
         if (!title) screen_draw(pixels, now);
@@ -570,7 +618,10 @@ int main(int argc, char **argv)
         screen_shake_apply(pixels);
         video_draw(pixels); /* a video over everything */
         gumps_draw_pointer(pixels, now); /* the pointer over everything */
+        timing(7);
         platform_present(pixels);
+        timing(8);
+        timing_frame_done();
         { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); } /* how far it got, if it ever stops */
     }
     platform_audio_close();

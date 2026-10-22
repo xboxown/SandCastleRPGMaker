@@ -17,6 +17,7 @@
  *    character's own add rules; reach, weight and volume checked; a
  *    refused drop leaves the thing where it was.
  */
+#include "blend.h"
 #include "gumps.h"
 #include "video.h"
 #include "books.h"
@@ -283,7 +284,7 @@ static void fill(uint32_t *pixels, int x, int y, int w, int h, uint32_t c)
         for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++)
         {
             uint32_t *d = &pixels[j * SCREEN_W + i];
-            uint32_t r = (((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255, gg = (((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255, b = ((c & 255) * a + (*d & 255) * (255 - a)) / 255;
+            uint32_t r = div255(((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)), gg = div255(((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)), b = div255((c & 255) * a + (*d & 255) * (255 - a));
             *d = 0xFF000000u | (r << 16) | (gg << 8) | b;
         }
 }

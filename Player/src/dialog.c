@@ -1,3 +1,4 @@
+#include "blend.h"
 #include "dialog.h"
 #include "font.h"
 #include <math.h>
@@ -321,23 +322,21 @@ static uint32_t *screen;
 static void blit_part(const Picture *p, int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh)
 {
     if (!p || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
-    for (int j = 0; j < dh; j++)
+    /* clipped once; the picture stepped through in 16.16 (no dividing a pixel) */
+    int i0 = dx < 0 ? -dx : 0, i1 = dx + dw > SCREEN_W ? SCREEN_W - dx : dw;
+    int j0 = dy < 0 ? -dy : 0, j1 = dy + dh > SCREEN_H ? SCREEN_H - dy : dh;
+    if (i0 >= i1 || j0 >= j1) return;
+    uint32_t stepX = ((uint32_t)sw << 16) / (uint32_t)dw, stepY = ((uint32_t)sh << 16) / (uint32_t)dh;
+    for (int j = j0; j < j1; j++)
     {
-        int y = dy + j;
-        if (y < 0 || y >= SCREEN_H) continue;
-        const uint32_t *row = p->pixels + (size_t)(sy + j * sh / dh) * (size_t)p->width;
-        for (int i = 0; i < dw; i++)
+        const uint32_t *row = p->pixels + (size_t)(sy + (int)(((uint32_t)j * stepY) >> 16)) * (size_t)p->width + sx;
+        uint32_t *d = &screen[(dy + j) * SCREEN_W + dx];
+        uint32_t at = (uint32_t)i0 * stepX;
+        for (int i = i0; i < i1; i++, at += stepX)
         {
-            int x = dx + i;
-            if (x < 0 || x >= SCREEN_W) continue;
-            uint32_t c = row[sx + i * sw / dw], a = c >> 24;
+            uint32_t c = row[at >> 16], a = c >> 24;
             if (a == 0) continue;
-            uint32_t *d = &screen[y * SCREEN_W + x];
-            if (a == 255) { *d = c; continue; }
-            uint32_t r = (((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255;
-            uint32_t g = (((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255;
-            uint32_t b = ((c & 255) * a + (*d & 255) * (255 - a)) / 255;
-            *d = 0xFF000000u | (r << 16) | (g << 8) | b;
+            d[i] = a == 255 ? c : blend_px(d[i], c, a);
         }
     }
 }
@@ -348,10 +347,7 @@ static void shade(int x, int y, int w, int h, uint32_t rgb, uint32_t a)
         for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++)
         {
             uint32_t *d = &screen[j * SCREEN_W + i];
-            uint32_t r = (((rgb >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255;
-            uint32_t g = (((rgb >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255;
-            uint32_t b = ((rgb & 255) * a + (*d & 255) * (255 - a)) / 255;
-            *d = 0xFF000000u | (r << 16) | (g << 8) | b;
+            *d = blend_px(*d, rgb, a);
         }
 }
 

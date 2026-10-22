@@ -17,6 +17,9 @@
 #include <exec/exec.h>
 #include <intuition/intuition.h>
 #include <graphics/gfx.h>
+#include <graphics/clip.h>
+#include <graphics/layers.h>
+#include <proto/layers.h>
 #include <graphics/modeid.h>
 #include <devices/timer.h>
 #include <cybergraphx/cybergraphics.h>
@@ -28,13 +31,26 @@
 #include <proto/dos.h>
 #include <proto/keymap.h>
 #include <devices/inputevent.h>
+#include <devices/input.h>
+#include <intuition/pointerclass.h>
 struct Library *KeymapBase;
 static int pendingText; /* a letter typed, given as EV_TEXT after its key */
 #include <string.h>
 #include <stdio.h>
 
-#define SCALE 2
 #define KICKSTART_31 40 /* Kickstart 3.1: version 40 of its libraries */
+#ifndef RECTFMT_RAW
+#define RECTFMT_RAW 5UL /* the display's own pixel format (not in every NDK's header) */
+#endif
+
+/* How the 320 x 200 frame is shown: doubled (640 x 400, a window or a screen that size) or as it is (a 320 x 200 / 320 x 240
+   full screen), at (offX, offY) - a 240-line screen has it in the middle. */
+static int scale = 2, offX, offY;
+/* The display's own pixel format: each frame is made in it (doubled as it goes) and handed over with no conversion left
+   to do (RECTFMT_RAW). rawOk: 1 it works, 0 it doesn't (the frame given as ARGB, converted by the card's software), -1 not tried. */
+static ULONG pixFmt;
+static int rawOk = -1;
+void game_log(const char *line);
 
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
@@ -59,39 +75,91 @@ static char error_text[256];
 const char *platform_error(void) { return error_text; }
 
 static UWORD *blankPointer; /* Intuition's pointer, blanked: the game draws its own */
+#ifndef __MORPHOS__
+static struct BitMap *blankBitMap; /* the blank pointer as a pointerclass object (Intuition V39+: RTG pointers too) */
+static Object *blankObject;
+#endif
+
+/* The mouse kept inside the game: while its window is active the pointer can't leave it (moved back with an
+   IECLASS_POINTERPOS input event). F9 lets it go (and takes it again); the game closing lets it go. */
+static struct MsgPort *inputPort;
+static struct IOStdReq *inputRequest;
+static int inputOpen, mouseLocked = 1, windowActive = 1;
+
+static void hide_pointer(void)
+{
+#ifdef __MORPHOS__
+    SetWindowPointer(window, WA_PointerType, POINTERTYPE_INVISIBLE, TAG_DONE);
+#else
+    if (IntuitionBase->LibNode.lib_Version >= 39)
+    {
+        if (!blankBitMap) blankBitMap = AllocBitMap(16, 1, 2, BMF_CLEAR, NULL);
+        if (blankBitMap && !blankObject)
+            blankObject = NewObject(NULL, (CONST_STRPTR)POINTERCLASS, POINTERA_BitMap, (ULONG)blankBitMap, POINTERA_WordWidth, 1,
+                                    POINTERA_XResolution, POINTERXRESN_SCREENRES, POINTERA_YResolution, POINTERYRESN_SCREENRESASPECT, TAG_DONE);
+        if (blankObject) { SetWindowPointer(window, WA_Pointer, (ULONG)blankObject, TAG_DONE); return; }
+    }
+    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_CHIP | MEMF_CLEAR); /* a 1-line empty sprite in chip memory */
+    if (blankPointer) SetPointer(window, blankPointer, 1, 16, 0, 0);
+#endif
+}
+
+/* The pointer put at (x, y) in the window's own pixels. */
+static void warp_mouse(int x, int y)
+{
+    if (!inputOpen || !window) return;
+    struct InputEvent ie;
+    memset(&ie, 0, sizeof ie);
+    ie.ie_Class = IECLASS_POINTERPOS;
+    ie.ie_X = x + window->LeftEdge + (screen ? offX : window->BorderLeft);
+    ie.ie_Y = y + window->TopEdge + (screen ? offY : window->BorderTop);
+    inputRequest->io_Command = IND_WRITEEVENT;
+    inputRequest->io_Data = (APTR)&ie;
+    inputRequest->io_Length = sizeof ie;
+    DoIO((struct IORequest *)inputRequest);
+}
 
 static int open_display(void)
 {
+    scale = 2; offX = offY = 0;
+    int sw = SCREEN_W * 2, sh = SCREEN_H * 2;
     if (fullscreen)
     {
-        ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, SCREEN_W * SCALE, CYBRBIDTG_NominalHeight, SCREEN_H * SCALE, CYBRBIDTG_Depth, 16, TAG_DONE);
-        if (mode != INVALID_ID)
-            screen = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, SCREEN_W * SCALE, SA_Height, SCREEN_H * SCALE, SA_Depth, 16,
+        /* a 320 x 200 or 320 x 240 RTG mode: the frame needs no doubling (a quarter of the pixels to hand over); else 640 x 400 / 480 */
+        static const int TRY[][3] = { { 320, 200, 1 }, { 320, 240, 1 }, { 640, 400, 2 }, { 640, 480, 2 } };
+        for (int t = 0; t < 4 && !screen; t++)
+        {
+            ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, TRY[t][0], CYBRBIDTG_NominalHeight, TRY[t][1], CYBRBIDTG_Depth, 16, TAG_DONE);
+            if (mode == INVALID_ID || !IsCyberModeID(mode)) continue;
+            if ((int)GetCyberIDAttr(CYBRIDATTR_WIDTH, mode) != TRY[t][0] || (int)GetCyberIDAttr(CYBRIDATTR_HEIGHT, mode) != TRY[t][1]) continue; /* only that size */
+            screen = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, TRY[t][0], SA_Height, TRY[t][1], SA_Depth, 16,
                                     SA_Title, (ULONG)title, SA_ShowTitle, FALSE, SA_Quiet, TRUE, SA_Type, CUSTOMSCREEN, TAG_DONE);
+            if (screen) { sw = TRY[t][0]; sh = TRY[t][1]; scale = TRY[t][2]; offX = (sw - SCREEN_W * scale) / 2; offY = (sh - SCREEN_H * scale) / 2; }
+        }
         if (!screen) fullscreen = 0; /* no RTG mode that size: a window on the Workbench instead */
     }
     if (screen)
-        window = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)screen, WA_Left, 0, WA_Top, 0, WA_Width, SCREEN_W * SCALE, WA_Height, SCREEN_H * SCALE,
+        window = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)screen, WA_Left, 0, WA_Top, 0, WA_Width, sw, WA_Height, sh,
                                 WA_Borderless, TRUE, WA_Backdrop, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE,
-                                WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
+                                WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
     else
-        window = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_InnerWidth, SCREEN_W * SCALE, WA_InnerHeight, SCREEN_H * SCALE,
+        window = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_InnerWidth, SCREEN_W * 2, WA_InnerHeight, SCREEN_H * 2,
                                 WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE,
-                                WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
+                                WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
     if (!window) { snprintf(error_text, sizeof error_text, "The game's window couldn't open (an RTG Workbench in 15, 16, 24 or 32 bits is needed)."); return 0; }
-    /* the game draws its own pointer: Intuition's is blanked over the window (a 1-line empty sprite in chip memory) */
-#ifdef __MORPHOS__
-    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_ANY | MEMF_CLEAR); /* no chip memory on a PowerPC machine */
-#else
-    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_CHIP | MEMF_CLEAR);
-#endif
-    if (blankPointer) SetPointer(window, blankPointer, 1, 16, 0, 0);
+    /* the game draws its own pointer: Intuition's is made invisible over the window */
+    hide_pointer();
+    pixFmt = GetCyberMapAttr(window->RPort->BitMap, CYBRMATTR_PIXFMT);
+    rawOk = -1;
+    if (screen) { ScreenToFront(screen); ActivateWindow(window); FillPixelArray(window->RPort, 0, 0, window->Width, window->Height, 0x000000); } /* in front, and black round the frame (a 240-line screen) */
+    { char line[120]; snprintf(line, sizeof line, "Display: %s, %d x %d, pixel format %lu.", screen ? "full screen" : "a window", SCREEN_W * scale, SCREEN_H * scale, (unsigned long)pixFmt); game_log(line); }
+    windowActive = 1;
     return 1;
 }
 
 static void close_display(void)
 {
-    if (window) { if (blankPointer) ClearPointer(window); CloseWindow(window); window = NULL; }
+    if (window) { ClearPointer(window); CloseWindow(window); window = NULL; }
     if (screen) { CloseScreen(screen); screen = NULL; }
 }
 
@@ -109,9 +177,12 @@ int platform_open(const char *gameTitle, int wantFullscreen)
     if (!timerRequest || OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)timerRequest, 0) != 0) { snprintf(error_text, sizeof error_text, "timer.device couldn't open."); return 0; }
     TimerBase = (void *)timerRequest->tr_node.io_Device;
     eclockRate = ReadEClock(&startClock);
-    scaled = (ULONG *)AllocVec(SCREEN_W * SCALE * SCREEN_H * SCALE * 4, MEMF_ANY);
+    scaled = (ULONG *)AllocVec(SCREEN_W * 2 * SCREEN_H * 2 * 4, MEMF_ANY);
     if (!scaled) { snprintf(error_text, sizeof error_text, "Not enough memory for the picture."); return 0; }
     fullscreen = wantFullscreen;
+    inputPort = CreateMsgPort();
+    inputRequest = inputPort ? (struct IOStdReq *)CreateIORequest(inputPort, sizeof(struct IOStdReq)) : NULL;
+    inputOpen = inputRequest && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)inputRequest, 0) == 0;
     return open_display();
 }
 
@@ -120,6 +191,14 @@ void platform_close(void)
     close_display();
     if (scaled) FreeVec(scaled);
     if (blankPointer) { FreeMem(blankPointer, 12); blankPointer = NULL; }
+#ifndef __MORPHOS__
+    if (blankObject) { DisposeObject(blankObject); blankObject = NULL; }
+    if (blankBitMap) { FreeBitMap(blankBitMap); blankBitMap = NULL; }
+#endif
+    if (inputOpen) CloseDevice((struct IORequest *)inputRequest);
+    if (inputRequest) DeleteIORequest((struct IORequest *)inputRequest);
+    if (inputPort) DeleteMsgPort(inputPort);
+    inputOpen = 0; inputRequest = NULL; inputPort = NULL;
     if (TimerBase) CloseDevice((struct IORequest *)timerRequest);
     if (timerRequest) DeleteIORequest((struct IORequest *)timerRequest);
     if (timerPort) DeleteMsgPort(timerPort);
@@ -178,16 +257,20 @@ int platform_poll(PlatformEvent *event)
             char buf[4];
             if (MapRawKey(&ie, (STRPTR)buf, 4, NULL) == 1 && (unsigned char)buf[0] >= 32 && (unsigned char)buf[0] <= 126) pendingText = buf[0];
         }
-        int mx = m->MouseX - (screen ? 0 : window->BorderLeft), my = m->MouseY - (screen ? 0 : window->BorderTop);
+        int mx = m->MouseX - (screen ? offX : window->BorderLeft), my = m->MouseY - (screen ? offY : window->BorderTop);
         ReplyMsg((struct Message *)m);
         event->type = EV_NONE;
-        event->mouseX = mx / SCALE;
-        event->mouseY = my / SCALE;
+        event->mouseX = mx / scale;
+        event->mouseY = my / scale;
         switch (cls)
         {
             case IDCMP_CLOSEWINDOW: event->type = EV_QUIT; return 1;
+            case IDCMP_ACTIVEWINDOW: windowActive = 1; break;
+            case IDCMP_INACTIVEWINDOW: windowActive = 0; break; /* Amiga-tabbed away: the mouse is free */
             case IDCMP_RAWKEY:
                 if ((code & 0x7F) >= 0x68) break; /* not a key */
+                if ((code & 0x7F) == 0x58) { if (!(code & IECODE_UP_PREFIX)) mouseLocked = !mouseLocked; break; } /* F9: the mouse let go / kept in */
+                if ((qualifier & IEQUALIFIER_REPEAT) && (code & 0x7F) >= 0x4C && (code & 0x7F) <= 0x4F) break; /* a held arrow's auto-repeat: walking ignores it (as the Windows engine) */
                 event->type = (code & IECODE_UP_PREFIX) ? EV_KEY_UP : EV_KEY_DOWN;
                 event->key = key_of(code);
                 if ((code & 0x7F) == 0x10 && (qualifier & IEQUALIFIER_CONTROL)) event->key = KEY_CTRL_Q; /* Ctrl+Q: the Quit prompt */
@@ -196,26 +279,183 @@ int platform_poll(PlatformEvent *event)
                 if (code == SELECTDOWN || code == MENUDOWN) { event->type = EV_MOUSE_DOWN; event->button = code == MENUDOWN ? 2 : 1; return 1; }
                 if (code == SELECTUP || code == MENUUP) { event->type = EV_MOUSE_UP; event->button = code == MENUUP ? 2 : 1; return 1; }
                 break;
-            case IDCMP_MOUSEMOVE: event->type = EV_MOUSE_MOVE; return 1;
+            case IDCMP_MOUSEMOVE:
+                if (mouseLocked && windowActive)
+                {
+                    int w = SCREEN_W * scale, h = SCREEN_H * scale;
+                    int cx = mx < 0 ? 0 : mx >= w ? w - 1 : mx, cy = my < 0 ? 0 : my >= h ? h - 1 : my;
+                    if (cx != mx || cy != my) { warp_mouse(cx, cy); mx = cx; my = cy; event->mouseX = mx / scale; event->mouseY = my / scale; }
+                }
+                event->type = EV_MOUSE_MOVE; return 1;
         }
     }
     return 0;
 }
 
+/* One ARGB pixel in the display's own format: 16 bits (in the low half), or 32. */
+static inline ULONG native_px(ULONG c, ULONG fmt)
+{
+    ULONG v;
+    switch (fmt)
+    {
+        case PIXFMT_RGB16: return ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F);
+        case PIXFMT_RGB16PC: v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); return ((v >> 8) | (v << 8)) & 0xFFFF;
+        case PIXFMT_BGR16PC: v = ((c << 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 19) & 0x001F); return ((v >> 8) | (v << 8)) & 0xFFFF;
+        case PIXFMT_RGB15: return ((c >> 9) & 0x7C00) | ((c >> 6) & 0x03E0) | ((c >> 3) & 0x001F);
+        case PIXFMT_RGB15PC: v = ((c >> 9) & 0x7C00) | ((c >> 6) & 0x03E0) | ((c >> 3) & 0x001F); return ((v >> 8) | (v << 8)) & 0xFFFF;
+        case PIXFMT_BGRA32: return ((c & 0xFF) << 24) | ((c & 0xFF00) << 8) | ((c >> 8) & 0xFF00) | 0xFF;
+        case PIXFMT_RGBA32: return (c << 8) | 0xFF;
+        default: return c; /* ARGB32 */
+    }
+}
+
+static int fmt_bytes(ULONG fmt)
+{
+    switch (fmt)
+    {
+        case PIXFMT_RGB16: case PIXFMT_RGB16PC: case PIXFMT_BGR16PC: case PIXFMT_RGB15: case PIXFMT_RGB15PC: return 2;
+        case PIXFMT_ARGB32: case PIXFMT_BGRA32: case PIXFMT_RGBA32: return 4;
+        default: return 0; /* 8 or 24 bits, or another: given as ARGB */
+    }
+}
+
+/* One row of the frame in the display's own format (doubled across when scale is 2): bytes 2 or 4. */
+static void native_row(const uint32_t *src, void *out, int bytes)
+{
+    const ULONG fmt = pixFmt;
+    if (bytes == 2)
+    {
+        if (scale == 2)
+        {
+            ULONG *a = (ULONG *)out;
+            if (fmt == PIXFMT_RGB16) /* Vampire SAGA, many cards: big-endian 5-6-5 */
+                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (v << 16) | v; }
+            else if (fmt == PIXFMT_RGB16PC) /* most Picasso96 cards: little-endian 5-6-5 */
+                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); v = ((v >> 8) | (v << 8)) & 0xFFFF; a[x] = (v << 16) | v; }
+            else
+                for (int x = 0; x < SCREEN_W; x++) { ULONG v = native_px(src[x], fmt); a[x] = (v << 16) | v; }
+        }
+        else
+        {
+            UWORD *a = (UWORD *)out;
+            if (fmt == PIXFMT_RGB16)
+                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[x] = (UWORD)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F)); }
+            else if (fmt == PIXFMT_RGB16PC)
+                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (UWORD)((v >> 8) | (v << 8)); }
+            else
+                for (int x = 0; x < SCREEN_W; x++) a[x] = (UWORD)native_px(src[x], fmt);
+        }
+        return;
+    }
+    ULONG *a = (ULONG *)out;
+    if (scale == 2)
+    {
+        if (fmt == PIXFMT_ARGB32) for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
+        else if (fmt == PIXFMT_BGRA32) for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; c = ((c & 0xFF) << 24) | ((c & 0xFF00) << 8) | ((c >> 8) & 0xFF00) | 0xFF; a[2 * x] = a[2 * x + 1] = c; }
+        else for (int x = 0; x < SCREEN_W; x++) { ULONG c = native_px(src[x], fmt); a[2 * x] = a[2 * x + 1] = c; }
+    }
+    else if (fmt == PIXFMT_ARGB32) memcpy(a, src, SCREEN_W * 4);
+    else for (int x = 0; x < SCREEN_W; x++) a[x] = native_px(src[x], fmt);
+}
+
+/* The frame made in the display's format (doubled when scale is 2) into "scaled"; its bytes a row. */
+static int make_native(const uint32_t *pixels, int bytes)
+{
+    const int rowBytes = SCREEN_W * scale * bytes;
+    UBYTE *out = (UBYTE *)scaled;
+    for (int y = 0; y < SCREEN_H; y++)
+    {
+        UBYTE *a = out + (size_t)(y * scale) * rowBytes;
+        native_row(pixels + y * SCREEN_W, a, bytes);
+        if (scale == 2) memcpy(a + rowBytes, a, rowBytes);
+    }
+    return rowBytes;
+}
+
+/* Straight into the display's memory (LockBitMap), each row made in fast memory first and copied there (twice when doubled):
+   on our own screen always; in a window only while nothing covers any of it (its layer one whole clip rectangle). 0: not now. */
+static int write_direct(const uint32_t *pixels, int bytes)
+{
+    struct Layer *layer = window->WLayer;
+    int x0, y0;
+    if (!screen)
+    {
+        LockLayer(0, layer);
+        struct ClipRect *cr = layer->ClipRect;
+        x0 = layer->bounds.MinX + window->BorderLeft; y0 = layer->bounds.MinY + window->BorderTop;
+#ifdef __MORPHOS__
+#define CR_OBSCURED(c) ((c)->lobs != NULL)
+#else
+#define CR_OBSCURED(c) ((c)->obscured != 0) /* the 3.x NDK's name for it */
+#endif
+        int whole = cr && !cr->Next && !CR_OBSCURED(cr) && cr->bounds.MinX <= x0 && cr->bounds.MinY <= y0
+                    && cr->bounds.MaxX >= x0 + SCREEN_W * scale - 1 && cr->bounds.MaxY >= y0 + SCREEN_H * scale - 1;
+        if (!whole) { UnlockLayer(layer); return 0; }
+    }
+    else { x0 = offX; y0 = offY; }
+    ULONG base = 0, perRow = 0;
+    APTR handle = LockBitMapTags(window->RPort->BitMap, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&perRow, TAG_DONE);
+    if (!handle || !base)
+    {
+        if (handle) UnLockBitMap(handle);
+        if (!screen) UnlockLayer(layer);
+        return 0;
+    }
+    static ULONG row[SCREEN_W * 2];
+    const int rowBytes = SCREEN_W * scale * bytes;
+    UBYTE *to = (UBYTE *)base + (size_t)y0 * perRow + (size_t)x0 * bytes;
+    for (int y = 0; y < SCREEN_H; y++)
+    {
+        native_row(pixels + y * SCREEN_W, row, bytes);
+        memcpy(to, row, rowBytes); to += perRow;
+        if (scale == 2) { memcpy(to, row, rowBytes); to += perRow; }
+    }
+    UnLockBitMap(handle);
+    if (!screen) UnlockLayer(layer);
+    return 1;
+}
+
+/* Does this display take RECTFMT_RAW? A pixel written that way and read back (once a display): else the frame is given as ARGB. */
+static int raw_works(int bytes)
+{
+    int x0 = screen ? offX : window->BorderLeft, y0 = screen ? offY : window->BorderTop;
+    ULONG test = 0xFF8040C0, back = 0, word[1];
+    if (bytes == 2) ((UWORD *)word)[0] = (UWORD)native_px(test, pixFmt);
+    else word[0] = native_px(test, pixFmt);
+    WritePixelArray(word, 0, 0, bytes, window->RPort, x0, y0, 1, 1, RECTFMT_RAW);
+    ReadPixelArray(&back, 0, 0, 4, window->RPort, x0, y0, 1, 1, RECTFMT_ARGB);
+    int dr = (int)((back >> 16) & 255) - 0x80, dg = (int)((back >> 8) & 255) - 0x40, db = (int)(back & 255) - 0xC0;
+    int ok = dr > -12 && dr < 12 && dg > -12 && dg < 12 && db > -12 && db < 12;
+    char line[120];
+    snprintf(line, sizeof line, ok ? "Display: frames handed over in its own format." : "Display: its own format can't be written (read back %08lX) - frames given as ARGB.", (unsigned long)back);
+    game_log(line);
+    return ok;
+}
+
 void platform_present(const uint32_t *pixels)
 {
     if (!window) return;
-    /* Doubled, a pixel to a 2 x 2 block (no blurring, as the other platforms). */
-    const int w = SCREEN_W * SCALE;
+    const int w = SCREEN_W * scale, h = SCREEN_H * scale;
+    int x0 = screen ? offX : window->BorderLeft, y0 = screen ? offY : window->BorderTop;
+    int bytes = fmt_bytes(pixFmt);
+    if (bytes && write_direct(pixels, bytes)) { static int said; if (!said) { said = 1; game_log("Display: frames written straight into its memory."); } return; }
+    if (bytes && rawOk < 0) rawOk = raw_works(bytes);
+    if (bytes && rawOk)
+    {
+        int rowBytes = make_native(pixels, bytes);
+        WritePixelArray(scaled, 0, 0, rowBytes, window->RPort, x0, y0, w, h, RECTFMT_RAW);
+        return;
+    }
+    /* any other display: the frame as ARGB (doubled when it must be), converted by the card's software */
+    if (scale == 1) { WritePixelArray((APTR)pixels, 0, 0, SCREEN_W * 4, window->RPort, x0, y0, w, h, RECTFMT_ARGB); return; }
     for (int y = 0; y < SCREEN_H; y++)
     {
-        ULONG *a = scaled + (y * SCALE) * w, *b = a + w;
+        ULONG *a = scaled + (y * 2) * w, *b = a + w;
         const uint32_t *src = pixels + y * SCREEN_W;
         for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
         memcpy(b, a, w * 4);
     }
-    WaitTOF();
-    WritePixelArray(scaled, 0, 0, w * 4, window->RPort, screen ? 0 : window->BorderLeft, screen ? 0 : window->BorderTop, w, SCREEN_H * SCALE, RECTFMT_ARGB);
+    WritePixelArray(scaled, 0, 0, w * 4, window->RPort, x0, y0, w, h, RECTFMT_ARGB);
 }
 
 uint32_t platform_ticks(void)
@@ -225,6 +465,15 @@ uint32_t platform_ticks(void)
     unsigned long long a = ((unsigned long long)startClock.ev_hi << 32) | startClock.ev_lo;
     unsigned long long b = ((unsigned long long)now.ev_hi << 32) | now.ev_lo;
     return (uint32_t)((b - a) * 1000ULL / (eclockRate ? eclockRate : 1));
+}
+
+double platform_ms_precise(void)
+{
+    struct EClockVal now;
+    ReadEClock(&now);
+    unsigned long long a = ((unsigned long long)startClock.ev_hi << 32) | startClock.ev_lo;
+    unsigned long long b = ((unsigned long long)now.ev_hi << 32) | now.ev_lo;
+    return (double)(b - a) * 1000.0 / (double)(eclockRate ? eclockRate : 1);
 }
 
 void platform_sleep(uint32_t ms) { if (ms >= 20) Delay(ms / 20); }

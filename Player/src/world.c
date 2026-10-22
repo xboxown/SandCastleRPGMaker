@@ -14,6 +14,8 @@
  *  - The camera: a dead zone in the middle, following where the player is
  *    drawn, held inside the map.
  */
+#include "blend.h"
+#include "lighting.h"
 #include "world.h"
 #include "vitals.h"
 #include "magic.h"
@@ -738,6 +740,7 @@ int world_seated(int actor);
 void world_stand_up(int actor);
 void world_cancel_player_sit(void);
 int world_keys_held(void) { return keysHeld; }
+void world_keys_let_go(void) { keysHeld = 0; }
 static Actor *actor_of(int i);
 void world_walks_update(double seconds);
 void world_walk_cancel(int actor);
@@ -798,6 +801,34 @@ static Bleeding bleeding[32]; static int bleedingCount;
 static void draw_status_outlines(uint32_t *pixels);
 static int blitOpacity = 255, blitMirror; /* the next blits: how see-through (invisible in the party), mirrored (blood) */
 
+/* The sky's light (lighting_shade), drawn into the world as it's drawn: each picture's darkened copy, made again only when
+   the light changes (shadeGen); the same as the Windows engine's overlay over the finished map, without a pass over it. */
+static int shadeOn, blitShading;
+static uint32_t shadeKeep, shadeRB, shadeG, shadeGen = 1;
+static inline uint32_t shade_px(uint32_t c)
+{
+    return (c & 0xFF000000u) | ((((c & 0xFF00FFu) * shadeKeep + shadeRB) >> 8) & 0xFF00FFu) | ((((c & 0xFF00u) * shadeKeep + shadeG) >> 8) & 0xFF00u);
+}
+static void shade_update(void)
+{
+    uint32_t keep = 256, rb = 0, g = 0;
+    int on = lighting_shade(&keep, &rb, &g);
+    if (on != shadeOn || keep != shadeKeep || rb != shadeRB || g != shadeG) { if (++shadeGen == 0) shadeGen = 1; }
+    shadeOn = on; shadeKeep = keep; shadeRB = rb; shadeG = g;
+}
+static const uint32_t *shaded_pixels(const Picture *p)
+{
+    Picture *q = (Picture *)p;
+    if (q->shaded && q->shadeGen == shadeGen) return q->shaded;
+    size_t n = (size_t)p->width * (size_t)p->height;
+    if (!q->shaded) q->shaded = (uint32_t *)malloc(n * 4);
+    if (!q->shaded) return p->pixels;
+    for (size_t i = 0; i < n; i++) q->shaded[i] = shade_px(p->pixels[i]);
+    q->shadeGen = shadeGen;
+    return q->shaded;
+}
+uint32_t world_shade_colour(uint32_t c) { return shadeOn ? shade_px(c) : c; }
+
 /* A picture fitted (keeping its shape, centred, nearest pixel) into a box at (x, y). */
 static void blit_box(const Picture *p, int x, int y, int bw, int bh)
 {
@@ -805,24 +836,32 @@ static void blit_box(const Picture *p, int x, int y, int bw, int bh)
     double s = fmin((double)bw / p->width, (double)bh / p->height);
     int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5);
     int ox = x + (bw - dw) / 2, oy = y + (bh - dh) / 2;
-    for (int j = 0; j < dh; j++)
+    /* clipped to the screen once: the columns and rows of it that show */
+    int i0 = ox < 0 ? -ox : 0, i1 = ox + dw > SCREEN_W ? SCREEN_W - ox : dw;
+    int j0 = oy < 0 ? -oy : 0, j1 = oy + dh > SCREEN_H ? SCREEN_H - oy : dh;
+    if (i0 >= i1 || j0 >= j1) return;
+    int same = dw == p->width && dh == p->height;
+    const uint32_t *src = blitShading && shadeOn ? shaded_pixels(p) : p->pixels;
+    if (same && p->opaque && !blitMirror && blitOpacity >= 255)
     {
-        int sy = oy + j;
-        if (sy < 0 || sy >= SCREEN_H) continue;
-        const uint32_t *row = p->pixels + (size_t)(j * p->height / dh) * (size_t)p->width;
-        for (int i = 0; i < dw; i++)
+        for (int j = j0; j < j1; j++) memcpy(&screen[(oy + j) * SCREEN_W + ox + i0], src + (size_t)j * (size_t)p->width + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); /* a whole tile: its rows as they are */
+        return;
+    }
+    uint32_t stepX = ((uint32_t)p->width << 16) / (uint32_t)dw, stepY = ((uint32_t)p->height << 16) / (uint32_t)dh;
+    uint32_t op = (uint32_t)blitOpacity, op1 = op + (op >> 7);
+    for (int j = j0; j < j1; j++)
+    {
+        int sj = same ? j : (int)(((uint32_t)j * stepY) >> 16);
+        if (sj >= p->height) sj = p->height - 1;
+        const uint32_t *row = src + (size_t)sj * (size_t)p->width;
+        uint32_t *d = &screen[(oy + j) * SCREEN_W + ox];
+        for (int i = i0; i < i1; i++)
         {
-            int sx = ox + i;
-            if (sx < 0 || sx >= SCREEN_W) continue;
-            uint32_t c = row[(blitMirror ? dw - 1 - i : i) * p->width / dw], a = c >> 24;
-            if (blitOpacity < 255) a = a * (uint32_t)blitOpacity / 255;
+            int ci = blitMirror ? dw - 1 - i : i;
+            uint32_t c = row[same ? ci : (int)(((uint32_t)ci * stepX) >> 16)], a = c >> 24;
+            if (op < 255) a = (a * op1) >> 8;
             if (a == 0) continue;
-            uint32_t *d = &screen[sy * SCREEN_W + sx];
-            if (a == 255) { *d = c; continue; }
-            uint32_t r = (((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255;
-            uint32_t g = (((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255;
-            uint32_t b = ((c & 255) * a + (*d & 255) * (255 - a)) / 255;
-            *d = 0xFF000000u | (r << 16) | (g << 8) | b;
+            d[i] = a >= 255 ? c : blend_px(d[i], c, a);
         }
     }
 }
@@ -963,6 +1002,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms);
 /* The world - and on a map that wraps around, the land beyond an edge drawn in the gap, one map-width (or height) along. */
 void world_draw(uint32_t *pixels, uint32_t ms)
 {
+    shade_update();
     double w = mapW * tileW, h = mapH * tileH, cx = floor(cameraX), cy = floor(cameraY);
     int ax0 = 0, ax1 = 0, ay0 = 0, ay1 = 0; double shiftX = 0, shiftY = 0;
     if (wraps && w > SCREEN_W) { if (cx < 0) { ax1 = (int)-cx; shiftX = w; } else if (cx + SCREEN_W > w) { ax0 = (int)(w - cx); ax1 = SCREEN_W; shiftX = -w; } }
@@ -996,7 +1036,9 @@ void world_draw(uint32_t *pixels, uint32_t ms)
 static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++) pixels[i] = 0xFF000000u;
+    uint32_t black = world_shade_colour(0xFF000000u);
+    for (int i = 0; i < SCREEN_W * SCREEN_H; i++) pixels[i] = black;
+    blitShading = 1;
     int cx = (int)floor(cameraX), cy = (int)floor(cameraY);
     int ceiling = ceiling_over_player();
 
@@ -1168,10 +1210,12 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
     }
     blitOpacity = 255; blitMirror = 0;
+    blitShading = 0;
     draw_status_outlines(pixels);
     drawnCount = count;
     lastMs = ms;
 }
+void world_draw_stats(int *thingsOnMap, int *drawnLast) { *thingsOnMap = thingCount; *drawnLast = drawnCount; }
 
 /* ---------------- The characters, for events ---------------- */
 
@@ -3473,7 +3517,7 @@ static void draw_status_outlines(uint32_t *pixels)
             {
                 if (SOLID(x, y) || !(SOLID(x - 1, y) || SOLID(x + 1, y) || SOLID(x, y - 1) || SOLID(x, y + 1))) continue;
                 int sx = ox + x, sy = oy + y;
-                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = colour;
+                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = world_shade_colour(colour); /* under the sky's light too */
             }
 #undef SOLID
     }

@@ -130,8 +130,12 @@ const Picture *frame_picture(const Frame *frame)
     p->width = w;
     p->height = h;
     p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
+    p->shaded = NULL; p->shadeGen = 0; p->opaque = 1;
     for (int i = 0; i < w * h; i++)
+    {
         p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+        if (rgba[i * 4 + 3] != 255) p->opaque = 0;
+    }
     stbi_image_free(rgba);
     f->picture = p;
     return p;
@@ -181,12 +185,13 @@ Picture *picture_from_file(const char *path)
     Picture *p = (Picture *)malloc(sizeof(Picture));
     p->width = w; p->height = h;
     p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
-    for (int i = 0; i < w * h; i++) p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+    p->shaded = NULL; p->shadeGen = 0; p->opaque = 1;
+    for (int i = 0; i < w * h; i++) { p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2]; if (rgba[i * 4 + 3] != 255) p->opaque = 0; }
     stbi_image_free(rgba);
     return p;
 }
 
-void picture_free(Picture *p) { if (p) { free(p->pixels); free(p); } }
+void picture_free(Picture *p) { if (p) { free(p->pixels); free(p->shaded); free(p); } }
 
 /* SpriteAnimator's frame sounds for a window's pictures (paperdolls, inventories): a frame with a sound plays it each time it comes round. */
 #include "sound.h"

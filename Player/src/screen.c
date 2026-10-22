@@ -6,6 +6,7 @@
  * Camera and Camera Follows are the world's. Fades and flashes run whether
  * the game is paused or not, as the engine's screen tweens do.
  */
+#include "blend.h"
 #include "screen.h"
 #include "pictures.h"
 #include "platform.h"
@@ -101,7 +102,7 @@ static void cover(uint32_t *pixels, uint32_t rgb, double opacity)
     for (int i = 0; i < SCREEN_W * SCREEN_H; i++)
     {
         uint32_t c = pixels[i];
-        pixels[i] = 0xFF000000u | (((((c >> 16) & 255) * k + r) / 255) << 16) | (((((c >> 8) & 255) * k + g) / 255) << 8) | (((c & 255) * k + b) / 255);
+        pixels[i] = 0xFF000000u | (div255(((c >> 16) & 255) * k + r) << 16) | (div255(((c >> 8) & 255) * k + g) << 8) | div255((c & 255) * k + b);
     }
 }
 
@@ -126,7 +127,7 @@ void screen_draw(uint32_t *pixels, uint32_t now)
                 uint32_t c = pic->pixels[y * pic->width + x], a = ((c >> 24) * (uint32_t)a0) / 255;
                 if (!a) continue;
                 uint32_t *d = &pixels[sy * SCREEN_W + sx], k = 255 - a;
-                *d = 0xFF000000u | (((((*d >> 16) & 255) * k + ((c >> 16) & 255) * a) / 255) << 16) | (((((*d >> 8) & 255) * k + ((c >> 8) & 255) * a) / 255) << 8) | (((*d & 255) * k + (c & 255) * a) / 255);
+                *d = 0xFF000000u | (div255(((*d >> 16) & 255) * k + ((c >> 16) & 255) * a) << 16) | (div255(((*d >> 8) & 255) * k + ((c >> 8) & 255) * a) << 8) | div255((*d & 255) * k + (c & 255) * a);
             }
         }
     }

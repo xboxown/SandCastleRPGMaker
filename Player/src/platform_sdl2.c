@@ -120,6 +120,7 @@ void platform_present(const uint32_t *pixels)
 }
 
 uint32_t platform_ticks(void) { return SDL_GetTicks(); }
+double platform_ms_precise(void) { static Uint64 start; if (!start) start = SDL_GetPerformanceCounter(); return (double)(SDL_GetPerformanceCounter() - start) * 1000.0 / (double)SDL_GetPerformanceFrequency(); }
 void platform_sleep(uint32_t ms) { SDL_Delay(ms); }
 
 void platform_toggle_fullscreen(void)

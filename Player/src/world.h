@@ -187,6 +187,9 @@ int world_actor_facing(int actor);
 int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);
 int world_keys_held(void); /* a direction key held (it takes over from an event's walk) */
+void world_draw_stats(int *thingsOnMap, int *drawnLast);
+uint32_t world_shade_colour(uint32_t c);   /* a colour under the sky's light (for what is drawn under it: clouds) */   /* for the timing diary */
+void world_keys_let_go(void);   /* the game paused or Cinema Mode began: no direction counts as held till pressed again */
 void world_walk_cancel(int actor);
 void world_actor_cell(int actor, int *x, int *y, int *onFloor);
 int world_can_stand(int actor, int x, int y, int onFloor);

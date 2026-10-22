@@ -68,6 +68,7 @@ int events_combat_forbidden(void);
 int events_keys_forbidden(void);   /* Allow Controls > Keys: only walking */
 int events_quit_requested(void);
 void events_request_quit(void);
+void main_take_screenshot(void);   /* main.c: the view as it is now, the next save's screenshot */
 void events_request_restart(int toTitle);   /* New Game during play (0), Return To Title (1) */
 int events_restart_requested(void);
 int events_has_combine(int category, int itemId);

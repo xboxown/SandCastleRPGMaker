@@ -9,6 +9,7 @@
  * the dusk colour or full daylight. Change Day/Night sets the sky until the
  * next hour. The sky is a colour laid over the world, fading in 0.4 s.
  */
+#include "blend.h"
 #include "lighting.h"
 #include "events.h"
 #include "world.h"
@@ -155,17 +156,19 @@ void lighting_update(double ms)
     show(sky);
 }
 
-void lighting_draw(uint32_t *pixels)
+/* The sky's light over the world (the Windows engine's overlay over the map): each pixel c becomes
+   ((c & 0xFF00FF) * keep + rbAdd) >> 8 for red and blue, the same with 0xFF00 for green. The world draws its
+   pictures that way already darkened (world.c shade) - the same picture, since mixing is linear - instead of
+   going over the whole view again. 0: no light over it now. */
+int lighting_shade(uint32_t *keep, uint32_t *rbAdd, uint32_t *gAdd)
 {
     int a = (int)(drawnOpacity * 255 + 0.5);
-    if (a <= 0) return;
-    uint32_t r = (drawnColor >> 16) & 255, g = (drawnColor >> 8) & 255, b = drawnColor & 255;
-    uint32_t ra = r * (uint32_t)a, ga = g * (uint32_t)a, ba = b * (uint32_t)a, keep = (uint32_t)(255 - a);
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++)
-    {
-        uint32_t c = pixels[i];
-        pixels[i] = 0xFF000000u | (((((c >> 16) & 255) * keep + ra) / 255) << 16) | (((((c >> 8) & 255) * keep + ga) / 255) << 8) | (((c & 255) * keep + ba) / 255);
-    }
+    if (a <= 0) return 0;
+    uint32_t a1 = (uint32_t)a + ((uint32_t)a >> 7);
+    *keep = 256 - a1;
+    *rbAdd = (drawnColor & 0xFF00FFu) * a1;
+    *gAdd = (drawnColor & 0xFF00u) * a1;
+    return 1;
 }
 
 /* Change Day/Night: Morning (clear), Afternoon (the dusk colour), Evening (the night) - until the next hour. */

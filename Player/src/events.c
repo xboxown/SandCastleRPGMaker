@@ -372,8 +372,18 @@ static int sub_condition(cJSON *sub, int just)
         case 5: raw = 1; break;                    /* the distance the engine assumes: 0 <= 32 */
         case 6: raw = 1; break;                    /* Always */
         case 8: raw = just == 2; break;            /* By Use Item */
+        case 11: raw = 0; break;                   /* By After Read Item: only a book's own pages are ever read */
+        /* By Trade / Drop / Destroy / Pickup / Having / Not Having (EvaluateTriggerTypeSubCondition): that just happened,
+           and no other thing chosen as its target (a map event isn't a book) */
+        case 7: case 9: case 10: case 12: case 13: case 14:
+        {
+            static const int HAPPENED[15] = { [7] = 1, [9] = 3, [10] = 4, [12] = 6, [13] = 7, [14] = 8 };
+            cJSON *target = get(sub, "TriggerItemReference");
+            raw = (!target || cJSON_IsNull(target)) && just == HAPPENED[num(sub, "Type", 0)];
+            break;
+        }
         case 15: raw = conditions_test(get(sub, "Game"), evaluatingName); break;
-        default: raw = 0; break;                   /* the other item triggers: they don't happen in the player yet */
+        default: raw = 0; break;
     }
     return flag(sub, "Invert") ? !raw : raw;
 }
@@ -747,10 +757,16 @@ static Value value_of_text(const char *f)
     return v;
 }
 
-/* While / Wait Until: its formula, or a game condition (Advance IF's - not in the player yet). */
+/* While / Wait Until: its formula, or a game condition (Advance IF's list, ScriptRuntime.Condition). */
 static int condition_of(const Cmd *c)
 {
-    if (strcmp(param(c, "Mode"), "Game") == 0) { log_once(205, "A While / Wait Until on a game condition isn't in the player yet (taken as false)."); return 0; }
+    if (strcmp(param(c, "Mode"), "Game") == 0)
+    {
+        cJSON *condition = cJSON_Parse(param(c, "Condition"));
+        int result = condition ? conditions_test(condition, evaluatingName) : 0;
+        cJSON_Delete(condition);
+        return result;
+    }
     return value_truth(formula(c, "Formula"));
 }
 
@@ -1510,6 +1526,42 @@ static int execute(Run *r, const Cmd *c)
             else controlsLocked = forbid;
             return 1;
         }
+        case C_SaveGame: /* GameTestWindow.SaveGameCommand: into its slot (the save there written over), named, with the view as it is */
+        {
+            if (savingForbidden) { lastResult = 0; game_log("Saving isn't allowed here."); gumps_label("Saving isn't allowed here."); return 1; }
+            int slot = (int)formula_number(c, "Slot");
+            if (slot < 1) slot = 1;
+            char name[64], error[300], line[120];
+            const char *given = value_text_of(formula(c, "Name"));
+            while (*given == ' ') given++;
+            snprintf(name, sizeof name, "%s", given);
+            for (int n = (int)strlen(name); n > 0 && name[n - 1] == ' '; n--) name[n - 1] = 0;
+            if (!name[0]) snprintf(name, sizeof name, "Slot %d", slot);
+            static SaveInfo saves[64];
+            int count = save_list(saves, 64);
+            const char *over = NULL;
+            for (int i = 0; i < count; i++) if (saves[i].slot == slot) { over = saves[i].folder; break; }
+            main_take_screenshot();
+            if (!save_write(name, slot, over, error, sizeof error)) { lastResult = 0; game_error(106, error); return 1; }
+            snprintf(line, sizeof line, "Game saved: \"%s\".", name);
+            game_log(line); gumps_label(line);
+            lastResult = 1;
+            return 1;
+        }
+        case C_LoadGame: /* GameTestWindow.LoadGameCommand: the save in that slot, loaded between frames */
+        {
+            int slot = (int)formula_number(c, "Slot");
+            if (slot < 1) slot = 1;
+            static SaveInfo saves[64];
+            int count = save_list(saves, 64);
+            for (int i = 0; i < count; i++)
+                if (saves[i].slot == slot) { dolls_request_load(saves[i].folder, saves[i].name); lastResult = 1; return 0; } /* this game ends here */
+            snprintf(text, sizeof text, "Slot %d is empty.", slot);
+            game_log(text); gumps_label(text);
+            lastResult = 0;
+            return 1;
+        }
+        case C_OpenSaveLoadScreen: main_take_screenshot(); dolls_open_save_screen(); return 1;
         case C_QuitGame: quitRequested = 1; return 1;
         case C_ShowError:
         {

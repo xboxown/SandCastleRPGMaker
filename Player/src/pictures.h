@@ -12,6 +12,9 @@ typedef struct Picture
 {
     int width, height;
     uint32_t *pixels; /* 0xAARRGGBB */
+    uint32_t *shaded; /* the same, under the sky's light (world.c: made when the light changes, shadeGen it was made for) */
+    uint32_t shadeGen;
+    int opaque;       /* every pixel fully opaque: its rows copied straight */
 } Picture;
 
 typedef struct Frame
