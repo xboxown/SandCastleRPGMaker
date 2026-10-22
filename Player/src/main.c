@@ -43,7 +43,7 @@ static uint32_t pixels[SCREEN_W * SCREEN_H];
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
 static void note(const char *step)
 {
-#ifdef __amigaos__
+#if defined(__amigaos__) && !defined(__MORPHOS__)
     static int fresh = 0; /* amiga_start.c began Game.log */
 #else
     static int fresh = 1;
@@ -99,7 +99,7 @@ static void scripted_presses(const char *presses, double t, double *done)
     *done = t;
 }
 
-#ifdef __amigaos__
+#if defined(__amigaos__) || defined(__MORPHOS__)
 /* libnix: the stack the game runs with, whatever the icon or shell gives it. */
 unsigned long __stack = 262144; /* 256 KB: the MP3 decoder alone needs some 17 KB when music starts */
 #endif
@@ -333,7 +333,7 @@ int main(int argc, char **argv)
         return 20;
     }
     note("The machine can run it.");
-#ifdef __amigaos__
+#if defined(__amigaos__) || defined(__MORPHOS__)
     /* An Amiga needs the game's memory free before it starts (128 MB at least; the user's rule: say so, don't crash). */
     long freeMb = platform_free_memory_mb();
     if (freeMb >= 0 && freeMb < GAME_MIN_RAM_MB)

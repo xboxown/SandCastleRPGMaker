@@ -7,6 +7,11 @@
  * Keys and mouse through Intuition; time through timer.device.
  * Kickstart 3.1 (V40) at least: its libraries and devices are what's used.
  * Build: m68k-amigaos-gcc -noixemul -m68060 (runs on the 68080 too).
+ *
+ * MorphOS (PowerPC: Pegasos, PowerPC Macs, Efika) uses this same layer - it
+ * has Intuition, cybergraphics.library, timer.device and keymap.library of
+ * its own; only the 68k processor checks and chip memory are left out.
+ * Build: ppc-morphos-gcc -noixemul (build_morphos.sh).
  */
 #include "platform.h"
 #include <exec/exec.h>
@@ -34,7 +39,11 @@ static int pendingText; /* a letter typed, given as EV_TEXT after its key */
 struct IntuitionBase *IntuitionBase;
 struct GfxBase *GfxBase;
 struct Library *CyberGfxBase;
+#ifdef __MORPHOS__
+struct Library *TimerBase; /* MorphOS declares it as a library */
+#else
 struct Device *TimerBase;
+#endif
 
 static struct Screen *screen;   /* our own RTG screen when full screen; NULL in a window on the Workbench */
 static struct Window *window;
@@ -71,7 +80,11 @@ static int open_display(void)
                                 WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE, TAG_DONE);
     if (!window) { snprintf(error_text, sizeof error_text, "The game's window couldn't open (an RTG Workbench in 15, 16, 24 or 32 bits is needed)."); return 0; }
     /* the game draws its own pointer: Intuition's is blanked over the window (a 1-line empty sprite in chip memory) */
+#ifdef __MORPHOS__
+    if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_ANY | MEMF_CLEAR); /* no chip memory on a PowerPC machine */
+#else
     if (!blankPointer) blankPointer = (UWORD *)AllocMem(12, MEMF_CHIP | MEMF_CLEAR);
+#endif
     if (blankPointer) SetPointer(window, blankPointer, 1, 16, 0, 0);
     return 1;
 }
@@ -94,7 +107,7 @@ int platform_open(const char *gameTitle, int wantFullscreen)
     timerPort = CreateMsgPort();
     timerRequest = timerPort ? (struct timerequest *)CreateIORequest(timerPort, sizeof(struct timerequest)) : NULL;
     if (!timerRequest || OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)timerRequest, 0) != 0) { snprintf(error_text, sizeof error_text, "timer.device couldn't open."); return 0; }
-    TimerBase = timerRequest->tr_node.io_Device;
+    TimerBase = (void *)timerRequest->tr_node.io_Device;
     eclockRate = ReadEClock(&startClock);
     scaled = (ULONG *)AllocVec(SCREEN_W * SCALE * SCREEN_H * SCALE * 4, MEMF_ANY);
     if (!scaled) { snprintf(error_text, sizeof error_text, "Not enough memory for the picture."); return 0; }
@@ -226,6 +239,9 @@ void platform_toggle_fullscreen(void)
 /* A 68060 (or a Vampire's 68080) with its FPU: the game is built for it and uses floating point throughout. */
 int platform_can_run(void)
 {
+#ifdef __MORPHOS__
+    return 1; /* every MorphOS machine is a PowerPC with its FPU */
+#endif
     if (SysBase->LibNode.lib_Version < KICKSTART_31) { snprintf(error_text, sizeof error_text, "This game needs Kickstart 3.1 or later - this Amiga has an older one."); return 0; }
     UWORD flags = SysBase->AttnFlags;
     if (!(flags & AFF_68040)) { snprintf(error_text, sizeof error_text, "This game needs a 68060 or a 68080 (Vampire) - this Amiga's processor is older."); return 0; }

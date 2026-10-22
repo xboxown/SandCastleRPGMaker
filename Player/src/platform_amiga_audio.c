@@ -18,7 +18,12 @@
 #include <clib/alib_protos.h>
 #include <string.h>
 
+/* MorphOS (PowerPC) has no Paula: it plays through AHI, at CD rate. */
+#ifdef __MORPHOS__
+#define AMIGA_RATE 44100
+#else
 #define AMIGA_RATE 22050           /* half CD rate: the 68060 / 68080 keeps the game's speed */
+#endif
 #define FRAMES 1024                /* each buffer: ~46 ms */
 #define PAL_CLOCK 3546895
 
@@ -26,8 +31,16 @@ static AudioFill audioFill;
 static struct SignalSemaphore lock;
 static volatile int running, quit, started;
 static const char *device = "none";
+#ifdef __MORPHOS__
+static int route = 2; /* AHI */
+#else
 static int route = 1; /* the 68k build plays through Paula (8-bit, its own sound - the user's choice); 2: AHI only (an "ahi" file or argument); 0: AHI, else Paula */
+#endif
+#ifdef __MORPHOS__
+void platform_audio_route(int which) { (void)which; } /* no Paula to choose */
+#else
 void platform_audio_route(int which) { route = which; }
+#endif
 const char *platform_audio_name(void) { return device; }
 static struct Task *mainTask;
 static int16_t mixed[FRAMES * 2];
@@ -95,6 +108,9 @@ static int run_ahi(void)
 }
 
 /* ---- Paula through audio.device: a left and a right channel, two buffers each queued ---- */
+#ifdef __MORPHOS__
+static int run_paula(void) { return 0; }
+#else
 static int run_paula(void)
 {
     static UBYTE channels[] = { 3, 5, 10, 12 }; /* a left and a right channel, any pair */
@@ -154,6 +170,7 @@ static int run_paula(void)
     DeleteMsgPort(port);
     return 1;
 }
+#endif
 
 static void sound_task(void)
 {
@@ -173,7 +190,11 @@ int platform_audio_open(int rate, AudioFill fill)
     mainTask = FindTask(NULL);
     SetSignal(0, SIGBREAKF_CTRL_F);
     running = 1; quit = 0; started = 0;
-    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 0, NP_StackSize, 131072, TAG_DONE);
+    struct Process *p = CreateNewProcTags(NP_Entry, (ULONG)sound_task, NP_Name, (ULONG)"Sandcastle sound", NP_Priority, 0, NP_StackSize, 131072,
+#ifdef __MORPHOS__
+                                          NP_CodeType, CODETYPE_PPC, /* the sound task is PowerPC code */
+#endif
+                                          TAG_DONE);
     if (!p) { running = 0; return 0; }
     while (!started) Wait(SIGBREAKF_CTRL_F);
     if (started < 0) { while (running) Wait(SIGBREAKF_CTRL_F); return 0; }

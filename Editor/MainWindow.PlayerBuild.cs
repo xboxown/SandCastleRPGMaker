@@ -10,9 +10,9 @@ namespace SandcastleRpgMaker.Editor;
 /// Build for the Sandcastle player's platforms (Linux, Mac, Amiga...): the
 /// game's data folder the player reads ("Game_Data": game.sdbx, sprites,
 /// pictures, sounds, videos - Engine/PlayerPack.cs, all encrypted).
-/// Amiga 68k: a whole drawer named after the game - the player program
-/// "Game" (compiled from the repo's Player folder and shipped with the
-/// editor in Runtimes/Amiga68k), its icon "Game.info" (the splash scene,
+/// Amiga 68k and MorphOS: a whole drawer named after the game - the player
+/// program "Game" (compiled from the repo's Player folder and shipped with the
+/// editor in Runtimes/Amiga68k or Runtimes/MorphOS), its icon "Game.info" (the splash scene,
 /// 64x64) and Game_Data beside it. Linux and Mac (preview): only the data;
 /// the player is built on that machine from the Player folder.
 /// </summary>
@@ -22,6 +22,7 @@ public partial class MainWindow
     private static string? ShippedPlayer(BuildPlatform platform) => platform switch
     {
         BuildPlatform.Amiga68k => Path.Combine(AppContext.BaseDirectory, "Runtimes", "Amiga68k", "Game"),
+        BuildPlatform.MorphOS => Path.Combine(AppContext.BaseDirectory, "Runtimes", "MorphOS", "Game"),
         _ => null
     };
 
@@ -65,8 +66,13 @@ public partial class MainWindow
                 File.Copy(player, Path.Combine(folder, "Game"), overwrite: true);
                 File.WriteAllBytes(Path.Combine(folder, "Game.info"), AmigaIcon.DiskObject(64, 64, SplashScene.IconPixels(64)));
                 StatusText.Text = $"Game built for the {machine}: {folder}";
-                MessageBox.Show($"The game is built in:\n{folder}\n\nCopy that whole drawer to the {machine}'s hard drive (or a WinUAE / AmiKit shared folder) and double-click \"Game\".\n" +
-                                "Needs an RTG card (Picasso96 or CyberGraphX), a 68060 or 68080 with its FPU (68060.library installed), and 128 MB of RAM. Sound plays through Paula; put a file named \"ahi\" beside Game for AHI instead.",
+                string needs = platform switch
+                {
+                    BuildPlatform.MorphOS => "Needs MorphOS 3.x and 128 MB of free memory. Sound plays through AHI.",
+                    _ => "Needs an RTG card (Picasso96 or CyberGraphX), a 68060 or 68080 with its FPU (68060.library installed), and 128 MB of RAM. Sound plays through Paula; put a file named \"ahi\" beside Game for AHI instead."
+                };
+                string where = platform == BuildPlatform.Amiga68k ? "hard drive (or a WinUAE / AmiKit shared folder)" : "disk";
+                MessageBox.Show($"The game is built in:\n{folder}\n\nCopy that whole drawer to the {machine}'s {where} and double-click \"Game\".\n{needs}",
                                 "Build", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
