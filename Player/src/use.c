@@ -8,6 +8,7 @@
  *    anything else: nothing happens.
  */
 #include "use.h"
+#include "vehicles.h"
 #include "mechanisms.h"
 #include "magic.h"
 #include "events.h"
@@ -106,6 +107,7 @@ void use_thing(int uid)
     }
     cJSON *def = objectDef(objectId);
     if (!def) return;
+    if (vehicles_use_part(uid)) return; /* a vehicle's controls (its driver's seat: sat in as a chair, then it drives) */
     cJSON *dollId = cJSON_GetObjectItem(def, "DollDesignId");
     if (cJSON_IsNumber(dollId) && dollId->valueint >= 0)
     {

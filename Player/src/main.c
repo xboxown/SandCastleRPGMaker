@@ -22,6 +22,7 @@
 #include "save.h"
 #include "magic.h"
 #include "mechanisms.h"
+#include "vehicles.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -52,6 +53,8 @@ static void note(const char *step)
 void game_log(const char *line) { note(line); }
 
 /* Testing: a key pressed at a moment ("--press 2:E,3.5:1": Enter at 2 s, the 1 key at 3.5 s; T7 = double-click the character with id 7). */
+static int testDx, testDy; /* testing: a direction held by --press "J..." */
+
 static void scripted_presses(const char *presses, double t, double *done)
 {
     for (const char *k = presses; k && *k; k = strchr(k, ','), k = k ? k + 1 : NULL)
@@ -64,6 +67,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
         else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
@@ -162,7 +166,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     cJSON *old = (cJSON *)world_json();
     /* the last game, let go of */
     sound_stop_all();
-    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset();
+    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
@@ -331,6 +335,7 @@ int main(int argc, char **argv)
         {
             if (held[0] == best) dx = -1; else if (held[1] == best) dx = 1; else if (held[2] == best) dy = -1; else dy = 1;
         }
+        else { dx = testDx; dy = testDy; }
         uint32_t now = platform_ticks();
         if (presses) scripted_presses(presses, (now - start) / 1000.0, &pressedTill);
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
@@ -400,6 +405,7 @@ int main(int argc, char **argv)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
+            if (vehicles_drive(dx, dy, seconds)) dx = dy = 0; /* at a vehicle's controls: the keys drive it */
             world_update(dx, dy, seconds);
             schedules_update(seconds * 1000);
             weather_update(seconds * 1000);
@@ -407,6 +413,7 @@ int main(int argc, char **argv)
             combat_update(seconds * 1000);
             magic_update(seconds * 1000);
             mechanisms_update(seconds * 1000);
+            vehicles_update(seconds * 1000);
             gumps_update(seconds * 1000);
             events_player_moved();
         }

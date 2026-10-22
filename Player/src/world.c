@@ -117,6 +117,7 @@ static int mapW, mapH, tileW = 32, tileH = 32;
 static int *floors[MAX_FLOORS + 1]; /* floors[1] = the ground; NULL = none painted */
 static char sheetNames[8][128]; static int sheetCount;
 static unsigned char *walkable; /* per ground cell */
+static unsigned char *water;    /* per ground cell: Is Water (ships sail on it) */
 static ObjectDef *defs; static int defCount;
 static Thing *things; static int thingCount;
 static Body *bodies; static int bodyCount;
@@ -486,6 +487,7 @@ int world_build(cJSON *root)
     }
     /* The ground's walkable cells (Tile Properties). */
     walkable = (unsigned char *)malloc((size_t)(mapW * mapH));
+    water = (unsigned char *)calloc((size_t)(mapW * mapH), 1);
     cJSON *byKey = get(get(project, "TileProperties"), "ByTileKey");
     for (int i = 0; i < mapW * mapH; i++)
     {
@@ -497,6 +499,7 @@ int world_build(cJSON *root)
         snprintf(key, sizeof key, "%s:%d", slot < sheetCount ? sheetNames[slot] : "", tile % 100000);
         cJSON *props = get(byKey, key);
         if (props && !flag(props, "Walkable")) walkable[i] = 0;
+        if (props && flag(props, "IsWater")) water[i] = 1;
     }
 
     /* Things: objects on the map, placed books and containers. */
@@ -554,7 +557,7 @@ int world_build(cJSON *root)
         t->solid = d->solid && !(d->type == T_DOOR && t->open);
         t->solidOffX = turned ? d->solidOffY : d->solidOffX; t->solidOffY = turned ? d->solidOffX : d->solidOffY;
         t->hangs = flag(o, "HangsOnWall");
-        t->elevates = d->elevates; t->liesUnder = flag(o, "LiesUnder"); t->wallSetPiece = flag(o, "WallSetPiece"); t->vehicle = num(o, "VehicleStateId", 0) > 0;
+        t->elevates = d->elevates; t->liesUnder = flag(o, "LiesUnder"); t->wallSetPiece = flag(o, "WallSetPiece"); t->vehicle = num(o, "VehicleStateId", 0) > 0 ? num(o, "VehicleStateId", 0) : 0;
         t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
         if (t->sizeX < 1) t->sizeX = 1;
         if (t->sizeY < 1) t->sizeY = 1;
@@ -2283,7 +2286,9 @@ int world_set_tile(int x, int y, int onFloor, int tile)
             snprintf(key, sizeof key, "%s:%d", slot < sheetCount ? sheetNames[slot] : "", tile % 100000);
             cJSON *props = get(byKey, key);
             if (props && !flag(props, "Walkable")) walkable[y * mapW + x] = 0;
+            water[y * mapW + x] = props && flag(props, "IsWater");
         }
+        else water[y * mapW + x] = 0;
         return 1;
     }
     /* an upper floor's slab: added, or taken away */
@@ -2720,7 +2725,7 @@ const char *world_actor_name(int actor)
 void world_reset(void)
 {
     for (int f = 0; f <= MAX_FLOORS; f++) { free(floors[f]); floors[f] = NULL; }
-    free(walkable); walkable = NULL;
+    free(walkable); free(water); water = NULL; walkable = NULL;
     free(defs); defs = NULL; defCount = 0;
     free(things); things = NULL; thingCount = 0;
     free(bodies); bodies = NULL; bodyCount = 0;
@@ -2887,3 +2892,162 @@ void world_thing_become(int uid, int objectId)
     else if (t->solid && !t->hangs) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); }
     settle_all();
 }
+
+/* ---------------- Vehicles' needs (Barge_object: gather, step, turn, lift) ---------------- */
+
+/* The ground cell: a tile there, walkable, water. */
+void world_ground(int cx, int cy, int *tile, int *walk, int *wet)
+{
+    *tile = 0; *walk = 0; *wet = 0;
+    if (cx < 0 || cy < 0 || cx >= mapW || cy >= mapH) return;
+    *tile = floors[1] && floors[1][cy * mapW + cx] >= 0;
+    *walk = walkable[cy * mapW + cx];
+    *wet = water && water[cy * mapW + cx];
+}
+
+int world_units_x(void) { return unitsX; }
+int world_units_y(void) { return unitsY; }
+int world_thing_vehicle(int uid) { Thing *t = thing_by_uid(uid); return t && !t->gone ? t->vehicle : 0; }
+
+/* Its box in 8px units and lifts (its footprint as placed, whether solid or not). */
+void world_thing_box(int uid, int *l, int *tp, int *w, int *d, int *z, int *h)
+{
+    Thing *t = thing_by_uid(uid);
+    Body b = { 0, 0, 0, 0, 0, 0 };
+    if (t) thing_box(t, &b);
+    *l = b.left; *tp = b.top; *w = b.width; *d = b.depth; *z = b.z; *h = b.height;
+}
+
+int world_thing_solid(int uid) { Thing *t = thing_by_uid(uid); return t && t->body >= 0 && bodies[t->body].width > 0; }
+int world_thing_kind(int uid) { Thing *t = thing_by_uid(uid); return t && t->def ? t->def->type : -1; }
+
+/* Every thing on the map now whose box overlaps this area (uids). */
+int world_things_in(int l, int tp, int w, int d, int *out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < thingCount && n < max; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone) continue;
+        Body b;
+        thing_box(t, &b);
+        if (overlaps(&b, l, tp, w, d) || (t->bodyN > 1 && t->body >= 0 && overlaps(&bodies[t->body], l, tp, w, d))) out[n++] = t->uid;
+    }
+    return n;
+}
+
+/* A character's footprint (8px units) and lift and height. */
+void world_actor_foot(int actor, int *l, int *tp, int *w, int *d, int *lift, int *h)
+{
+    Actor *a = actor_of(actor);
+    *l = *tp = *w = *d = *lift = *h = 0;
+    if (!a || a->gone) return;
+    foot_at(a, a->px, a->py, l, tp);
+    *w = a->sizeX; *d = a->sizeY; *lift = a->lift; *h = a->sizeZ;
+}
+
+/* Something solid in this unit area between these lifts that isn't one of the given things or characters: its name (NULL: clear). */
+const char *world_blocked(int l, int tp, int w, int d, int zFrom, int zTo, const int *uids, int nu, const int *actors, int na)
+{
+    static char name[96];
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || t->body < 0) continue;
+        int mine = 0;
+        for (int k = 0; k < nu && !mine; k++) mine = uids[k] == t->uid;
+        if (mine) continue;
+        for (int k = 0; k < (t->bodyN > 0 ? t->bodyN : 1); k++)
+        {
+            const Body *b = &bodies[t->body + k];
+            if (b->width <= 0 || !overlaps(b, l, tp, w, d)) continue;
+            if (b->z + b->height <= zFrom || b->z >= zTo) continue; /* under its floor, or over its top (a bridge) */
+            snprintf(name, sizeof name, "%s", items_name(t->category, t->itemId));
+            return name;
+        }
+    }
+    for (int a = 0; a <= npcCount; a++)
+    {
+        int mine = 0;
+        for (int k = 0; k < na && !mine; k++) mine = actors[k] == a;
+        if (mine) continue;
+        int al, at, aw, ad, lift, h;
+        world_actor_foot(a, &al, &at, &aw, &ad, &lift, &h);
+        if (!aw || al >= l + w || l >= al + aw || at >= tp + d || tp >= at + ad) continue;
+        if (lift + h <= zFrom || lift >= zTo) continue;
+        if (a == 0) return "you";
+        snprintf(name, sizeof name, "%s", world_actor_name(a));
+        return name;
+    }
+    return NULL;
+}
+
+static void refresh_bodies(Thing *t)
+{
+    if (t->body < 0) return;
+    if (t->bodyN > 1)
+    {
+        Body steps[64];
+        int n = 0;
+        stair_bodies(t, steps, 64, &n);
+        for (int k = 0; k < n && k < t->bodyN; k++) bodies[t->body + k] = steps[k];
+        return;
+    }
+    if (bodies[t->body].width > 0 || t->solid) thing_box(t, &bodies[t->body]);
+}
+
+/* Moved by whole 8px units (its cell and the offset within it) and lifts. */
+void world_shift_thing(int uid, int dx, int dy, int dz)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    int ux = t->x * unitsX + t->offX + dx, uy = t->y * unitsY + t->offY + dy;
+    t->x = (int)floor(ux / (double)unitsX); t->y = (int)floor(uy / (double)unitsY);
+    t->offX = ux - t->x * unitsX; t->offY = uy - t->y * unitsY;
+    t->z += dz;
+    t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
+    refresh_bodies(t);
+}
+
+/* Turned a quarter (or more) about a point: facing on, its width and depth swapped if it has turned looks, its footprint's middle put at (cx, cy) units. */
+void world_turn_thing(int uid, int quarters, double cx, double cy)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    if (t->def)
+    {
+        const ObjectDef *d = t->def;
+        t->facing = (t->facing + quarters * 2) & 7;
+        int turned = (d->turned[0] || d->turned[2] || d->turned[4] || d->turned[6]) && (t->facing == DIR_E || t->facing == DIR_W);
+        t->sizeX = turned ? d->sizeY : d->sizeX; t->sizeY = turned ? d->sizeX : d->sizeY;
+        if (t->sizeX < 1) t->sizeX = 1;
+        if (t->sizeY < 1) t->sizeY = 1;
+        t->solidOffX = turned ? d->solidOffY : d->solidOffX; t->solidOffY = turned ? d->solidOffX : d->solidOffY;
+    }
+    int left = (int)floor(cx - t->sizeX / 2.0 + 0.5), top = (int)floor(cy - t->sizeY / 2.0 + 0.5);
+    int ux = left - (int)floor((unitsX - t->sizeX) / 2.0) - t->solidOffX, uy = top + t->sizeY - t->solidOffY - unitsY; /* FootprintAt the other way round */
+    t->x = (int)floor(ux / (double)unitsX); t->y = (int)floor(uy / (double)unitsY);
+    t->offX = ux - t->x * unitsX; t->offY = uy - t->y * unitsY;
+    refresh_bodies(t);
+}
+
+/* A character moved with what it stands on (pixels and lifts): where it would get up to goes along. */
+void world_shift_actor(int actor, double dx, double dy, int dz)
+{
+    Actor *a = actor_of(actor);
+    if (!a || a->gone) return;
+    if (actor > 0) world_walk_cancel(actor);
+    a->px += dx; a->py += dy; a->lift += dz;
+    seats_ready();
+    if (seats[actor].uid) { seats[actor].fromX += dx; seats[actor].fromY += dy; seats[actor].fromLift += dz; }
+    if (a->body >= 0 && !seats[actor].uid)
+    {
+        int l, t;
+        foot_at(a, a->px, a->py, &l, &t);
+        Body *b = &bodies[a->body]; b->left = l; b->top = t; b->z = a->lift;
+    }
+    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+}
+
+void world_actor_set_facing(int actor, int facing) { Actor *a = actor_of(actor); if (a) a->facing = facing & 7; }
+int world_actor_facing_of(int actor) { Actor *a = actor_of(actor); return a ? a->facing : 0; }

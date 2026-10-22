@@ -1,5 +1,6 @@
 #include "events.h"
 #include "magic.h"
+#include "vehicles.h"
 #include "commands.h"
 #include "dialog.h"
 #include "world.h"
@@ -1649,6 +1650,22 @@ static int execute(Run *r, const Cmd *c)
             int actor = actor_for(r, param(c, "Who"));
             cJSON *data = actor >= 0 ? character_data(world_actor_character(actor)) : NULL;
             if (data && param(c, "Mode")[0]) cJSON_ReplaceItemInObject(data, "AttackModeRuntime", cJSON_CreateString(param(c, "Mode")));
+            return 1;
+        }
+        case C_DriveVehicle: lastResult = vehicles_drive_command(atoi(param(c, "Vehicle"))); return 1;
+        case C_StopDriving: lastResult = vehicles_stop_command(); return 1;
+        case C_SetVehicleSpeed: lastResult = vehicles_speed_command(atoi(param(c, "Vehicle")), formula_number(c, "Speed")); return 1;
+        case C_TravelVehicle:
+        {
+            /* off it goes; the event waits for it to get there unless told not to */
+            int wait = strcmp(param(c, "Wait"), "False") != 0, token = wait ? new_answer(r, "") : 0;
+            if (!vehicles_travel_command(atoi(param(c, "Vehicle")), atoi(param(c, "X")), atoi(param(c, "Y")), token))
+            {
+                if (token) answers[token - 1].used = 0;
+                lastResult = 0;
+                return 1;
+            }
+            if (wait) { r->waiting = W_DOLL; r->answerToken = token; return 0; }
             return 1;
         }
         case C_LearnSpell:
