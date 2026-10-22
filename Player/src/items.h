@@ -137,6 +137,8 @@ int items_key_count(const Item *it);
 int items_has_key(const Item *it, int keyId);
 void items_add_key(Item *it, int keyId);
 int items_holds(const Item *container, const Item *it);
+int items_liquid(const Item *it, int fallback);
+void items_set_liquid(Item *it, int liquid);
 cJSON *items_save_thing(int uid, cJSON *entry);
 int items_locked(const Item *it, int byDefault);
 int items_carries_key(int characterId, int keyId);

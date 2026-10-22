@@ -931,6 +931,13 @@ static void drop(void)
         }
         return;
     }
+    if (under.kind == T_THING && !drag.dollState)
+    {
+        dropping = 1;
+        int sown = mechanisms_drop_on(under.uid, drag.category, drag.itemId);
+        dropping = 0;
+        if (sown) return;
+    }
     drop_on_map();
 }
 
@@ -942,7 +949,7 @@ int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (events_cinema()) return 1;
-    if (mechanisms_map_click()) return 1; /* a map being looked at: put away */
+    if (mechanisms_click(x, y)) return 1; /* the sleep slider, a map being looked at, the party asleep */
     if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
     if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */
     pressed = hit(x, y);

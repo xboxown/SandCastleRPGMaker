@@ -81,6 +81,7 @@ static void scripted_presses(const char *presses, double t, double *done)
             enum PlatformKey key = *what == 'E' ? KEY_ENTER : *what == 'S' ? KEY_SPACE : *what >= '1' && *what <= '9' ? (enum PlatformKey)(KEY_1 + (*what - '1'))
                 : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : KEY_OTHER;
             if (dialog_showing()) dialog_key(key);
+            else if (!dolls_key(key, 0)) mechanisms_key(key); /* the sleep slider */
         }
     }
     *done = t;
@@ -300,6 +301,7 @@ int main(int argc, char **argv)
             {
                 int down = e.type == EV_KEY_DOWN;
                 if (down && !dialog_showing() && e.key != KEY_F11 && dolls_key(e.key, 0)) continue; /* typing, or a modal paperdoll: nothing else hears it */
+                if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* the sleep slider */
                 if (down && dialog_showing() && e.key != KEY_F11)
                 {
                     dialog_key(e.key); /* while a box is up the keys are its own */
@@ -388,7 +390,7 @@ int main(int argc, char **argv)
         sound_update(seconds * 1000);
         screen_update(seconds * 1000);
         int title = dolls_title_open(); /* the Title Screen: nothing in the world goes on behind it */
-        int paused = dialog_showing() || title; /* a box up: the game waits, as in an Exult conversation */
+        int paused = dialog_showing() || title || mechanisms_pausing(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
@@ -408,6 +410,7 @@ int main(int argc, char **argv)
             gumps_update(seconds * 1000);
             events_player_moved();
         }
+        mechanisms_frame(seconds * 1000); /* the sleep fade runs while the world waits */
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
         if (title) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H); /* the world isn't seen behind the title */
         else

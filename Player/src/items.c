@@ -33,6 +33,7 @@ struct Item
     int autoPlaced;                  /* laid out in the row by the engine, not dropped at a spot */
     void *doll;                      /* its paperdoll as it was left (PaperDoll Editor), NULL: never opened */
     char **learned; int learnedCount; /* a spellbook: the spells this copy has learned (LearnedSpellsRuntime) */
+    int liquid, liquidSet;            /* a liquid container: what it holds (a liquid Food's id, -1 empty); liquidSet: its own, not as it starts */
     Item **contents; int count, cap;
 };
 
@@ -126,6 +127,7 @@ static Item *read_item(cJSON *j)
     if (cJSON_IsArray(get(j, "KeyIdsRuntime"))) it->keysSet = 1;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     it->charges = num(j, "ChargesRuntime", -1);
+    if (cJSON_IsNumber(get(j, "LiquidIdRuntime"))) { it->liquid = num(j, "LiquidIdRuntime", -1); it->liquidSet = 1; }
     cJSON *spell;
     cJSON_ArrayForEach(spell, get(j, "LearnedSpellsRuntime")) if (cJSON_IsString(spell)) items_learn_spell(it, spell->valuestring);
     if (cJSON_IsObject(get(j, "DollRuntime"))) it->doll = dolls_state_from_json(get(j, "DollRuntime")); /* its paperdoll as it was left */
@@ -1237,6 +1239,7 @@ cJSON *items_item_json(const Item *it)
     if (it->locked >= 0) cJSON_AddBoolToObject(j, "IsLockedRuntime", it->locked);
     if (it->keyCount || it->keysSet) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
     cJSON_AddNumberToObject(j, "ChargesRuntime", it->charges);
+    if (it->liquidSet) cJSON_AddNumberToObject(j, "LiquidIdRuntime", it->liquid);
     if (it->learnedCount) { cJSON *spells = cJSON_CreateArray(); for (int i = 0; i < it->learnedCount; i++) cJSON_AddItemToArray(spells, cJSON_CreateString(it->learned[i])); cJSON_AddItemToObject(j, "LearnedSpellsRuntime", spells); }
     if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
     return j;
@@ -1397,3 +1400,7 @@ int items_holds(const Item *container, const Item *it)
     for (int i = 0; i < container->count; i++) if (container->contents[i] == it || items_holds(container->contents[i], it)) return 1;
     return 0;
 }
+
+/* A carried liquid container's liquid: its own once set, else as it starts (fallback). */
+int items_liquid(const Item *it, int fallback) { return it && it->liquidSet ? it->liquid : fallback; }
+void items_set_liquid(Item *it, int liquid) { if (it) { it->liquid = liquid; it->liquidSet = 1; } }

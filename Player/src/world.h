@@ -110,6 +110,7 @@ int world_things_of_type(int type, int *out, int max);
 void world_actor_place_lift(int actor, int x, int y, int lift);
 void world_player_units(int *ux, int *uy);
 void world_player_pixel(double *px, double *py);
+void world_thing_become(int uid, int objectId);
 int world_line_clear(double fromX, double fromY, int fromLift, double toX, double toY);
 void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double y, int lift, uint32_t ms);
 int world_put_body(int actor, int x, int y, int onFloor);

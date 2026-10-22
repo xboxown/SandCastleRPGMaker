@@ -1538,3 +1538,21 @@ void combat_force_fuse(int uid)
     cJSON *lit = get(e, "LitSprite");
     if (flag(lit, "IsSet")) world_thing_look(uid, sprite_find(str(lit, "SpriteGroup"), str(lit, "SpriteName")));
 }
+
+/* Not with enemies in sight: anyone not in the party, able to act, out to attack the player and seeing them. */
+int combat_foes_in_sight(void)
+{
+    for (int a = 1; a < world_actor_count(); a++)
+        if (!dead(a) && !in_party(a) && !incapacitated(a) && attitude(a, 0) == F_ATTACK && can_see(a, 0)) return 1;
+    return 0;
+}
+
+/* Water on a lit fuse: it goes out. 1 = there was one. */
+int combat_douse_fuse(int uid)
+{
+    int f = fuse_of(uid);
+    if (f < 0) return 0;
+    fuses[f] = fuses[--fuseCount];
+    world_thing_look(uid, NULL);
+    return 1;
+}

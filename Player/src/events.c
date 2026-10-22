@@ -3166,3 +3166,6 @@ static int restartRequested;
 void events_request_restart(int toTitle) { restartRequested = toTitle ? 2 : 1; }
 int events_restart_requested(void) { return restartRequested; }
 void events_clear_restart(void) { restartRequested = 0; }
+
+/* Resting: the hours pass at once (lights burn down by them as the clock moves on). */
+void events_advance_minutes(int minutes) { clock_advance_minutes(minutes); }

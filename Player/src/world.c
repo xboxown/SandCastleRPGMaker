@@ -16,6 +16,7 @@
  */
 #include "world.h"
 #include "magic.h"
+#include "mechanisms.h"
 #include "pictures.h"
 #include "font.h"
 #include "pack.h"
@@ -1510,8 +1511,10 @@ static Bark barks[16];
 
 void world_bark(int actor, const char *text, int ms)
 {
-    int slot = 0;
-    for (int i = 0; i < 16; i++) if (barks[i].until <= lastMs) { slot = i; break; }
+    int slot = -1;
+    for (int i = 0; i < 16 && slot < 0; i++) if (barks[i].until > lastMs && barks[i].actor == actor) slot = i; /* Exult's add_text: their earlier words go */
+    for (int i = 0; i < 16 && slot < 0; i++) if (barks[i].until <= lastMs) slot = i;
+    if (slot < 0) slot = 0;
     barks[slot].actor = actor;
     snprintf(barks[slot].text, sizeof barks[slot].text, "%s", text);
     barks[slot].until = lastMs + (uint32_t)(ms > 0 ? ms : 1000);
@@ -1682,7 +1685,7 @@ static void take_seat(int actor, Thing *t, int spot)
     Actor *a = actor_of(actor);
     double x, y; int lift;
     if (!a || !spot_position(t, spot, &x, &y, &lift)) return;
-    int bed = t->def->type == T_BED;
+    int bed = t->def->type == T_BED || t->def->type == T_BEDROLL;
     seats[actor] = (Seat){ t->uid, spot, bed, a->px, a->py, a->lift };
     a->px = x; a->py = y - tileH / 2.0; a->lift = lift;
     if (a->body >= 0) bodies[a->body].z = -100000; /* in the chair: not in anyone's way as a standing body */
@@ -1690,6 +1693,7 @@ static void take_seat(int actor, Thing *t, int spot)
     world_set_pose(actor, bed ? "Sleeping" : "Sit", f >= 0 ? f : t->facing);
     if (bed) set_cover(t, 1);
     world_furniture_event(t->uid, 9, actor); /* By Enter on the chair or bed */
+    if (actor == 0 && bed) mechanisms_lay_down(t->uid); /* the slider: how many hours (Exult's rest) */
 }
 
 /* Gets up: back where they stood, standing; a bed is made again. */
@@ -1776,7 +1780,7 @@ int world_player_sit(int uid)
 {
     seats_ready();
     Thing *t = thing_by_uid(uid);
-    if (!t || !t->def || (t->def->type != T_CHAIR && t->def->type != T_BED)) return 0;
+    if (!t || !t->def || (t->def->type != T_CHAIR && t->def->type != T_BED && t->def->type != T_BEDROLL)) return 0;
     if (seats[0].uid) world_stand_up(0);
     int spot = nearest_free_spot(t, player.px, player.py + tileH / 2.0, 0);
     double x, y; int lift;
@@ -1838,7 +1842,6 @@ static void player_sit_update(double seconds)
     int spot = nearest_free_spot(t, player.px, player.py + tileH / 2.0, 0);
     if (spot < 0) return;
     take_seat(0, t, spot);
-    if (t->def->type == T_BED) game_log("Sleeping the hours away (the hours slider) isn't in the player yet.");
 }
 
 /* At the start of play: a bed with a cover gets it laid on it (its own object). */
@@ -2863,3 +2866,24 @@ void world_actor_place_lift(int actor, int x, int y, int lift)
 /* The player's spot in 8-pixel units (a sextant's reading). */
 void world_player_units(int *ux, int *uy) { *ux = (int)floor(player.px / UNIT); *uy = (int)floor(player.py / UNIT); }
 void world_player_pixel(double *px, double *py) { *px = player.px; *py = player.py; }
+
+/* BecomeObject: a placed object becomes another where it is, starting as that one starts (a plant at its first stage). */
+void world_thing_become(int uid, int objectId)
+{
+    Thing *t = thing_by_uid(uid);
+    const ObjectDef *d = def_of(objectId);
+    if (!t || !d || t->category != 4) return;
+    t->def = d; t->itemId = objectId;
+    t->stage = 0; t->grow = 0; t->spent = 0; t->lookOverride = NULL; t->fixedFrame = 0;
+    t->open = (d->type == T_DOOR && d->doorStartsOpen) || (d->type == T_WINDOW && d->winShutters && d->winStartsOpen) || (d->type == T_LEVER && d->leverKind != 2 && d->leverStartsOn);
+    t->locked = d->type == T_DOOR && d->doorStartsLocked && !d->doorStartsOpen;
+    t->lit = d->type == T_LIGHT && d->lightStartsLit;
+    t->liquid = d->type == T_LIQUID ? d->liquidStart : -1;
+    t->hpSet = 0;
+    t->sizeX = d->sizeX > 0 ? d->sizeX : 1; t->sizeY = d->sizeY > 0 ? d->sizeY : 1;
+    t->sizeZ = d->type == T_TRAP || (d->type == T_TILE && !d->solid) ? 0 : d->sizeZ;
+    t->solid = d->solid; t->solidOffX = d->solidOffX; t->solidOffY = d->solidOffY;
+    if (t->body >= 0) { if (t->solid) thing_box(t, &bodies[t->body]); else { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; } }
+    else if (t->solid && !t->hangs) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); }
+    settle_all();
+}

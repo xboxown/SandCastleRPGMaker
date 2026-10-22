@@ -628,3 +628,5 @@ int vitals_resurrect(int characterId)
     game_log(line);
     return 1;
 }
+
+int vitals_can_get_hungry(int characterId) { return can_get_hungry(characterId); }

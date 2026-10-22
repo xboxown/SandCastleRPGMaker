@@ -1180,3 +1180,6 @@ void magic_reset(void)
     book.open = 0; bookmarkCount = 0; bookReader = -1;
     memset(casts, 0, sizeof casts);
 }
+
+/* Mana set (resting brings it back). */
+void magic_set_mana(int actor, int mana) { set_stat_of(actor, K_MANA, mana); }

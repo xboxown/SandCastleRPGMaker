@@ -15,6 +15,7 @@ int magic_combat_spell(int actor, int target);               /* a mage's turn in
 int magic_frozen(int actor);                                 /* Time Stop */
 void magic_update(double ms);
 void magic_reset(void);
+void magic_set_mana(int actor, int mana);
 
 /* The open spellbook (Exult's Spellbook_gump): over everything, it takes every click. */
 int magic_book_open(void);

@@ -44,6 +44,7 @@ int events_object_event(int uid, int trigger, int activator);
 
 /* The game clock (Exult's: from System Settings > Clock). */
 int events_hour(void);
+void events_advance_minutes(int minutes);
 int events_minute(void);
 
 long events_total_minutes(void);
