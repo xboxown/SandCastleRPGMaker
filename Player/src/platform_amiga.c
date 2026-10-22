@@ -125,6 +125,7 @@ static enum PlatformKey key_of(UWORD code)
         case 0x42: return KEY_TAB;
         case 0x33: return KEY_C;
         case 0x17: return KEY_I;
+        case 0x31: return KEY_Z;
         case 0x21: return KEY_S;
         case 0x41: return KEY_BACKSPACE;
         case 0x01: case 0x1D: return KEY_1; /* the row of numbers, and the keypad's */

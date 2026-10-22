@@ -28,5 +28,8 @@ int gumps_choosing(void);
 void gumps_cancel_choosing(void);
 int gumps_turn_into(const void *state, int objectId);
 void gumps_close_container(const Item *box);
+void gumps_next_stats(void);       /* Z */
+void gumps_next_inventory(void);   /* I */
+int gumps_save_screen_wanted(void); /* the disk button was clicked */
 
 #endif

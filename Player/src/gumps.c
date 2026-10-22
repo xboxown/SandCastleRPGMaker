@@ -48,8 +48,8 @@
 #define SLOT_DROP_RADIUS 32
 #define UNIT 8
 
-enum { G_DOLL = 1, G_PACK, G_BOX };
-enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT, T_DOLL_PART, T_DOLL_ITEM, T_DOLL_BODY };
+enum { G_DOLL = 1, G_PACK, G_BOX, G_STATS };
+enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT, T_DOLL_PART, T_DOLL_ITEM, T_DOLL_BODY, T_BUTTON };
 enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_ENTER = 9 };
 
 static const char *SLOT_NAMES[15] = { "Head", "Neck", "Body", "Arms", "Gloves", "Belt", "Back", "Legs", "Feet", "RightHand", "LeftHand", "Ring1", "Ring2", "Backpack", "Pouch" };
@@ -68,6 +68,7 @@ static double sinceClick = 1e9, identifyIn = -1;
 static const Sprite *ghost;
 typedef struct Label { char text[64]; int x, y; uint32_t until; } Label;
 static Label labels[8];
+static int pressedButtonGump = -1, pressedButton = -1, saveScreenWanted;
 static void (*choosing)(void *context, const GumpsPick *pick);
 static void *choosingContext;
 static uint32_t nowMs;
@@ -133,11 +134,19 @@ static int solid_at(const Picture *p, int bx, int by, int bw, int bh, int x, int
 /* ---------------- The windows ---------------- */
 
 static double scale_of(const Gump *g) { return g->kind == G_DOLL ? 200.0 / DOLL_H : g->kind == G_BOX ? 200.0 / BOX_H : 1; }
+static double atof_safe(const char *s) { double sc_strtod(const char *text, char **end); return sc_strtod(s, NULL); }
 
 static int pack_rows(const Gump *g) { Item *loose[64]; return items_loose(g->characterId, loose, 64); }
 
+static void stats_size(const Gump *g, int *w, int *h);
+static const Picture *button_look(const Gump *g, int b, int *x, int *y, int *w, int *h);
+static const Picture *stats_close(const Gump *g, int *x, int *y, int *w, int *h);
+static void draw_stats(uint32_t *pixels, const Gump *g);
+static void press_button(int gi, int b);
+
 static void size_of(const Gump *g, int *w, int *h)
 {
+    if (g->kind == G_STATS) { stats_size(g, w, h); return; }
     if (g->kind == G_DOLL) { *w = DOLL_W / 2; *h = DOLL_H / 2; return; }
     if (g->kind == G_BOX) { *w = (int)(BOX_W * scale_of(g) + 0.5); *h = 200; return; }
     int rows = pack_rows(g);
@@ -283,10 +292,13 @@ static void draw_readout(uint32_t *pixels, const Gump *g, cJSON *r, const char *
     const char *fontName = str(r, "FontName");
     const Font *f = font_get(fontName[0] ? fontName : "InGameFont");
     double s = scale_of(g);
-    int w = font_text_width(f, text), x = g->x + (int)(dbl(r, "X", 0) * s), y = g->y + (int)(dbl(r, "Y", 0) * s);
+    int scale = num(r, "Scale", 1) > 1 ? num(r, "Scale", 1) : 1;
+    int w = font_text_width(f, text) * scale, x = g->x + (int)(dbl(r, "X", 0) * s), y = g->y + (int)(dbl(r, "Y", 0) * s);
     int align = num(r, "Align", 0);
     if (align == 1) x -= w / 2; else if (align == 2) x -= w;
-    font_draw(f, pixels, x, y, text, 0);
+    const char *tint = str(r, "Tint");
+    uint32_t colour = tint[0] == '#' && strlen(tint) >= 7 ? 0xFF000000u | (uint32_t)strtoul(tint + (strlen(tint) >= 9 ? 3 : 1), NULL, 16) : 0;
+    font_draw_into(f, pixels, SCREEN_W, SCREEN_H, x, y, text, colour, scale, 0);
 }
 
 static int being_dragged(const Item *it) { return dragging && pressed.item == it; }
@@ -325,6 +337,12 @@ static void draw_doll(uint32_t *pixels, const Gump *g)
     }
     const Picture *exit = sprite_now(sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName")));
     if (exit) world_blit(pixels, exit, g->x + (int)((DOLL_W - 28) * s), g->y + (int)(4 * s), (int)(24 * s), (int)(24 * s));
+    for (int b = 0; b < 5; b++)
+    {
+        int bx, by, bw, bh;
+        const Picture *pic = button_look(g, b, &bx, &by, &bw, &bh);
+        if (pic) world_blit(pixels, pic, bx, by, bw, bh);
+    }
 }
 
 static void frame_bounds(cJSON *data, double *x, double *y, double *w, double *h)
@@ -417,6 +435,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < gumpCount; i++)
     {
         if (gumps[i].kind == G_DOLL) draw_doll(pixels, &gumps[i]);
+        else if (gumps[i].kind == G_STATS) draw_stats(pixels, &gumps[i]);
         else if (gumps[i].kind == G_BOX) draw_box(pixels, &gumps[i]);
         else draw_pack(pixels, &gumps[i]);
     }
@@ -493,6 +512,20 @@ static Target hit(int x, int y)
             continue; /* see-through: what's behind */
         }
         /* a paperdoll: the exit button, a slot's thing, an empty slot under the body art, the body */
+        if (g->kind == G_STATS)
+        {
+            int cx, cy, cw, ch;
+            const Picture *close = stats_close(g, &cx, &cy, &cw, &ch);
+            if (close && x >= cx && y >= cy && x < cx + cw && y < cy + ch) { t.kind = T_EXIT; return t; }
+            t.kind = T_GUMP;
+            return t;
+        }
+        for (int b = 4; b >= 0; b--)
+        {
+            int bx, by, bw, bh;
+            const Picture *pic = button_look(g, b, &bx, &by, &bw, &bh);
+            if (pic && solid_at(pic, bx, by, bw, bh, x, y)) { t.kind = T_BUTTON; t.slotKey = b; return t; }
+        }
         cJSON *pd = paperdoll_of(g->characterId);
         int ex = g->x + (int)((DOLL_W - 28) * s), ey = g->y + (int)(4 * s);
         if (x >= ex && y >= ey && x < ex + (int)(24 * s) && y < ey + (int)(24 * s)) { t.kind = T_EXIT; return t; }
@@ -621,6 +654,13 @@ static void use_target(const Target *t)
 static void click_released(const Target *t)
 {
     if (t->kind == T_EXIT) { close_gump(t->gump); return; }
+    if (t->kind == T_BUTTON)
+    {
+        Target now = hit(mouseX, mouseY);
+        if (now.kind == T_BUTTON && now.gump == t->gump && now.slotKey == t->slotKey) press_button(t->gump, t->slotKey);
+        lastClick.kind = T_NONE;
+        return;
+    }
     if (t->kind == T_DOLL_PART && t->doll < dolls_window_count() && dolls_part_acts_on_click(t->doll, t->part))
     {
         /* buttons, switches, sliders, controls act at once; a second click in time is a double click too (a save loads) */
@@ -957,6 +997,7 @@ int gumps_mouse_down(int x, int y)
     if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */
     pressed = hit(x, y);
     pressing = 1; dragging = 0; pressX = x; pressY = y;
+    if (pressed.kind == T_BUTTON) { pressedButtonGump = pressed.gump; pressedButton = pressed.slotKey; }
     if (pressed.doll >= 0) { int top = dolls_to_front(pressed.doll); pressed.doll = top; }
     if (pressed.kind == T_DOLL_BODY) { movingDoll = pressed.doll; moveDX = x - dolls_window_x(movingDoll); moveDY = y - dolls_window_y(movingDoll); pressing = 0; return 1; }
     if (pressed.kind == T_GUMP) { movingGump = to_front(pressed.gump); moveDX = x - gumps[movingGump].x; moveDY = y - gumps[movingGump].y; pressing = 0; return 1; }
@@ -1076,4 +1117,262 @@ void gumps_close_container(const Item *box)
 {
     for (int i = gumpCount - 1; i >= 0; i--)
         if (gumps[i].box && (gumps[i].box == box || items_holds(box, gumps[i].box))) close_gump(i);
+}
+
+/* ---------------- The paperdoll's buttons and the stats paperdoll (GameTestWindow.PaperdollButtons, misc_buttons.cc, Stats_gump.cc) ---------------- */
+
+static const char *BUTTONS[5] = { "CombatButton", "CombatModeButton", "StatsButton", "DiskButton", "HaloButton" };
+
+static cJSON *character_of(int characterId)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(project(), "Characters"), "Characters")) if (num(c, "Id", -2) == characterId) return c;
+    return NULL;
+}
+
+/* Its picture now (the frame for its state) and where it is; NULL when it isn't on this paperdoll. */
+static const Picture *button_look(const Gump *g, int b, int *x, int *y, int *w, int *h)
+{
+    if (g->kind != G_DOLL) return NULL;
+    int player = world_actor_character(0) == g->characterId;
+    if ((b == 0 || b == 3) && !player) return NULL; /* combat and disk: the main character's only */
+    cJSON *button = get(paperdoll_of(g->characterId), BUTTONS[b]), *c = character_of(g->characterId);
+    if (!flag(button, "Enabled")) return NULL;
+    const Sprite *sprite = sprite_find(str(get(button, "Sprite"), "SpriteGroup"), str(get(button, "Sprite"), "SpriteName"));
+    if (!sprite || !sprite->frameCount) return NULL;
+    int frame = b == 0 ? combat_mode() != 0 : b == 1 ? num(c, "AttackMode", 0) : b == 4 ? flag(c, "CombatProtected") : 0;
+    if ((b == 2 || b == 3) && dragging == 0 && pressing && pressedButton == b && &gumps[pressedButtonGump] == g) frame = 1; /* heart and disk: pressed while held */
+    if (frame >= sprite->frameCount) frame = sprite->frameCount - 1;
+    const Picture *p = frame_picture(&sprite->frames[frame < 0 ? 0 : frame]);
+    if (!p) return NULL;
+    double s = scale_of(g);
+    *x = g->x + (int)(dbl(button, "X", 0) * s); *y = g->y + (int)(dbl(button, "Y", 0) * s);
+    *w = (int)(p->width * s + 0.5); *h = (int)(p->height * s + 0.5);
+    return p;
+}
+
+static void open_stats(int characterId);
+
+static void press_button(int gi, int b)
+{
+    if (gi < 0 || gi >= gumpCount) return;
+    int id = gumps[gi].characterId, player = world_actor_character(0) == id;
+    cJSON *button = get(paperdoll_of(id), BUTTONS[b]), *c = character_of(id);
+    char line[160];
+    sound_play(num(button, "ClickSoundResourceId", -1));
+    switch (b)
+    {
+        case 0: combat_toggle_mode(); break;
+        case 1:
+        {
+            /* Combat_mode_button::activate: the next mode; only the player gets the last one (Manual) */
+            static const char *NAMES[] = { "Nearest", "Weakest", "Strongest", "Berserk", "Protect", "Defend", "Flank", "Flee", "Random", "Manual" };
+            int mode = (num(c, "AttackMode", 0) + 1) % (player ? 10 : 9);
+            if (get(c, "AttackMode")) cJSON_ReplaceItemInObject(c, "AttackMode", cJSON_CreateNumber(mode)); else cJSON_AddNumberToObject(c, "AttackMode", mode);
+            snprintf(line, sizeof line, "%s now fights: %s.", cJSON_GetStringValue(get(c, "Name")) ? cJSON_GetStringValue(get(c, "Name")) : "", NAMES[mode]);
+            game_log(line);
+            break;
+        }
+        case 2: open_stats(id); break;
+        case 3: saveScreenWanted = 1; break; /* the save/load screen (the view now is its picture) */
+        case 4:
+        {
+            /* Halo_button::activate: toggled; on, nobody else in the party is protected */
+            int on = !flag(c, "CombatProtected");
+            if (get(c, "CombatProtected")) cJSON_ReplaceItemInObject(c, "CombatProtected", cJSON_CreateBool(on)); else cJSON_AddBoolToObject(c, "CombatProtected", on);
+            if (on)
+                for (int a = 0; a < world_actor_count(); a++)
+                {
+                    int other = world_actor_character(a);
+                    cJSON *oc = character_of(other);
+                    if (other == id || !oc || (a != 0 && !items_in_party(other))) continue;
+                    if (get(oc, "CombatProtected")) cJSON_ReplaceItemInObject(oc, "CombatProtected", cJSON_CreateFalse());
+                }
+            snprintf(line, sizeof line, on ? "The party protects %s." : "%s is no longer protected.", cJSON_GetStringValue(get(c, "Name")) ? cJSON_GetStringValue(get(c, "Name")) : "");
+            game_log(line);
+            break;
+        }
+    }
+}
+
+int gumps_save_screen_wanted(void) { int w = saveScreenWanted; saveScreenWanted = 0; return w; }
+
+static cJSON *stats_doll(int characterId) { return get(paperdoll_of(characterId), "StatsDoll"); }
+
+static const Picture *link_picture(cJSON *link, int frame)
+{
+    const Sprite *s = sprite_find(str(link, "SpriteGroup"), str(link, "SpriteName"));
+    if (!s || !s->frameCount) return NULL;
+    return frame_picture(&s->frames[frame < s->frameCount ? frame : s->frameCount - 1]);
+}
+
+static void stats_size(const Gump *g, int *w, int *h)
+{
+    const Picture *bg = link_picture(get(stats_doll(g->characterId), "Background"), 0);
+    *w = bg ? bg->width : 160; *h = bg ? bg->height : 120;
+}
+
+static const Picture *stats_close(const Gump *g, int *x, int *y, int *w, int *h)
+{
+    cJSON *doll = stats_doll(g->characterId);
+    int held = pressing && pressed.kind == T_EXIT && &gumps[pressed.gump] == g;
+    const Picture *p = link_picture(get(doll, "CloseButton"), held ? 1 : 0);
+    if (!p) return NULL;
+    *x = g->x + (int)dbl(doll, "CloseX", 140); *y = g->y + (int)dbl(doll, "CloseY", 4); *w = p->width; *h = p->height;
+    return p;
+}
+
+/* Z (the player's) or the heart (anyone's): opens it - or closes it when it's open. */
+static void open_stats(int characterId)
+{
+    int i = find_gump(G_STATS, characterId, NULL, 0);
+    if (i >= 0) { close_gump(i); return; }
+    cJSON *doll = stats_doll(characterId), *c = character_of(characterId);
+    char line[200];
+    if (!link_picture(get(doll, "Background"), 0) && !cJSON_GetArraySize(get(doll, "Elements")))
+    {
+        snprintf(line, sizeof line, "%s has no stats paperdoll yet.", cJSON_GetStringValue(get(c, "Name")) ? cJSON_GetStringValue(get(c, "Name")) : "They");
+        game_log(line);
+        return;
+    }
+    cJSON *sounds = get(get(project(), "Settings"), "Sounds");
+    int own = num(doll, "OpenSoundResourceId", -1) >= 0 ? num(doll, "OpenSoundResourceId", -1) : num(paperdoll_of(characterId), "OpenSoundResourceId", -1);
+    sound_play(!cJSON_IsFalse(get(sounds, "PaperdollOpenSoundEnabled")) && num(sounds, "PaperdollOpenSoundId", -1) >= 0 ? num(sounds, "PaperdollOpenSoundId", -1) : own);
+    int open = 0;
+    for (int k = 0; k < gumpCount; k++) open += gumps[k].kind == G_STATS;
+    add_gump((Gump){ G_STATS, 60 + open * 24, 40 + open * 20, characterId, 0, NULL, NULL });
+}
+
+static double stat_number(cJSON *c, int statId)
+{
+    char key[16];
+    snprintf(key, sizeof key, "%d", statId);
+    const char *v = cJSON_GetStringValue(get(get(c, "StatValues"), key));
+    return v && *v ? atof_safe(v) : 0;
+}
+
+static uint32_t hex_colour(const char *hex, uint32_t fallback)
+{
+    if (!hex || hex[0] != '#') return fallback;
+    size_t n = strlen(hex);
+    if (n == 9) return (uint32_t)strtoul(hex + 1, NULL, 16);           /* #AARRGGBB */
+    if (n == 7) return 0xFF000000u | (uint32_t)strtoul(hex + 1, NULL, 16);
+    return fallback;
+}
+
+/* PaperdollReadouts.Gauge: a bar, a pie filled clockwise from the top, or a sprite's frame (first empty .. last full). */
+static void draw_gauge(uint32_t *pixels, int x, int y, cJSON *g, int kind, double fraction)
+{
+    if (fraction < 0) fraction = 0;
+    if (fraction > 1) fraction = 1;
+    int w = (int)dbl(g, "Width", 80), h = (int)dbl(g, "Height", 10);
+    uint32_t back = hex_colour(str(g, "BackColor"), 0xFF402818u), fillc = hex_colour(str(g, "FillColor"), 0xFFC8A040u);
+    if (kind == 2)
+    {
+        const Sprite *s = sprite_find(str(get(g, "Sprite"), "SpriteGroup"), str(get(g, "Sprite"), "SpriteName"));
+        if (!s || !s->frameCount) return;
+        int frame = (int)(fraction * s->frameCount);
+        if (frame >= s->frameCount) frame = s->frameCount - 1;
+        const Picture *p = frame_picture(&s->frames[frame]);
+        if (p) world_blit(pixels, p, x, y, p->width, p->height);
+        return;
+    }
+    if (kind == 1)
+    {
+        int size = w < h ? w : h;
+        if (size < 4) size = 4;
+        double r = size / 2.0;
+        for (int j = 0; j < size; j++)
+            for (int i = 0; i < size; i++)
+            {
+                double dx = i + 0.5 - r, dy = j + 0.5 - r;
+                if (dx * dx + dy * dy > r * r) continue;
+                double angle = atan2(dx, -dy); /* clockwise from the top */
+                if (angle < 0) angle += 2 * 3.14159265358979;
+                int px = x + i, py = y + j;
+                if (px < 0 || py < 0 || px >= SCREEN_W || py >= SCREEN_H) continue;
+                uint32_t c = angle <= fraction * 2 * 3.14159265358979 ? fillc : back;
+                if (c >> 24) pixels[py * SCREEN_W + px] = c | 0xFF000000u;
+            }
+        return;
+    }
+    if (w < 2) w = 2;
+    if (h < 2) h = 2;
+    if (back >> 24) fill(pixels, x, y, w, h, back | 0xFF000000u);
+    fill(pixels, x, y, (int)(w * fraction), h, fillc | 0xFF000000u);
+}
+
+/* Stats_gump::paint: the background, then every element with the character's values now. */
+static void draw_stats(uint32_t *pixels, const Gump *g)
+{
+    cJSON *doll = stats_doll(g->characterId), *c = character_of(g->characterId), *e;
+    int w, h;
+    stats_size(g, &w, &h);
+    const Picture *bg = link_picture(get(doll, "Background"), 0);
+    if (bg) world_blit(pixels, bg, g->x, g->y, w, h); else fill(pixels, g->x, g->y, w, h, 0xE6281A10u);
+    cJSON *survival = get(c, "Survival");
+    int food = vitals_food(g->characterId), hungry = !cJSON_IsFalse(get(survival, "CanGetHungry")) && food <= num(survival, "HungryAtOrBelow", 9);
+    Gump at = *g;
+    at.kind = G_STATS; /* its elements at its own pixels (scale 1) */
+    cJSON_ArrayForEach(e, get(doll, "Elements"))
+    {
+        int kind = num(e, "Kind", 0), showAs = num(e, "ShowAs", 0);
+        cJSON *style = get(e, "Style"), *gauge = get(e, "Gauge");
+        int ex = g->x + (int)dbl(style, "X", 0), ey = g->y + (int)dbl(style, "Y", 0);
+        char text[64];
+        switch (kind)
+        {
+            case 0: draw_readout(pixels, &at, style, str(e, "Text")); break;
+            case 1: draw_readout(pixels, &at, style, cJSON_GetStringValue(get(c, "Name")) ? cJSON_GetStringValue(get(c, "Name")) : ""); break;
+            case 2:
+            {
+                char key[16];
+                snprintf(key, sizeof key, "%d", num(e, "StatId", -1));
+                const char *v = cJSON_GetStringValue(get(get(c, "StatValues"), key));
+                if (showAs == 0) { snprintf(text, sizeof text, "%s", v && *v ? v : "0"); draw_readout(pixels, &at, style, text); break; }
+                double value = stat_number(c, num(e, "StatId", -1)), max = num(e, "MaxStatId", -1) >= 0 ? stat_number(c, num(e, "MaxStatId", -1)) : num(e, "Max", 30), min = num(e, "Min", 0);
+                draw_gauge(pixels, ex, ey, gauge, showAs == 3 ? 2 : showAs == 2 ? 1 : 0, max - min <= 0 ? 0 : (value - min) / (max - min));
+                break;
+            }
+            case 3: if (vitals_has(g->characterId, num(e, "Ailment", 1))) draw_gauge(pixels, ex, ey, gauge, 2, 0); break;
+            default:
+                if (cJSON_IsFalse(get(e, "OnlyWhenHungry"))) draw_gauge(pixels, ex, ey, gauge, showAs == 3 ? 2 : showAs == 2 ? 1 : 0, food / 31.0);
+                else if (hungry) draw_gauge(pixels, ex, ey, gauge, 2, 0);
+                break;
+        }
+    }
+    int cx, cy, cw, ch;
+    const Picture *close = stats_close(g, &cx, &cy, &cw, &ch);
+    if (close) world_blit(pixels, close, cx, cy, cw, ch);
+}
+
+/* Exult's Z (ActionStats): the first in the party (the main character first) with a stats paperdoll whose isn't open yet opens; all open: the next to the front. */
+void gumps_next_stats(void)
+{
+    int party[64], n = 0;
+    for (int a = 0; a < world_actor_count() && n < 64; a++)
+    {
+        int id = world_actor_character(a);
+        cJSON *doll = stats_doll(id);
+        if ((a == 0 || items_in_party(id)) && !vitals_dead(id) && (link_picture(get(doll, "Background"), 0) || cJSON_GetArraySize(get(doll, "Elements")))) party[n++] = id;
+    }
+    if (!n) { open_stats(world_actor_character(0)); return; } /* says there's none yet */
+    for (int i = 0; i < n; i++) if (find_gump(G_STATS, party[i], NULL, 0) < 0) { open_stats(party[i]); return; }
+    static int next;
+    next = (next + 1) % n;
+    to_front(find_gump(G_STATS, party[next], NULL, 0));
+}
+
+/* Exult's I (ActionInventory): the same for the party's inventories. */
+void gumps_next_inventory(void)
+{
+    int party[64], n = 0;
+    for (int a = 0; a < world_actor_count() && n < 64; a++)
+    {
+        int id = world_actor_character(a);
+        if ((a == 0 || items_in_party(id)) && !vitals_dead(id)) party[n++] = id;
+    }
+    for (int i = 0; i < n; i++) if (find_gump(G_DOLL, party[i], NULL, 0) < 0) { gumps_open_paperdoll(party[i]); return; }
+    static int next;
+    if (n) { next = (next + 1) % n; gumps_open_paperdoll(party[next]); }
 }

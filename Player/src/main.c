@@ -70,6 +70,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
         else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
+        else if (*what == 'Z') gumps_next_stats(); /* Z: the stats paperdoll */
         else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
@@ -422,7 +423,8 @@ int main(int argc, char **argv)
                     case KEY_S: /* Exult: S for the Save/Load screen (the view as it is now is its screenshot) */
                         if (down && !dolls_title_open() && !dolls_modal_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); }
                         break;
-                    case KEY_I: if (down && !events_cinema() && !events_keys_forbidden()) gumps_open_paperdoll(world_actor_character(0)); break; /* Exult: I for the inventory */
+                    case KEY_I: if (down && !events_cinema() && !events_keys_forbidden()) gumps_next_inventory(); break; /* Exult: I for the party's inventories, one after another */
+                    case KEY_Z: if (down && !events_cinema() && !events_keys_forbidden()) gumps_next_stats(); break; /* Exult: Z for their stats */
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
                     case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
                     default: break;
@@ -522,6 +524,7 @@ int main(int argc, char **argv)
             events_player_moved();
         }
         mechanisms_frame(seconds * 1000); /* the sleep fade runs while the world waits */
+        if (gumps_save_screen_wanted() && !dolls_title_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); } /* the paperdoll's disk */
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
         if (title) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H); /* the world isn't seen behind the title */
         else
