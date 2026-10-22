@@ -84,6 +84,7 @@ static int cells_for_tiles(int tiles) { int c = (int)floor(tiles * 8.0 / world_t
 void schedules_load(void)
 {
     schedules_house_keys();
+    combat_doors_init(); /* hostile NPCs break doors down */
     cJSON *project = get((cJSON *)world_json(), "Project"), *c;
     cJSON *characters = get(get(project, "Characters"), "Characters");
     free(npcs); npcCount = 0; lastHour = -1; followThinkMs = 0;

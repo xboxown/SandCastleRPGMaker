@@ -32,6 +32,7 @@ int combat_friends(int a, int b);
 void combat_owned_theft(int uid);
 void combat_strike_object(int uid, int damage);
 void combat_force_fuse(int uid);
+void combat_doors_init(void);
 int combat_foes_in_sight(void);
 int combat_douse_fuse(int uid);
 #include "../third_party/cJSON.h"

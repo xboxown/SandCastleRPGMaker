@@ -1558,3 +1558,37 @@ int combat_douse_fuse(int uid)
     world_thing_look(uid, NULL);
     return 1;
 }
+
+/* ---------------- Breaking doors down (GameTestWindow.ObjectsTick: WouldBreakDown, NpcBashesDoor) ---------------- */
+
+/* The faction a door belongs to: its own, or its owner's. */
+static int door_faction(cJSON *door)
+{
+    int f = num(door, "FactionId", -1), owner = num(door, "BelongToId", -1);
+    if (f >= 0 || owner < 0) return f;
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters")) if (num(c, "Id", -2) == owner) return num(c, "FactionId", -1);
+    return -1;
+}
+
+/* An NPC breaks a door down when its faction would attack the door's (a bear breaking into a house) and the door can be broken -
+   a locked one always; a closed, unlocked one only if it's set to break closed doors (Character Editor > Verbose). */
+static int would_break(int actor, int uid, int locked)
+{
+    if (actor <= 0 || dead(actor) || (!locked && !cJSON_IsTrue(get(json_of(actor), "BreaksClosedDoors")))) return 0;
+    cJSON *door = object_def(world_thing_object_id(uid));
+    int f = door_faction(door);
+    return door && object_breakable(door) && f >= 0 && behavior_toward(faction_of(actor), f) == F_ATTACK;
+}
+
+static void bash_door(int actor, int uid)
+{
+    int c, i, q, x, y, n;
+    world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+    world_face_cell(actor, x, y, "Attacking Melee");
+    int str = stat(actor, K_STRENGTH, 10) / 3;
+    cJSON *door = object_def(world_thing_object_id(uid));
+    if (door) strike_object(uid, door, (str > 0 ? 1 + rnd(str) : 0) + 1, actor, 0);
+}
+
+void combat_doors_init(void) { world_set_door_breaker(would_break, bash_door); }

@@ -83,6 +83,7 @@ int world_wrap_cells_y(int d);
 int world_wraps(void);
 void world_update_bleeding(double ms);
 void world_set_key_check(int (*check)(int actor, int doorUid));
+void world_set_door_breaker(int (*breaks)(int actor, int doorUid, int locked), void (*bash)(int actor, int doorUid));
 void world_lock_own_doors(int actor, int cells);
 int world_heading_to_seat(int actor);
 void world_thing_break_glass(int uid, const Sprite *broken);

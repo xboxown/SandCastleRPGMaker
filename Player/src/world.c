@@ -115,6 +115,7 @@ typedef struct Actor
     int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies) */
     int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
     double climbMs;                 /* a flier climbing or dropping a lift at a time */
+    double bashMs;                  /* breaking a door down: till its next blow */
     const Sprite *face;
     Pose poses[MAX_POSES]; int poseCount;
     int shownPose;                  /* Change Pose: the pose kept (index into poses, -1 = idle / walking) */
@@ -845,6 +846,8 @@ typedef struct Drawn
     int actor; /* the character drawn (world_actor_at), -1 for anything else */
     int opacity, mirror; /* 0: opaque, else 1..254 (an invisible party member: a shimmer); a mirrored picture */
     int thing; /* the thing drawn (its uid), 0 for anything else */
+    int band;  /* its floor's band (floor - 1) */
+    int slab, sl, sr, sf, sn; /* an upper floor's tiles (UpperFloorOrder): its tile box in 8px units */
 } Drawn;
 
 static int by_key(const void *a, const void *b)
@@ -925,7 +928,7 @@ static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, 
     memset(d, 0, sizeof *d);
     d->key = floorBand * 10000000.0 + depth; /* the floor's band first, then nearer the viewer later (ComputeDepthZIndex) */
     d->picture = pic; d->x = x; d->y = y; d->w = w; d->h = h;
-    d->actor = -1;
+    d->actor = -1; d->band = floorBand;
     return d;
 }
 
@@ -998,7 +1001,8 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
             {
                 int tile = floors[f][y * mapW + x];
                 if (tile < 0) continue;
-                add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count); /* a floor: before everything standing on it */
+                Drawn *d = add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count); /* a floor: before everything standing on it */
+                if (d) { d->slab = 1; d->sl = x * unitsX; d->sr = (x + 1) * unitsX - 1; d->sf = y * unitsY; d->sn = (y + 1) * unitsY - 1; }
             }
     }
     /* Things: bottom-centred on their cell, in a box rounded up to 8 pixels, up and left by their lift. */
@@ -1025,7 +1029,8 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 {
                     int slab = t->z + (topLift - 1 > 0 ? topLift - 1 : 0);
                     if (slab >= ceiling) continue;
-                    add_drawn(floor_of(t->z + topLift) - 1, -5000000.0 + (t->x + t->y) * 100.0 + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count); /* with that floor's tiles */
+                    Drawn *ld = add_drawn(floor_of(t->z + topLift) - 1, -5000000.0 + (t->x + t->y) * 100.0 + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count); /* with that floor's tiles */
+                    if (ld) { ld->slab = 1; ld->sl = al; ld->sr = al + sw - 1; ld->sf = at; ld->sn = at + sd - 1; }
                     continue;
                 }
                 Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count);
@@ -1053,6 +1058,8 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         d->occludes = t->def && t->def->occludes;
         d->hangs = t->hangs;
         d->thing = t->uid;
+        if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
+        { d->slab = 1; d->sl = b.left; d->sr = b.left + b.width - 1; d->sf = b.top; d->sn = b.top + b.depth - 1; } /* a tile object that is part of an upper floor */
     }
     /* Blood: puddles on the ground, under everything standing there. */
     for (int i = 0; i < puddleCount; i++)
@@ -1119,6 +1126,23 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
             else if (cmp < 0 && w->key - 0.25 < lowest) lowest = w->key - 0.25;
         }
         d->key = key < lowest ? key : lowest;
+    }
+    /* UpperFloorOrder: an upper floor's tiles are a thin slab - something on a lower floor wholly in front of them (south or east, not under)
+       is nearer the viewer and drawn over them (objs.cc compare); what is under or behind them stays covered. */
+    for (int i = 0; i < count; i++)
+    {
+        Drawn *d = &drawn[i];
+        if (!d->hasBox || d->slab) continue;
+        int liftTo = -1;
+        for (int j = 0; j < count; j++)
+        {
+            const Drawn *s = &drawn[j];
+            if (!s->slab || s->band <= d->band || d->x >= s->x + s->w || s->x >= d->x + d->w || d->y >= s->y + s->h || s->y >= d->y + d->h) continue;
+            int south = d->yf > s->sn, east = d->xl > s->sr, north = d->yn < s->sf, west = d->xr < s->sl;
+            if ((south || east) && !north && !west) { if (s->band > liftTo) liftTo = s->band; }
+            else if (!(south && west) && !(north && east)) { liftTo = -2; break; } /* under it or behind it: the floor above covers it */
+        }
+        if (liftTo >= 0) d->key = liftTo * 10000000.0 - 2500000.0 + (d->key - d->band * 10000000.0) * 0.1; /* over that floor's slabs, under all that stands on it */
     }
     seated_draw_order(count);
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
@@ -1382,14 +1406,18 @@ static int actor_under_roof(const Actor *a);
 static int (*holdsKey)(int actor, int doorUid); /* LocksHouseDoor: the key to its own door, carried (schedules.c) */
 static int index_of_actor(const Actor *a);
 
+static int (*breaksDoor)(int actor, int doorUid, int locked); /* WouldBreakDown (combat.c) */
+static void (*bashDoor)(int actor, int doorUid);               /* a blow at it (combat.c) */
+
 static void doors_passable(const Actor *a, int passable)
 {
-    if (!a->human) return;
     for (int i = 0; i < thingCount; i++)
     {
         Thing *t = &things[i];
         if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->body < 0) continue;
-        if (t->locked && !(holdsKey && a != &player && holdsKey(index_of_actor(a), t->uid))) continue;
+        int breaks = a != &player && breaksDoor && breaksDoor(index_of_actor(a), t->uid, t->locked); /* it breaks it down on the way */
+        if (!breaks && !a->human) continue; /* only the sentient open doors */
+        if (!breaks && t->locked && !(holdsKey && a != &player && holdsKey(index_of_actor(a), t->uid))) continue;
         if (passable) bodies[t->body].z -= 1000000; else bodies[t->body].z += 1000000;
     }
 }
@@ -1558,6 +1586,7 @@ static int open_door_in_way(Actor *a, Walk *w, int l, int t)
         Thing *d = &things[i];
         if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0) continue;
         if (!overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
+        if (!d->locked && breaksDoor && breaksDoor(index_of_actor(a), d->uid, 0)) return 0; /* it'd rather break it down */
         if (d->locked)
         {
             /* its own door, key in hand: unlocked to get through (and locked again behind it once outside) */
@@ -1572,6 +1601,26 @@ static int open_door_in_way(Actor *a, Walk *w, int l, int t)
     }
     return 0;
 }
+
+/* NpcBashesDoor: a walker blocked by a door it would break down hits it - a blow every two standard delays - until it breaks. */
+static int bash_door_in_way(int actor, Actor *a, int l, int t, double seconds)
+{
+    if (a == &player || !breaksDoor || !bashDoor) return 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *d = &things[i];
+        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0 || !overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
+        if (!breaksDoor(actor, d->uid, d->locked)) return 0;
+        a->walkingNow = 0;
+        if ((a->bashMs -= seconds * 1000) > 0) return 1;
+        a->bashMs = 400;
+        bashDoor(actor, d->uid);
+        return 1;
+    }
+    return 0;
+}
+
+void world_set_door_breaker(int (*breaks)(int actor, int doorUid, int locked), void (*bash)(int actor, int doorUid)) { breaksDoor = breaks; bashDoor = bash; }
 
 /* CloseDoorsBehindNpcs: once clear of the doorway (a tile all round), the door is closed again - unless someone is in it. */
 static void close_doors_behind(void)
@@ -1641,6 +1690,7 @@ static void step_walk(int actor, double seconds)
                 a->climbMs = 0;
             }
             if (lift < 0 && open_door_in_way(a, w, l1, t1)) return; /* a closed, unlocked door: opened, on next frame */
+            if (lift < 0 && bash_door_in_way(actor, a, l1, t1, seconds)) return; /* a door of a side it's hostile to: broken down */
             if (lift < 0 && ask_aside(actor, l1, t1, alongX ? (remaining > 0 ? 1 : -1) : 0, alongX ? 0 : (remaining > 0 ? 1 : -1))) return; /* someone in the way moved aside (or swapped): on next frame */
             if (lift < 0) { w->active = 0; w->blocked = 1; a->walkingNow = 0; return; } /* something in the way: stop, think again */
             a->lift = lift;
