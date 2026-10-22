@@ -26,6 +26,7 @@
 #include "video.h"
 #include "books.h"
 #include "prompt.h"
+#include "work.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -264,6 +265,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     /* the last game, let go of */
     video_stop();
     prompt_reset();
+    work_reset();
     sound_stop_all();
     gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
@@ -537,6 +539,7 @@ int main(int argc, char **argv)
             magic_update(seconds * 1000);
             mechanisms_update(seconds * 1000);
             vehicles_update(seconds * 1000);
+            work_update(seconds * 1000);
             gumps_update(seconds * 1000);
             events_player_moved();
         }

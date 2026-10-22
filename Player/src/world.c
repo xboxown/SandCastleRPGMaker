@@ -86,6 +86,7 @@ typedef struct Thing
     int hp, hpSet;                                   /* hit points left in play (Attack Object) */
     int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
     int bodyN;                                       /* how many boxes it has from body on (stairs: a box a step) */
+    int owner;                                       /* who it belongs to now, set in play (+1; 0: as placed) */
     int stage; double grow;                          /* a plant: its stage, the game minutes grown towards the next */
     int liquid;                                      /* a liquid container: what it holds (a liquid Food's id, -1: empty) */
     cJSON *steps;                                    /* a designed staircase: its steps for its facing */
@@ -2483,7 +2484,8 @@ void world_thing_set_hp(int uid, int hp) { Thing *t = thing_by_uid(uid); if (t) 
 int world_thing_z(int uid) { Thing *t = thing_by_uid(uid); return t ? t->z : 0; }
 int world_thing_floor(int uid) { Thing *t = thing_by_uid(uid); return t ? floor_of(t->z) : 1; }
 int world_thing_spent(int uid) { Thing *t = thing_by_uid(uid); return t && t->spent; }
-int world_thing_belongs_to(int uid) { Thing *t = thing_by_uid(uid); return t ? num(t->placed, "BelongsToId", -1) : -1; }
+int world_thing_belongs_to(int uid) { Thing *t = thing_by_uid(uid); return !t ? -1 : t->owner ? t->owner - 1 : num(t->placed, "BelongsToId", -1); }
+void world_thing_set_belongs(int uid, int characterId) { Thing *t = thing_by_uid(uid); if (t) t->owner = characterId + 1; }
 
 /* A window's glass broken where it is: its Broken picture from now on. */
 void world_thing_break_glass(int uid, const Sprite *broken) { Thing *t = thing_by_uid(uid); if (t) { t->spent = 1; if (broken) t->lookOverride = broken; } }
@@ -2642,6 +2644,7 @@ static cJSON *thing_json(const Thing *t, int instanceId, cJSON *(*extra)(int uid
     set_num(e, "X", t->x); set_num(e, "Y", t->y); set_num(e, "Z", t->z);
     set_num(e, "OffsetX", t->offX); set_num(e, "OffsetY", t->offY); set_num(e, "Facing", t->facing);
     set_bool(e, "HangsOnWall", t->hangs); set_bool(e, "LiesUnder", t->liesUnder);
+    if (t->owner) set_num(e, "BelongsToId", t->owner - 1);
     if (extra) extra(t->uid, e);
     return e;
 }

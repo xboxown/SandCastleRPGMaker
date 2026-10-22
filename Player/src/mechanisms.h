@@ -19,7 +19,9 @@ void mechanisms_lay_down(int uid);                              /* the player la
 int mechanisms_key(int key);                                    /* the sleep slider's keys: 1 = taken */
 int mechanisms_pausing(void);                                   /* the slider up, or the party asleep: the game waits */
 int mechanisms_drop_on(int uid, int category, int itemId);      /* a seed dropped on its soil: sown (1) */
-int mechanisms_click(int x, int y);                             /* the slider, the map, sleeping: 1 = taken */
+int mechanisms_click(int x, int y);
+int mechanisms_harvest(int uid, int by);          /* a worker harvests: the produce's uid */
+int mechanisms_station_busy(int uid);             /* the player's work at it */                             /* the slider, the map, sleeping: 1 = taken */
 void mechanisms_frame(double ms);                               /* every frame, paused or not (the sleep fade) */
 
 #endif

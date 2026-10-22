@@ -17,6 +17,7 @@
  *    only outdoors by day), musical instruments.
  */
 #include "mechanisms.h"
+#include "work.h"
 #include "world.h"
 #include "items.h"
 #include "events.h"
@@ -110,6 +111,7 @@ static void party_bark(int kind) { int a = random_speaker(); if (a >= 0) vitals_
 
 typedef struct Used { cJSON *def; int uid; Item *item; int holder; } Used;
 static Used using;
+static int harvestBy = -1; /* who harvests (a worker), or -1: the player */
 static int slider_click(int mx, int my);
 static void draw_slider(uint32_t *p);
 static void draw_sleep(uint32_t *p);
@@ -635,19 +637,31 @@ static void draw_map(uint32_t *pixels)
 
 
 /* A plant harvested: its sound, back to an earlier stage, taken whole, or back to the soil it was sown in; what it gives appears where it stood. */
-static void harvest(int uid, cJSON *obj)
+static int harvest(int uid, cJSON *obj)
 {
     cJSON *p = get(obj, "Plant");
-    sound_play(num(p, "HarvestSoundResourceId", -1));
+    if (harvestBy < 0 || combat_tiles_between(harvestBy, 0) <= 24) sound_play(num(p, "HarvestSoundResourceId", -1));
     int c, i, q, x, y, n, fl = world_thing_floor(uid), last = world_thing_stage_count(uid) - 1;
     world_thing_info(uid, &c, &i, &q, &x, &y, &n);
     int soil = num(p, "SoilObjectId", -1);
     if (flag(p, "RemovedWhenHarvested") && soil >= 0 && object_def(soil)) world_thing_become(uid, soil); /* the soil it was sown in, ready to sow again */
     else if (flag(p, "RemovedWhenHarvested")) { items_free(items_unpark(uid, c, i, q)); world_thing_remove(uid); }
     else { int st = num(p, "StageAfterHarvest", 0); world_thing_set_stage(uid, st < 0 ? 0 : st > last ? (last < 0 ? 0 : last) : st); }
-    int produce = num(p, "ProduceObjectId", -1), many = num(p, "ProduceQuantity", 1);
-    if (object_def(produce)) world_thing_put(CAT_OBJECT, produce, many > 1 ? many : 1, x, y, fl);
-    if (world_thing_there(uid) && world_thing_object_id(uid) == num(obj, "Id", -2)) events_object_event(uid, TR_AFTER_READ, -1); /* By Harvested */
+    int produce = num(p, "ProduceObjectId", -1), many = num(p, "ProduceQuantity", 1), made = 0;
+    if (object_def(produce)) made = world_thing_put(CAT_OBJECT, produce, many > 1 ? many : 1, x, y, fl);
+    if (world_thing_there(uid) && world_thing_object_id(uid) == num(obj, "Id", -2)) events_object_event(uid, TR_AFTER_READ, harvestBy); /* By Harvested */
+    return made > 0 ? made : 0;
+}
+
+/* A worker's harvest (Farm, Miner): its sound only near the player. The produce's uid (0: none). */
+int mechanisms_harvest(int uid, int by)
+{
+    cJSON *obj = object_def(world_thing_object_id(uid));
+    if (!obj) return 0;
+    harvestBy = by;
+    int made = harvest(uid, obj);
+    harvestBy = -1;
+    return made;
 }
 
 /* Double-clicked (toolKind NULL) or a tool used on it: harvested if it's ripe and the right tool is used. */
@@ -807,6 +821,7 @@ static void use_station(int uid, cJSON *obj, const char *toolKind)
     if (!toolKind && events_object_event(uid, TR_USE, -1)) return;
     char line[300];
     for (int i = 0; i < jobCount; i++) if (jobs[i].uid == uid) { snprintf(line, sizeof line, "\"%s\" is busy.", str(obj, "Name")); say(line); return; }
+    if (work_station_in_use(uid)) { snprintf(line, sizeof line, "\"%s\" is busy.", str(obj, "Name")); say(line); return; } /* someone is working at it */
     cJSON *r, *first = NULL, *recipe = NULL;
     cJSON_ArrayForEach(r, get(get(obj, "Crafting"), "Recipes"))
     {
@@ -1175,7 +1190,7 @@ static void use_liquid(const Used *u)
 
 /* ---------------- Each frame: growth, work, milking, sleep ---------------- */
 
-static void work_update(double ms)
+static void mech_work_update(double ms)
 {
     long minute = events_total_minutes();
     if (lastMinute < 0) lastMinute = minute;
@@ -1329,7 +1344,9 @@ void mechanisms_update(double ms)
         events_object_event(uid, TR_ENTER, -1);
     }
     if (poseBackMs > 0 && (poseBackMs -= ms) <= 0) world_set_pose(0, "Idle", -1);
-    work_update(ms);
+    mech_work_update(ms);
 }
 
 void mechanisms_reset(void) { buttonCount = 0; poseBackMs = 0; view.open = 0; jobCount = 0; milking.on = 0; slider.open = 0; sleep.phase = 0; lastMinute = -1; }
+
+int mechanisms_station_busy(int uid) { for (int i = 0; i < jobCount; i++) if (jobs[i].uid == uid) return 1; return 0; }

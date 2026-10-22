@@ -69,6 +69,7 @@ int world_thing_z(int uid);
 int world_thing_floor(int uid);
 int world_thing_spent(int uid);
 int world_thing_belongs_to(int uid);
+void world_thing_set_belongs(int uid, int characterId);
 void world_thing_break_glass(int uid, const Sprite *broken);
 void world_thing_center(int uid, double *px, double *py);
 int world_things_near(double px, double py, double reach, int *out, int max);

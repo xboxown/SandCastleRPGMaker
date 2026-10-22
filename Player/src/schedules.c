@@ -15,6 +15,7 @@
  * Party members and the main player don't follow schedules.
  */
 #include "schedules.h"
+#include "work.h"
 #include "magic.h"
 #include "events.h"
 #include "world.h"
@@ -34,7 +35,7 @@
 enum { S_HPACE = 1, S_VPACE = 2, S_DANCE = 4, S_FARM = 6, S_MINER = 8, S_STAND = 10, S_LOITER = 11, S_WANDER = 12, S_BLACKSMITH = 13,
        S_SLEEP = 14, S_WAIT = 15, S_SIT = 16, S_BAKE = 18, S_SEW = 19, S_LAB = 21, S_WAITER = 23, S_EAT = 26, S_CUSTOM = 0x80 };
 
-typedef struct Entry { int period, type, x, y; cJSON *custom; int zone; } Entry;
+typedef struct Entry { int period, type, x, y; cJSON *custom; int zone; cJSON *json; } Entry;
 
 typedef struct Npc
 {
@@ -97,6 +98,7 @@ void schedules_load(void)
             en->period = num(e, "Period", 0); en->type = num(e, "Type", S_STAND);
             en->x = num(e, "X", -1); en->y = num(e, "Y", -1);
             en->custom = get(e, "CustomCommands");
+            en->json = e;
             en->zone = num(e, "ZoneId", -1) >= 0 || (cJSON_GetStringValue(get(e, "ZonePurpose")) && cJSON_GetStringValue(get(e, "ZonePurpose"))[0]);
         }
     }
@@ -128,6 +130,7 @@ static void start_path(Npc *n, int x, int y)
 static void set_schedule_and_loc(Npc *n, const Entry *e, int x, int y, int delayMs)
 {
     if (n->entry == e && (n->walkingToSchedule || (n->activity == e->type && tile_distance(n->actor, x, y) <= 16))) return; /* don't interrupt */
+    work_schedule_changed(n->actor, e->type); /* a round of work stops; tools it borrowed go back first */
     world_stand_up(n->actor); /* off the chair / out of bed */
     stop_walking(n);
     n->entry = e; n->destX = x; n->destY = y;
@@ -188,8 +191,12 @@ static void begin_activity(Npc *n)
             world_set_pose(n->actor, "Idle", facing);
             events_run_commands(e->custom, n->actor);
             break;
-        case S_WAITER: case S_EAT: case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
-            events_log_once(301, "Sit, Waiter, Eat at Inn and the work schedules aren't in the player yet - they stand at their spot.");
+        case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
+            world_set_pose(n->actor, "Idle", facing);
+            n->waitMs = STD_DELAY; /* to work */
+            break;
+        case S_WAITER: case S_EAT:
+            events_log_once(301, "Waiter and Eat at Inn aren't in the player yet - they stand at their spot.");
             world_set_pose(n->actor, "Idle", facing);
             break;
         default: world_set_pose(n->actor, "Idle", facing); break; /* Stand, Wait */
@@ -279,6 +286,10 @@ static void now_what(Npc *n)
         case S_HPACE: pace(n, 1); break;
         case S_VPACE: pace(n, 0); break;
         case S_DANCE: dance(n); break;
+        case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
+            if (n->entry) work_now_what(n->actor, n->activity, n->entry->json, n->destX, n->destY);
+            n->waitMs = 1000; /* the work's own rounds and pauses */
+            break;
         case S_SIT:
             if (!world_seated(n->actor))
             {
@@ -374,6 +385,7 @@ void schedules_update(double ms)
         if (events_actor_busy(n->actor) || events_actor_held(n->actor)) { n->walking = 0; continue; } /* an event has them: their schedule waits */
         if (world_actor_gone(n->actor) || vitals_incapacitated(n->characterId)) continue; /* dead, knocked out, asleep or paralyzed: does nothing */
         if (combat_busy(n->actor)) { n->walking = 0; continue; } /* fighting, fleeing or hounding: its schedule waits */
+        if (work_busy(n->actor)) continue; /* at work (or tidying up after it) */
         if (n->walking)
         {
             if (world_walking(n->actor)) continue;
@@ -403,6 +415,7 @@ int schedules_change_behavior(int actor, const char *behavior)
     if (!n) return 0;
     stop_walking(n);
     n->walkingToSchedule = 0;
+    work_schedule_changed(actor, 0);
     if (!strcmp(behavior, "Resume"))
     {
         n->entry = NULL; n->activity = 0; n->hasOld = 0;
