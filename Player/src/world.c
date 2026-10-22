@@ -933,13 +933,29 @@ static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, 
 }
 
 /* Exult's roofs: something solid over the player's head - everything from its height up isn't drawn. */
+static int ceilingIsFloor; /* the lowest ceiling over the player is the floor above (its slab), not a roof */
+
 static int ceiling_over_player(void)
 {
     int l, t, ceiling = 1 << 30;
     player_foot(player.px, player.py, &l, &t);
     for (int i = 0; i < bodyCount; i++)
         if (overlaps(&bodies[i], l, t, player.sizeX, player.sizeY) && bodies[i].z >= player.lift + player.sizeZ && bodies[i].z < ceiling) ceiling = bodies[i].z;
+    /* IsFloorSlabAt: a painted upper floor's slab, or a Floor tile up there (one lift thick, just under its floor's height) */
+    ceilingIsFloor = 0;
+    for (int i = 0; i < bodyCount && ceiling < (1 << 30); i++)
+        if (bodies[i].z == ceiling && overlaps(&bodies[i], l, t, player.sizeX, player.sizeY)
+            && ((i >= slabStart && i < slabEnd) || (bodies[i].height == 1 && (bodies[i].z + 1) % LIFTS_PER_FLOOR == 0 && bodies[i].z + 1 >= base_lift(2)))) ceilingIsFloor = 1;
     return ceiling;
+}
+
+/* skip_above (UpdateRoofs): under a roof, what is at its lift or above isn't drawn - at the roof's own lift only solid things (and Floor tiles) go.
+   Under the floor above, its slab's own lift is still this floor (a book on a tall table): only from that floor's height up goes. */
+static int hidden_above(int z, int solid, int ceiling)
+{
+    if (ceiling >= (1 << 30)) return 0;
+    if (ceilingIsFloor) return z >= ceiling + 1;
+    return z > ceiling || (z == ceiling && solid);
 }
 
 static void draw_world_once(uint32_t *pixels, uint32_t ms);
@@ -994,7 +1010,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     /* Upper floors' tiles, at their floor's height. */
     for (int f = 2; f <= MAX_FLOORS; f++)
     {
-        if (!floors[f] || base_lift(f) - 1 >= ceiling) continue;
+        if (!floors[f] || (ceiling < (1 << 30) && base_lift(f) >= ceiling + ceilingIsFloor)) continue; /* the floors overhead go */
         int lift = base_lift(f);
         for (int y = y0 < 0 ? 0 : y0; y <= y1 + 4 && y < mapH; y++)
             for (int x = x0 < 0 ? 0 : x0; x <= x1 + 4 && x < mapW; x++)
@@ -1009,7 +1025,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < thingCount; i++)
     {
         const Thing *t = &things[i];
-        if (t->gone || t->z >= ceiling) continue;
+        if (t->gone || hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling)) continue;
         if (t->def && t->def->type == T_TRAP && t->def->trapHidden && !t->sprung) continue; /* a hidden trap: unseen till it goes off */
         if (t->steps)
         {
@@ -1028,7 +1044,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 if (landing)
                 {
                     int slab = t->z + (topLift - 1 > 0 ? topLift - 1 : 0);
-                    if (slab >= ceiling) continue;
+                    if (ceiling < (1 << 30) && slab + 1 >= ceiling + ceilingIsFloor) continue;
                     Drawn *ld = add_drawn(floor_of(t->z + topLift) - 1, -5000000.0 + (t->x + t->y) * 100.0 + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count); /* with that floor's tiles */
                     if (ld) { ld->slab = 1; ld->sl = al; ld->sr = al + sw - 1; ld->sf = at; ld->sn = at + sd - 1; }
                     continue;
@@ -1066,7 +1082,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     {
         Puddle *pd = &puddles[i];
         const Picture *pic = pd->blood && pd->frame < pd->blood->frameCount ? frame_picture(&pd->blood->frames[pd->frame]) : NULL;
-        if (!pic || pd->lift >= ceiling) continue;
+        if (!pic || hidden_above(pd->lift, 0, ceiling)) continue;
         double px = pd->ux * 8 + 4.0, py = pd->uy * 8 + 4.0;
         Drawn *d = add_drawn(floor_of(pd->lift) - 1, (px / tileW + py / tileH) * 100.0 + pd->lift - 50, pic, (int)(px - pic->width / 2.0) - pd->lift * LIFT_SHIFT - cx, (int)(py - pic->height / 2.0) - pd->lift * LIFT_SHIFT - cy, pic->width, pic->height, &count);
         if (d) d->mirror = pd->mirrored;
@@ -1075,7 +1091,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     for (int i = -1; i < npcCount; i++)
     {
         const Actor *a = i < 0 ? &player : &npcs[i];
-        if (i >= 0 && (a->gone || a->lift >= ceiling)) continue;
+        if (i >= 0 && (a->gone || (ceiling < (1 << 30) && a->lift >= ceiling + ceilingIsFloor))) continue;
         int invisible = vitals_has(a->characterId, 32), shimmer = invisible && (i < 0 || items_in_party(a->characterId));
         if (invisible && !shimmer) continue; /* ShowInvisibility: unseen */
         const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
