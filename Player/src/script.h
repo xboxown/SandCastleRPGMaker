@@ -44,6 +44,9 @@ void script_set_self_switch(const char *key, int on);
 int script_data_command(int type, cJSON *params);
 
 int script_has_variable(const char *name);
+void script_save(cJSON *runtime);
+void script_restore(cJSON *runtime);
+void script_reset(void);
 int script_array_texts(const char *name, char (*out)[96], int max);
 
 /* Frees the texts formulas made (after each command). */

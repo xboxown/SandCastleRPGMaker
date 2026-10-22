@@ -159,3 +159,29 @@ int sprite_frame_at(const Sprite *sprite, uint32_t ms)
     }
     return 0;
 }
+
+/* A picture from a file on disk (a save's screenshot); NULL if it can't be read. Freed with picture_free. */
+Picture *picture_from_file(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    fseek(f, 0, SEEK_SET);
+    unsigned char *file = (unsigned char *)malloc((size_t)(size > 0 ? size : 1));
+    int ok = file && fread(file, 1, (size_t)size, f) == (size_t)size;
+    fclose(f);
+    if (!ok) { free(file); return NULL; }
+    int w, h, n;
+    unsigned char *rgba = stbi_load_from_memory(file, (int)size, &w, &h, &n, 4);
+    free(file);
+    if (!rgba) return NULL;
+    Picture *p = (Picture *)malloc(sizeof(Picture));
+    p->width = w; p->height = h;
+    p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
+    for (int i = 0; i < w * h; i++) p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+    stbi_image_free(rgba);
+    return p;
+}
+
+void picture_free(Picture *p) { if (p) { free(p->pixels); free(p); } }

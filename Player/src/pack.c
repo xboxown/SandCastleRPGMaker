@@ -17,6 +17,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 /* ---------------- SHA-256 ---------------- */
 
@@ -70,7 +71,7 @@ static void sha256(const unsigned char *data, size_t n, unsigned char out[32])
 
 #define NR 14
 static uint8_t sbox[256], inv[256];
-static uint32_t Td0[256], Td1[256], Td2[256], Td3[256];
+static uint32_t Td0[256], Td1[256], Td2[256], Td3[256], Te0[256], Te1[256], Te2[256], Te3[256];
 static int tablesReady;
 
 static uint8_t xtime(uint8_t x) { return (uint8_t)((x << 1) ^ ((x & 0x80) ? 0x1b : 0)); }
@@ -97,6 +98,9 @@ static void make_tables(void)
         uint8_t s = inv[i];
         Td0[i] = (uint32_t)gmul(s, 14) << 24 | (uint32_t)gmul(s, 9) << 16 | (uint32_t)gmul(s, 13) << 8 | gmul(s, 11);
         Td1[i] = ror32(Td0[i], 8); Td2[i] = ror32(Td0[i], 16); Td3[i] = ror32(Td0[i], 24);
+        uint8_t f = sbox[i]; /* the forward cipher's: (S.02, S, S, S.03) */
+        Te0[i] = (uint32_t)gmul(f, 2) << 24 | (uint32_t)f << 16 | (uint32_t)f << 8 | gmul(f, 3);
+        Te1[i] = ror32(Te0[i], 8); Te2[i] = ror32(Te0[i], 16); Te3[i] = ror32(Te0[i], 24);
     }
     tablesReady = 1;
 }
@@ -105,11 +109,10 @@ static uint32_t be32(const uint8_t *b) { return (uint32_t)b[0] << 24 | (uint32_t
 static void put_be32(uint8_t *b, uint32_t v) { b[0] = (uint8_t)(v >> 24); b[1] = (uint8_t)(v >> 16); b[2] = (uint8_t)(v >> 8); b[3] = (uint8_t)v; }
 static uint32_t sub_word(uint32_t w) { return (uint32_t)sbox[w >> 24] << 24 | (uint32_t)sbox[(w >> 16) & 255] << 16 | (uint32_t)sbox[(w >> 8) & 255] << 8 | sbox[w & 255]; }
 
-/* The decryption round keys (the equivalent inverse cipher's: in reverse, the middle ones through InvMixColumns). */
-static void aes_keys(const uint8_t key[32], uint32_t dk[4 * (NR + 1)])
+/* The round keys (the key expansion of FIPS-197). */
+static void aes_round_keys(const uint8_t key[32], uint32_t rk[4 * (NR + 1)])
 {
     make_tables();
-    uint32_t rk[4 * (NR + 1)];
     for (int i = 0; i < 8; i++) rk[i] = be32(key + 4 * i);
     uint8_t rcon = 1;
     for (int i = 8; i < 4 * (NR + 1); i++)
@@ -119,6 +122,13 @@ static void aes_keys(const uint8_t key[32], uint32_t dk[4 * (NR + 1)])
         else if (i % 8 == 4) t = sub_word(t);
         rk[i] = rk[i - 8] ^ t;
     }
+}
+
+/* The decryption round keys (the equivalent inverse cipher's: in reverse, the middle ones through InvMixColumns). */
+static void aes_keys(const uint8_t key[32], uint32_t dk[4 * (NR + 1)])
+{
+    uint32_t rk[4 * (NR + 1)];
+    aes_round_keys(key, rk);
     for (int r = 0; r <= NR; r++)
         for (int c = 0; c < 4; c++)
         {
@@ -145,6 +155,25 @@ static void aes_decrypt_block(const uint32_t *dk, const uint8_t in[16], uint8_t 
     put_be32(out + 4, ((uint32_t)inv[s1 >> 24] << 24 | (uint32_t)inv[(s0 >> 16) & 255] << 16 | (uint32_t)inv[(s3 >> 8) & 255] << 8 | inv[s2 & 255]) ^ k[1]);
     put_be32(out + 8, ((uint32_t)inv[s2 >> 24] << 24 | (uint32_t)inv[(s1 >> 16) & 255] << 16 | (uint32_t)inv[(s0 >> 8) & 255] << 8 | inv[s3 & 255]) ^ k[2]);
     put_be32(out + 12, ((uint32_t)inv[s3 >> 24] << 24 | (uint32_t)inv[(s2 >> 16) & 255] << 16 | (uint32_t)inv[(s1 >> 8) & 255] << 8 | inv[s0 & 255]) ^ k[3]);
+}
+
+static void aes_encrypt_block(const uint32_t *rk, const uint8_t in[16], uint8_t out[16])
+{
+    uint32_t s0 = be32(in) ^ rk[0], s1 = be32(in + 4) ^ rk[1], s2 = be32(in + 8) ^ rk[2], s3 = be32(in + 12) ^ rk[3], t0, t1, t2, t3;
+    for (int r = 1; r < NR; r++)
+    {
+        const uint32_t *k = rk + 4 * r;
+        t0 = Te0[s0 >> 24] ^ Te1[(s1 >> 16) & 255] ^ Te2[(s2 >> 8) & 255] ^ Te3[s3 & 255] ^ k[0];
+        t1 = Te0[s1 >> 24] ^ Te1[(s2 >> 16) & 255] ^ Te2[(s3 >> 8) & 255] ^ Te3[s0 & 255] ^ k[1];
+        t2 = Te0[s2 >> 24] ^ Te1[(s3 >> 16) & 255] ^ Te2[(s0 >> 8) & 255] ^ Te3[s1 & 255] ^ k[2];
+        t3 = Te0[s3 >> 24] ^ Te1[(s0 >> 16) & 255] ^ Te2[(s1 >> 8) & 255] ^ Te3[s2 & 255] ^ k[3];
+        s0 = t0; s1 = t1; s2 = t2; s3 = t3;
+    }
+    const uint32_t *k = rk + 4 * NR;
+    put_be32(out, ((uint32_t)sbox[s0 >> 24] << 24 | (uint32_t)sbox[(s1 >> 16) & 255] << 16 | (uint32_t)sbox[(s2 >> 8) & 255] << 8 | sbox[s3 & 255]) ^ k[0]);
+    put_be32(out + 4, ((uint32_t)sbox[s1 >> 24] << 24 | (uint32_t)sbox[(s2 >> 16) & 255] << 16 | (uint32_t)sbox[(s3 >> 8) & 255] << 8 | sbox[s0 & 255]) ^ k[1]);
+    put_be32(out + 8, ((uint32_t)sbox[s2 >> 24] << 24 | (uint32_t)sbox[(s3 >> 16) & 255] << 16 | (uint32_t)sbox[(s0 >> 8) & 255] << 8 | sbox[s1 & 255]) ^ k[2]);
+    put_be32(out + 12, ((uint32_t)sbox[s3 >> 24] << 24 | (uint32_t)sbox[(s0 >> 16) & 255] << 16 | (uint32_t)sbox[(s1 >> 8) & 255] << 8 | sbox[s2 & 255]) ^ k[3]);
 }
 
 /* CBC: each block decrypted, then XORed with the cipher block before it (the IV for the first). */
@@ -200,11 +229,14 @@ unsigned char *pack_decrypt(const unsigned char *data, long size, long *plainLen
 
 char *read_whole_file(const char *path, long *length);
 
+static unsigned char projectId[16]; static int haveProjectId;
+
 unsigned char *pack_read(const char *path, long *plainLength)
 {
     long size;
     unsigned char *data = (unsigned char *)read_whole_file(path, &size);
     if (!data) return NULL;
+    if (size >= 24 && !memcmp(data, "SRPG", 4) && !haveProjectId) { memcpy(projectId, data + 8, 16); haveProjectId = 1; } /* the game's id: saves are encrypted with it */
     unsigned char *plain = pack_decrypt(data, size, plainLength);
     free(data);
     return plain;
@@ -336,3 +368,45 @@ long pack_stream_read(const PackStream *s, long offset, void *dst, long n)
 }
 
 void pack_stream_close(PackStream *s) { if (s) { free(s->raw); free(s); } }
+
+/* ---------------- Writing: a save, encrypted as the game's own files are ---------------- */
+
+/* ProjectContainer.Save: "SRPG", version 1, the game's id, a fresh IV, AES-256-CBC (PKCS7) with the game's key. malloc'd; NULL without the game's id. */
+unsigned char *pack_encrypt(const unsigned char *plain, long length, long *size)
+{
+    if (!haveProjectId) return NULL;
+    long blocks = length / 16 + 1, cipherLength = blocks * 16;
+    unsigned char *out = (unsigned char *)malloc((size_t)(48 + cipherLength));
+    if (!out) return NULL;
+    memcpy(out, "SRPG", 4);
+    out[4] = 1; out[5] = out[6] = out[7] = 0;
+    memcpy(out + 8, projectId, 16);
+    out[24] = 16; out[25] = out[26] = out[27] = 0;
+    /* the IV: different for every save (the clock, a counter, where the buffer is) */
+    static uint32_t counter = 0x9E3779B9u;
+    uint32_t mix = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)out ^ (counter += 0x6D2B79F5u);
+    for (int i = 0; i < 16; i++) { mix ^= mix << 13; mix ^= mix >> 17; mix ^= mix << 5; out[28 + i] = (unsigned char)(mix >> 24); }
+    out[44] = (unsigned char)cipherLength; out[45] = (unsigned char)(cipherLength >> 8); out[46] = (unsigned char)(cipherLength >> 16); out[47] = (unsigned char)(cipherLength >> 24);
+    char text[80];
+    strcpy(text, "SandcastleRpgMaker.ProjectKey.v1:");
+    guid_text(projectId, text + strlen(text));
+    unsigned char key[32];
+    sha256((const unsigned char *)text, strlen(text), key);
+    uint32_t rk[4 * (NR + 1)];
+    aes_round_keys(key, rk);
+    const unsigned char *before = out + 28;
+    unsigned char block[16];
+    unsigned pad = (unsigned)(cipherLength - length);
+    for (long b = 0; b < blocks; b++)
+    {
+        for (int i = 0; i < 16; i++)
+        {
+            long at = b * 16 + i;
+            block[i] = (unsigned char)((at < length ? plain[at] : (unsigned char)pad) ^ before[i]);
+        }
+        aes_encrypt_block(rk, block, out + 48 + b * 16);
+        before = out + 48 + b * 16;
+    }
+    *size = 48 + cipherLength;
+    return out;
+}

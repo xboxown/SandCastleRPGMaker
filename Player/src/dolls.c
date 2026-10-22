@@ -30,6 +30,7 @@
 #include "platform.h"
 #include "pictures.h"
 #include "vitals.h"
+#include "save.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -48,6 +49,10 @@ enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_COMBINE_ITEM = 17, TR_COMBINE_
 #define PRESS_MS 160
 #define OWNER_TITLE 5
 #define ANSWER_QUIT -1
+#define ANSWER_SAVE_OVER -2
+#define ANSWER_DELETE -3
+#define MAX_SAVES 200
+#define MAX_SAVE_NAME 40
 
 typedef struct PartState
 {
@@ -70,7 +75,19 @@ typedef struct DollWin
     int pressPart; double pressMs; int pressAction; /* a button shown pressed; what happens after */
     int hasFill, errNumber; char errWords[200], errDetail[200];
     uint32_t *canvas; int cw, ch;
+    struct SaveScreen *save;               /* the Save/Load screen's own (System Settings > Save / Load) */
 } DollWin;
+
+/* The Save/Load screen (Exult's Newfile_gump): its saves, what's picked, the name being typed, a press waiting to be confirmed. */
+typedef struct SaveScreen
+{
+    SaveInfo saves[MAX_SAVES]; int count;
+    int picked, pickedSlot, scroll;
+    char name[MAX_SAVE_NAME + 1];
+    int confirmKind; char confirmFolder[1200]; double confirmMs;  /* pressed once: pressed again in time, it's done */
+    int pendingSlot; char pendingName[MAX_SAVE_NAME + 1], pendingFolder[1200]; /* what a "Write over?" Yes goes ahead with */
+    Picture *shot; char shotFolder[1200];
+} SaveScreen;
 
 static cJSON *designs;
 static DollWin *wins[16]; static int winCount;   /* drawing order: the last on top */
@@ -78,6 +95,11 @@ static DollState *forms[64]; static int formIds[64], formCount;
 static int nextSoundOwner = 1000;
 static uint32_t nowMs;
 static void title_button(int wi, int kind);
+void dolls_open_save_screen(void);
+void dolls_save_answer(int token, int yes);
+static int save_part_clicked(struct DollWin *w, int i, int dy, int ph);
+static SaveInfo *picked_save(struct SaveScreen *s);
+static void load_pressed(struct DollWin *w);
 typedef struct Slide { DollState *state; int part; double fx, fy, tx, ty, ms, total; } Slide;
 static Slide slides[16]; static int slideCount;
 
@@ -580,6 +602,7 @@ static void draw_items(DollWin *win, cJSON *part, PartState *r, int px, int py)
 }
 
 static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, int x, int y, int fade);
+static void draw_save_part(DollWin *win, cJSON *part, int i, int x, int y, int w, int h, int fade);
 
 static void render(DollWin *win)
 {
@@ -674,11 +697,8 @@ static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, 
                 break;
             }
             case K_SAVELIST: case K_SAVENAME: case K_SAVESHOT: case K_SAVEDETAILS:
-            {
-                const Sprite *s = look_sprite(part, 0);
-                if (s) cv_blit(now_picture(s), x, y, pw, ph, 0, 0, cvw, cvh, fade);
+                draw_save_part(win, part, i, x, y, pw, ph, fade);
                 break;
-            }
             case K_SLOT: case K_AREA:
             {
                 const Sprite *s = look_sprite(part, 0);
@@ -770,6 +790,7 @@ void dolls_close_window(int i)
     sound_play(num(w->design, "CloseSoundResourceId", -1));
     if (w->title) sound_stop_owner(OWNER_TITLE); /* the game begins */
     if (w->answerToken > 0) events_doll_answered(w->answerToken, 0); /* an unanswered question is a no */
+    if (w->save) { picture_free(w->save->shot); free(w->save); }
     free(w->canvas);
     free(w);
 }
@@ -844,6 +865,7 @@ static void answer(int wi, int yes)
     w->answerToken = 0;
     dolls_close_window(wi);
     if (token == ANSWER_QUIT && yes) events_request_quit(); /* the Quit prompt */
+    else if (token == ANSWER_SAVE_OVER || token == ANSWER_DELETE) dolls_save_answer(token, yes);
     else if (token > 0) events_doll_answered(token, yes);
 }
 
@@ -865,7 +887,7 @@ static void title_button(int wi, int kind)
             else events_log_once(313, "New Game during play isn't in the player yet.");
             break;
         case K_CONTINUE: game_log("There's no saved game to continue."); break;
-        case K_LOADGAME: events_log_once(314, "The Save/Load screen isn't in the player yet."); break;
+        case K_LOADGAME: dolls_open_save_screen(); break; /* to load (no Save there at the title) */
         case K_QUIT: ask_to_quit(); break;
     }
 }
@@ -994,6 +1016,13 @@ int dolls_click(int wi, int i, int x, int y)
     play_click(part);
     if (r->disabled) return 1;
     if (w->typing >= 0 && w->typing != i) dolls_stop_typing();
+    {
+        double sc = dolls_scale(w);
+        int ppx = r->moved ? (int)r->x : num(part, "X", 0), ppy = r->moved ? (int)r->y : num(part, "Y", 0), sw, sh;
+        size_of_part(part, 0, &sw, &sh);
+        (void)ppx;
+        if (save_part_clicked(w, i, (int)((y - w->y) / sc) - ppy, sh)) return 1; /* the Save/Load screen's own parts */
+    }
     if (w->openList >= 0 && w->openList != i) w->openList = -1;
     double s = dolls_scale(w);
     int px = r->moved ? (int)r->x : num(part, "X", 0), py = r->moved ? (int)r->y : num(part, "Y", 0);
@@ -1089,6 +1118,7 @@ void dolls_double_click(int wi, int i)
         if (!fire(w->state, i, TR_USE, 0, 0, -1)) { snprintf(line, sizeof line, "You %s \"%s\".", r->look == 1 ? "open" : "close", str(part, "Name")); game_log(line); }
         return;
     }
+    if ((kind_of(part) == K_SAVELIST || kind_of(part) == K_SAVENAME) && w->save) { if (picked_save(w->save)) load_pressed(w); return; } /* double-clicking a save loads it */
     if (is_control_kind(kind_of(part)) || kind_of(part) == K_SWITCH || kind_of(part) == K_SLIDER) return; /* acted on at the click */
     if (!fire(w->state, i, TR_USE, 0, 0, -1)) { snprintf(line, sizeof line, "\"%s\" - nothing happens.", str(part, "Name")); game_log(line); }
 }
@@ -1098,10 +1128,12 @@ const char *dolls_part_name(int wi, int i) { return str(part_at(wins[wi]->design
 int dolls_part_acts_on_click(int wi, int i)
 {
     int k = kind_of(part_at(wins[wi]->design, i));
-    return is_control_kind(k) || k == K_SWITCH || k == K_SLIDER || k == K_CLOSE;
+    return is_control_kind(k) || k == K_SWITCH || k == K_SLIDER || k == K_CLOSE || k == K_SAVELIST || k == K_SAVENAME;
 }
 
 /* Keys: typing in a text box; on a modal one Escape answers no, Enter presses Yes / OK. 1 = taken. */
+static int save_key(int key, int ch);
+
 int dolls_key(int key, int ch)
 {
     for (int wi = winCount - 1; wi >= 0; wi--)
@@ -1124,7 +1156,7 @@ int dolls_key(int key, int ch)
             if (key == KEY_ENTER || key == KEY_TAB || key == KEY_ESCAPE) { dolls_stop_typing(); return 1; }
             return 1; /* nothing else while typing */
         }
-        if (!w->modal) continue;
+        if (!w->modal) { if (w->save && save_key(key, ch)) return 1; continue; }
         if (ch) return 1;
         if (key == KEY_ESCAPE) { if (!w->title) answer(wi, 0); return 1; }
         if (key == KEY_ENTER)
@@ -1139,6 +1171,7 @@ int dolls_key(int key, int ch)
 
 void dolls_update(double ms)
 {
+    for (int wi = 0; wi < winCount; wi++) if (wins[wi]->save && wins[wi]->save->confirmMs > 0) wins[wi]->save->confirmMs -= ms;
     for (int wi = 0; wi < winCount; wi++)
     {
         DollWin *w = wins[wi];
@@ -1152,6 +1185,7 @@ void dolls_update(double ms)
         int now = find_win(s);
         if (now < 0) break;
         if (action == K_CONFIRM || action == K_CANCEL) { answer(now, action == K_CONFIRM); break; }
+        if (action == K_LOADBUTTON) { if (wins[now]->save) load_pressed(wins[now]); break; }
         title_button(now, action); /* New Game, Continue, Load Game, Quit */
         break;
     }
@@ -1483,3 +1517,387 @@ int dolls_move_command(DollState *context, int designId, int move, double x, dou
     if (front) for (int i = 0; i < winCount; i++) if (wins[i] == w) { dolls_to_front(i); break; }
     return 1;
 }
+
+/* ---------------- Saving (DollState: DesignId, Parts by id) ---------------- */
+
+cJSON *dolls_state_json(void *p)
+{
+    DollState *s = (DollState *)p;
+    cJSON *j = cJSON_CreateObject(), *parts = cJSON_CreateObject();
+    cJSON_AddNumberToObject(j, "DesignId", s->designId);
+    for (int i = 0; i < s->partCount; i++)
+    {
+        PartState *r = &s->parts[i];
+        cJSON *e = cJSON_CreateObject(), *its = cJSON_CreateArray();
+        cJSON_AddNumberToObject(e, "Look", r->look);
+        cJSON_AddBoolToObject(e, "Visible", r->visible);
+        cJSON_AddNumberToObject(e, "Value", r->value);
+        cJSON_AddBoolToObject(e, "Disabled", r->disabled);
+        if (r->moved) { cJSON_AddNumberToObject(e, "X", r->x); cJSON_AddNumberToObject(e, "Y", r->y); }
+        if (r->caption) cJSON_AddStringToObject(e, "Caption", r->caption);
+        if (r->hasOptions) { cJSON *o = cJSON_CreateArray(); for (int k = 0; k < r->optionCount; k++) cJSON_AddItemToArray(o, cJSON_CreateString(r->options[k])); cJSON_AddItemToObject(e, "Options", o); }
+        cJSON_AddStringToObject(e, "Text", r->text);
+        for (int k = 0; k < r->itemCount; k++) cJSON_AddItemToArray(its, items_item_json(r->items[k]));
+        cJSON_AddItemToObject(e, "Items", its);
+        char key[16];
+        snprintf(key, sizeof key, "%d", num(part_at(s->design, i), "Id", i));
+        cJSON_AddItemToObject(parts, key, e);
+    }
+    cJSON_AddItemToObject(j, "Parts", parts);
+    return j;
+}
+
+/* A saved paperdoll (or one from a Windows save's DollRuntime): parts it no longer has are dropped, new ones start as designed. */
+void *dolls_state_from_json(cJSON *j)
+{
+    if (!designs) dolls_load();
+    cJSON *design = dolls_design(num(j, "DesignId", -1));
+    if (!design) return NULL;
+    DollState *s = new_state(design);
+    for (int i = 0; i < s->partCount; i++)
+    {
+        char key[16];
+        snprintf(key, sizeof key, "%d", num(part_at(design, i), "Id", i));
+        cJSON *e = get(get(j, "Parts"), key), *x;
+        if (!e) continue;
+        PartState *r = &s->parts[i];
+        for (int k = 0; k < r->itemCount; k++) items_free(r->items[k]);
+        r->itemCount = 0;
+        r->look = num(e, "Look", r->look);
+        r->visible = !cJSON_IsFalse(get(e, "Visible"));
+        r->value = num(e, "Value", r->value);
+        r->disabled = flag(e, "Disabled");
+        if (cJSON_IsNumber(get(e, "X")) && cJSON_IsNumber(get(e, "Y"))) { r->moved = 1; r->x = get(e, "X")->valuedouble; r->y = get(e, "Y")->valuedouble; }
+        if (cJSON_IsString(get(e, "Caption"))) r->caption = strdup(str(e, "Caption"));
+        if (cJSON_IsArray(get(e, "Options")))
+        {
+            int n = cJSON_GetArraySize(get(e, "Options")), k = 0;
+            r->options = (char (*)[96])calloc((size_t)(n + 1), 96);
+            cJSON_ArrayForEach(x, get(e, "Options")) snprintf(r->options[k++], 96, "%s", cJSON_GetStringValue(x) ? cJSON_GetStringValue(x) : "");
+            r->optionCount = n; r->hasOptions = 1;
+        }
+        snprintf(r->text, sizeof r->text, "%s", str(e, "Text"));
+        cJSON_ArrayForEach(x, get(e, "Items")) dolls_restore_item(s, i, items_read_json(x), -1);
+    }
+    return s;
+}
+
+/* ---------------- The Save/Load screen (System Settings > Save / Load) ---------------- */
+
+static cJSON *save_settings(void) { return get(get(project(), "Settings"), "SaveLoad"); }
+
+/* The saved game a Save slot holds: its own number, or its place among the paperdoll's Save slots. */
+static int slot_number(cJSON *design, int partIndex)
+{
+    cJSON *part = part_at(design, partIndex);
+    if (num(part, "SaveSlot", 0) > 0) return num(part, "SaveSlot", 0);
+    int n = 0;
+    for (int i = 0; i <= partIndex; i++) if (kind_of(part_at(design, i)) == K_SAVENAME) n++;
+    return n;
+}
+
+static int has_kind(cJSON *design, int kind) { cJSON *p; cJSON_ArrayForEach(p, parts_of(design)) if (kind_of(p) == kind) return 1; return 0; }
+static int slot_count(cJSON *design) { int n = 0; cJSON *p; cJSON_ArrayForEach(p, parts_of(design)) if (kind_of(p) == K_SAVENAME) n++; return n; }
+static SaveInfo *in_slot(SaveScreen *s, int slot) { for (int i = 0; i < s->count; i++) if (s->saves[i].slot == slot) return &s->saves[i]; return NULL; }
+static SaveInfo *picked_save(SaveScreen *s) { return s->pickedSlot > 0 ? in_slot(s, s->pickedSlot) : s->picked >= 0 && s->picked < s->count ? &s->saves[s->picked] : NULL; }
+
+static void pick_slot(SaveScreen *s, int slot)
+{
+    s->pickedSlot = slot;
+    SaveInfo *save = in_slot(s, slot);
+    snprintf(s->name, sizeof s->name, "%s", save ? save->name : "");
+    s->picked = save ? (int)(save - s->saves) : -1;
+    s->confirmKind = 0;
+}
+
+static void pick_row(DollWin *w, int row)
+{
+    SaveScreen *s = w->save;
+    s->picked = row;
+    int slot = s->saves[row].slot, found = 0;
+    for (int i = 0; i < w->state->partCount; i++) if (kind_of(part_at(w->design, i)) == K_SAVENAME && slot_number(w->design, i) == slot) found = 1;
+    s->pickedSlot = slot > 0 && found ? slot : 0;
+    snprintf(s->name, sizeof s->name, "%s", s->saves[row].name);
+    s->confirmKind = 0;
+}
+
+static void refresh_saves(SaveScreen *s) { s->count = save_list(s->saves, MAX_SAVES); }
+
+static DollWin *save_window(int *index)
+{
+    for (int i = winCount - 1; i >= 0; i--) if (wins[i]->save) { if (index) *index = i; return wins[i]; }
+    return NULL;
+}
+
+int dolls_save_screen_open(void) { return save_window(NULL) != NULL; }
+
+/* The S key (Exult's File gump): the Save/Load screen opens - as designed, every time. */
+void dolls_open_save_screen(void)
+{
+    int wi;
+    if (save_window(&wi)) { dolls_to_front(wi); return; }
+    cJSON *design = dolls_design(num(save_settings(), "DollDesignId", -1));
+    if (!design) { game_error(101, ""); return; }
+    DollWin *w = open_window(form_state(design, 1), design, 0, 0);
+    if (!w) return;
+    w->save = (SaveScreen *)calloc(1, sizeof(SaveScreen));
+    w->save->picked = -1;
+    refresh_saves(w->save);
+    for (int i = 0; i < w->state->partCount; i++) if (kind_of(part_at(design, i)) == K_SAVEBUTTON && dolls_title_open()) w->state->parts[i].visible = 0; /* at the title: load only */
+    game_log(slot_count(design) ? "Click a slot: type a name and Save, or Load what it holds." : w->save->count ? "Pick a save, or type a new name." : "No saved games yet - type a name and press Save.");
+}
+
+static void save_text(cJSON *part, const char *text, int x, int y, int faint)
+{
+    if (!text[0]) return;
+    uint32_t tint = tint_of(part);
+    if (faint) tint = 0xFF999999u;
+    font_draw_into(font_of(part), cv, cvw, cvh, x, y, text, tint, scale_of_text(part), 0);
+}
+
+static void draw_save_part(DollWin *win, cJSON *part, int i, int x, int y, int w, int h, int fade)
+{
+    const Sprite *look = look_sprite(part, 0);
+    int k = kind_of(part), row = row_height(part);
+    SaveScreen *s = win->save;
+    if (look && k != K_SAVESHOT) cv_blit(now_picture(look), x, y, w, h, x, y, x + w, y + h, fade);
+    if (!s) return;
+    switch (k)
+    {
+        case K_SAVELIST:
+        {
+            int rows = h / row > 1 ? h / row : 1;
+            if (s->scroll > s->count - rows) s->scroll = s->count - rows;
+            if (s->scroll < 0) s->scroll = 0;
+            if (!s->count) { save_text(part, "(no saved games)", x + 2, y + 1, 1); break; }
+            for (int n = s->scroll; n < s->count && n < s->scroll + rows; n++)
+            {
+                int yy = y + (n - s->scroll) * row;
+                if (n == s->picked) { const Sprite *m = look_sprite(part, 1); if (m) cv_blit(now_picture(m), x, yy, w, row, x, y, x + w, y + h, 0); else cv_fill(x, yy, w, row, PLAIN_PICKED); }
+                save_text(part, s->saves[n].name, x + 2, yy + 1, 0);
+            }
+            break;
+        }
+        case K_SAVENAME:
+        {
+            int slot = slot_number(win->design, i), picked = s->pickedSlot == slot;
+            if (picked) { const Sprite *m = look_sprite(part, 1); if (m) cv_blit(now_picture(m), x, y, w, h, x, y, x + w, y + h, 0); else cv_fill(x, y, w, h, PLAIN_PICKED); }
+            else if (!look) { cv_fill(x, y, w, 1, 0x46FFFFFFu); cv_fill(x, y + h - 1, w, 1, 0x46FFFFFFu); cv_fill(x, y, 1, h, 0x46FFFFFFu); cv_fill(x + w - 1, y, 1, h, 0x46FFFFFFu); } /* an empty slot can still be found */
+            char text[64];
+            SaveInfo *save = in_slot(s, slot);
+            if (picked) snprintf(text, sizeof text, "%s_", s->name); else snprintf(text, sizeof text, "%s", save ? save->name : ""); /* an empty slot is blank, as in Exult */
+            save_text(part, text, x + 2, y + (h - row > 0 ? (h - row) / 2 : 0) + 1, 0);
+            break;
+        }
+        case K_SAVESHOT:
+        {
+            SaveInfo *save = picked_save(s);
+            if (save)
+            {
+                if (strcmp(s->shotFolder, save->folder))
+                {
+                    char path[1300];
+                    picture_free(s->shot);
+                    s->shot = picture_from_file(save_screenshot_path(save->folder, path, sizeof path));
+                    snprintf(s->shotFolder, sizeof s->shotFolder, "%s", save->folder);
+                }
+                if (s->shot)
+                {
+                    double sc = fmin((double)w / s->shot->width, (double)h / s->shot->height);
+                    int dw = (int)(s->shot->width * sc), dh = (int)(s->shot->height * sc);
+                    cv_blit(s->shot, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh, x, y, x + w, y + h, 0);
+                }
+            }
+            if (look) cv_blit(now_picture(look), x, y, w, h, x, y, x + w, y + h, fade); /* its frame, over the picture */
+            break;
+        }
+        case K_SAVEDETAILS:
+        {
+            SaveInfo *save = picked_save(s);
+            if (!save) break;
+            char when[48];
+            snprintf(when, sizeof when, "Saved %s", save->savedAt);
+            const char *lines[3] = { save->name, save->gameTime, when };
+            int yy = y + 1;
+            for (int n = 0; n < 3; n++) if (lines[n][0]) { save_text(part, lines[n], x + 2, yy, 0); yy += row; }
+            break;
+        }
+    }
+}
+
+/* Tells the player on the screen itself and in Game.log. */
+static void say(const char *text) { game_log(text); gumps_label(text); }
+
+static void save_error(int number, const char *detail) { game_error_shown(number, detail, 0); }
+
+static void write_save(DollWin *w, int slot, const char *name, const char *over)
+{
+    const char *busy = events_save_blocker();
+    if (busy) { save_error(102, busy); return; }
+    char error[300], line[120];
+    if (!save_write(name, slot, over, error, sizeof error)) { save_error(106, error); return; }
+    snprintf(line, sizeof line, "Game saved: \"%s\".", name);
+    int savedId = num(save_settings(), "SavedDollDesignId", -1);
+    if (dolls_design(savedId)) { game_log(line); dolls_open_form(savedId, 1, 1, 0, 0); } /* the maker's own "Game saved" paperdoll */
+    else say(line);
+    /* Exult's Newfile_gump::save: the screen stays open, nothing picked any more */
+    refresh_saves(w->save);
+    w->save->pickedSlot = 0; w->save->picked = -1; w->save->name[0] = 0; w->save->confirmKind = 0;
+}
+
+/* Writing over or deleting a save asks first: the "Are you sure?" paperdoll, else the same button pressed again. 1 = go ahead now. */
+static int ask_first(DollWin *w, int kind, const char *folder, const char *question, int token)
+{
+    int prompt = num(save_settings(), "ConfirmDollDesignId", -1);
+    SaveScreen *s = w->save;
+    if (dolls_design(prompt)) { game_log(question); if (dolls_open_form(prompt, 1, 1, 0, 0)) wins[winCount - 1]->answerToken = token; return 0; }
+    if (s->confirmKind == kind && !strcmp(s->confirmFolder, folder) && s->confirmMs > 0) { s->confirmKind = 0; return 1; }
+    s->confirmKind = kind; snprintf(s->confirmFolder, sizeof s->confirmFolder, "%s", folder); s->confirmMs = 4000;
+    say(question);
+    return 0;
+}
+
+static void save_pressed(DollWin *w)
+{
+    SaveScreen *s = w->save;
+    int slot = s->pickedSlot;
+    if (slot == 0 && slot_count(w->design) > 0 && !has_kind(w->design, K_SAVELIST)) { save_error(103, ""); return; }
+    char name[MAX_SAVE_NAME + 1];
+    const char *a = s->name;
+    while (*a == ' ') a++;
+    snprintf(name, sizeof name, "%s", a);
+    size_t n = strlen(name);
+    while (n && name[n - 1] == ' ') name[--n] = 0;
+    if (!n) { save_error(111, ""); return; }
+    const char *busy = events_save_blocker();
+    if (busy) { save_error(102, busy); return; }
+    SaveInfo *existing = NULL;
+    if (slot > 0) existing = in_slot(s, slot); /* a slot is written over whatever its save was called */
+    else for (int i = 0; i < s->count && !existing; i++) if (s->saves[i].slot == 0 && !strcmp(s->saves[i].name, name)) existing = &s->saves[i];
+    if (!existing) { write_save(w, slot, name, NULL); return; }
+    char question[160];
+    snprintf(question, sizeof question, "Write over \"%s\"? Press Save again.", existing->name);
+    s->pendingSlot = slot; snprintf(s->pendingName, sizeof s->pendingName, "%s", name); snprintf(s->pendingFolder, sizeof s->pendingFolder, "%s", existing->folder);
+    if (ask_first(w, K_SAVEBUTTON, existing->folder, question, ANSWER_SAVE_OVER)) write_save(w, slot, name, existing->folder);
+}
+
+static void delete_pressed(DollWin *w)
+{
+    SaveScreen *s = w->save;
+    SaveInfo *save = picked_save(s);
+    if (!save) { save_error(s->pickedSlot > 0 ? 105 : 104, ""); return; }
+    char question[160];
+    snprintf(question, sizeof question, "Delete \"%s\"? Press Delete again.", save->name);
+    snprintf(s->pendingFolder, sizeof s->pendingFolder, "%s", save->folder);
+    if (ask_first(w, K_DELETESAVE, save->folder, question, ANSWER_DELETE)) dolls_save_answer(ANSWER_DELETE, 1);
+}
+
+static void load_pressed(DollWin *w)
+{
+    SaveScreen *s = w->save;
+    SaveInfo *save = picked_save(s);
+    if (!save) { save_error(s->pickedSlot > 0 ? 105 : 104, ""); return; }
+    dolls_request_load(save->folder, save->name);
+}
+
+/* An answer to the screen's own questions (write over, delete). */
+void dolls_save_answer(int token, int yes)
+{
+    DollWin *w = save_window(NULL);
+    if (!w || !yes) return;
+    SaveScreen *s = w->save;
+    if (token == ANSWER_SAVE_OVER) write_save(w, s->pendingSlot, s->pendingName, s->pendingFolder);
+    else if (token == ANSWER_DELETE)
+    {
+        char name[64] = "";
+        for (int i = 0; i < s->count; i++) if (!strcmp(s->saves[i].folder, s->pendingFolder)) snprintf(name, sizeof name, "%s", s->saves[i].name);
+        save_delete(s->pendingFolder);
+        refresh_saves(s);
+        if (s->pickedSlot > 0) pick_slot(s, s->pickedSlot); /* the slot stays picked, empty now */
+        else { if (s->picked >= s->count) s->picked = s->count - 1; SaveInfo *p = picked_save(s); snprintf(s->name, sizeof s->name, "%s", p ? p->name : ""); }
+        char line[120];
+        snprintf(line, sizeof line, "Deleted \"%s\".", name);
+        game_log(line);
+    }
+}
+
+/* A click on one of the screen's own parts. 1 = handled. */
+static int save_part_clicked(DollWin *w, int i, int dy, int ph)
+{
+    cJSON *part = part_at(w->design, i);
+    int k = kind_of(part);
+    if (k < K_SAVELIST || k > K_DELETESAVE) return 0;
+    if (!w->save) { char line[160]; snprintf(line, sizeof line, "\"%s\" works on the Save/Load screen (System Settings > Save / Load).", str(part, "Name")); game_log(line); return 1; }
+    SaveScreen *s = w->save;
+    PartState *r = &w->state->parts[i];
+    switch (k)
+    {
+        case K_SAVELIST:
+        {
+            int row = s->scroll + dy / row_height(part);
+            (void)ph;
+            if (row >= 0 && row < s->count) pick_row(w, row);
+            return 1;
+        }
+        case K_SAVENAME:
+        {
+            int slot = slot_number(w->design, i);
+            if (s->pickedSlot != slot) pick_slot(s, slot);
+            SaveInfo *save = in_slot(s, slot);
+            char line[160];
+            if (save) snprintf(line, sizeof line, "Slot %d: \"%s\" - Load it, or type a new name and Save over it.", slot, save->name);
+            else snprintf(line, sizeof line, "Slot %d is empty - type a name and press Save.", slot);
+            game_log(line);
+            return 1;
+        }
+        case K_SAVEBUTTON: r->look = 1; w->pressPart = i; w->pressMs = PRESS_MS; w->pressAction = 0; fire(w->state, i, TR_USE, 0, 0, -1); save_pressed(w); return 1;
+        case K_LOADBUTTON: r->look = 1; w->pressPart = i; w->pressMs = PRESS_MS; w->pressAction = K_LOADBUTTON; return 1; /* its Pressed look shows first, then the game loads */
+        case K_DELETESAVE: r->look = 1; w->pressPart = i; w->pressMs = PRESS_MS; w->pressAction = 0; fire(w->state, i, TR_USE, 0, 0, -1); delete_pressed(w); return 1;
+    }
+    return 1;
+}
+
+/* Keys on the Save/Load screen: the name typed, Backspace, Enter saves, Up / Down pick. 1 = taken. */
+static int save_key(int key, int ch)
+{
+    DollWin *w = save_window(NULL);
+    if (!w || dolls_modal_open()) return 0;
+    SaveScreen *s = w->save;
+    if (ch)
+    {
+        if (s->pickedSlot == 0 && slot_count(w->design) > 0 && !has_kind(w->design, K_SAVELIST)) return 1; /* no slot picked: the letters go nowhere (Exult) */
+        size_t n = strlen(s->name);
+        if (n < MAX_SAVE_NAME && !strchr("\\/:*?\"<>|", ch)) { s->name[n] = (char)ch; s->name[n + 1] = 0; }
+        s->confirmKind = 0;
+        return 1;
+    }
+    switch (key)
+    {
+        case KEY_BACKSPACE: { size_t n = strlen(s->name); if (n) s->name[n - 1] = 0; s->confirmKind = 0; return 1; }
+        case KEY_ENTER: save_pressed(w); return 1;
+        case KEY_UP: case KEY_DOWN:
+        {
+            int step = key == KEY_UP ? -1 : 1, slots = slot_count(w->design);
+            if (slots > 0 && (s->pickedSlot > 0 || !has_kind(w->design, K_SAVELIST)))
+            {
+                int numbers[64], n = 0, at = -1;
+                for (int i = 0; i < w->state->partCount && n < 64; i++) if (kind_of(part_at(w->design, i)) == K_SAVENAME) numbers[n++] = slot_number(w->design, i);
+                for (int i = 0; i < n; i++) if (numbers[i] == s->pickedSlot) at = i;
+                at = at < 0 ? 0 : at + step < 0 ? 0 : at + step >= n ? n - 1 : at + step;
+                pick_slot(s, numbers[at]);
+                return 1;
+            }
+            if (!s->count) return 1;
+            int row = s->picked + step;
+            pick_row(w, row < 0 ? 0 : row >= s->count ? s->count - 1 : row);
+            if (s->picked < s->scroll) s->scroll = s->picked;
+            return 1;
+        }
+        case KEY_S: case KEY_C: case KEY_I: case KEY_SPACE: case KEY_1: case KEY_2: case KEY_3: case KEY_4: case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9: case KEY_OTHER:
+            return 1; /* letters arrive as text */
+    }
+    return 0;
+}
+
+/* The mouse wheel over the Save list: it scrolls. */
+void dolls_save_scroll(int step) { DollWin *w = save_window(NULL); if (w) w->save->scroll += step; }

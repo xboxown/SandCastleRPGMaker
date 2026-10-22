@@ -10,4 +10,8 @@ void weather_update(double ms);                              /* not while the ga
 void weather_draw_clouds(uint32_t *pixels);                  /* over the world, under the sky's light */
 void weather_draw(uint32_t *pixels);                         /* over the sky's light */
 
+#include "../third_party/cJSON.h"
+void weather_save(cJSON *runtime);
+void weather_restore(cJSON *runtime);
+
 #endif

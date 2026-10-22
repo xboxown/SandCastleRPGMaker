@@ -550,3 +550,46 @@ void vitals_update(double ms)
 
 /* Game Over (the command): from now on the player can do nothing. */
 void vitals_set_game_over(void) { gameOver = 1; }
+
+/* ---------------- Saving (SavedVitals) ---------------- */
+
+void vitals_save(cJSON *runtime)
+{
+    cJSON *all = cJSON_CreateArray();
+    for (int i = 0; i < vitalCount; i++)
+    {
+        Vital *v = &vitals[i];
+        cJSON *e = cJSON_CreateObject();
+        cJSON_AddNumberToObject(e, "CharacterId", v->characterId); cJSON_AddNumberToObject(e, "Food", v->food); cJSON_AddNumberToObject(e, "Ailments", v->ailments);
+        cJSON_AddNumberToObject(e, "PoisonRemainingMs", v->poisonLeft); cJSON_AddNumberToObject(e, "SleepRemainingMs", v->sleepLeft);
+        cJSON_AddNumberToObject(e, "ParalyzeRemainingMs", v->paralyzeLeft); cJSON_AddNumberToObject(e, "CharmRemainingMs", v->charmLeft);
+        cJSON_AddNumberToObject(e, "CurseRemainingMs", v->curseLeft); cJSON_AddNumberToObject(e, "InvisibleRemainingMs", v->invisibleLeft);
+        cJSON_AddNumberToObject(e, "ProtectedRemainingMs", v->protectedLeft);
+        cJSON_AddBoolToObject(e, "Dead", v->dead); cJSON_AddBoolToObject(e, "Unconscious", v->unconscious);
+        cJSON_AddItemToArray(all, e);
+    }
+    cJSON_AddItemToObject(runtime, "Vitals", all);
+    cJSON_AddBoolToObject(runtime, "GameOver", gameOver);
+}
+
+void vitals_restore(cJSON *runtime)
+{
+    cJSON *e;
+    cJSON_ArrayForEach(e, get(runtime, "Vitals"))
+    {
+        Vital *v = vital_of(num(e, "CharacterId", -2));
+        if (!v) continue;
+        v->food = num(e, "Food", v->food); v->ailments = num(e, "Ailments", 0);
+        v->poisonLeft = get(e, "PoisonRemainingMs") ? get(e, "PoisonRemainingMs")->valuedouble : 0; v->poisonNext = 5000;
+        v->sleepLeft = get(e, "SleepRemainingMs") ? get(e, "SleepRemainingMs")->valuedouble : 0;
+        v->paralyzeLeft = get(e, "ParalyzeRemainingMs") ? get(e, "ParalyzeRemainingMs")->valuedouble : 0;
+        v->charmLeft = get(e, "CharmRemainingMs") ? get(e, "CharmRemainingMs")->valuedouble : 0;
+        v->curseLeft = get(e, "CurseRemainingMs") ? get(e, "CurseRemainingMs")->valuedouble : 0;
+        v->invisibleLeft = get(e, "InvisibleRemainingMs") ? get(e, "InvisibleRemainingMs")->valuedouble : 0;
+        v->protectedLeft = get(e, "ProtectedRemainingMs") ? get(e, "ProtectedRemainingMs")->valuedouble : 0;
+        v->dead = flag(e, "Dead"); v->unconscious = flag(e, "Unconscious");
+        int actor = world_actor_by_character(v->characterId);
+        if (actor >= 0 && v->unconscious && !v->dead && !world_set_pose(actor, "Unconscious", -1)) world_set_pose(actor, "Sleeping", -1);
+    }
+    gameOver = flag(runtime, "GameOver");
+}

@@ -21,6 +21,9 @@ void vitals_cure(int characterId, int ailment);
 int vitals_ailment_of(const char *name);           /* "Poisoned" -> its flag */
 void vitals_change_food(int characterId, const char *operation, int amount);
 void vitals_heal_fully(int characterId);
-int vitals_bark(int characterId, int kind);        /* VerboseKind: Hungry 0 .. Uneasy 10 */
+int vitals_bark(int characterId, int kind);
+#include "../third_party/cJSON.h"
+void vitals_save(cJSON *runtime);
+void vitals_restore(cJSON *runtime);        /* VerboseKind: Hungry 0 .. Uneasy 10 */
 
 #endif

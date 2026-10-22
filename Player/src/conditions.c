@@ -216,3 +216,33 @@ int conditions_all(cJSON *list, const char *evaluatingEvent)
     }
     return result;
 }
+
+/* ---------------- Saving: what has happened ---------------- */
+void conditions_save(cJSON *runtime)
+{
+    cJSON *all = cJSON_CreateArray();
+    for (int i = 0; i < historyCount; i++)
+    {
+        cJSON *e = cJSON_CreateObject();
+        cJSON_AddStringToObject(e, "Key", history[i].key); cJSON_AddNumberToObject(e, "Count", history[i].count); cJSON_AddNumberToObject(e, "LastMinute", history[i].lastMinute);
+        cJSON_AddItemToArray(all, e);
+    }
+    cJSON_AddItemToObject(runtime, "Happenings", all);
+}
+
+void conditions_restore(cJSON *runtime)
+{
+    cJSON *e;
+    historyCount = 0;
+    cJSON_ArrayForEach(e, get(runtime, "Happenings"))
+    {
+        Happening *h = find(str(e, "Key"));
+        if (!h)
+        {
+            if (historyCount == historyCap) { historyCap = historyCap ? historyCap * 2 : 64; history = (Happening *)realloc(history, sizeof(Happening) * (size_t)historyCap); }
+            h = &history[historyCount++];
+            snprintf(h->key, sizeof h->key, "%s", str(e, "Key"));
+        }
+        h->count = num(e, "Count", 0); h->lastMinute = (long)num(e, "LastMinute", 0);
+    }
+}

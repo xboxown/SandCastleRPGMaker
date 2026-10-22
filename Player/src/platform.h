@@ -17,7 +17,7 @@
 enum PlatformKey
 {
     KEY_NONE, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESCAPE, KEY_ENTER, KEY_SPACE, KEY_F11, KEY_TAB, KEY_PAGEUP, KEY_PAGEDOWN,
-    KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_C, KEY_I, KEY_BACKSPACE, KEY_OTHER
+    KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6, KEY_7, KEY_8, KEY_9, KEY_C, KEY_I, KEY_S, KEY_BACKSPACE, KEY_OTHER
 };
 
 typedef struct PlatformEvent
@@ -60,6 +60,10 @@ void platform_audio_close(void);
 void platform_audio_lock(void);
 void platform_audio_unlock(void);
 const char *platform_audio_name(void);
+
+/* Folders for the saves: made (1 if it's there now), removed when empty. */
+int platform_make_dir(const char *path);
+int platform_remove_dir(const char *path);
 void platform_audio_route(int which);   /* Amiga: 0 AHI else Paula, 1 Paula only, 2 AHI only */  /* what it plays through ("AHI", "Paula", "SDL", "none") */
 
 /* A message box (the Amiga's requester): why a game can't start, started from an icon with no console to print to. */

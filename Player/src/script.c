@@ -1135,3 +1135,79 @@ int script_array_texts(const char *name, char (*out)[96], int max)
     for (int i = 0; i < l->count && count < max; i++) snprintf(out[count++], 96, "%s", value_text_of(l->items[i]));
     return count;
 }
+
+/* ---------------- Saving (SavedScriptData) ---------------- */
+
+static cJSON *value_json(Value v) { return v.kind == V_TEXT ? cJSON_CreateString(v.s ? v.s : "") : cJSON_CreateNumber(v.n); }
+static Value json_value(cJSON *j) { return cJSON_IsString(j) ? keep(text_in_place(j->valuestring)) : value_number(cJSON_IsNumber(j) ? j->valuedouble : 0); }
+
+void script_save(cJSON *runtime)
+{
+    cJSON *numbersJ = cJSON_CreateObject(), *textsJ = cJSON_CreateObject(), *listsJ = cJSON_CreateObject(), *gridsJ = cJSON_CreateObject(), *selfJ = cJSON_CreateArray();
+    for (int i = 0; i < numbers.count; i++) cJSON_AddNumberToObject(numbersJ, numbers.items[i].name, numbers.items[i].number);
+    for (int i = 0; i < texts.count; i++) cJSON_AddStringToObject(textsJ, texts.items[i].name, (const char *)texts.items[i].data);
+    for (int i = 0; i < lists.count; i++)
+    {
+        ScriptList *l = (ScriptList *)lists.items[i].data;
+        cJSON *a = cJSON_CreateArray();
+        for (int k = 0; l && k < l->count; k++) cJSON_AddItemToArray(a, value_json(l->items[k]));
+        cJSON_AddItemToObject(listsJ, lists.items[i].name, a);
+    }
+    for (int i = 0; i < grids.count; i++)
+    {
+        ScriptGrid *g = (ScriptGrid *)grids.items[i].data;
+        cJSON *o = cJSON_CreateObject(), *cells = cJSON_CreateArray();
+        cJSON_AddNumberToObject(o, "Columns", g ? g->cols : 0); cJSON_AddNumberToObject(o, "Rows", g ? g->rows : 0);
+        for (int k = 0; g && k < g->cols * g->rows; k++) cJSON_AddItemToArray(cells, value_json(g->cells[k]));
+        cJSON_AddItemToObject(o, "Cells", cells);
+        cJSON_AddItemToObject(gridsJ, grids.items[i].name, o);
+    }
+    for (int i = 0; i < selfSwitches.count; i++) cJSON_AddItemToArray(selfJ, cJSON_CreateString(selfSwitches.items[i].name));
+    cJSON *script = cJSON_CreateObject();
+    cJSON_AddItemToObject(script, "Variables", numbersJ);
+    cJSON_AddItemToObject(script, "Texts", textsJ);
+    cJSON_AddItemToObject(script, "Arrays", listsJ);
+    cJSON_AddItemToObject(script, "Grids", gridsJ);
+    cJSON_AddItemToObject(script, "SelfSwitches", selfJ);
+    cJSON_AddItemToObject(runtime, "Script", script);
+}
+
+void script_restore(cJSON *runtime)
+{
+    cJSON *script = cJSON_GetObjectItem(runtime, "Script"), *e;
+    if (!script) return;
+    cJSON_ArrayForEach(e, cJSON_GetObjectItem(script, "Variables")) if (cJSON_IsNumber(e)) script_set_number(e->string, e->valuedouble);
+    cJSON_ArrayForEach(e, cJSON_GetObjectItem(script, "Texts")) if (cJSON_IsString(e)) { Named *t = find_or_add(&texts, e->string); free(t->data); t->data = owned_copy(e->valuestring); }
+    cJSON_ArrayForEach(e, cJSON_GetObjectItem(script, "Arrays"))
+    {
+        ScriptList *l = new_list(e->string);
+        cJSON *v;
+        cJSON_ArrayForEach(v, e) list_add(l, json_value(v), -1);
+    }
+    cJSON_ArrayForEach(e, cJSON_GetObjectItem(script, "Grids"))
+    {
+        int cols = cJSON_GetObjectItem(e, "Columns") ? cJSON_GetObjectItem(e, "Columns")->valueint : 0, rows = cJSON_GetObjectItem(e, "Rows") ? cJSON_GetObjectItem(e, "Rows")->valueint : 0;
+        ScriptGrid *g = new_grid(e->string, cols, rows, value_number(0));
+        int k = 0;
+        cJSON *v;
+        cJSON_ArrayForEach(v, cJSON_GetObjectItem(e, "Cells")) if (k < cols * rows) { unkeep(&g->cells[k]); g->cells[k++] = json_value(v); }
+    }
+    cJSON_ArrayForEach(e, cJSON_GetObjectItem(script, "SelfSwitches")) if (cJSON_IsString(e)) find_or_add(&selfSwitches, e->valuestring);
+}
+
+/* A new game (a save being loaded): every variable, text, array, grid and self switch forgotten. */
+void script_reset(void)
+{
+    Table *all[5] = { &numbers, &texts, &lists, &grids, &selfSwitches };
+    for (int t = 0; t < 5; t++)
+    {
+        for (int i = 0; i < all[t]->count; i++)
+        {
+            free(all[t]->items[i].name);
+            if (all[t] == &texts) free(all[t]->items[i].data);
+            else if (all[t] == &lists && all[t]->items[i].data) { ScriptList *l = (ScriptList *)all[t]->items[i].data; for (int k = 0; k < l->count; k++) unkeep(&l->items[k]); free(l->items); free(l); }
+            else if (all[t] == &grids && all[t]->items[i].data) { ScriptGrid *g = (ScriptGrid *)all[t]->items[i].data; for (int k = 0; k < g->cols * g->rows; k++) unkeep(&g->cells[k]); free(g->cells); free(g); }
+        }
+        all[t]->count = 0;
+    }
+}

@@ -430,7 +430,9 @@ int world_load(const char *folder)
         if (!d) continue;
         Thing *t = &things[thingCount++];
         t->def = d;
+        t->placed = o; /* its Map Editor entry (a save writes it back) */
         t->uid = nextUid++; t->category = 4; t->itemId = d->id; t->instanceId = num(o, "InstanceId", 0);
+        if (cJSON_IsNumber(get(o, "HitPointsRuntime")) && num(o, "HitPointsRuntime", -1) >= 0) { t->hp = num(o, "HitPointsRuntime", 0); t->hpSet = 1; }
         t->quantity = num(o, "Quantity", 1) > 0 ? num(o, "Quantity", 1) : 1;
         t->x = num(o, "X", 0); t->y = num(o, "Y", 0); t->z = num(o, "Z", 0);
         t->offX = num(o, "OffsetX", 0); t->offY = num(o, "OffsetY", 0); t->facing = num(o, "Facing", DIR_S) & 7;
@@ -512,7 +514,7 @@ int world_load(const char *folder)
            health, belongings and fights. Its runtime id: the character's + 1000000 x n, so lookups by id still find the first. */
         int copies = 0;
         for (int i = 0; i < npcCount; i++) if (npcs[i].characterId % COPY_STEP == num(who, "Id", -2)) copies++;
-        if (copies)
+        if (copies && num(who, "Id", -2) < COPY_STEP)
         {
             cJSON *copy = cJSON_Duplicate(who, 1);
             cJSON_ReplaceItemInObject(copy, "Id", cJSON_CreateNumber(num(who, "Id", -2) + COPY_STEP * copies));
@@ -2466,4 +2468,108 @@ void world_thing_drop_at(int uid, int sx, int sy, int onFloor)
     t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
     if (t->body >= 0) { if (bodies[t->body].width || t->solid) thing_box(t, &bodies[t->body]); }
     settle_all();
+}
+
+/* ---------------- Saving (GameSaveData.Map): the map as it is now ---------------- */
+
+static void set_num(cJSON *o, const char *k, double v) { if (get(o, k)) cJSON_ReplaceItemInObject(o, k, cJSON_CreateNumber(v)); else cJSON_AddNumberToObject(o, k, v); }
+static void set_bool(cJSON *o, const char *k, int v) { if (get(o, k)) cJSON_ReplaceItemInObject(o, k, cJSON_CreateBool(v)); else cJSON_AddBoolToObject(o, k, v); }
+static void set_item(cJSON *o, const char *k, cJSON *v) { if (get(o, k)) cJSON_ReplaceItemInObject(o, k, v); else cJSON_AddItemToObject(o, k, v); }
+
+/* A thing's entry in the save's map: its Map Editor entry with where it is and what state it's in now. extra: what it holds (items.c / dolls.c). */
+static cJSON *thing_json(const Thing *t, int instanceId, cJSON *(*extra)(int uid, cJSON *entry))
+{
+    cJSON *e = t->placed ? cJSON_Duplicate(t->placed, 1) : cJSON_CreateObject();
+    set_num(e, "InstanceId", instanceId);
+    if (t->category == 4)
+    {
+        set_num(e, "ObjectId", t->itemId);
+        set_num(e, "Quantity", t->quantity);
+        set_num(e, "ContainerInstanceId", -1);
+        set_bool(e, "StartsOpen", t->open);
+        if (t->def && t->def->type == T_DOOR) set_bool(e, "IsLockedRuntime", t->locked);
+        if (t->def && t->def->type == T_LIGHT) { set_bool(e, "IsLitRuntime", t->lit); set_bool(e, "StartsLit", t->lit); }
+        set_bool(e, "IsSpentRuntime", t->spent);
+        set_num(e, "BurnLeftRuntime", t->burnLeft);
+        set_num(e, "HitPointsRuntime", t->hpSet ? t->hp : -1);
+    }
+    else { set_num(e, "Category", t->category); set_num(e, "ItemId", t->itemId); }
+    set_num(e, "X", t->x); set_num(e, "Y", t->y); set_num(e, "Z", t->z);
+    set_num(e, "OffsetX", t->offX); set_num(e, "OffsetY", t->offY); set_num(e, "Facing", t->facing);
+    set_bool(e, "HangsOnWall", t->hangs); set_bool(e, "LiesUnder", t->liesUnder);
+    if (extra) extra(t->uid, e);
+    return e;
+}
+
+/* The map now: its tiles (Change Tile), every thing where it is (picked up: gone; put down: there), every character where it stands
+   (the dead lie in their bodies), and the main character's spot as the Start Position. runtime: the exact spot, facing, lift. */
+void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entry))
+{
+    /* tiles */
+    int first = 1;
+    cJSON *layer;
+    cJSON_ArrayForEach(layer, get(map, "Layers"))
+    {
+        int f = first ? 1 : num(layer, "Floor", 1);
+        first = 0;
+        if (f < 1 || f > MAX_FLOORS || !floors[f]) continue;
+        cJSON *tiles = cJSON_CreateArray();
+        for (int i = 0; i < mapW * mapH; i++) cJSON_AddItemToArray(tiles, cJSON_CreateNumber(floors[f][i]));
+        set_item(layer, "TileIndices", tiles);
+    }
+    /* things */
+    int top = 0;
+    for (int i = 0; i < thingCount; i++) if (things[i].instanceId > top) top = things[i].instanceId;
+    cJSON *objects = cJSON_CreateArray(), *items = cJSON_CreateArray(), *o;
+    cJSON_ArrayForEach(o, get(map, "Objects")) if (num(o, "ContainerInstanceId", -1) >= 0) cJSON_AddItemToArray(objects, cJSON_Duplicate(o, 1)); /* inside a container: as it was */
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->wallSetPiece) { if (t->wallSetPiece && !t->gone && t->placed) cJSON_AddItemToArray(objects, cJSON_Duplicate(t->placed, 1)); continue; }
+        int id = t->instanceId > 0 ? t->instanceId : ++top;
+        cJSON_AddItemToArray(t->category == 4 ? objects : items, thing_json(t, id, extra));
+    }
+    set_item(map, "Objects", objects);
+    set_item(map, "Items", items);
+    /* characters */
+    cJSON *placed = cJSON_CreateArray();
+    int placementId = 1;
+    for (int i = 0; i < npcCount; i++)
+    {
+        const Actor *a = &npcs[i];
+        if (a->gone) continue;
+        cJSON *p = cJSON_CreateObject();
+        cJSON_AddNumberToObject(p, "Id", placementId++);
+        cJSON_AddNumberToObject(p, "CharacterId", a->characterId);
+        cJSON_AddNumberToObject(p, "X", (int)floor(a->px / tileW)); cJSON_AddNumberToObject(p, "Y", (int)floor(a->py / tileH));
+        cJSON_AddNumberToObject(p, "Floor", floor_of(a->lift < 0 ? 0 : a->lift));
+        cJSON_AddNumberToObject(p, "Facing", a->facing);
+        cJSON_AddItemToArray(placed, p);
+    }
+    set_item(map, "Characters", placed);
+    /* the main character */
+    set_num(map, "StartX", (int)floor(player.px / tileW)); set_num(map, "StartY", (int)floor(player.py / tileH));
+    set_num(map, "StartFloor", floor_of(player.lift < 0 ? 0 : player.lift));
+    cJSON_AddNumberToObject(runtime, "PlayerPixelX", player.px); cJSON_AddNumberToObject(runtime, "PlayerPixelY", player.py);
+    cJSON_AddNumberToObject(runtime, "PlayerLift", player.lift); cJSON_AddNumberToObject(runtime, "PlayerFacing", player.facing);
+}
+
+/* A save's exact spot for the main character (the Start Position only knows the cell). */
+void world_restore_player(cJSON *runtime)
+{
+    if (!cJSON_IsNumber(get(runtime, "PlayerPixelX"))) return;
+    player.px = get(runtime, "PlayerPixelX")->valuedouble; player.py = get(runtime, "PlayerPixelY")->valuedouble;
+    player.lift = num(runtime, "PlayerLift", player.lift); player.facing = num(runtime, "PlayerFacing", DIR_S) & 7;
+}
+
+cJSON *world_thing_placed(int uid) { Thing *t = thing_by_uid(uid); return t ? t->placed : NULL; }
+int world_thing_count(void) { return thingCount; }
+int world_thing_uid_at(int i) { return i >= 0 && i < thingCount && !things[i].gone ? things[i].uid : 0; }
+
+const char *world_actor_name(int actor)
+{
+    cJSON *c;
+    int id = world_actor_character(actor);
+    cJSON_ArrayForEach(c, get(get(get(gameJson, "Project"), "Characters"), "Characters")) if (num(c, "Id", -2) == id) return str(c, "Name");
+    return "Someone";
 }

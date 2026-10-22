@@ -1458,3 +1458,6 @@ int combat_attack_thing_tick(int actor, double ms)
     combat_strike_thing(t->uid, actor);
     return 1;
 }
+
+void combat_save(cJSON *runtime) { cJSON_AddBoolToObject(runtime, "CombatMode", combatMode); }
+void combat_restore(cJSON *runtime) { combatMode = cJSON_IsTrue(cJSON_GetObjectItem(runtime, "CombatMode")); }

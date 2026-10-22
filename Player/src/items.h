@@ -115,6 +115,11 @@ int items_parked_uid(const Item *it);
 void items_become(Item *it, int itemId);
 void items_use_up_one(Item *it);
 Item *items_find_doll(const void *doll, int *uid);
+/* Saving. */
+cJSON *items_item_json(const Item *it);
+Item *items_read_json(cJSON *json);
+void items_save(cJSON *characters);
+cJSON *items_save_thing(int uid, cJSON *entry);
 int items_locked(const Item *it, int byDefault);
 int items_carries_key(int characterId, int keyId);
 int items_lockpick(int characterId);

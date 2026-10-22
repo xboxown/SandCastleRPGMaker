@@ -1000,3 +1000,6 @@ int gumps_turn_into(const void *state, int objectId)
     return 1;
 }
 
+
+/* Words over the windows for a moment (the Save/Load screen tells the player). */
+void gumps_label(const char *text) { show_label(text, SCREEN_W / 2, SCREEN_H - 24); }

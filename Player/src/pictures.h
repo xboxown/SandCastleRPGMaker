@@ -49,4 +49,8 @@ int sprite_frame_at(const Sprite *sprite, uint32_t ms);
 /* The picture to show at a time (ms) for an animation; its first frame when not looping and past the end. */
 const Picture *sprite_picture_at(const Sprite *sprite, uint32_t ms);
 
+/* A picture read from a file (PNG, BMP...): a save's screenshot. */
+Picture *picture_from_file(const char *path);
+void picture_free(Picture *p);
+
 #endif

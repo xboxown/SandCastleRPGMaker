@@ -53,6 +53,16 @@ int dolls_key(int key, int ch);
 int dolls_typing(void);
 void dolls_stop_typing(void);
 
+/* The Save/Load screen (the S key; the title's Load Game). Loading is asked of main (dolls_request_load). */
+void dolls_open_save_screen(void);
+int dolls_save_screen_open(void);
+void dolls_save_scroll(int step);
+void dolls_request_load(const char *folder, const char *name);
+
+/* Saving. */
+cJSON *dolls_state_json(void *state);
+void *dolls_state_from_json(cJSON *json);
+
 /* Commands. */
 int dolls_paperdoll_command(DollState *s, const char *action, int partId, const char *partName, cJSON *params);
 int dolls_script_command(const char *command, DollState *context, int designId, const char *partName, const char *value, double number, int valueIsText, double x, double y, double seconds, cJSON *params);

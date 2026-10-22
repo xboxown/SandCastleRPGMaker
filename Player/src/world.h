@@ -7,6 +7,7 @@
 #define SANDCASTLE_WORLD_H
 
 #include <stdint.h>
+#include "../third_party/cJSON.h"
 
 /* Loads <folder>/game.json and sprites.json; 0 on failure (why in world_error()). */
 int world_load(const char *folder);
@@ -79,6 +80,13 @@ void world_thing_add_quantity(int uid, int n);
 int world_thing_quantity(int uid);
 int world_thing_at_cell(int category, int itemId, int x, int y, int except);
 void world_thing_drop_at(int uid, int screenX, int screenY, int onFloor);
+/* Saving and loading. */
+void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entry));
+void world_restore_player(cJSON *runtime);
+cJSON *world_thing_placed(int uid);
+int world_thing_count(void);
+int world_thing_uid_at(int i);
+const char *world_actor_name(int actor);
 int world_line_clear(double fromX, double fromY, int fromLift, double toX, double toY);
 void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double y, int lift, uint32_t ms);
 int world_put_body(int actor, int x, int y, int onFloor);

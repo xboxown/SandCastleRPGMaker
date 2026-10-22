@@ -4,6 +4,7 @@
  * (whole pixels, as the Windows engine's nearest-neighbour scaling).
  */
 #include "platform.h"
+#include <errno.h>
 #include <SDL.h>
 
 static SDL_Window *window;
@@ -57,6 +58,7 @@ static enum PlatformKey key_of(SDL_Keycode k)
         case SDLK_TAB: return KEY_TAB;
         case SDLK_c: return KEY_C;
         case SDLK_i: return KEY_I;
+        case SDLK_s: return KEY_S;
         case SDLK_BACKSPACE: return KEY_BACKSPACE;
         case SDLK_PAGEUP: return KEY_PAGEUP;
         case SDLK_PAGEDOWN: return KEY_PAGEDOWN;
@@ -158,3 +160,15 @@ void platform_audio_close(void) { if (audioDevice) { SDL_CloseAudioDevice(audioD
 
 void platform_audio_lock(void) { if (audioDevice) SDL_LockAudioDevice(audioDevice); }
 void platform_audio_unlock(void) { if (audioDevice) SDL_UnlockAudioDevice(audioDevice); }
+
+/* ---------------- Folders (the saves) ---------------- */
+#ifdef _WIN32
+#include <direct.h>
+int platform_make_dir(const char *path) { return _mkdir(path) == 0 || errno == EEXIST; }
+int platform_remove_dir(const char *path) { return _rmdir(path) == 0; }
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+int platform_make_dir(const char *path) { return mkdir(path, 0755) == 0 || errno == EEXIST; }
+int platform_remove_dir(const char *path) { return rmdir(path) == 0; }
+#endif

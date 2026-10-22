@@ -125,6 +125,7 @@ static enum PlatformKey key_of(UWORD code)
         case 0x42: return KEY_TAB;
         case 0x33: return KEY_C;
         case 0x17: return KEY_I;
+        case 0x21: return KEY_S;
         case 0x41: return KEY_BACKSPACE;
         case 0x01: case 0x1D: return KEY_1; /* the row of numbers, and the keypad's */
         case 0x02: case 0x1E: return KEY_2;
@@ -233,3 +234,16 @@ void platform_message(const char *heading, const char *text)
     if (!IntuitionBase) IntuitionBase = (struct IntuitionBase *)OpenLibrary((CONST_STRPTR)"intuition.library", 36); /* any that can show a requester - even to say the Kickstart is too old */
     if (IntuitionBase) EasyRequestArgs(NULL, &es, NULL, NULL);
 }
+
+/* ---------------- Folders (the saves) ---------------- */
+int platform_make_dir(const char *path)
+{
+    BPTR lock = Lock((CONST_STRPTR)path, ACCESS_READ);
+    if (lock) { UnLock(lock); return 1; } /* there already */
+    lock = CreateDir((CONST_STRPTR)path);
+    if (!lock) return 0;
+    UnLock(lock);
+    return 1;
+}
+
+int platform_remove_dir(const char *path) { return DeleteFile((CONST_STRPTR)path) != 0; }

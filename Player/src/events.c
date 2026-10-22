@@ -3033,3 +3033,84 @@ int events_fire_doll(cJSON *pages, int trigger, void *state, int part, int itemC
 }
 
 void events_request_quit(void) { quitRequested = 1; }
+
+/* ---------------- Saving: the clock, and how many times each event page has fired ---------------- */
+
+void events_save(cJSON *runtime)
+{
+    cJSON_AddNumberToObject(runtime, "Day", clockDay); cJSON_AddNumberToObject(runtime, "Hour", clockHour);
+    cJSON_AddNumberToObject(runtime, "Minute", clockMinute); cJSON_AddNumberToObject(runtime, "Ticks", clockTicks);
+    cJSON *fired = cJSON_CreateArray();
+    for (int i = 0; i < ownerCount; i++)
+    {
+        Owner *o = &owners[i];
+        char key[48];
+        if (o->isMapEvent) snprintf(key, sizeof key, "Event:%d", o->eventId);
+        else if (o->itemCategory) snprintf(key, sizeof key, "%s:%d", o->itemCategory == 5 ? "Container" : o->itemCategory == 3 ? "Book" : "ObjectDef", o->itemId);
+        else snprintf(key, sizeof key, "Character:%d", o->characterId);
+        for (int p = 0; p < o->pageCount; p++)
+            if (o->pages[p].fired > 0)
+            {
+                cJSON *f = cJSON_CreateObject();
+                cJSON_AddStringToObject(f, "Owner", key); cJSON_AddNumberToObject(f, "PageIndex", p); cJSON_AddNumberToObject(f, "Count", o->pages[p].fired);
+                cJSON_AddItemToArray(fired, f);
+            }
+    }
+    for (int i = 0; i < copyCountN; i++) /* each placed copy of an object: by its instance */
+        if (copyCounts[i].count > 0 && world_thing_instance(copyCounts[i].uid) > 0)
+        {
+            cJSON *f = cJSON_CreateObject();
+            char key[48];
+            snprintf(key, sizeof key, "Object:%d", world_thing_instance(copyCounts[i].uid));
+            cJSON_AddStringToObject(f, "Owner", key); cJSON_AddNumberToObject(f, "PageIndex", copyCounts[i].page); cJSON_AddNumberToObject(f, "Count", copyCounts[i].count);
+            cJSON_AddItemToArray(fired, f);
+        }
+    cJSON_AddItemToObject(runtime, "FiredPages", fired);
+}
+
+void events_restore(cJSON *runtime)
+{
+    clockDay = num(runtime, "Day", clockDay); clockHour = num(runtime, "Hour", clockHour);
+    clockMinute = num(runtime, "Minute", clockMinute); clockTicks = num(runtime, "Ticks", clockTicks);
+    cJSON *f;
+    cJSON_ArrayForEach(f, get(runtime, "FiredPages"))
+    {
+        const char *key = str(f, "Owner");
+        int page = num(f, "PageIndex", -1), count = num(f, "Count", 0);
+        const char *colon = strchr(key, ':');
+        if (!colon || page < 0) continue;
+        int id = atoi(colon + 1);
+        if (!strncmp(key, "Object:", 7))
+        {
+            for (int i = 0; i < world_thing_count(); i++) { int uid = world_thing_uid_at(i); if (uid && world_thing_instance(uid) == id) *count_for(uid, page) = count; }
+            continue;
+        }
+        for (int i = 0; i < ownerCount; i++)
+        {
+            Owner *o = &owners[i];
+            int match = !strncmp(key, "Event:", 6) ? o->isMapEvent && o->eventId == id
+                : !strncmp(key, "Character:", 10) ? !o->isMapEvent && !o->itemCategory && o->characterId == id
+                : !strncmp(key, "Container:", 10) ? o->itemCategory == 5 && o->itemId == id
+                : !strncmp(key, "Book:", 5) ? o->itemCategory == 3 && o->itemId == id
+                : o->itemCategory == 4 && o->itemId == id;
+            if (match && page < o->pageCount) { o->pages[page].fired = count; break; }
+        }
+    }
+}
+
+/* WhatIsHappening: why a save can't be made right now (NULL: it can). */
+const char *events_save_blocker(void)
+{
+    static char why[120];
+    if (events_cinema()) return "a cutscene is playing";
+    if (dialog_showing()) return "a message is showing";
+    for (int i = 0; i < MAX_RUNS; i++)
+        if (runs[i].used && runs[i].waiting != W_NONE && runs[i].waiting != W_DOLL)
+        {
+            if (runs[i].waiting == W_WALK || runs[i].waiting == W_ACTION) { snprintf(why, sizeof why, "%s is still doing an event's command", world_actor_name(runs[i].walker)); return why; }
+            return "an event is waiting";
+        }
+    if (vitals_game_over()) return "the game is over";
+    if (savingForbidden) return "saving isn't allowed here";
+    return NULL;
+}

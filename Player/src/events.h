@@ -56,6 +56,9 @@ void events_knocked_out(int characterId);
 int events_fire_doll(cJSON *pages, int trigger, void *state, int part, int itemCategory, int itemId, int combinedPartId);
 void events_set_doll_context(void *doll);
 void events_doll_answered(int token, int yes);
+void events_save(cJSON *runtime);
+const char *events_save_blocker(void);
+void events_restore(cJSON *runtime);
 /* The error box shown (System Settings > Errors has one): token hears when it closes. 0: no box (the words went to Game.log). */
 int game_error_shown(int number, const char *detail, int token);
 int events_saving_forbidden(void);

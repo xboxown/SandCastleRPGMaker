@@ -19,6 +19,7 @@ int gumps_dragging_doll_part(const void *state, int part);
 const struct DollState *gumps_drag_doll_state(void);
 int gumps_drag_doll_part(void);
 int gumps_use_up_combined(void);
+void gumps_label(const char *text);
 int gumps_turn_into(const void *state, int objectId);
 
 #endif

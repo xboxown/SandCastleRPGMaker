@@ -21,4 +21,7 @@ long pack_stream_length(const PackStream *stream);
 long pack_stream_read(const PackStream *stream, long offset, void *dst, long n);
 void pack_stream_close(PackStream *stream);
 
+/* A save: encrypted with the game's own key (read from game.sdbx), as the Windows game's saves are. malloc'd. */
+unsigned char *pack_encrypt(const unsigned char *plain, long length, long *size);
+
 #endif

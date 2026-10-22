@@ -19,6 +19,7 @@
 #include "combat.h"
 #include "gumps.h"
 #include "dolls.h"
+#include "save.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -64,6 +65,8 @@ static void scripted_presses(const char *presses, double t, double *done)
             if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') gumps_mouse_down(x, y); else if (*what == 'V') gumps_mouse_move(x, y); else gumps_mouse_up(x, y); }
         }
         else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
+        else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) dolls_key(0, t[q]); } /* Lname: letters typed */
+        else if (*what == 'F') { save_take_screenshot(pixels); dolls_open_save_screen(); } /* F: S pressed (the Save/Load screen) */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
         else if (*what == 'M') { const char *comma = strchr(what, ';'); if (comma) world_teleport(0, atoi(what + 1), atoi(comma + 1)); } /* M7;10: the player to (7, 10) */
         else
@@ -105,6 +108,10 @@ static void save_bmp(const char *path)
         }
     fclose(f);
 }
+
+/* A save to load (the Save/Load screen, Continue): done between frames, the game built anew from it. */
+static char loadFolder[1200], loadName[64]; static int loadRequested;
+void dolls_request_load(const char *folder, const char *name) { snprintf(loadFolder, sizeof loadFolder, "%s", folder); snprintf(loadName, sizeof loadName, "%s", name); loadRequested = 1; }
 
 int main(int argc, char **argv)
 {
@@ -171,6 +178,7 @@ int main(int argc, char **argv)
         return 1;
     }
     note("Window open. Starting.");
+    save_init(folder); /* the saves: beside the game */
     { FILE *quiet = fopen("nosound", "rb"); if (quiet) { fclose(quiet); noSound = 1; } } /* a file called nosound beside the game: no sound */
     { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula (paula)."); } } /* a file called paula: audio.device, never AHI */
     { FILE *p = fopen("ahi", "rb"); if (p) { fclose(p); platform_audio_route(2); note("Sound through AHI only (ahi)."); } }
@@ -222,6 +230,9 @@ int main(int argc, char **argv)
                     case KEY_UP: held[2] = down ? ++order : 0; break;
                     case KEY_DOWN: held[3] = down ? ++order : 0; break;
                     case KEY_ESCAPE: if (down && !gumps_close_top()) running = 0; break; /* Escape closes the top window first */
+                    case KEY_S: /* Exult: S for the Save/Load screen (the view as it is now is its screenshot) */
+                        if (down && !dolls_title_open() && !dolls_modal_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); }
+                        break;
                     case KEY_I: if (down && !events_cinema() && !events_keys_forbidden()) gumps_open_paperdoll(world_actor_character(0)); break; /* Exult: I for the inventory */
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
                     case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
@@ -299,6 +310,7 @@ int main(int argc, char **argv)
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
+        if (loadRequested) { loadRequested = 0; note("Loading saves isn't in the player yet (next build)."); }
         if (!dialog_showing() && !title)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */

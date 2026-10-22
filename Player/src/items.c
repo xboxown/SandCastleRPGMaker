@@ -119,6 +119,8 @@ static Item *read_item(cJSON *j)
     cJSON *key;
     cJSON_ArrayForEach(key, get(j, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(key)) it->keys[it->keyCount++] = key->valueint;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
+    it->charges = num(j, "ChargesRuntime", -1);
+    if (cJSON_IsObject(get(j, "DollRuntime"))) it->doll = dolls_state_from_json(get(j, "DollRuntime")); /* its paperdoll as it was left */
     cJSON_ArrayForEach(c, get(j, "Contents")) add_to(&it->contents, &it->count, &it->cap, read_item(c));
     return it;
 }
@@ -465,10 +467,18 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
     for (int i = 0; i < parkedCount; i++)
         if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; return it; }
     /* never carried: SeedContentsOf - its own contents if the Map Editor gave it some, else its Starting Contents */
-    cJSON *own = (cJSON *)world_thing_own_contents(uid), *c;
-    if (category != CAT_CONTAINER || !own) return items_make(category, itemId, quantity);
-    Item *it = new_item(category, itemId, quantity);
-    cJSON_ArrayForEach(c, own) add_to(&it->contents, &it->count, &it->cap, read_item(c));
+    cJSON *own = (cJSON *)world_thing_own_contents(uid), *c, *placed = world_thing_placed(uid);
+    Item *it;
+    if (category != CAT_CONTAINER || !own) it = items_make(category, itemId, quantity);
+    else
+    {
+        it = new_item(category, itemId, quantity);
+        cJSON_ArrayForEach(c, own) add_to(&it->contents, &it->count, &it->cap, read_item(c));
+    }
+    cJSON *locked = get(placed, "IsLockedRuntime");
+    if (category == CAT_CONTAINER && cJSON_IsBool(locked)) it->locked = cJSON_IsTrue(locked);
+    if (cJSON_IsObject(get(placed, "DollRuntime"))) it->doll = dolls_state_from_json(get(placed, "DollRuntime"));
+    it->charges = num(placed, "ChargesRuntime", -1);
     return it;
 }
 
@@ -1197,3 +1207,75 @@ Item *items_find_doll(const void *doll, int *uid)
     }
     return NULL;
 }
+
+/* ---------------- Saving: what's carried, as InventoryItemInstance ---------------- */
+
+cJSON *items_item_json(const Item *it)
+{
+    cJSON *j = cJSON_CreateObject(), *contents = cJSON_CreateArray();
+    cJSON_AddNumberToObject(j, "InstanceId", it->instanceId);
+    cJSON_AddNumberToObject(j, "Category", it->category);
+    cJSON_AddNumberToObject(j, "ItemId", it->itemId);
+    cJSON_AddNumberToObject(j, "Quantity", it->quantity);
+    if (it->cx > UNPLACED && it->cy > UNPLACED) { cJSON_AddNumberToObject(j, "ContainerX", it->cx); cJSON_AddNumberToObject(j, "ContainerY", it->cy); }
+    for (int i = 0; i < it->count; i++) cJSON_AddItemToArray(contents, items_item_json(it->contents[i]));
+    cJSON_AddItemToObject(j, "Contents", contents);
+    if (it->lit) cJSON_AddTrueToObject(j, "IsLitRuntime");
+    if (it->spent) cJSON_AddTrueToObject(j, "IsSpentRuntime");
+    cJSON_AddNumberToObject(j, "BurnLeftRuntime", it->burnLeft);
+    if (it->locked >= 0) cJSON_AddBoolToObject(j, "IsLockedRuntime", it->locked);
+    if (it->keyCount) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
+    cJSON_AddNumberToObject(j, "ChargesRuntime", it->charges);
+    if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
+    return j;
+}
+
+static void put_into(cJSON *o, const char *k, cJSON *v) { if (cJSON_GetObjectItem(o, k)) cJSON_ReplaceItemInObject(o, k, v); else cJSON_AddItemToObject(o, k, v); }
+
+/* Every character's belongings into the save's characters: Inventory, EquippedSlots, CustomEquippedSlots, IsInParty. */
+void items_save(cJSON *characters)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, characters)
+    {
+        Carrier *k = carrier_of(num(c, "Id", -2));
+        if (!k) continue;
+        cJSON *inventory = cJSON_CreateArray(), *slots = cJSON_CreateObject(), *custom = cJSON_CreateObject();
+        for (int i = 0; i < k->count; i++) cJSON_AddItemToArray(inventory, items_item_json(k->items[i]));
+        for (int i = 0; i < k->slotCount; i++)
+        {
+            char key[16];
+            if (k->slots[i].key < SLOT_COUNT) cJSON_AddNumberToObject(slots, SLOT_NAMES[k->slots[i].key], k->slots[i].instanceId);
+            else { snprintf(key, sizeof key, "%d", k->slots[i].key - 100); cJSON_AddNumberToObject(custom, key, k->slots[i].instanceId); }
+        }
+        put_into(c, "Inventory", inventory);
+        put_into(c, "EquippedSlots", slots);
+        put_into(c, "CustomEquippedSlots", custom);
+        put_into(c, "IsInParty", cJSON_CreateBool(k->inParty));
+    }
+}
+
+/* A thing on the map: what a container holds (and its lock), a carried object's own state, its paperdoll - into its map entry. */
+cJSON *items_save_thing(int uid, cJSON *entry)
+{
+    for (int p = 0; p < parkedCount; p++)
+    {
+        if (parked[p].uid != uid) continue;
+        Item *it = parked[p].item;
+        if (it->category == CAT_CONTAINER)
+        {
+            cJSON *contents = cJSON_CreateArray();
+            for (int i = 0; i < it->count; i++) cJSON_AddItemToArray(contents, items_item_json(it->contents[i]));
+            put_into(entry, "OwnContents", contents);
+            if (it->locked >= 0) put_into(entry, "IsLockedRuntime", cJSON_CreateBool(it->locked));
+        }
+        if (it->charges >= 0) put_into(entry, "ChargesRuntime", cJSON_CreateNumber(it->charges));
+        if (it->doll) put_into(entry, "DollRuntime", dolls_state_json(it->doll));
+        if (it->category == CAT_CONTAINER && it->itemId <= -1000) put_into(entry, "BodyOf", cJSON_CreateNumber(-1000 - it->itemId));
+        break;
+    }
+    return entry;
+}
+
+/* An InventoryItemInstance read (a saved paperdoll's items). */
+Item *items_read_json(cJSON *j) { return read_item(j); }

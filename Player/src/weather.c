@@ -205,3 +205,21 @@ void weather_draw(uint32_t *pixels)
         if (a > 0) for (int i = 0; i < SCREEN_W * SCREEN_H; i++) blend(&pixels[i], 0xFFFFFF, a);
     }
 }
+
+/* ---------------- Saving: the weather as it is ---------------- */
+void weather_save(cJSON *runtime)
+{
+    cJSON *w = cJSON_CreateObject();
+    cJSON_AddNumberToObject(w, "Kind", kind); cJSON_AddNumberToObject(w, "Intensity", intensity); cJSON_AddBoolToObject(w, "Clouds", clouds);
+    cJSON_AddNumberToObject(w, "CloudCover", cloudCover); cJSON_AddNumberToObject(w, "Wind", wind);
+    cJSON_AddItemToObject(runtime, "Weather", w);
+}
+
+void weather_restore(cJSON *runtime)
+{
+    cJSON *w = get(runtime, "Weather");
+    if (!w) return;
+    kind = num(w, "Kind", kind); intensity = num(w, "Intensity", intensity); clouds = cJSON_IsTrue(get(w, "Clouds"));
+    cloudCover = num(w, "CloudCover", cloudCover); wind = num(w, "Wind", wind);
+    build();
+}

@@ -4,7 +4,10 @@
 
 #include "../third_party/cJSON.h"
 
+#include "../third_party/cJSON.h"
 void conditions_record(const char *key);
+void conditions_save(cJSON *runtime);
+void conditions_restore(cJSON *runtime);
 void conditions_record_item(const char *what, int category, int itemId);
 void conditions_record_person_item(const char *what, int characterId, int category, int itemId);
 int conditions_test(cJSON *condition, const char *evaluatingEvent);
