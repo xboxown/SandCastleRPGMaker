@@ -59,6 +59,7 @@ void events_doll_answered(int token, int yes);
 void events_save(cJSON *runtime);
 const char *events_save_blocker(void);
 void events_restore(cJSON *runtime);
+void events_reset(void);
 /* The error box shown (System Settings > Errors has one): token hears when it closes. 0: no box (the words went to Game.log). */
 int game_error_shown(int number, const char *detail, int token);
 int events_saving_forbidden(void);

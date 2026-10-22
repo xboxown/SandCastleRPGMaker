@@ -20,6 +20,9 @@
 #include "gumps.h"
 #include "dolls.h"
 #include "save.h"
+#include "script.h"
+#include "conditions.h"
+#include "items.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -112,6 +115,60 @@ static void save_bmp(const char *path)
 /* A save to load (the Save/Load screen, Continue): done between frames, the game built anew from it. */
 static char loadFolder[1200], loadName[64]; static int loadRequested;
 void dolls_request_load(const char *folder, const char *name) { snprintf(loadFolder, sizeof loadFolder, "%s", folder); snprintf(loadName, sizeof loadName, "%s", name); loadRequested = 1; }
+
+/* LoadGame: the game built anew from a save, as a new game is built from the project, then what was only in play put back
+   (the clock, the main character's exact spot, variables, hunger and ailments, fired events, weather). The last game is let go. */
+static int load_game(const char *folder, const char *name)
+{
+    char error[300];
+    char *text = save_read(folder, error, sizeof error);
+    if (!text) { game_error(108, ""); return 0; }
+    cJSON *root = cJSON_Parse(text);
+    free(text);
+    cJSON *runtime = cJSON_GetObjectItem(root, "Runtime");
+    if (!root || !runtime || !cJSON_GetObjectItem(root, "Project")) { cJSON_Delete(root); game_error(108, ""); return 0; }
+    cJSON *format = cJSON_GetObjectItem(runtime, "Format");
+    if (cJSON_IsNumber(format) && format->valueint > SAVE_FORMAT) { cJSON_Delete(root); game_error(109, ""); return 0; }
+    cJSON *old = (cJSON *)world_json();
+    /* the last game, let go of */
+    sound_stop_all();
+    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset();
+    events_reset(); items_reset(); script_reset(); world_reset();
+    /* the saved one */
+    if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
+    events_load();
+    events_restore(runtime);
+    script_restore(runtime);
+    dolls_load();
+    vitals_load();
+    vitals_restore(runtime);
+    combat_load();
+    combat_restore(runtime);
+    conditions_restore(runtime);
+    world_restore_player(runtime);
+    schedules_load();
+    schedules_start();
+    weather_load();
+    weather_restore(runtime);
+    /* the dead lie in their bodies, holding what they had */
+    cJSON *it;
+    cJSON_ArrayForEach(it, cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem(root, "Project"), "Map"), "Items"))
+    {
+        cJSON *id = cJSON_GetObjectItem(it, "ItemId");
+        if (!cJSON_IsNumber(id) || id->valueint > -1000) continue;
+        int actor = world_actor_by_character(-1000 - id->valueint);
+        cJSON *z = cJSON_GetObjectItem(it, "Z");
+        int floorOf = (cJSON_IsNumber(z) ? z->valueint : 0) / 5 + 1;
+        int uid = actor >= 0 ? world_put_body(actor, cJSON_GetObjectItem(it, "X")->valueint, cJSON_GetObjectItem(it, "Y")->valueint, floorOf) : -1;
+        if (uid >= 0) items_park(uid, items_body_from_json(cJSON_GetObjectItem(it, "OwnContents")));
+    }
+    events_player_moved();
+    cJSON_Delete(old);
+    char line[160];
+    snprintf(line, sizeof line, "Loaded \"%s\".", name);
+    note(line);
+    return 1;
+}
 
 int main(int argc, char **argv)
 {
@@ -210,7 +267,7 @@ int main(int argc, char **argv)
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
-                else if (!vitals_game_over()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction) */
+                else if (!vitals_game_over() || dolls_window_count()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
             }
             else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
             else if (e.type == EV_TEXT) dolls_key(0, e.ch); /* a letter for a paperdoll's text box */
@@ -310,7 +367,7 @@ int main(int argc, char **argv)
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         if (events_quit_requested()) running = 0; /* Quit Game */
-        if (loadRequested) { loadRequested = 0; note("Loading saves isn't in the player yet (next build)."); }
+        if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
         if (!dialog_showing() && !title)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */

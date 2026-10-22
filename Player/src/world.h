@@ -11,6 +11,8 @@
 
 /* Loads <folder>/game.json and sprites.json; 0 on failure (why in world_error()). */
 int world_load(const char *folder);
+int world_build(cJSON *root);   /* from a save's data */
+void world_reset(void);
 const char *world_error(void);
 const char *world_title(void);
 

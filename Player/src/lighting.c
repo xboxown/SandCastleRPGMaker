@@ -52,6 +52,7 @@ static double clamp01(double v) { return v < 0 ? 0 : v > 1 ? 1 : v; }
 void lighting_load(void)
 {
     cJSON *project = get((cJSON *)world_json(), "Project"), *d = get(get(project, "Settings"), "DayNight");
+    overrideHour = -1; shown = (Sky){ 0, -1 }; checkMs = 0; /* a new game: no Change Day/Night of the last one */
     if (!d) return;
     enabled = !cJSON_IsFalse(get(d, "Enabled"));
     dawnStart = dbl(d, "DawnStartHour", 5); dayStart = dbl(d, "DayStartHour", 7);

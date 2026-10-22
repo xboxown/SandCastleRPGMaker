@@ -1003,3 +1003,6 @@ int gumps_turn_into(const void *state, int objectId)
 
 /* Words over the windows for a moment (the Save/Load screen tells the player). */
 void gumps_label(const char *text) { show_label(text, SCREEN_W / 2, SCREEN_H - 24); }
+
+/* A new game: every window closed, nothing in hand. */
+void gumps_reset(void) { gumpCount = 0; memset(&drag, 0, sizeof drag); pressing = dragging = 0; movingGump = movingDoll = -1; lastClick.kind = pendingIdentify.kind = T_NONE; identifyIn = -1; memset(labels, 0, sizeof labels); }

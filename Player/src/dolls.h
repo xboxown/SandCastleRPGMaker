@@ -9,6 +9,7 @@
 typedef struct DollState DollState;
 
 void dolls_load(void);
+void dolls_reset(void);
 cJSON *dolls_design(int id);
 void dolls_free_state(void *state);                 /* an item's paperdoll, when the item goes */
 void dolls_draw(uint32_t *pixels, uint32_t ms);

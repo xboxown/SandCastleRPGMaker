@@ -556,3 +556,6 @@ void dialog_draw(uint32_t *pixels, uint32_t ms)
     place(&words, top);
     place(&replies, top + words.height + MARGIN);
 }
+
+/* A new game: no box up, none waiting. */
+void dialog_reset(void) { messages.count = 0; pages.count = 0; current = NULL; cursor = lit = -1; replyPage = 0; }

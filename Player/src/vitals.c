@@ -171,6 +171,7 @@ void vitals_load(void)
     statsJson = get(get(project, "Stats"), "Stats");
     tileProps = get(get(project, "TileProperties"), "ByTileKey");
     cJSON *list = get(get(project, "Characters"), "Characters");
+    free(vitals); vitalCount = 0; gameOver = 0; lastHour = -1;
     vitals = (Vital *)calloc((size_t)cJSON_GetArraySize(list) + 1, sizeof(Vital));
     cJSON_ArrayForEach(c, list)
     {

@@ -147,3 +147,6 @@ void screen_shake_apply(uint32_t *pixels)
             pixels[y * SCREEN_W + x] = fx >= 0 && fy >= 0 && fx < SCREEN_W && fy < SCREEN_H ? copy[fy * SCREEN_W + fx] : 0xFF000000u;
         }
 }
+
+/* A new game: no fades, flashes, pictures or shaking left over. */
+void screen_reset(void) { flashCount = 0; memset(pics, 0, sizeof pics); shakeLeft = shakeMax = 0; shakeX = shakeY = 0; }

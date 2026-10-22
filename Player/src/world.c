@@ -73,6 +73,7 @@ typedef struct Thing
     const Sprite *lookOverride;                      /* Change Object Look: another sprite (NULL: its own) */
     int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
     int hp, hpSet;                                   /* hit points left in play (Attack Object) */
+    int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -366,6 +367,8 @@ static void player_foot(double px, double py, int *l, int *t)
 
 /* ---------------- Loading ---------------- */
 
+int world_build(cJSON *root);
+
 int world_load(const char *folder)
 {
     if (!sprites_load(folder)) { snprintf(error_text, sizeof error_text, "Couldn't read %s/sprites.sdbx (missing, damaged, or not this game's).", folder); return 0; }
@@ -376,6 +379,12 @@ int world_load(const char *folder)
     cJSON *root = cJSON_Parse(text);
     free(text);
     if (!root) { snprintf(error_text, sizeof error_text, "game.sdbx is damaged."); return 0; }
+    return world_build(root);
+}
+
+/* The world from a game's data (game.sdbx's, or a save's). */
+int world_build(cJSON *root)
+{
     cJSON *project = get(root, "Project"), *map = get(project, "Map");
     snprintf(title, sizeof title, "%s", str(get(project, "Manifest"), "ProjectName"));
     snprintf(mapName, sizeof mapName, "%s", str(get(project, "Map"), "MapName"));
@@ -1720,7 +1729,7 @@ static void spawn_bed_covers(void)
         int bx = bed->x, by = bed->y, bz = bed->z, ox = bed->offX, oy = bed->offY, facing = bed->facing;
         int uid = world_thing_put(4, things[i].def->coverId, 1, bx, by, floor_of(bz));
         Thing *c = thing_by_uid(uid);
-        if (c) { c->z = bz; c->offX = ox; c->offY = oy; c->facing = facing; c->fixedFrame = 1; }
+        if (c) { c->z = bz; c->offX = ox; c->offY = oy; c->facing = facing; c->fixedFrame = 1; c->spawned = 1; }
     }
 }
 
@@ -2525,6 +2534,7 @@ void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entr
     for (int i = 0; i < thingCount; i++)
     {
         const Thing *t = &things[i];
+        if (t->spawned) continue;
         if (t->gone || t->wallSetPiece) { if (t->wallSetPiece && !t->gone && t->placed) cJSON_AddItemToArray(objects, cJSON_Duplicate(t->placed, 1)); continue; }
         int id = t->instanceId > 0 ? t->instanceId : ++top;
         cJSON_AddItemToArray(t->category == 4 ? objects : items, thing_json(t, id, extra));
@@ -2560,6 +2570,7 @@ void world_restore_player(cJSON *runtime)
     if (!cJSON_IsNumber(get(runtime, "PlayerPixelX"))) return;
     player.px = get(runtime, "PlayerPixelX")->valuedouble; player.py = get(runtime, "PlayerPixelY")->valuedouble;
     player.lift = num(runtime, "PlayerLift", player.lift); player.facing = num(runtime, "PlayerFacing", DIR_S) & 7;
+    cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
 }
 
 cJSON *world_thing_placed(int uid) { Thing *t = thing_by_uid(uid); return t ? t->placed : NULL; }
@@ -2573,3 +2584,29 @@ const char *world_actor_name(int actor)
     cJSON_ArrayForEach(c, get(get(get(gameJson, "Project"), "Characters"), "Characters")) if (num(c, "Id", -2) == id) return str(c, "Name");
     return "Someone";
 }
+
+/* A new game (or a save loaded, as a new game is built from the project): everything of the last one forgotten. */
+void world_reset(void)
+{
+    for (int f = 0; f <= MAX_FLOORS; f++) { free(floors[f]); floors[f] = NULL; }
+    free(walkable); walkable = NULL;
+    free(defs); defs = NULL; defCount = 0;
+    free(things); things = NULL; thingCount = 0;
+    free(bodies); bodies = NULL; bodyCount = 0;
+    memset(&player, 0, sizeof player);
+    free(npcs); npcs = NULL; npcCount = 0;
+    nextUid = 1; thingCap = bodyCap = slabStart = slabEnd = 0;
+    drawnCount = 0; seenCount = 0;
+    free(walks); walks = NULL;
+    memset(barks, 0, sizeof barks);
+    free(seats); seats = NULL; free(heading); heading = NULL;
+    memset(&pendingSit, 0, sizeof pendingSit);
+    memset(thingBarks, 0, sizeof thingBarks);
+    savedLookCount = 0;
+    memset(effects, 0, sizeof effects);
+    outlineActor = -1;
+    cameraFollow = 0; cameraHeld = 0; keysHeld = 0;
+    sheetCount = 0;
+    gameJson = NULL;
+}
+

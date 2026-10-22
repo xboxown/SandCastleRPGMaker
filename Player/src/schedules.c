@@ -51,6 +51,8 @@ typedef struct Npc
 
 static Npc *npcs; static int npcCount;
 static int leaderOf[256];          /* per actor: the actor it follows + 1 (0: nobody) */
+static long untilMinute[256];      /* per actor: when a Change Schedule for some hours ends (0: never) */
+static double followThinkMs;
 static int lastHour = -1;
 
 static unsigned rng = 1234567u;
@@ -74,6 +76,8 @@ void schedules_load(void)
 {
     cJSON *project = get((cJSON *)world_json(), "Project"), *c;
     cJSON *characters = get(get(project, "Characters"), "Characters");
+    free(npcs); npcCount = 0; lastHour = -1; followThinkMs = 0;
+    memset(leaderOf, 0, sizeof leaderOf); memset(untilMinute, 0, sizeof untilMinute);
     npcs = (Npc *)calloc((size_t)world_actor_count() + 1, sizeof(Npc));
     for (int a = 1; a < world_actor_count(); a++)
     {
@@ -424,8 +428,6 @@ int schedules_change_behavior(int actor, const char *behavior)
 
 /* ---------------- Followers (Join Party, Follow) and timed schedules (Change Schedule) ---------------- */
 
-static long untilMinute[256];      /* per actor: when a Change Schedule for some hours ends (0: never) */
-static double followThinkMs;
 
 /* Join Party / Leave: a party member has no schedule (Exult) and walks with the main character; one who leaves goes back to its day. */
 void schedules_join(int actor, int join)

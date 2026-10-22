@@ -15,4 +15,6 @@ void screen_update(double ms);                                   /* paused or no
 void screen_draw(uint32_t *pixels, uint32_t now);
 void screen_shake_apply(uint32_t *pixels);
 
+void screen_reset(void);
+
 #endif

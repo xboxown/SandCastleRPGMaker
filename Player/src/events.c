@@ -3114,3 +3114,29 @@ const char *events_save_blocker(void)
     if (savingForbidden) return "saving isn't allowed here";
     return NULL;
 }
+
+/* A new game (a save being loaded): every event, wait and count of the last one forgotten. */
+void events_reset(void)
+{
+    for (int i = 0; i < MAX_RUNS; i++) free(runs[i].callers);
+    memset(runs, 0, sizeof runs);
+    free(owners); owners = NULL; ownerCount = 0;
+    free(varDefs); varDefs = NULL; varDefCount = 0;
+    free(commons); commons = NULL; commonCount = 0;
+    pickedCount = 0;
+    memset(warned, 0, sizeof warned);
+    memset(effectTimers, 0, sizeof effectTimers);
+    lastResult = 1;
+    memset(answers, 0, sizeof answers);
+    dollContext = lastDoll = NULL;
+    memset(heldBy, 0, sizeof heldBy);
+    savingForbidden = combatForbidden = keysForbidden = controlsLocked = quitRequested = 0;
+    statChangeCount = 0;
+    functionRun = NULL;
+    copyCountN = 0; fireCopy = 0;
+    eventUnder = NULL; lastX = lastY = -1; started = 0; stayMs = 1000; alwaysMs = 0;
+    customCount = 0; dollCountN = 0; dollPagesN = 0;
+    clockDay = 0; clockHour = 6; clockMinute = 0; clockTicks = 0; timeRate = 1; clockMs = 0;
+    ambientPlaying = -2; burnedTo = -1;
+    playerCharacter = NULL;
+}

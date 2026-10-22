@@ -1279,3 +1279,21 @@ cJSON *items_save_thing(int uid, cJSON *entry)
 
 /* An InventoryItemInstance read (a saved paperdoll's items). */
 Item *items_read_json(cJSON *j) { return read_item(j); }
+
+/* A new game: every carried thing and everything parked on the map forgotten. */
+void items_reset(void)
+{
+    for (int c = 0; c < carrierCount; c++) { for (int i = 0; i < carriers[c].count; i++) items_free(carriers[c].items[i]); free(carriers[c].items); }
+    free(carriers); carriers = NULL; carrierCount = 0;
+    for (int p = 0; p < parkedCount; p++) items_free(parked[p].item);
+    parkedCount = 0;
+}
+
+/* A body's belongings from a save (its OwnContents), as one container. */
+Item *items_body_from_json(cJSON *contents)
+{
+    Item *box = new_item(CAT_CONTAINER, -1, 1);
+    cJSON *c;
+    cJSON_ArrayForEach(c, contents) add_to(&box->contents, &box->count, &box->cap, read_item(c));
+    return box;
+}

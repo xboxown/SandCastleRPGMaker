@@ -48,4 +48,6 @@ void dialog_click(int x, int y);
 
 void dialog_draw(uint32_t *pixels, uint32_t ms);
 
+void dialog_reset(void);
+
 #endif

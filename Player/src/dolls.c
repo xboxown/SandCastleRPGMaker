@@ -886,7 +886,14 @@ static void title_button(int wi, int kind)
             if (wins[wi]->title) dolls_close_window(wi); /* the game begins */
             else events_log_once(313, "New Game during play isn't in the player yet.");
             break;
-        case K_CONTINUE: game_log("There's no saved game to continue."); break;
+        case K_CONTINUE:
+        {
+            /* the newest save */
+            static SaveInfo newest[1];
+            if (save_list(newest, 1) < 1) { game_log("There's no saved game to continue."); break; }
+            dolls_request_load(newest[0].folder, newest[0].name);
+            break;
+        }
         case K_LOADGAME: dolls_open_save_screen(); break; /* to load (no Save there at the title) */
         case K_QUIT: ask_to_quit(); break;
     }
@@ -901,7 +908,9 @@ int dolls_open_title(void)
     int id = num(title, "DollDesignId", -1);
     if (!dolls_design(id) || !dolls_open_form(id, 1, 1, 0, 1)) return 0;
     DollWin *w = wins[winCount - 1];
-    for (int i = 0; i < w->state->partCount; i++) if (kind_of(part_at(w->design, i)) == K_CONTINUE) w->state->parts[i].disabled = 1; /* nothing saved to continue */
+    static SaveInfo any[1];
+    int saved = save_list(any, 1) > 0;
+    for (int i = 0; i < w->state->partCount; i++) if (kind_of(part_at(w->design, i)) == K_CONTINUE) w->state->parts[i].disabled = !saved; /* greyed with nothing to continue */
     if (num(title, "MusicId", -1) >= 0) sound_play_ex(num(title, "MusicId", -1), -1, !cJSON_IsFalse(get(title, "MusicLoops")), OWNER_TITLE, 1);
     return 1;
 }
@@ -1901,3 +1910,12 @@ static int save_key(int key, int ch)
 
 /* The mouse wheel over the Save list: it scrolls. */
 void dolls_save_scroll(int step) { DollWin *w = save_window(NULL); if (w) w->save->scroll += step; }
+
+/* A new game: every paperdoll window closed (no answers heard), forms as designed, the designs read again. */
+void dolls_reset(void)
+{
+    while (winCount) { DollWin *w = wins[--winCount]; if (w->save) { picture_free(w->save->shot); free(w->save); } free(w->canvas); free(w); }
+    for (int i = 0; i < formCount; i++) dolls_free_state(forms[i]);
+    formCount = 0; slideCount = 0;
+    designs = NULL;
+}

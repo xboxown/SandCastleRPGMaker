@@ -1061,15 +1061,6 @@ static void update_player(double ms)
 
 /* ---------------- Each frame ---------------- */
 
-void combat_load(void)
-{
-    project = get((cJSON *)world_json(), "Project");
-    factionsJson = get(project, "Factions");
-    statsJson = get(get(project, "Stats"), "Stats");
-    settingsJson = get(project, "Settings");
-    for (int i = 0; i < 256; i++) { memset(&fighters[i], 0, sizeof fighters[i]); fighters[i].target = fighters[i].fleeFrom = -1; }
-    combatMode = 0; playerTarget = -1;
-}
 
 int combat_busy(int actor) { return actor > 0 && actor < 256 && (fighters[actor].inCombat || fighters[actor].hounding); }
 
@@ -1461,3 +1452,15 @@ int combat_attack_thing_tick(int actor, double ms)
 
 void combat_save(cJSON *runtime) { cJSON_AddBoolToObject(runtime, "CombatMode", combatMode); }
 void combat_restore(cJSON *runtime) { combatMode = cJSON_IsTrue(cJSON_GetObjectItem(runtime, "CombatMode")); }
+
+void combat_load(void)
+{
+    project = get((cJSON *)world_json(), "Project");
+    factionsJson = get(project, "Factions");
+    statsJson = get(get(project, "Stats"), "Stats");
+    settingsJson = get(project, "Settings");
+    for (int i = 0; i < 256; i++) { memset(&fighters[i], 0, sizeof fighters[i]); fighters[i].target = fighters[i].fleeFrom = -1; }
+    combatMode = 0; playerTarget = -1; playerThing = -1; playerDex = 0;
+    memset(shots, 0, sizeof shots); fuseCount = 0; struckCount = 0; theftWarnings = 0; theftChunkX = theftChunkY = -1;
+    cue = startedBattle = nearDeath = 0; memset(thingAttacks, 0, sizeof thingAttacks);
+}
