@@ -131,15 +131,20 @@ static const char *const DEFAULT_LINES[][9] = {
     { "The key doesn't fit.", "Maybe it is another key." },
     { "The lockpick broke!", "Blast, it snapped!" },
     { "I do not like this.", "Something is not right here.", "I feel uneasy..." },
+    { "Mmmm!", "Delicious.", "*munch munch*", "Tasty!" },
+    { "Where is my food?", "I am famished - bring me something!", "Food, please!", "Is anyone serving here?", "More food!" },
+    { "Hey! That was my food!", "Who took my supper?", "Thief! My food!" },
+    { "What wouldst thou like?", "Hungry, art thou?", "May I bring thee something?", "What shall it be?", "Thou lookest hungry." },
+    { "Here thou art.", "Enjoy thy meal." },
 };
-static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy" };
+static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy", "Munching", "WantsFood", "FoodStolen", "WaiterAsks", "WaiterServes" };
 
 /* Bark: one line of its own for the situation, over its head (only the human speak; never the dead or the knocked out). */
 int vitals_bark(int characterId, int kind)
 {
     cJSON *ch = character_json(characterId);
     Vital *v = vital_of(characterId);
-    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 10) return 0;
+    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 15) return 0;
     int actor = actor_of_character(characterId);
     if (actor < 0) return 0;
     cJSON *own = get(get(get(ch, "Verbose"), "Lines"), KIND_NAMES[kind]);

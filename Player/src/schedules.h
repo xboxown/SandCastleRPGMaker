@@ -13,4 +13,6 @@ void schedules_until(int actor, long minute);
 int schedules_sleeping(int actor);
 void schedules_resume(int actor);
 
+void schedules_house_keys(void);
+
 #endif

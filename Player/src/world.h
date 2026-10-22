@@ -70,6 +70,9 @@ int world_thing_floor(int uid);
 int world_thing_spent(int uid);
 int world_thing_belongs_to(int uid);
 void world_thing_set_belongs(int uid, int characterId);
+void world_set_key_check(int (*check)(int actor, int doorUid));
+void world_lock_own_doors(int actor, int cells);
+int world_heading_to_seat(int actor);
 void world_thing_break_glass(int uid, const Sprite *broken);
 void world_thing_center(int uid, double *px, double *py);
 int world_things_near(double px, double py, double reach, int *out, int max);
@@ -146,6 +149,7 @@ int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken m
 void world_stand_up(int actor);
 int world_seated(int actor);
 int world_seated_on(int actor);
+int world_in_bed(int actor);
 int world_player_sit(int uid);
 int world_player_sitting_down(void);
 void world_cancel_player_sit(void);

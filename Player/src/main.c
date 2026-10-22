@@ -73,6 +73,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
         else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
         else if (*what == 'Z') gumps_next_stats(); /* Z: the stats paperdoll */
+        else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); char line[160]; snprintf(line, sizeof line, "DBG actor %d char %d at (%d,%d) floor %d gone %d food %d", a, world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a))); note(line); } } /* Q: where everyone is (testing) */
         else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */

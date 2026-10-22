@@ -15,6 +15,7 @@
  * Party members and the main player don't follow schedules.
  */
 #include "schedules.h"
+#include "sound.h"
 #include "work.h"
 #include "magic.h"
 #include "events.h"
@@ -49,6 +50,12 @@ typedef struct Npc
     double waitMs;
     int walking;               /* on a path it was given */
     int dormant, missedHour, joined;
+    int meal, mealFood;        /* MealStep (GameTestWindow.Meals) and the food it's going to */
+    double mealCheckMs, ruleCheckMs;
+    int rule;                  /* the When... rule it follows (+1; 0: its timetable) */
+    Entry *ruleEntries; int ruleCount;
+    int waiter, customer, dish;/* a waiter's step, its customer (actor), the dish it brings */
+    int served[8], servedCount;/* dishes put in front of it (uids) */
 } Npc;
 
 static Npc *npcs; static int npcCount;
@@ -76,6 +83,7 @@ static int cells_for_tiles(int tiles) { int c = (int)floor(tiles * 8.0 / world_t
 
 void schedules_load(void)
 {
+    schedules_house_keys();
     cJSON *project = get((cJSON *)world_json(), "Project"), *c;
     cJSON *characters = get(get(project, "Characters"), "Characters");
     free(npcs); npcCount = 0; lastHour = -1; followThinkMs = 0;
@@ -99,6 +107,19 @@ void schedules_load(void)
             en->x = num(e, "X", -1); en->y = num(e, "Y", -1);
             en->custom = get(e, "CustomCommands");
             en->json = e;
+        }
+        /* its When... rules: each one's line */
+        cJSON *rules = get(data, "ScheduleRules"), *r;
+        n->ruleEntries = (Entry *)calloc((size_t)cJSON_GetArraySize(rules) + 1, sizeof(Entry));
+        cJSON_ArrayForEach(r, rules)
+        {
+            cJSON *e2 = get(r, "Do");
+            Entry *en = &n->ruleEntries[n->ruleCount++];
+            en->period = -1; en->type = num(e2, "Type", S_STAND);
+            en->x = num(e2, "X", -1); en->y = num(e2, "Y", -1);
+            en->custom = get(e2, "CustomCommands");
+            en->json = e2;
+            en->zone = num(e2, "ZoneId", -1) >= 0 || (cJSON_GetStringValue(get(e2, "ZonePurpose")) && cJSON_GetStringValue(get(e2, "ZonePurpose"))[0]);
             en->zone = num(e, "ZoneId", -1) >= 0 || (cJSON_GetStringValue(get(e, "ZonePurpose")) && cJSON_GetStringValue(get(e, "ZonePurpose"))[0]);
         }
     }
@@ -106,9 +127,16 @@ void schedules_load(void)
 
 static Npc *npc_of(int actor) { for (int i = 0; i < npcCount; i++) if (npcs[i].actor == actor) return &npcs[i]; return NULL; }
 
+static int zone_spot(const Npc *n, cJSON *line, int *x, int *y);
+static void waiter_now_what(Npc *n);
+static void inn_customer_now_what(Npc *n);
+static void check_rules(Npc *n, double ms);
+static void check_hunger(Npc *n, double ms);
+static void meal_now_what(Npc *n);
+
 static void spot_of(const Npc *n, const Entry *e, int *x, int *y)
 {
-    if (e->zone) events_log_once(300, "A schedule goes to a zone - zones aren't in the player yet (its cell, or its placed spot, instead).");
+    if (e->zone && zone_spot(n, e->json, x, y)) return;
     if (e->x >= 0 && e->y >= 0)
     {
         *x = e->x < 0 ? 0 : e->x >= world_map_w() ? world_map_w() - 1 : e->x;
@@ -175,6 +203,7 @@ static void begin_activity(Npc *n)
     switch (e->type)
     {
         case S_SLEEP:
+            world_lock_own_doors(n->actor, cells_for_tiles(24)); /* LockHouseDoorsForNight */
             /* Sleep_schedule: the nearest free bed within 24 tiles; none: lies down here */
             if (world_go_to_furniture(n->actor, 1, 0)) n->walking = world_walking(n->actor);
             else if (!world_set_pose(n->actor, "Sleeping", facing)) world_set_pose(n->actor, "Idle", facing);
@@ -195,10 +224,8 @@ static void begin_activity(Npc *n)
             world_set_pose(n->actor, "Idle", facing);
             n->waitMs = STD_DELAY; /* to work */
             break;
-        case S_WAITER: case S_EAT:
-            events_log_once(301, "Waiter and Eat at Inn aren't in the player yet - they stand at their spot.");
-            world_set_pose(n->actor, "Idle", facing);
-            break;
+        case S_WAITER: n->waiter = 0; n->customer = -1; world_set_pose(n->actor, "Idle", facing); n->waitMs = STD_DELAY; break;
+        case S_EAT: world_set_pose(n->actor, "Idle", facing); n->waitMs = STD_DELAY; break;
         default: world_set_pose(n->actor, "Idle", facing); break; /* Stand, Wait */
     }
 }
@@ -286,6 +313,8 @@ static void now_what(Npc *n)
         case S_HPACE: pace(n, 1); break;
         case S_VPACE: pace(n, 0); break;
         case S_DANCE: dance(n); break;
+        case S_WAITER: waiter_now_what(n); break;
+        case S_EAT: inn_customer_now_what(n); break;
         case S_FARM: case S_MINER: case S_BLACKSMITH: case S_BAKE: case S_SEW: case S_LAB:
             if (n->entry) work_now_what(n->actor, n->activity, n->entry->json, n->destX, n->destY);
             n->waitMs = 1000; /* the work's own rounds and pauses */
@@ -310,7 +339,7 @@ static void finish_path(Npc *n)
 {
     n->walking = 0;
     int seat = world_arrive_furniture(n->actor); /* was heading for a seat or bed: sits / lies down */
-    if (seat > 0) return;
+    if (seat > 0) { if (n->meal || n->activity == S_EAT) n->waitMs = 1000; return; } /* at the inn: waiting to be served */
     if (seat < 0) { n->waitMs = 1000 + rnd(1000); return; } /* taken meanwhile: look again shortly */
     world_set_pose(n->actor, n->activity == S_DANCE ? "Dancing" : "Idle", -1);
     n->waitMs = n->activity == S_LOITER ? 2 * STD_DELAY + rnd(2000) : n->activity == S_WANDER ? rnd(2000) : n->activity == S_DANCE ? 2 * STD_DELAY : STD_DELAY;
@@ -386,6 +415,8 @@ void schedules_update(double ms)
         if (world_actor_gone(n->actor) || vitals_incapacitated(n->characterId)) continue; /* dead, knocked out, asleep or paralyzed: does nothing */
         if (combat_busy(n->actor)) { n->walking = 0; continue; } /* fighting, fleeing or hounding: its schedule waits */
         if (work_busy(n->actor)) continue; /* at work (or tidying up after it) */
+        check_rules(n, ms);
+        check_hunger(n, ms);
         if (n->walking)
         {
             if (world_walking(n->actor)) continue;
@@ -395,7 +426,8 @@ void schedules_update(double ms)
         if (n->waitMs < 0) continue;
         if ((n->waitMs -= ms) > 0) continue;
         n->waitMs = -1;
-        now_what(n);
+        if (n->meal) meal_now_what(n);
+        else now_what(n);
     }
 }
 
@@ -511,3 +543,479 @@ void schedules_resume(int actor)
     n->walking = 0;
     update_schedule(n, events_hour() / 3, 0);
 }
+
+/* ---------------- Zones, When... rules, meals, the inn, waiters, house keys (GameTestWindow.Zones / Meals) ---------------- */
+
+static cJSON *project_json(void) { return get((cJSON *)world_json(), "Project"); }
+static const char *text_of(cJSON *o, const char *k) { const char *s = cJSON_GetStringValue(get(o, k)); return s ? s : ""; }
+static int flag_of(cJSON *o, const char *k) { return cJSON_IsTrue(get(o, k)); }
+static cJSON *character_of(int id) { cJSON *c; cJSON_ArrayForEach(c, get(get(project_json(), "Characters"), "Characters")) if (num(c, "Id", -2) == id) return c; return NULL; }
+static cJSON *object_of(int id) { cJSON *o; cJSON_ArrayForEach(o, get(get(project_json(), "Objects"), "Objects")) if (num(o, "Id", -2) == id) return o; return NULL; }
+static int same_text(const char *a, const char *b)
+{
+    while (*a == ' ') a++;
+    while (*b == ' ') b++;
+    for (; *a || *b; a++, b++) { char x = *a >= 'A' && *a <= 'Z' ? (char)(*a + 32) : *a, y = *b >= 'A' && *b <= 'Z' ? (char)(*b + 32) : *b; if (x != y) return (x == ' ' && !y) || (!x && y == ' '); }
+    return 1;
+}
+
+/* ZoneSpotOf: the middle of the line's zone - by its id, or the zone of its purpose nearest to where it is now. */
+static int zone_spot(const Npc *n, cJSON *line, int *x, int *y)
+{
+    cJSON *z, *best = NULL;
+    int zoneId = num(line, "ZoneId", -1), bestD = 1 << 30, ax, ay, af;
+    world_actor_cell(n->actor, &ax, &ay, &af);
+    const char *purpose = text_of(line, "ZonePurpose");
+    cJSON_ArrayForEach(z, get(get(project_json(), "Map"), "Zones"))
+    {
+        int cx = num(z, "X", 0) + num(z, "Width", 1) / 2, cy = num(z, "Y", 0) + num(z, "Height", 1) / 2;
+        if (zoneId >= 0) { if (num(z, "Id", -2) == zoneId) { best = z; break; } continue; }
+        if (!purpose[0] || !same_text(text_of(z, "Purpose"), purpose)) continue;
+        int d = abs(cx - ax) > abs(cy - ay) ? abs(cx - ax) : abs(cy - ay);
+        if (d < bestD) { bestD = d; best = z; }
+    }
+    if (!best) return 0;
+    *x = num(best, "X", 0) + num(best, "Width", 1) / 2; *y = num(best, "Y", 0) + num(best, "Height", 1) / 2;
+    if (*x < 0) *x = 0;
+    if (*y < 0) *y = 0;
+    if (*x >= world_map_w()) *x = world_map_w() - 1;
+    if (*y >= world_map_h()) *y = world_map_h() - 1;
+    return 1;
+}
+
+/* ---- When... rules: checked every 2 seconds, ahead of the timetable ---- */
+
+static int rule_holds(const Npc *n, cJSON *rule, int starting)
+{
+    cJSON *me = character_of(n->characterId), *s = get(me, "Survival");
+    switch (num(rule, "Condition", 0))
+    {
+        case 0:
+        {
+            if (cJSON_IsFalse(get(s, "CanGetHungry"))) return 0;
+            int food = vitals_food(n->characterId);
+            return starting ? food <= num(s, "HungryAtOrBelow", 9) : food < 31;
+        }
+        case 1:
+        {
+            int hp, most = vitals_max_hp(n->characterId);
+            if (most <= 0 || !vitals_hp(n->characterId, &hp)) return 0;
+            return starting ? hp * 100 <= num(rule, "InjuredAtOrBelowPercent", 50) * most : hp * 100 < num(rule, "HealedAtPercent", 100) * most;
+        }
+        default:
+        {
+            const char *var = text_of(rule, "VariableName");
+            if (!var[0]) return 0;
+            double left = events_variable(var), right = get(rule, "Value") && cJSON_IsNumber(get(rule, "Value")) ? get(rule, "Value")->valuedouble : 0;
+            switch (num(rule, "Comparison", 0))
+            {
+                case 0: return fabs(left - right) < 0.0001;
+                case 1: return fabs(left - right) >= 0.0001;
+                case 2: return left > right;
+                case 3: return left >= right;
+                case 4: return left < right;
+                default: return left <= right;
+            }
+        }
+    }
+}
+
+static void check_rules(Npc *n, double ms)
+{
+    cJSON *rules = get(character_of(n->characterId), "ScheduleRules");
+    if (!n->ruleCount || n->joined) return;
+    if ((n->ruleCheckMs -= ms) > 0) return;
+    n->ruleCheckMs = 2000;
+    if (n->rule)
+    {
+        if (rule_holds(n, cJSON_GetArrayItem(rules, n->rule - 1), 0)) return;
+        /* done (full, healed, the variable changed): back to the timetable */
+        n->rule = 0; n->entry = NULL; n->activity = 0;
+        world_stand_up(n->actor);
+        stop_walking(n);
+        world_set_pose(n->actor, "Idle", -1);
+        update_schedule(n, events_hour() / 3, 0);
+        return;
+    }
+    if (n->meal) return; /* off to eat its own way (Health tab) */
+    for (int i = 0; i < n->ruleCount; i++)
+    {
+        if (!rule_holds(n, cJSON_GetArrayItem(rules, i), 1)) continue;
+        n->rule = i + 1;
+        int x, y;
+        spot_of(n, &n->ruleEntries[i], &x, &y);
+        set_schedule_and_loc(n, &n->ruleEntries[i], x, y, 0);
+        return;
+    }
+}
+
+/* ---- Meals: the hungry feed themselves (its own food, food it carries, the inn) ---- */
+
+enum { MEAL_NONE, MEAL_OWN_FOOD, MEAL_CARRIED, MEAL_TO_INN, MEAL_AT_INN };
+enum { B_MUNCHING = 11, B_WANTS_FOOD = 12, B_FOOD_STOLEN = 13, B_WAITER_ASKS = 14, B_WAITER_SERVES = 15 };
+#define FOOD_FULL 31
+
+static int near_tiles(void) { int t = (int)ceil(world_tile_w() / 8.0) + 1; return t > 2 ? t : 2; }
+static int human_of(const Npc *n) { return !cJSON_IsFalse(get(character_of(n->characterId), "IsHuman")); }
+
+static int owner_of_thing(int uid)
+{
+    int owner = world_thing_belongs_to(uid);
+    return owner >= 0 ? owner : num(object_of(world_thing_object_id(uid)), "BelongToId", -1);
+}
+
+static int is_solid_food(int objectId) { cJSON *d = object_of(objectId); return num(d, "Type", -1) == 17 && !flag_of(get(d, "Food"), "IsLiquid"); }
+
+/* The nearest solid food on the map that belongs to it (within 64 tiles). */
+static int nearest_own_food(const Npc *n)
+{
+    int ax, ay, af, best = 0, bestD = 1 << 30, range = cells_for_tiles(64);
+    world_actor_cell(n->actor, &ax, &ay, &af);
+    for (int i = 0; i < world_thing_count(); i++)
+    {
+        int uid = world_thing_uid_at(i), c, id, q, x, y, k;
+        if (!uid) continue;
+        world_thing_info(uid, &c, &id, &q, &x, &y, &k);
+        if (c != CAT_OBJECT || !is_solid_food(id) || owner_of_thing(uid) != n->characterId) continue;
+        if (abs(x - ax) > range || abs(y - ay) > range) continue;
+        if (abs(x - ax) + abs(y - ay) < bestD) { bestD = abs(x - ax) + abs(y - ay); best = uid; }
+    }
+    return best;
+}
+
+static Item *carried_food(const Npc *n)
+{
+    Item *all[128];
+    int count = items_carried_all(n->characterId, all, 128);
+    for (int i = 0; i < count; i++) if (items_category(all[i]) == CAT_OBJECT && is_solid_food(items_item_id(all[i]))) return all[i];
+    return NULL;
+}
+
+/* A hungry character's inn: its cell, else the middle of the nearest zone of its inn purpose. */
+static int inn_spot(const Npc *n, int *x, int *y)
+{
+    cJSON *s = get(character_of(n->characterId), "Survival");
+    if (num(s, "InnX", -1) >= 0 && num(s, "InnX", -1) < world_map_w() && num(s, "InnY", -1) >= 0 && num(s, "InnY", -1) < world_map_h()) { *x = num(s, "InnX", -1); *y = num(s, "InnY", -1); return 1; }
+    const char *purpose = text_of(s, "InnZonePurpose");
+    if (!purpose[0]) return 0;
+    cJSON *line = cJSON_CreateObject();
+    cJSON_AddStringToObject(line, "ZonePurpose", purpose);
+    int ok = zone_spot(n, line, x, y);
+    cJSON_Delete(line);
+    return ok;
+}
+
+/* The food's nutrition and effects, its eat sound, and (three times in four) a munch. */
+static void nourish(const Npc *n, int objectId)
+{
+    cJSON *food = get(object_of(objectId), "Food");
+    vitals_change_food(n->characterId, "Add", num(food, "Nutrition", 0));
+    sound_play(num(food, "EatSoundResourceId", -1));
+    if (rnd(4) > 0) vitals_bark(n->characterId, B_MUNCHING);
+    magic_apply_effects(get(food, "Effects"), n->actor, text_of(object_of(objectId), "Name"), -1);
+}
+
+static void eat_placed(const Npc *n, int uid)
+{
+    int c, id, q, x, y, k;
+    world_thing_info(uid, &c, &id, &q, &x, &y, &k);
+    if (q > 1) world_thing_add_quantity(uid, -1);
+    else { items_free(items_unpark(uid, c, id, q)); world_thing_remove(uid); }
+    nourish(n, id);
+}
+
+static int walk_towards(Npc *n, int x, int y)
+{
+    if (tile_distance(n->actor, x, y) <= near_tiles()) return 0;
+    if (!world_walk_to(n->actor, x, y, 0, 1)) return 0;
+    n->walking = 1;
+    return 1;
+}
+
+static void begin_meal(Npc *n, int step)
+{
+    if (!n->meal) { world_stand_up(n->actor); stop_walking(n); n->walkingToSchedule = 0; work_schedule_changed(n->actor, 0); }
+    n->meal = step; n->mealFood = 0;
+}
+
+static void finish_meal(Npc *n)
+{
+    n->meal = 0; n->mealFood = 0; n->mealCheckMs = 60000;
+    world_stand_up(n->actor);
+    n->entry = NULL; n->activity = 0;
+    world_set_pose(n->actor, "Idle", -1);
+    update_schedule(n, events_hour() / 3, 0); /* back to what it should be doing now */
+}
+
+static int plan_meal(Npc *n)
+{
+    cJSON *s = get(character_of(n->characterId), "Survival");
+    int food, x, y;
+    if (!cJSON_IsFalse(get(s, "EatsOwnFood")) && (food = nearest_own_food(n)) != 0)
+    {
+        begin_meal(n, MEAL_OWN_FOOD);
+        n->mealFood = food;
+        n->waitMs = 0;
+        return 1;
+    }
+    if (!cJSON_IsFalse(get(s, "EatsCarriedFood")) && carried_food(n)) { begin_meal(n, MEAL_CARRIED); n->waitMs = 800; return 1; }
+    if (flag_of(s, "GoesToInn") && inn_spot(n, &x, &y)) { begin_meal(n, MEAL_TO_INN); n->waitMs = 0; return 1; }
+    return 0;
+}
+
+/* Every frame: hungry and free, it sets out to eat (checked every 2 seconds). */
+static void check_hunger(Npc *n, double ms)
+{
+    if (n->rule || n->meal || (n->mealCheckMs -= ms) > 0) return;
+    n->mealCheckMs = 2000;
+    cJSON *me = character_of(n->characterId), *s = get(me, "Survival");
+    if (n->joined || items_in_party(n->characterId) || cJSON_IsFalse(get(s, "CanGetHungry"))) return;
+    if (cJSON_IsFalse(get(s, "EatsOwnFood")) && cJSON_IsFalse(get(s, "EatsCarriedFood")) && !flag_of(s, "GoesToInn")) return;
+    if (n->activity == S_SLEEP || n->activity == S_EAT || world_in_bed(n->actor)) return;
+    if (vitals_food(n->characterId) > num(s, "HungryAtOrBelow", 9)) return;
+    if (!plan_meal(n)) n->mealCheckMs = 30000; /* nothing to eat anywhere: later */
+}
+
+/* Its own dishes in front of it (within 2 tiles - Exult's find_nearby 2). */
+static int dish_for(const Npc *n)
+{
+    for (int i = 0; i < world_thing_count(); i++)
+    {
+        int uid = world_thing_uid_at(i), c, id, q, x, y, k;
+        if (!uid) continue;
+        world_thing_info(uid, &c, &id, &q, &x, &y, &k);
+        if (c == CAT_OBJECT && world_thing_belongs_to(uid) == n->characterId && num(object_of(id), "Type", -1) == 17 && tile_distance(n->actor, x, y) <= near_tiles() + 1) return uid;
+    }
+    return 0;
+}
+
+/* Eat_at_inn_schedule::now_what: sit; a dish of its own in front of it eaten (with a munch), else it asks for food. */
+static void inn_customer_now_what(Npc *n)
+{
+    if (!world_seated(n->actor) && world_heading_to_seat(n->actor)) { n->waitMs = 1000; return; } /* still walking to its chair */
+    if (!world_seated(n->actor) && world_go_to_furniture(n->actor, 0, 0)) { n->walking = world_walking(n->actor); n->waitMs = 1000; return; }
+    for (int i = 0; i < n->servedCount; i++)
+        if (!world_thing_there(n->served[i])) { n->served[i--] = n->served[--n->servedCount]; vitals_bark(n->characterId, B_FOOD_STOLEN); } /* taken, and not by its mouth */
+    int dish = dish_for(n);
+    if (dish)
+    {
+        for (int i = 0; i < n->servedCount; i++) if (n->served[i] == dish) n->served[i--] = n->served[--n->servedCount];
+        eat_placed(n, dish);
+        if (n->meal == MEAL_AT_INN && vitals_food(n->characterId) >= FOOD_FULL) { finish_meal(n); return; }
+        n->waitMs = 3000 + rnd(3000);
+        return;
+    }
+    if (human_of(n) && rnd(4) > 0) vitals_bark(n->characterId, B_WANTS_FOOD);
+    n->waitMs = 5000 + rnd(12000); /* Exult: "Wake up in a little while" - 5 to 17 s */
+}
+
+static void meal_now_what(Npc *n)
+{
+    if (vitals_food(n->characterId) >= FOOD_FULL) { finish_meal(n); return; }
+    cJSON *s = get(character_of(n->characterId), "Survival");
+    switch (n->meal)
+    {
+        case MEAL_OWN_FOOD:
+        {
+            int food = n->mealFood, c, id, q, x, y, k;
+            if (!food || !world_thing_there(food) || owner_of_thing(food) != n->characterId)
+            {
+                if (food && !world_thing_there(food)) vitals_bark(n->characterId, B_FOOD_STOLEN); /* it's gone: taken */
+                if (!plan_meal(n)) finish_meal(n);
+                return;
+            }
+            world_thing_info(food, &c, &id, &q, &x, &y, &k);
+            if (tile_distance(n->actor, x, y) > near_tiles())
+            {
+                if (!walk_towards(n, x, y) && !plan_meal(n)) finish_meal(n);
+                return;
+            }
+            eat_placed(n, food);
+            n->mealFood = 0;
+            n->waitMs = 1500 + rnd(1500);
+            if (vitals_food(n->characterId) < FOOD_FULL && !plan_meal(n)) finish_meal(n);
+            return;
+        }
+        case MEAL_CARRIED:
+        {
+            Item *food = carried_food(n);
+            int x, y;
+            if (!food)
+            {
+                if (flag_of(s, "GoesToInn") && inn_spot(n, &x, &y)) { n->meal = MEAL_TO_INN; n->waitMs = 0; }
+                else finish_meal(n);
+                return;
+            }
+            int id = items_item_id(food);
+            Item *got[4];
+            int got_n = 0;
+            if (items_take(n->characterId, CAT_OBJECT, id, 1, got, 4, &got_n)) for (int g = 0; g < got_n; g++) items_free(got[g]);
+            nourish(n, id);
+            n->waitMs = 2000 + rnd(1500);
+            return;
+        }
+        case MEAL_TO_INN:
+        {
+            int x, y;
+            if (!inn_spot(n, &x, &y)) { finish_meal(n); return; }
+            if (tile_distance(n->actor, x, y) > near_tiles() + 1)
+            {
+                if (!walk_towards(n, x, y)) n->waitMs = 3000; /* someone in the way: shortly */
+                return;
+            }
+            n->meal = MEAL_AT_INN;
+            if (!world_seated(n->actor) && world_go_to_furniture(n->actor, 0, 0)) n->walking = world_walking(n->actor);
+            else n->waitMs = 1000;
+            return;
+        }
+        case MEAL_AT_INN: inn_customer_now_what(n); return;
+    }
+}
+
+/* ---- The waiter (Waiter_schedule) ---- */
+
+static int waiting_customer(const Npc *c)
+{
+    if (vitals_dead(c->characterId) || vitals_incapacitated(c->characterId) || world_actor_gone(c->actor)) return 0;
+    int atInn = c->meal == MEAL_AT_INN || (!c->meal && c->activity == S_EAT && !c->walkingToSchedule);
+    if (!atInn || world_heading_to_seat(c->actor)) return 0;
+    return !dish_for(c);
+}
+
+static int order_taken(int actor)
+{
+    for (int i = 0; i < npcCount; i++) if (npcs[i].activity == S_WAITER && npcs[i].customer == actor && npcs[i].waiter > 0) return 1;
+    return 0;
+}
+
+/* serve_food: on a table next to them if there is one, else on the floor in front of them. It's theirs. */
+static int serve_dish(int foodId, const Npc *customer)
+{
+    if (!object_of(foodId)) return 0;
+    int cx, cy, cf, spotX, spotY, table = 0, best = 1 << 30;
+    world_actor_cell(customer->actor, &cx, &cy, &cf);
+    for (int i = 0; i < world_thing_count(); i++)
+    {
+        int uid = world_thing_uid_at(i), c, id, q, x, y, k;
+        if (!uid || world_thing_type(uid) != 32) continue;
+        world_thing_info(uid, &c, &id, &q, &x, &y, &k);
+        if (abs(x - cx) > 2 || abs(y - cy) > 2) continue;
+        if (abs(x - cx) + abs(y - cy) < best) { best = abs(x - cx) + abs(y - cy); table = uid; spotX = x; spotY = y; }
+    }
+    if (!table)
+    {
+        static const int DX[8] = { 0, 1, 1, 1, 0, -1, -1, -1 }, DY[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+        int f = world_actor_facing(customer->actor) & 7;
+        spotX = cx + DX[f]; spotY = cy + DY[f];
+        spotX = spotX < 0 ? 0 : spotX >= world_map_w() ? world_map_w() - 1 : spotX;
+        spotY = spotY < 0 ? 0 : spotY >= world_map_h() ? world_map_h() - 1 : spotY;
+    }
+    int uid = world_thing_put(CAT_OBJECT, foodId, 1, spotX, spotY, cf);
+    if (uid < 0) return 0;
+    world_thing_set_belongs(uid, customer->characterId);
+    return uid;
+}
+
+static void face_towards(const Npc *n, int other)
+{
+    int x, y, f, ox, oy;
+    world_actor_cell(n->actor, &x, &y, &f);
+    world_actor_cell(other, &ox, &oy, &f);
+    int dx = (ox > x) - (ox < x), dy = (oy > y) - (oy < y);
+    static const int dirs[3][3] = { { 7, 0, 1 }, { 6, 4, 2 }, { 5, 4, 3 } };
+    world_set_pose(n->actor, "Idle", dirs[dy + 1][dx + 1]);
+}
+
+static void waiter_now_what(Npc *n)
+{
+    Npc *c = n->customer > 0 ? npc_of(n->customer) : NULL;
+    int ok = c && waiting_customer(c);
+    int cx = 0, cy = 0, cf;
+    if (c) world_actor_cell(c->actor, &cx, &cy, &cf);
+    switch (n->waiter)
+    {
+        case 0: /* find a customer within 32 tiles */
+        {
+            Npc *next = NULL;
+            int best = 1 << 30;
+            for (int i = 0; i < npcCount; i++)
+            {
+                Npc *o = &npcs[i];
+                if (o == n || !waiting_customer(o) || order_taken(o->actor)) continue;
+                int ox, oy, of;
+                world_actor_cell(o->actor, &ox, &oy, &of);
+                int d = tile_distance(n->actor, ox, oy);
+                if (d <= 32 && d < best) { best = d; next = o; }
+            }
+            if (!next)
+            {
+                /* no one to serve: back to the counter, waiting there (Exult wait_at_counter: 2-4 s) */
+                if (tile_distance(n->actor, n->destX, n->destY) > 3 && walk_towards(n, n->destX, n->destY)) return;
+                n->waitMs = 2000 + rnd(2000);
+                return;
+            }
+            n->customer = next->actor;
+            n->waiter = 1;
+            int ox, oy, of;
+            world_actor_cell(next->actor, &ox, &oy, &of);
+            if (!walk_towards(n, ox, oy)) n->waitMs = 0;
+            return;
+        }
+        case 1: /* at the customer: the order */
+            if (!ok) { n->waiter = 0; n->waitMs = 500; return; }
+            if (walk_towards(n, cx, cy)) return;
+            face_towards(n, c->actor);
+            vitals_bark(n->characterId, B_WAITER_ASKS);
+            n->waiter = 2;
+            n->waitMs = 1200;
+            return;
+        case 2: /* back to the counter */
+            if (walk_towards(n, n->destX, n->destY)) return;
+            n->waiter = 3;
+            world_set_pose(n->actor, "Attacking Melee", -1); /* working at the counter (Exult's Prep_animation) */
+            n->waitMs = 1500 + rnd(1500);
+            return;
+        case 3: /* prepared: a dish from its menu */
+        {
+            world_set_pose(n->actor, "Idle", -1);
+            cJSON *menu = get(character_of(n->characterId), "WaiterServesFoodIds");
+            if (!ok || !cJSON_GetArraySize(menu)) { n->waiter = 0; n->customer = -1; n->waitMs = 1000; return; }
+            n->dish = cJSON_GetArrayItem(menu, rnd(cJSON_GetArraySize(menu)))->valueint;
+            n->waiter = 4;
+            if (!walk_towards(n, cx, cy)) n->waitMs = 0;
+            return;
+        }
+        case 4: /* brought */
+        {
+            if (!ok) { n->waiter = 0; n->customer = -1; n->waitMs = 500; return; }
+            if (walk_towards(n, cx, cy)) return;
+            face_towards(n, c->actor);
+            int dish = serve_dish(n->dish, c);
+            if (dish)
+            {
+                if (c->servedCount < 8) c->served[c->servedCount++] = dish;
+                sound_play(num(get(get(project_json(), "Settings"), "Sounds"), "DropOnMapSoundId", -1)); /* Exult: the drop sound */
+                if (rnd(3) > 0) vitals_bark(n->characterId, B_WAITER_SERVES);
+            }
+            n->customer = -1;
+            n->waiter = 0;
+            n->waitMs = 1000 + rnd(1000);
+            return;
+        }
+    }
+}
+
+/* ---- House doors: the key to its own door, carried (Character Editor > Verbose > Locks its house door) ---- */
+
+static int holds_house_key(int actor, int doorUid)
+{
+    int id = world_actor_character(actor);
+    cJSON *me = character_of(id), *door = get(object_of(world_thing_object_id(doorUid)), "Door");
+    if (!flag_of(me, "LocksHouseDoor") || cJSON_IsFalse(get(me, "IsHuman")) || flag_of(door, "MagicallyLocked")) return 0;
+    int keyId = num(door, "RequiredKeyItemId", -1);
+    cJSON *key = keyId >= 0 ? object_of(keyId) : NULL;
+    if (!key || num(key, "BelongToId", -1) != id) return 0;
+    return items_count_any(id, CAT_OBJECT, keyId) > 0;
+}
+
+void schedules_house_keys(void) { world_set_key_check(holds_house_key); }

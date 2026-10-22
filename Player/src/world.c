@@ -1144,13 +1144,27 @@ static int heuristic(int ax, int ay, int bx, int by) { return abs(ax - bx) + abs
 
 /* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
    Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
+static int door_sound(const Thing *d, const char *key)
+{
+    cJSON *o;
+    cJSON_ArrayForEach(o, get(get(get(gameJson, "Project"), "Objects"), "Objects")) if (num(o, "Id", -2) == d->itemId) return num(get(o, "Door"), key, -1);
+    return -1;
+}
+static int door_unlock_sound(const Thing *d) { int s = door_sound(d, "UnlockSoundResourceId"); return s >= 0 ? s : door_sound(d, "LockSoundResourceId"); }
+static int door_lock_sound(const Thing *d) { int s = door_sound(d, "LockSoundResourceId"); return s >= 0 ? s : door_sound(d, "UnlockSoundResourceId"); }
+static int actor_under_roof(const Actor *a);
+
+static int (*holdsKey)(int actor, int doorUid); /* LocksHouseDoor: the key to its own door, carried (schedules.c) */
+static int index_of_actor(const Actor *a);
+
 static void doors_passable(const Actor *a, int passable)
 {
     if (!a->human) return;
     for (int i = 0; i < thingCount; i++)
     {
         Thing *t = &things[i];
-        if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->locked || t->body < 0) continue;
+        if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->body < 0) continue;
+        if (t->locked && !(holdsKey && a != &player && holdsKey(index_of_actor(a), t->uid))) continue;
         if (passable) bodies[t->body].z -= 1000000; else bodies[t->body].z += 1000000;
     }
 }
@@ -1238,7 +1252,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
 }
 
 #define MAX_PATH 512
-typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose, blocked; } Walk;
+typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose, blocked, lockBehind; } Walk;
 static Walk *walks; /* one per actor */
 
 static Walk *walk_of(int actor)
@@ -1302,8 +1316,16 @@ static int open_door_in_way(Actor *a, Walk *w, int l, int t)
     for (int i = 0; i < thingCount; i++)
     {
         Thing *d = &things[i];
-        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->locked || d->body < 0) continue;
+        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0) continue;
         if (!overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
+        if (d->locked)
+        {
+            /* its own door, key in hand: unlocked to get through (and locked again behind it once outside) */
+            if (!holdsKey || !holdsKey(index_of_actor(a), d->uid)) continue;
+            d->locked = 0;
+            sound_play(door_unlock_sound(d));
+            w->lockBehind = 1;
+        }
         door_set_open(d, 1);
         w->doorToClose = d->uid;
         return 1;
@@ -1338,6 +1360,9 @@ static void close_doors_behind(void)
         if (blocked) continue; /* someone in the doorway: next frame */
         door_set_open(d, 0);
         w->doorToClose = 0;
+        /* LockBehindIfLeaving: its own door, and it's now outside (nothing over its head) */
+        if (holdsKey && holdsKey(i, d->uid) && !actor_under_roof(a)) { d->locked = 1; sound_play(door_lock_sound(d)); }
+        w->lockBehind = 0;
     }
 }
 
@@ -1724,6 +1749,7 @@ void world_stand_up(int actor)
 
 int world_seated(int actor) { seats_ready(); return seats[actor].uid != 0; }
 int world_seated_on(int actor) { seats_ready(); return seats[actor].uid; }
+int world_in_bed(int actor) { seats_ready(); return seats[actor].uid != 0 && seats[actor].bed; }
 
 /* Sit_schedule / Sleep_schedule: the nearest free chair (any distance) or bed (within 24 tiles) it can walk to - heading there. 0 if none. */
 int world_go_to_furniture(int actor, int bed, int onlyUid)
@@ -3054,3 +3080,35 @@ void world_shift_actor(int actor, double dx, double dy, int dz)
 
 void world_actor_set_facing(int actor, int facing) { Actor *a = actor_of(actor); if (a) a->facing = facing & 7; }
 int world_actor_facing_of(int actor) { Actor *a = actor_of(actor); return a ? a->facing : 0; }
+
+static int index_of_actor(const Actor *a) { return a == &player ? 0 : (int)(a - npcs) + 1; }
+
+/* Exult's is_roof for a character: anything solid over its head (inside a house). */
+static int actor_under_roof(const Actor *a)
+{
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    for (int i = 0; i < bodyCount; i++)
+        if (overlaps(&bodies[i], l, t, a->sizeX, a->sizeY) && bodies[i].z >= a->lift + 4) return 1;
+    return 0;
+}
+
+void world_set_key_check(int (*check)(int actor, int doorUid)) { holdsKey = check; }
+
+/* Going to sleep: its own doors near it closed (if they can be) and locked (LockHouseDoorsForNight). */
+void world_lock_own_doors(int actor, int cells)
+{
+    Actor *a = actor_of(actor);
+    if (!a || !holdsKey) return;
+    int ax = (int)floor(a->px / tileW), ay = (int)floor(a->py / tileH);
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *d = &things[i];
+        if (d->gone || !d->def || d->def->type != T_DOOR || abs(d->x - ax) > cells || abs(d->y - ay) > cells || !holdsKey(actor, d->uid)) continue;
+        if (d->open && !world_door_close(d->uid)) continue; /* someone in the doorway */
+        if (!d->locked) { d->locked = 1; sound_play(door_lock_sound(d)); }
+    }
+}
+
+/* Whether a character is heading for a chair or bed it hasn't reached yet. */
+int world_heading_to_seat(int actor) { seats_ready(); return actor >= 0 && actor <= npcCount && heading[actor].uid != 0; }
