@@ -50,7 +50,11 @@ public partial class GameTestWindow
         leaving.Characters.RemoveAll(partyPlacements.Contains);
         var states = data.WorldStates;
         states[_map.Id > 0 ? _map.Id : Worlds.FirstOrDefault()?.Id ?? 1] = leaving; // a save from before worlds: the starting world
+        // The world left keeps what of its events' and objects' pages has fired; the one arrived in gets its own back.
+        leaving.FiredPagesRuntime = data.FiredPages.Where(f => f.Owner.StartsWith("Event:") || f.Owner.StartsWith("Object:")).ToList();
+        data.FiredPages.RemoveAll(f => f.Owner.StartsWith("Event:") || f.Owner.StartsWith("Object:"));
         var arriving = states.Remove(world.Id, out var kept) ? kept : JsonCopy(world);
+        if (arriving.FiredPagesRuntime is { } own) { data.FiredPages.AddRange(own); arriving.FiredPagesRuntime = null; }
 
         int x = spot?.X ?? arriving.StartX, y = spot?.Y ?? arriving.StartY, floor = spot?.Floor ?? arriving.StartFloor;
         if (x < 0 || y < 0 || x >= arriving.Width || y >= arriving.Height) { x = arriving.Width / 2; y = arriving.Height / 2; }

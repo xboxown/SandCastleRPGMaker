@@ -111,6 +111,9 @@ public class MapData
     /// <summary>The floor (1-9) the player starts on.</summary>
     public int StartFloor { get; set; } = 1;
 
+    /// <summary>In play: what of this world's events' and objects' pages had fired when the party left it (kept with it, as event ids repeat across worlds).</summary>
+    public List<SavedFiredPage>? FiredPagesRuntime { get; set; }
+
     /// <summary>The tile layer of this floor (1 = the ground), or null if nothing was ever painted there. create: make it (empty) if missing.</summary>
     public MapLayer? LayerForFloor(int floor, bool create = false)
     {
