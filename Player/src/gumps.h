@@ -27,5 +27,6 @@ void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const
 int gumps_choosing(void);
 void gumps_cancel_choosing(void);
 int gumps_turn_into(const void *state, int objectId);
+void gumps_close_container(const Item *box);
 
 #endif

@@ -31,6 +31,7 @@ double combat_tiles_between(int a, int b);
 int combat_friends(int a, int b);
 void combat_owned_theft(int uid);
 void combat_strike_object(int uid, int damage);
+void combat_force_fuse(int uid);
 #include "../third_party/cJSON.h"
 void combat_save(cJSON *runtime);
 void combat_restore(cJSON *runtime);

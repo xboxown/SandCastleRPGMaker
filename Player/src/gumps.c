@@ -18,6 +18,7 @@
  *    refused drop leaves the thing where it was.
  */
 #include "gumps.h"
+#include "mechanisms.h"
 #include "magic.h"
 #include "world.h"
 #include "items.h"
@@ -249,7 +250,7 @@ static void close_gump(int i)
 }
 
 int gumps_open(void) { return gumpCount; }
-int gumps_close_top(void) { if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
+int gumps_close_top(void) { if (mechanisms_map_click()) return 1; if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
 
 /* A map container double-clicked: its window (a never-opened one with its starting contents). */
 void gumps_open_map_container(int uid)
@@ -427,6 +428,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         if (p) world_blit(pixels, p, mouseX - grabX, mouseY - grabY, quantize(p->width), quantize(p->height));
     }
     magic_draw_book(pixels, ms); /* the open spellbook, over every window */
+    mechanisms_draw(pixels); /* a map being looked at */
 }
 
 static void show_label(const char *text, int x, int y)
@@ -577,6 +579,7 @@ static void use_carried(Item *it)
     int category = items_category(it), id = items_item_id(it);
     if (category == CAT_CONTAINER) { open_box(it, 0); return; }
     if (category == CAT_OBJECT && dolls_use_item(it, 0)) return; /* its paperdoll (its own By Use first) */
+    if (category == CAT_OBJECT && mechanisms_use_carried(it)) return; /* a key, lockpick, keychain, sextant, map, clock, instrument */
     if (category == CAT_OBJECT && magic_use_carried(it)) return; /* a potion, food, a useable object, a spellbook */
     if (events_fire_item(category, id, TR_USE)) return;
     if (category == CAT_OBJECT && items_use_light(it)) return;
@@ -939,6 +942,7 @@ int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
     if (events_cinema()) return 1;
+    if (mechanisms_map_click()) return 1; /* a map being looked at: put away */
     if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
     if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */
     pressed = hit(x, y);
@@ -1055,4 +1059,11 @@ static int pick_target(int x, int y)
     if (p.actor < 0 && !p.uid && !p.item && t.kind == T_NONE) p.ground = 1;
     chosen(choosingContext, &p);
     return 1;
+}
+
+/* Locked with a key: its windows close, and those of every container inside it. */
+void gumps_close_container(const Item *box)
+{
+    for (int i = gumpCount - 1; i >= 0; i--)
+        if (gumps[i].box && (gumps[i].box == box || items_holds(box, gumps[i].box))) close_gump(i);
 }

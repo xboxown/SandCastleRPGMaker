@@ -27,7 +27,7 @@ struct Item
     int instanceId, category, itemId, quantity;
     int locked;              /* -1 as its kind says, else 0 / 1 (IsLockedRuntime) */
     int lit, spent; double burnLeft; /* a light: lit, burnt out, game minutes left (-1: not started) */
-    int keys[32], keyCount;          /* a keyring: the keys on it */
+    int keys[32], keyCount, keysSet; /* a keyring: the keys on it (keysSet: its list is its own, not its Starting Keys) */
     int charges;                     /* a weapon with charges: how many left (-1: not used yet) */
     double cx, cy;                   /* its spot in a container's window (-100000: none yet) */
     int autoPlaced;                  /* laid out in the row by the engine, not dropped at a spot */
@@ -123,6 +123,7 @@ static Item *read_item(cJSON *j)
     it->lit = cJSON_IsTrue(get(j, "IsLitRuntime")); it->spent = cJSON_IsTrue(get(j, "IsSpentRuntime"));
     cJSON *key;
     cJSON_ArrayForEach(key, get(j, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(key)) it->keys[it->keyCount++] = key->valueint;
+    if (cJSON_IsArray(get(j, "KeyIdsRuntime"))) it->keysSet = 1;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     it->charges = num(j, "ChargesRuntime", -1);
     cJSON *spell;
@@ -485,6 +486,9 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
     cJSON *locked = get(placed, "IsLockedRuntime");
     if (category == CAT_CONTAINER && cJSON_IsBool(locked)) it->locked = cJSON_IsTrue(locked);
     if (cJSON_IsObject(get(placed, "DollRuntime"))) it->doll = dolls_state_from_json(get(placed, "DollRuntime"));
+    cJSON *placedKey;
+    cJSON_ArrayForEach(placedKey, get(placed, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(placedKey)) it->keys[it->keyCount++] = placedKey->valueint;
+    if (cJSON_IsArray(get(placed, "KeyIdsRuntime"))) it->keysSet = 1;
     it->charges = num(placed, "ChargesRuntime", -1);
     return it;
 }
@@ -1231,7 +1235,7 @@ cJSON *items_item_json(const Item *it)
     if (it->spent) cJSON_AddTrueToObject(j, "IsSpentRuntime");
     cJSON_AddNumberToObject(j, "BurnLeftRuntime", it->burnLeft);
     if (it->locked >= 0) cJSON_AddBoolToObject(j, "IsLockedRuntime", it->locked);
-    if (it->keyCount) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
+    if (it->keyCount || it->keysSet) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
     cJSON_AddNumberToObject(j, "ChargesRuntime", it->charges);
     if (it->learnedCount) { cJSON *spells = cJSON_CreateArray(); for (int i = 0; i < it->learnedCount; i++) cJSON_AddItemToArray(spells, cJSON_CreateString(it->learned[i])); cJSON_AddItemToObject(j, "LearnedSpellsRuntime", spells); }
     if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
@@ -1278,6 +1282,7 @@ cJSON *items_save_thing(int uid, cJSON *entry)
             if (it->locked >= 0) put_into(entry, "IsLockedRuntime", cJSON_CreateBool(it->locked));
         }
         if (it->charges >= 0) put_into(entry, "ChargesRuntime", cJSON_CreateNumber(it->charges));
+        if (it->keysSet) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); put_into(entry, "KeyIdsRuntime", keys); } /* a keychain lying on the map */
         if (it->doll) put_into(entry, "DollRuntime", dolls_state_json(it->doll));
         if (it->category == CAT_CONTAINER && it->itemId <= -1000) put_into(entry, "BodyOf", cJSON_CreateNumber(-1000 - it->itemId));
         break;
@@ -1376,4 +1381,19 @@ int items_carried_objects(int characterId, Item **out, int max)
     int n = 0;
     if (k) for (int i = 0; i < k->count; i++) collect_objects(k->items[i], out, &n, max);
     return n;
+}
+
+/* A keychain's keys (KeyIdsRuntime). */
+int items_keys_set(const Item *it) { return it && it->keysSet; }
+void items_mark_keys_set(Item *it) { if (it) it->keysSet = 1; }
+int items_key_count(const Item *it) { return it ? it->keyCount : 0; }
+int items_has_key(const Item *it, int keyId) { if (!it || keyId < 0) return 0; for (int i = 0; i < it->keyCount; i++) if (it->keys[i] == keyId) return 1; return 0; }
+void items_add_key(Item *it, int keyId) { if (it && keyId >= 0 && !items_has_key(it, keyId) && it->keyCount < 32) it->keys[it->keyCount++] = keyId; if (it) it->keysSet = 1; }
+
+/* Whether this is somewhere inside the container (at any depth). */
+int items_holds(const Item *container, const Item *it)
+{
+    if (!container || !it) return 0;
+    for (int i = 0; i < container->count; i++) if (container->contents[i] == it || items_holds(container->contents[i], it)) return 1;
+    return 0;
 }

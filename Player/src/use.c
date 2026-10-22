@@ -8,6 +8,7 @@
  *    anything else: nothing happens.
  */
 #include "use.h"
+#include "mechanisms.h"
 #include "magic.h"
 #include "events.h"
 #include "combat.h"
@@ -115,6 +116,7 @@ void use_thing(int uid)
     /* a bed's cover lies over the bed: double-clicking it means the bed */
     int bed = world_bed_under_cover(uid);
     if (bed && !has_commands(def)) { world_player_sit(bed); return; }
+    if (mechanisms_use_map(uid)) return; /* a window, lever, ladder, key, lockpick, keychain, sextant, map, clock, instrument */
     if (magic_use_map(uid)) return; /* a potion, food, a useable object, a spellbook */
     switch (world_thing_type(uid))
     {

@@ -1525,3 +1525,16 @@ void combat_strike_object(int uid, int damage)
     cJSON *def = c == CAT_OBJECT ? object_def(i) : NULL;
     if (def) strike_object(uid, def, damage, -1, 1);
 }
+
+/* A lever linked to an explosive: its fuse is lit, double-click or not. */
+void combat_force_fuse(int uid)
+{
+    cJSON *def = object_def(world_thing_object_id(uid)), *e = get(def, "Explosive");
+    if (!def || num(def, "Type", 0) != TYPE_EXPLOSIVE || fuse_of(uid) >= 0) return;
+    double seconds = get(e, "FuseSeconds") ? get(e, "FuseSeconds")->valuedouble : 3;
+    set_fuse(uid, seconds > 0.05 ? seconds : 0.05, 1);
+    conditions_record_item("ignited", CAT_OBJECT, num(def, "Id", -1));
+    sound_play(num(e, "FuseSoundResourceId", -1));
+    cJSON *lit = get(e, "LitSprite");
+    if (flag(lit, "IsSet")) world_thing_look(uid, sprite_find(str(lit, "SpriteGroup"), str(lit, "SpriteName")));
+}

@@ -21,6 +21,7 @@
 #include "dolls.h"
 #include "save.h"
 #include "magic.h"
+#include "mechanisms.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -63,6 +64,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
         else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
         {
@@ -159,7 +161,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     cJSON *old = (cJSON *)world_json();
     /* the last game, let go of */
     sound_stop_all();
-    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset();
+    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
@@ -402,6 +404,7 @@ int main(int argc, char **argv)
             vitals_update(seconds * 1000);
             combat_update(seconds * 1000);
             magic_update(seconds * 1000);
+            mechanisms_update(seconds * 1000);
             gumps_update(seconds * 1000);
             events_player_moved();
         }

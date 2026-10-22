@@ -40,7 +40,9 @@ void game_log(const char *line);
 #define DEAD_HALF_W 60
 #define DEAD_HALF_H 40
 
-enum { T_JUNK, T_TILE, T_WALL, T_DOOR, T_LIGHT, T_AMMO, T_MONEY, T_CHAIR, T_BED, T_TRAP };
+enum { T_JUNK, T_TILE, T_WALL, T_DOOR, T_LIGHT, T_AMMO, T_MONEY, T_CHAIR, T_BED, T_TRAP, T_KEY, T_LOCKPICK, T_WINDOW, T_PLANT, T_KEYCHAIN,
+       T_SEXTANT, T_MAP, T_FOOD, T_POTION, T_GLASS, T_SPELLBOOK, T_USEABLE, T_LEVER, T_STAIRS, T_ROOF, T_CLOCK, T_TOOL, T_STATION,
+       T_INSTRUMENT, T_EXPLOSIVE, T_BEDROLL, T_REAGENT, T_TABLE, T_LIQUID };
 enum { DIR_N, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW };
 static const char *DIR_NAMES[8] = { "North", "NorthEast", "East", "SouthEast", "South", "SouthWest", "West", "NorthWest" };
 
@@ -57,6 +59,13 @@ typedef struct ObjectDef
     int burnMinutes, spentSound;      /* how long it burns (0: for ever), and the sound when it's spent */
     int spotCount[8]; double spotX[8][8], spotY[8][8]; /* a chair's seats / a bed's sleeping places, per facing (picture pixels) */
     int coverId;                      /* a bed's cover object (-1: none) */
+    const Sprite *locked, *bundle[8]; /* a door's locked look; ammo / money / lockpicks by how many (ObjectTypes.BundleLevel) */
+    const Sprite *winOpen, *winBroken; int winShutters, winStartsOpen, winBlocks; /* a window: shutters open, glass broken; closed shutters block sight */
+    const Sprite *stages[16]; int stageCount;                                    /* a plant's stages */
+    const Sprite *leverOn; int leverKind, leverStartsOn;                          /* a lever (0), switch (1), button (2) */
+    const Sprite *working, *laidOut, *usedUp;                                     /* a crafting station at work; a bedroll laid out; a useable object used up */
+    int liquidFood[8]; const Sprite *liquidLook[8]; int liquidCount, liquidStart; /* a liquid container: its look per liquid; what it starts full of */
+    int stairsKind, risesToward; cJSON *design;                                   /* stairs (0) or a ladder (1); a designed staircase (Staircase Designer) */
 } ObjectDef;
 
 typedef struct Thing
@@ -75,6 +84,10 @@ typedef struct Thing
     int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
     int hp, hpSet;                                   /* hit points left in play (Attack Object) */
     int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
+    int bodyN;                                       /* how many boxes it has from body on (stairs: a box a step) */
+    int stage; double grow;                          /* a plant: its stage, the game minutes grown towards the next */
+    int liquid;                                      /* a liquid container: what it holds (a liquid Food's id, -1: empty) */
+    cJSON *steps;                                    /* a designed staircase: its steps for its facing */
 } Thing;
 
 typedef struct Body { int left, top, width, depth, z, height; } Body;
@@ -158,6 +171,24 @@ static void read_objects(cJSON *project)
                 if (d->spotCount[dir] < 8) { d->spotX[dir][d->spotCount[dir]] = get(spot, "X") ? get(spot, "X")->valuedouble : 0; d->spotY[dir][d->spotCount[dir]++] = get(spot, "Y") ? get(spot, "Y")->valuedouble : 0; }
         }
         d->coverId = num(get(o, "Furniture"), "CoverObjectId", -1);
+        d->locked = link_of(get(door, "LockedSprite"));
+        cJSON *lv;
+        int li = 0;
+        cJSON_ArrayForEach(lv, get(get(o, "Bundle"), "Levels")) if (li < 8) d->bundle[li++] = link_of(lv);
+        cJSON *win = get(o, "Window"), *lever = get(o, "Lever"), *liquid = get(o, "Liquid"), *stairs = get(o, "Stairs");
+        d->winOpen = link_of(get(win, "OpenSprite")); d->winBroken = link_of(get(win, "BrokenSprite"));
+        d->winShutters = flag(win, "HasShutters"); d->winStartsOpen = flag(win, "StartsOpen"); d->winBlocks = !cJSON_IsFalse(get(win, "ClosedBlocksSight"));
+        cJSON_ArrayForEach(lv, get(get(o, "Plant"), "Stages")) if (d->stageCount < 16) d->stages[d->stageCount++] = link_of(lv);
+        d->leverOn = link_of(get(lever, "OnSprite")); d->leverKind = num(lever, "Kind", 0); d->leverStartsOn = flag(lever, "StartsOn");
+        d->working = link_of(get(get(o, "Crafting"), "WorkingSprite")); d->laidOut = link_of(get(get(o, "Bedroll"), "LaidOutSprite")); d->usedUp = link_of(get(get(o, "Useable"), "UsedUpSprite"));
+        cJSON_ArrayForEach(lv, get(liquid, "Liquids")) if (d->liquidCount < 8) { d->liquidFood[d->liquidCount] = num(lv, "FoodId", -1); d->liquidLook[d->liquidCount++] = link_of(get(lv, "Sprite")); }
+        d->liquidStart = num(liquid, "StartsFullOfId", -1);
+        d->stairsKind = num(stairs, "Kind", 0); d->risesToward = num(stairs, "RisesToward", 0);
+        if (d->type == T_STAIRS && d->stairsKind == 0 && num(stairs, "DesignId", -1) >= 0)
+        {
+            cJSON *design;
+            cJSON_ArrayForEach(design, get(get(project, "Objects"), "StairDesigns")) if (num(design, "Id", -2) == num(stairs, "DesignId", -1)) d->design = design;
+        }
         cJSON_ArrayForEach(f, turn) d->turned[dir_of(f->string)] = link_of(f);
     }
 }
@@ -171,8 +202,26 @@ static const Sprite *look_of(const Thing *t)
     const Sprite *own = d->turned[t->facing] ? d->turned[t->facing] : d->own;
     switch (d->type)
     {
-        case T_DOOR: return t->open && d->open ? d->open : own;
-        case T_LIGHT: return t->lit && d->lit ? d->lit : t->spent && d->spent ? d->spent : own;
+        case T_DOOR: return t->open ? (d->open ? d->open : own) : t->locked && d->locked ? d->locked : own;
+        case T_LIGHT: return t->spent ? (d->spent ? d->spent : own) : t->lit && d->lit ? d->lit : own;
+        case T_AMMO: case T_MONEY: case T_LOCKPICK:
+        {
+            int q = t->quantity > 1 ? t->quantity : 1, level = q > 12 ? 7 : q > 6 ? 6 : q - 1;
+            for (; level >= 0; level--) if (d->bundle[level]) return d->bundle[level];
+            return own;
+        }
+        case T_WINDOW: return t->spent ? (d->winBroken ? d->winBroken : own) : t->open && d->winShutters && d->winOpen ? d->winOpen : own;
+        case T_PLANT: return d->stageCount && d->stages[t->stage < 0 ? 0 : t->stage >= d->stageCount ? d->stageCount - 1 : t->stage] ? d->stages[t->stage < 0 ? 0 : t->stage >= d->stageCount ? d->stageCount - 1 : t->stage] : own;
+        case T_LEVER: return t->open && d->leverOn ? d->leverOn : own;
+        case T_STATION: return t->lit && d->working ? d->working : own;
+        case T_BEDROLL:
+            if (!t->open) return own;
+            if (d->facing[t->facing]) return d->facing[t->facing];
+            return d->laidOut ? d->laidOut : own;
+        case T_USEABLE: return t->spent && d->usedUp ? d->usedUp : own;
+        case T_LIQUID:
+            for (int i = 0; i < d->liquidCount; i++) if (d->liquidFood[i] == t->liquid && t->liquid >= 0) return d->liquidLook[i] ? d->liquidLook[i] : own;
+            return own;
         case T_CHAIR: case T_BED:
             if (d->facing[t->facing]) return d->facing[t->facing];
             if (d->facing[DIR_S]) return d->facing[DIR_S];
@@ -196,9 +245,32 @@ static void settle_all(void);
 static void spawn_bed_covers(void);
 static cJSON *containersJson, *booksJson;
 
+static void stair_bodies(Thing *t, Body *out, int max, int *n);
+
+static void ensure_bodies(int more)
+{
+    if (bodyCount + more < bodyCap) return;
+    while (bodyCount + more >= bodyCap) bodyCap = bodyCap * 2 + 16;
+    bodies = (Body *)realloc(bodies, sizeof(Body) * (size_t)bodyCap);
+}
+
 static void add_thing_body(Thing *t)
 {
     t->body = -1;
+    t->bodyN = 1;
+    if (t->def && t->def->type == T_STAIRS && t->solid && !t->hangs)
+    {
+        Body steps[64];
+        int n = 0;
+        stair_bodies(t, steps, 64, &n);
+        if (n > 0)
+        {
+            ensure_bodies(n);
+            t->body = bodyCount; t->bodyN = n;
+            for (int i = 0; i < n; i++) bodies[bodyCount++] = steps[i];
+            return;
+        }
+    }
     int door = t->def && t->def->type == T_DOOR && t->def->solid;
     if ((!t->solid && !door) || t->hangs) return;
     t->body = bodyCount;
@@ -452,6 +524,27 @@ int world_build(cJSON *root)
         cJSON *litNow = get(o, "IsLitRuntime");
         t->lit = d->type == T_LIGHT && (cJSON_IsBool(litNow) ? cJSON_IsTrue(litNow) : cJSON_IsBool(sl) ? cJSON_IsTrue(sl) : d->lightStartsLit);
         t->spent = flag(o, "IsSpentRuntime");
+        cJSON *openNow = get(o, "IsOpenRuntime");
+        if (d->type == T_WINDOW) t->open = d->winShutters && (cJSON_IsBool(openNow) ? cJSON_IsTrue(openNow) : cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->winStartsOpen);
+        if (d->type == T_LEVER) t->open = d->leverKind != 2 && (cJSON_IsBool(openNow) ? cJSON_IsTrue(openNow) : cJSON_IsBool(so) ? cJSON_IsTrue(so) : d->leverStartsOn);
+        if (d->type == T_BEDROLL) t->open = cJSON_IsTrue(openNow);
+        t->stage = num(o, "StartStage", 0);
+        if (t->stage >= d->stageCount) t->stage = d->stageCount > 0 ? d->stageCount - 1 : 0;
+        if (t->stage < 0) t->stage = 0;
+        t->grow = cJSON_IsNumber(get(o, "GrowMinutesRuntime")) ? get(o, "GrowMinutesRuntime")->valuedouble : 0;
+        cJSON *full = get(o, "LiquidIdRuntime");
+        if (!cJSON_IsNumber(full)) full = get(o, "StartsFullOfId");
+        t->liquid = d->type != T_LIQUID ? -1 : cJSON_IsNumber(full) ? full->valueint : d->liquidStart;
+        if (d->type == T_KEYCHAIN || d->type == T_PLANT) t->fixedFrame = 0;
+        if (d->type == T_KEYCHAIN && cJSON_IsNumber(get(o, "FrameRuntime")) && num(o, "FrameRuntime", 0) > 0) t->fixedFrame = num(o, "FrameRuntime", 0) + 1;
+        if (d->design)
+        {
+            /* StairDesign.Resolve: its own pose for the way it faces, else the first with steps */
+            cJSON *pose, *first = NULL;
+            cJSON_ArrayForEach(pose, get(d->design, "Poses"))
+                if (cJSON_GetArraySize(get(pose, "Steps")) > 0) { if (!first) first = pose; if (num(pose, "Facing", -1) == t->facing && !t->steps) t->steps = get(pose, "Steps"); }
+            if (!t->steps && first) t->steps = get(first, "Steps");
+        }
         t->burnLeft = get(o, "BurnLeftRuntime") && cJSON_IsNumber(get(o, "BurnLeftRuntime")) ? get(o, "BurnLeftRuntime")->valuedouble : -1;
         int turned = (d->turned[0] || d->turned[2] || d->turned[4] || d->turned[6]) && (t->facing == DIR_E || t->facing == DIR_W);
         t->sizeX = turned ? d->sizeY : d->sizeX; t->sizeY = turned ? d->sizeX : d->sizeY;
@@ -794,6 +887,34 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     {
         const Thing *t = &things[i];
         if (t->gone || t->z >= ceiling) continue;
+        if (t->steps)
+        {
+            cJSON *step;
+            int index = 0;
+            cJSON_ArrayForEach(step, t->steps)
+            {
+                const Sprite *ss = link_of(get(step, "Sprite"));
+                int frame = num(step, "Frame", 0), landing = flag(step, "IsLanding");
+                const Picture *sp = landing || frame > 0 ? (ss && ss->frameCount ? frame_picture(&ss->frames[frame < ss->frameCount ? frame : ss->frameCount - 1]) : NULL) : sprite_picture_at(ss, ms);
+                index++;
+                if (!sp) continue;
+                int sx = t->x * tileW + t->offX * UNIT + num(step, "PictureX", 0) - t->z * LIFT_SHIFT, sy = t->y * tileH + t->offY * UNIT + num(step, "PictureY", 0) - t->z * LIFT_SHIFT;
+                int al = t->x * unitsX + t->offX + num(step, "FootX", 0), at = t->y * unitsY + t->offY + num(step, "FootY", 0);
+                int sw = num(step, "SizeX", 1) > 1 ? num(step, "SizeX", 1) : 1, sd = num(step, "SizeY", 1) > 1 ? num(step, "SizeY", 1) : 1, topLift = num(step, "TopLift", 1);
+                if (landing)
+                {
+                    int slab = t->z + (topLift - 1 > 0 ? topLift - 1 : 0);
+                    if (slab >= ceiling) continue;
+                    add_drawn(floor_of(t->z + topLift) - 1, -5000000.0 + (t->x + t->y) * 100.0 + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count); /* with that floor's tiles */
+                    continue;
+                }
+                Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count);
+                if (!d) continue;
+                set_box(d, al, at, sw, sd, t->z, topLift > 0 ? topLift : 1);
+                d->thing = t->uid;
+            }
+            continue;
+        }
         const Sprite *ls = look_of(t);
         if (!t->fixedFrame) frame_sound(t->uid, ls, ms);
         const Picture *pic = t->fixedFrame && ls && t->fixedFrame - 1 < ls->frameCount ? frame_picture(&ls->frames[t->fixedFrame - 1]) : sprite_picture_at(ls, ms);
@@ -1313,7 +1434,7 @@ void world_thing_remove(int uid)
     t->gone = 1;
     Body b;
     thing_box(t, &b);
-    if (t->body >= 0) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
+    if (t->body >= 0) for (int k = 0; k < (t->bodyN > 0 ? t->bodyN : 1); k++) { bodies[t->body + k].width = bodies[t->body + k].depth = 0; bodies[t->body + k].z = -100000; }
     (void)b;
     settle_all(); /* whatever rested on it falls */
 }
@@ -1337,6 +1458,7 @@ int world_thing_put(int category, int itemId, int quantity, int x, int y, int on
         t->sizeZ = flat ? 0 : d->sizeZ;
         t->solid = d->solid; t->solidOffX = d->solidOffX; t->solidOffY = d->solidOffY;
         t->open = d->type == T_DOOR && d->doorStartsOpen; t->lit = d->type == T_LIGHT && d->lightStartsLit;
+        t->liquid = d->type == T_LIQUID ? d->liquidStart : -1;
     }
     else
     {
@@ -2304,7 +2426,8 @@ int world_line_clear(double fx, double fy, int fromLift, double tx, double ty)
     for (int i = 0; i < thingCount && n < 512; i++)
     {
         const Thing *t = &things[i];
-        if (t->gone || t->body < 0 || (t->def && t->def->type == 12 /* a window */)) continue;
+        if (t->gone || t->body < 0) continue;
+        if (t->def && t->def->type == T_WINDOW && (!t->def->winShutters || !t->def->winBlocks || t->open || t->spent)) continue; /* LetsSightThrough */
         const Body *b = &bodies[t->body];
         if (b->z + b->height <= fromLift + 3 || b->z > fromLift + 3) continue;
         if (b->left >= right || b->left + b->width <= left || b->top >= bottom || b->top + b->depth <= top) continue;
@@ -2500,6 +2623,10 @@ static cJSON *thing_json(const Thing *t, int instanceId, cJSON *(*extra)(int uid
         if (t->def && t->def->type == T_DOOR) set_bool(e, "IsLockedRuntime", t->locked);
         if (t->def && t->def->type == T_LIGHT) { set_bool(e, "IsLitRuntime", t->lit); set_bool(e, "StartsLit", t->lit); }
         set_bool(e, "IsSpentRuntime", t->spent);
+        if (t->def && (t->def->type == T_WINDOW || t->def->type == T_LEVER || t->def->type == T_BEDROLL)) set_bool(e, "IsOpenRuntime", t->open);
+        if (t->def && t->def->type == T_PLANT) { set_num(e, "StartStage", t->stage); set_num(e, "FrameRuntime", t->stage); set_num(e, "GrowMinutesRuntime", t->grow); }
+        if (t->def && t->def->type == T_LIQUID) { set_num(e, "LiquidIdRuntime", t->liquid); set_num(e, "StartsFullOfId", t->liquid); }
+        if (t->def && t->def->type == T_KEYCHAIN) set_num(e, "FrameRuntime", t->fixedFrame > 0 ? t->fixedFrame - 1 : 0);
         set_num(e, "BurnLeftRuntime", t->burnLeft);
         set_num(e, "HitPointsRuntime", t->hpSet ? t->hp : -1);
     }
@@ -2646,3 +2773,93 @@ int world_body_of(int characterId)
     for (int i = 0; i < thingCount; i++) if (!things[i].gone && things[i].category == 5 && things[i].itemId == -1000 - characterId) return things[i].uid;
     return 0;
 }
+
+/* ---------------- Stairs: a box a step (GameTestWindow.Mechanisms ObjectBodies) ---------------- */
+
+static void stair_bodies(Thing *t, Body *out, int max, int *n)
+{
+    Body body;
+    thing_box(t, &body);
+    *n = 0;
+    if (t->steps)
+    {
+        /* a designed staircase: every step its own piece, from the staircase's foot up to its top lift */
+        int ax = t->x * unitsX + t->offX, ay = t->y * unitsY + t->offY;
+        cJSON *step;
+        cJSON_ArrayForEach(step, t->steps)
+        {
+            if (*n >= max) break;
+            Body b = body;
+            int top = num(step, "TopLift", 1);
+            b.left = ax + num(step, "FootX", 0); b.top = ay + num(step, "FootY", 0);
+            b.width = num(step, "SizeX", 1) > 1 ? num(step, "SizeX", 1) : 1; b.depth = num(step, "SizeY", 1) > 1 ? num(step, "SizeY", 1) : 1;
+            if (flag(step, "IsLanding")) { b.z = body.z + (top - 1 > 0 ? top - 1 : 0); b.height = 1; } /* a landing: a floor slab, solid only in its top lift */
+            else b.height = top > 1 ? top : 1;
+            out[(*n)++] = b;
+        }
+        return;
+    }
+    if (t->def->stairsKind != 0 || body.height <= 1) return; /* a ladder, or too low: one box */
+    int steps = body.height, alongY = t->def->risesToward == 0 || t->def->risesToward == 4, length = alongY ? body.depth : body.width;
+    for (int i = 0; i < steps && *n < max; i++)
+    {
+        int from = length * i / steps, to = length * (i + 1) / steps;
+        if (to <= from) continue; /* too short for its height: a step is missing */
+        int start = t->def->risesToward == 0 ? body.top + body.depth - to : t->def->risesToward == 4 ? body.top + from
+                  : t->def->risesToward == 6 ? body.left + body.width - to : body.left + from;
+        Body b = body;
+        if (alongY) { b.top = start; b.depth = to - from; } else { b.left = start; b.width = to - from; }
+        b.height = i + 1;
+        out[(*n)++] = b;
+    }
+}
+
+/* ---------------- The state of things that work (GameTestWindow.Types) ---------------- */
+
+int world_thing_open(int uid) { Thing *t = thing_by_uid(uid); return t && t->open; }
+void world_thing_set_open(int uid, int open) { Thing *t = thing_by_uid(uid); if (t) t->open = open; }
+int world_thing_lit(int uid) { Thing *t = thing_by_uid(uid); return t && t->lit; }
+void world_thing_set_lit(int uid, int lit) { Thing *t = thing_by_uid(uid); if (t) t->lit = lit; }
+void world_thing_set_spent(int uid, int spent) { Thing *t = thing_by_uid(uid); if (t) t->spent = spent; }
+int world_thing_stage(int uid) { Thing *t = thing_by_uid(uid); return t ? t->stage : 0; }
+int world_thing_stage_count(int uid) { Thing *t = thing_by_uid(uid); return t && t->def ? t->def->stageCount : 0; }
+void world_thing_set_stage(int uid, int stage) { Thing *t = thing_by_uid(uid); if (t) { t->stage = stage; t->grow = 0; } }
+double world_thing_grow(int uid, double minutes) { Thing *t = thing_by_uid(uid); if (!t) return 0; t->grow += minutes; return t->grow; }
+void world_thing_set_grow(int uid, double minutes) { Thing *t = thing_by_uid(uid); if (t) t->grow = minutes; }
+int world_thing_liquid(int uid) { Thing *t = thing_by_uid(uid); return t ? t->liquid : -1; }
+void world_thing_set_liquid(int uid, int liquid) { Thing *t = thing_by_uid(uid); if (t) t->liquid = liquid; }
+void world_thing_set_frame(int uid, int frame) { Thing *t = thing_by_uid(uid); if (t) t->fixedFrame = frame >= 0 ? frame + 1 : 0; }
+cJSON *world_thing_entry(int uid) { Thing *t = thing_by_uid(uid); return t ? t->placed : NULL; }
+int world_thing_by_instance(int instanceId)
+{
+    for (int i = 0; i < thingCount; i++) if (!things[i].gone && things[i].category == 4 && things[i].instanceId == instanceId) return things[i].uid;
+    return 0;
+}
+
+/* Every thing of a type on the map now (uids). */
+int world_things_of_type(int type, int *out, int max)
+{
+    int n = 0;
+    for (int i = 0; i < thingCount && n < max; i++) if (!things[i].gone && things[i].def && things[i].def->type == type) out[n++] = things[i].uid;
+    return n;
+}
+
+/* A ladder's destination: there, on the floor at (or just under) its lift. */
+void world_actor_place_lift(int actor, int x, int y, int lift)
+{
+    Actor *a = actor_of(actor);
+    if (!a || x < 0 || y < 0 || x >= mapW || y >= mapH) return;
+    world_actor_place(actor, x, y, floor_of(lift < 0 ? 0 : lift));
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    const Body *here[512];
+    int n = 0;
+    for (int i = 0; i < bodyCount && n < 512; i++) if (overlaps(&bodies[i], l, t, a->sizeX, a->sizeY) && (actor == 0 || i != a->body)) here[n++] = &bodies[i];
+    a->lift = floor_below(here, n, lift + 1);
+    if (a->body >= 0) bodies[a->body].z = a->lift;
+    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+}
+
+/* The player's spot in 8-pixel units (a sextant's reading). */
+void world_player_units(int *ux, int *uy) { *ux = (int)floor(player.px / UNIT); *uy = (int)floor(player.py / UNIT); }
+void world_player_pixel(double *px, double *py) { *px = player.px; *py = player.py; }
