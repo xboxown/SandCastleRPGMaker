@@ -71,8 +71,20 @@ public partial class ObjectEditorWindow : Window
         deleteButton.Click += (_, _) => DeleteObject();
         var currencyButton = new Button { Content = "Currency Editor...", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(2) };
         currencyButton.Click += (_, _) => { new CurrencyEditorWindow(ProjectSession.Currencies) { Owner = this }.ShowDialog(); ShowCurrent(); };
+        var painterButton = new Button { Content = "Format Painter...", Padding = new Thickness(6, 2, 6, 2), Margin = new Thickness(2),
+            ToolTip = "This object's settings (all but its look, ticked) pasted onto the objects you pick - twenty walls given one wall's size in one go." };
+        painterButton.Click += (_, _) =>
+        {
+            if (_current is not { } source) return;
+            if (FormatPainterWindow.Paint(this, source, _db.Objects, o => o.Name, "Objects",
+                    skip: new[] { "Name", "Type", "TypeChosen", "FolderId" },
+                    unticked: new[] { "SpriteGroup", "SpriteName", "IconPath", "TurnLooks", "EventPages" },
+                    groupOf: o => ObjectTypes.Name(o.Type)))
+                ShowCurrent();
+        };
         toolbar.Items.Add(newButton);
         toolbar.Items.Add(deleteButton);
+        toolbar.Items.Add(painterButton);
         toolbar.Items.Add(new Separator());
         toolbar.Items.Add(new TextBlock { Text = "Show:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) });
         toolbar.Items.Add(_filter);

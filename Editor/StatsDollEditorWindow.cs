@@ -215,6 +215,8 @@ public sealed class StatsDollEditorWindow : Window
                 _picked = null; BuildSettings(); RefreshList(); ShowElement(); Redraw();
             }));
             _settings.Children.Add(row);
+            _settings.Children.Add(MakeButton("Format Painter... (this layout onto others)", () =>
+                FormatPainterWindow.Paint(this, _character, ProjectSession.Characters.Characters, c => c.Name, "Stats paperdoll", only: new[] { "Paperdoll.StatsDoll" })));
         }
         _settings.Children.Add(Heading("Elements"));
         var adds = new WrapPanel();

@@ -291,6 +291,11 @@ public sealed class PaperdollLayoutWindow : Window
         var stats = new Button { Content = "Stats paperdoll...", Padding = new Thickness(8, 3, 8, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
         stats.Click += (_, _) => new StatsDollEditorWindow(_character) { Owner = this }.ShowDialog();
         _settings.Children.Add(stats);
+        var painter = new Button { Content = "Format Painter...", Padding = new Thickness(8, 3, 8, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0),
+            ToolTip = "This inventory paperdoll - its picture, slots and where they are, its checks, buttons and readouts - pasted onto the characters you pick." };
+        painter.Click += (_, _) => FormatPainterWindow.Paint(this, _character, ProjectSession.Characters.Characters, c => c.Name, "Inventory paperdoll",
+            only: new[] { "Paperdoll" }, unticked: new[] { "Paperdoll.StatsDoll" });
+        _settings.Children.Add(painter);
     }
 
     // ================= Drawing =================

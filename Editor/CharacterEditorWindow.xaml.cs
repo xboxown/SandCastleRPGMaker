@@ -1131,6 +1131,16 @@ public partial class CharacterEditorWindow : Window
         BuildPaperdollCanvas(character);
     }
 
+    /// <summary>Format Painter: the selected character's settings onto others (its look, events and what it carries unticked at first).</summary>
+    private void FormatPainter_Click(object sender, RoutedEventArgs e)
+    {
+        if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        if (FormatPainterWindow.Paint(this, character, _database.Characters, c => c.Name, "Characters",
+                skip: new[] { "Name" },
+                unticked: new[] { "FaceSpriteGroup", "FaceSpriteName", "EventPages", "TalkCommands", "Inventory", "EquippedSlots", "CustomEquippedSlots", "IsTestPlayer", "IsInParty", "Schedules", "ScheduleRules" }))
+            CharacterListBox_SelectionChanged(CharacterListBox, null!);
+    }
+
     /// <summary>Stats paperdoll...: the character's stats window (StatsDollEditorWindow) - Z or the heart in the game.</summary>
     private void StatsDollButton_Click(object sender, RoutedEventArgs e)
     {

@@ -12,6 +12,8 @@
             <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="0,0,0,4">
                 <Button Content="New" Width="60" Margin="2" Click="NewCharacter_Click"/>
                 <Button Content="Delete" Width="60" Margin="2" Click="DeleteCharacter_Click"/>
+                <Button Content="Format..." Width="64" Margin="2" Click="FormatPainter_Click"
+                        ToolTip="Format Painter: this character's settings you tick (its inventory paperdoll, stats paperdoll, stats, poses...) pasted onto the characters you pick."/>
             </StackPanel>
             <ListBox x:Name="CharacterListBox" DisplayMemberPath="Name" SelectionChanged="CharacterListBox_SelectionChanged"/>
         </DockPanel>

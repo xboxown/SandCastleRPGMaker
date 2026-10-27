@@ -76,6 +76,11 @@ public class PaperDollEditorWindow : Window
         designButtons.Children.Add(MakeButton("New", NewDesign));
         designButtons.Children.Add(MakeButton("Duplicate", DuplicateDesign));
         designButtons.Children.Add(MakeButton("Delete", DeleteDesign));
+        designButtons.Children.Add(MakeButton("Format...", () =>
+        {
+            if (Design is not { } design) return;
+            if (FormatPainterWindow.Paint(this, design, _objects.DollDesigns, d => d.Name, "Paperdolls", skip: new[] { "Name" })) RefreshAll();
+        }));
         leftTop.Children.Add(designButtons);
         DockPanel.SetDock(leftTop, Dock.Top);
         left.Children.Add(leftTop);
