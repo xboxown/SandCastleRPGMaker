@@ -79,7 +79,16 @@ public enum MagicEffectKind
     /// <summary>The ground shakes (Tremor) - Min..Max is how hard; add Damage for the hurt.</summary>
     Tremor,
     /// <summary>Tells where the caster stands (Locate).</summary>
-    Locate
+    Locate,
+    // ---- build 453: appended ----
+    /// <summary>Fields within reach of the spot are gone (Ultima VII's Dispel Field): those Create Field made - and, with an object chosen, any of that object there.</summary>
+    DestroyField,
+    /// <summary>A Common Event (System Settings > Common Events) runs on whoever it's used on ("Whoever set it off") - a spell of the designer's own, scripted with any commands.</summary>
+    CommonEvent,
+    /// <summary>Whoever it's cast on rises up to 3 floors (under a ceiling: till their head touches it) and walks in the air for Seconds, then falls onto whatever is under them. Party members it isn't cast on stay on the ground.</summary>
+    Levitate,
+    /// <summary>For Seconds every language (System Settings > Languages) reads plainly, as if the party knew it (Translate).</summary>
+    Translate
 }
 
 /// <summary>Who a spell with a reach touches.</summary>
@@ -96,10 +105,15 @@ public class MagicEffect
     public int ThingId { get; set; } = -1;
     /// <summary>How long it lasts (real seconds): summoned creatures, fields, fear, dance, time stop, clones.</summary>
     public double Seconds { get; set; } = 60;
+    /// <summary>Kind CommonEvent: which Common Event runs.</summary>
+    public int CommonEventId { get; set; } = -1;
 
     public static bool NeedsCharacter(MagicEffectKind kind) => kind == MagicEffectKind.Summon;
     public static bool NeedsObject(MagicEffectKind kind) => kind is MagicEffectKind.CreateItem or MagicEffectKind.CreateField;
-    public static bool HasSeconds(MagicEffectKind kind) => kind is MagicEffectKind.Summon or MagicEffectKind.CreateField or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.TimeStop or MagicEffectKind.Clone;
+    public static bool HasSeconds(MagicEffectKind kind) => kind is MagicEffectKind.Summon or MagicEffectKind.CreateField or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.TimeStop or MagicEffectKind.Clone or MagicEffectKind.Levitate or MagicEffectKind.Translate;
+
+    /// <summary>Levitate: how high it lifts (3 floors).</summary>
+    public const int LevitateLifts = 3 * MapFloors.LiftsPerFloor;
 
     /// <summary>A built-in effect's name as the editor lists it ("Restore Mana", "Cure Poison").</summary>
     public static string KindName(MagicEffectKind kind) => kind switch
@@ -118,6 +132,8 @@ public class MagicEffect
         MagicEffectKind.DestroyTraps => "Destroy Traps",
         MagicEffectKind.RevealInvisible => "Reveal Invisible",
         MagicEffectKind.TimeStop => "Time Stop",
+        MagicEffectKind.DestroyField => "Destroy Field",
+        MagicEffectKind.CommonEvent => "Common Event (own spell)",
         _ => kind.ToString()
     };
 
@@ -158,6 +174,10 @@ public class MagicEffect
         MagicEffectKind.TimeStop => $"Everyone else frozen {e.Seconds} s",
         MagicEffectKind.Tremor => $"The ground shakes ({Range(e)})",
         MagicEffectKind.Locate => "Where the caster stands",
+        MagicEffectKind.DestroyField => "Fields in reach are gone",
+        MagicEffectKind.CommonEvent => "Its Common Event runs on them",
+        MagicEffectKind.Levitate => $"Up to 3 floors, walking in the air, {e.Seconds} s",
+        MagicEffectKind.Translate => $"Every language reads plainly for {e.Seconds} s",
         _ => KindName(e.Kind)
     };
 

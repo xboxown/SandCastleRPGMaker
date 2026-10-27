@@ -12,6 +12,8 @@ internal sealed record DialogBoxContent(string Title, string Text, BitmapSource?
 {
     /// <summary>Which page of replies shows, when they need more than one (More / Previous).</summary>
     public int ReplyPage { get; init; }
+    /// <summary>The font the words (not the title or replies) show in - a language not understood (System Settings > Languages); null: the DialogFont.</summary>
+    public string? WordsFont { get; init; }
     /// <summary>The replies in a box of their own under the speaker's, with ReplyFace (the main character's) - as Exult (System Settings > Conversations).</summary>
     public bool RepliesApart { get; init; }
     public BitmapSource? ReplyFace { get; init; }
@@ -102,7 +104,7 @@ internal static class DialogBoxBuilder
         string text = content.Text.Replace("\r\n", "\n");
         if (text.Trim().Length == 0) { pages.Add(content.Text); return pages; }
         double width = TextWidth(content);
-        var font = SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
+        var font = (content.WordsFont is { Length: > 0 } words ? SpriteFont.For(sprites, words) : null) ?? SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
         int Lines(string s)
         {
             if (font is not null) return font.LineCount(s, width);
@@ -266,9 +268,10 @@ internal static class DialogBoxBuilder
         double textWidth = TextWidth(content);
 
         var font = SpriteFont.For(sprites, SpriteDatabase.DialogFontName);
-        FrameworkElement Words(string text, bool bold = false, bool natural = false)
+        var wordsFont = (content.WordsFont is { Length: > 0 } words ? SpriteFont.For(sprites, words) : null) ?? font; // a language not understood: its font
+        FrameworkElement Words(string text, bool bold = false, bool natural = false, SpriteFont? useFont = null)
         {
-            if (font?.RenderText(text, 1, null, textWidth) is { } bitmap)
+            if ((useFont ?? font)?.RenderText(text, 1, null, textWidth) is { } bitmap)
             {
                 var image = new Image { Source = bitmap, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Stretch = Stretch.None };
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
@@ -300,7 +303,7 @@ internal static class DialogBoxBuilder
         }
         if (!string.IsNullOrEmpty(content.Text))
         {
-            var text = Words(content.Text);
+            var text = Words(content.Text, useFont: wordsFont);
             pieces.Add((text, 0, y, -1));
             y += text.Height;
         }

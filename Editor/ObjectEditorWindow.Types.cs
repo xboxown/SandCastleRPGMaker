@@ -945,6 +945,16 @@ public partial class ObjectEditorWindow
                 }
                 if (MagicEffect.NeedsObject(effect.Kind))
                     row.Children.Add(ObjectPicker("", o => o.Type != ObjectType.Projectile, () => effect.ThingId, v => effect.ThingId = v, "(choose the object)"));
+                if (effect.Kind == MagicEffectKind.DestroyField)
+                    row.Children.Add(ObjectPicker("", o => o.Type != ObjectType.Projectile, () => effect.ThingId, v => effect.ThingId = v, "(any field a spell made)"));
+                if (effect.Kind == MagicEffectKind.CommonEvent)
+                {
+                    var commons = ProjectSession.SettingsProvider?.Invoke()?.CommonEvents.OrderBy(c => c.Name).ToList() ?? new List<CommonEventDefinition>();
+                    var which = new ComboBox { Width = 170, ItemsSource = commons, DisplayMemberPath = "Name", SelectedItem = commons.FirstOrDefault(c => c.Id == effect.CommonEventId), Margin = new Thickness(6, 0, 0, 0),
+                        ToolTip = "The Common Event that runs - on whoever the spell (or potion, food, useable) is used on: \"Whoever set it off\" in its commands." };
+                    which.SelectionChanged += (_, _) => effect.CommonEventId = (which.SelectedItem as CommonEventDefinition)?.Id ?? -1;
+                    row.Children.Add(which);
+                }
                 if (MagicEffect.NeedsCharacter(effect.Kind))
                 {
                     var characters = ProjectSession.CharactersProvider?.Invoke()?.Characters.OrderBy(c => c.Name).ToList() ?? new List<CharacterDefinition>();

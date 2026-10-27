@@ -23,6 +23,7 @@ typedef struct DialogBox
     int position;                  /* 0 top, 1 middle, 2 bottom */
     int dim;                       /* darken the game behind */
     const Sprite *frame;           /* the DialogFrame sprite, or NULL for none */
+    const char *wordsFont;         /* a language not understood: the font its words show in (NULL: the DialogFont) */
     int replyCount;
     int replyIds[DIALOG_MAX_REPLIES];
     const char *replies[DIALOG_MAX_REPLIES];

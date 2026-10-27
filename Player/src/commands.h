@@ -176,6 +176,7 @@ enum Command
     C_TravelVehicle = 169,
     C_SetVehicleSpeed = 170,
     C_Earthquake = 171,
+    C_LearnLanguage = 172,
     C_COUNT
 };
 
@@ -353,6 +354,7 @@ static const char *const COMMAND_NAMES[] =
     "Travel Vehicle",
     "Set Vehicle Speed",
     "Earthquake",
+    "LearnLanguage",
 };
 
 #endif

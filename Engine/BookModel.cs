@@ -92,6 +92,9 @@ public class BookData : PlaceableItemBase
     /// </summary>
     public string TextFontSpriteName { get; set; } = string.Empty;
 
+    /// <summary>The language it's written in (System Settings > Languages), -1 none: not understood, its pages show in that language's font.</summary>
+    public int LanguageId { get; set; } = -1;
+
     /// <summary>The shared text-frame layout, drawn once, reused on every page.</summary>
     public List<BookTextFrame> Frames { get; set; } = new();
 

@@ -46,7 +46,9 @@ public enum ScriptFieldKind
     /// <summary>A world (Maps tab) - keys World (its id; -1 = the one the party is in), WorldName.</summary>
     World,
     /// <summary>A vehicle (Map Editor > Vehicles tab) - keys Vehicle (its id), VehicleName; in play the copy of it nearest the player.</summary>
-    Vehicle
+    Vehicle,
+    /// <summary>A language (System Settings > Languages) - keys Language (its id), LanguageName.</summary>
+    Language
 }
 
 public sealed record ScriptField(string Key, string Label, ScriptFieldKind Kind, string Default = "", string[]? Options = null, string Help = "");
@@ -246,6 +248,8 @@ public static class ScriptCommands
             new[] { Who(), Choice("Mode", "Mode", "Nearest", "Weakest", "Strongest", "Berserk", "Protect", "Defend", "Flank", "Flee", "Random", "Manual") }, "{Who}: {Mode}"),
         new(EventCommandType.Resurrect, "Resurrect / Heal Fully", World, "Characters", "Heals fully (all health, no ailments) - or brings a dead character back to life where its body lies.",
             new[] { Who(), Choice("Value", "Do", "Heal fully", "Resurrect") }, "{Who}: {Value}"),
+        new(EventCommandType.LearnLanguage, "Learn / Forget Language", World, "Characters", "A character comes to know a language (System Settings > Languages) - or forgets it. While someone in the party knows it, words written in it (a Show Text, a book) read plainly; else they show in its font, as Serpent Isle's runes.",
+            new[] { Who(), new("Language", "Language", ScriptFieldKind.Language), Choice("Value", "Do", "Learn", "Forget") }, "{Who}: {Value} {LanguageName}"),
         new(EventCommandType.ShowBark, "Show Bark", World, "Characters", "Words floating over a character's head for a moment (Exult's item_say) - not a dialog box. The event doesn't wait.",
             new[] { Who(), new("Value", "Words", ScriptFieldKind.Words, "Hello!"), F("Seconds", "For how many seconds", def: "3") }, "{Who}: {Value}"),
 

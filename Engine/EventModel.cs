@@ -119,7 +119,8 @@ public enum EventCommandType
     DebugLog, PauseHere,
     ShowError,
     DriveVehicle, StopDriving, TravelVehicle, SetVehicleSpeed,
-    Earthquake
+    Earthquake,
+    LearnLanguage
 }
 
 /// <summary>

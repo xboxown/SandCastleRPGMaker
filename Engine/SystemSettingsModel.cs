@@ -238,8 +238,23 @@ public class AutoSaveSettings
     public int Minutes { get; set; } = 5;
 }
 
+/// <summary>
+/// A language of the game's own (System Settings > Languages), as Serpent Isle's Ophidian: words written in it
+/// (a Show Text, a book) show in its font - runes - till the party understands it: someone in it knows the
+/// language (Learn Language), or a Translate spell is on.
+/// </summary>
+public class LanguageDefinition
+{
+    public int Id { get; set; }
+    public string Name { get; set; } = "New Language";
+    /// <summary>The font (Sprite Editor > Fonts) its words show in while not understood; none: the ordinary one.</summary>
+    public string FontSpriteName { get; set; } = string.Empty;
+}
+
 public class SystemSettings
 {
+    /// <summary>The game's own languages (System Settings > Languages).</summary>
+    public List<LanguageDefinition> Languages { get; set; } = new();
     public AutoSaveSettings AutoSave { get; set; } = new();
     public DisplaySettings Display { get; set; } = new();
     public TitleScreenSettings Title { get; set; } = new();

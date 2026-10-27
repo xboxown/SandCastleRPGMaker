@@ -57,6 +57,10 @@ public partial class ShowTextCommandWindow : Window
         var (frame, dim) = existing is null ? ("", false) : DialogBoxBuilder.LookOf(existing);
         FrameCombo.SelectedItem = frames.FirstOrDefault(f => f.Key == frame) ?? frames[0];
         DimCheck.IsChecked = dim;
+        var languages = new List<LanguageDefinition> { new() { Id = -1, Name = "(None - everyone reads it)" } };
+        languages.AddRange(ProjectSession.SettingsProvider?.Invoke()?.Languages ?? new List<LanguageDefinition>());
+        LanguageCombo.ItemsSource = languages;
+        LanguageCombo.SelectedItem = languages.FirstOrDefault(l => l.Id.ToString() == (existing?.Get("LanguageId") ?? "")) ?? languages[0];
 
         _replies = existing is null ? new List<DialogChoice>() : DialogChoices.Read(existing);
         if (existing is not null)
@@ -286,6 +290,7 @@ public partial class ShowTextCommandWindow : Window
         command.Parameters["Position"] = PositionText;
         command.Parameters["SpeakerId"] = (SpeakerCombo.SelectedItem as SpeakerChoice)?.Key ?? "";
         command.Parameters["FaceSide"] = FaceSideCombo.SelectedIndex == 1 ? "Right" : "Left";
+        if (LanguageCombo.SelectedItem is LanguageDefinition { Id: >= 0 } language) command.Parameters["LanguageId"] = language.Id.ToString();
         DialogChoices.Write(command, _replies);
         Result = command;
         DialogResult = true;

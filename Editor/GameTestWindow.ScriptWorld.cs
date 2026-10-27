@@ -49,6 +49,13 @@ public partial class GameTestWindow
             return true;
         };
         h[EventCommandType.Resurrect] = ResurrectCommand;
+        h[EventCommandType.LearnLanguage] = c =>
+        {
+            if (CharacterDefinitionFor(c.Get("Who")) is not { } who || !int.TryParse(c.Get("Language"), out int language)) return false;
+            if (c.Get("Value") == "Forget") who.KnownLanguages.RemoveAll(l => l == language);
+            else if (!who.KnownLanguages.Contains(language)) who.KnownLanguages.Add(language);
+            return true;
+        };
         h[EventCommandType.ShowBark] = c =>
         {
             if (CharacterDefinitionFor(c.Get("Who")) is not { } who) return false;

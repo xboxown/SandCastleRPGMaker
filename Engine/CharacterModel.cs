@@ -117,6 +117,8 @@ public class CharacterDefinition
     public LevelSettings? Levels { get; set; }
     /// <summary>The colour its level graph is drawn in, in the editor only (#RRGGBB).</summary>
     public string LevelGraphColor { get; set; } = "#5AA0E6";
+    /// <summary>The languages (System Settings > Languages) it knows: with it in the party, words in them read plainly.</summary>
+    public List<int> KnownLanguages { get; set; } = new();
 
     /// <summary>How it fights (Exult's attack mode - the combat behavior button on its paperdoll).</summary>
     public AttackMode AttackMode { get; set; } = AttackMode.Nearest;

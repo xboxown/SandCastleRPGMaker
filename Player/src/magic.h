@@ -13,6 +13,9 @@ int magic_learn_spell(int actor, const char *name);
 int magic_cast_named(int actor, const char *name, int other, void *doll, int byActivator); /* doll: the paperdoll the event runs from (a spellbook's own) */
 int magic_combat_spell(int actor, int target);               /* a mage's turn in a fight: 1 = it cast */
 int magic_frozen(int actor);                                 /* Time Stop */
+int magic_understands(int languageId);                       /* no language, Translate on, or someone in the party knows it */
+const char *magic_language_font(int languageId);             /* the font while not understood, or NULL */
+void magic_learn_language(int actor, int languageId, int learn);
 void magic_update(double ms);
 void magic_reset(void);
 void magic_set_mana(int actor, int mana);

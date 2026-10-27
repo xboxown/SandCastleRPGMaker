@@ -337,6 +337,23 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 _savers.Add(c => { c.Parameters[field.Key] = combo.SelectedItem as string ?? ""; return true; });
                 break;
             }
+            case ScriptFieldKind.Language:
+            {
+                AddLabel(field.Label);
+                var languages = ProjectSession.SettingsProvider?.Invoke()?.Languages ?? new List<LanguageDefinition>();
+                var combo = new ComboBox { ItemsSource = languages, DisplayMemberPath = nameof(LanguageDefinition.Name) };
+                combo.SelectedItem = languages.FirstOrDefault(l => l.Id.ToString() == Existing(field.Key, "")) ?? languages.FirstOrDefault();
+                Rows.Children.Add(combo);
+                if (languages.Count == 0) AddLabel("There are no languages yet - make them in System Settings > Languages.", bold: false);
+                _savers.Add(c =>
+                {
+                    if (combo.SelectedItem is not LanguageDefinition language) return false;
+                    c.Parameters[field.Key] = language.Id.ToString();
+                    c.Parameters[field.Key + "Name"] = language.Name;
+                    return true;
+                });
+                break;
+            }
             case ScriptFieldKind.Faction:
             {
                 AddLabel(field.Label);

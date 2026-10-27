@@ -14,7 +14,7 @@ struct Font
     int cellHeight, spaceWidth, builtIn;
 };
 
-static Font fonts[4];
+static Font fonts[16]; /* the game's fonts, a language's ones too */
 static int fontCount;
 
 /* The built-in font: 5 x 7 capitals, digits and signs (each row is a byte, the top bits used). */
@@ -98,7 +98,7 @@ static void make_built_in(Font *f)
 Font *font_get(const char *name)
 {
     for (int i = 0; i < fontCount; i++) if (strcmp(fonts[i].name, name) == 0) return &fonts[i];
-    if (fontCount >= 4) return &fonts[0];
+    if (fontCount >= 16) return &fonts[0];
     Font *f = &fonts[fontCount++];
     memset(f, 0, sizeof *f);
     strncpy(f->name, name, sizeof f->name - 1);

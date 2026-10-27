@@ -60,6 +60,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
         tabs.Items.Add(new TabItem { Header = "Autosave", Content = BuildAutoSaveTab() });
+        tabs.Items.Add(new TabItem { Header = "Languages", Content = BuildLanguagesTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
@@ -253,6 +254,57 @@ public partial class SystemSettingsWindow : Window
         {
             Text = "While the editor is open, the project (.msrp and its .sdbx files) is saved this often, as Project > Save does - so a power cut or a crash loses no more than these minutes of work. " +
                    "It isn't saved while Game Test is running or a window is open over the editor; it waits till they're closed.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
+        });
+        return panel;
+    }
+
+    /// <summary>
+    /// The game's own languages (as Serpent Isle's Ophidian): a name and the font its words show in while the party
+    /// doesn't understand them. Show Text and books pick one; Learn Language and the Translate spell make them readable.
+    /// </summary>
+    private UIElement BuildLanguagesTab()
+    {
+        var languages = _settings.Languages;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var rows = new StackPanel();
+        var fonts = new List<string> { "(the ordinary font)" };
+        fonts.AddRange(_sprites.FontNames());
+        void Show()
+        {
+            rows.Children.Clear();
+            foreach (var language in languages.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+                var name = new TextBox { Width = 180, Text = language.Name };
+                name.LostFocus += (_, _) => language.Name = name.Text.Trim().Length > 0 ? name.Text.Trim() : language.Name;
+                row.Children.Add(name);
+                row.Children.Add(new TextBlock { Text = "written in", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 6, 0) });
+                var font = new ComboBox { Width = 180, ItemsSource = fonts, SelectedItem = fonts.Contains(language.FontSpriteName) ? language.FontSpriteName : fonts[0],
+                    ToolTip = "The font from the Sprite Editor's Fonts group its words show in while the party doesn't understand them - runes, glyphs." };
+                font.SelectionChanged += (_, _) => language.FontSpriteName = font.SelectedIndex > 0 ? font.SelectedItem as string ?? "" : "";
+                row.Children.Add(font);
+                var remove = new Button { Content = "✕", Width = 22, Margin = new Thickness(6, 0, 0, 0), ToolTip = "Remove this language" };
+                remove.Click += (_, _) =>
+                {
+                    if (MessageBox.Show($"Remove the language \"{language.Name}\"? Show Texts and books written in it read plainly again.", "Languages", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
+                    languages.Remove(language);
+                    Show();
+                };
+                row.Children.Add(remove);
+                rows.Children.Add(row);
+            }
+        }
+        Show();
+        panel.Children.Add(new TextBlock { Text = "The game's own languages", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
+        panel.Children.Add(rows);
+        var add = new Button { Content = "Add language", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 6, 0, 0) };
+        add.Click += (_, _) => { languages.Add(new LanguageDefinition { Id = languages.Count == 0 ? 1 : languages.Max(l => l.Id) + 1 }); Show(); };
+        panel.Children.Add(add);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "As Serpent Isle's Ophidian runes: a Show Text (its Language box) or a book (Book Editor > Language) written in a language shows in its font till the party understands it - " +
+                   "someone in the party knows it (Learn / Forget Language, or Character Editor), or a Translate spell is on.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
         });
         return panel;

@@ -71,6 +71,16 @@ public partial class GameTestWindow
                 case MagicEffectKind.Custom:
                     RunCustomEffect(effect.CustomEffectId, target);
                     break;
+                case MagicEffectKind.Translate:
+                    _translateMs = Math.Max(_translateMs, effect.Seconds * 1000);
+                    break;
+                case MagicEffectKind.Levitate:
+                    Levitate(target, effect.Seconds);
+                    break;
+                case MagicEffectKind.CommonEvent:
+                    if (_systemSettings.CommonEvents.FirstOrDefault(c => c.Id == effect.CommonEventId) is { Commands.Count: > 0 } common)
+                        RunCommandsOn(common.Commands, target);
+                    break;
                 case MagicEffectKind.Nourish:
                 {
                     var vitals = VitalsOf(target);
@@ -98,13 +108,19 @@ public partial class GameTestWindow
     private void RunCustomEffect(int customEffectId, CharacterDefinition target)
     {
         if (_objects.CustomEffects.FirstOrDefault(c => c.Id == customEffectId) is not { Commands.Count: > 0 } custom) return;
+        RunCommandsOn(custom.Commands, target);
+    }
+
+    /// <summary>Commands run with someone as "Whoever set it off" (a custom effect, a Common Event spell).</summary>
+    private void RunCommandsOn(List<EventCommand> commands, CharacterDefinition target)
+    {
         var (previous, previousStep) = (_activator, _activatedByCharacterStep);
         _activator = target == _player ? null : MapCharacterOf(target);
         _activatedByCharacterStep = false;
         try
         {
             _execContext.SelfBookId = -1;
-            EventCommandInterpreter.Run(custom.Commands, _execContext, new List<string>());
+            EventCommandInterpreter.Run(commands, _execContext, new List<string>());
         }
         finally { (_activator, _activatedByCharacterStep) = (previous, previousStep); }
     }

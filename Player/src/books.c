@@ -17,6 +17,7 @@
 #include "events.h"
 #include "sound.h"
 #include "font.h"
+#include "magic.h"
 #include "pictures.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
@@ -329,7 +330,8 @@ int books_read(int bookId)
     free_frames();
     memset(&open_, 0, sizeof open_);
     open_.on = 1; open_.id = bookId; open_.book = book; open_.pageCount = pages;
-    open_.font = font_get(str(book, "TextFontSpriteName")[0] ? str(book, "TextFontSpriteName") : "InGameFont");
+    const char *language = magic_language_font(num(book, "LanguageId", -1)); /* in a language not understood: its font */
+    open_.font = font_get(language ? language : str(book, "TextFontSpriteName")[0] ? str(book, "TextFontSpriteName") : "InGameFont");
     open_.s = SCREEN_W / DESIGN_W < SCREEN_H / DESIGN_H ? SCREEN_W / DESIGN_W : SCREEN_H / DESIGN_H;
     open_.bw = (int)(DESIGN_W * open_.s); open_.bh = (int)(DESIGN_H * open_.s);
     open_.bx = (SCREEN_W - open_.bw) / 2; open_.by = (SCREEN_H - open_.bh) / 2;

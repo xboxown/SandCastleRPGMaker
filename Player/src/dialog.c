@@ -23,6 +23,7 @@ typedef struct Message
     char *title, *text;
     const Sprite *face; int faceRight, position, dim;
     const Sprite *frame;
+    const Font *wordsFont; /* a language not understood (NULL: the DialogFont) */
     int replyCount, replyIds[DIALOG_MAX_REPLIES];
     char *replies[DIALOG_MAX_REPLIES];
     void (*chosen)(void *, int); void *context;
@@ -109,7 +110,8 @@ static int text_width(const Sprite *face, const Sprite *frame)
     return w < 16 ? 16 : w;
 }
 
-static int lines_of(const char *s, int width) { return font_line_count(font(), s, width); }
+static const Font *pagingFont;
+static int lines_of(const char *s, int width) { return font_line_count(pagingFont ? pagingFont : font(), s, width); }
 
 /* DialogBoxBuilder.Pages: four lines a page; a page that can't hold the rest ends after its last word ending in . ? ! , or "
    (else after its fourth line); a word starting with * begins a new page. */
@@ -178,6 +180,8 @@ void dialog_queue(const DialogBox *box)
     Message *m = (Message *)calloc(1, sizeof(Message));
     m->title = copy(box->title); m->text = copy(box->text);
     m->face = box->face; m->faceRight = box->faceRight; m->position = box->position; m->dim = box->dim; m->frame = box->frame;
+    const Sprite *words = box->wordsFont && box->wordsFont[0] ? sprite_find("Fonts", box->wordsFont) : NULL;
+    m->wordsFont = words && words->frameCount > 0 ? font_get(box->wordsFont) : NULL; /* SpriteFont.For: no letters - the DialogFont */
     m->replyCount = box->replyCount > DIALOG_MAX_REPLIES ? DIALOG_MAX_REPLIES : box->replyCount;
     for (int i = 0; i < m->replyCount; i++) { m->replyIds[i] = box->replyIds[i]; m->replies[i] = copy(box->replies[i]); }
     m->chosen = box->chosen; m->context = box->context;
@@ -215,7 +219,9 @@ static void show_next(void)
         {
             /* Too long for one box: four lines at a time, the replies with the last page. */
             char *parts[256];
+            pagingFont = m->wordsFont;
             int n = make_pages(m->text, text_width(m->face, m->frame), parts, 256);
+            pagingFont = NULL;
             if (n > 1)
             {
                 for (int i = 1; i < n; i++) push(&pages, clone(m, parts[i], i == n - 1));
@@ -448,7 +454,8 @@ static void measure(Plan *plan, int maxHeight)
     }
     if (plan->text && plan->text[0])
     {
-        int h = font_line_count(f, plan->text, plan->textW) * cell;
+        const Font *wf = current->wordsFont ? current->wordsFont : f;
+        int h = font_line_count(wf, plan->text, plan->textW) * font_line_height(wf);
         plan->pieces[plan->pieceCount++] = (Piece){ plan->text, 0, y, plan->textW, h, -1 };
         y += h;
     }
@@ -509,7 +516,7 @@ static void place(const Plan *plan, int boxTop)
             if (s == lit) shade(spotX[s], spotY[s], spotW[s], spotH[s], 0xFFFFFF, 70);
         }
         if (top + pc->y > boxTop + plan->height) continue; /* past the bottom of a full-screen box */
-        font_draw_block(f, screen, left + pc->x, top + pc->y, pc->text, plan->textW, 0);
+        font_draw_block(pc->text == plan->text && current->wordsFont ? current->wordsFont : f, screen, left + pc->x, top + pc->y, pc->text, plan->textW, 0);
     }
 }
 

@@ -118,6 +118,7 @@ typedef struct Actor
     int human;                      /* Exult: only the sentient open doors */
     int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies), 3 stationary */
     int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
+    double levitateMs; int levitateLift, groundMovement; /* Levitate (a spell): how long still, at what height, how it moved before */
     double climbMs;                 /* a flier climbing or dropping a lift at a time */
     double bashMs;                  /* breaking a door down: till its next blow */
     const Sprite *face;
@@ -173,6 +174,7 @@ static void wrap_actor(struct Actor *a, int isPlayer)
 }
 
 static void camera_update(void);
+static int fly_room(int l, int t, int sx, int sy, int lift, int h);
 static cJSON *gameJson;
 void *world_json(void) { return gameJson; }
 const char *world_error(void) { return error_text; }
@@ -778,7 +780,8 @@ void world_update(int dx, int dy, double seconds)
         if (l1 == l0 && t1 == t0) { player.px = nx; player.py = ny; }
         else
         {
-            int lift = try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
+            int lift = player.levitateMs > 0 ? fly_room(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ) /* floating: room at this height */
+                                             : try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
             if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; wrap_actor(&player, 1); }
             else ask_aside(0, l1, t1, dx, dy); /* Actor::is_really_blocked: a character in the way is asked to move aside */
         }
@@ -1452,6 +1455,56 @@ static int air_step(const Actor *a, int fl, int ft, int l, int t, int lift)
     return best;
 }
 
+/* TryFlyStep: room for its whole height at this lift on the new footprint (nothing under it needed) - the lift, or -1. */
+static int fly_room(int l, int t, int sx, int sy, int lift, int h)
+{
+    if (l < 0 || t < 0 || l + sx > mapW * unitsX || t + sy > mapH * unitsY) return -1;
+    int lows[64], highs[64], n = free_bands(l, t, sx, sy, lows, highs, 64);
+    for (int i = 0; i < n; i++) if (lift >= lows[i] && lift + h <= highs[i]) return lift;
+    return -1;
+}
+
+/* Levitate: up by 3 floors from where they stand - under a ceiling only till the head touches it - walking in the air for a while. */
+void world_levitate(int actor, double seconds)
+{
+    Actor *a = actor_of(actor);
+    if (!a || a->gone || seconds <= 0) return;
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    int own = actor > 0 ? lift_own_body(a) : -1;
+    int lows[64], highs[64], n = free_bands(l, t, a->sizeX, a->sizeY, lows, highs, 64), top = a->lift;
+    if (actor > 0) put_own_body(a, own);
+    for (int i = 0; i < n; i++) if (a->lift >= lows[i] && a->lift < highs[i]) top = highs[i] - a->sizeZ > a->lift ? highs[i] - a->sizeZ : a->lift;
+    int to = a->lift + 3 * LIFTS_PER_FLOOR < top ? a->lift + 3 * LIFTS_PER_FLOOR : top;
+    if (a->levitateMs <= 0) a->groundMovement = a->movement;
+    a->levitateMs = seconds * 1000;
+    a->levitateLift = to;
+    a->lift = to;
+    if (actor > 0) { world_walk_cancel(actor); a->movement = 2; a->flyPrefer = to; if (a->body >= 0) bodies[a->body].z = to; }
+    else camera_update();
+}
+
+/* Each frame: the time runs out - down they fall onto whatever is under them. */
+void world_levitation_update(double ms)
+{
+    for (int i = 0; i <= npcCount; i++)
+    {
+        Actor *a = actor_of(i);
+        if (!a || a->levitateMs <= 0 || (a->levitateMs -= ms) > 0) continue;
+        a->levitateMs = 0;
+        int l, t;
+        foot_at(a, a->px, a->py, &l, &t);
+        static const Body *under[1024];
+        int n = 0;
+        for (int k = 0; k < bodyCount && n < 1024; k++) if (k != a->body && overlaps(&bodies[k], l, t, a->sizeX, a->sizeY)) under[n++] = &bodies[k];
+        int ground = floor_below(under, n, a->lift);
+        if (i > 0) { world_walk_cancel(i); a->movement = a->groundMovement; }
+        if (ground < a->lift) a->lift = ground;
+        if (a->body >= 0) bodies[a->body].z = a->lift;
+        if (i == 0) camera_update();
+    }
+}
+
 /* A character's step onto a new footprint by how it moves: the lift it'd be at, or -1. */
 static int mover_step(const Actor *a, int fl, int ft, int l, int t, int lift)
 {
@@ -1714,7 +1767,7 @@ int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
     Walk *w = walk_of(actor);
     if (!a || !w) return 0;
     if (a->movement == 3) return 0; /* Stationary: it never moves (Character Editor > Moves on) */
-    a->flyPrefer = goalFloor ? base_lift(goalFloor) : FLY_LIFT;
+    a->flyPrefer = goalFloor ? base_lift(goalFloor) : a->levitateMs > 0 ? a->levitateLift : FLY_LIFT; /* levitating: at its own height */
     int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1);
     if (n < 0) return 0;
     w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
@@ -2650,7 +2703,7 @@ static void settle_all(void)
     int hn = 0;
     for (int i = 0; i < bodyCount && hn < 512; i++) if (overlaps(&bodies[i], l, tp, player.sizeX, player.sizeY)) here[hn++] = &bodies[i];
     int below = floor_below(here, hn, player.lift);
-    if (below < player.lift) player.lift = below;
+    if (below < player.lift && player.levitateMs <= 0) player.lift = below; /* floating (Levitate): nothing pulls them down till it ends */
 }
 
 /* Any placed lever (of that object, -1: any) on - or off. */

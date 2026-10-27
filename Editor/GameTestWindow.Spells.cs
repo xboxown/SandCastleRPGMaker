@@ -34,7 +34,7 @@ public partial class GameTestWindow
 
     private static bool IsSpotEffect(MagicEffectKind kind) => kind is MagicEffectKind.Teleport or MagicEffectKind.Mark or MagicEffectKind.Recall
         or MagicEffectKind.Summon or MagicEffectKind.CreateItem or MagicEffectKind.CreateField or MagicEffectKind.DouseLights or MagicEffectKind.IgniteLights
-        or MagicEffectKind.RevealTraps or MagicEffectKind.DestroyTraps or MagicEffectKind.TimeStop or MagicEffectKind.Tremor or MagicEffectKind.Locate;
+        or MagicEffectKind.RevealTraps or MagicEffectKind.DestroyTraps or MagicEffectKind.TimeStop or MagicEffectKind.Tremor or MagicEffectKind.Locate or MagicEffectKind.DestroyField;
 
     private static bool IsThingEffect(MagicEffectKind kind) => kind is MagicEffectKind.MagicUnlock or MagicEffectKind.MagicLock or MagicEffectKind.Telekinesis;
 
@@ -260,6 +260,11 @@ public partial class GameTestWindow
                     for (int x = cell.X - (radiusTiles > 0 ? reach : 0); x <= cell.X + (radiusTiles > 0 ? reach : 0); x++)
                         if (InsideMap(x, y) && SpawnObjectAt(effect.ThingId, 1, x, y) is { } field) _fieldMs[field] = seconds * 1000;
                 break;
+            case MagicEffectKind.DestroyField:
+                // Dispel Field: what Create Field made within reach of the spot goes - and, with an object chosen, any of it there.
+                foreach (var field in _map.Objects.Where(o => o.ContainerInstanceId < 0 && CellsApart((o.X, o.Y), (cell.X, cell.Y)) <= reach).ToList())
+                    if (_fieldMs.ContainsKey(field) || (effect.ThingId >= 0 && field.ObjectId == effect.ThingId)) { _fieldMs.Remove(field); RemoveMapObject(field); }
+                break;
             case MagicEffectKind.DouseLights:
             case MagicEffectKind.IgniteLights:
             {
@@ -380,6 +385,8 @@ public partial class GameTestWindow
     private void UpdateSpellTimers(double elapsedMs)
     {
         if (_timeStopMs > 0) _timeStopMs = Math.Max(0, _timeStopMs - elapsedMs);
+        UpdateLevitation(elapsedMs);
+        if (_translateMs > 0) _translateMs = Math.Max(0, _translateMs - elapsedMs);
         foreach (var summoned in _summonedMs.Keys.ToList())
         {
             if ((_summonedMs[summoned] -= elapsedMs) > 0 && !IsDead(summoned)) continue;

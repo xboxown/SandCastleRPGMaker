@@ -274,6 +274,10 @@ public partial class BookEditorWindow : Window
         fontChoices.AddRange(_sprites.FontNames());
         TextFontCombo.ItemsSource = fontChoices;
         TextFontCombo.SelectedItem = fontChoices.Contains(_current.TextFontSpriteName) ? _current.TextFontSpriteName : DefaultTextFont;
+        var languageChoices = new List<LanguageDefinition> { new() { Id = -1, Name = "(None - everyone reads it)" } };
+        languageChoices.AddRange(ProjectSession.SettingsProvider?.Invoke()?.Languages ?? new List<LanguageDefinition>());
+        LanguageCombo.ItemsSource = languageChoices;
+        LanguageCombo.SelectedItem = languageChoices.FirstOrDefault(l => l.Id == _current.LanguageId) ?? languageChoices[0];
 
         var soundChoices = new List<ResourceEntry> { NoneSound };
         soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));
@@ -464,6 +468,7 @@ public partial class BookEditorWindow : Window
         if (ChatteredSpriteNameCombo.SelectedItem is SpriteChoice ch) { _current.ChatteredSpriteGroup = ch.Group; _current.ChatteredSpriteName = ch.Name; }
         if (DestroyedSpriteNameCombo.SelectedItem is SpriteChoice de) { _current.DestroyedSpriteGroup = de.Group; _current.DestroyedSpriteName = de.Name; }
         _current.FactionId = (FactionCombo.SelectedItem as Faction)?.Id ?? -1;
+        if (LanguageCombo.SelectedItem is LanguageDefinition language) _current.LanguageId = language.Id;
         string chosenFont = TextFontCombo.SelectedItem is string font && font != DefaultTextFont ? font : string.Empty;
         if (chosenFont != _current.TextFontSpriteName)
         {

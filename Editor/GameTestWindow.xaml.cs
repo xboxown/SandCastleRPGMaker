@@ -1864,7 +1864,9 @@ public partial class GameTestWindow : Window
         int newLift = _playerZ;
         string blockReason = "";
         bool tileOffMap = prospectiveTileX < 0 || prospectiveTileY < 0 || prospectiveTileX >= _map.Width || prospectiveTileY >= _map.Height;
-        if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason))
+        if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !(PlayerLevitating
+            ? TryFlyStep(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, null, null, out newLift, out blockReason) // floating: room at this height, nothing under needed
+            : TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason)))
         {
             StatusText.Text = tileOffMap ? "Blocked: edge of the map." : blockReason;
             // Actor::is_really_blocked: a character in the way is asked to move aside (or swap places).
@@ -2429,7 +2431,7 @@ public partial class GameTestWindow : Window
                 string xaml = _execContext.GetContentOverride(book.Id, pageIndex, frame.Id)
                     ?? (page.FrameTexts.TryGetValue(frame.Id, out var t) ? t : string.Empty);
 
-                var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites, book.TextFontSpriteName);
+                var result = FormattedContentRenderer.Render(xaml, bbox.Width, bbox.Height, _sprites, LanguageFont(book.LanguageId) ?? book.TextFontSpriteName); // in a language not understood: its font
 
                 var container = new Canvas
                 {

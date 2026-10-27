@@ -686,6 +686,7 @@ static int build_box(const Run *r, const Cmd *c, DialogBox *box, int withReplies
     const char *pos = param(c, "Position");
     box->position = strcmp(pos, "Top") == 0 ? 0 : strcmp(pos, "Middle") == 0 ? 1 : 2;
     box->faceRight = strcmp(param(c, "FaceSide"), "Right") == 0;
+    box->wordsFont = magic_language_font(param(c, "LanguageId")[0] ? atoi(param(c, "LanguageId")) : -1); /* a language not understood: its font */
     return 1;
 }
 
@@ -2117,6 +2118,13 @@ static int execute(Run *r, const Cmd *c)
             double seconds = 1;
             if (!parse_number(param(c, "DurationSeconds"), &seconds)) seconds = 1;
             screen_shake(intensity, seconds);
+            return 1;
+        }
+        case C_LearnLanguage: /* Learn / Forget Language: into its "KnownLanguages" (saved with it) */
+        {
+            int actor = actor_for(r, param(c, "Who"));
+            if (actor < 0 || !param(c, "Language")[0]) return 1;
+            magic_learn_language(actor, atoi(param(c, "Language")), strcmp(param(c, "Value"), "Forget") != 0);
             return 1;
         }
         case C_Earthquake:

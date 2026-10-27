@@ -521,6 +521,7 @@ public partial class GameTestWindow
     /// <summary>Map_chunk::gravity for the player: if what they stood on is gone, they fall onto whatever is left beneath them (any distance - this is falling, not stepping).</summary>
     private void ApplyGravityToPlayer()
     {
+        if (PlayerLevitating) return; // floating (Levitate): nothing pulls them down till it ends
         var foot = PlayerFootprint();
         int floor = FloorBelow(WorldNow().Overlapping(foot).Where(b => b.Solid), _playerZ);
         if (floor >= _playerZ) return;

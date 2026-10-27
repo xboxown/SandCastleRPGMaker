@@ -27,6 +27,8 @@ public partial class GameTestWindow
     private sealed record GameMessage(string Text, CharacterDefinition? Speaker, string Position, bool FaceRight)
     {
         public string Title { get; init; } = "";
+        /// <summary>A language the party doesn't understand: the font its words show in.</summary>
+        public string? WordsFont { get; init; }
         /// <summary>The DialogFrame sprite, or null for no box.</summary>
         public SpriteEntry? Frame { get; init; }
         public bool Dim { get; init; }
@@ -288,6 +290,7 @@ public partial class GameTestWindow
         return new GameMessage(text, speaker, command.Get("Position"), command.Get("FaceSide") == "Right")
         {
             Title = title,
+            WordsFont = LanguageFont(int.TryParse(command.Get("LanguageId"), out int language) ? language : -1),
             Frame = _sprites.FindDialogFrame(frame),
             Dim = dim,
             Replies = replies,
@@ -333,7 +336,7 @@ public partial class GameTestWindow
         if (!isPage)
         {
             // Too long for one box: four lines at a time, each a click (Enter) for the next - the replies come with the last page.
-            var pages = DialogBoxBuilder.Pages(new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame, Array.Empty<string>()), _sprites);
+            var pages = DialogBoxBuilder.Pages(new DialogBoxContent(message.Title, message.Text, face, message.FaceRight, message.Position, message.Dim, message.Frame, Array.Empty<string>()) { WordsFont = message.WordsFont }, _sprites);
             if (pages.Count > 1)
             {
                 for (int i = 1; i < pages.Count; i++)
@@ -362,6 +365,7 @@ public partial class GameTestWindow
             message.Replies?.Select(r => r.Text).ToList() ?? new List<string>())
         {
             ReplyPage = _replyPage,
+            WordsFont = message.WordsFont,
             // System Settings > Conversations: as Exult, the main character answers - the replies in a box of their own with its face.
             RepliesApart = _systemSettings.Conversation.RepliesUnderMainCharacter,
             ReplyFace = _player is { } player && FindSprite(player.FaceSpriteGroup, player.FaceSpriteName) is { } playerFace ? FirstFrameOf(playerFace) : null

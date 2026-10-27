@@ -50,7 +50,8 @@ enum
 {
     E_HEAL, E_MANA, E_CURE_POISON, E_POISON, E_SLEEP, E_AWAKEN, E_PARALYZE, E_CURE_PARALYSIS, E_CURSE, E_REMOVE_CURSE, E_PROTECTION, E_INVISIBILITY,
     E_LIGHT, E_DAMAGE, E_NOURISH, E_CUSTOM, E_TELEPORT, E_MARK, E_RECALL, E_SUMMON, E_CREATE_ITEM, E_CREATE_FIELD, E_UNLOCK, E_LOCK, E_DOUSE, E_IGNITE,
-    E_REVEAL_TRAPS, E_DESTROY_TRAPS, E_TELEKINESIS, E_CHARM, E_FEAR, E_DANCE, E_RESURRECT, E_CLONE, E_REVEAL_INVISIBLE, E_TIME_STOP, E_TREMOR, E_LOCATE
+    E_REVEAL_TRAPS, E_DESTROY_TRAPS, E_TELEKINESIS, E_CHARM, E_FEAR, E_DANCE, E_RESURRECT, E_CLONE, E_REVEAL_INVISIBLE, E_TIME_STOP, E_TREMOR, E_LOCATE,
+    E_DESTROY_FIELD, E_COMMON_EVENT, E_LEVITATE, E_TRANSLATE
 };
 enum { A_POISONED = 1, A_ASLEEP = 2, A_PARALYZED = 4, A_CHARMED = 8, A_CURSED = 16, A_INVISIBLE = 32, A_PROTECTED = 64 };
 enum { K_STRENGTH = 1, K_MAGIC = 5, K_HITS = 6, K_MANA = 7, K_LEVEL = 8, K_EXP = 9 };
@@ -148,6 +149,50 @@ static Timed summoned[32], fields[64], fears[32]; static int summonedCount, fiel
 static double timeStopMs;
 static long lastMinute = -1;
 
+static double translateMs; /* Translate: every language reads plainly a while */
+
+static cJSON *character_of(int actor)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(project(), "Characters"), "Characters")) if (num(c, "Id", -2) == id_of(actor)) return c;
+    return NULL;
+}
+
+static int knows_language(int actor, int languageId)
+{
+    cJSON *k;
+    cJSON_ArrayForEach(k, get(character_of(actor), "KnownLanguages")) if (cJSON_IsNumber(k) && k->valueint == languageId) return 1;
+    return 0;
+}
+
+int magic_understands(int languageId)
+{
+    if (languageId < 0 || translateMs > 0) return 1;
+    for (int a = 0; a < world_actor_count(); a++)
+        if ((a == 0 || (in_party(a) && !world_actor_gone(a))) && knows_language(a, languageId)) return 1;
+    return 0;
+}
+
+const char *magic_language_font(int languageId)
+{
+    if (magic_understands(languageId)) return NULL;
+    cJSON *l;
+    cJSON_ArrayForEach(l, get(get(project(), "Settings"), "Languages"))
+        if (num(l, "Id", -2) == languageId) { const char *f = cJSON_GetStringValue(get(l, "FontSpriteName")); return f && f[0] ? f : NULL; }
+    return NULL;
+}
+
+void magic_learn_language(int actor, int languageId, int learn)
+{
+    cJSON *c = character_of(actor);
+    if (!c) return;
+    cJSON *known = get(c, "KnownLanguages");
+    if (!cJSON_IsArray(known)) { cJSON_DeleteItemFromObject(c, "KnownLanguages"); known = cJSON_AddArrayToObject(c, "KnownLanguages"); }
+    for (int i = cJSON_GetArraySize(known) - 1; i >= 0; i--)
+        if (cJSON_GetArrayItem(known, i)->valueint == languageId) { if (learn) return; cJSON_DeleteItemFromArray(known, i); }
+    if (learn) cJSON_AddItemToArray(known, cJSON_CreateNumber(languageId));
+}
+
 int magic_frozen(int actor) { return timeStopMs > 0 && actor > 0 && !in_party(actor); } /* Time Stop: everyone but the party stands still */
 
 static void timed_add(Timed *list, int *count, int max, int id, double ms)
@@ -162,7 +207,7 @@ static void spot_effect(cJSON *effect, int caster, int cx, int cy, int radius, i
 static void character_spell(cJSON *effect, int target, int by);
 static void summon(cJSON *kind, int caster, int cx, int cy, int count, double seconds);
 
-static int is_spot(int k) { return k == E_TELEPORT || k == E_MARK || k == E_RECALL || k == E_SUMMON || k == E_CREATE_ITEM || k == E_CREATE_FIELD || k == E_DOUSE || k == E_IGNITE || k == E_REVEAL_TRAPS || k == E_DESTROY_TRAPS || k == E_TIME_STOP || k == E_TREMOR || k == E_LOCATE; }
+static int is_spot(int k) { return k == E_TELEPORT || k == E_MARK || k == E_RECALL || k == E_SUMMON || k == E_CREATE_ITEM || k == E_CREATE_FIELD || k == E_DOUSE || k == E_IGNITE || k == E_REVEAL_TRAPS || k == E_DESTROY_TRAPS || k == E_TIME_STOP || k == E_TREMOR || k == E_LOCATE || k == E_DESTROY_FIELD; }
 static int is_thing(int k) { return k == E_UNLOCK || k == E_LOCK || k == E_TELEKINESIS; }
 static int is_harmful(int k) { return k == E_DAMAGE || k == E_POISON || k == E_SLEEP || k == E_PARALYZE || k == E_CURSE || k == E_CHARM || k == E_FEAR || k == E_DANCE; }
 
@@ -215,6 +260,15 @@ void magic_apply_effects(cJSON *effects, int target, const char *cause, int by)
                 break;
             }
             case E_NOURISH: vitals_change_food(id, "Add", amount); break;
+            case E_TRANSLATE: { double ms = (cJSON_IsNumber(get(e, "Seconds")) ? get(e, "Seconds")->valuedouble : 60) * 1000; if (ms > translateMs) translateMs = ms; break; }
+            case E_LEVITATE: world_levitate(target, cJSON_IsNumber(get(e, "Seconds")) ? get(e, "Seconds")->valuedouble : 60); break;
+            case E_COMMON_EVENT: /* its Common Event runs on them ("Whoever set it off") */
+            {
+                cJSON *common;
+                cJSON_ArrayForEach(common, get(get(project(), "Settings"), "CommonEvents"))
+                    if (num(common, "Id", -2) == num(e, "CommonEventId", -1)) events_run_commands(get(common, "Commands"), target > 0 ? target : -1);
+                break;
+            }
         }
     }
 }
@@ -405,6 +459,23 @@ static void spot_effect(cJSON *effect, int caster, int cx, int cy, int radius, i
             int n = world_things_near(cx * world_tile_w() + world_tile_w() / 2.0, cy * world_tile_h() + world_tile_h() / 2.0, reach * world_tile_w(), around, 512);
             for (int i = 0; i < n; i++)
                 if (world_thing_type(around[i]) == OT_TRAP) { if (num(effect, "Kind", 0) == E_DESTROY_TRAPS) world_thing_remove(around[i]); }
+            break;
+        }
+        case E_DESTROY_FIELD:
+        {
+            /* Dispel Field: what Create Field made within reach goes - and, with an object chosen, any of it there */
+            int around[512], thing = num(effect, "ThingId", -1);
+            int n = world_things_near(cx * world_tile_w() + world_tile_w() / 2.0, cy * world_tile_h() + world_tile_h() / 2.0, (near > 0 ? near : 1) * world_tile_w(), around, 512);
+            for (int i = 0; i < n; i++)
+            {
+                int made = -1;
+                for (int k = 0; k < fieldCount; k++) if (fields[k].id == around[i]) made = k;
+                int category, itemId, q, tx, ty, inst;
+                world_thing_info(around[i], &category, &itemId, &q, &tx, &ty, &inst);
+                if (made < 0 && !(thing >= 0 && category == CAT_OBJECT && itemId == thing)) continue;
+                if (made >= 0) fields[made] = fields[--fieldCount];
+                world_thing_remove(around[i]);
+            }
             break;
         }
         case E_TIME_STOP: if (seconds * 1000 > timeStopMs) timeStopMs = seconds * 1000; game_log("Time stands still."); break;
@@ -1162,6 +1233,8 @@ int magic_combat_spell(int actor, int target)
 void magic_update(double ms)
 {
     if (timeStopMs > 0) { timeStopMs -= ms; if (timeStopMs < 0) timeStopMs = 0; }
+    world_levitation_update(ms);
+    if (translateMs > 0) { translateMs -= ms; if (translateMs < 0) translateMs = 0; }
     long minute = events_total_minutes();
     if (lastMinute < 0) lastMinute = minute;
     if (minute > lastMinute) { lighting_minutes_passed((double)(minute - lastMinute)); lastMinute = minute; }
@@ -1176,7 +1249,7 @@ void magic_update(double ms)
 void magic_reset(void)
 {
     markCount = summonedCount = fieldCount = fearCount = 0;
-    timeStopMs = 0; lastMinute = -1;
+    timeStopMs = 0; translateMs = 0; lastMinute = -1;
     book.open = 0; bookmarkCount = 0; bookReader = -1;
     memset(casts, 0, sizeof casts);
 }

@@ -64,6 +64,11 @@
                         </StackPanel>
                     </Grid>
                     <CheckBox x:Name="DimCheck" Content="Dim the screen behind the box" Margin="0,8,0,0" Checked="Any_Changed" Unchecked="Any_Changed"/>
+                    <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                        <TextBlock Text="Language:" VerticalAlignment="Center" Margin="0,0,6,0"
+                                   ToolTip="Words in a language of the game's own (System Settings > Languages) show in its font till the party understands it: someone in it knows the language, or Translate is on."/>
+                        <ComboBox x:Name="LanguageCombo" Width="200" DisplayMemberPath="Name" SelectionChanged="Any_Changed"/>
+                    </StackPanel>
 
                     <TextBlock Text="Preview (the game screen, 320 x 200)" FontWeight="Bold" Margin="0,12,0,4"/>
                     <Border BorderBrush="Gray" BorderThickness="1" HorizontalAlignment="Left">

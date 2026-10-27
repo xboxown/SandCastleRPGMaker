@@ -34,13 +34,72 @@ public partial class GameTestWindow
     private MovementKind MovementOf(object? mover)
     {
         if (mover is not PlacedCharacter placed) return MovementKind.Land;
+        if (_levitating.Count > 0 && _mapCharacters.FirstOrDefault(mc => ReferenceEquals(mc.Placement, placed)) is { } floating && _levitating.ContainsKey(floating.Character)) return MovementKind.Air; // Levitate: steps in the air
         if (_movementOf.TryGetValue(placed, out var known)) return known;
         var kind = _mapCharacters.FirstOrDefault(mc => ReferenceEquals(mc.Placement, placed))?.Character.Movement ?? MovementKind.Land;
         _movementOf[placed] = kind;
         return kind;
     }
 
-    private bool IsFlier(MapCharacter mapCharacter) => mapCharacter.Character.Movement == MovementKind.Air;
+    private bool IsFlier(MapCharacter mapCharacter) => mapCharacter.Character.Movement == MovementKind.Air || _levitating.ContainsKey(mapCharacter.Character);
+
+    // ---------- Languages (System Settings > Languages) and Translate ----------
+
+    /// <summary>Translate: how long still every language reads plainly (ms).</summary>
+    private double _translateMs;
+
+    /// <summary>Read plainly: no language, Translate is on, or someone in the party knows it.</summary>
+    private bool Understands(int languageId) =>
+        languageId < 0 || _translateMs > 0
+        || _player?.KnownLanguages.Contains(languageId) == true
+        || _mapCharacters.Any(mc => mc.Character.IsInParty && mc.Character.KnownLanguages.Contains(languageId));
+
+    /// <summary>The font words in a language show in while not understood; null: read plainly (or it has no font).</summary>
+    private string? LanguageFont(int languageId) =>
+        Understands(languageId) ? null
+        : _systemSettings.Languages.FirstOrDefault(l => l.Id == languageId) is { FontSpriteName.Length: > 0 } language ? language.FontSpriteName : null;
+
+    // ---------- Levitate (a spell): up to 3 floors, walking in the air, then falling ----------
+
+    /// <summary>Who floats, for how long still (ms), at what lift.</summary>
+    private readonly Dictionary<CharacterDefinition, (double Ms, int Lift)> _levitating = new(ReferenceEqualityComparer.Instance);
+
+    private bool PlayerLevitating => _player is not null && _levitating.ContainsKey(_player);
+
+    /// <summary>Up from where they stand by 3 floors - under a ceiling only till their head touches it.</summary>
+    private void Levitate(CharacterDefinition who, double seconds)
+    {
+        if (seconds <= 0) return;
+        bool player = who == _player;
+        var mapCharacter = player ? null : MapCharacterOf(who);
+        if (!player && mapCharacter is null) return;
+        var foot = player ? PlayerFootprint() : CharacterFootprint(mapCharacter!);
+        int lift = player ? _playerZ : mapCharacter!.Lift, height = player ? _playerSize.Z : mapCharacter!.Size.Z;
+        var band = FreeBands(foot, player ? null : mapCharacter!.Placement, null).FirstOrDefault(b => lift >= b.Low && lift < b.High);
+        int top = band.High > band.Low ? Math.Max(lift, band.High - height) : lift;
+        int to = Math.Min(lift + MagicEffect.LevitateLifts, top);
+        _levitating[who] = (seconds * 1000, to);
+        if (player) { _playerZ = to; _playerVisualLiftZ = to; SnapPlayerPosition(); UpdateCamera(); }
+        else { StopWalking(mapCharacter!); mapCharacter!.Lift = to; PositionCharacterVisual(mapCharacter); }
+    }
+
+    /// <summary>Each frame: the time runs out - down they fall onto whatever is under them.</summary>
+    private void UpdateLevitation(double elapsedMs)
+    {
+        if (_levitating.Count == 0) return;
+        foreach (var (who, (ms, lift)) in _levitating.ToList())
+        {
+            if (ms - elapsedMs > 0) { _levitating[who] = (ms - elapsedMs, lift); continue; }
+            _levitating.Remove(who);
+            if (who == _player) { ApplyGravityToPlayer(); UpdateCamera(); }
+            else if (MapCharacterOf(who) is { } mc)
+            {
+                StopWalking(mc);
+                mc.Lift = GroundBelow(mc);
+                PositionCharacterVisual(mc);
+            }
+        }
+    }
 
     /// <summary>Every unit under the footprint is a Water tile.</summary>
     private bool AllWaterUnder(UnitRect foot)
@@ -90,7 +149,8 @@ public partial class GameTestWindow
         int h = mapCharacter.Size.Z;
         var band = FreeBands(CharacterFootprint(mapCharacter), mapCharacter.Placement, null).FirstOrDefault(b => mapCharacter.Lift >= b.Low && mapCharacter.Lift < b.High);
         if (band.High <= band.Low) return mapCharacter.Lift;
-        return Math.Clamp(FlyLift, band.Low, Math.Max(band.Low, band.High - h));
+        int prefer = _levitating.TryGetValue(mapCharacter.Character, out var floating) ? floating.Lift : FlyLift; // levitating: at its own height
+        return Math.Clamp(prefer, band.Low, Math.Max(band.Low, band.High - h));
     }
 
     /// <summary>The top of whatever solid thing is under it (a roof, a table, the ground).</summary>
@@ -134,7 +194,7 @@ public partial class GameTestWindow
     private List<(int X, int Y)>? FindFlyPath(MapCharacter mapCharacter, (int X, int Y) goal, bool allowPartial, bool besideOnly, int? goalFloor)
     {
         int h = mapCharacter.Size.Z;
-        int prefer = goalFloor is { } floor ? MapFloors.BaseLift(floor) : FlyLift; // headed for a floor (a foe on the ground): it flies down at that height
+        int prefer = goalFloor is { } floor ? MapFloors.BaseLift(floor) : _levitating.TryGetValue(mapCharacter.Character, out var floating) ? floating.Lift : FlyLift; // headed for a floor (a foe on the ground): it flies down at that height; levitating: its own
         var world = WorldBodiesForPathing(mapCharacter);
         var bandsAt = new Dictionary<(int, int), List<(int Low, int High)>>();
         List<(int Low, int High)> Bands((int X, int Y) cell)
