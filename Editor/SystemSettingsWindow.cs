@@ -54,7 +54,6 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
         tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Conversations", Content = BuildConversationTab() });
-        tabs.Items.Add(new TabItem { Header = "Levels", Content = new LevelCurveEditor(_settings.Levels) });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
         tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
         tabs.Items.Add(new TabItem { Header = "Errors", Content = BuildErrorsTab() });

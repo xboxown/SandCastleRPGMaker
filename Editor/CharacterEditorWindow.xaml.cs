@@ -165,6 +165,7 @@ public partial class CharacterEditorWindow : Window
         if (character.SizeX <= 0 || character.SizeY <= 0 || character.SizeZ <= 0)
             (character.SizeX, character.SizeY, character.SizeZ) = ActorSizing.Resolve(character, _poses, _sprites);
         ShowSize(character);
+        ShowLevelTab(character);
 
         _faceFilterGroup = string.IsNullOrEmpty(character.FaceSpriteGroup) ? null : character.FaceSpriteGroup;
         FaceFilterCheck.IsChecked = _faceFilterGroup is not null;
@@ -794,6 +795,39 @@ public partial class CharacterEditorWindow : Window
         int index = CharacterListBox.SelectedIndex;
         CharacterListBox.Items.Refresh();
         CharacterListBox.SelectedIndex = index;
+    }
+
+    private TabItem? _levelTab;
+
+    /// <summary>
+    /// The Level tab: this character's own level curve (as RPG Maker's per-class curves) - its Max Level, the experience
+    /// each level needs and the training points it gives - and the colour its graph is drawn in (the editor only).
+    /// A character from before starts with a copy of the curve System Settings used to hold.
+    /// </summary>
+    private void ShowLevelTab(CharacterDefinition character)
+    {
+        character.Levels ??= (ProjectSession.SettingsProvider?.Invoke()?.Levels ?? new LevelSettings()).Clone();
+        if (_levelTab is null) { _levelTab = new TabItem { Header = "Level" }; DetailsTabs.Items.Add(_levelTab); }
+        Color color;
+        try { color = (Color)ColorConverter.ConvertFromString(character.LevelGraphColor); } catch { color = Color.FromRgb(90, 160, 230); }
+        var panel = new DockPanel { Margin = new Thickness(6) };
+        var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
+        top.Children.Add(new TextBlock { Text = "Graph colour (the editor only):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var swatch = new Rectangle { Width = 26, Height = 18, Stroke = Brushes.Gray, Fill = new SolidColorBrush(color) };
+        var pick = new Button { Content = "Change...", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0) };
+        pick.Click += (_, _) =>
+        {
+            var palette = new ApplyPaletteColorCommandWindow(new EventCommand { Type = EventCommandType.ApplyPaletteColor, Parameters = { ["Hex"] = character.LevelGraphColor.TrimStart('#'), ["OpacityPercent"] = "100" } }) { Owner = this };
+            if (palette.ShowDialog() != true) return;
+            character.LevelGraphColor = "#" + palette.Result.Get("Hex");
+            ShowLevelTab(character); // drawn again in it
+        };
+        top.Children.Add(swatch);
+        top.Children.Add(pick);
+        DockPanel.SetDock(top, Dock.Top);
+        panel.Children.Add(top);
+        panel.Children.Add(new LevelCurveEditor(character.Levels, color));
+        _levelTab.Content = panel;
     }
 
     private void ShowSize(CharacterDefinition character)

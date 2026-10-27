@@ -41,6 +41,7 @@ public partial class GameTestWindow
         var h = _execContext.GameHandlers;
         var a = _execContext.GameActions;
         a[EventCommandType.FadeScreen] = FadeScreenCommand;
+        a[EventCommandType.Earthquake] = EarthquakeCommand;
         h[EventCommandType.FlashScreen] = FlashScreenCommand;
         a[EventCommandType.MoveCamera] = MoveCameraCommand;
         InitializeVehicleCommands(); // Drive Vehicle, Stop Driving, Travel Vehicle (GameTestWindow.VehicleTravel.cs)
@@ -242,6 +243,45 @@ public partial class GameTestWindow
         int hours = _clock.AdvanceMinutes(minutes);
         if (hours > 0) ScheduleNpcs(_clock.Hour); // Exult re-schedules everyone on the hour
         ShowClock();
+        return true;
+    }
+
+    /// <summary>
+    /// Earthquake (Exult's Earthquake effect: the view shaken up to 4 pixels each way every 100 ms, its sound once). As in
+    /// Ultima VII's quakes the party - not the characters the game controls - stops where it is and falls and gets up
+    /// again till it's over, the controls taken meanwhile.
+    /// </summary>
+    private bool EarthquakeCommand(EventCommand command, Action<bool> done)
+    {
+        double seconds = Math.Clamp(FormulaNumber(command, "Seconds"), 0.1, 600);
+        PlayRealShakeEffect(4, seconds);
+        if (int.TryParse(command.Get("SoundId"), out int sound)) PlaySound(sound);
+        var party = command.Get("Falls") != "False"
+            ? new List<CharacterDefinition?> { _player }.Concat(_mapCharacters.Where(mc => mc.Character.IsInParty && !IsDead(mc.Character)).Select(mc => (CharacterDefinition?)mc.Character)).OfType<CharacterDefinition>().ToList()
+            : new List<CharacterDefinition>();
+        var quake = new object();
+        if (party.Count > 0)
+        {
+            BeginCinema(quake);
+            CancelPlayerWalk();
+            _heldDirectionKeys.Clear();
+            foreach (var member in party) if (member != _player && MapCharacterOf(member) is { } mc) StopWalking(mc);
+        }
+        bool down = false;
+        var started = DateTime.UtcNow;
+        var timer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(600) };
+        void Fall() { down = !down; foreach (var member in party) ShowPose(member, down ? "Fall" : "Stand up", restart: true); }
+        if (party.Count > 0) Fall();
+        timer.Tick += (_, _) =>
+        {
+            if ((DateTime.UtcNow - started).TotalSeconds < seconds) { if (party.Count > 0) Fall(); return; }
+            timer.Stop();
+            foreach (var member in party) ShowPose(member, "Idle");
+            if (party.Count > 0) EndCinema(quake);
+            if (command.Get("Wait") != "False") done(true);
+        };
+        timer.Start();
+        if (command.Get("Wait") == "False") done(true);
         return true;
     }
 

@@ -30,9 +30,13 @@ internal sealed class LevelCurveEditor : DockPanel
 
     private bool ShowingExp => _showExp.IsChecked == true;
 
-    public LevelCurveEditor(LevelSettings levels)
+    /// <summary>The colour the experience bars are drawn in (a character's own graph colour).</summary>
+    private readonly Color? _barColor;
+
+    public LevelCurveEditor(LevelSettings levels, Color? barColor = null)
     {
         _levels = levels;
+        _barColor = barColor;
         _levels.Normalize();
         Margin = new Thickness(10);
 
@@ -169,7 +173,7 @@ internal sealed class LevelCurveEditor : DockPanel
         _chart.Children.Clear();
         if (_chart.ActualWidth <= 0 || _levels.Steps.Count == 0) return;
         double height = _chart.ActualHeight, scale = _drag?.Scale ?? Scale();
-        var fill = ShowingExp ? Color.FromRgb(90, 160, 230) : Color.FromRgb(120, 200, 110);
+        var fill = ShowingExp ? _barColor ?? Color.FromRgb(90, 160, 230) : Color.FromRgb(120, 200, 110);
         for (int i = 0; i < _levels.Steps.Count; i++)
         {
             var step = _levels.Steps[i];

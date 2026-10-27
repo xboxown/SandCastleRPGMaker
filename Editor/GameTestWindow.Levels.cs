@@ -34,18 +34,19 @@ public partial class GameTestWindow
     /// <summary>Its level from its experience: up only (a level set by hand above it stays), each new level's training points added; Next Exp kept up to date.</summary>
     private void CheckLevel(CharacterDefinition character)
     {
-        Levels.Normalize();
-        int cap = character.LevelLock > 0 ? Math.Min(character.LevelLock, Levels.MaxLevel) : Levels.MaxLevel;
+        var levels = character.Levels ?? Levels; // its own curve (Character Editor > Level), else the old shared one
+        levels.Normalize();
+        int cap = character.LevelLock > 0 ? Math.Min(character.LevelLock, levels.MaxLevel) : levels.MaxLevel;
         int old = Math.Max(1, Stat(character, BuiltInStatKind.Level, 1));
-        int level = Math.Max(old, Levels.LevelFor(Stat(character, BuiltInStatKind.Exp, 0), cap));
+        int level = Math.Max(old, levels.LevelFor(Stat(character, BuiltInStatKind.Exp, 0), cap));
         if (level > old)
         {
-            int points = Levels.Steps.Where(s => s.Level > old && s.Level <= level).Sum(s => s.TrainingPoints);
+            int points = levels.Steps.Where(s => s.Level > old && s.Level <= level).Sum(s => s.TrainingPoints);
             SetStat(character, BuiltInStatKind.Level, level);
             SetStat(character, BuiltInStatKind.TrainingPoints, Stat(character, BuiltInStatKind.TrainingPoints, 0) + points);
             if (character == _player || character.IsInParty)
                 StatusText.Text = $"{character.Name} is now level {level}" + (points > 0 ? $" (+{points} training points)." : ".");
         }
-        SetStat(character, BuiltInStatKind.NextExp, level < cap ? Levels.ExperienceFor(level + 1) : 0); // 0: at its highest level
+        SetStat(character, BuiltInStatKind.NextExp, level < cap ? levels.ExperienceFor(level + 1) : 0); // 0: at its highest level
     }
 }

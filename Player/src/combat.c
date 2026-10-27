@@ -316,9 +316,10 @@ static void pose_back(int actor, double ms)
 
 /* ---------------- Levels ---------------- */
 
-static int level_steps(cJSON **levels)
+static int level_steps(int actor, cJSON **levels)
 {
-    *levels = get(settingsJson, "Levels");
+    *levels = get(json_of(actor), "Levels"); /* its own curve (Character Editor > Level) */
+    if (!cJSON_IsObject(*levels)) *levels = get(settingsJson, "Levels"); /* else the old shared one */
     return cJSON_GetArraySize(get(*levels, "Steps"));
 }
 
@@ -343,7 +344,7 @@ static int points_for(cJSON *levels, int level)
 static void check_level(int actor)
 {
     cJSON *levels;
-    level_steps(&levels);
+    level_steps(actor, &levels);
     int maxLevel = num(levels, "MaxLevel", 8);
     if (maxLevel < 1) maxLevel = 1;
     if (maxLevel > 99) maxLevel = 99;

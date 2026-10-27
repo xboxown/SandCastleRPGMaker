@@ -534,10 +534,29 @@ int events_actor_busy(int actor)
 }
 
 static int savingForbidden, combatForbidden, keysForbidden, controlsLocked, quitRequested;
+static double quakeMs, quakeFlipMs; static int quakeDown; /* an Earthquake throwing the party (C_Earthquake) */
+
+/* Each 0.6 s of a quake the party falls or gets up; when it's over they stand. */
+static void update_quake(double ms)
+{
+    if (quakeMs <= 0) return;
+    quakeMs -= ms;
+    int over = quakeMs <= 0;
+    if (!over && (quakeFlipMs -= ms) > 0) return;
+    quakeFlipMs = 600;
+    quakeDown = over ? 0 : !quakeDown;
+    for (int a = 0; a < world_actor_count(); a++)
+    {
+        if (a > 0 && (!items_in_party(world_actor_character(a)) || world_actor_gone(a) || vitals_dead(world_actor_character(a)))) continue;
+        if (a > 0) world_walk_cancel(a);
+        world_set_pose(a, over ? "Idle" : quakeDown ? "Fall" : "Stand up", -1);
+    }
+}
 
 int events_cinema(void)
 {
     if (controlsLocked) return 1; /* Allow Controls > Forbidden: as in Cinema Mode */
+    if (quakeMs > 0) return 1; /* an Earthquake throwing the party: no walking */
     for (int i = 0; i < MAX_RUNS; i++) if (runs[i].used && runs[i].cinema) return 1;
     return 0;
 }
@@ -2100,6 +2119,18 @@ static int execute(Run *r, const Cmd *c)
             screen_shake(intensity, seconds);
             return 1;
         }
+        case C_Earthquake:
+        {
+            /* EarthquakeCommand: the view shaken (Exult: up to 4 px each way every 100 ms), its sound once; the party falls and
+               gets up again till it's over (the controls taken), the game's own characters untouched */
+            double seconds = formula_number(c, "Seconds");
+            if (seconds < 0.1) seconds = 0.1;
+            screen_shake(4, seconds);
+            if (param(c, "SoundId")[0]) sound_play(atoi(param(c, "SoundId")));
+            if (strcmp(param(c, "Falls"), "False") != 0) { quakeMs = seconds * 1000; quakeFlipMs = 0; quakeDown = 0; world_walk_cancel(0); world_keys_let_go(); }
+            if (strcmp(param(c, "Wait"), "False") != 0) { r->waiting = W_TIMER; r->timerMs = seconds * 1000; r->waitMinutes = 0; return 0; }
+            return 1;
+        }
         case C_FlashScreen: screen_flash(screen_parse_colour(param(c, "Color"), 0xFFFFFF), formula_number(c, "Seconds")); return 1;
         case C_FadeScreen:
         {
@@ -3083,6 +3114,7 @@ void events_update(double ms, int paused)
         }
     }
     if (paused) return;
+    update_quake(ms);
     clock_advance(ms); /* the clock runs while the game does */
     for (int k = 0; k < MAX_EFFECT_TIMERS; k++)
         if (effectTimers[k].used && (effectTimers[k].minutes > 0 ? total_minutes() - effectTimers[k].fromMinute >= effectTimers[k].minutes : (effectTimers[k].ms -= ms) <= 0))
@@ -3423,7 +3455,7 @@ void events_reset(void)
     memset(answers, 0, sizeof answers);
     dollContext = lastDoll = NULL;
     memset(heldBy, 0, sizeof heldBy);
-    savingForbidden = combatForbidden = keysForbidden = controlsLocked = quitRequested = 0;
+    savingForbidden = combatForbidden = keysForbidden = controlsLocked = quitRequested = 0; quakeMs = 0;
     statChangeCount = 0;
     functionRun = NULL;
     copyCountN = 0; fireCopy = 0;

@@ -38,6 +38,9 @@ public class LevelSettings
         return steps;
     }
 
+    /// <summary>A copy of its own (a character's own curve, starting from this one).</summary>
+    public LevelSettings Clone() => new() { MaxLevel = MaxLevel, Steps = Steps.Select(s => new LevelStep { Level = s.Level, Experience = s.Experience, TrainingPoints = s.TrainingPoints }).ToList() };
+
     /// <summary>Exactly one step for each level 2..MaxLevel: missing ones continue the curve, extra ones are dropped.</summary>
     public void Normalize()
     {

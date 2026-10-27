@@ -118,7 +118,8 @@ public enum EventCommandType
     SaveGame, LoadGame, OpenSaveLoadScreen, AllowSaving, AllowControls, GameOver, ReturnToTitle, QuitGame, LearnSpell, CastSpell,
     DebugLog, PauseHere,
     ShowError,
-    DriveVehicle, StopDriving, TravelVehicle, SetVehicleSpeed
+    DriveVehicle, StopDriving, TravelVehicle, SetVehicleSpeed,
+    Earthquake
 }
 
 /// <summary>
