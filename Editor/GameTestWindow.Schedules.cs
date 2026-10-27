@@ -469,6 +469,7 @@ public partial class GameTestWindow
         // A flier first climbs or drops in its own cell to the height its way goes on at (down outside a door, up into the open sky).
         if (IsFlier(mapCharacter) && PlannedFlyLift(mapCharacter) is { } wantLift && mapCharacter.Lift != wantLift && ClimbToward(mapCharacter, wantLift, elapsedMs)) return;
         double targetX = CellCenterX(cellX), targetY = CellCenterY(cellY);
+        if (_pathPoints.TryGetValue(npc.Path, out var points) && npc.PathIndex < points.Count) (targetX, targetY) = points[npc.PathIndex]; // its spot in that cell (a doorway off the middle)
         var (remainingX, remainingY) = WrappedDelta(targetX - mapCharacter.PixelX, targetY - mapCharacter.PixelY); // the next cell can be over the seam of a map that wraps around
         // Cardinal steps, one axis at a time, like the player.
         bool alongX = Math.Abs(remainingX) > 0.01;
@@ -611,6 +612,9 @@ public partial class GameTestWindow
         var cameFrom = new Dictionary<(int X, int Y, int F), (int X, int Y, int F)>();
         var cost = new Dictionary<(int X, int Y, int F), int> { [start] = 0 };
         var liftAt = new Dictionary<(int X, int Y, int F), int> { [start] = mapCharacter.Lift };
+        // Where in each cell the walker stands: its middle, or - when walls built in 8px steps leave the way between two cells
+        // off the middles (a doorway between wall pieces) - the nearest 8px spot in it that can be stood on and walked to.
+        var pointAt = new Dictionary<(int X, int Y, int F), (double X, double Y)> { [start] = (mapCharacter.PixelX, mapCharacter.PixelY) };
         open.Enqueue(start, H(start));
         int expansions = 0;
         var nearest = start;
@@ -618,8 +622,18 @@ public partial class GameTestWindow
         List<(int X, int Y)> PathTo((int X, int Y, int F) end)
         {
             var path = new List<(int X, int Y)>();
-            for (var step = end; step != start; step = cameFrom[step]) path.Add((step.X, step.Y));
+            var points = new List<(double X, double Y)>();
+            bool offMiddle = false;
+            for (var step = end; step != start; step = cameFrom[step])
+            {
+                path.Add((step.X, step.Y));
+                var point = pointAt[step];
+                points.Add(point);
+                if (Math.Abs(point.X - CellCenterX(step.X)) > 0.01 || Math.Abs(point.Y - CellCenterY(step.Y)) > 0.01) offMiddle = true;
+            }
             path.Reverse();
+            points.Reverse();
+            if (offMiddle) _pathPoints.AddOrUpdate(path, points);
             return path;
         }
         while (open.Count > 0 && expansions++ < 6000) // the way round can be far longer than the straight way (out of a house, round to its door)
@@ -637,28 +651,59 @@ public partial class GameTestWindow
                 var cell = WrapCell(stepTo);
                 if (!InsideMap(cell.Item1, cell.Item2)) continue;
                 if (goalFloor is null && cost.TryGetValue((cell.Item1, cell.Item2, 0), out int reached) && reached <= cost[current] + 1) continue; // no floor asked for: one place per cell, so skip the walking rules for a cell already reached as cheaply
-                int lift;
-                if (goalFloor is not null)
+                // The walk from its spot in this cell to its spot in the next: the next cell's middle first, else its other 8px spots, nearest first.
+                var (fromX, fromY) = pointAt[current];
+                int lift = 0;
+                (double X, double Y)? spot = null;
+                foreach (var (ox, oy) in SpotsInCell())
                 {
-                    // To another floor: the stairs climb several lifts a cell, 1 a step - only the walk itself, step by step, gets up or down them (a jump cell to cell is a cliff).
-                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), stepTo, current == start, liftAt[current], world, out lift)) continue;
+                    double tx = CellCenterX(stepTo.Item1) + ox, ty = CellCenterY(stepTo.Item2) + oy;
+                    if (goalFloor is not null)
+                    {
+                        // To another floor: the stairs climb several lifts a cell, 1 a step - only the walk itself, step by step, gets up or down them (a jump cell to cell is a cliff).
+                        if (!CanWalkBetweenPoints(mapCharacter, fromX, fromY, tx, ty, liftAt[current], world, out lift)) continue;
+                    }
+                    else
+                    {
+                        if (!TryStepActor(ActorFootprintAt(tx, ty, mapCharacter.Size), liftAt[current], mapCharacter.Size.Z, out lift, out _, mapCharacter.Placement, world)) continue;
+                        if (!CanWalkBetweenPoints(mapCharacter, fromX, fromY, tx, ty, liftAt[current], world, out _)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
+                    }
+                    spot = (tx, ty);
+                    break;
                 }
-                else
-                {
-                    if (!CanStandAt(mapCharacter, stepTo, liftAt[current], world, out lift)) continue;
-                    if (!CanWalkBetween(mapCharacter, (current.X, current.Y), stepTo, current == start, liftAt[current], world)) continue; // the walk itself, not just where it ends (GameTestWindow.Sweep.cs)
-                }
+                if (spot is null) continue;
                 var next = (cell.Item1, cell.Item2, FloorKey(lift));
                 int newCost = cost[current] + 1;
                 if (cost.TryGetValue(next, out int known) && known <= newCost) continue;
                 cost[next] = newCost;
                 liftAt[next] = lift;
+                pointAt[next] = (spot.Value.X - (stepTo.Item1 - cell.Item1) * _tileWidth, spot.Value.Y - (stepTo.Item2 - cell.Item2) * _tileHeight); // over the seam of a map that wraps around: on the cell's own side
                 cameFrom[next] = current;
                 open.Enqueue(next, newCost + H(next));
             }
         }
         if (!allowPartial || nearest == start) return null;
         return PathTo(nearest);
+    }
+
+    /// <summary>A path's spots in its cells (FindPathAStar), when not all are the cells' middles - MoveAlongPath heads for them.</summary>
+    private readonly System.Runtime.CompilerServices.ConditionalWeakTable<List<(int X, int Y)>, List<(double X, double Y)>> _pathPoints = new();
+
+    private List<(double X, double Y)>? _spotsInCell;
+    /// <summary>Offsets from a cell's middle where a walker may stand in it: the middle, then each 8px step off it within the cell, nearest first.</summary>
+    private List<(double X, double Y)> SpotsInCell()
+    {
+        if (_spotsInCell is not null) return _spotsInCell;
+        var spots = new List<(double X, double Y)>();
+        int rx = _tileWidth / SpriteSizing.BaseUnit / 2, ry = _tileHeight / SpriteSizing.BaseUnit / 2;
+        for (int j = -ry; j <= ry; j++)
+            for (int i = -rx; i <= rx; i++)
+            {
+                double x = i * SpriteSizing.BaseUnit, y = j * SpriteSizing.BaseUnit;
+                if (Math.Abs(x) >= _tileWidth / 2.0 || Math.Abs(y) >= _tileHeight / 2.0) continue; // in the cell
+                spots.Add((x, y));
+            }
+        return _spotsInCell = spots.OrderBy(p => Math.Abs(p.X) + Math.Abs(p.Y)).ThenBy(p => Math.Abs(p.Y)).ToList();
     }
 
     private int Heuristic((int X, int Y) a, (int X, int Y) b) => Math.Abs(CellsAcross(a.X - b.X)) + Math.Abs(CellsUpDown(a.Y - b.Y)); // the short way round a map that wraps around

@@ -107,7 +107,7 @@ static const Sprite *item_look(const Item *it)
 {
     int lit, spent;
     items_light(it, &lit, &spent);
-    return world_item_look(items_category(it), items_item_id(it), lit, spent, items_is_locked(it));
+    return world_item_look(items_category(it), items_item_id(it), lit, spent, items_is_locked(it), items_quantity(it), items_liquid(it, -1));
 }
 
 /* Its size on the screen (as on the map: its picture rounded up to whole 8-pixel units). */
@@ -307,6 +307,7 @@ static void draw_readout(uint32_t *pixels, const Gump *g, cJSON *r, const char *
 
 static int being_dragged(const Item *it) { return dragging && pressed.item == it; }
 int gumps_dragging_item(const Item *it) { return being_dragged(it); }
+int gumps_dragged_map_thing(void) { return dragging && drag.fromMap ? drag.uid : 0; } /* hidden on the map while it is dragged (the source visual hidden) */
 int gumps_dragging_doll_part(const void *state, int part) { return dragging && drag.partDragged && drag.dollState == state && drag.dollPart == part; }
 const DollState *gumps_drag_doll_state(void) { return dragging && !drag.partDragged ? drag.dollState : NULL; }
 int gumps_drag_doll_part(void) { return dragging && drag.dollState && !drag.partDragged ? drag.dollPart : -1; }
@@ -669,7 +670,7 @@ static void use_target(const Target *t)
         {
             int category, itemId, quantity, x, y, instance;
             world_thing_info(t->uid, &category, &itemId, &quantity, &x, &y, &instance);
-            if (!world_reachable(x, y, world_thing_z(t->uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; } /* Game_window::double_clicked: blocked */
+            if (!world_reachable_thing(t->uid)) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; } /* Game_window::double_clicked: blocked */
             use_thing(t->uid);
             break;
         }
@@ -733,7 +734,7 @@ static int start_drag(const Target *t)
         int x, y, instance;
         world_thing_info(t->uid, &drag.category, &drag.itemId, &drag.quantity, &x, &y, &instance);
         if (!items_can_lift(drag.category, drag.itemId) || drag.itemId <= -1000) { gumps_refuse(P_TOO_HEAVY, "That's too heavy to move."); return 0; }
-        if (!world_reachable(x, y, world_thing_z(t->uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
+        if (!world_reachable_thing(t->uid)) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
         drag.fromMap = 1; drag.uid = t->uid;
         ghost = world_thing_sprite(t->uid);
     }
@@ -759,7 +760,7 @@ static int start_drag(const Target *t)
         {
             int c, i, q, x, y, n;
             world_thing_info(gumps[t->gump].uid, &c, &i, &q, &x, &y, &n);
-            if (!world_reachable(x, y, world_thing_z(gumps[t->gump].uid))) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
+            if (!world_reachable_thing(gumps[t->gump].uid)) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
         }
         drag.item = t->item;
         drag.category = items_category(t->item); drag.itemId = items_item_id(t->item); drag.quantity = items_quantity(t->item);
@@ -842,7 +843,7 @@ static int drop_on_box(int gi, const Target *under)
     {
         int c, i, q, x, y, n;
         world_thing_info(g->uid, &c, &i, &q, &x, &y, &n);
-        if (!world_reachable(x, y, world_thing_z(g->uid))) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
+        if (!world_reachable_thing(g->uid)) { gumps_refuse(P_OUT_OF_RANGE, "That's out of reach."); return 0; }
     }
     double s = scale_of(g), fx = (mouseX - grabX - g->x) / s, fy = (mouseY - grabY - g->y) / s;
     double ax, ay, aw, ah;
@@ -1031,7 +1032,7 @@ static void drop(void)
         world_thing_info(under.uid, &c, &i, &q, &x, &y, &n);
         if ((!drag.fromMap || drag.uid != under.uid) && events_has_combine(c, i))
         {
-            if (!world_reachable(x, y, world_thing_z(under.uid))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; }
+            if (!world_reachable_thing(under.uid)) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return; }
             dropping = 1;
             int ran = events_combine(under.uid, c, i, drag.category, drag.itemId); /* its pages run; "Use up the item just combined" works while they do */
             dropping = 0;
@@ -1139,8 +1140,8 @@ void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const
     choosing = chosen; choosingContext = context;
     char line[200];
     snprintf(line, sizeof line, "%s (Escape to cancel)", prompt);
-    game_log(line);
-    gumps_label(prompt);
+    game_log(line); /* the Windows engine says it in its status bar, which a built game doesn't show */
+    (void)prompt;
 }
 
 int gumps_choosing(void) { return choosing != NULL; }

@@ -366,7 +366,7 @@ static void keychain_target(void *context, const GumpsPick *pick)
         {
             int c, i, q, n, x, y;
             world_thing_info(pick->uid, &c, &i, &q, &x, &y, &n);
-            if (!world_reachable(x, y, world_thing_z(pick->uid))) { say("You can't reach that from here."); return; }
+            if (!world_reachable_thing(pick->uid)) { say("You can't reach that from here."); return; }
             items_free(items_unpark(pick->uid, c, i, q));
             world_thing_remove(pick->uid);
         }
@@ -726,7 +726,7 @@ int mechanisms_drop_on(int uid, int category, int itemId)
     if (!sown) return 0;
     int c, i, q, x, y, n;
     world_thing_info(uid, &c, &i, &q, &x, &y, &n);
-    if (!world_reachable(x, y, world_thing_z(uid))) { say("You can't reach that from here."); return 1; }
+    if (!world_reachable_thing(uid)) { say("You can't reach that from here."); return 1; }
     combat_owned_theft(uid); /* someone else's field */
     world_thing_become(uid, num(sown, "Id", -1));
     sound_play(num(get(sown, "Plant"), "HarvestSoundResourceId", -1));

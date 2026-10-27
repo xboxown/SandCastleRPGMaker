@@ -91,10 +91,11 @@ void world_thing_center(int uid, double *px, double *py);
 int world_things_near(double px, double py, double reach, int *out, int max);
 void world_effect_once(const Sprite *sprite, int cellX, int cellY);
 void world_blit(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h);
-const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked);
+const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked, int quantity, int liquid);
 const Sprite *world_thing_sprite(int uid);
 void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor);
 int world_reachable(int x, int y, int z);
+int world_reachable_thing(int uid);   /* Exult is_grabable for a thing on the map (its own box) */
 void world_thing_add_quantity(int uid, int n);
 int world_thing_quantity(int uid);
 int world_thing_at_cell(int category, int itemId, int x, int y, int except);
@@ -189,6 +190,7 @@ int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);
 int world_keys_held(void); /* a direction key held (it takes over from an event's walk) */
 void world_draw_stats(int *thingsOnMap, int *drawnLast);
+void world_camera_origin(double *x, double *y);   /* the view's top-left in world pixels */
 uint32_t world_shade_colour(uint32_t c);   /* a colour under the sky's light (for what is drawn under it: clouds) */   /* for the timing diary */
 void world_keys_let_go(void);   /* the game paused or Cinema Mode began: no direction counts as held till pressed again */
 void world_walk_cancel(int actor);

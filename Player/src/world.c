@@ -15,6 +15,7 @@
  *    drawn, held inside the map.
  */
 #include "blend.h"
+#include "gumps.h"
 #include "lighting.h"
 #include "world.h"
 #include "vitals.h"
@@ -57,7 +58,7 @@ typedef struct Link { const Sprite *sprite; } Link;
 
 typedef struct ObjectDef
 {
-    int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile;
+    int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile, portable;
     const Sprite *own, *open, *lit, *spent;
     const Sprite *facing[8], *turned[8];
     int doorStartsOpen, lightStartsLit, occludes;
@@ -89,6 +90,7 @@ typedef struct Thing
     int spent; double burnLeft;                      /* a light burnt out; the game minutes it has left (-1: not started) */
     cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
     const Sprite *lookOverride;                      /* Change Object Look: another sprite (NULL: its own) */
+    int seq;                                         /* when last put down (0: when made, its uid) - ties in drawing order go to the later */
     int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
     int hp, hpSet;                                   /* hit points left in play (Attack Object) */
     int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
@@ -170,6 +172,7 @@ static void wrap_actor(struct Actor *a, int isPlayer)
     if (a->body >= 0) { int l, t; foot_at(a, a->px, a->py, &l, &t); bodies[a->body].left = l; bodies[a->body].top = t; }
 }
 
+static void camera_update(void);
 static cJSON *gameJson;
 void *world_json(void) { return gameJson; }
 const char *world_error(void) { return error_text; }
@@ -200,6 +203,7 @@ static void read_objects(cJSON *project)
         d->solidOffX = num(o, "SolidOffsetX", 0); d->solidOffY = num(o, "SolidOffsetY", 0);
         d->stackable = flag(o, "IsCellStackable"); d->elevates = flag(o, "AllowCellElevation");
         d->floorTile = flag(o, "IsFloorTile");
+        d->portable = flag(o, "IsPortable"); /* Reach: something portable doesn't block an arm's line (IsMovable) */
         d->occludes = flag(o, "Occludes");
         d->own = sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName"));
         cJSON *door = get(o, "Door"), *light = get(o, "Light"), *furniture = get(get(o, "Furniture"), "Facings"), *turn = get(o, "TurnLooks"), *f;
@@ -458,6 +462,9 @@ static int ground_walkable(int l, int t, int w, int d)
 }
 
 /* TryStepActor for the player: the lift they'd stand at, or -1 if they can't. */
+/* Reach's walk (world_reachable): only the boxes round the player are looked at for each of its many steps. */
+static int stepWindowOn, stepWindowL, stepWindowT, stepWindowR, stepWindowB, *stepWindow, stepWindowN, stepWindowCap;
+
 static int try_step(int l, int t, int w, int d, int lift, int height)
 {
     int W = mapW * unitsX, H = mapH * unitsY;
@@ -485,7 +492,9 @@ static int try_step(int l, int t, int w, int d, int lift, int height)
     if (l < 0 || t < 0 || l + w > mapW * unitsX || t + d > mapH * unitsY) return -1;
     static const Body *here[512], *solids[2048];
     int ns = 0;
-    for (int i = 0; i < bodyCount && ns < 2048; i++) if (overlaps(&bodies[i], l, t, w, d)) solids[ns++] = &bodies[i];
+    if (stepWindowOn && l >= stepWindowL && t >= stepWindowT && l + w <= stepWindowR && t + d <= stepWindowB)
+    { for (int k = 0; k < stepWindowN && ns < 2048; k++) if (overlaps(&bodies[stepWindow[k]], l, t, w, d)) solids[ns++] = &bodies[stepWindow[k]]; }
+    else for (int i = 0; i < bodyCount && ns < 2048; i++) if (overlaps(&bodies[i], l, t, w, d)) solids[ns++] = &bodies[i];
     int highest = -1;
     for (int y = t; y < t + d; y++)
         for (int x = l; x < l + w; x++)
@@ -727,7 +736,7 @@ int world_build(cJSON *root)
     gameJson = root; /* kept: the events run from it */
     settle_all(); /* every authored thing comes to rest: stacks form in placement order */
     spawn_bed_covers();
-    cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
+    cameraX = cameraY = 0; camera_update(); /* from the map's corner, as the Windows engine's camera starts */
     return 1;
 }
 
@@ -775,7 +784,13 @@ void world_update(int dx, int dy, double seconds)
         }
     }
     world_walks_update(seconds);
-    /* The camera: a dead zone round the middle, following where the player (or whoever it follows) is drawn (up and left by its lift). */
+    camera_update();
+}
+
+/* The camera (GameTestWindow.UpdateCamera): a dead zone round the middle, following where the player (or whoever it follows) is
+   drawn (up and left by its lift); kept inside the map. It is never centred: a new game's starts at the map's corner. */
+static void camera_update(void)
+{
     const Actor *followed = cameraFollow > 0 ? actor_of(cameraFollow) : NULL;
     if (!followed) followed = &player;
     double fx = followed->px - followed->lift * LIFT_SHIFT, fy = followed->py - followed->lift * LIFT_SHIFT;
@@ -887,12 +902,14 @@ typedef struct Drawn
     int thing; /* the thing drawn (its uid), 0 for anything else */
     int band;  /* its floor's band (floor - 1) */
     int slab, sl, sr, sf, sn; /* an upper floor's tiles (UpperFloorOrder): its tile box in 8px units */
+    int order; /* at the same depth, the later drawn over (the Windows engine: the order its visuals were added) */
 } Drawn;
 
 static int by_key(const void *a, const void *b)
 {
     const Drawn *p = (const Drawn *)a, *q = (const Drawn *)b;
-    return p->key < q->key ? -1 : p->key > q->key ? 1 : 0;
+    if (p->key != q->key) return p->key < q->key ? -1 : 1;
+    return p->order < q->order ? -1 : p->order > q->order ? 1 : 0; /* never left to chance: qsort isn't stable, and a tie flickered */
 }
 
 /* objs.cc Compare_ranges */
@@ -967,7 +984,7 @@ static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, 
     memset(d, 0, sizeof *d);
     d->key = floorBand * 10000000.0 + depth; /* the floor's band first, then nearer the viewer later (ComputeDepthZIndex) */
     d->picture = pic; d->x = x; d->y = y; d->w = w; d->h = h;
-    d->actor = -1; d->band = floorBand;
+    d->actor = -1; d->band = floorBand; d->order = *count;
     return d;
 }
 
@@ -1041,6 +1058,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     blitShading = 1;
     int cx = (int)floor(cameraX), cy = (int)floor(cameraY);
     int ceiling = ceiling_over_player();
+    int draggedUid = gumps_dragged_map_thing();
 
     /* The ground. */
     int x0 = cx / tileW - 1, y0 = cy / tileH - 1, x1 = (cx + SCREEN_W) / tileW + 1, y1 = (cy + SCREEN_H) / tileH + 1;
@@ -1068,6 +1086,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     {
         const Thing *t = &things[i];
         if (t->gone || hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling)) continue;
+        if (t->uid == draggedUid) continue; /* being dragged: only the one under the pointer is seen */
         if (t->def && t->def->type == T_TRAP && t->def->trapHidden && !t->sprung) continue; /* a hidden trap: unseen till it goes off */
         if (t->steps)
         {
@@ -1094,7 +1113,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count);
                 if (!d) continue;
                 set_box(d, al, at, sw, sd, t->z, topLift > 0 ? topLift : 1);
-                d->thing = t->uid;
+                d->thing = t->uid; d->order = t->seq ? t->seq : t->uid;
             }
             continue;
         }
@@ -1115,7 +1134,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         d->wall = t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == 12 /* Window */);
         d->occludes = t->def && t->def->occludes;
         d->hangs = t->hangs;
-        d->thing = t->uid;
+        d->thing = t->uid; d->order = t->seq ? t->seq : t->uid;
         if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
         { d->slab = 1; d->sl = b.left; d->sr = b.left + b.width - 1; d->sf = b.top; d->sn = b.top + b.depth - 1; } /* a tile object that is part of an upper floor */
     }
@@ -1149,7 +1168,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         if (shimmer) d->opacity = 102; /* 40% */
         double feetY = a->py + tileH / 2.0;
         set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
-        d->actor = i + 1;
+        d->actor = i + 1; d->order = 1 << 30;
     }
     /* Whatever rests on something is drawn after it (Exult: greater in z). */
     for (int pass = 0; pass < 2; pass++)
@@ -1215,6 +1234,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     drawnCount = count;
     lastMs = ms;
 }
+void world_camera_origin(double *x, double *y) { *x = floor(cameraX); *y = floor(cameraY); }
 void world_draw_stats(int *thingsOnMap, int *drawnLast) { *thingsOnMap = thingCount; *drawnLast = drawnCount; }
 
 /* ---------------- The characters, for events ---------------- */
@@ -1286,7 +1306,7 @@ int world_teleport(int actor, int x, int y)
     if (a->body >= 0) bodies[a->body].z = -1000; /* not in its own way */
     a->lift = standing_lift(l, t, a->sizeX, a->sizeY, onFloor);
     if (a->body >= 0) { Body *b = &bodies[a->body]; b->left = l; b->top = t; b->z = a->lift; }
-    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+    if (actor == 0) world_update(0, 0, 0); /* the camera follows by its dead zone (GameTestWindow.UpdateCamera), not centred */
     return 1;
 }
 
@@ -1448,8 +1468,8 @@ static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
     return *lift >= 0;
 }
 
-typedef struct Node { int x, y, f, lift, cost, from, open; } Node;
-static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max);
+typedef struct Node { int x, y, f, lift, cost, from, open; double px, py; } Node; /* px, py: where in its cell the walker stands */
+static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, signed char *offX, signed char *offY, int max);
 
 static int heuristic(int ax, int ay, int bx, int by) { return abs(world_wrap_cells_x(ax - bx)) + abs(world_wrap_cells_y(ay - by)); }
 
@@ -1484,16 +1504,38 @@ static void doors_passable(const Actor *a, int passable)
 
 /* FindPath: from where the walker is to the goal cell (on a floor when asked: 0 = whatever floor), or beside it when it's taken.
    Fills path (cells) and returns its length; -1 when there's no way (allowPartial: the reachable cell nearest the goal instead). */
-static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max)
+static int find_path(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, signed char *offX, signed char *offY, int max)
 {
     doors_passable(a, 1); /* WorldBodiesForPathing: closed unlocked doors will be opened on the way */
-    int length = find_path_core(a, gx, gy, goalFloor, allowPartial, besideOnly, pathX, pathY, max);
+    int length = find_path_core(a, gx, gy, goalFloor, allowPartial, besideOnly, pathX, pathY, offX, offY, max);
     doors_passable(a, 0);
     return length;
 }
 
-static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, int max)
+/* SpotsInCell: offsets from a cell's middle where a walker may stand in it - the middle, then each 8px step off it within the
+   cell, nearest first. Walls built in 8px steps can leave the way between two cells off their middles (a doorway between
+   wall pieces): then the nearest spot that can be stood on and walked to is used (FindPathAStar's pointAt). */
+static int spotCount; static signed char spotX[64], spotY[64];
+static void make_spots(void)
 {
+    spotCount = 0;
+    int rx = tileW / UNIT / 2, ry = tileH / UNIT / 2;
+    for (int j = -ry; j <= ry; j++)
+        for (int i = -rx; i <= rx; i++)
+        {
+            int x = i * UNIT, y = j * UNIT;
+            if (abs(x) * 2 >= tileW || abs(y) * 2 >= tileH || spotCount >= 64) continue;
+            /* sorted as it goes: by |x| + |y|, then by |y| */
+            int k = spotCount++;
+            while (k > 0 && (abs(spotX[k - 1]) + abs(spotY[k - 1]) > abs(x) + abs(y) || (abs(spotX[k - 1]) + abs(spotY[k - 1]) == abs(x) + abs(y) && abs(spotY[k - 1]) > abs(y))))
+            { spotX[k] = spotX[k - 1]; spotY[k] = spotY[k - 1]; k--; }
+            spotX[k] = (signed char)x; spotY[k] = (signed char)y;
+        }
+}
+
+static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPartial, int besideOnly, int *pathX, int *pathY, signed char *offX, signed char *offY, int max)
+{
+    if (!spotCount) make_spots();
     int own = lift_own_body(a);
     int sx = (int)floor(a->px / tileW), sy = (int)floor(a->py / tileH);
     int startF = goalFloor ? floor_of(a->lift) : 0;
@@ -1516,7 +1558,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
     Node *nodes = (Node *)malloc(sizeof(Node) * (size_t)cap);
 #define KEY(x, y, f) (((f) * mapH + (y)) * mapW + (x))
 #define H(n) (heuristic((n).x, (n).y, gx, gy) + (goalFloor ? abs((n).f - goalFloor) * LIFTS_PER_FLOOR : 0))
-    nodes[count] = (Node){ sx, sy, startF, a->lift, 0, -1, 1 };
+    nodes[count] = (Node){ sx, sy, startF, a->lift, 0, -1, 1, a->px, a->py };
     index[KEY(sx, sy, startF)] = count++;
     int nearest = 0, nearestH = H(nodes[0]), found = -1, expansions = 0;
     while (expansions++ < 6000)
@@ -1539,7 +1581,8 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
             if (wraps) { nx = (nx + mapW) % mapW; ny = (ny + mapH) % mapH; }
             if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
             if (!goalFloor && index[KEY(nx, ny, 0)] >= 0 && nodes[index[KEY(nx, ny, 0)]].cost <= cur.cost + 1) continue;
-            double fx = best == 0 ? a->px : cell_cx(cur.x), fy = best == 0 ? a->py : cell_cy(cur.y);
+            double fx = cur.px, fy = cur.py; /* from its spot in this cell */
+            int spotOx = 0, spotOy = 0;
             if (a->movement)
             {
                 int fl, ft, l, t;
@@ -1549,8 +1592,21 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
             }
             else
             {
-                if (!goalFloor && !can_stand_at(a, nx, ny, cur.lift, &lift)) continue;
-                if (!can_sweep(a, fx, fy, toX, toY, cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+                /* to its spot in the next: the next cell's middle first, else its other 8px spots, nearest first */
+                int found1 = 0;
+                for (int sp = 0; sp < spotCount && !found1; sp++)
+                {
+                    double tx = toX + spotX[sp], ty = toY + spotY[sp];
+                    if (!goalFloor)
+                    {
+                        int l, t;
+                        foot_at(a, tx, ty, &l, &t);
+                        if ((lift = try_step(l, t, a->sizeX, a->sizeY, cur.lift, a->sizeZ)) < 0) continue;
+                    }
+                    if (!can_sweep(a, fx, fy, tx, ty, cur.lift, goalFloor ? &lift : &(int){ 0 })) continue;
+                    spotOx = spotX[sp]; spotOy = spotY[sp]; found1 = 1;
+                }
+                if (!found1) continue;
             }
             int nf = goalFloor ? floor_of(lift) : 0, k = KEY(nx, ny, nf), cost = cur.cost + 1;
             if (index[k] >= 0 && nodes[index[k]].cost <= cost) continue;
@@ -1559,7 +1615,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
                 if (count == cap) { cap *= 2; nodes = (Node *)realloc(nodes, sizeof(Node) * (size_t)cap); }
                 index[k] = count++;
             }
-            nodes[index[k]] = (Node){ nx, ny, nf, lift, cost, best, 1 };
+            nodes[index[k]] = (Node){ nx, ny, nf, lift, cost, best, 1, cell_cx(nx) + spotOx, cell_cy(ny) + spotOy };
         }
     }
     int end = found >= 0 ? found : allowPartial && nearest != 0 ? nearest : -1, length = -1;
@@ -1569,7 +1625,11 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
         for (int n = end; n > 0 && nodes[n].from >= 0; n = nodes[n].from) length++;
         if (length > max) length = max;
         int i = length;
-        for (int n = end; n > 0 && nodes[n].from >= 0 && i > 0; n = nodes[n].from) { i--; pathX[i] = nodes[n].x; pathY[i] = nodes[n].y; }
+        for (int n = end; n > 0 && nodes[n].from >= 0 && i > 0; n = nodes[n].from)
+        {
+            i--; pathX[i] = nodes[n].x; pathY[i] = nodes[n].y;
+            if (offX) { offX[i] = (signed char)(nodes[n].px - cell_cx(nodes[n].x)); offY[i] = (signed char)(nodes[n].py - cell_cy(nodes[n].y)); }
+        }
     }
 #undef KEY
 #undef H
@@ -1579,7 +1639,7 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
 }
 
 #define MAX_PATH 512
-typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; int doorToClose, blocked, lockBehind; } Walk;
+typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; signed char ox[MAX_PATH], oy[MAX_PATH]; int doorToClose, blocked, lockBehind; } Walk; /* ox, oy: its spot off the cell's middle */
 static Walk *walks; /* one per actor */
 
 static Walk *walk_of(int actor)
@@ -1595,9 +1655,10 @@ int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
     Walk *w = walk_of(actor);
     if (!a || !w) return 0;
     a->flyPrefer = goalFloor ? base_lift(goalFloor) : FLY_LIFT;
-    int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, MAX_PATH - 1);
+    int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1);
     if (n < 0) return 0;
     w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
+    w->ox[0] = (signed char)(a->px - cell_cx(w->x[0])); w->oy[0] = (signed char)(a->py - cell_cy(w->y[0])); /* from where it stands */
     w->count = n + 1; w->at = 0; w->active = 1;
     a->shownPose = -1;
     return 1;
@@ -1725,8 +1786,9 @@ static void step_walk(int actor, double seconds)
     while (budget > 0.0001)
     {
         if (w->at >= w->count) { w->active = 0; a->walkingNow = 0; return; }
-        double rx = world_wrap_dx(cell_cx(w->x[w->at]) - a->px), ry = world_wrap_dy(cell_cy(w->y[w->at]) - a->py);
-        if (fabs(rx) < 0.01 && fabs(ry) < 0.01) { a->px = cell_cx(w->x[w->at]); a->py = cell_cy(w->y[w->at]); w->at++; continue; }
+        double gx = cell_cx(w->x[w->at]) + w->ox[w->at], gy = cell_cy(w->y[w->at]) + w->oy[w->at]; /* its spot in that cell */
+        double rx = world_wrap_dx(gx - a->px), ry = world_wrap_dy(gy - a->py);
+        if (fabs(rx) < 0.01 && fabs(ry) < 0.01) { a->px = gx; a->py = gy; w->at++; continue; }
         int alongX = fabs(rx) > 0.01;
         double remaining = alongX ? rx : ry, move = fmin(fabs(remaining), budget);
         a->facing = alongX ? (remaining > 0 ? DIR_E : DIR_W) : (remaining > 0 ? DIR_S : DIR_N);
@@ -2592,7 +2654,7 @@ void world_actor_place(int actor, int x, int y, int onFloor)
     if (a->body >= 0) bodies[a->body].z = -100000;
     a->lift = standing_lift(l, t, a->sizeX, a->sizeY, onFloor);
     if (a->body >= 0) { Body *b = &bodies[a->body]; b->left = l; b->top = t; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ; }
-    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+    if (actor == 0) world_update(0, 0, 0); /* the camera follows by its dead zone (GameTestWindow.UpdateCamera), not centred */
 }
 
 /* Change Look: someone else's look (its poses), or back to its own. */
@@ -2637,6 +2699,7 @@ void world_thing_move(int uid, int x, int y, int onFloor)
     Thing *t = thing_by_uid(uid);
     if (!t || x < 0 || y < 0 || x >= mapW || y >= mapH) return;
     t->x = x; t->y = y; t->offX = t->offY = 0;
+    t->seq = nextUid++; /* put down again: over what it ties with, as the Windows engine re-adds its visual */
     Body b;
     thing_box(t, &b);
     if (t->body >= 0) bodies[t->body].z = -100000;
@@ -2929,14 +2992,18 @@ void world_blit(uint32_t *pixels, const Picture *picture, int x, int y, int w, i
 }
 
 /* How a carried thing looks: an object's own picture (lit, spent), a book's or container's (a locked container: its Locked picture). */
-const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked)
+/* A carried thing's look (GameTestWindow.StateOf(InventoryItemInstance) + ObjectLooks.SpriteFor): as a placed one in the same
+   state - lit or spent, how many (a bundle's picture), what it holds. */
+const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked, int quantity, int liquid)
 {
     if (category == 4)
     {
         const ObjectDef *d = def_of(itemId);
         if (!d) return NULL;
-        if (d->type == T_LIGHT) return lit && d->lit ? d->lit : spent && d->spent ? d->spent : d->own;
-        return d->own;
+        Thing as;
+        memset(&as, 0, sizeof as);
+        as.def = d; as.lit = lit; as.spent = spent; as.quantity = quantity > 1 ? quantity : 1; as.liquid = liquid; as.facing = DIR_S;
+        return look_of(&as);
     }
     cJSON *list = category == 5 ? get(get(get(gameJson, "Project"), "Containers"), "Containers") : get(get(gameJson, "Books"), "Books"), *o;
     cJSON_ArrayForEach(o, list)
@@ -2957,17 +3024,311 @@ void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor)
     *x = (int)floor((sx + cameraX) / tileW); *y = (int)floor((sy + cameraY) / tileH); *onFloor = floor_of(player.lift);
 }
 
-/* Whether the player can reach a cell from where they stand (Exult is_grabable, roughly: within 1 tile, or a short walk and a clear line). */
+/* ---------------- Reach (GameTestWindow.Reach: Exult's Fast_pathfinder_client::is_grabable, paths.cc) ----------------
+   1. Within 1 tile (8px unit) of the player, sizes counted (Game_object::distance): reachable.
+   2. Else, for margins 1..5: a short A* walk by the player's footprint (a step rises or drops at most 1 lift, 8 ways, no
+      cutting corners, at most 2x the distance (8..64 steps)) till the footprint touches the target box grown by the margin
+      and is within 5 lifts of it.
+   3. From there a straight 3D line (Zombie) to the target's nearest edge must not pass through anything solid that can't be
+      moved. Walls, doors and windows reach up to the roof; you reach over a table. */
+
+#define MAX_GRAB_DIST 5
+typedef struct T3 { int x, y, z; } T3;
+typedef struct Vol { int x, y, z, w, d, h; } Vol;
+typedef struct ReachSolid { Body b; int table, movable; } ReachSolid;
+static ReachSolid *reachSolids; static int reachSolidCount, reachSolidCap;
+
+static int vol_has(const Vol *v, T3 t) { return t.x >= v->x && t.x < v->x + v->w && t.y >= v->y && t.y < v->y + v->d && t.z >= v->z && t.z < v->z + v->h; }
+static T3 anchor_of(const Vol *v) { T3 t = { v->x + v->w - 1, v->y + v->d - 1, v->z }; return t; }
+static int imax(int a, int b) { return a > b ? a : b; }
+static int tile_distance(T3 a, T3 b) { return imax(imax(abs(b.x - a.x), abs(b.y - a.y)), abs(b.z - a.z)); }
+
+static void add_reach_solid(const Body *b, int table, int movable)
+{
+    if (b->z <= -100000 || b->width <= 0 || b->depth <= 0) return;
+    if (reachSolidCount >= reachSolidCap) { reachSolidCap = reachSolidCap * 2 + 64; reachSolids = (ReachSolid *)realloc(reachSolids, sizeof(ReachSolid) * (size_t)reachSolidCap); }
+    ReachSolid *r = &reachSolids[reachSolidCount++];
+    r->b = *b; r->table = table; r->movable = movable;
+}
+
+/* ReachQuery's solids: the things' boxes (walls, doors and windows to the roof), the upper floors' slabs, the characters. */
+static void reach_solids(void)
+{
+    reachSolidCount = 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->body < 0) continue;
+        int type = t->def ? t->def->type : -1;
+        int wallLike = type == T_WALL || type == T_DOOR || type == T_WINDOW;
+        for (int k = 0; k < t->bodyN; k++)
+        {
+            Body b = bodies[t->body + k];
+            if (wallLike && b.height < 64) b.height = 64;
+            add_reach_solid(&b, type == T_TABLE, t->def ? t->def->portable : 1); /* IsMovable: an object if Portable; books and containers can always be moved */
+        }
+    }
+    for (int i = slabStart; i < slabEnd; i++) add_reach_solid(&bodies[i], 0, 0); /* a floor overhead: not reached through */
+    for (int i = 0; i < npcCount; i++) if (!npcs[i].gone && npcs[i].body >= 0) add_reach_solid(&bodies[npcs[i].body], 0, 1);
+}
+
+/* BlockingAt / ReachBlockerAt: the solid filling this tile and lift (forReach: not a table). -1: none. */
+static int reach_blocker(T3 t, int forReach)
+{
+    for (int i = 0; i < reachSolidCount; i++)
+    {
+        const Body *b = &reachSolids[i].b;
+        if (t.x >= b->left && t.x < b->left + b->width && t.y >= b->top && t.y < b->top + b->depth && t.z >= b->z && t.z < b->z + b->height)
+        {
+            if (forReach && reachSolids[i].table) continue;
+            return i;
+        }
+    }
+    return -1;
+}
+
+static int reach_at_goal(T3 tile, T3 goal, int bl, int bt, int bw, int bd, int aw, int ad)
+{
+    int dz = tile.z - goal.z;
+    if (dz > 5 || dz < -5) return 0;
+    int left = tile.x - aw + 1, top = tile.y - ad + 1;
+    return left < bl + bw && bl < left + aw && top < bt + bd && bt < top + ad;
+}
+
+/* StepTo: the player's footprint (lower-right at this tile), 1 lift tall, rising or dropping at most 1 lift; -1 blocked.
+   Remembered per tile for this question (each is asked several times: the diagonals' corners). */
+#define STEP_MEMO 8192
+typedef struct StepMemo { int x, y, z, lift, used; } StepMemo;
+static StepMemo stepMemo[STEP_MEMO];
+static int reach_step(int x, int y, int z, int aw, int ad)
+{
+    unsigned h = ((unsigned)(x * 73856093) ^ (unsigned)(y * 19349663) ^ (unsigned)(z * 83492791)) & (STEP_MEMO - 1);
+    for (int probe = 0; probe < 16; probe++, h = (h + 1) & (STEP_MEMO - 1))
+    {
+        StepMemo *m = &stepMemo[h];
+        if (m->used && m->x == x && m->y == y && m->z == z) return m->lift;
+        if (!m->used) { m->used = 1; m->x = x; m->y = y; m->z = z; m->lift = try_step(x - aw + 1, y - ad + 1, aw, ad, z, 1); return m->lift; }
+    }
+    return try_step(x - aw + 1, y - ad + 1, aw, ad, z, 1);
+}
+
+/* path.cc Find_path (A*) with Fast_pathfinder_client's costs and limits: the steps (not the start) into out; -1 no path.
+   The open list a binary heap ordered by total, then by when added (the Windows engine's priority queue). */
+#define REACH_NODES 8192
+typedef struct ReachNode { T3 at; int cost, parent, closed; } ReachNode;
+typedef struct HeapEntry { int total; long order; int node; } HeapEntry;
+static ReachNode reachNodes[REACH_NODES];
+static HeapEntry reachHeap[REACH_NODES * 4];
+static int reachHash[16384];
+static unsigned reach_key(T3 t) { return ((unsigned)(t.x * 73856093) ^ (unsigned)(t.y * 19349663) ^ (unsigned)(t.z * 83492791)) & 16383u; }
+static int reach_find(T3 t)
+{
+    for (unsigned h = reach_key(t);; h = (h + 1) & 16383u)
+    {
+        int i = reachHash[h];
+        if (i < 0) return -1;
+        if (reachNodes[i].at.x == t.x && reachNodes[i].at.y == t.y && reachNodes[i].at.z == t.z) return i;
+    }
+}
+static int reach_add(T3 t, int *count)
+{
+    if (*count >= REACH_NODES) return -1;
+    unsigned h = reach_key(t);
+    while (reachHash[h] >= 0) h = (h + 1) & 16383u;
+    reachHash[h] = *count;
+    reachNodes[*count].at = t;
+    return (*count)++;
+}
+static int heap_less(const HeapEntry *a, const HeapEntry *b) { return a->total < b->total || (a->total == b->total && a->order < b->order); }
+static void heap_push(int *n, HeapEntry e)
+{
+    if (*n >= REACH_NODES * 4) return;
+    int i = (*n)++;
+    while (i > 0) { int p = (i - 1) / 2; if (!heap_less(&e, &reachHeap[p])) break; reachHeap[i] = reachHeap[p]; i = p; }
+    reachHeap[i] = e;
+}
+static HeapEntry heap_pop(int *n)
+{
+    HeapEntry top = reachHeap[0], last = reachHeap[--(*n)];
+    int i = 0;
+    for (;;)
+    {
+        int c = 2 * i + 1;
+        if (c >= *n) break;
+        if (c + 1 < *n && heap_less(&reachHeap[c + 1], &reachHeap[c])) c++;
+        if (!heap_less(&reachHeap[c], &last)) break;
+        reachHeap[i] = reachHeap[c]; i = c;
+    }
+    if (*n > 0) reachHeap[i] = last;
+    return top;
+}
+
+static int reach_path(T3 start, T3 goal, int bl, int bt, int bw, int bd, int aw, int ad, T3 *out, int max)
+{
+    int estimate0 = tile_distance(start, goal);
+    int maxCost = 2 * estimate0; if (maxCost < 8) maxCost = 8; if (maxCost > 64) maxCost = 64; /* "Don't try too hard." */
+    for (int i = 0; i < 16384; i++) reachHash[i] = -1;
+    int count = 0, heapN = 0; long order = 0;
+    int s = reach_add(start, &count);
+    reachNodes[s].cost = 0; reachNodes[s].parent = -1; reachNodes[s].closed = 0;
+    heap_push(&heapN, (HeapEntry){ estimate0, order++, s });
+    while (heapN > 0)
+    {
+        HeapEntry e = heap_pop(&heapN);
+        int cur = e.node;
+        if (reachNodes[cur].closed) continue; /* a stale entry */
+        reachNodes[cur].closed = 1;
+        T3 c = reachNodes[cur].at;
+        if (reach_at_goal(c, goal, bl, bt, bw, bd, aw, ad))
+        {
+            int n = 0;
+            for (int k = cur; reachNodes[k].parent >= 0; k = reachNodes[k].parent) n++;
+            if (n > max) return -1;
+            int k = cur;
+            for (int i = n - 1; i >= 0; i--) { out[i] = reachNodes[k].at; k = reachNodes[k].parent; }
+            return n;
+        }
+        int costHere = reachNodes[cur].cost;
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                if (!dx && !dy) continue;
+                int lift = reach_step(c.x + dx, c.y + dy, c.z, aw, ad);
+                if (lift < 0) continue;
+                if (dx && dy && (reach_step(c.x + dx, c.y, c.z, aw, ad) < 0 || reach_step(c.x, c.y + dy, c.z, aw, ad) < 0)) continue; /* no cutting a corner */
+                T3 next = { c.x + dx, c.y + dy, lift };
+                int newCost = costHere + 1, estimate = tile_distance(next, goal);
+                if (newCost + estimate >= maxCost) continue; /* too far away */
+                int k = reach_find(next);
+                if (k >= 0 && reachNodes[k].cost <= newCost) continue;
+                if (k < 0 && (k = reach_add(next, &count)) < 0) continue;
+                reachNodes[k].cost = newCost; reachNodes[k].parent = cur; reachNodes[k].closed = 0;
+                heap_push(&heapN, (HeapEntry){ newCost + estimate, order++, k });
+            }
+    }
+    return -1;
+}
+
+/* paths.cc Get_closest_edge */
+static void closest_edge(const Vol *from, const Vol *to, T3 *p1, T3 *p2)
+{
+    if (p2->x < p1->x) p1->x = from->x; else p2->x = to->x;
+    if (p2->y < p1->y) p1->y = from->y; else p2->y = to->y;
+    if (p2->z < p1->z) p2->z += to->h - 1;
+    p1->z += from->h - 1;
+}
+
+/* Game_object::distance with both sizes counted, then Tile_coord::distance */
+static int exult_distance(const Vol *a, const Vol *b)
+{
+    T3 t1 = anchor_of(a), t2 = anchor_of(b);
+    int x1 = t1.x, y1 = t1.y, z1 = t1.z, x2 = t2.x, y2 = t2.y, z2 = t2.z;
+    if (x2 > x1) x2 -= b->w - 1; else if (x2 < x1) x1 -= a->w - 1;
+    if (y2 > y1) y2 -= b->d - 1; else if (y2 < y1) y1 -= a->d - 1;
+    int dz = z1 - z2;
+    if (dz < 0) { if (z1 + a->h > z2) z1 = z2; else z1 += a->h; }
+    else if (dz > 0) { if (z2 + b->h > z1) z2 = z1; else z2 += b->h; }
+    return imax(imax(abs(x2 - x1), abs(y2 - y1)), abs(z2 - z1));
+}
+
+/* Zombie.cc: a straight line through 3D tiles (not the start), stopping below ground. Returns how many. */
+static int zombie_line(T3 from, T3 to, T3 *out, int max)
+{
+    int d[3] = { to.x - from.x, to.y - from.y, to.z - from.z };
+    if (!d[0] && !d[1] && !d[2]) return 0;
+    int a[3] = { abs(d[0]), abs(d[1]), abs(d[2]) }, dir[3] = { d[0] >= 0 ? 1 : -1, d[1] >= 0 ? 1 : -1, d[2] >= 0 ? 1 : -1 };
+    int cur[3] = { from.x, from.y, from.z };
+    int major, m1, m2;
+    if (a[2] >= a[0] && a[2] >= a[1]) { major = 2; m1 = 0; m2 = 1; }
+    else if (a[1] >= a[0] && a[1] >= a[2]) { major = 1; m1 = 0; m2 = 2; }
+    else { major = 0; m1 = 1; m2 = 2; }
+    int sum1 = 0, sum2 = 0, n = 0;
+    for (int remaining = a[major]; remaining > 0 && n < max; remaining--)
+    {
+        sum1 += a[m1]; sum2 += a[m2];
+        int step1 = sum1 / a[major], step2 = sum2 / a[major];
+        sum1 %= a[major]; sum2 %= a[major];
+        cur[major] += dir[major]; cur[m1] += dir[m1] * step1; cur[m2] += dir[m2] * step2;
+        if (cur[2] < 0) break;
+        out[n].x = cur[0]; out[n].y = cur[1]; out[n].z = cur[2]; n++;
+    }
+    return n;
+}
+
+/* Fast_pathfinder_client::is_grabable_internal */
+static int grabable_internal(const Vol *fromVol, T3 targetTile, const Vol *toVol, int bl, int bt, int bw, int bd)
+{
+    T3 fromTile = anchor_of(fromVol), src = fromTile, dst = targetTile;
+    closest_edge(fromVol, toVol, &src, &dst);
+    src = fromTile; src.z = fromVol->z; /* the walk starts from where the player really stands */
+    static T3 path[128];
+    int n = reach_path(src, dst, bl, bt, bw, bd, fromVol->w, fromVol->d, path, 128);
+    if (n < 0) return 0;
+    T3 t = fromTile;
+    for (int i = 0; i < n; i++)
+    {
+        t = path[i];
+        if (!(t.x == fromTile.x && t.y == fromTile.y && t.z == fromTile.z) && !reach_at_goal(t, dst, bl, bt, bw, bd, fromVol->w, fromVol->d) && reach_blocker(t, 0) >= 0) return 0; /* blocked */
+    }
+    if (!reach_at_goal(t, dst, bl, bt, bw, bd, fromVol->w, fromVol->d)) return 0;
+    Vol moved = *fromVol;
+    moved.x += t.x - src.x; moved.y += t.y - src.y; moved.z += t.z - src.z;
+    dst = targetTile;
+    closest_edge(&moved, toVol, &t, &dst);
+    static T3 line[256];
+    int m = zombie_line(t, dst, line, 256);
+    if (m == 0) return 0; /* "if (zpath.get_num_steps() == 0) return false;" */
+    for (int i = 0; i < m; i++)
+    {
+        if (vol_has(toVol, line[i]) || vol_has(fromVol, line[i]) || vol_has(&moved, line[i])) continue;
+        int b = reach_blocker(line[i], 1);
+        if (b >= 0 && !reachSolids[b].movable) return 0;
+    }
+    return 1;
+}
+
+static int grabable(Vol target, int isSpot)
+{
+    int l, t;
+    player_foot(player.px, player.py, &l, &t);
+    Vol from = { l, t, player.lift, player.sizeX, player.sizeY, player.sizeZ };
+    Vol near = target;
+    if (isSpot) { near.w = 1; near.d = 1; near.h = 0; }
+    if (exult_distance(&from, &near) <= 1) return 1;
+    reach_solids();
+    memset(stepMemo, 0, sizeof stepMemo);
+    /* the walk can't go further than 64 tiles: only the boxes round here are looked at for each step */
+    stepWindowOn = 1; stepWindowL = from.x - 70; stepWindowT = from.y - 70; stepWindowR = from.x + 70; stepWindowB = from.y + 70; stepWindowN = 0;
+    for (int i = 0; i < bodyCount; i++)
+        if (bodies[i].left < stepWindowR && bodies[i].left + bodies[i].width > stepWindowL && bodies[i].top < stepWindowB && bodies[i].top + bodies[i].depth > stepWindowT)
+        { if (stepWindowN >= stepWindowCap) { stepWindowCap = stepWindowCap * 2 + 256; stepWindow = (int *)realloc(stepWindow, sizeof(int) * (size_t)stepWindowCap); } stepWindow[stepWindowN++] = i; }
+    int found = 0;
+    for (int margin = 1; margin <= MAX_GRAB_DIST; margin++)
+    {
+        int bl = target.x - margin, bt = target.y - margin;
+        int bw = isSpot ? 2 * margin : target.w + 2 * margin, bd = isSpot ? 2 * margin : target.d + 2 * margin;
+        if (grabable_internal(&from, anchor_of(&target), &target, bl, bt, bw, bd)) { found = 1; break; }
+    }
+    stepWindowOn = 0;
+    return found;
+}
+
+/* Is this thing on the map within the player's reach (its own box, solid or not)? */
+int world_reachable_thing(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return 0;
+    Body b;
+    thing_box(t, &b);
+    Vol v = { b.left, b.top, b.z, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1, b.height > 0 ? b.height : 1 };
+    return grabable(v, 0);
+}
+
+/* Is this spot (the middle of a cell, at a lift) within the player's reach (IsSpotReachable)? */
 int world_reachable(int x, int y, int z)
 {
-    double tx = x * tileW + tileW / 2.0, ty = y * tileH + tileH / 2.0;
-    double tiles = fmax(fabs(tx - player.px), fabs(ty - player.py)) / UNIT;
-    int px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
-    if (abs(px - x) <= 1 && abs(py - y) <= 1 && abs(z - player.lift) <= 5) return 1;
-    if (tiles > 5 * 2 + (tileW > tileH ? tileW : tileH) / UNIT || abs(z - player.lift) > 5 + LIFTS_PER_FLOOR) return 0;
-    int wx[MAX_PATH], wy[MAX_PATH];
-    int n = find_path(&player, x, y, floor_of(z), 0, 1, wx, wy, MAX_PATH - 1);
-    return n >= 0 && n <= (int)(2 * tiles + 8);
+    Vol v = { x * unitsX + unitsX / 2, y * unitsY + unitsY / 2, z, 1, 1, 1 };
+    return grabable(v, 1);
 }
 
 /* A stack on the map grows (a stackable thing dropped on it). */
@@ -3104,7 +3465,7 @@ void world_restore_player(cJSON *runtime)
     if (!cJSON_IsNumber(get(runtime, "PlayerPixelX"))) return;
     player.px = get(runtime, "PlayerPixelX")->valuedouble; player.py = get(runtime, "PlayerPixelY")->valuedouble;
     player.lift = num(runtime, "PlayerLift", player.lift); player.facing = num(runtime, "PlayerFacing", DIR_S) & 7;
-    cameraX = player.px - SCREEN_W / 2.0; cameraY = player.py - SCREEN_H / 2.0;
+    cameraX = cameraY = 0; camera_update(); /* a loaded game: a fresh window in the Windows engine, its camera from the corner */
 }
 
 cJSON *world_thing_placed(int uid) { Thing *t = thing_by_uid(uid); return t ? t->placed : NULL; }
@@ -3264,7 +3625,7 @@ void world_actor_place_lift(int actor, int x, int y, int lift)
     for (int i = 0; i < bodyCount && n < 512; i++) if (overlaps(&bodies[i], l, t, a->sizeX, a->sizeY) && (actor == 0 || i != a->body)) here[n++] = &bodies[i];
     a->lift = floor_below(here, n, lift + 1);
     if (a->body >= 0) bodies[a->body].z = a->lift;
-    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+    if (actor == 0) world_update(0, 0, 0); /* the camera follows by its dead zone (GameTestWindow.UpdateCamera), not centred */
 }
 
 /* The player's spot in 8-pixel units (a sextant's reading). */
@@ -3445,7 +3806,7 @@ void world_shift_actor(int actor, double dx, double dy, int dz)
         foot_at(a, a->px, a->py, &l, &t);
         Body *b = &bodies[a->body]; b->left = l; b->top = t; b->z = a->lift;
     }
-    if (actor == 0) { cameraX = a->px - SCREEN_W / 2.0; cameraY = a->py - SCREEN_H / 2.0; world_update(0, 0, 0); }
+    if (actor == 0) world_update(0, 0, 0); /* the camera follows by its dead zone (GameTestWindow.UpdateCamera), not centred */
 }
 
 void world_actor_set_facing(int actor, int facing) { Actor *a = actor_of(actor); if (a) a->facing = facing & 7; }
@@ -3652,7 +4013,7 @@ static int move_aside(int blocker, int walker, int dx, int dy)
         if (!free_cell(blocker, x, y)) continue;
         if (blocker == 0) { put_on_cell(0, x, y); return 1; }
         Walk *w = walk_of(blocker);
-        w->x[0] = bx; w->y[0] = by; w->x[1] = x; w->y[1] = y; /* steps there, then carries on with what it was doing */
+        w->x[0] = bx; w->y[0] = by; w->x[1] = x; w->y[1] = y; w->ox[0] = w->oy[0] = w->ox[1] = w->oy[1] = 0; /* steps there, then carries on with what it was doing */
         w->count = 2; w->at = 0; w->active = 1; w->blocked = 0;
         return 1;
     }

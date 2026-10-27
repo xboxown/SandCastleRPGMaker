@@ -30,6 +30,36 @@ static const unsigned char BUILT_IN[95][7] = {
     {8,4,0,0,0,0,0}
 };
 
+/* Small letters (DialogBoxBuilder's fallback is the system font, in both cases): rows 0-8, x-height rows 3-7, tails on row 8. */
+static const unsigned char BUILT_IN_LOWER[26][9] = {
+    {0,0,0,14,1,15,17,15,0},
+    {0,16,16,30,17,17,17,30,0},
+    {0,0,0,14,16,16,16,14,0},
+    {0,1,1,15,17,17,17,15,0},
+    {0,0,0,14,17,31,16,14,0},
+    {0,6,8,28,8,8,8,8,0},
+    {0,0,0,15,17,17,15,1,14},
+    {0,16,16,30,17,17,17,17,0},
+    {0,16,0,16,16,16,16,16,0},
+    {0,4,0,4,4,4,4,20,8},
+    {0,16,16,18,20,24,20,18,0},
+    {0,16,16,16,16,16,16,8,0},
+    {0,0,0,26,21,21,21,21,0},
+    {0,0,0,30,17,17,17,17,0},
+    {0,0,0,14,17,17,17,14,0},
+    {0,0,0,30,17,17,30,16,16},
+    {0,0,0,15,17,17,15,1,1},
+    {0,0,0,22,24,16,16,16,0},
+    {0,0,0,15,16,14,1,30,0},
+    {0,8,8,28,8,8,8,6,0},
+    {0,0,0,17,17,17,17,15,0},
+    {0,0,0,17,17,17,10,4,0},
+    {0,0,0,17,17,21,21,10,0},
+    {0,0,0,17,10,4,10,17,0},
+    {0,0,0,17,17,17,15,1,14},
+    {0,0,0,31,2,4,8,31,0}
+};
+
 static Glyph builtInGlyph[95];
 static Picture builtInPictures[95];
 
@@ -37,21 +67,30 @@ static void make_built_in(Font *f)
 {
     f->builtIn = 1;
     f->cellHeight = 10; /* DialogBoxBuilder.FallbackLineHeight */
-    f->spaceWidth = 4;
+    f->spaceWidth = 3;
     for (int i = 0; i < 95; i++)
     {
         int c = i + 32;
-        int src = c >= 'a' && c <= 'z' ? c - 32 - 32 : (c > '`' ? 0 : i); /* lowercase as capitals; past the table: blank */
+        int lower = c >= 'a' && c <= 'z', src = lower ? 0 : (c > '`' ? 0 : i); /* past the table: blank */
         Picture *p = &builtInPictures[i];
         if (!p->pixels)
         {
             p->width = 5; p->height = 9;
             p->pixels = (uint32_t *)calloc(45, 4);
-            for (int y = 0; y < 7; y++)
+            for (int y = 0; y < 9; y++)
                 for (int x = 0; x < 5; x++)
-                    if (src < 65 && (BUILT_IN[src][y] >> (4 - x)) & 1) p->pixels[(y + 1) * 5 + x] = 0xFFFFFFFFu;
+                {
+                    int on = lower ? (BUILT_IN_LOWER[c - 'a'][y] >> (4 - x)) & 1 : (y >= 1 && y <= 7 && src < 65 && ((BUILT_IN[src][y - 1] >> (4 - x)) & 1));
+                    if (on) p->pixels[y * 5 + x] = 0xFFFFFFFFu;
+                }
         }
-        builtInGlyph[i] = (Glyph){ p, 0, 5, 6 };
+        /* each letter as wide as its ink, a pixel apart (as the system font is proportional) */
+        int left = 5, right = -1;
+        for (int y = 0; y < 9; y++)
+            for (int x = 0; x < 5; x++)
+                if (p->pixels[y * 5 + x]) { if (x < left) left = x; if (x > right) right = x; }
+        if (right < 0) { left = 0; right = 1; }
+        builtInGlyph[i] = (Glyph){ p, left, right - left + 1, right - left + 2 };
         f->glyphs[i] = builtInGlyph[i];
     }
 }

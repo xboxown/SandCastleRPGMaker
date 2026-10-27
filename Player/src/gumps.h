@@ -39,4 +39,5 @@ void gumps_flash_pointer(int kind);
 void gumps_refuse(int kind, const char *message);
 void gumps_draw_pointer(uint32_t *pixels, uint32_t ms);
 
+int gumps_dragged_map_thing(void);   /* the map thing being dragged (0: none) - not drawn where it was */
 #endif

@@ -588,7 +588,7 @@ static void draw_items(DollWin *win, cJSON *part, PartState *r, int px, int py)
         }
         int lit, spent;
         items_light(it, &lit, &spent);
-        const Picture *p = now_picture(world_item_look(items_category(it), items_item_id(it), lit, spent, items_is_locked(it)));
+        const Picture *p = now_picture(world_item_look(items_category(it), items_item_id(it), lit, spent, items_is_locked(it), items_quantity(it), items_liquid(it, -1)));
         int w = p ? (int)(((p->width + 7) / 8 * 8) * counter) : 32, h = p ? (int)(((p->height + 7) / 8 * 8) * counter) : 32;
         double ix, iy;
         if (kind_of(part) == K_SLOT) { int sw, sh; size_of_part(part, 0, &sw, &sh); ix = (sw - w) / 2.0; iy = (sh - h) / 2.0; }
@@ -1739,7 +1739,7 @@ static void draw_save_part(DollWin *win, cJSON *part, int i, int x, int y, int w
 }
 
 /* Tells the player on the screen itself and in Game.log. */
-static void say(const char *text) { game_log(text); gumps_label(text); }
+static void say(const char *text) { game_log(text); } /* the Windows engine's status bar - not shown in a built game */
 
 static void save_error(int number, const char *detail) { game_error_shown(number, detail, 0); }
 

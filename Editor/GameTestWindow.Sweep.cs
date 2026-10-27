@@ -50,6 +50,10 @@ public partial class GameTestWindow
     private bool CanWalkBetween(MapCharacter mapCharacter, (int X, int Y) from, (int X, int Y) to, bool fromWhereItStands, int fromLift, BodySource world) =>
         CanWalkBetween(mapCharacter, from, to, fromWhereItStands, fromLift, world, out _);
 
+    /// <summary>A character's walk between two points (its spots in two cells, FindPathAStar).</summary>
+    private bool CanWalkBetweenPoints(MapCharacter mapCharacter, double fromX, double fromY, double toX, double toY, int fromLift, BodySource world, out int lift) =>
+        CanSweep((px, py) => ActorFootprintAt(px, py, mapCharacter.Size), fromX, fromY, toX, toY, fromLift, mapCharacter.Size.Z, mapCharacter.Placement, world, out lift);
+
     /// <summary>The player's walk from one cell's middle to the next (and the lift they end at).</summary>
     private bool PlayerCanWalkBetween((int X, int Y) from, (int X, int Y) to, int fromLift, BodySource world, out int lift) =>
         CanSweep(PlayerFootprintAt, CellCenterX(from.X), CellCenterY(from.Y), CellCenterX(to.X), CellCenterY(to.Y), fromLift, _playerSize.Z, null, world, out lift);
