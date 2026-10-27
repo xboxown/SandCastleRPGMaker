@@ -818,6 +818,17 @@ public partial class GameTestWindow : Window
             character.EquippedSlots.TryGetValue(slot, out int equippedInstanceId);
             var equippedItem = equippedInstanceId > 0 ? character.Inventory.FirstOrDefault(i => i.InstanceId == equippedInstanceId) : null;
 
+            // Serpent Isle's paperdoll: its worn look on the body, in Exult's order (GameTestWindow.WornLooks.cs).
+            if (character.Paperdoll.WornOnBody && equippedItem is not null && BuildWornVisual(gump, character, equippedItem, slot, bodySprite) is { } wornVisual)
+            {
+                Panel.SetZIndex(wornVisual, 10 + WornOrder(slot));
+                wornVisual.Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand;
+                wornVisual.IsHitTestVisible = true;
+                wornVisual.Tag = new SlotTarget(gump, slot);
+                HideIfBeingDragged(wornVisual);
+                gump.BodyCanvas.Children.Add(wornVisual);
+                continue;
+            }
             // The equipped item's own real sprite/icon, drawn directly at the slot's position - this IS the paperdoll visual; there is nothing else to draw for a slot. Real, confirmed extraction - shared now (BuildEquippedItemIconVisual below) so the real custom-slot loop further down uses the exact same real rendering logic, not a second, separately-maintained copy of it.
             FrameworkElement? itemVisual = equippedItem is not null ? BuildEquippedItemIconVisual(gump, equippedItem, paperdollItemCounterScale) : null;
             // Interaction is never wired on the visual itself - it only carries a SlotTarget tag; the window's one mouse pipeline
@@ -826,7 +837,7 @@ public partial class GameTestWindow : Window
             {
                 Canvas.SetLeft(itemVisual, pos.X);
                 Canvas.SetTop(itemVisual, pos.Y);
-                Panel.SetZIndex(itemVisual, 10);
+                Panel.SetZIndex(itemVisual, character.Paperdoll.WornOnBody ? 10 + WornOrder(slot) : 10);
                 itemVisual.Cursor = isLockedLeftHand ? Cursors.No : Cursors.Hand;
                 itemVisual.IsHitTestVisible = true;
                 itemVisual.Tag = new SlotTarget(gump, slot);

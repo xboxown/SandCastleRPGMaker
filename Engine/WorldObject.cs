@@ -171,6 +171,8 @@ public class WorldObject
 
     /// <summary>The Object Editor folder it's kept in (-1 = none) - for finding it only; it works the same anywhere.</summary>
     public int FolderId { get; set; } = -1;
+    /// <summary>Worn on a Serpent Isle-style paperdoll: its picture on the body (Object Editor > Worn on the body).</summary>
+    public WornLookSettings Worn { get; set; } = new();
 
     /// <summary>Its events (Object Editor > Event), as books and containers have.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();

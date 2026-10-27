@@ -291,6 +291,18 @@ public partial class ObjectEditorWindow : Window
         };
         var body = Group("Look");
         body.Children.Add(SpritePicker(label, () => (obj.SpriteGroup, obj.SpriteName), (g, n) => { obj.SpriteGroup = g; obj.SpriteName = n; }));
+        if (obj.Type is not (ObjectType.Tile or ObjectType.Wall or ObjectType.Door or ObjectType.Window or ObjectType.Roof or ObjectType.Stairs))
+        {
+            var worn = Group("Worn on the body (Serpent Isle paperdolls)");
+            worn.Children.Add(Note("On a paperdoll set to \"Worn on the body\" (Character Editor > inventory paperdoll), this picture is drawn on the body itself, over the body's picture at the offset (its pixels) - the armour on the chest, the sword in the fist. None: its icon in its slot."));
+            worn.Children.Add(SpritePicker("Worn look", () => (obj.Worn.Look.SpriteGroup, obj.Worn.Look.SpriteName), (g, n) => { obj.Worn.Look.SpriteGroup = g; obj.Worn.Look.SpriteName = n; }, identity: SpriteFolderIdentity.Paperdoll));
+            worn.Children.Add(SpritePicker("In the left hand (optional)", () => (obj.Worn.LeftHand.SpriteGroup, obj.Worn.LeftHand.SpriteName), (g, n) => { obj.Worn.LeftHand.SpriteGroup = g; obj.Worn.LeftHand.SpriteName = n; }, compact: true, identity: SpriteFolderIdentity.Paperdoll));
+            worn.Children.Add(SpritePicker("On a female character (optional)", () => (obj.Worn.Female.SpriteGroup, obj.Worn.Female.SpriteName), (g, n) => { obj.Worn.Female.SpriteGroup = g; obj.Worn.Female.SpriteName = n; }, compact: true, identity: SpriteFolderIdentity.Paperdoll));
+            var offsets = new StackPanel { Orientation = Orientation.Horizontal };
+            offsets.Children.Add(Labeled("Offset X", InlineNumber(() => obj.Worn.OffsetX, v => obj.Worn.OffsetX = v)));
+            offsets.Children.Add(Labeled("Offset Y", InlineNumber(() => obj.Worn.OffsetY, v => obj.Worn.OffsetY = v)));
+            worn.Children.Add(offsets);
+        }
     }
 
     private void BuildDoor(WorldObject obj)

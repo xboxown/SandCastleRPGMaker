@@ -221,6 +221,10 @@ public sealed class PaperdollLayoutWindow : Window
         _settings.Children.Add(Note("Drag any slot, number or gauge to place it. Items show what this character starts with, at their size in the game, so you can see they sit right on the body."));
 
         var pd = _character.Paperdoll;
+        _settings.Children.Add(Heading("Look"));
+        _settings.Children.Add(Check("Worn on the body (Serpent Isle): what's worn is drawn on the body - each thing's worn look (Object Editor > Worn on the body) - not as icons in the slots",
+            () => pd.WornOnBody, v => pd.WornOnBody = v));
+        _settings.Children.Add(Note("Drawn in Exult's order: backpack, cloak, legs, feet, body armour, belt, head, neck, arms, rings, gloves, left hand, right hand. The slots stay where they are (invisible) for dropping things; something without a worn look shows its icon in its slot."));
         _settings.Children.Add(Heading("Slots on this paperdoll"));
         _settings.Children.Add(Note("Untick a slot this paperdoll doesn't have (one ring, no pouch): it isn't drawn and nothing goes in it. Built-in slots can't be deleted - custom slots are added, renamed and deleted in the Character Editor."));
         var slots = new WrapPanel();

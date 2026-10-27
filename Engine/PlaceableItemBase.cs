@@ -10,6 +10,8 @@ public abstract class PlaceableItemBase
 {
     public int Id { get; set; }
     public string Name { get; set; } = "New Item";
+    /// <summary>Worn on a Serpent Isle-style paperdoll (a backpack on the back): its picture on the body.</summary>
+    public WornLookSettings Worn { get; set; } = new();
 
     /// <summary>WorldObject/NPC id that "owns" this item, or -1 for unowned/free.</summary>
     public int BelongToId { get; set; } = -1;

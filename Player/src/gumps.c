@@ -314,6 +314,58 @@ int gumps_dragging_doll_part(const void *state, int part) { return dragging && d
 const DollState *gumps_drag_doll_state(void) { return dragging && !drag.partDragged ? drag.dollState : NULL; }
 int gumps_drag_doll_part(void) { return dragging && drag.dollState && !drag.partDragged ? drag.dollPart : -1; }
 
+/* ---------------- Serpent Isle's paperdoll: worn looks on the body (GameTestWindow.WornLooks.cs) ---------------- */
+
+/* Exult's Paperdoll_gump::paint order, as built-in slot -> rank: backpack, cloak, legs, feet, body, belt, pouch, head, neck,
+   arms, rings, gloves, left hand, right hand. */
+static const int WORN_RANK[15] = { /* Head */ 7, /* Neck */ 8, /* Body */ 4, /* Arms */ 9, /* Gloves */ 12, /* Belt */ 5, /* Back */ 1,
+    /* Legs */ 2, /* Feet */ 3, /* RightHand */ 14, /* LeftHand */ 13, /* Ring1 */ 10, /* Ring2 */ 11, /* Backpack */ 0, /* Pouch */ 6 };
+
+/* The slot keys in the order they're drawn: as they come, or (worn on the body) built-in ones by Exult's order, custom ones after. */
+static int drawn_keys(const Gump *g, int *keys)
+{
+    int n = slot_keys(g->characterId, keys);
+    if (!flag(paperdoll_of(g->characterId), "WornOnBody")) return n;
+    for (int i = 1; i < n; i++)
+        for (int j = i; j > 0; j--)
+        {
+            int a = keys[j - 1] < 100 ? WORN_RANK[keys[j - 1]] : 100 + j - 1, b = keys[j] < 100 ? WORN_RANK[keys[j]] : 100 + j;
+            if (a <= b) break;
+            int t = keys[j]; keys[j] = keys[j - 1]; keys[j - 1] = t;
+        }
+    return n;
+}
+
+static cJSON *item_def(const Item *it)
+{
+    int c = items_category(it), id = items_item_id(it);
+    cJSON *d;
+    if (c == CAT_CONTAINER) return container_def(id);
+    cJSON *list = c == CAT_OBJECT ? get(get(project(), "Objects"), "Objects") : get(get((cJSON *)world_json(), "Books"), "Books");
+    cJSON_ArrayForEach(d, list) if (num(d, "Id", -2) == id) return d;
+    return NULL;
+}
+
+/* Its worn look in this slot (in the left hand, on a woman, else its own) and where it goes over the body: 0 when it has none. */
+static int worn_look(const Gump *g, const Item *it, int slotKey, const Picture **pic, int *x, int *y, int *w, int *h)
+{
+    cJSON *pd = paperdoll_of(g->characterId), *worn = get(item_def(it), "Worn"), *link = NULL;
+    if (!flag(pd, "WornOnBody") || slotKey >= 100 || !worn) return 0;
+    if (slotKey == 10 && str(get(worn, "LeftHand"), "SpriteName")[0]) link = get(worn, "LeftHand");
+    else if (num(character_json(g->characterId), "Gender", 0) == 1 && str(get(worn, "Female"), "SpriteName")[0]) link = get(worn, "Female");
+    else if (str(get(worn, "Look"), "SpriteName")[0]) link = get(worn, "Look");
+    if (!link) return 0;
+    *pic = sprite_now(sprite_find(str(link, "SpriteGroup"), str(link, "SpriteName")));
+    if (!*pic) return 0;
+    /* over the body's picture, as it's fitted into the paperdoll (its pixels scaled the same) */
+    const Picture *body = sprite_now(sprite_find(str(pd, "BodySpriteGroup"), str(pd, "BodySpriteName")));
+    double bs = body && body->width > 0 && body->height > 0 ? fmin((DOLL_W / 2.0) / body->width, (DOLL_H / 2.0) / body->height) : 1;
+    double ix = body ? (DOLL_W / 2.0 - body->width * bs) / 2 : 0, iy = body ? (DOLL_H / 2.0 - body->height * bs) / 2 : 0;
+    *x = g->x + (int)(ix + num(worn, "OffsetX", 0) * bs); *y = g->y + (int)(iy + num(worn, "OffsetY", 0) * bs);
+    *w = (int)((*pic)->width * bs + 0.5); *h = (int)((*pic)->height * bs + 0.5);
+    return 1;
+}
+
 static void draw_doll(uint32_t *pixels, const Gump *g)
 {
     cJSON *pd = paperdoll_of(g->characterId);
@@ -321,12 +373,14 @@ static void draw_doll(uint32_t *pixels, const Gump *g)
     const Picture *body = sprite_now(sprite_find(str(pd, "BodySpriteGroup"), str(pd, "BodySpriteName")));
     if (body) world_blit(pixels, body, g->x, g->y, DOLL_W / 2, DOLL_H / 2);
     else fill(pixels, g->x, g->y, DOLL_W / 2, DOLL_H / 2, 0xEE1A1A1Au);
-    int keys[64], n = slot_keys(g->characterId, keys);
+    int keys[64], n = drawn_keys(g, keys);
     for (int i = 0; i < n; i++)
     {
         Item *it = items_in_slot(g->characterId, keys[i]);
         double x, y;
         if (!it || being_dragged(it) || !slot_spot(g->characterId, keys[i], &x, &y)) continue;
+        const Picture *pic; int wx, wy, ww, wh;
+        if (worn_look(g, it, keys[i], &pic, &wx, &wy, &ww, &wh)) { world_blit(pixels, pic, wx, wy, ww, wh); continue; } /* worn on the body */
         draw_item(pixels, it, g->x + (int)(x * s), g->y + (int)(y * s));
     }
     double carried, max;
@@ -568,12 +622,14 @@ static Target hit(int x, int y)
         cJSON *pd = paperdoll_of(g->characterId);
         int ex = g->x + (int)((DOLL_W - 28) * s), ey = g->y + (int)(4 * s);
         if (x >= ex && y >= ey && x < ex + (int)(24 * s) && y < ey + (int)(24 * s)) { t.kind = T_EXIT; return t; }
-        int keys[64], n = slot_keys(g->characterId, keys);
-        for (int i = n - 1; i >= 0; i--)
+        int keys[64], n = drawn_keys(g, keys);
+        for (int i = n - 1; i >= 0; i--) /* the topmost drawn first */
         {
             Item *it = items_in_slot(g->characterId, keys[i]);
             double sx, sy;
             if (!it || !slot_spot(g->characterId, keys[i], &sx, &sy)) continue;
+            const Picture *pic; int wx, wy, ww, wh;
+            if (worn_look(g, it, keys[i], &pic, &wx, &wy, &ww, &wh)) { if (solid_at(pic, wx, wy, ww, wh, x, y)) { t.kind = T_SLOT; t.slotKey = keys[i]; t.item = it; return t; } continue; }
             int iw, ih;
             item_size(it, &iw, &ih);
             if (solid_at(sprite_now(item_look(it)), g->x + (int)(sx * s), g->y + (int)(sy * s), iw, ih, x, y)) { t.kind = T_SLOT; t.slotKey = keys[i]; t.item = it; return t; }

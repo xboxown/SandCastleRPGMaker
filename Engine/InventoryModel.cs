@@ -128,6 +128,8 @@ public class PaperdollDefinition
 {
     public string BodySpriteGroup { get; set; } = string.Empty;
     public string BodySpriteName { get; set; } = string.Empty;
+    /// <summary>Serpent Isle's paperdoll: what's worn is drawn on the body (each thing's worn look, in Exult's order) instead of as icons in the slots; a thing without a worn look shows its icon in its slot.</summary>
+    public bool WornOnBody { get; set; }
 
     /// <summary>Real, configurable exit-button art, per spec - a 2-frame sprite (frame 1 = unpressed, frame 2 = pressed while held down, returning to frame 1 on release before the gump actually closes), picked from the sprite library exactly like the body is, rather than a hardcoded placeholder glyph.</summary>
     public string ExitButtonSpriteGroup { get; set; } = string.Empty;

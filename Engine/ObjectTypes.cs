@@ -246,6 +246,22 @@ public static class ObjectTypes
 }
 
 /// <summary>A sprite chosen from the Sprite Editor (group + name). Empty name = none.</summary>
+/// <summary>
+/// How a thing looks worn on a Serpent Isle-style paperdoll (Exult's paperdoll info, SI): its picture drawn on
+/// the body itself - the armour on the chest, the sword in the fist - instead of its icon in the slot.
+/// The picture is placed over the body's picture at its offset (the body picture's own pixels).
+/// </summary>
+public class WornLookSettings
+{
+    public SpriteLink Look { get; set; } = new();
+    /// <summary>In the left hand (a sword drawn the other way), if it looks different there.</summary>
+    public SpriteLink LeftHand { get; set; } = new();
+    /// <summary>On a female character (Exult's gender frames), if it looks different.</summary>
+    public SpriteLink Female { get; set; } = new();
+    public int OffsetX { get; set; }
+    public int OffsetY { get; set; }
+}
+
 public class SpriteLink
 {
     public string SpriteGroup { get; set; } = string.Empty;
