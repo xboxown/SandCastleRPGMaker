@@ -25,7 +25,7 @@ public partial class GameTestWindow
     /// above it: the value is passed on when it's accepted (check mark or
     /// Enter); Escape cancels. The game waits while it's up.
     /// </summary>
-    private void ShowNumberSlider(string question, int min, int max, int step, int value, Action<int> accepted)
+    private void ShowNumberSlider(string question, int min, int max, int step, int value, Action<int> accepted, Action? cancelled = null)
     {
         var slider = new NumberSliderControl(_systemSettings.Slider, _sprites, _resources, min, max, step, value, GameTextLabel);
         var panel = new StackPanel { HorizontalAlignment = HorizontalAlignment.Center };
@@ -38,7 +38,7 @@ public partial class GameTestWindow
         }
         panel.Children.Add(slider);
         slider.Accepted += v => { CloseObjectOverlay(); accepted(v); };
-        slider.Cancelled += CloseObjectOverlay;
+        slider.Cancelled += () => { CloseObjectOverlay(); cancelled?.Invoke(); };
         ShowObjectOverlay(panel, takesClicks: true, scaleLikeViewport: true);
         _overlayKeys = slider.HandleKey;
         StatusText.Text = $"{question.Trim()} ({min}-{max}: arrows or drag, Enter to accept, Escape to cancel)";

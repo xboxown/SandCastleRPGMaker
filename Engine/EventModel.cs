@@ -120,7 +120,8 @@ public enum EventCommandType
     ShowError,
     DriveVehicle, StopDriving, TravelVehicle, SetVehicleSpeed,
     Earthquake,
-    LearnLanguage
+    LearnLanguage,
+    Shop
 }
 
 /// <summary>

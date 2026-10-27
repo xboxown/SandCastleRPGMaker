@@ -20,6 +20,7 @@ typedef struct Prompt
     char names[128][64]; int ids[128];
     void (*done)(int ok, const char *text, int id, void *context); void *context;
     uint32_t lastClick; int lastRow;
+    int selected; /* the start text is selected (Windows' SelectAll): the first key typed replaces it */
 } Prompt;
 static Prompt p;
 
@@ -41,6 +42,7 @@ void prompt_ask(int kind, const char *question, const char *start, int longest, 
     p.longest = longest < 1 ? 1 : longest > 200 ? 200 : longest;
     snprintf(p.question, sizeof p.question, "%s", question ? question : "");
     snprintf(p.text, (size_t)p.longest + 1, "%s", start ? start : "");
+    p.selected = p.text[0] != 0;
 }
 
 void prompt_add_row(const char *name, int id)
@@ -63,13 +65,13 @@ int prompt_key(int key, int ch)
         if (p.chosen >= p.top + 8) p.top = p.chosen - 7;
         return 1;
     }
+    if (key == KEY_BACKSPACE && p.selected) { p.text[0] = 0; p.selected = 0; return 1; } /* the selection deleted */
+    if (ch >= 32 && ch < 127 && p.kind == PROMPT_NUMBER && !(ch >= '0' && ch <= '9') && ch != '-') return 1; /* digits and '-' only */
+    if (ch >= 32 && ch < 127 && p.selected) p.text[0] = 0; /* typing over the selection */
+    if (key == KEY_BACKSPACE || (ch >= 32 && ch < 127)) p.selected = 0;
     size_t n = strlen(p.text);
     if (key == KEY_BACKSPACE && n > 0) p.text[n - 1] = 0;
-    if (ch >= 32 && ch < 127 && (int)n < p.longest)
-    {
-        if (p.kind == PROMPT_NUMBER && !(ch >= '0' && ch <= '9') && ch != '-') return 1; /* digits and '-' only */
-        p.text[n] = (char)ch; p.text[n + 1] = 0;
-    }
+    if (ch >= 32 && ch < 127 && (int)n < p.longest) { p.text[n] = (char)ch; p.text[n + 1] = 0; }
     return 1;
 }
 
@@ -136,6 +138,7 @@ void prompt_draw(uint32_t *px, uint32_t ms)
     {
         fill(px, x + 8, cy - 1, w - 16, lh + 2, 0xFF2A2420u);
         char shown[210];
+        if (p.selected) fill(px, x + 9, cy - 1, font_text_width(f, p.text) + 2, lh + 2, 0xFF3060C0u); /* selected, as Windows shows it */
         snprintf(shown, sizeof shown, "%s%s", p.text, (ms / 500) % 2 ? "_" : ""); /* the caret blinking */
         font_draw(f, px, x + 10, cy, shown, 0xFFFFFFFFu);
         cy += lh + 2;

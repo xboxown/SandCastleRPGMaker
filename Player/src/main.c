@@ -29,6 +29,8 @@
 #include "work.h"
 #include "traps.h"
 #include "eggs.h"
+#include "shop.h"
+#include "slider.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -99,8 +101,9 @@ static void scripted_presses(const char *presses, double t, double *done)
         else
         {
             enum PlatformKey key = *what == 'E' ? KEY_ENTER : *what == 'S' ? KEY_SPACE : *what >= '1' && *what <= '9' ? (enum PlatformKey)(KEY_1 + (*what - '1'))
-                : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : KEY_OTHER;
-            if (dialog_showing()) dialog_key(key);
+                : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : *what == 'l' ? KEY_LEFT : *what == 'r' ? KEY_RIGHT : KEY_OTHER;
+            if (slider_key(key)) { } /* the slider (slider.c) */
+            else if (dialog_showing()) dialog_key(key);
             else if (!prompt_key(key, 0) && !dolls_key(key, 0)) mechanisms_key(key); /* a question, a paperdoll, the sleep slider */
         }
     }
@@ -305,7 +308,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     work_reset();
     traps_reset();
     sound_stop_all();
-    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset();
+    gumps_reset(); dolls_reset(); dialog_reset(); screen_reset(); magic_reset(); mechanisms_reset(); vehicles_reset(); slider_reset();
     events_reset(); items_reset(); script_reset(); world_reset();
     /* the worlds left behind (a save's, or none: a new game) */
     save_set_world_states(runtime && cJSON_GetObjectItem(runtime, "WorldStates") ? cJSON_Duplicate(cJSON_GetObjectItem(runtime, "WorldStates"), 1) : NULL);
@@ -321,6 +324,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     if (runtime) { combat_restore(runtime); conditions_restore(runtime); world_restore_player(runtime); }
     else conditions_restore(NULL);
     eggs_reset(); /* the eggs look afresh (eggs.c) */
+    shop_reset();
     schedules_load();
     schedules_start();
     weather_load();
@@ -426,6 +430,7 @@ int main(int argc, char **argv)
     vitals_load();
     combat_load();
     eggs_reset(); /* the eggs look afresh (eggs.c) */
+    shop_reset();
     schedules_load();
     schedules_start();
     note("Characters ready.");
@@ -443,10 +448,11 @@ int main(int argc, char **argv)
         while (platform_poll(&e))
         {
             if (e.type == EV_QUIT) running = 0;
-            else if (e.type == EV_MOUSE_MOVE) { dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
+            else if (e.type == EV_MOUSE_MOVE) { if (slider_open_now()) { slider_mouse_move(e.mouseX, e.mouseY); continue; } dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
                 if (video_input(1)) continue; /* a click skips a video */
+                if (slider_mouse_down(e.mouseX, e.mouseY)) continue; /* the slider up: its clicks */
                 if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
                 else if (!vitals_game_over() || dolls_window_count()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
                 else
@@ -463,6 +469,7 @@ int main(int argc, char **argv)
                     }
                 }
             }
+            else if (e.type == EV_MOUSE_UP && e.button == 1 && slider_open_now()) slider_mouse_up(e.mouseX, e.mouseY);
             else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
             else if (e.type == EV_TEXT) { if (!prompt_key(0, e.ch)) dolls_key(0, e.ch); } /* a letter for a question's box, or a paperdoll's text box */
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
@@ -471,7 +478,8 @@ int main(int argc, char **argv)
                 if (down && !dialog_showing() && e.key != KEY_F11 && dolls_key(e.key, 0)) continue; /* typing, or a modal paperdoll: nothing else hears it */
                 if (down && e.key != KEY_F11 && prompt_key(e.key, 0)) continue; /* a question being answered */
                 if (down && e.key != KEY_F11 && video_input(e.key == KEY_ESCAPE || e.key == KEY_SPACE || e.key == KEY_ENTER)) continue; /* a video playing: these skip it */
-                if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* the sleep slider */
+                if (down && e.key != KEY_F11 && slider_key(e.key)) continue; /* the slider (sleeping, haggling) */
+                if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* sleeping */
                 if (down && dialog_showing() && e.key != KEY_F11)
                 {
                     dialog_key(e.key); /* while a box is up the keys are its own */
@@ -520,7 +528,7 @@ int main(int argc, char **argv)
             traps_draw(pixels, worldMs);
             gumps_draw(pixels, worldMs);
             screen_draw(pixels, now);
-            dialog_draw(pixels, now);
+            dialog_draw(pixels, now); slider_draw(pixels, now);
             video_draw(pixels);
             gumps_draw_pointer(pixels, now);
             save_bmp(shot);
@@ -543,7 +551,7 @@ int main(int argc, char **argv)
                 k++;
             }
             if (t < 0) done = 0;
-            if (done && shot && shotAt < 0) { world_draw(pixels, now); dialog_draw(pixels, now); save_bmp(shot); break; }
+            if (done && shot && shotAt < 0) { world_draw(pixels, now); dialog_draw(pixels, now); slider_draw(pixels, now); save_bmp(shot); break; }
         }
         else if (shot && shotAt < 0 && now - start > 1000)
         {
@@ -567,7 +575,7 @@ int main(int argc, char **argv)
         int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
         video_update(seconds * 1000);
         timing(0);
-        int paused = dialog_showing() || title || mechanisms_pausing() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
+        int paused = dialog_showing() || title || mechanisms_pausing() || slider_open_now() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
         if (!title) events_update(seconds * 1000, paused);
         else gumps_update(seconds * 1000);
         timing(1);
@@ -622,7 +630,7 @@ int main(int argc, char **argv)
         }
         gumps_draw(pixels, title ? now : worldMs);
         if (!title) screen_draw(pixels, now);
-        dialog_draw(pixels, now);
+        dialog_draw(pixels, now); slider_draw(pixels, now);
         screen_shake_apply(pixels);
         video_draw(pixels); /* a video over everything */
         gumps_draw_pointer(pixels, now); /* the pointer over everything */

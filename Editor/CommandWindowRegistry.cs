@@ -40,6 +40,7 @@ internal static class CommandWindowRegistry
         [EventCommandType.PicklockDoor] = new("Picklock Door", c => new PicklockDoorCommandWindow(c), PicklockDoorCommandWindow.Describe),
         [EventCommandType.Wait] = new("Wait", c => new WaitCommandWindow(c), WaitCommandWindow.Describe),
         [EventCommandType.TakeFromContainer] = new("Pick Item From Container", c => new TakeFromContainerCommandWindow(c), TakeFromContainerCommandWindow.Describe),
+        [EventCommandType.Shop] = new("Shop", c => new ShopCommandWindow(c), ShopCommandWindow.Describe),
     };
 
     /// <summary>The script commands (Engine/ScriptCommands.cs) that have a window - all built by ScriptCommandWindow from their field lists.</summary>

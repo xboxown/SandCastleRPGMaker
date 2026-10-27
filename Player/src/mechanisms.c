@@ -17,6 +17,7 @@
  *    only outdoors by day), musical instruments.
  */
 #include "mechanisms.h"
+#include "slider.h"
 #include "work.h"
 #include "world.h"
 #include "items.h"
@@ -112,8 +113,6 @@ static void party_bark(int kind) { int a = random_speaker(); if (a >= 0) vitals_
 typedef struct Used { cJSON *def; int uid; Item *item; int holder; } Used;
 static Used using;
 static int harvestBy = -1; /* who harvests (a worker), or -1: the player */
-static int slider_click(int mx, int my);
-static void draw_slider(uint32_t *p);
 static void draw_sleep(uint32_t *p);
 static void use_station(int uid, cJSON *obj, const char *toolKind);
 static void use_plant(int uid, cJSON *obj, const char *toolKind);
@@ -124,7 +123,7 @@ typedef struct Job { int uid; cJSON *obj, *recipe; double left, nextBeat; } Job;
 static Job jobs[16]; static int jobCount;
 typedef struct Sleep { int phase, hours, bedroll; double ms; } Sleep; /* phase 1: falling dark, 2: rising */
 static Sleep sleep;
-typedef struct Slider { int open, bed, value, min, max, step, minHours; char question[128], cancel[96]; } Slider;
+typedef struct Slider { int bed, minHours; char cancel[96]; } Slider; /* the bed being slept in, while the slider (slider.c) asks how long */
 static Slider slider;
 
 static int still_there(const Used *u) { return u->uid > 0 ? world_thing_there(u->uid) : items_alive(u->item); }
@@ -608,14 +607,13 @@ static void use_map(const Used *u)
 
 int mechanisms_map_open(void) { return view.open; }
 int mechanisms_map_click(void) { if (!view.open) return 0; view.open = 0; return 1; }
-int mechanisms_click(int x, int y) { if (sleep.phase) return 1; if (slider_click(x, y)) return 1; return mechanisms_map_click(); }
+int mechanisms_click(int x, int y) { if (sleep.phase) return 1; if (slider_mouse_down(x, y)) return 1; return mechanisms_map_click(); }
 
 static void draw_map(uint32_t *pixels);
 
 void mechanisms_draw(uint32_t *pixels)
 {
     draw_map(pixels);
-    if (slider.open) draw_slider(pixels);
     draw_sleep(pixels);
 }
 
@@ -904,6 +902,8 @@ static void cancel_sleep(void)
     say("You decide not to sleep.");
 }
 
+static void slider_done(int ok, int hours, void *context);
+
 /* AskHowLongToSleep: the bed's own range, from 0 ("don't sleep"). */
 static void ask_sleep(int bed, cJSON *obj)
 {
@@ -914,21 +914,25 @@ static void ask_sleep(int bed, cJSON *obj)
         return;
     }
     memset(&slider, 0, sizeof slider);
-    slider.open = 1; slider.bed = bed;
-    slider.max = num(f, "SleepMaxHours", 12); if (slider.max < 1) slider.max = 1; if (slider.max > 99) slider.max = 99;
-    slider.minHours = num(f, "SleepMinHours", 1); if (slider.minHours < 1) slider.minHours = 1; if (slider.minHours > slider.max) slider.minHours = slider.max;
-    slider.step = num(f, "SleepStepHours", 1) > 1 ? num(f, "SleepStepHours", 1) : 1;
-    slider.value = num(f, "SleepDefaultHours", 8); if (slider.value < slider.minHours) slider.value = slider.minHours; if (slider.value > slider.max) slider.value = slider.max;
-    snprintf(slider.question, sizeof slider.question, "%s", get(f, "SleepQuestion") ? str(f, "SleepQuestion") : "How many hours wilt thou sleep?");
+    slider.bed = bed;
+    int max = num(f, "SleepMaxHours", 12), step = num(f, "SleepStepHours", 1) > 1 ? num(f, "SleepStepHours", 1) : 1, value = num(f, "SleepDefaultHours", 8);
+    if (max < 1) max = 1;
+    if (max > 999) max = 999; /* SliderSettings.MaxValue */
+    slider.minHours = num(f, "SleepMinHours", 1); if (slider.minHours < 1) slider.minHours = 1; if (slider.minHours > max) slider.minHours = max;
+    if (value < slider.minHours) value = slider.minHours;
+    if (value > max) value = max;
     snprintf(slider.cancel, sizeof slider.cancel, "%s", get(f, "CancelSleepLine") ? str(f, "CancelSleepLine") : "Perhaps later.");
+    /* From 0: 0 is "don't sleep" (the sleeper says so and gets up). */
+    slider_open(get(f, "SleepQuestion") ? str(f, "SleepQuestion") : "How many hours wilt thou sleep?", 0, max, step, value, slider_done, NULL);
 }
 
-static void slider_done(int ok)
+static void slider_done(int ok, int hours, void *context)
 {
-    slider.open = 0;
-    if (!ok || slider.value <= 0) { cancel_sleep(); return; }
+    (void)context;
+    if (!ok) return; /* Escape: just lying there (AskHowLongToSleep) */
+    if (hours <= 0) { cancel_sleep(); return; }
     if (combat_foes_in_sight()) { world_bark(0, "We cannot rest with foes about!", 2500); say("You can't sleep with enemies in sight."); return; }
-    sleep_hours(slider.value > slider.minHours ? slider.value : slider.minHours, world_thing_type(slider.bed) == OT_BEDROLL ? slider.bed : 0); /* wakes still lying - move to get up */
+    sleep_hours(hours > slider.minHours ? hours : slider.minHours, world_thing_type(slider.bed) == OT_BEDROLL ? slider.bed : 0); /* wakes still lying - move to get up */
 }
 
 void mechanisms_lay_down(int uid)
@@ -937,43 +941,12 @@ void mechanisms_lay_down(int uid)
     if (obj) ask_sleep(uid, obj);
 }
 
-int mechanisms_pausing(void) { return slider.open || sleep.phase; }
+int mechanisms_pausing(void) { return slider_open_now() || sleep.phase; }
 
 int mechanisms_key(int key)
 {
     if (sleep.phase) return 1;
-    if (!slider.open) return 0;
-    if (key == KEY_LEFT || key == KEY_DOWN) { slider.value -= slider.step; if (slider.value < 0) slider.value = 0; }
-    else if (key == KEY_RIGHT || key == KEY_UP) { slider.value += slider.step; if (slider.value > slider.max) slider.value = slider.max; }
-    else if (key == KEY_ENTER || key == KEY_SPACE) slider_done(1);
-    else if (key == KEY_ESCAPE) slider_done(0);
-    return 1;
-}
-
-/* The slider's box: the question, "<  8 hours  >", OK and Cancel. */
-static void slider_box(int *x, int *y, int *w, int *h)
-{
-    int need = font_text_width(font_get("InGameFont"), slider.question) + 16; /* as wide as its question, within the screen */
-    *w = need < 220 ? 220 : need > SCREEN_W - 8 ? SCREEN_W - 8 : need; *h = 62; *x = (SCREEN_W - *w) / 2; *y = (SCREEN_H - *h) / 2;
-}
-
-static int slider_click(int mx, int my)
-{
-    if (!slider.open) return 0;
-    int x, y, w, h;
-    slider_box(&x, &y, &w, &h);
-    if (my >= y + 22 && my < y + 36)
-    {
-        if (mx >= x + 8 && mx < x + 30) mechanisms_key(KEY_LEFT);
-        else if (mx >= x + w - 30 && mx < x + w - 8) mechanisms_key(KEY_RIGHT);
-        else if (mx >= x + 30 && mx < x + w - 30) { slider.value = (int)((mx - x - 30) * (double)slider.max / (w - 60) + 0.5); slider.value -= slider.value % slider.step; }
-    }
-    else if (my >= y + 42 && my < y + 56)
-    {
-        if (mx >= x + w / 2 - 70 && mx < x + w / 2 - 10) slider_done(1);
-        else if (mx >= x + w / 2 + 10 && mx < x + w / 2 + 70) slider_done(0);
-    }
-    return 1;
+    return slider_key(key); /* the slider (slider.c) */
 }
 
 static void fill_rect(uint32_t *p, int x, int y, int w, int h, uint32_t c)
@@ -981,26 +954,6 @@ static void fill_rect(uint32_t *p, int x, int y, int w, int h, uint32_t c)
     for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++) for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++) p[j * SCREEN_W + i] = c;
 }
 
-static void draw_slider(uint32_t *p)
-{
-    int x, y, w, h;
-    slider_box(&x, &y, &w, &h);
-    const Font *f = font_get("InGameFont");
-    fill_rect(p, x, y, w, h, 0xFF2E1808u); fill_rect(p, x + 2, y + 2, w - 4, h - 4, 0xFFF1E4C2u);
-    const uint32_t ink = 0xFF3B2410u;
-    font_draw(f, p, x + (w - font_text_width(f, slider.question)) / 2, y + 6, slider.question, ink);
-    fill_rect(p, x + 30, y + 28, w - 60, 2, ink);
-    int knob = x + 30 + (slider.max > 0 ? (w - 60) * slider.value / slider.max : 0);
-    fill_rect(p, knob - 2, y + 23, 5, 12, 0xFF8B0000u);
-    font_draw(f, p, x + 14, y + 23, "<", ink);
-    font_draw(f, p, x + w - 20, y + 23, ">", ink);
-    char value[32];
-    snprintf(value, sizeof value, slider.value == 1 ? "%d hour" : "%d hours", slider.value);
-    font_draw(f, p, knob - font_text_width(f, value) / 2, y + 36, value, ink);
-    fill_rect(p, x + w / 2 - 70, y + 46, 60, 1, ink); fill_rect(p, x + w / 2 + 10, y + 46, 60, 1, ink);
-    font_draw(f, p, x + w / 2 - 40 - font_text_width(f, "OK") / 2, y + 48, "OK", ink);
-    font_draw(f, p, x + w / 2 + 40 - font_text_width(f, "Cancel") / 2, y + 48, "Cancel", ink);
-}
 
 static void use_bedroll(const Used *u)
 {
@@ -1020,7 +973,7 @@ static void use_bedroll(const Used *u)
     if (world_player_sit(u->uid)) return; /* its sleeping place: walk there and lie down, as on a bed (then the hours) */
     world_set_pose(0, "Sleeping", -1); /* no sleeping place: lies where it stands */
     ask_sleep(u->uid, u->def);
-    if (!slider.open && !sleep.phase) { world_thing_set_open(u->uid, 0); world_set_pose(0, "Idle", -1); }
+    if (!slider_open_now() && !sleep.phase) { world_thing_set_open(u->uid, 0); world_set_pose(0, "Idle", -1); }
 }
 
 /* ---------------- Liquid containers (bucket.uc, milking.uc; pouring is the user's rule) ---------------- */
@@ -1347,6 +1300,6 @@ void mechanisms_update(double ms)
     mech_work_update(ms);
 }
 
-void mechanisms_reset(void) { buttonCount = 0; poseBackMs = 0; view.open = 0; jobCount = 0; milking.on = 0; slider.open = 0; sleep.phase = 0; lastMinute = -1; }
+void mechanisms_reset(void) { buttonCount = 0; poseBackMs = 0; view.open = 0; jobCount = 0; milking.on = 0; slider_reset(); sleep.phase = 0; lastMinute = -1; }
 
 int mechanisms_station_busy(int uid) { for (int i = 0; i < jobCount; i++) if (jobs[i].uid == uid) return 1; return 0; }

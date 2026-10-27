@@ -1,6 +1,7 @@
 #include "events.h"
 #include "save.h"
 #include "magic.h"
+#include "shop.h"
 #include "vehicles.h"
 #include "video.h"
 #include "books.h"
@@ -2136,6 +2137,17 @@ static int execute(Run *r, const Cmd *c)
             if (!parse_number(param(c, "DurationSeconds"), &seconds)) seconds = 1;
             screen_shake(intensity, seconds);
             return 1;
+        }
+        case C_Shop: /* the merchant's talk, goods and haggling (shop.c); the event waits till the player leaves */
+        {
+            cJSON *json = cJSON_Parse(param(c, "Shop"));
+            if (!json) { lastResult = 0; return 1; }
+            const char *who = cJSON_GetStringValue(cJSON_GetObjectItem(json, "SpeakerId")) ? cJSON_GetStringValue(cJSON_GetObjectItem(json, "SpeakerId")) : "Self";
+            int speaker = !strcmp(who, "Self") ? (r->activator >= 0 ? r->activator : 0) : !strcmp(who, "Player") ? 0 : !who[0] ? -1 : world_actor_by_character(atoi(who));
+            cJSON_Delete(json);
+            r->waiting = W_READ;
+            shop_open(c->params, speaker, read_done, r);
+            return 0;
         }
         case C_LearnLanguage: /* Learn / Forget Language: into its "KnownLanguages" (saved with it) */
         {

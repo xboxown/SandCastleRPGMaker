@@ -42,6 +42,7 @@ public partial class GameTestWindow
         var a = _execContext.GameActions;
         a[EventCommandType.FadeScreen] = FadeScreenCommand;
         a[EventCommandType.Earthquake] = EarthquakeCommand;
+        a[EventCommandType.Shop] = ShopCommand; // GameTestWindow.Shop.cs
         h[EventCommandType.FlashScreen] = FlashScreenCommand;
         a[EventCommandType.MoveCamera] = MoveCameraCommand;
         InitializeVehicleCommands(); // Drive Vehicle, Stop Driving, Travel Vehicle (GameTestWindow.VehicleTravel.cs)

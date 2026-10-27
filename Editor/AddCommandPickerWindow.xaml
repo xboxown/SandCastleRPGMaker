@@ -43,6 +43,7 @@
                         <TextBlock Text="Party / Item" FontWeight="Bold" Margin="0,0,0,4"/>
                         <Button Content="Give Item..." Margin="0,0,0,4" Click="Registered_Click" Tag="GiveItem" ToolTip="One character gives an item to another - from what they really have, or not; someone who can't carry it gets help from the party, or it's put down at their feet"/>
                         <Button Content="Exchange Currency..." Margin="0,0,0,4" Click="ExchangeCurrency_Click" ToolTip="A money changer: the party's money of one currency into another, at the Currency Editor's rate"/>
+                        <Button Content="Shop..." Margin="0,0,0,4" Click="Registered_Click" Tag="Shop" ToolTip="A merchant: his lines and the player's choices, his goods and prices, what he buys, Serpent Isle's haggling - every word your own"/>
                         <Button Content="Remove Item..." Margin="0,0,0,12" Click="Registered_Click" Tag="RemoveItem" ToolTip="Takes an item away from a character or the party"/>
 
                         <TextBlock Text="Actor" FontWeight="Bold" Margin="0,0,0,4"/>
