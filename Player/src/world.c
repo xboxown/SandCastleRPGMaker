@@ -2443,8 +2443,14 @@ static void seated_draw_order(int count)
         Drawn *d = &drawn[i];
         if (d->actor < 0 || d->actor > npcCount || !seats[d->actor].uid) continue;
         Thing *f = thing_by_uid(seats[d->actor].uid);
+        /* Exult (Sit_actor_action::offsets, Game_object::compare): a chair facing north or west is drawn over its sitter, else the sitter over it */
+        int under = f && !seats[d->actor].bed && (f->facing == DIR_N || f->facing == DIR_W || f->facing == DIR_NW);
         for (int j = 0; j < count; j++)
-            if (drawn[j].thing == seats[d->actor].uid && drawn[j].key + 0.5 > d->key) d->key = drawn[j].key + 0.5;
+            if (drawn[j].thing == seats[d->actor].uid)
+            {
+                if (drawn[j].key + 0.5 > d->key) d->key = drawn[j].key + 0.5;
+                if (under) drawn[j].key = d->key + 0.25; /* over what the chair is over, the chair itself just over the sitter */
+            }
         Thing *c = f && seats[d->actor].bed ? cover_of(f) : NULL;
         if (c) for (int j = 0; j < count; j++) if (drawn[j].thing == c->uid) drawn[j].key = d->key + 0.25;
     }

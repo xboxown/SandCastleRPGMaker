@@ -361,10 +361,14 @@ public partial class GameTestWindow
     {
         if (!_seats.TryGetValue(who, out var seat) || VisualOf(seat.Furniture) is not { } furnitureVisual) return null;
         int z = Math.Max(zIndex, Panel.GetZIndex(furnitureVisual) + 1);
+        if (ChairOverSitter(seat)) { Panel.SetZIndex(furnitureVisual, z + 1); return z; } // its back nearer the viewer: over what the chair is over, the chair itself just over them
         if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
             Panel.SetZIndex(coverVisual, z + 1);
         return z;
     }
+
+    /// <summary>Exult (Sit_actor_action::offsets + Game_object::compare): the sitter sits a tile off the chair the way it faces - a chair facing north or west is then in front of them.</summary>
+    private static bool ChairOverSitter(Seat seat) => !seat.Bed && seat.Furniture.Facing is SpriteDirection.North or SpriteDirection.West or SpriteDirection.NorthWest;
 
     private void FixFurnitureDrawOrder()
     {
@@ -374,7 +378,10 @@ public partial class GameTestWindow
             int z = Panel.GetZIndex(furnitureVisual) + 1;
             UIElement? sitter = who == _player ? _playerImage : MapCharacterOf(who)?.Visual;
             if (sitter is null) continue;
+            // Exult (Sit_actor_action::offsets, Game_object::compare): the sitter is a tile off the chair the way it faces, so a chair
+            // facing north or west (its back nearer the viewer) is drawn over the sitter; facing south or east, the sitter over it.
             Panel.SetZIndex(sitter, Math.Max(Panel.GetZIndex(sitter), z));
+            if (ChairOverSitter(seat)) Panel.SetZIndex(furnitureVisual, Panel.GetZIndex(sitter) + 1);
             if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
                 Panel.SetZIndex(coverVisual, Panel.GetZIndex(sitter) + 1);
         }
