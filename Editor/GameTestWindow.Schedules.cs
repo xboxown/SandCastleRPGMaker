@@ -231,7 +231,7 @@ public partial class GameTestWindow
         if (npc.WalkingToSchedule) { WalkToScheduleNowWhat(mapCharacter); return; }
         switch (npc.Activity)
         {
-            case ScheduleType.Loiter: LoiterNowWhat(mapCharacter, CellsForTiles(12)); break;
+            case ScheduleType.Loiter: LoiterNowWhat(mapCharacter, CellsForTiles(npc.Entry?.WorkAreaTiles is > 0 and var reach ? reach : 12)); break; // Exult's 12 tiles; a spawn point's copies: its reach
             case ScheduleType.Wander: WanderNowWhat(mapCharacter); break;
             case ScheduleType.HorizPace: PaceNowWhat(mapCharacter, horizontal: true); break;
             case ScheduleType.VertPace: PaceNowWhat(mapCharacter, horizontal: false); break;
@@ -360,7 +360,7 @@ public partial class GameTestWindow
     private void WanderNowWhat(MapCharacter mapCharacter)
     {
         var npc = mapCharacter.Npc;
-        int leg = CellsForTiles(32), dist = CellsForTiles(128);
+        int leg = CellsForTiles(32), dist = npc.Entry?.WorkAreaTiles == 0 ? _map.Width + _map.Height : CellsForTiles(128); // a spawn point's free copies: no bounds
         int x = mapCharacter.Placement.X - leg + Rng.Next(2 * leg + 1);
         int y = mapCharacter.Placement.Y - leg + Rng.Next(2 * leg + 1);
         x = Math.Clamp(x, npc.Center.X - dist, npc.Center.X + dist);

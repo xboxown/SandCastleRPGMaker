@@ -48,7 +48,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone, House }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone, House, Spawn }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -1082,6 +1082,7 @@ public partial class MainWindow : Window
         ZoneModeMenuItem.IsChecked = false;
         if (_houseModeItem is not null) _houseModeItem.IsChecked = false; // MainWindow.Houses.cs
         if (_vehicleModeItem is not null) _vehicleModeItem.IsChecked = false;
+        if (_spawnModeItem is not null) _spawnModeItem.IsChecked = false; // MainWindow.Spawns.cs
         HideHouseGhost();
         _selectedZone = null;
         DrawZones(); // zones show only in Zones mode
@@ -1578,6 +1579,7 @@ public partial class MainWindow : Window
         // Draw any events already placed on this map (on top of everything else).
         foreach (var gameEvent in _map.Events)
             PlaceEventVisual(gameEvent);
+        DrawSpawnPoints(); // MainWindow.Spawns.cs
 
         // Restore the Start Position marker, if this map already has one.
         if (_map.StartX >= 0 && _map.StartY >= 0 && _map.StartFloor == _currentFloor)
@@ -1635,6 +1637,8 @@ public partial class MainWindow : Window
             else StatusText.Text = "Ctrl + double-click a container to fill it. (To put something on top of it, drag it there.)";
             return;
         }
+
+        if (_editMode == EditMode.Spawn) { SpawnMode_Click(x, y, e.ClickCount); return; } // MainWindow.Spawns.cs
 
         if (_editMode == EditMode.Zone)
         {
@@ -1874,6 +1878,8 @@ public partial class MainWindow : Window
             HouseMode_RightClick(x, y); // MainWindow.Houses.cs
             return;
         }
+
+        if (_editMode == EditMode.Spawn) { SpawnMode_RightClick(x, y); return; } // MainWindow.Spawns.cs
 
         if (_editMode == EditMode.Event)
         {

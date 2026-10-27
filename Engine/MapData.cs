@@ -133,6 +133,8 @@ public class MapData
 
     /// <summary>Characters (from the Character Editor) standing on this map - each with the pose and facing it starts in. The main player is not placed here; it starts at the Start Position.</summary>
     public List<PlacedCharacter> Characters { get; set; } = new();
+    /// <summary>Spawn points (Map Editor > Mode > Spawn): characters that may appear here when the map is entered.</summary>
+    public List<SpawnPoint> SpawnPoints { get; set; } = new();
 
     public int GetNextCharacterPlacementId()
         => Characters.Count == 0 ? 1 : Characters.Max(c => c.Id) + 1;
@@ -325,4 +327,32 @@ public class PlacedCharacter
     public int BodyInstanceId { get; set; } = -1;
     /// <summary>In a save only: which of the save's characters this placement is (each copy of a character placed more than once has its own health, things and fights); -1 = by its CharacterId.</summary>
     public int SavedCharacterIndex { get; set; } = -1;
+}
+
+/// <summary>
+/// A spawn point (Map Editor > Mode > Spawn), as Ultima VII's monster eggs: when the map is first entered, each
+/// of its characters may appear here - by its chance, as many as it says - as a copy of its own. A copy roams
+/// round the point, coming back within its reach of it - or, set free, wanders anywhere (towns, caves).
+/// </summary>
+public class SpawnPoint
+{
+    public int Id { get; set; }
+    public int X { get; set; }
+    public int Y { get; set; }
+    public int Floor { get; set; } = 1;
+    public List<SpawnEntry> Entries { get; set; } = new();
+    /// <summary>How far (map squares) its characters roam round it - farther, they come back near it.</summary>
+    public int WanderTiles { get; set; } = 12;
+    /// <summary>Free to the wild: they wander anywhere, never brought back.</summary>
+    public bool Free { get; set; }
+    /// <summary>In play: it has had its chance on this map (a save, or a world come back to, keeps it so).</summary>
+    public bool HatchedRuntime { get; set; }
+}
+
+/// <summary>One character a spawn point may bring: its chance (0-100 %) for each of how many.</summary>
+public class SpawnEntry
+{
+    public int CharacterId { get; set; } = -1;
+    public int Percent { get; set; } = 100;
+    public int Count { get; set; } = 1;
 }

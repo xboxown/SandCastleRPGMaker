@@ -76,6 +76,7 @@ public partial class MainWindow
         PaletteTabs.Items.Insert(0, new TabItem { Header = "Maps", Content = panel });
         PaletteTabs.SelectedIndex = 1; // still opens on the Tileset tab
         BuildHousesTab(); // the House Editor's tab, last (MainWindow.Houses.cs)
+        AddSpawnMode(); // Mode > Spawn (MainWindow.Spawns.cs)
     }
 
     private sealed record WorldRow(MapData Map, bool Starting)

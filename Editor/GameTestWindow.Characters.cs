@@ -44,6 +44,7 @@ public partial class GameTestWindow
         if (_characters is null) return;
         // Bodies left by a save keep their numbers: new ones are numbered after them.
         if (_map.Items.Count > 0) _nextContainerRuntimeInstanceId = Math.Max(_nextContainerRuntimeInstanceId, _map.Items.Max(i => i.InstanceId) + 1);
+        HatchSpawnPoints(); // spawn points not hatched yet: their characters' chances (GameTestWindow.Spawns.cs)
         var placed = new HashSet<CharacterDefinition>(ReferenceEqualityComparer.Instance);
         var deadOnes = new List<(PlacedCharacter Placement, CharacterDefinition Character)>();
         foreach (var placement in _map.Characters)

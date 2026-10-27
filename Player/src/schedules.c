@@ -257,7 +257,7 @@ static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v;
 
 static void wander(Npc *n)
 {
-    int leg = cells_for_tiles(32), dist = cells_for_tiles(128), cx, cy;
+    int leg = cells_for_tiles(32), dist = n->entry && num(n->entry->json, "WorkAreaTiles", 12) == 0 ? world_map_w() + world_map_h() : cells_for_tiles(128), cx, cy; /* a spawn point's free copies: no bounds */
     world_actor_cell(n->actor, &cx, &cy, &(int){ 0 });
     int x = clampi(cx - leg + rnd(2 * leg + 1), n->centerX - dist, n->centerX + dist), y = clampi(cy - leg + rnd(2 * leg + 1), n->centerY - dist, n->centerY + dist);
     x = clampi(x, 0, world_map_w() - 1); y = clampi(y, 0, world_map_h() - 1);
@@ -312,7 +312,7 @@ static void now_what(Npc *n)
     if (n->walkingToSchedule) { walk_to_schedule(n); return; }
     switch (n->activity)
     {
-        case S_LOITER: loiter(n, cells_for_tiles(12)); break;
+        case S_LOITER: loiter(n, cells_for_tiles(n->entry && num(n->entry->json, "WorkAreaTiles", 12) > 0 ? num(n->entry->json, "WorkAreaTiles", 12) : 12)); break; /* Exult's 12 tiles; a spawn point's copies: its reach */
         case S_WANDER: wander(n); break;
         case S_HPACE: pace(n, 1); break;
         case S_VPACE: pace(n, 0); break;
