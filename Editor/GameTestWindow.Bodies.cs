@@ -69,6 +69,9 @@ public partial class GameTestWindow
         character.Inventory.Clear();
         character.EquippedSlots.Clear();
         character.CustomEquippedSlots.Clear();
+        if (!character.IsHuman) // not human: what may be found in its body (Character Editor > When it dies), each by its chance
+            foreach (var drop in character.DeathDrops)
+                if (ObjectDef(drop.ObjectId) is not null && _random.Next(100) < drop.Percent) belongings.AddRange(MakeGifts(ReferencedItemCategory.Object, drop.ObjectId, Math.Max(1, drop.Quantity)));
         foreach (var item in belongings) PlaceWithinFrame(item, data, null);
 
         var body = new PlacedItemInstance

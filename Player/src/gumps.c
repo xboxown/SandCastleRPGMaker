@@ -214,6 +214,8 @@ static int add_gump(Gump g)
 /* OpenPaperdoll: its own window, or the one already open brought to the front. */
 void gumps_open_paperdoll(int characterId)
 {
+    cJSON *who = character_json(characterId);
+    if (cJSON_IsFalse(get(who, "IsHuman"))) { char line[96]; snprintf(line, sizeof line, "%s has no inventory.", str(who, "Name")); gumps_refuse(P_RED_X, line); return; } /* not human: no paperdoll */
     int i = find_gump(G_DOLL, characterId, NULL, 0);
     if (i >= 0) { to_front(i); return; }
     sound_play(num(paperdoll_of(characterId), "OpenSoundResourceId", -1));
@@ -804,6 +806,8 @@ static int navigate_sound(int characterId) { sound_play(num(paperdoll_of(charact
 /* DropOnCharacter: the character's own add rules. */
 static int drop_on_character(int characterId)
 {
+    cJSON *who = character_json(characterId);
+    if (cJSON_IsFalse(get(who, "IsHuman"))) { char no[96]; snprintf(no, sizeof no, "%s can't be given things.", str(who, "Name")); gumps_refuse(P_RED_X, no); return 0; } /* not human: it goes back */
     ItemPlace from;
     Item *it = lift(&from);
     if (!it) return 0;
@@ -1430,7 +1434,7 @@ void gumps_next_inventory(void)
     for (int a = 0; a < world_actor_count() && n < 64; a++)
     {
         int id = world_actor_character(a);
-        if ((a == 0 || items_in_party(id)) && !vitals_dead(id)) party[n++] = id;
+        if ((a == 0 || items_in_party(id)) && !vitals_dead(id) && !cJSON_IsFalse(get(character_json(id), "IsHuman"))) party[n++] = id; /* not human: no inventory to show */
     }
     for (int i = 0; i < n; i++) if (find_gump(G_DOLL, party[i], NULL, 0) < 0) { gumps_open_paperdoll(party[i]); return; }
     static int next;

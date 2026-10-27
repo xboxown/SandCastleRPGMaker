@@ -789,6 +789,7 @@ public partial class GameTestWindow
     /// </summary>
     private bool DropOnCharacter(DragOrigin origin, CharacterDefinition character)
     {
+        if (!character.IsHuman && !_quietRefusals) { Refuse(MousePointerKind.RedX, $"{character.Name} can't be given things."); return false; } // not human: dragged to it, it goes back
         if (!CheckWeight(origin, character)) return false; // drag.cc Check_weight
         var (category, itemId) = PayloadIdentity(origin);
         var payloadObject = PayloadObject(origin);

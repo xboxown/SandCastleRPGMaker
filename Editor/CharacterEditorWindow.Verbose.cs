@@ -19,14 +19,16 @@ public partial class CharacterEditorWindow
         VerbosePanel.Children.Add(VerboseHeading("Kind"));
         var human = new RadioButton { Content = "Human", GroupName = "Kind" + character.Id, IsChecked = character.IsHuman, Margin = new Thickness(0, 0, 16, 0) };
         var notHuman = new RadioButton { Content = "Not human (an animal, a monster)", GroupName = "Kind" + character.Id, IsChecked = !character.IsHuman };
-        human.Checked += (_, _) => character.IsHuman = true;
-        notHuman.Checked += (_, _) => character.IsHuman = false;
+        human.Checked += (_, _) => { character.IsHuman = true; BuildVerbosePanel(character); };
+        notHuman.Checked += (_, _) => { character.IsHuman = false; BuildVerbosePanel(character); };
         var kindRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 4) };
         kindRow.Children.Add(human);
         kindRow.Children.Add(notHuman);
         VerbosePanel.Children.Add(kindRow);
         VerbosePanel.Children.Add(VerboseNote("Human (Exult's sentient, can speak): opens doors, sits on chairs, sleeps in beds, and says the lines below. " +
-            "Not human: says nothing, never opens a door, sits or takes a bed (a rat doesn't scream \"Help!\" or open doors). A closed door stops it - unless its faction is hostile to the door's, when it breaks locked doors down."));
+            "Not human: says nothing, never opens a door, sits or takes a bed (a rat doesn't scream \"Help!\" or open doors). A closed door stops it - unless its faction is hostile to the door's, when it breaks locked doors down. " +
+            "It has no paperdoll: in the party, its inventory doesn't open (a red X) and it can't be given things - its stats (Z) still show."));
+        if (!character.IsHuman) VerbosePanel.Children.Add(BuildDeathDrops(character));
 
         var breaks = new CheckBox
         {
@@ -46,6 +48,45 @@ public partial class CharacterEditorWindow
             "\"Ultima VII's lines\" puts back the original game's text. Only humans speak."));
         foreach (var kind in Enum.GetValues<VerboseKind>())
             VerbosePanel.Children.Add(BuildVerboseLines(character, kind));
+    }
+
+    /// <summary>Not human: the objects that may be in its body when it's killed, each with how many and the chance it's there.</summary>
+    private UIElement BuildDeathDrops(CharacterDefinition character)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 6, 0, 4) };
+        panel.Children.Add(VerboseHeading("When it dies"));
+        panel.Children.Add(VerboseNote("What may be found in its body: each object, how many, and the chance (0-100 %) it's there - rolled once as it dies. As many as you like."));
+        var objects = (ProjectSession.ObjectsProvider?.Invoke()?.Objects ?? new List<WorldObject>()).OrderBy(o => o.Name).ToList();
+        var rows = new StackPanel();
+        void Show()
+        {
+            rows.Children.Clear();
+            foreach (var drop in character.DeathDrops.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+                var what = new ComboBox { Width = 200, ItemsSource = objects, DisplayMemberPath = nameof(WorldObject.Name), SelectedItem = objects.FirstOrDefault(o => o.Id == drop.ObjectId) };
+                what.SelectionChanged += (_, _) => drop.ObjectId = (what.SelectedItem as WorldObject)?.Id ?? -1;
+                row.Children.Add(what);
+                row.Children.Add(new TextBlock { Text = "x", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 4, 0) });
+                var quantity = new TextBox { Width = 44, Text = drop.Quantity.ToString() };
+                quantity.LostFocus += (_, _) => { if (int.TryParse(quantity.Text.Trim(), out int q)) drop.Quantity = Math.Clamp(q, 1, ObjectTypes.MaxQuantity); quantity.Text = drop.Quantity.ToString(); };
+                row.Children.Add(quantity);
+                var percent = new TextBox { Width = 44, Text = drop.Percent.ToString(), Margin = new Thickness(10, 0, 0, 0) };
+                percent.LostFocus += (_, _) => { if (int.TryParse(percent.Text.Trim(), out int p)) drop.Percent = Math.Clamp(p, 0, 100); percent.Text = drop.Percent.ToString(); };
+                row.Children.Add(percent);
+                row.Children.Add(new TextBlock { Text = "% chance", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 0, 0) });
+                var remove = new Button { Content = "✕", Width = 22, Margin = new Thickness(8, 0, 0, 0), ToolTip = "Remove it" };
+                remove.Click += (_, _) => { character.DeathDrops.Remove(drop); Show(); };
+                row.Children.Add(remove);
+                rows.Children.Add(row);
+            }
+        }
+        Show();
+        panel.Children.Add(rows);
+        var add = new Button { Content = "Add object", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 4, 0, 0) };
+        add.Click += (_, _) => { character.DeathDrops.Add(new DeathDrop { ObjectId = objects.FirstOrDefault()?.Id ?? -1 }); Show(); };
+        panel.Children.Add(add);
+        return panel;
     }
 
     private UIElement BuildVerboseLines(CharacterDefinition character, VerboseKind kind)

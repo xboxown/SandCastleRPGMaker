@@ -643,6 +643,7 @@ public partial class GameTestWindow : Window
     private void OpenPaperdoll(CharacterDefinition? character)
     {
         if (character is null) return;
+        if (!character.IsHuman) { Refuse(MousePointerKind.RedX, $"{character.Name} has no inventory."); return; } // not human: no paperdoll
         var existing = _openPaperdolls.FirstOrDefault(g => g.Character == character);
         if (existing is not null)
         {

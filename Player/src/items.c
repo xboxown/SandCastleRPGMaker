@@ -827,6 +827,24 @@ Item *items_strip(int characterId)
     return body;
 }
 
+/* Not human: what may be found in its body ("DeathDrops"), each by its chance - into the body's belongings (made if it had none). */
+Item *items_death_drops(int characterId, Item *body, int (*roll)(int))
+{
+    cJSON *c = NULL, *d;
+    cJSON_ArrayForEach(d, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters")) if (num(d, "Id", -2) == characterId) c = d;
+    if (!c || !cJSON_IsFalse(get(c, "IsHuman"))) return body;
+    cJSON_ArrayForEach(d, get(c, "DeathDrops"))
+    {
+        int objectId = num(d, "ObjectId", -1), quantity = num(d, "Quantity", 1);
+        if (!def_of(CAT_OBJECT, objectId) || roll(100) >= num(d, "Percent", 50)) continue;
+        Item *gifts[100];
+        int n = items_make_gifts(CAT_OBJECT, objectId, quantity > 1 ? quantity : 1, gifts, 100);
+        if (!body) body = new_item(CAT_CONTAINER, -1, 1);
+        for (int i = 0; i < n; i++) add_to(&body->contents, &body->count, &body->cap, gifts[i]);
+    }
+    return body;
+}
+
 /* ---------------- Weapons, armor, ammo (combat) ---------------- */
 
 static int object_type(const Item *it) { return it->category == CAT_OBJECT ? num(def_of(CAT_OBJECT, it->itemId), "Type", -1) : -1; }

@@ -121,6 +121,7 @@ Item *items_read_json(cJSON *json);
 void items_save(cJSON *characters);
 void items_reset(void);
 Item *items_body_from_json(cJSON *contents);
+Item *items_death_drops(int characterId, Item *body, int (*roll)(int)); /* not human: its DeathDrops by chance */
 void items_add_loose(int characterId, Item *it);
 int items_take_all(Item *container, Item **out, int max);
 void items_add_carrier(cJSON *character);

@@ -200,7 +200,7 @@ public partial class GameTestWindow
     /// </summary>
     private void NextPartyInventory()
     {
-        var party = GetPartyList().Where(c => !IsDead(c)).ToList();
+        var party = GetPartyList().Where(c => !IsDead(c) && c.IsHuman).ToList(); // not human: no inventory to show
         if (party.Count == 0) return;
         for (int i = 0; i < party.Count; i++)
         {

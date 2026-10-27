@@ -77,6 +77,8 @@ public class CharacterDefinition
     public SurvivalSettings Survival { get; set; } = new();
     /// <summary>Human (Exult's sentient, can speak): opens doors, sits on chairs, sleeps in beds, and says its Verbose lines. Not human (a rat, a bear): none of that - doors it can't open stop it, unless its faction would break them down.</summary>
     public bool IsHuman { get; set; } = true;
+    /// <summary>Not human: what may be found in its body when it dies - each object with how many and its chance (Character Editor > Verbose > When it dies).</summary>
+    public List<DeathDrop> DeathDrops { get; set; } = new();
     /// <summary>Breaks down closed doors of a side it's hostile to even when they aren't locked (instead of opening them).</summary>
     public bool BreaksClosedDoors { get; set; }
     /// <summary>What it says in each situation (Character Editor > Verbose).</summary>
@@ -166,4 +168,12 @@ public class CharacterDatabase
     {
         _nextId = Characters.Count == 0 ? 1 : Characters.Max(c => c.Id) + 1;
     }
+}
+
+/// <summary>Something a creature (not human) may leave in its body: an object, how many, and the chance (0-100) it's there.</summary>
+public class DeathDrop
+{
+    public int ObjectId { get; set; } = -1;
+    public int Quantity { get; set; } = 1;
+    public int Percent { get; set; } = 50;
 }

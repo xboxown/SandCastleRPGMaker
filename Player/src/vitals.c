@@ -250,7 +250,7 @@ static void die(int characterId, const char *cause)
     if (actor < 0) return;
     world_walk_cancel(actor);
     /* the body: a container like it (its Body pose), holding everything it carried */
-    Item *belongings = items_strip(characterId);
+    Item *belongings = items_death_drops(characterId, items_strip(characterId), rnd); /* not human: what may be found in it */
     int x, y, f;
     world_actor_cell(actor, &x, &y, &f);
     int uid = world_put_body(actor, x, y, f);
