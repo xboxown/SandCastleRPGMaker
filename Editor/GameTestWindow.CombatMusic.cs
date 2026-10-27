@@ -96,7 +96,7 @@ public partial class GameTestWindow
             var npc = mc.Npc;
             if (IsDead(mc.Character) || mc.Character.IsInParty || !npc.InCombat || npc.Fleeing || npc.Target is not { } target) continue;
             bool hostile = Attitude(mc.Character, _player) == FactionBehavior.Attack || target == _player || target.IsInParty;
-            if (hostile && IsOnScreen(mc.PixelX, mc.PixelY)) return true;
+            if (hostile && IsOnScreen(mc.PixelX, mc.PixelY) && SameFloor(mc.Character, _player) && SameFloor(target, _player)) return true; // a fight on another floor isn't heard
         }
         return false;
     }
@@ -185,7 +185,7 @@ public partial class GameTestWindow
         if (_battleEndTimeMs >= _battleTimeMs) return; // no battle raging
         foreach (var mc in _mapCharacters)
         {
-            if (mc.Character == victim || IsDead(mc.Character) || !IsOnScreen(mc.PixelX, mc.PixelY)) continue;
+            if (mc.Character == victim || IsDead(mc.Character) || !IsOnScreen(mc.PixelX, mc.PixelY) || !SameFloor(mc.Character, _player)) continue; // another floor's enemies aren't this fight's
             if (mc.Npc.Fleeing || mc.Character.AttackMode == AttackMode.Flee) continue;
             if (Attitude(mc.Character, _player) == FactionBehavior.Attack) return; // still possible enemies
         }

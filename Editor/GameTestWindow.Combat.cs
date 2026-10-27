@@ -87,11 +87,15 @@ public partial class GameTestWindow
     private bool SameSide(CharacterDefinition a, CharacterDefinition b) => a.FactionId >= 0 && a.FactionId == b.FactionId;
 
     /// <summary>Can see: within a screen's distance and nothing tall in between.</summary>
+    /// <summary>On the same floor: floors are apart - those on another one don't know the others are there (no fighting, no danger music).</summary>
+    private bool SameFloor(CharacterDefinition a, CharacterDefinition b) => MapFloors.FloorOfLift(LiftOf(a)) == MapFloors.FloorOfLift(LiftOf(b));
+
     private bool CanSee(CharacterDefinition viewer, CharacterDefinition other)
     {
         var (vx, vy) = PixelOf(viewer);
         var (ox, oy) = PixelOf(other);
         if (double.IsNaN(vx) || double.IsNaN(ox)) return false;
+        if (!SameFloor(viewer, other)) return false; // upstairs and downstairs are apart
         if (Has(other, Ailment.Invisible) && !SameSide(viewer, other) && !(IsPartyOrPlayer(viewer) && IsPartyOrPlayer(other))) return false; // Exult: invisible to those who can't see invisible
         (ox, oy) = NearestImage(vx, vy, ox, oy); // over the seam of a map that wraps around, if nearer
         if (Math.Abs(vx - ox) > ViewportWidth / 2 || Math.Abs(vy - oy) > ViewportHeight / 2) return false;
@@ -229,7 +233,8 @@ public partial class GameTestWindow
             return;
         }
 
-        // Need a new opponent? (Need_new_opponent: none, dead)
+        // Need a new opponent? (Need_new_opponent: none, dead - or gone to another floor, out of its world)
+        if (npc.Target is not null && !SameFloor(me, npc.Target)) npc.Target = null;
         if (npc.Target is null || IsDead(npc.Target)) npc.Target = FindFoe(mapCharacter);
         if (npc.Target is null)
         {
@@ -397,7 +402,7 @@ public partial class GameTestWindow
             && FindFoeFor(_player) is { } autoFoe && !IsUnconscious(autoFoe)) _playerTarget = autoFoe;
         if (!_combatMode || _player is null || (_playerTarget is null && _playerTargetThing is null)) return;
         // The Avatar stops when its foe is knocked out (Exult) - unless the player chose to finish it off, and still holds a weapon.
-        if (_playerTarget is not null && (IsDead(_playerTarget) || (IsUnconscious(_playerTarget) && !(_playerFinishesOff && WieldedWeapon(_player) is not null))))
+        if (_playerTarget is not null && (IsDead(_playerTarget) || !SameFloor(_player, _playerTarget) || (IsUnconscious(_playerTarget) && !(_playerFinishesOff && WieldedWeapon(_player) is not null))))
         {
             _playerTarget = null;
             _playerFinishesOff = false;

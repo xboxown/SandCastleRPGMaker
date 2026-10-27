@@ -241,10 +241,20 @@ static int in_reach(int a, int b)
     return abs(world_wrap_cells_x(ax - bx)) <= 1 && abs(world_wrap_cells_y(ay - by)) <= 1 && abs(world_actor_lift(a) - world_actor_lift(b)) <= 4;
 }
 
-/* Can see: within half a screen and nothing tall in between; the invisible are unseen by those not on their side. */
+/* On the same floor (GameTestWindow.SameFloor): floors are apart - those on another one don't know the others are there. */
+static int same_floor(int a, int b)
+{
+    int x, y, fa, fb;
+    world_actor_cell(a, &x, &y, &fa);
+    world_actor_cell(b, &x, &y, &fb);
+    return fa == fb;
+}
+
+/* Can see: on the same floor, within half a screen and nothing tall in between; the invisible are unseen by those not on their side. */
 static int can_see(int viewer, int other)
 {
     if (dead(viewer) || dead(other)) return 0;
+    if (!same_floor(viewer, other)) return 0; /* upstairs and downstairs are apart */
     if (vitals_has(id_of(other), 32) && !same_side(viewer, other) && !(in_party(viewer) && in_party(other))) return 0;
     double vx, vy, ox, oy;
     world_actor_pixel(viewer, &vx, &vy);
@@ -423,7 +433,7 @@ static int hostile_nearby(void)
         int hostile = attitude(a, 0) == F_ATTACK || f->target == 0 || in_party(f->target);
         double x, y;
         world_actor_pixel(a, &x, &y);
-        if (hostile && world_on_screen(x, y, 0)) return 1;
+        if (hostile && world_on_screen(x, y, 0) && same_floor(a, 0) && same_floor(f->target, 0)) return 1; /* a fight on another floor isn't heard */
     }
     return 0;
 }
@@ -470,7 +480,7 @@ static void enemy_killed_music(int victim, int killer)
     {
         double x, y;
         world_actor_pixel(a, &x, &y);
-        if (a == victim || dead(a) || !world_on_screen(x, y, 0) || fighters[a].fleeing || attack_mode(a) == M_FLEE) continue;
+        if (a == victim || dead(a) || !world_on_screen(x, y, 0) || !same_floor(a, 0) || fighters[a].fleeing || attack_mode(a) == M_FLEE) continue; /* another floor's enemies aren't this fight's */
         if (attitude(a, 0) == F_ATTACK) return; /* still enemies */
     }
     battleEndTimeMs = nowMs;
@@ -600,6 +610,7 @@ static void combat_now_what(int actor)
         run_away(actor);
         return;
     }
+    if (f->target >= 0 && !same_floor(actor, f->target)) f->target = -1; /* gone to another floor: out of its world */
     if (f->target < 0 || dead(f->target)) f->target = find_foe(actor);
     if (f->target < 0)
     {
@@ -1051,7 +1062,7 @@ static void update_player(double ms)
         return;
     }
     if (!combatMode || playerTarget < 0) return;
-    if (dead(playerTarget) || (unconscious(playerTarget) && !(playerFinishesOff && wielded(0, NULL)))) { playerTarget = -1; playerFinishesOff = 0; return; }
+    if (dead(playerTarget) || !same_floor(0, playerTarget) || (unconscious(playerTarget) && !(playerFinishesOff && wielded(0, NULL)))) { playerTarget = -1; playerFinishesOff = 0; return; }
     if (incapacitated(0)) return;
     if ((playerStrikeMs -= ms) > 0) return;
     playerStrikeMs = STD_DELAY;
