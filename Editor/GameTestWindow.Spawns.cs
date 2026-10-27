@@ -32,7 +32,7 @@ public partial class GameTestWindow
                     copy.Schedules = Enumerable.Range(0, 8).Select(period => new ScheduleEntry
                     {
                         Period = period, Type = spawn.Free ? ScheduleType.Wander : ScheduleType.Loiter, X = spawn.X, Y = spawn.Y,
-                        WorkAreaTiles = spawn.Free ? 0 : Math.Max(1, spawn.WanderTiles) * Math.Max(1, (int)Math.Round(_tileWidth / 8)) // map squares as Exult tiles: the reach Loiter keeps to; 0: free
+                        WorkAreaTiles = spawn.Free ? 0 : Math.Max(1, spawn.WanderTiles) * Math.Max(1, (int)Math.Round(_tileWidth / 8.0)) // map squares as Exult tiles: the reach Loiter keeps to; 0: free
                     }).ToList();
                     _map.Characters.Add(new PlacedCharacter
                     {
