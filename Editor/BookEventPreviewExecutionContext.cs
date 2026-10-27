@@ -102,6 +102,8 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public bool WaitUntilRead(Action goOn) => OnWaitUntilRead?.Invoke(goOn) ?? false;
     /// <summary>Teleport: (who - "Activator", "Player" or a character id, cell x, cell y).</summary>
     public Func<string, int, int, bool>? OnTeleport { get; set; }
+    /// <summary>Teleport with its floor and map (the game): the whole command; when set, used instead of OnTeleport.</summary>
+    public Func<EventCommand, bool>? OnTeleportCommand { get; set; }
     /// <summary>Change Behavior: (character - "Activator" or an id, a schedule activity name or "Resume").</summary>
     public Func<string, string, bool>? OnChangeBehavior { get; set; }
     /// <summary>Food Level: (who, "Set"/"Add"/"Subtract", amount).</summary>
@@ -233,6 +235,7 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
                 return OnShowMessage(command);
             case EventCommandType.Teleport:
             {
+                if (OnTeleportCommand is not null) return OnTeleportCommand(command);
                 if (OnTeleport is null) return false;
                 if (!int.TryParse(command.Get("X"), out int x) || !int.TryParse(command.Get("Y"), out int y)) return false;
                 string who = command.Get("Who");

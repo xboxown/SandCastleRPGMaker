@@ -42,7 +42,9 @@ public class MapCellPickerWindow : Window
 
     /// <param name="selectThings">Picking a thing: which keys can be picked (a door, a chair...). Null: any object shown can be clicked to take its cell.</param>
     /// <param name="startFloor">The floor to open on (the current spot's); null: the Map Editor's floor.</param>
-    public MapCellPickerWindow(BitmapSource map, int tileWidth, int tileHeight, int columns, int rows, (int X, int Y)? current, (int X, int Y)? placedSpot, Func<string, bool>? selectThings = null, int? startFloor = null)
+    /// <param name="floorPictures">Each floor's picture (another world's): the open map's when not given.</param>
+    public MapCellPickerWindow(BitmapSource map, int tileWidth, int tileHeight, int columns, int rows, (int X, int Y)? current, (int X, int Y)? placedSpot, Func<string, bool>? selectThings = null, int? startFloor = null,
+        Func<int, bool, MapPickerPicture?>? floorPictures = null)
     {
         Title = selectThings is null ? "Pick the spot on the map" : "Pick it on the map";
         (_tileWidth, _tileHeight, _columns, _rows) = (tileWidth, tileHeight, columns, rows);
@@ -137,7 +139,7 @@ public class MapCellPickerWindow : Window
 
         var bar = new DockPanel { Margin = new Thickness(6) };
         var left = new StackPanel { Orientation = Orientation.Horizontal };
-        var floorPicker = ProjectSession.MapFloorPictureProvider;
+        var floorPicker = floorPictures ?? ProjectSession.MapFloorPictureProvider;
         if (floorPicker is not null)
         {
             var floors = new ComboBox { Width = 80, ItemsSource = Enumerable.Range(1, MapFloors.MaxFloors).Select(f => $"Floor {f}").ToList(), ToolTip = "Which floor to see and pick on (the Map Editor's floors 1-9)." };

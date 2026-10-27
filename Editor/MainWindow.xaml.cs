@@ -121,6 +121,8 @@ public partial class MainWindow : Window
         ProjectSession.CharactersProvider = () => _characterDatabase;
         ProjectSession.MapSnapshotProvider = SnapshotOpenMap;
         ProjectSession.MapFloorPictureProvider = (floor, seeInside) => RenderMapPicture(floor, seeInside);
+        ProjectSession.WorldFloorPictureProvider = RenderWorldPicture;
+        StartAutoSave();
         ProjectSession.MapEditorFloorProvider = () => _currentFloor;
         ProjectSession.PlacedSpotProvider = characterId =>
             _map?.Characters.FirstOrDefault(c => c.CharacterId == characterId) is { } placed ? (placed.X, placed.Y) : null;
@@ -923,6 +925,27 @@ public partial class MainWindow : Window
 
     private void SaveProjectMenuItem_Click(object sender, RoutedEventArgs e) => SaveProject();
 
+    // ---------- Autosave (System Settings > Autosave) ----------
+
+    private System.Windows.Threading.DispatcherTimer? _autoSaveTimer;
+    private DateTime _lastSaved = DateTime.UtcNow;
+
+    /// <summary>Started with the window: every 30 s it looks whether the project is due a save (and nothing is open over the editor).</summary>
+    private void StartAutoSave()
+    {
+        _autoSaveTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromSeconds(30) };
+        _autoSaveTimer.Tick += (_, _) =>
+        {
+            var auto = _systemSettings.AutoSave;
+            if (!auto.Enabled || _currentProjectFilePath is null) return;
+            if ((DateTime.UtcNow - _lastSaved).TotalMinutes < Math.Max(1, auto.Minutes)) return;
+            if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible) || System.Windows.Application.Current.Windows.OfType<GameTestWindow>().Any()) return; // Game Test or a window open over the editor: later
+            if (SaveProject()) StatusText.Text = $"Autosaved at {DateTime.Now:HH:mm}.";
+            else _lastSaved = DateTime.UtcNow; // failed (already told): try again after the next interval
+        };
+        _autoSaveTimer.Start();
+    }
+
     /// <summary>Saves the open project (.msrp and its .sdbx files). False if there is none or saving failed (the reason was already shown).</summary>
     private bool SaveProject()
     {
@@ -949,6 +972,7 @@ public partial class MainWindow : Window
             MarkAudiosIntegrated();
 
             StatusText.Text = $"Project saved to {_currentProjectFolder}";
+            _lastSaved = DateTime.UtcNow;
             return true;
         }
         catch (ProjectFileException ex)

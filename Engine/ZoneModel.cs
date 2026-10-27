@@ -21,6 +21,8 @@ public class MapZone
     public int Floor { get; set; } = 1;
     /// <summary>Its colour in the Map Editor, #RRGGBB.</summary>
     public string Color { get; set; } = "#3FA7FF";
+    /// <summary>The sound looping while the main character is in it, instead of the map's ambient sounds (-1: none). A Cave silences the world's ambient sounds always - quiet if it has none of its own. Each house's zones keep their own (one cave drips, another howls).</summary>
+    public int AmbientSoundId { get; set; } = -1;
 
     public bool Contains(int x, int y) => x >= X && y >= Y && x < X + Width && y < Y + Height;
     public (int X, int Y) Center => (X + Width / 2, Y + Height / 2);
@@ -31,7 +33,16 @@ public class MapZone
 public static class Zones
 {
     /// <summary>Purposes offered in the editors (any other can be typed).</summary>
-    public static readonly string[] CommonPurposes = { "Home", "Pub", "Inn", "Hospital", "Shop", "Smithy", "Farm", "Temple", "Guard post", "Workplace" };
+    public static readonly string[] CommonPurposes = { "Home", "Pub", "Inn", "Hospital", "Shop", "Smithy", "Farm", "Temple", "Guard post", "Workplace", CavePurpose };
+
+    /// <summary>A Cave: the world's ambient sounds stop inside it; its own (AmbientSoundId) loops instead.</summary>
+    public const string CavePurpose = "Cave";
+
+    public static bool IsCave(MapZone zone) => string.Equals(zone.Purpose.Trim(), CavePurpose, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>The zone on that cell and floor with a sound of its own or a Cave (its ambient instead of the map's), or null.</summary>
+    public static MapZone? AmbientZoneAt(IEnumerable<MapZone> zones, int x, int y, int floor) =>
+        zones.FirstOrDefault(z => z.Floor == floor && z.Contains(x, y) && (IsCave(z) || z.AmbientSoundId >= 0));
 
     /// <summary>Zones of a purpose (any case).</summary>
     public static IEnumerable<MapZone> WithPurpose(IEnumerable<MapZone> zones, string purpose) =>

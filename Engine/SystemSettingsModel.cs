@@ -231,8 +231,16 @@ public class DisplaySettings
     public int WindowScale { get; set; } = 3;
 }
 
+/// <summary>The editor saving the project by itself (System Settings > Autosave) - every so many real minutes while it's open.</summary>
+public class AutoSaveSettings
+{
+    public bool Enabled { get; set; } = true;
+    public int Minutes { get; set; } = 5;
+}
+
 public class SystemSettings
 {
+    public AutoSaveSettings AutoSave { get; set; } = new();
     public DisplaySettings Display { get; set; } = new();
     public TitleScreenSettings Title { get; set; } = new();
     public QuitSettings Quit { get; set; } = new();

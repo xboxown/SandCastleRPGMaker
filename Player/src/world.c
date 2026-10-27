@@ -116,7 +116,7 @@ typedef struct Actor
     int walkingNow;
     int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
     int human;                      /* Exult: only the sentient open doors */
-    int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies) */
+    int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies), 3 stationary */
     int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
     double climbMs;                 /* a flier climbing or dropping a lift at a time */
     double bashMs;                  /* breaking a door down: till its next blow */
@@ -1706,11 +1706,14 @@ static Walk *walk_of(int actor)
 }
 
 /* Starts a walk there (the player: first to the middle of the cell they stand in); 0 when there's no way just now. */
+int world_actor_stationary(int actor) { Actor *a = actor_of(actor); return a && a->movement == 3; }
+
 int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
 {
     Actor *a = actor_of(actor);
     Walk *w = walk_of(actor);
     if (!a || !w) return 0;
+    if (a->movement == 3) return 0; /* Stationary: it never moves (Character Editor > Moves on) */
     a->flyPrefer = goalFloor ? base_lift(goalFloor) : FLY_LIFT;
     int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1);
     if (n < 0) return 0;
@@ -4060,7 +4063,7 @@ static int free_cell(int actor, int x, int y)
 static int move_aside(int blocker, int walker, int dx, int dy)
 {
     Actor *b = actor_of(blocker), *wa = actor_of(walker);
-    if (!b || !wa || b->gone || vitals_dead(b->characterId) || vitals_has(b->characterId, 2 | 4) || world_seated(blocker)) return 0;
+    if (!b || !wa || b->gone || vitals_dead(b->characterId) || vitals_has(b->characterId, 2 | 4) || world_seated(blocker) || b->movement == 3) return 0; /* sitting, or stationary: an obstacle */
     if (blocker == 0 ? (keysHeld || world_walking(0) || combat_mode()) : (world_walking(blocker) || combat_busy(blocker))) return 0;
     int bx = (int)floor(b->px / tileW), by = (int)floor(b->py / tileH);
     const int ax[6] = { -dy, dy, 1, 1, -1, -1 }, ay[6] = { dx, -dx, 1, -1, 1, -1 };

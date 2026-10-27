@@ -45,7 +45,7 @@ public partial class GameTestWindow
     private bool MoveAside(MapCharacter blocker, int dx, int dy, MapCharacter? walker)
     {
         var npc = blocker.Npc;
-        if (npc.InCombat || npc.Path is not null || npc.Activity == ScheduleType.Sleep || IsIncapacitated(blocker.Character) || _seats.ContainsKey(blocker.Character)) return false; // sitting or lying: an obstacle (Exult)
+        if (npc.InCombat || npc.Path is not null || npc.Activity == ScheduleType.Sleep || IsIncapacitated(blocker.Character) || _seats.ContainsKey(blocker.Character) || blocker.Character.Movement == MovementKind.Stationary) return false; // sitting or lying: an obstacle (Exult) A stationary one never moves.
         var here = (blocker.Placement.X, blocker.Placement.Y);
         foreach (var (ax, ay) in AsideDirections(dx, dy))
         {

@@ -195,6 +195,20 @@ public partial class MainWindow
         rows.Children.Add(purpose);
         rows.Children.Add(Label("Colour in the Map Editor"));
         rows.Children.Add(color);
+        // Its own ambient sound: a Cave stops the world's ambient sounds inside it and loops this instead.
+        var none = new ResourceEntry { Id = -1, Name = "(None)" };
+        var sounds = new List<ResourceEntry> { none };
+        sounds.AddRange(_resourceDatabase.Entries.Where(r => r.Kind == ResourceKind.Sound));
+        var ambient = new ComboBox { ItemsSource = sounds, DisplayMemberPath = "Name", SelectedItem = sounds.FirstOrDefault(s => s.Id == zone.AmbientSoundId) ?? none };
+        var listen = new Button { Content = "Play", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(6, 0, 0, 0) };
+        listen.Click += (_, _) => { if (ambient.SelectedItem is ResourceEntry { Id: >= 0 } s) SoundPlayback.TryPlay(_resourceDatabase, s.Id); };
+        var hush = new Button { Content = "Stop", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(4, 0, 0, 0) };
+        hush.Click += (_, _) => SoundPlayback.StopAll();
+        var ambientRow = new DockPanel();
+        DockPanel.SetDock(hush, Dock.Right); DockPanel.SetDock(listen, Dock.Right);
+        ambientRow.Children.Add(hush); ambientRow.Children.Add(listen); ambientRow.Children.Add(ambient);
+        rows.Children.Add(Label("Ambient sound inside it (a Cave: instead of the world's - none keeps a cave quiet)"));
+        rows.Children.Add(ambientRow);
         rows.Children.Add(Label($"Cells (floor {zone.Floor})"));
         rows.Children.Add(cells);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -207,6 +221,7 @@ public partial class MainWindow
             { MessageBox.Show(window, "X, Y, Width and Height are whole numbers (size at least 1).", window.Title); return; }
             zone.Name = name.Text.Trim();
             zone.Purpose = purpose.Text.Trim();
+            zone.AmbientSoundId = ambient.SelectedItem is ResourceEntry picked ? picked.Id : -1;
             zone.Color = color.SelectedItem as string ?? zone.Color;
             zone.X = Math.Clamp(x, 0, _map.Width - 1);
             zone.Y = Math.Clamp(y, 0, _map.Height - 1);

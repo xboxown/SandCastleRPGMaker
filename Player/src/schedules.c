@@ -165,6 +165,7 @@ static void set_schedule_and_loc(Npc *n, const Entry *e, int x, int y, int delay
     world_stand_up(n->actor); /* off the chair / out of bed */
     stop_walking(n);
     n->entry = e; n->destX = x; n->destY = y;
+    if (world_actor_stationary(n->actor)) { int cx, cy, cf; world_actor_cell(n->actor, &cx, &cy, &cf); n->destX = cx; n->destY = cy; } /* does it where it stands */
     n->activity = 0;
     n->walkingToSchedule = 1;
     n->retries = 0; n->bestDistance = 1 << 30;

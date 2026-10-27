@@ -188,6 +188,7 @@ int world_actor_facing(int actor);
 /* Walk To Location: a way there (A* by Exult's walking rules), walked at the player's pace; 0 when there's none just now. floor 0 = any. */
 int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);
+int world_actor_stationary(int actor);   /* Moves on: Stationary - never moves */
 int world_keys_held(void); /* a direction key held (it takes over from an event's walk) */
 void world_draw_stats(int *thingsOnMap, int *drawnLast);
 int world_hearing_at(double drawnX, double drawnY, double *volume, double *balance);   /* Exult's sound positions: 0 too far */

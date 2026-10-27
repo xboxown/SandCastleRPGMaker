@@ -52,6 +52,24 @@ public partial class SystemSettingsWindow
             row.Children.Add(swatch);
             row.Children.Add(new TextBlock { Text = "  strength (0-1):", VerticalAlignment = VerticalAlignment.Center });
             row.Children.Add(amount);
+            // Double-click the square: the Apply Palette Color window to pick it from the palettes (its opacity is the strength).
+            swatch.ToolTip = "Double-click to pick the colour from the palettes.";
+            swatch.Cursor = System.Windows.Input.Cursors.Hand;
+            swatch.MouseLeftButtonDown += (_, e) =>
+            {
+                if (e.ClickCount < 2) return;
+                var now = new EventCommand { Type = EventCommandType.ApplyPaletteColor };
+                now.Parameters["Hex"] = get().TrimStart('#');
+                now.Parameters["OpacityPercent"] = ((int)Math.Round(strength() * 100)).ToString();
+                var pick = new ApplyPaletteColorCommandWindow(now) { Owner = this };
+                if (pick.ShowDialog() != true) return;
+                set("#" + pick.Result.Get("Hex"));
+                if (int.TryParse(pick.Result.Get("OpacityPercent"), out int percent)) setStrength(Math.Clamp(percent / 100.0, 0, 1));
+                box.Text = get();
+                amount.Text = strength().ToString("0.##");
+                Show();
+                e.Handled = true;
+            };
             Show();
             return row;
         }

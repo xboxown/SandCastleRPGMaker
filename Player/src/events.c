@@ -68,11 +68,13 @@ static int ambientDawn = -1, ambientDay = -1, ambientDusk = -1, ambientNight = -
 static double dawnHour = 5, dayHour = 7, duskHour = 19, nightHour = 21;
 
 /* The map's ambient sound (Edit > Map Ambient Sounds): the one for this part of the day loops, giving way to the next when its hour comes. */
+static int zone_ambient(int sound);
 static void update_ambient(void)
 {
     if (combat_silences_ambient()) { if (ambientPlaying != -3) { sound_stop_owner(OWNER_AMBIENT); ambientPlaying = -3; } return; } /* combat music in its place */
     double h = clockHour + clockMinute / 60.0;
     int sound = h >= dawnHour && h < dayHour ? ambientDawn : h >= dayHour && h < duskHour ? ambientDay : h >= duskHour && h < nightHour ? ambientDusk : ambientNight;
+    sound = zone_ambient(sound); /* Zones.AmbientZoneAt: in a Cave (or a zone with a sound of its own), its ambient instead of the world's */
     if (sound == ambientPlaying) return;
     ambientPlaying = sound;
     sound_stop_owner(OWNER_AMBIENT);
@@ -135,6 +137,24 @@ static int num(cJSON *o, const char *k, int fallback) { cJSON *v = get(o, k); re
 static double dbl(cJSON *o, const char *k) { cJSON *v = get(o, k); return cJSON_IsNumber(v) ? v->valuedouble : 0; }
 static int flag(cJSON *o, const char *k) { return cJSON_IsTrue(get(o, k)); }
 static const char *str(cJSON *o, const char *k) { const char *s = cJSON_GetStringValue(get(o, k)); return s ? s : ""; }
+
+/* Zones.AmbientZoneAt: the zone the main character is in with a sound of its own, or a Cave - its ambient (-1 quiet); else the world's. */
+static int zone_ambient(int sound)
+{
+    int px, py, pf;
+    world_actor_cell(0, &px, &py, &pf);
+    cJSON *zone;
+    cJSON_ArrayForEach(zone, get(get(get((cJSON *)world_json(), "Project"), "Map"), "Zones"))
+    {
+        int zx = num(zone, "X", 0), zy = num(zone, "Y", 0);
+        if (num(zone, "Floor", 1) != pf || px < zx || py < zy || px >= zx + num(zone, "Width", 1) || py >= zy + num(zone, "Height", 1)) continue;
+        const char *purpose = str(zone, "Purpose");
+        while (*purpose == ' ') purpose++;
+        int cave = (purpose[0] | 32) == 'c' && (purpose[1] | 32) == 'a' && (purpose[2] | 32) == 'v' && (purpose[3] | 32) == 'e' && (!purpose[4] || purpose[4] == ' ');
+        if (cave || num(zone, "AmbientSoundId", -1) >= 0) return num(zone, "AmbientSoundId", -1);
+    }
+    return sound;
+}
 static const char *param(const Cmd *c, const char *k) { return str(c->params, k); }
 
 /* ---------------- Variables and switches (one store by name, as the engine's) ---------------- */
@@ -2287,8 +2307,23 @@ static int execute(Run *r, const Cmd *c)
         }
         case C_Teleport:
         {
+            /* TeleportEventCommand: on a floor of this map, or (the main character, with the party) to another map as Change Map */
+            int world = atoi(param(c, "World")), x = atoi(param(c, "X")), y = atoi(param(c, "Y"));
+            int onFloor = param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 0;
+            if (world > 0 && world != num(get(get((cJSON *)world_json(), "Project"), "Map"), "Id", 0))
+            {
+                if (!world_exists(world)) { lastResult = 0; return 1; }
+                worldTrip = (WorldTrip){ 1, world, 1, x, y, onFloor ? onFloor : 1, 0 };
+                r->waiting = W_DOLL; r->answerToken = 0; /* never goes on: the game is rebuilt there */
+                return 0;
+            }
             int actor = actor_for(r, param(c, "Who"));
-            if (actor >= 0) world_teleport(actor, atoi(param(c, "X")), atoi(param(c, "Y")));
+            if (actor >= 0)
+            {
+                if (onFloor && actor > 0) world_actor_place(actor, x, y, onFloor);
+                else if (onFloor) { world_teleport(actor, x, y); world_actor_place(0, x, y, onFloor); }
+                else world_teleport(actor, x, y);
+            }
             return 1;
         }
         case C_ChangePose:

@@ -173,7 +173,7 @@ public partial class GameTestWindow
         StopWalking(mapCharacter);
         npc.Hounding = false;
         npc.Entry = entry;
-        npc.Dest = spot;
+        npc.Dest = mapCharacter.Character.Movement == MovementKind.Stationary ? (mapCharacter.Placement.X, mapCharacter.Placement.Y) : spot; // a stationary one does it where it stands
         npc.Activity = null;
         // Exult puts a character straight there when it and the spot are both off-screen; here it always walks
         // (the designer's choice) - whatever happens on the way happens: a fight, a trap, a locked door.
@@ -444,6 +444,7 @@ public partial class GameTestWindow
 
     private void StartPath(MapCharacter mapCharacter, List<(int X, int Y)> path)
     {
+        if (mapCharacter.Character.Movement == MovementKind.Stationary) return; // it never moves (Character Editor > Moves on)
         mapCharacter.Npc.Path = path;
         mapCharacter.Npc.PathIndex = 0;
         mapCharacter.Npc.Chasing = false; // a chase says so itself, after starting its path

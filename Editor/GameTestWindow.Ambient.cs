@@ -24,6 +24,8 @@ public partial class GameTestWindow
             : hour >= d.DayStartHour && hour < d.DuskStartHour ? a.DaySoundId
             : hour >= d.DuskStartHour && hour < d.NightStartHour ? a.DuskSoundId
             : a.NightSoundId;
+        // In a Cave (or a zone with a sound of its own): its ambient instead of the world's.
+        if (Zones.AmbientZoneAt(_map.Zones, _playerX, _playerY, MapFloors.FloorOfLift(_playerZ)) is { } zone) sound = zone.AmbientSoundId;
         if (sound == _ambientPlaying) return;
         _ambientPlaying = sound;
         SoundPlayback.StopFor(_ambientSoundOwner);

@@ -146,7 +146,8 @@ public class CharacterDefinition
 
 /// <summary>Every PC defined in the project. Per spec, stored in .msrp, not a separate file.</summary>
 /// <summary>How a character gets about: mammals walk, sea creatures swim, birds fly.</summary>
-public enum MovementKind { Land, Sea, Air }
+/// <summary>How a character gets about. Stationary: it never moves from where it is placed (a reaper, a tree that shoots lightning) - still a character: it talks, fights from where it stands, has its schedules' activities there.</summary>
+public enum MovementKind { Land, Sea, Air, Stationary }
 
 public class CharacterDatabase
 {

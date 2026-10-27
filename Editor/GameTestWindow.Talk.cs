@@ -56,7 +56,8 @@ public partial class GameTestWindow
         _execContext.OnShowMessage = QueueMessage;
         _execContext.OnAskChoice = AskChoice;
         _execContext.OnWaitUntilRead = WaitUntilRead;
-        _execContext.OnTeleport = TeleportCommand;
+        _execContext.OnTeleport = (who, x, y) => TeleportCommand(who, x, y);
+        _execContext.OnTeleportCommand = TeleportEventCommand;
         _execContext.OnChangeBehavior = ChangeBehaviorCommand;
     }
 
@@ -171,7 +172,18 @@ public partial class GameTestWindow
         _ => _mapCharacters.FirstOrDefault(mc => mc.Character.Id.ToString() == who)
     };
 
-    private bool TeleportCommand(string who, int x, int y)
+    /// <summary>The Teleport command: to a cell on a floor of this map, or (the main character, with the party) of another map, as Change Map takes them.</summary>
+    private bool TeleportEventCommand(EventCommand command)
+    {
+        if (!int.TryParse(command.Get("X"), out int x) || !int.TryParse(command.Get("Y"), out int y)) return false;
+        string who = command.Get("Who") is { Length: > 0 } w ? w : WhoChoice.Activator;
+        int? floor = int.TryParse(command.Get("Floor"), out int f) ? Math.Clamp(f, 1, MapFloors.MaxFloors) : null;
+        if (int.TryParse(command.Get("World"), out int worldId) && worldId > 0 && worldId != _map.Id)
+            return TravelToWorld(worldId, (x, y, floor ?? 1), false, _ => { });
+        return TeleportCommand(who, x, y, floor);
+    }
+
+    private bool TeleportCommand(string who, int x, int y, int? floor = null)
     {
         if (!InsideMap(x, y)) return false;
         if (who == WhoChoice.Player || (who == WhoChoice.Activator && _activator is null))
@@ -180,7 +192,7 @@ public partial class GameTestWindow
             _playerY = y;
             _playerPixelX = x * _tileWidth + _tileWidth / 2.0;
             _playerPixelY = y * _tileHeight + _tileHeight / 2.0;
-            _playerZ = StandingLiftOnFloor(PlayerFootprint(), MapFloors.FloorOfLift(_playerZ)); // on the floor they were on
+            _playerZ = StandingLiftOnFloor(PlayerFootprint(), floor ?? MapFloors.FloorOfLift(_playerZ)); // on the floor asked for, else the one they were on
             _playerVisualLiftZ = _playerZ;
             _eventUnderPlayer = EventAt(x, y, _playerZ); // arriving doesn't set off the event there
             SnapPlayerPosition();
@@ -191,6 +203,7 @@ public partial class GameTestWindow
         if (mapCharacter is null) return false;
         bool wasBusy = mapCharacter.Npc.WalkingToSchedule || mapCharacter.Npc.Activity is ScheduleType.Loiter or ScheduleType.Wander or ScheduleType.Dance or ScheduleType.HorizPace or ScheduleType.VertPace;
         Teleport(mapCharacter, (x, y));
+        if (floor is { } onFloor) { mapCharacter.Lift = StandingLiftOnFloor(CharacterFootprint(mapCharacter), onFloor, mapCharacter.Placement); PositionCharacterVisual(mapCharacter); }
         mapCharacter.Npc.EventUnder = EventAt(x, y, mapCharacter.Lift);
         if (wasBusy) mapCharacter.Npc.WaitMs = StdDelay; // think again from the new place
         return true;

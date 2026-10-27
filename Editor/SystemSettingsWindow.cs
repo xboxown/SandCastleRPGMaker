@@ -60,6 +60,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Errors", Content = BuildErrorsTab() });
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
+        tabs.Items.Add(new TabItem { Header = "Autosave", Content = BuildAutoSaveTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
 
@@ -236,6 +237,28 @@ public partial class SystemSettingsWindow : Window
     }
 
     /// <summary>How a built game opens: in a window, or 100% full screen.</summary>
+    private UIElement BuildAutoSaveTab()
+    {
+        var auto = _settings.AutoSave;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        var on = new CheckBox { Content = "Save the project by itself", IsChecked = auto.Enabled };
+        on.Checked += (_, _) => auto.Enabled = true;
+        on.Unchecked += (_, _) => auto.Enabled = false;
+        panel.Children.Add(on);
+        var minutes = new TextBox { Width = 60, Text = auto.Minutes.ToString() };
+        minutes.LostFocus += (_, _) => { if (int.TryParse(minutes.Text.Trim(), out int m)) auto.Minutes = Math.Clamp(m, 1, 600); minutes.Text = auto.Minutes.ToString(); };
+        var row = LabeledRow("Every (real minutes):", minutes);
+        ((FrameworkElement)row).Margin = new Thickness(0, 10, 0, 0);
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "While the editor is open, the project (.msrp and its .sdbx files) is saved this often, as Project > Save does - so a power cut or a crash loses no more than these minutes of work. " +
+                   "It isn't saved while Game Test is running or a window is open over the editor; it waits till they're closed.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
+        });
+        return panel;
+    }
+
     private UIElement BuildGameWindowTab()
     {
         var display = _settings.Display;

@@ -60,6 +60,31 @@ public sealed class MapPickerPicture
 /// </summary>
 public partial class MainWindow
 {
+    /// <summary>Another world's floor: the Map Editor shows it for a moment to picture it, then goes back to the world it had open.</summary>
+    private MapPickerPicture? RenderWorldPicture(int worldId, int floor, bool seeInside)
+    {
+        var world = _worlds.FirstOrDefault(w => w.Id == worldId);
+        if (world is null || ReferenceEquals(world, _map) || _editingHouse is not null) return RenderMapPicture(floor, seeInside);
+        var keep = _map;
+        int keepFloor = _currentFloor;
+        double h = MapScrollViewer.HorizontalOffset, v = MapScrollViewer.VerticalOffset;
+        bool sameTiles = keep is not null && keep.Tileset.TilesetSpriteName == world.Tileset.TilesetSpriteName;
+        try
+        {
+            _map = world;
+            if (sameTiles) BuildMapCanvas(); else ShowMapInEditor();
+            return RenderMapPicture(floor, seeInside);
+        }
+        finally
+        {
+            _map = keep;
+            _currentFloor = keepFloor;
+            if (sameTiles) BuildMapCanvas(); else ShowMapInEditor();
+            MapScrollViewer.ScrollToHorizontalOffset(h);
+            MapScrollViewer.ScrollToVerticalOffset(v);
+        }
+    }
+
     private MapPickerPicture? RenderMapPicture(int floor, bool seeInside)
     {
         if (_map is null || _tileset is null) return null;

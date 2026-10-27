@@ -29,15 +29,17 @@ internal sealed record WhoChoice(string Key, string Label)
 }
 
 /// <summary>
-/// Teleport: moves the player or a character to a cell of this map at once.
-/// "Whoever set it off" makes a teleporter tile work on characters walking
-/// over it exactly as it does on the player.
+/// Teleport: moves the player or a character to a cell at once - on a floor,
+/// in this world or (the player, with the party) another one (Maps tab), as
+/// Change Map does. "Whoever set it off" makes a teleporter tile work on
+/// characters walking over it exactly as it does on the player.
 /// </summary>
 public class TeleportCommandWindow : FactionCommandWindowBase
 {
-    private readonly ComboBox _who;
+    private readonly ComboBox _who, _world;
     private readonly TextBlock _spotText;
     private (int X, int Y)? _spot;
+    private int _floor = 1;
 
     public TeleportCommandWindow(EventCommand? existing = null) : base("Teleport")
     {
@@ -48,29 +50,45 @@ public class TeleportCommandWindow : FactionCommandWindowBase
         _who.SelectedItem = choices.FirstOrDefault(c => c.Key == existing?.Get("Who")) ?? choices[0];
         Rows.Children.Add(_who);
 
-        AddLabel("To");
+        AddLabel("Map");
+        var worlds = new List<KeyValuePair<int, string>> { new(-1, "(This map - the one the event is on)") };
+        worlds.AddRange((ProjectSession.WorldsProvider?.Invoke() ?? new List<MapData>()).Select(w => new KeyValuePair<int, string>(w.Id, w.MapName)));
+        _world = new ComboBox { ItemsSource = worlds, DisplayMemberPath = "Value" };
+        string wantWorld = existing?.Get("World") is { Length: > 0 } wk ? wk : "-1";
+        _world.SelectedItem = worlds.Any(w => w.Key.ToString() == wantWorld) ? worlds.First(w => w.Key.ToString() == wantWorld) : worlds[0];
+        _world.SelectionChanged += (_, _) => { _spot = null; ShowSpot(); }; // a spot is in one map
+        Rows.Children.Add(_world);
+
+        AddLabel("To (floor and cell)");
         if (int.TryParse(existing?.Get("X"), out int x) && int.TryParse(existing?.Get("Y"), out int y)) _spot = (x, y);
+        if (int.TryParse(existing?.Get("Floor"), out int floor)) _floor = Math.Clamp(floor, 1, MapFloors.MaxFloors);
         var line = new StackPanel { Orientation = Orientation.Horizontal };
-        _spotText = new TextBlock { Width = 150, VerticalAlignment = VerticalAlignment.Center };
+        _spotText = new TextBlock { Width = 190, VerticalAlignment = VerticalAlignment.Center };
         var pick = new Button { Content = "Pick on Map...", Padding = new Thickness(8, 1, 8, 1) };
         pick.Click += (_, _) =>
         {
-            if (ProjectSession.MapSnapshotProvider?.Invoke() is not { } map)
+            int worldId = (_world.SelectedItem as KeyValuePair<int, string>?)?.Key ?? -1;
+            Func<int, bool, MapPickerPicture?>? floors = worldId > 0 && ProjectSession.WorldFloorPictureProvider is { } provider ? (f, inside) => provider(worldId, f, inside) : null;
+            var first = floors?.Invoke(_spot is not null ? _floor : 1, true);
+            var open = first is null ? ProjectSession.MapSnapshotProvider?.Invoke() : null;
+            if (first is null && open is null)
             {
                 MessageBox.Show(this, "Open or create a map in the Map Editor first.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
-            var picker = new MapCellPickerWindow(map.Picture, map.TileWidth, map.TileHeight, map.Columns, map.Rows, _spot, null) { Owner = this };
-            if (picker.ShowDialog() == true && picker.Picked is { } cell) { _spot = cell; ShowSpot(); }
+            var picker = first is not null
+                ? new MapCellPickerWindow(first.Picture, first.TileWidth, first.TileHeight, first.Columns, first.Rows, _spot, null, startFloor: _spot is not null ? _floor : null, floorPictures: floors) { Owner = this }
+                : new MapCellPickerWindow(open!.Value.Picture, open.Value.TileWidth, open.Value.TileHeight, open.Value.Columns, open.Value.Rows, _spot, null, startFloor: _spot is not null ? _floor : null) { Owner = this };
+            if (picker.ShowDialog() == true && picker.Picked is { } cell) { _spot = cell; _floor = picker.PickedFloor; ShowSpot(); }
         };
         line.Children.Add(_spotText);
         line.Children.Add(pick);
         Rows.Children.Add(line);
-        AddLabel("On this map. They arrive standing on top of whatever is there; the event tile they land on isn't set off by arriving.", bold: false);
+        AddLabel("They arrive standing on top of whatever is there on that floor; the event tile they land on isn't set off by arriving. To another map, only the main character goes - with the party, as Change Map takes them; the map left is remembered as it was.", bold: false);
         ShowSpot();
     }
 
-    private void ShowSpot() => _spotText.Text = _spot is { } s ? $"cell ({s.X}, {s.Y})" : "(no spot chosen)";
+    private void ShowSpot() => _spotText.Text = _spot is { } s ? $"floor {_floor}, cell ({s.X}, {s.Y})" : "(no spot chosen)";
 
     protected override bool TryBuild()
     {
@@ -79,15 +97,22 @@ public class TeleportCommandWindow : FactionCommandWindowBase
             MessageBox.Show(this, "Pick the spot on the map.", Title, MessageBoxButton.OK, MessageBoxImage.Information);
             return false;
         }
+        var world = _world.SelectedItem is KeyValuePair<int, string> w ? w : new KeyValuePair<int, string>(-1, "");
+        string who = (_who.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Activator;
+        if (world.Key > 0 && who != WhoChoice.Player && MessageBox.Show(this, "To another map only the main character goes (with the party). Teleport the main character?", Title, MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return false;
         var command = new EventCommand { Type = EventCommandType.Teleport };
-        command.Parameters["Who"] = (_who.SelectedItem as WhoChoice)?.Key ?? WhoChoice.Activator;
+        command.Parameters["Who"] = world.Key > 0 ? WhoChoice.Player : who;
         command.Parameters["X"] = spot.X.ToString();
         command.Parameters["Y"] = spot.Y.ToString();
+        command.Parameters["Floor"] = _floor.ToString();
+        command.Parameters["World"] = world.Key.ToString();
+        command.Parameters["WorldName"] = world.Key > 0 ? world.Value : "";
         Result = command;
         return true;
     }
 
-    public static string Describe(EventCommand command) => $"{WhoChoice.Describe(command.Get("Who"))} to ({command.Get("X")}, {command.Get("Y")})";
+    public static string Describe(EventCommand command) =>
+        $"{WhoChoice.Describe(command.Get("Who"))} to ({command.Get("X")}, {command.Get("Y")}){(command.Get("Floor") is { Length: > 0 } f ? $" floor {f}" : "")}{(command.Get("WorldName") is { Length: > 0 } w ? $" in \"{w}\"" : "")}";
 }
 
 /// <summary>
