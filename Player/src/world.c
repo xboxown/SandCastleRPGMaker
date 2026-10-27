@@ -3978,6 +3978,7 @@ int world_heading_to_seat(int actor) { seats_ready(); return actor >= 0 && actor
 int world_trap_sprung(int uid) { Thing *t = thing_by_uid(uid); return t && t->sprung; }
 void world_trap_set_sprung(int uid) { Thing *t = thing_by_uid(uid); if (t) t->sprung = 1; }
 int world_thing_facing(int uid) { Thing *t = thing_by_uid(uid); return t ? t->facing : DIR_S; }
+void world_thing_set_facing(int uid, int facing) { Thing *t = thing_by_uid(uid); if (t && facing >= 0 && facing < 8) t->facing = facing; }
 void world_camera(double *x, double *y) { *x = floor(cameraX); *y = floor(cameraY); }
 
 /* ---------------- Status outlines (Actor::paint: charmed, paralyzed, protected, cursed, poisoned) ---------------- */

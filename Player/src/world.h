@@ -73,6 +73,7 @@ void world_thing_set_belongs(int uid, int characterId);
 int world_trap_sprung(int uid);
 void world_trap_set_sprung(int uid);
 int world_thing_facing(int uid);
+void world_thing_set_facing(int uid, int facing);
 void world_camera(double *x, double *y);
 void world_maybe_bleed(int actor, int damage);
 /* A map that wraps around: distances the short way round (pixels, cells). */

@@ -827,7 +827,8 @@ public partial class ContainerEditorWindow : Window
             {
                 var obj = _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId);
                 var sprite = obj is null || string.IsNullOrEmpty(obj.SpriteName) ? null
-                    : _sprites.Groups.FirstOrDefault(g => g.Name == obj.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == obj.SpriteName)
+                    : (CanFace(obj) ? ObjectLooks.SpriteFor(obj, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), item.FacingRuntime), _sprites) : null) // turned: its look that way
+                      ?? _sprites.Groups.FirstOrDefault(g => g.Name == obj.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == obj.SpriteName)
                       ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == obj.SpriteName);
                 if (sprite is not null && sprite.Frames.Count > 0) // its look from the Sprite Editor, as the game draws it
                 {
@@ -880,6 +881,27 @@ public partial class ContainerEditorWindow : Window
                 ContentsPreviewCanvas.CaptureMouse();
                 e.Handled = true;
             };
+            if (item.Category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) is { } faced && CanFace(faced))
+            {
+                // Right-click: which way it faces when it's taken out (a bedroll, a chair) - as on the map.
+                visual.MouseRightButtonUp += (_, e) =>
+                {
+                    var menu = new ContextMenu();
+                    var facingMenu = new MenuItem { Header = "Facing" };
+                    foreach (var direction in Enum.GetValues<SpriteDirection>())
+                    {
+                        bool hasLook = faced.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet || faced.TurnLooks.TryGetValue(direction, out var t) && t.IsSet;
+                        var entry = new MenuItem { Header = hasLook ? direction.ToString() : $"{direction} (no sprite)", IsCheckable = true, IsChecked = capturedItem.FacingRuntime == direction };
+                        var d = direction;
+                        entry.Click += (_, _) => { capturedItem.FacingRuntime = d; BuildContentsPreview(container); };
+                        facingMenu.Items.Add(entry);
+                    }
+                    menu.Items.Add(facingMenu);
+                    menu.PlacementTarget = visual;
+                    menu.IsOpen = true;
+                    e.Handled = true;
+                };
+            }
             ContentsPreviewCanvas.Children.Add(visual);
         }
 
@@ -908,6 +930,10 @@ public partial class ContainerEditorWindow : Window
     }
 
     private const double DragThresholdContents = 3;
+
+    /// <summary>Something that faces a way (a chair, a bed, a bedroll, or one with turned looks): Facing in its right-click menu.</summary>
+    private static bool CanFace(WorldObject obj) =>
+        obj.Type is ObjectType.Chair or ObjectType.Bed or ObjectType.Bedroll || obj.TurnLooks.Values.Any(t => t.IsSet);
 
     private static BitmapImage? LoadBitmapForPreview(string path)
     {

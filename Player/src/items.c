@@ -35,6 +35,7 @@ struct Item
     void *doll;                      /* its paperdoll as it was left (PaperDoll Editor), NULL: never opened */
     char **learned; int learnedCount; /* a spellbook: the spells this copy has learned (LearnedSpellsRuntime) */
     int liquid, liquidSet;            /* a liquid container: what it holds (a liquid Food's id, -1 empty); liquidSet: its own, not as it starts */
+    int facing;                       /* the way it faces when put down (FacingRuntime; 4 = south) */
     Item **contents; int count, cap;
 };
 
@@ -98,7 +99,7 @@ static void remove_from(Item **list, int *count, const Item *item)
 static Item *new_item(int category, int itemId, int quantity)
 {
     Item *it = (Item *)calloc(1, sizeof(Item));
-    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1; it->cx = it->cy = UNPLACED;
+    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1; it->cx = it->cy = UNPLACED; it->facing = 4;
     return it;
 }
 
@@ -129,6 +130,7 @@ static Item *read_item(cJSON *j)
     if (cJSON_IsArray(get(j, "KeyIdsRuntime"))) it->keysSet = 1;
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     it->charges = num(j, "ChargesRuntime", -1);
+    it->facing = num(j, "FacingRuntime", 4);
     if (cJSON_IsNumber(get(j, "LiquidIdRuntime"))) { it->liquid = num(j, "LiquidIdRuntime", -1); it->liquidSet = 1; }
     cJSON *spell;
     cJSON_ArrayForEach(spell, get(j, "LearnedSpellsRuntime")) if (cJSON_IsString(spell)) items_learn_spell(it, spell->valuestring);
@@ -471,13 +473,14 @@ void items_park(int uid, Item *item)
 {
     if (parkedCount == parkedCap) { parkedCap = parkedCap ? parkedCap * 2 : 16; parked = (Parked *)realloc(parked, sizeof(Parked) * (size_t)parkedCap); }
     parked[parkedCount++] = (Parked){ uid, item };
+    if (item && item->category == CAT_OBJECT) world_thing_set_facing(uid, item->facing); /* put down the way it faced (FacingRuntime) */
 }
 
 /* The thing on the map with that uid as it was put down - or, never carried, a fresh one (a container with its Starting Contents). */
 Item *items_unpark(int uid, int category, int itemId, int quantity)
 {
     for (int i = 0; i < parkedCount; i++)
-        if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; return it; }
+        if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; it->facing = world_thing_facing(uid); return it; }
     /* never carried: SeedContentsOf - its own contents if the Map Editor gave it some, else its Starting Contents */
     cJSON *own = (cJSON *)world_thing_own_contents(uid), *c, *placed = world_thing_placed(uid);
     Item *it;
@@ -494,6 +497,7 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
     cJSON_ArrayForEach(placedKey, get(placed, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(placedKey)) it->keys[it->keyCount++] = placedKey->valueint;
     if (cJSON_IsArray(get(placed, "KeyIdsRuntime"))) it->keysSet = 1;
     it->charges = num(placed, "ChargesRuntime", -1);
+    it->facing = world_thing_facing(uid); /* picked up: the way it faced goes with it */
     return it;
 }
 
@@ -1259,6 +1263,7 @@ cJSON *items_item_json(const Item *it)
     if (it->locked >= 0) cJSON_AddBoolToObject(j, "IsLockedRuntime", it->locked);
     if (it->keyCount || it->keysSet) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); cJSON_AddItemToObject(j, "KeyIdsRuntime", keys); }
     cJSON_AddNumberToObject(j, "ChargesRuntime", it->charges);
+    cJSON_AddNumberToObject(j, "FacingRuntime", it->facing);
     if (it->liquidSet) cJSON_AddNumberToObject(j, "LiquidIdRuntime", it->liquid);
     if (it->learnedCount) { cJSON *spells = cJSON_CreateArray(); for (int i = 0; i < it->learnedCount; i++) cJSON_AddItemToArray(spells, cJSON_CreateString(it->learned[i])); cJSON_AddItemToObject(j, "LearnedSpellsRuntime", spells); }
     if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
