@@ -285,7 +285,7 @@ public partial class GameTestWindow
         if (FireObjectEvent(door, obj, BookTriggerConditionBased.ByUseItem)) return;
         if (!IsDoorOpen(door) && IsDoorLocked(door))
         {
-            PlaySound(obj.Door.LockedRattleSoundResourceId);
+            PlaySoundAt(obj.Door.LockedRattleSoundResourceId, door);
             ShowFloatingTextOver(VisualOf(door), "Locked");
             StatusText.Text = obj.Door.MagicallyLocked ? $"\"{obj.Name}\" is magically locked." : $"\"{obj.Name}\" is locked.";
             return;
@@ -297,7 +297,7 @@ public partial class GameTestWindow
     private void OpenDoor(ObjectInstance door, WorldObject obj, MapCharacter? by)
     {
         door.IsOpenRuntime = true;
-        PlaySound(obj.Door.OpenSoundResourceId);
+        PlaySoundAt(obj.Door.OpenSoundResourceId, door);
         RefreshObjectLook(door);
         if (by is null) StatusText.Text = $"You open \"{obj.Name}\".";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByAfterReadItem, by);
@@ -316,7 +316,7 @@ public partial class GameTestWindow
             return false;
         }
         door.IsOpenRuntime = false;
-        PlaySound(obj.Door.CloseSoundResourceId);
+        PlaySoundAt(obj.Door.CloseSoundResourceId, door);
         RefreshObjectLook(door);
         if (by is null) StatusText.Text = $"You close \"{obj.Name}\".";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByEnter, by);
@@ -331,14 +331,14 @@ public partial class GameTestWindow
         {
             StatusText.Text = $"\"{key.Name}\" doesn't fit \"{obj.Name}\".";
             FlashPointer(MousePointerKind.Blocked, playSound: d.WrongKeySoundResourceId < 0);
-            PlaySound(d.WrongKeySoundResourceId);
+            PlaySoundAt(d.WrongKeySoundResourceId, door);
             PartyBark(VerboseKind.WrongKey);
             return;
         }
         if (IsDoorLocked(door))
         {
             door.IsLockedRuntime = false;
-            PlaySound(d.UnlockSoundResourceId >= 0 ? d.UnlockSoundResourceId : d.LockSoundResourceId);
+            PlaySoundAt(d.UnlockSoundResourceId >= 0 ? d.UnlockSoundResourceId : d.LockSoundResourceId, door);
             ShowFloatingTextOver(VisualOf(door), "Unlocked");
             StatusText.Text = $"You unlock \"{obj.Name}\".";
             RefreshObjectLook(door);
@@ -348,7 +348,7 @@ public partial class GameTestWindow
         }
         if (IsDoorOpen(door) && !TryCloseDoor(door, obj, null)) return; // can't lock it open
         door.IsLockedRuntime = true;
-        PlaySound(d.LockSoundResourceId >= 0 ? d.LockSoundResourceId : d.UnlockSoundResourceId);
+        PlaySoundAt(d.LockSoundResourceId >= 0 ? d.LockSoundResourceId : d.UnlockSoundResourceId, door);
         ShowFloatingTextOver(VisualOf(door), "Locked");
         StatusText.Text = $"You lock \"{obj.Name}\".";
         RefreshObjectLook(door);
@@ -365,7 +365,7 @@ public partial class GameTestWindow
         if (Rng.Next(100) < chance)
         {
             door.IsLockedRuntime = false;
-            PlaySound(d.UnlockSoundResourceId >= 0 ? d.UnlockSoundResourceId : d.LockSoundResourceId);
+            PlaySoundAt(d.UnlockSoundResourceId >= 0 ? d.UnlockSoundResourceId : d.LockSoundResourceId, door);
             ShowFloatingTextOver(VisualOf(door), "Unlocked");
             StatusText.Text = $"You pick the lock on \"{obj.Name}\". ({chance}% chance)";
             RecordItem("picklocked", ReferencedItemCategory.Object, obj.Id);
@@ -374,7 +374,7 @@ public partial class GameTestWindow
             return;
         }
         UseUpOne(source);
-        PlaySound(d.LockpickBrokeSoundResourceId);
+        PlaySoundAt(d.LockpickBrokeSoundResourceId, door);
         if (_player is not null) Bark(_player, VerboseKind.LockpickFailed);
         StatusText.Text = $"You fail to pick the lock on \"{obj.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByExit);
@@ -400,7 +400,7 @@ public partial class GameTestWindow
         bool lit = !(light.IsLitRuntime ?? false);
         light.IsLitRuntime = lit;
         if (lit && obj.Light.BurnMinutes > 0 && light.BurnLeftRuntime < 0) light.BurnLeftRuntime = obj.Light.BurnMinutes;
-        PlaySound(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId);
+        PlaySoundAt(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId, light);
         RefreshObjectLook(light);
         StatusText.Text = lit ? $"You light \"{obj.Name}\"." : $"You put out \"{obj.Name}\".";
         FireObjectEvent(light, obj, lit ? BookTriggerConditionBased.ByAfterReadItem : BookTriggerConditionBased.ByEnter);
@@ -429,7 +429,7 @@ public partial class GameTestWindow
             if (instance.BurnLeftRuntime > 0) continue;
             instance.IsLitRuntime = false;
             instance.IsSpentRuntime = true;
-            PlaySound(obj.Light.SpentSoundResourceId);
+            PlaySoundAt(obj.Light.SpentSoundResourceId, instance);
             RefreshObjectLook(instance);
             FireObjectEvent(instance, obj, BookTriggerConditionBased.ByStay);
         }

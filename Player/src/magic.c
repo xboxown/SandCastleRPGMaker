@@ -630,7 +630,7 @@ void magic_cast(int caster, cJSON *spell, int castOn)
     char *w = words;
     while (isspace((unsigned char)*w)) w++;
     if (*w) bark(caster, w, 2500); /* begin_casting: the words of power */
-    sound_play(num(spell, "CastSoundResourceId", -1));
+    world_sound_from_actor(num(spell, "CastSoundResourceId", -1), caster);
     int x, y, fl;
     cell_of(caster, &x, &y, &fl);
     if (castOn >= 0 && flag(spell, "NeedsTarget")) { int tx, ty, tf; world_actor_cell(castOn, &tx, &ty, &tf); deliver(caster, spell, castOn, 0, tx, ty); return; }

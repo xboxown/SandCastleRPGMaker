@@ -226,7 +226,7 @@ public partial class GameTestWindow
         var me = mapCharacter.Character;
         var vitals = VitalsOf(me);
         vitals.Food = Math.Clamp(vitals.Food + food.Food.Nutrition, 0, SurvivalSettings.MaxFood);
-        PlaySound(food.Food.EatSoundResourceId);
+        PlaySoundFrom(food.Food.EatSoundResourceId, me);
         if (me.IsHuman && Rng.Next(4) > 0) Bark(me, VerboseKind.Munching);
         ApplyEffects(food.Food.Effects, me, $"\"{food.Name}\"");
     }
@@ -407,7 +407,7 @@ public partial class GameTestWindow
             if (DefinitionOf(door) is not { Type: ObjectType.Door } obj || IsDoorOpen(door) || !IsDoorLocked(door) || !BodyOf(null, door).Overlaps(nextFoot)) continue;
             if (!HoldsHouseKey(mapCharacter, obj)) return false;
             door.IsLockedRuntime = false;
-            PlaySound(obj.Door.UnlockSoundResourceId >= 0 ? obj.Door.UnlockSoundResourceId : obj.Door.LockSoundResourceId);
+            PlaySoundAt(obj.Door.UnlockSoundResourceId >= 0 ? obj.Door.UnlockSoundResourceId : obj.Door.LockSoundResourceId, door);
             RefreshObjectLook(door);
             OpenDoor(door, obj, mapCharacter);
             _doorsToClose[mapCharacter] = door;
@@ -439,7 +439,7 @@ public partial class GameTestWindow
     private void LockDoor(ObjectInstance door, WorldObject obj)
     {
         door.IsLockedRuntime = true;
-        PlaySound(obj.Door.LockSoundResourceId >= 0 ? obj.Door.LockSoundResourceId : obj.Door.UnlockSoundResourceId);
+        PlaySoundAt(obj.Door.LockSoundResourceId >= 0 ? obj.Door.LockSoundResourceId : obj.Door.UnlockSoundResourceId, door);
         RefreshObjectLook(door);
     }
 

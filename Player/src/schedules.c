@@ -747,7 +747,7 @@ static void nourish(const Npc *n, int objectId)
 {
     cJSON *food = get(object_of(objectId), "Food");
     vitals_change_food(n->characterId, "Add", num(food, "Nutrition", 0));
-    sound_play(num(food, "EatSoundResourceId", -1));
+    world_sound_from_actor(num(food, "EatSoundResourceId", -1), n->actor);
     if (rnd(4) > 0) vitals_bark(n->characterId, B_MUNCHING);
     magic_apply_effects(get(food, "Effects"), n->actor, text_of(object_of(objectId), "Name"), -1);
 }

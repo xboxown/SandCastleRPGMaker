@@ -78,7 +78,7 @@ public partial class GameTestWindow
         var t = obj.Trap;
         var body = BodyOf(null, trap);
         double cx = body.Left + body.Width / 2.0, cy = body.Top + body.Depth / 2.0;
-        PlaySound(t.ExplosionSoundResourceId >= 0 ? t.ExplosionSoundResourceId : t.TriggerSoundResourceId);
+        PlaySoundAt(t.ExplosionSoundResourceId >= 0 ? t.ExplosionSoundResourceId : t.TriggerSoundResourceId, trap);
         PlayOneShot(t.ExplosionSprite, VisualOf(trap) as FrameworkElement);
         if (VisualOf(trap) is { } visual) visual.Visibility = Visibility.Visible;
         Blast(cx, cy, t.RadiusTiles, t.DamageMin, t.DamageMax, $"a {obj.Name.ToLowerInvariant()}", trap);
@@ -121,7 +121,7 @@ public partial class GameTestWindow
         trap.TrapSprungRuntime = true;
         if (!t.OneShot) _trapRearmMs[trap] = Math.Max(0.2, t.RearmSeconds) * 1000;
         if (wasHidden && VisualOf(trap) is { } visual) visual.Visibility = Visibility.Visible;
-        PlaySound(t.TriggerSoundResourceId);
+        PlaySoundAt(t.TriggerSoundResourceId, trap);
         FireObjectEvent(trap, obj, BookTriggerConditionBased.ByEnter, victim is null ? null : MapCharacterOf(victim));
         var body = BodyOf(null, trap);
         var (dx, dy) = FacingStep(trap.Facing);
@@ -181,7 +181,7 @@ public partial class GameTestWindow
             visual.RenderTransformOrigin = new Point(0.5, 0.5);
             visual.RenderTransform = new RotateTransform(Math.Atan2(dy, dx) * 180 / Math.PI - 90); // its art points down (south)
         }
-        if (projectile.Type == ObjectType.Projectile) PlaySound(projectile.Projectile.LaunchSoundResourceId);
+        if (projectile.Type == ObjectType.Projectile) PlaySoundAt(projectile.Projectile.LaunchSoundResourceId, instance);
         PlaceFlying(flying);
     }
 
@@ -258,8 +258,8 @@ public partial class GameTestWindow
         _flying.Remove(flying);
         if (flying.OnArrive is { } arrive)
         {
-            if (p.Explodes) { PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement); PlaySound(p.ExplosionSoundResourceId); }
-            else PlaySound(p.HitSoundResourceId);
+            if (p.Explodes) { PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement); PlaySoundAt(p.ExplosionSoundResourceId, flying.Instance); }
+            else PlaySoundAt(p.HitSoundResourceId, flying.Instance);
             RemoveMapObject(flying.Instance);
             arrive(victim, flying.X, flying.Y);
             RefreshAfterMove();
@@ -272,7 +272,7 @@ public partial class GameTestWindow
             if (flying.Def.Type == ObjectType.Projectile && p.Explodes && (victim is not null || p.ExplodesAtEnd))
             {
                 PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement);
-                PlaySound(p.ExplosionSoundResourceId);
+                PlaySoundAt(p.ExplosionSoundResourceId, flying.Instance);
                 Blast(flying.X / SpriteSizing.BaseUnit, flying.Y / SpriteSizing.BaseUnit, p.RadiusTiles, p.DamageMin, p.DamageMax, $"a {flying.Def.Name.ToLowerInvariant()}", flying.Instance);
             }
             var landed = flying.Instance;
@@ -287,7 +287,7 @@ public partial class GameTestWindow
         {
             int low = Math.Min(p.DamageMin, p.DamageMax), high = Math.Max(p.DamageMin, p.DamageMax);
             int damage = high <= 0 ? 0 : low + Rng.Next(high - low + 1);
-            PlaySound(p.HitSoundResourceId);
+            PlaySoundAt(p.HitSoundResourceId, flying.Instance);
             if (damage > 0) Damage(victim, damage, $"a {flying.Def.Name.ToLowerInvariant()}");
             var ailment = p.Ailment switch { TrapAilment.Poisoned => Ailment.Poisoned, TrapAilment.Asleep => Ailment.Asleep, TrapAilment.Paralyzed => Ailment.Paralyzed, _ => (Ailment?)null };
             if (ailment is { } a && !IsDead(victim)) Inflict(victim, a);
@@ -297,7 +297,7 @@ public partial class GameTestWindow
         if (p.Explodes && (victim is not null || p.ExplodesAtEnd))
         {
             PlayOneShot(p.ExplosionSprite, VisualOf(flying.Instance) as FrameworkElement);
-            PlaySound(p.ExplosionSoundResourceId);
+            PlaySoundAt(p.ExplosionSoundResourceId, flying.Instance);
             Blast(flying.X / SpriteSizing.BaseUnit, flying.Y / SpriteSizing.BaseUnit, p.RadiusTiles, p.DamageMin, p.DamageMax, $"a {flying.Def.Name.ToLowerInvariant()}", flying.Instance);
         }
         RemoveMapObject(flying.Instance);

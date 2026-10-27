@@ -10,6 +10,7 @@ void sound_load(const char *gameFolder, int enabled); /* enabled 0: "nosound" */
 const char *sound_status(void);                       /* for Game.log */
 /* A sound by its resource id (-1 = none), at its own volume, once. */
 void sound_play(int resourceId);
+void sound_play_at(int resourceId, double scale, double balance);   /* heard from somewhere: quieter, to one side */
 /* volume -1 = its own; startFade 0 = silent (for a fade in) .. 1 */
 int sound_play_ex(int resourceId, double volume, int loop, int owner, double startFade);
 void sound_stop_id(int resourceId);

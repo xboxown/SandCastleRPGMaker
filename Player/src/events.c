@@ -2597,7 +2597,7 @@ static int door_or_container(Run *r, double ms, int *ok)
             {
                 if (flag(door, "MagicallyLocked") || !items_carries_key(who, num(door, "RequiredKeyItemId", -1)))
                 {
-                    sound_play(num(door, "LockedRattleSoundResourceId", -1));
+                    world_sound_at_thing(num(door, "LockedRattleSoundResourceId", -1), r->thing);
                     world_bark_thing(r->thing, "Locked", 1000);
                     game_log(flag(door, "MagicallyLocked") ? "Open Door: it's magically locked." : "Open Door: they have no key for it.");
                     *ok = 0;
@@ -2611,7 +2611,7 @@ static int door_or_container(Run *r, double ms, int *ok)
         }
         if ((r->stageMs -= ms) > 0) return 1;
         world_door_state(r->thing, &open, &locked);
-        if (!open) { world_door_open(r->thing); sound_play(num(door, "OpenSoundResourceId", -1)); events_object_event(r->thing, 5, a > 0 ? a : -1); }
+        if (!open) { world_door_open(r->thing); world_sound_at_thing(num(door, "OpenSoundResourceId", -1), r->thing); events_object_event(r->thing, 5, a > 0 ? a : -1); }
         *ok = 1;
         return 0;
     }
@@ -2634,7 +2634,7 @@ static int door_or_container(Run *r, double ms, int *ok)
         if ((int)((rng >> 8) % 100) < chance) { unlock_door(r->thing, door, "picklocked"); return 1; } /* done next time round (unlocked) */
         Item *broken[1]; int n;
         if (items_take(who, CAT_OBJECT, pick, 1, broken, 1, &n)) for (int i = 0; i < n; i++) items_free(broken[i]); /* it breaks */
-        sound_play(num(door, "LockpickBrokeSoundResourceId", -1));
+        world_sound_at_thing(num(door, "LockpickBrokeSoundResourceId", -1), r->thing);
         events_object_event(r->thing, 11, a > 0 ? a : -1); /* By Exit */
         return 1;
     }
@@ -2648,7 +2648,7 @@ static int door_or_container(Run *r, double ms, int *ok)
     if (items_locked(box, flag(data, "IsLocked")))
     {
         items_park(r->thing, box);
-        sound_play(num(data, "LockedRattleSoundResourceId", -1));
+        world_sound_at_thing(num(data, "LockedRattleSoundResourceId", -1), r->thing);
         game_log("Pick Item From Container: it's locked.");
         *ok = 0;
         return 0;
@@ -2665,7 +2665,7 @@ static void unlock_door(int uid, cJSON *door, const char *record)
 {
     world_door_set_locked(uid, 0);
     int unlock = num(door, "UnlockSoundResourceId", -1);
-    sound_play(unlock >= 0 ? unlock : num(door, "LockSoundResourceId", -1));
+    world_sound_at_thing(unlock >= 0 ? unlock : num(door, "LockSoundResourceId", -1), uid);
     world_bark_thing(uid, "Unlocked", 1000);
     conditions_record_item(record, CAT_OBJECT, world_thing_object_id(uid));
     events_object_event(uid, 10, -1);

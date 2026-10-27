@@ -754,7 +754,7 @@ public partial class GameTestWindow
                 if (!IsDoorLocked(door)) return true;
                 if (obj.Door.MagicallyLocked || !CarriesKeyFor(who, obj.Door.RequiredKeyItemId))
                 {
-                    PlaySound(obj.Door.LockedRattleSoundResourceId);
+                    PlaySoundAt(obj.Door.LockedRattleSoundResourceId, door);
                     ShowFloatingTextOver(VisualOf(door), "Locked");
                     return Cancel(obj.Door.MagicallyLocked ? $"\"{obj.Name}\" is magically locked." : $"{who.Name} has no key for \"{obj.Name}\".");
                 }
@@ -779,7 +779,7 @@ public partial class GameTestWindow
     private void UnlockDoor(ObjectInstance door, WorldObject obj, string record)
     {
         door.IsLockedRuntime = false;
-        PlaySound(obj.Door.UnlockSoundResourceId >= 0 ? obj.Door.UnlockSoundResourceId : obj.Door.LockSoundResourceId);
+        PlaySoundAt(obj.Door.UnlockSoundResourceId >= 0 ? obj.Door.UnlockSoundResourceId : obj.Door.LockSoundResourceId, door);
         ShowFloatingTextOver(VisualOf(door), "Unlocked");
         RefreshObjectLook(door);
         RecordItem(record, ReferencedItemCategory.Object, obj.Id);
@@ -816,7 +816,7 @@ public partial class GameTestWindow
                 return null; // done next frame (unlocked)
             }
             TakeFromCarrier(who, ReferencedItemCategory.Object, lockpick.Id, 1); // it breaks
-            PlaySound(obj.Door.LockpickBrokeSoundResourceId);
+            PlaySoundFrom(obj.Door.LockpickBrokeSoundResourceId, who);
             Bark(who, VerboseKind.LockpickFailed);
             StatusText.Text = $"{who.Name} fails to pick the lock on \"{obj.Name}\", and \"{lockpick.Name}\" breaks. ({chance}% chance)";
             FireObjectEvent(door, obj, BookTriggerConditionBased.ByExit);
@@ -837,7 +837,7 @@ public partial class GameTestWindow
         int quantity = int.TryParse(command.Get("Quantity"), out int q) ? Math.Max(1, q) : 1;
         BeginScriptAction(who, Chain(GoTo(who, container), PoseOnce(who, "Picking"), Do(() =>
         {
-            if (IsLockedNow(container, data)) { PlaySound(data.LockedRattleSoundResourceId); return Cancel($"\"{data.Name}\" is locked."); } // it must be unlocked
+            if (IsLockedNow(container, data)) { PlaySoundFrom(data.LockedRattleSoundResourceId, who); return Cancel($"\"{data.Name}\" is locked."); } // it must be unlocked
             EnsureContainerSeeded(container, data); // never opened: its starting contents are in it
             int taken = 0, left = quantity;
             foreach (var item in container.Contents.ToList())

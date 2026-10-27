@@ -86,7 +86,7 @@ public partial class GameTestWindow
             armor += Math.Max(0, worn.Armor.ArmorPoints);
             if (worn.Armor.Immunities.Contains(type))
             {
-                PlaySound(worn.Armor.ImmuneSoundResourceId); // Exult: metal clang
+                PlaySoundFrom(worn.Armor.ImmuneSoundResourceId, defender); // Exult: metal clang
                 return 0;
             }
         }
@@ -108,7 +108,7 @@ public partial class GameTestWindow
             points += ammo.Ammo.DamageBonus;
             if (ammo.Ammo.Poisons) powers |= WeaponPowers.Poison;
         }
-        PlaySound(weapon?.Weapon.HitSoundResourceId ?? -1);
+        PlaySoundFrom(weapon?.Weapon.HitSoundResourceId ?? -1, defender);
         bool noDamage = powers.HasFlag(WeaponPowers.NoDamage);
         int damage = noDamage || points == 0 ? 0 : WeaponDamage(attacker, defender, points, type);
         if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
@@ -227,7 +227,7 @@ public partial class GameTestWindow
         var (ax, ay) = PixelOf(attacker);
         var (tx, ty) = PixelOf(target);
         (tx, ty) = NearestImage(ax, ay, tx, ty); // shot over the seam of a map that wraps around, if that's the short way
-        PlaySound(w.AttackSoundResourceId);
+        PlaySoundFrom(w.AttackSoundResourceId, attacker);
         LaunchToward(flies, ax, ay, tx - ax, ty - ay, LiftOf(attacker) + 2, attacker, Math.Max(1, w.RangeTiles) + 2,
             new WeaponShot(attacker, weapon, ammoDef, attval, thrown), LiftOf(target) + 2, Math.Sqrt((tx - ax) * (tx - ax) + (ty - ay) * (ty - ay))); // up at a bird, down from a wall
         RefreshAfterMove();

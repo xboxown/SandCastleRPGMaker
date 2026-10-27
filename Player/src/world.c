@@ -961,7 +961,62 @@ static Drawn *drawn; static int drawnCap, drawnCount;
 typedef struct FrameSeen { int key; const Sprite *sprite; int frame; } FrameSeen;
 static FrameSeen seen[1024]; static int seenCount;
 
-static void frame_sound(int key, const Sprite *s, uint32_t ms)
+/* GameTestWindow.Hearing (Exult audio/Audio.cc get_2d_position_for_tile, AudioChannel::calculate2DVolume): heard from the
+   middle of the view, the distance on the screen in 8px tiles (a lift up is half a tile up and left); past 24 tiles not at
+   all; nearer, distance = tiles squared * 256 / 24^2 (+ 8 a lift the view is up), volume (256 - distance) / 256; balance
+   (2 dx - lifts) * 32 / 5, the other side turned down. 0: too far. */
+static Thing *thing_by_uid(int uid);
+int world_hearing_at(double drawnX, double drawnY, double *volume, double *balance)
+{
+    double dx = world_wrap_dx(drawnX - (cameraX + SCREEN_W / 2.0)), dy = world_wrap_dy(drawnY - (cameraY + SCREEN_H / 2.0));
+    double hx = dx / (UNIT / 2.0), hy = dy / (UNIT / 2.0);
+    double squared = (hx * hx + hy * hy) / 4;
+    if (squared > 24.0 * 24.0) return 0;
+    double distance = squared * 256 / (24.0 * 24.0);
+    const Actor *ear = cameraFollow > 0 ? actor_of(cameraFollow) : NULL;
+    int lift = ear ? ear->lift : player.lift;
+    if (lift > 0) { distance += lift * 8; if (distance > 256) distance = 256; }
+    *volume = (256 - distance) / 256;
+    double b = hx * 32 / 5 / 256;
+    *balance = b < -1 ? -1 : b > 1 ? 1 : b;
+    return 1;
+}
+
+/* A sound from a character (the main character's own: as it is) or a thing on the map, heard from where it's drawn. */
+void world_sound_from_actor(int resourceId, int actor)
+{
+    if (resourceId < 0) return;
+    const Actor *a = actor_of(actor);
+    if (!a || actor == 0) { sound_play(resourceId); return; }
+    double v, b;
+    if (world_hearing_at(a->px - a->lift * LIFT_SHIFT, a->py - a->lift * LIFT_SHIFT, &v, &b)) sound_play_at(resourceId, v, b);
+}
+
+void world_sound_at_thing(int resourceId, int uid)
+{
+    if (resourceId < 0) return;
+    Thing *t = thing_by_uid(uid);
+    if (!t) { sound_play(resourceId); return; }
+    double px = t->x * tileW + tileW / 2.0 + t->offX * UNIT - t->z * LIFT_SHIFT, py = t->y * tileH + tileH / 2.0 + t->offY * UNIT - t->z * LIFT_SHIFT, v, b;
+    if (world_hearing_at(px, py, &v, &b)) sound_play_at(resourceId, v, b);
+}
+
+/* A sound from a point on the map (map pixels, at a lift): a shot in the air. */
+void world_sound_at_point(int resourceId, double px, double py, int lift)
+{
+    double v, b;
+    if (resourceId >= 0 && world_hearing_at(px - lift * LIFT_SHIFT, py - lift * LIFT_SHIFT, &v, &b)) sound_play_at(resourceId, v, b);
+}
+
+/* Heard from here at all (within 24 tiles)? */
+int world_actor_heard(int actor)
+{
+    const Actor *a = actor_of(actor);
+    double v, b;
+    return a && (actor == 0 || world_hearing_at(a->px - a->lift * LIFT_SHIFT, a->py - a->lift * LIFT_SHIFT, &v, &b));
+}
+
+static void frame_sound(int key, const Sprite *s, uint32_t ms, double cx, double cy)
 {
     if (!s || s->frameCount <= 1) return;
     int f = sprite_frame_at(s, ms), slot = -1;
@@ -970,7 +1025,8 @@ static void frame_sound(int key, const Sprite *s, uint32_t ms)
     if (seen[slot].sprite == s && seen[slot].frame == f) return;
     int changed = seen[slot].sprite == s;
     seen[slot].sprite = s; seen[slot].frame = f;
-    if (changed && s->frames[f].sound >= 0) sound_play(s->frames[f].sound);
+    double v, b;
+    if (changed && s->frames[f].sound >= 0 && world_hearing_at(cx, cy, &v, &b)) sound_play_at(s->frames[f].sound, v, b); /* from where it's drawn */
 }
 static void seated_draw_order(int count);
 static uint32_t lastMs;
@@ -1118,12 +1174,12 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
             continue;
         }
         const Sprite *ls = look_of(t);
-        if (!t->fixedFrame) frame_sound(t->uid, ls, ms);
         const Picture *pic = t->fixedFrame && ls && t->fixedFrame - 1 < ls->frameCount ? frame_picture(&ls->frames[t->fixedFrame - 1]) : sprite_picture_at(ls, ms);
-        if (!pic) continue;
+        if (!pic) { if (!t->fixedFrame) frame_sound(t->uid, ls, ms, t->x * tileW + tileW / 2.0, t->y * tileH + tileH / 2.0); continue; }
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT;
         int top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
+        if (!t->fixedFrame) frame_sound(t->uid, ls, ms, left + qw / 2.0, top + qh / 2.0); /* its frame sounds from its picture's middle */
         if (t->def && t->def->type == T_DOOR && t->open) { left += t->def->openOffX; top += t->def->openOffY; } /* ShiftOpenDoor: hanging from its hinge */
         int flat = t->def && (t->def->type == T_TRAP || (t->def->type == T_TILE && !t->def->solid));
         Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - (flat ? 1000 : 0), pic, left - cx, top - cy, qw, qh, &count);
@@ -1159,10 +1215,11 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         uint32_t at = a->walkingNow ? ms : 0;
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
         const Picture *pic = sprite_picture_at(s, at);
-        frame_sound(-(i + 2), s, at);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
+        if (i < 0) frame_sound(-(i + 2), s, at, cameraX + SCREEN_W / 2.0, cameraY + SCREEN_H / 2.0); /* the main character's own: as it is */
+        else frame_sound(-(i + 2), s, at, left + qw / 2.0, top + qh / 2.0);
         Drawn *d = add_drawn(floor_of(a->lift) - 1, (a->px / tileW + a->py / tileH) * 100.0 + a->lift, pic, left - cx, top - cy, qw, qh, &count);
         if (!d) continue;
         if (shimmer) d->opacity = 102; /* 40% */
@@ -1713,7 +1770,7 @@ static int open_door_in_way(Actor *a, Walk *w, int l, int t)
             /* its own door, key in hand: unlocked to get through (and locked again behind it once outside) */
             if (!holdsKey || !holdsKey(index_of_actor(a), d->uid)) continue;
             d->locked = 0;
-            sound_play(door_unlock_sound(d));
+            world_sound_at_thing(door_unlock_sound(d), d->uid);
             w->lockBehind = 1;
         }
         door_set_open(d, 1);
@@ -1771,7 +1828,7 @@ static void close_doors_behind(void)
         door_set_open(d, 0);
         w->doorToClose = 0;
         /* LockBehindIfLeaving: its own door, and it's now outside (nothing over its head) */
-        if (holdsKey && holdsKey(i, d->uid) && !actor_under_roof(a)) { d->locked = 1; sound_play(door_lock_sound(d)); }
+        if (holdsKey && holdsKey(i, d->uid) && !actor_under_roof(a)) { d->locked = 1; world_sound_at_thing(door_lock_sound(d), d->uid); }
         w->lockBehind = 0;
     }
 }
@@ -2497,7 +2554,7 @@ void world_burn_lights(double minutes)
         t->burnLeft -= minutes;
         if (t->burnLeft > 0) continue;
         t->lit = 0; t->spent = 1;
-        sound_play(t->def->spentSound);
+        world_sound_at_thing(t->def->spentSound, t->uid);
         world_furniture_event(t->uid, 10, -1); /* By Stay */
     }
 }
@@ -3837,7 +3894,7 @@ void world_lock_own_doors(int actor, int cells)
         Thing *d = &things[i];
         if (d->gone || !d->def || d->def->type != T_DOOR || abs(d->x - ax) > cells || abs(d->y - ay) > cells || !holdsKey(actor, d->uid)) continue;
         if (d->open && !world_door_close(d->uid)) continue; /* someone in the doorway */
-        if (!d->locked) { d->locked = 1; sound_play(door_lock_sound(d)); }
+        if (!d->locked) { d->locked = 1; world_sound_at_thing(door_lock_sound(d), d->uid); }
     }
 }
 

@@ -86,6 +86,7 @@ public partial class GameTestWindow
     private void RegisterWorldAnimator(UIElement visual, SpriteAnimator animator)
     {
         _worldAnimators[visual] = animator;
+        animator.Hearing = () => HearingOf(visual); // its frame sounds from where it is (GameTestWindow.Hearing)
         if (_gamePaused) animator.Pause();
     }
 

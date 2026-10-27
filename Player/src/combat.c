@@ -813,7 +813,7 @@ static int weapon_damage(int attacker, int defender, int points, int type)
         int p = num(a, "ArmorPoints", 0);
         total += p > 0 ? p : 0;
         cJSON_ArrayForEach(t, get(a, "Immunities"))
-            if (cJSON_IsNumber(t) && t->valueint == type) { sound_play(num(a, "ImmuneSoundResourceId", -1)); return 0; } /* a metal clang */
+            if (cJSON_IsNumber(t) && t->valueint == type) { world_sound_from_actor(num(a, "ImmuneSoundResourceId", -1), defender); return 0; } /* a metal clang */
     }
     if (points >= 127 || type == D_LIGHTNING || type == D_ETHEREAL || type == D_SONIC) total = 0;
     if (total > 0) damage -= 1 + rnd(total);
@@ -833,7 +833,7 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
         points += num(a, "DamageBonus", 0);
         if (flag(a, "Poisons")) powers |= P_POISON;
     }
-    if (w) sound_play(num(w, "HitSoundResourceId", -1));
+    if (w) world_sound_from_actor(num(w, "HitSoundResourceId", -1), defender);
     int noDamage = (powers & P_NODAMAGE) != 0;
     int damage = noDamage || points == 0 ? 0 : weapon_damage(attacker, defender, points, type);
     char text[16];
@@ -872,7 +872,7 @@ static void strike(int attacker, int defender)
 {
     if (dead(defender)) return;
     cJSON *weapon = wielded(attacker, NULL), *w = weapon_settings(weapon);
-    if (w) sound_play(num(w, "AttackSoundResourceId", -1));
+    if (w) world_sound_from_actor(num(w, "AttackSoundResourceId", -1), attacker);
     int attval = stat(attacker, K_COMBAT, 10) + (w && flag(w, "Lucky") ? 3 : 0);
     int defval = stat(defender, K_COMBAT, 10) + (vitals_has(id_of(defender), 64) ? 3 : 0);
     int hit = (w && flag(w, "AutoHit")) || motionless(defender) || roll_to_win(attval, defval);
@@ -922,7 +922,7 @@ static int shoot(int attacker, int target, Item *weaponItem, cJSON *weapon)
     int attval = stat(attacker, K_COMBAT, 10) + (flag(w, "Lucky") ? 3 : 0) + 6, use = num(w, "Use", U_MELEE);
     if (use == U_POOR_THROWN) attval -= (int)tiles;
     else if (use == U_GOOD_THROWN) attval -= (int)tiles / 2;
-    sound_play(num(w, "AttackSoundResourceId", -1));
+    world_sound_from_actor(num(w, "AttackSoundResourceId", -1), attacker);
     Shot *s = NULL;
     for (int i = 0; i < 32 && !s; i++) if (!shots[i].used) s = &shots[i];
     if (!s) s = &shots[0];
@@ -1261,7 +1261,7 @@ static void strike_object(int uid, cJSON *def, int damage, int striker, int byPl
     if (hp > 0) return;
     /* broken: gone from the world - or a window with a Broken picture, broken where it is */
     if (uid == playerThing) playerThing = -1;
-    sound_play(num(def, "DestroyedSoundResourceId", -1));
+    world_sound_at_thing(num(def, "DestroyedSoundResourceId", -1), uid);
     events_object_event(uid, 4 /* By Destroy Item */, striker > 0 ? striker : -1);
     cJSON *broken = get(get(def, "Window"), "BrokenSprite");
     char line[160];
@@ -1311,7 +1311,7 @@ void combat_strike_thing(int uid, int striker)
     if (hp > 0) return;
     /* it breaks: its sound, everything inside falls out where it stood */
     if (uid == playerThing) playerThing = -1;
-    sound_play(num(data, "DestructibleSoundResourceId", -1));
+    world_sound_at_thing(num(data, "DestructibleSoundResourceId", -1), uid);
     int fl = world_thing_floor(uid);
     Item *box = items_unpark(uid, tc, ti, tq);
     int spilled = box ? items_count_in(box, -1, -1) : 0;
@@ -1371,7 +1371,7 @@ int combat_light_fuse(int uid)
     double seconds = get(e, "FuseSeconds") ? get(e, "FuseSeconds")->valuedouble : 3;
     set_fuse(uid, seconds > 0.05 ? seconds : 0.05, 1);
     conditions_record_item("ignited", CAT_OBJECT, num(def, "Id", -1));
-    sound_play(num(e, "FuseSoundResourceId", -1));
+    world_sound_at_thing(num(e, "FuseSoundResourceId", -1), uid);
     cJSON *lit = get(e, "LitSprite");
     if (flag(lit, "IsSet")) world_thing_look(uid, sprite_find(str(lit, "SpriteGroup"), str(lit, "SpriteName")));
     snprintf(line, sizeof line, "You light the fuse of \"%s\"!", str(def, "Name"));
@@ -1394,7 +1394,7 @@ static void explode(int uid, cJSON *def, int byPlayer)
     int crime = byPlayer && owned_by_other(def, world_thing_belongs_to(uid), &owner, &factionId);
     cJSON *blast = get(e, "ExplosionSprite");
     if (flag(blast, "IsSet")) world_effect_once(sprite_find(str(blast, "SpriteGroup"), str(blast, "SpriteName")), tx, ty);
-    sound_play(num(e, "ExplosionSoundResourceId", -1));
+    world_sound_at_thing(num(e, "ExplosionSoundResourceId", -1), uid);
     world_thing_remove(uid);
     double reach = num(e, "RadiusTiles", 5) * 8.0;
     int lo = num(e, "DamageMin", 8), hi = num(e, "DamageMax", 20);
@@ -1547,7 +1547,7 @@ void combat_force_fuse(int uid)
     double seconds = get(e, "FuseSeconds") ? get(e, "FuseSeconds")->valuedouble : 3;
     set_fuse(uid, seconds > 0.05 ? seconds : 0.05, 1);
     conditions_record_item("ignited", CAT_OBJECT, num(def, "Id", -1));
-    sound_play(num(e, "FuseSoundResourceId", -1));
+    world_sound_at_thing(num(e, "FuseSoundResourceId", -1), uid);
     cJSON *lit = get(e, "LitSprite");
     if (flag(lit, "IsSet")) world_thing_look(uid, sprite_find(str(lit, "SpriteGroup"), str(lit, "SpriteName")));
 }

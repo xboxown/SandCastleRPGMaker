@@ -50,6 +50,7 @@ typedef struct Voice
     double frac;                                  /* the position between frames, for resampling */
     int16_t lastL, lastR;
     const PackStream *stream; long pos;           /* the file it's read from, and where */
+    int lbal, rbal;                               /* heard from one side (world_hearing_at): 0..256 each side */
 } Voice;
 
 static Voice voices[MAX_VOICES];
@@ -160,7 +161,7 @@ static void fill(int16_t *out, int frames)
         Voice *v = &voices[k];
         if (!v->used) continue;
         double step = (double)v->rate / outRate, level = level_of(v);
-        int volume = (int)(level * 256 + 0.5);
+        int volume = (int)(level * 256 + 0.5), lvol = volume * v->lbal >> 8, rvol = volume * v->rbal >> 8;
         for (int i = 0; i < frames; i++)
         {
             while (v->frac >= 1)
@@ -172,7 +173,7 @@ static void fill(int16_t *out, int frames)
             if (!v->used) break;
             /* between the last frame and this one */
             int l = v->lastL + (int)((v->buffer[v->at * 2] - v->lastL) * v->frac), r = v->lastR + (int)((v->buffer[v->at * 2 + 1] - v->lastR) * v->frac);
-            mix[i * 2] += l * volume >> 8; mix[i * 2 + 1] += r * volume >> 8;
+            mix[i * 2] += l * lvol >> 8; mix[i * 2 + 1] += r * rvol >> 8;
             v->frac += step;
         }
     }
@@ -217,7 +218,11 @@ void sound_load(const char *gameFolder, int enabled)
     if (audioOn > 1) outRate = audioOn; /* the rate the machine plays at */
 }
 
-static Voice *start(int id, double volume, int loop, int owner, double startFade)
+static Voice *start_at(int id, double volume, int loop, int owner, double startFade, double scale, double balance);
+static Voice *start(int id, double volume, int loop, int owner, double startFade) { return start_at(id, volume, loop, owner, startFade, 1, 0); }
+
+/* scale: how loud it's heard from where it is (0..1); balance -1 left .. 1 right (AudioChannel::calculate2DVolume) */
+static Voice *start_at(int id, double volume, int loop, int owner, double startFade, double scale, double balance)
 {
     SoundFile *f = file_of(id);
     if (!f || !audioOn) return NULL;
@@ -246,7 +251,8 @@ static Voice *start(int id, double volume, int loop, int owner, double startFade
     if (v->kind == DEC_NONE || v->channels < 1 || v->rate < 1000) { if (v->kind) close_voice(v); platform_audio_unlock(); return NULL; }
     if (v->channels > 2) { /* more than stereo: only the first two are heard */ }
     v->soundId = id; v->music = f->music; v->loop = loop; v->owner = owner;
-    v->base = volume >= 0 ? volume : f->volume; v->fade = startFade;
+    v->base = (volume >= 0 ? volume : f->volume) * (scale < 0 ? 0 : scale > 1 ? 1 : scale); v->fade = startFade;
+    v->lbal = balance > 0 ? (int)((1 - balance) * 256) : 256; v->rbal = balance < 0 ? (int)((1 + balance) * 256) : 256;
     v->frac = 1;
     if (decode(v)) { v->lastL = v->buffer[0]; v->lastR = v->buffer[1]; v->used = 1; }
     else close_voice(v);
@@ -256,6 +262,9 @@ static Voice *start(int id, double volume, int loop, int owner, double startFade
 }
 
 void sound_play(int resourceId) { if (resourceId >= 0) start(resourceId, -1, 0, 0, 1); }
+
+/* A sound heard from somewhere (world_hearing_at): quieter by scale, turned to one side by balance. */
+void sound_play_at(int resourceId, double scale, double balance) { if (resourceId >= 0 && scale > 0) start_at(resourceId, -1, 0, 0, 1, scale, balance); }
 
 int sound_play_ex(int resourceId, double volume, int loop, int owner, double startFade) { return start(resourceId, volume, loop, owner, startFade) != NULL; }
 

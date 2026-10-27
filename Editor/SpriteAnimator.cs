@@ -39,6 +39,9 @@ internal sealed class SpriteAnimator
 
     public event Action<int>? Ticked;
 
+    /// <summary>A picture in the game world: how its frame sounds are heard from where it is (GameTestWindow.Hearing) - null when too far, then they're not played. Unset: heard as they are (the editors, the windows).</summary>
+    public Func<(double Volume, double Balance)?>? Hearing { get; set; }
+
     /// <summary>volumeOverride: null plays each frame's sound at the resource's own default volume (existing behavior, unchanged for every caller that doesn't pass it). 0 mutes it entirely; 0-1 scales it - used by the Internal Engine to respect a pose's own Muted/Volume setting.</summary>
     public SpriteAnimator(SpriteEntry sprite, Image target, ResourceDatabase? resources = null, double? volumeOverride = null)
     {
@@ -106,7 +109,10 @@ internal sealed class SpriteAnimator
         var frame = _sprite.Frames[_frameIndex];
         _target.Source = _frameIndex < _frames.Length ? _frames[_frameIndex] : FrameCache.Get(frame.FilePath);
         if (_resources is not null && frame.SoundResourceId >= 0 && _volumeOverride != 0)
-            SoundPlayback.TryPlay(_resources, frame.SoundResourceId, _volumeOverride);
+        {
+            if (Hearing is { } hearing) { if (hearing() is { } heard) SoundPlayback.TryPlayAt(_resources, frame.SoundResourceId, heard.Volume, heard.Balance, _volumeOverride); }
+            else SoundPlayback.TryPlay(_resources, frame.SoundResourceId, _volumeOverride);
+        }
         Ticked?.Invoke(_tickCount);
     }
 

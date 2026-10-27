@@ -229,7 +229,7 @@ public partial class GameTestWindow
         foreach (var reagent in spell.AllReagents()) TakeFrom(carried, reagent.ObjectId, Math.Max(1, reagent.Quantity));
         RefreshAfterMove();
         if (spell.Words.Trim().Length > 0) ShowFloatingText(caster, spell.Words.Trim(), 2500); // begin_casting: the words of power
-        PlaySound(spell.CastSoundResourceId);
+        PlaySoundFrom(spell.CastSoundResourceId, caster);
         ShowClock();
         StatusText.Text = "";
         if (castOn is not null && spell.NeedsTarget) { DeliverSpell(caster, spell, castOn, null, CellOf(castOn)); return; } // GameTestWindow.Spells.cs

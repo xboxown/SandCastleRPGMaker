@@ -38,7 +38,7 @@ public partial class GameTestWindow
         if (!obj.Window.HasShutters || window.IsSpentRuntime) { StatusText.Text = $"\"{obj.DisplayName(window.IsSpentRuntime)}\" - nothing happens."; return; }
         bool open = window.IsOpenRuntime != true;
         window.IsOpenRuntime = open;
-        PlaySound(open ? obj.Window.OpenSoundResourceId : obj.Window.CloseSoundResourceId);
+        PlaySoundAt(open ? obj.Window.OpenSoundResourceId : obj.Window.CloseSoundResourceId, window);
         RefreshObjectLook(window);
         StatusText.Text = open ? $"You open the shutters of \"{obj.Name}\"." : $"You close the shutters of \"{obj.Name}\".";
     }
@@ -61,7 +61,7 @@ public partial class GameTestWindow
             if (lever.IsOpenRuntime == true) return; // still pressed
             lever.IsOpenRuntime = true;
             _buttonResetMs[lever] = Math.Max(100, l.ButtonResetSeconds * 1000);
-            PlaySound(l.OnSoundResourceId);
+            PlaySoundAt(l.OnSoundResourceId, lever);
             RefreshObjectLook(lever);
             StatusText.Text = $"You press \"{obj.Name}\".";
             FireObjectEvent(lever, obj, BookTriggerConditionBased.ByAfterReadItem);
@@ -76,7 +76,7 @@ public partial class GameTestWindow
     {
         bool on = lever.IsOpenRuntime != true;
         lever.IsOpenRuntime = on;
-        PlaySound(on ? obj.Lever.OnSoundResourceId : obj.Lever.OffSoundResourceId);
+        PlaySoundAt(on ? obj.Lever.OnSoundResourceId : obj.Lever.OffSoundResourceId, lever);
         RefreshObjectLook(lever);
         FireObjectEvent(lever, obj, on ? BookTriggerConditionBased.ByAfterReadItem : BookTriggerConditionBased.ByEnter);
         WorkLinks(lever, depth);
@@ -100,12 +100,12 @@ public partial class GameTestWindow
                     bool lit = target.IsLitRuntime != true;
                     target.IsLitRuntime = lit;
                     if (lit && obj.Light.BurnMinutes > 0 && target.BurnLeftRuntime < 0) target.BurnLeftRuntime = obj.Light.BurnMinutes;
-                    PlaySound(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId);
+                    PlaySoundAt(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId, target);
                     RefreshObjectLook(target);
                     break;
                 case ObjectType.Window when obj.Window.HasShutters && !target.IsSpentRuntime:
                     target.IsOpenRuntime = target.IsOpenRuntime != true;
-                    PlaySound(target.IsOpenRuntime == true ? obj.Window.OpenSoundResourceId : obj.Window.CloseSoundResourceId);
+                    PlaySoundAt(target.IsOpenRuntime == true ? obj.Window.OpenSoundResourceId : obj.Window.CloseSoundResourceId, target);
                     RefreshObjectLook(target);
                     break;
                 case ObjectType.Explosive:
@@ -128,7 +128,7 @@ public partial class GameTestWindow
             if ((_buttonResetMs[button] -= elapsedMs) > 0) continue;
             _buttonResetMs.Remove(button);
             button.IsOpenRuntime = false;
-            if (DefinitionOf(button) is { } obj) { PlaySound(obj.Lever.OffSoundResourceId); FireObjectEvent(button, obj, BookTriggerConditionBased.ByEnter); }
+            if (DefinitionOf(button) is { } obj) { PlaySoundAt(obj.Lever.OffSoundResourceId, button); FireObjectEvent(button, obj, BookTriggerConditionBased.ByEnter); }
             RefreshObjectLook(button);
         }
     }
@@ -259,7 +259,7 @@ public partial class GameTestWindow
         keg.IsLitRuntime = true;
         RecordItem("ignited", ReferencedItemCategory.Object, obj.Id); // Ignited explosive
         if (byPlayer) _fusesLitByPlayer.Add(keg);
-        PlaySound(obj.Explosive.FuseSoundResourceId);
+        PlaySoundAt(obj.Explosive.FuseSoundResourceId, keg);
         RefreshObjectLook(keg);
         if (byPlayer && !forced) StatusText.Text = $"You light the fuse of \"{obj.Name}\"!";
     }
@@ -287,7 +287,7 @@ public partial class GameTestWindow
         FireObjectEvent(keg, obj, BookTriggerConditionBased.ByDestroyItem);
         var owner = byPlayer ? ObjectOwner(obj) : null;
         PlayOneShot(e.ExplosionSprite, VisualOf(keg) as FrameworkElement);
-        PlaySound(e.ExplosionSoundResourceId);
+        PlaySoundAt(e.ExplosionSoundResourceId, keg);
         RemoveMapObject(keg);
 
         bool InReach(double x, double y) => Math.Max(Math.Abs(x - cx), Math.Abs(y - cy)) <= e.RadiusTiles;
@@ -361,7 +361,7 @@ public partial class GameTestWindow
     /// </summary>
     private void BreakObject(ObjectInstance instance, WorldObject obj, (CharacterDefinition? Owner, int FactionId)? crimeOwner, MapCharacter? attacker)
     {
-        PlaySound(obj.DestroyedSoundResourceId);
+        PlaySoundAt(obj.DestroyedSoundResourceId, instance);
         FireObjectEvent(instance, obj, BookTriggerConditionBased.ByDestroyItem);
         if (obj.Type == ObjectType.Window && obj.Window.BrokenSprite.IsSet)
         {

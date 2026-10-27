@@ -109,7 +109,7 @@ public partial class GameTestWindow
         bool wasHidden = t.Hidden && !trap.TrapSprungRuntime;
         trap.TrapSprungRuntime = true;
         if (!t.OneShot && t.RearmSeconds > 0) _trapRearmMs[trap] = t.RearmSeconds * 1000;
-        PlaySound(t.TriggerSoundResourceId);
+        PlaySoundAt(t.TriggerSoundResourceId, trap);
         if (wasHidden && VisualOf(trap) is { } visual) visual.Visibility = Visibility.Visible;
         if (victim == _player) StatusText.Text = $"You set off \"{obj.Name}\"!";
         FireObjectEvent(trap, obj, BookTriggerConditionBased.ByEnter, MapCharacterOf(victim));

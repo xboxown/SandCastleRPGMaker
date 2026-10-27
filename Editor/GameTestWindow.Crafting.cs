@@ -150,7 +150,7 @@ public partial class GameTestWindow
             if ((job.NextWorkFrameMs -= elapsedMs) <= 0 && job.RemainingMs > 0)
             {
                 job.NextWorkFrameMs = 800; // Exult's millstone: three turns, each with its sound
-                PlaySound(job.Recipe.WorkSoundResourceId);
+                PlaySoundAt(job.Recipe.WorkSoundResourceId, job.Station);
                 ShowPlayerAtWork(400);
             }
             if (job.RemainingMs > 0) continue;

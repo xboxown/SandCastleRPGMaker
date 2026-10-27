@@ -93,7 +93,7 @@ static int is_field_work(int a) { return a == S_FARM || a == S_MINER; }
 int work_is_work(int activity) { return is_station_work(activity) || is_field_work(activity); }
 
 static int me_id(const Worker *w) { return world_actor_character(w->actor); }
-static int heard(int actor) { return combat_tiles_between(actor, 0) <= 24; } /* its sounds are heard only near the player */
+static int heard(int actor) { return world_actor_heard(actor); } /* its sounds are heard only near the player (Exult's 24 tiles) */
 
 /* Who a placed thing belongs to: this copy's own owner, else its kind's Belong To. */
 static int owner_of(int uid)
@@ -485,7 +485,7 @@ static int run_step(Worker *w, Step *s, double ms)
             if ((w->beat -= ms) <= 0 && w->ms > 0)
             {
                 w->beat = 800; /* Exult's millstone: a turn, with its sound */
-                if (heard(w->actor)) sound_play(num(recipe, "WorkSoundResourceId", -1));
+                world_sound_from_actor(num(recipe, "WorkSoundResourceId", -1), w->actor);
                 world_set_pose(w->actor, work_pose(w), -1);
             }
             if (w->ms > 0) return 0;
@@ -614,7 +614,7 @@ static int run_step(Worker *w, Step *s, double ms)
             int owner = world_thing_belongs_to(soil);
             world_thing_become(soil, plantId);
             if (owner >= 0) world_thing_set_belongs(soil, owner); /* the same field, the same owner */
-            if (heard(w->actor)) sound_play(num(get(object_def(plantId), "Plant"), "HarvestSoundResourceId", -1));
+            world_sound_from_actor(num(get(object_def(plantId), "Plant"), "HarvestSoundResourceId", -1), w->actor);
             world_set_pose(w->actor, "Idle", -1);
             return 1;
         }

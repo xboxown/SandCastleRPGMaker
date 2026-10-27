@@ -97,6 +97,35 @@ internal static class SoundPlayback
 
     public static bool TryPlay(ResourceEntry entry, double volume) => Play(entry, volume, null, false);
 
+    /// <summary>A sound heard from somewhere (GameTestWindow.Hearing): its own volume (or the override) times <paramref name="volumeScale"/>, turned to one side by <paramref name="balance"/> (-1 left .. 1 right).</summary>
+    public static bool TryPlayAt(ResourceDatabase resources, int resourceId, double volumeScale, double balance, double? volumeOverride = null)
+    {
+        var entry = resources.Entries.FirstOrDefault(e => e.Id == resourceId);
+        if (entry is null) { LastError = $"sound #{resourceId} is not in the Sound list"; return false; }
+        if (!File.Exists(entry.FilePath)) { LastError = $"file not found: {entry.FilePath}"; return false; }
+        return Play(entry, (volumeOverride ?? entry.Volume) * Math.Clamp(volumeScale, 0, 1), null, false, 1, balance);
+    }
+
+    /// <summary>One side turned down (AudioChannel::calculate2DVolume): balance above 0 quietens the left, below 0 the right.</summary>
+    private sealed class BalanceProvider : ISampleProvider
+    {
+        private readonly ISampleProvider _source;
+        private readonly float _left, _right;
+        public BalanceProvider(ISampleProvider source, double balance)
+        {
+            _source = source;
+            _left = (float)(balance > 0 ? 1 - balance : 1);
+            _right = (float)(balance < 0 ? 1 + balance : 1);
+        }
+        public WaveFormat WaveFormat => _source.WaveFormat;
+        public int Read(float[] buffer, int offset, int count)
+        {
+            int n = _source.Read(buffer, offset, count);
+            for (int i = 0; i + 1 < n; i += 2) { buffer[offset + i] *= _left; buffer[offset + i + 1] *= _right; }
+            return n;
+        }
+    }
+
     /// <summary>The game's music and sound volume (Set Volume), 0-1 - every piece playing follows a change at once.</summary>
     public static double MusicVolume { get; private set; } = 1;
     public static double SoundVolume { get; private set; } = 1;
@@ -155,7 +184,7 @@ internal static class SoundPlayback
         timer.Start();
     }
 
-    private static bool Play(ResourceEntry entry, double volume, object? owner, bool loop, double startFade = 1)
+    private static bool Play(ResourceEntry entry, double volume, object? owner, bool loop, double startFade = 1, double balance = 0)
     {
         try
         {
@@ -171,7 +200,13 @@ internal static class SoundPlayback
             var level = new Level { Reader = reader, Base = Math.Clamp(volume, 0, 1), Music = entry.Kind == ResourceKind.Music, Fade = startFade };
             level.Apply();
             var waveOut = new WaveOutEvent();
-            waveOut.Init(reader);
+            if (Math.Abs(balance) > 0.001 && reader.WaveFormat.Channels <= 2)
+            {
+                // heard from one side: mono made stereo, then the other side turned down
+                ISampleProvider samples = reader.WaveFormat.Channels == 1 ? new NAudio.Wave.SampleProviders.MonoToStereoSampleProvider(reader) : reader;
+                waveOut.Init(new BalanceProvider(samples, balance));
+            }
+            else waveOut.Init(reader);
             waveOut.PlaybackStopped += (_, _) =>
             {
                 bool again;

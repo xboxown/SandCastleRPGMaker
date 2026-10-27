@@ -91,7 +91,7 @@ static void spring(int trap, cJSON *def, int victim)
     if ((flag(t, "OneShot") && world_trap_sprung(trap)) || rearming(trap)) return;
     world_trap_set_sprung(trap);
     if (!flag(t, "OneShot") && dbl(t, "RearmSeconds", 3) > 0) rearm(trap, dbl(t, "RearmSeconds", 3) * 1000);
-    sound_play(num(t, "TriggerSoundResourceId", -1));
+    world_sound_at_thing(num(t, "TriggerSoundResourceId", -1), trap);
     char line[160], what[96];
     if (victim == 0) { snprintf(line, sizeof line, "You set off \"%s\"!", str(def, "Name")); game_log(line); }
     events_object_event(trap, TR_ENTER, victim > 0 ? victim : -1);
@@ -116,7 +116,7 @@ static void launch(int objectId, double x, double y, double dx, double dy, int l
     if (fabs(dx) < 0.001 && fabs(dy) < 0.001) dy = 1;
     double length = sqrt(dx * dx + dy * dy), speed = (dbl(p, "SpeedTiles", 24) > 1 ? dbl(p, "SpeedTiles", 24) : 1) * 8;
     *f = (Flying){ 1, objectId, shooter, shooterUid, lift, x, y, dx / length * speed, dy / length * speed, 0 };
-    sound_play(num(p, "LaunchSoundResourceId", -1));
+    world_sound_at_point(num(p, "LaunchSoundResourceId", -1), x, y, lift);
 }
 
 static void end_flight(Flying *f, int victim)
@@ -128,7 +128,7 @@ static void end_flight(Flying *f, int victim)
     if (victim >= 0)
     {
         int damage = roll(num(p, "DamageMin", 2), num(p, "DamageMax", 8));
-        sound_play(num(p, "HitSoundResourceId", -1));
+        world_sound_at_point(num(p, "HitSoundResourceId", -1), f->x, f->y, f->lift);
         if (damage > 0) vitals_damage(world_actor_character(victim), damage, what);
         ailment_of(num(p, "Ailment", 0), world_actor_character(victim));
     }
@@ -136,7 +136,7 @@ static void end_flight(Flying *f, int victim)
     {
         const Sprite *boom = link_sprite(get(p, "ExplosionSprite"));
         if (boom) world_effect_once(boom, (int)floor(f->x / world_tile_w()), (int)floor(f->y / world_tile_h()));
-        sound_play(num(p, "ExplosionSoundResourceId", -1));
+        world_sound_at_point(num(p, "ExplosionSoundResourceId", -1), f->x, f->y, f->lift);
         blast(f->x / 8, f->y / 8, num(p, "RadiusTiles", 2), num(p, "DamageMin", 2), num(p, "DamageMax", 8), what, 0);
     }
 }
@@ -233,7 +233,7 @@ static void fire_trap(int trap, cJSON *def, int victim)
     if (num(projectile, "Type", -1) != OT_PROJECTILE) { snprintf(line, sizeof line, "\"%s\" has no projectile to shoot.", str(def, "Name")); game_log(line); return; }
     world_trap_set_sprung(trap);
     if (!flag(t, "OneShot")) rearm(trap, (dbl(t, "RearmSeconds", 3) > 0.2 ? dbl(t, "RearmSeconds", 3) : 0.2) * 1000);
-    sound_play(num(t, "TriggerSoundResourceId", -1));
+    world_sound_at_thing(num(t, "TriggerSoundResourceId", -1), trap);
     events_object_event(trap, TR_ENTER, victim > 0 ? victim : -1);
     int l, tp, w, d, z, h;
     world_thing_box(trap, &l, &tp, &w, &d, &z, &h);
@@ -258,7 +258,7 @@ static void trigger(int trap, cJSON *def, int victim)
             int l, tp, w, d, z, h, x, y, c, i, q, n;
             world_thing_box(trap, &l, &tp, &w, &d, &z, &h);
             world_thing_info(trap, &c, &i, &q, &x, &y, &n);
-            sound_play(num(t, "ExplosionSoundResourceId", -1) >= 0 ? num(t, "ExplosionSoundResourceId", -1) : num(t, "TriggerSoundResourceId", -1));
+            world_sound_at_thing(num(t, "ExplosionSoundResourceId", -1) >= 0 ? num(t, "ExplosionSoundResourceId", -1) : num(t, "TriggerSoundResourceId", -1), trap);
             const Sprite *boom = link_sprite(get(t, "ExplosionSprite"));
             if (boom) world_effect_once(boom, x, y);
             lower_name(def, what, sizeof what);

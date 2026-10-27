@@ -190,6 +190,11 @@ int world_walk_to(int actor, int x, int y, int floor, int beside);
 int world_walking(int actor);
 int world_keys_held(void); /* a direction key held (it takes over from an event's walk) */
 void world_draw_stats(int *thingsOnMap, int *drawnLast);
+int world_hearing_at(double drawnX, double drawnY, double *volume, double *balance);   /* Exult's sound positions: 0 too far */
+void world_sound_from_actor(int resourceId, int actor);   /* heard from where they are (the main character: as it is) */
+void world_sound_at_thing(int resourceId, int uid);       /* heard from a thing on the map */
+int world_actor_heard(int actor);
+void world_sound_at_point(int resourceId, double px, double py, int lift);   /* heard from a point on the map */                         /* within hearing (24 tiles) */
 void world_camera_origin(double *x, double *y);   /* the view's top-left in world pixels */
 uint32_t world_shade_colour(uint32_t c);   /* a colour under the sky's light (for what is drawn under it: clouds) */   /* for the timing diary */
 void world_keys_let_go(void);   /* the game paused or Cinema Mode began: no direction counts as held till pressed again */

@@ -462,7 +462,7 @@ public partial class GameTestWindow
     {
         if (IsDead(defender)) return;
         var weapon = WieldedWeapon(attacker)?.Def; // Actor::get_weapon (bare hands: none)
-        PlaySound(weapon?.Weapon.AttackSoundResourceId ?? -1);
+        PlaySoundFrom(weapon?.Weapon.AttackSoundResourceId ?? -1, attacker);
         int attval = Stat(attacker, BuiltInStatKind.Combat, 10) + (weapon?.Weapon.Lucky == true ? 3 : 0); // lucky: +3
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
         bool hit = weapon?.Weapon.AutoHit == true || IsMotionless(defender) || RollToWin(attval, defval); // lying still, it can't ward off a blow

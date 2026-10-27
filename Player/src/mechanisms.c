@@ -640,7 +640,7 @@ static void draw_map(uint32_t *pixels)
 static int harvest(int uid, cJSON *obj)
 {
     cJSON *p = get(obj, "Plant");
-    if (harvestBy < 0 || combat_tiles_between(harvestBy, 0) <= 24) sound_play(num(p, "HarvestSoundResourceId", -1));
+    if (harvestBy < 0) sound_play(num(p, "HarvestSoundResourceId", -1)); else world_sound_from_actor(num(p, "HarvestSoundResourceId", -1), harvestBy);
     int c, i, q, x, y, n, fl = world_thing_floor(uid), last = world_thing_stage_count(uid) - 1;
     world_thing_info(uid, &c, &i, &q, &x, &y, &n);
     int soil = num(p, "SoilObjectId", -1);
@@ -1200,7 +1200,7 @@ static void mech_work_update(double ms)
     {
         Job *j = &jobs[i];
         j->left -= ms;
-        if ((j->nextBeat -= ms) <= 0 && j->left > 0) { j->nextBeat = 800; sound_play(num(j->recipe, "WorkSoundResourceId", -1)); at_work(400); } /* the millstone's turns, each with its sound */
+        if ((j->nextBeat -= ms) <= 0 && j->left > 0) { j->nextBeat = 800; world_sound_at_thing(num(j->recipe, "WorkSoundResourceId", -1), j->uid); at_work(400); } /* the millstone's turns, each with its sound */
         if (j->left > 0) continue;
         Job done = *j;
         jobs[i--] = jobs[--jobCount];

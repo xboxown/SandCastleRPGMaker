@@ -91,8 +91,6 @@ public partial class GameTestWindow
 
     private int Distance(MapCharacter mapCharacter, int x, int y) => CellsApart((x, y), (mapCharacter.Placement.X, mapCharacter.Placement.Y));
 
-    /// <summary>Its sounds are heard only near the player.</summary>
-    private bool HeardFrom(CharacterDefinition who) => _player is not null && TilesBetween(who, _player) <= 24;
 
     /// <summary>The chests in its area it may take from (unlocked), its own first, then the nearest.</summary>
     private List<(PlacedItemInstance Chest, ContainerData Data)> WorkContainers(MapCharacter mapCharacter)
@@ -427,7 +425,7 @@ public partial class GameTestWindow
             if ((beat -= elapsed) <= 0 && left > 0)
             {
                 beat = 800; // Exult's millstone: a turn, with its sound
-                if (HeardFrom(me)) PlaySound(recipe.WorkSoundResourceId);
+                PlaySoundFrom(recipe.WorkSoundResourceId, me);
                 ShowPose(me, pose, restart: true);
             }
             if (left > 0) return null;
@@ -593,7 +591,7 @@ public partial class GameTestWindow
     {
         var p = obj.Plant;
         int owner = OwnerOf(plant);
-        if (by is null || HeardFrom(by.Character)) PlaySound(p.HarvestSoundResourceId);
+        if (by is null) PlaySound(p.HarvestSoundResourceId); else PlaySoundFrom(p.HarvestSoundResourceId, by.Character);
         var (x, y) = (plant.X, plant.Y);
         int last = Math.Max(0, p.Stages.Count - 1);
         if (p.RemovedWhenHarvested && p.SoilObjectId >= 0 && ObjectDef(p.SoilObjectId) is { } soil) BecomeObject(plant, soil); // the soil it was sown in, ready to sow again
@@ -640,7 +638,7 @@ public partial class GameTestWindow
         int owner = soil.BelongsToId;
         BecomeObject(soil, plant);
         soil.BelongsToId = owner; // the same field, the same owner
-        if (by is not null && (by == _player || HeardFrom(by))) PlaySound(plant.Plant.HarvestSoundResourceId);
+        if (by is not null) PlaySoundFrom(plant.Plant.HarvestSoundResourceId, by);
     }
 
     /// <summary>Empty soil in its area that it has seeds for: fetch a seed, walk there, sow.</summary>
