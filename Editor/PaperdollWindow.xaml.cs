@@ -143,20 +143,8 @@ public partial class PaperdollWindow : Window
         UpdateSelectedItemHint();
     }
 
-    private static BitmapImage? LoadStaticFrame(string path)
-    {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
-    }
+    /// <summary>A picture file decoded once and shared (FrameCache) - not a fresh copy for every thing that shows it.</summary>
+    private static BitmapImage? LoadStaticFrame(string path) => FrameCache.Get(path);
 
     /// <summary>Real body + real, authored per-slot positions (from the PC Editor's own paperdoll tab) - the exact same PaperdollDefinition data, so a slot moved there shows up moved here too, automatically.</summary>
     /// <summary>Resolves IsTwoHanded from whichever real database the item's Category points at - same lookup pattern as DisplayText, never guessed.</summary>

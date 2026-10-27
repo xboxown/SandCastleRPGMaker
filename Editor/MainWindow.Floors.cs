@@ -101,27 +101,19 @@ public partial class MainWindow
         for (int floor = 1; floor < _currentFloor; floor++)
         {
             if (_map.LayerForFloor(floor) is not { } layer) continue;
-            for (int y = 0; y < _map.Height; y++)
-            {
-                for (int x = 0; x < _map.Width; x++)
+            // Drawn by chunks of 16 x 16 cells (MainWindow.TileChunks.cs), shifted and stacked under the floor picked.
+            double shift = LowerFloorShift(_currentFloor - floor);
+            for (int cy = 0; cy * EditorChunkCells < _map.Height; cy++)
+                for (int cx = 0; cx * EditorChunkCells < _map.Width; cx++)
                 {
-                    int tileIndex = layer.GetTile(x, y, _map.Width);
-                    if (tileIndex < 0) continue;
-                    var image = new Image
-                    {
-                        Width = _tileset.TileWidth,
-                        Height = _tileset.TileHeight,
-                        IsHitTestVisible = false,
-                        Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
-                    };
+                    if (ChunkPicture(layer, cx, cy, skipAnimated: false, withUnder: floor <= 1) is not { } picture) continue;
+                    var image = new Image { Source = picture, IsHitTestVisible = false, Stretch = Stretch.None };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-                    double shift = LowerFloorShift(_currentFloor - floor);
-                    Canvas.SetLeft(image, x * _tileset.TileWidth + shift);
-                    Canvas.SetTop(image, y * _tileset.TileHeight + shift);
+                    Canvas.SetLeft(image, cx * EditorChunkCells * _tileset.TileWidth + shift);
+                    Canvas.SetTop(image, cy * EditorChunkCells * _tileset.TileHeight + shift);
                     Panel.SetZIndex(image, -LowerFloorZIndexStep * (_currentFloor - floor));
                     MapCanvas.Children.Add(image);
                 }
-            }
             // A veil over each floor below: out of focus, and darker the further down.
             double reach = LowerFloorShift(_currentFloor - 1);
             var veil = new Rectangle { Width = _map.Width * _tileset.TileWidth + reach, Height = _map.Height * _tileset.TileHeight + reach, Fill = Brushes.Black, Opacity = 0.45, IsHitTestVisible = false };

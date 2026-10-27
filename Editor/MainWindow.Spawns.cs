@@ -49,8 +49,7 @@ public partial class MainWindow
         if (spawn.Floor != _currentFloor) return;
         var dim = Color.FromArgb(160, 150, 130, 0);
         var bright = Color.FromArgb(230, 255, 230, 0);
-        var fill = new SolidColorBrush(dim);
-        fill.BeginAnimation(SolidColorBrush.ColorProperty, new ColorAnimation { From = dim, To = bright, Duration = TimeSpan.FromSeconds(0.9), AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever });
+        var fill = PulseBrush(dim, bright); // shared with every spawn point's marker
         var names = spawn.Entries.Select(e => $"{_characterDatabase.Characters.FirstOrDefault(c => c.Id == e.CharacterId)?.Name ?? "(gone)"} {e.Count} x {e.Percent}%");
         var marker = new Border
         {

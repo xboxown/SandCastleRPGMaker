@@ -376,23 +376,49 @@ public partial class MainWindow
     /// what's put underneath below everything over it. Flat things (tiles,
     /// traps) under all of it.
     /// </summary>
+    /// <summary>The grid squares (8 x 8 units) a footprint covers.</summary>
+    private static IEnumerable<(int, int)> SquaresOf(EditorBody body)
+    {
+        int x1 = (body.Left + Math.Max(1, body.Width) - 1) >> 3, y1 = (body.Top + Math.Max(1, body.Depth) - 1) >> 3;
+        for (int y = body.Top >> 3; y <= y1; y++)
+            for (int x = body.Left >> 3; x <= x1; x++)
+                yield return (x, y);
+    }
+
     private void ApplyFreeDrawOrderNow()
     {
         if (_map is null) return;
         var bodies = MapThings().Where(OnCurrentFloor).Select(BodyOf).Where(b => VisualOfThing(b.Entity) is not null).OrderBy(b => b.Z).ToList();
         var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
+        // Each thing is compared only with those whose footprints share a grid square (8 x 8 units) with its own -
+        // the only ones the checks below can ever match - not with every thing on the map (49 000 x 49 000).
+        var grid = new Dictionary<(int, int), List<int>>();
+        for (int i = 0; i < bodies.Count; i++)
+            foreach (var square in SquaresOf(bodies[i]))
+            {
+                if (!grid.TryGetValue(square, out var list)) grid[square] = list = new List<int>(4);
+                list.Add(i);
+            }
+        IEnumerable<EditorBody> Near(EditorBody body)
+        {
+            var seen = new HashSet<int>();
+            foreach (var square in SquaresOf(body))
+                if (grid.TryGetValue(square, out var list))
+                    foreach (int i in list)
+                        if (seen.Add(i)) yield return bodies[i];
+        }
         foreach (var body in bodies)
         {
             // Flat things and Tile objects lie under everything on their floor, as the game draws them (ApplyRestingDrawOrder).
             int index = IsFloorTileObject(body.Entity) ? -1 // part of the floor: under everything on it, other tiles too
                 : body.Height == 0 || IsTileObject(body.Entity) ? body.Z % MapFloors.LiftsPerFloor : 10 + (body.Left + body.Width + body.Top + body.Depth) * 10 + body.Z % MapFloors.LiftsPerFloor;
-            foreach (var below in bodies)
+            foreach (var below in Near(body))
                 if (!ReferenceEquals(below.Entity, body.Entity) && below.TopLift <= body.Z && below.Overlaps(body) && order.TryGetValue(below.Entity, out int belowIndex))
                     index = Math.Max(index, belowIndex + 1);
             order[body.Entity] = index;
         }
         foreach (var body in bodies.Where(b => b.Under))
-            foreach (var over in bodies)
+            foreach (var over in Near(body))
                 if (!ReferenceEquals(over.Entity, body.Entity) && !over.Under && over.Overlaps(body))
                     order[body.Entity] = Math.Min(order[body.Entity], order[over.Entity] - 1);
         // Hung on the wall: on the face of whatever its picture is over.

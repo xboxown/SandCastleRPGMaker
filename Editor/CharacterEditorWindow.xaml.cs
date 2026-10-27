@@ -624,20 +624,8 @@ public partial class CharacterEditorWindow : Window
         if (window.ShowDialog() == true) BuildPosesPanel(character);
     }
 
-    private static BitmapImage? LoadStaticFrame(string path)
-    {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
-    }
+    /// <summary>A picture file decoded once and shared (FrameCache) - not a fresh copy for every thing that shows it.</summary>
+    private static BitmapImage? LoadStaticFrame(string path) => FrameCache.Get(path);
 
     /// <summary>No real Class system exists yet - "(None)" plus whatever this character already had (so an old value isn't silently lost) is genuinely the whole list for now, honestly reflecting the alpha stage rather than pretending there's more here.</summary>
     private void RefreshClassChoices(string currentClassName)

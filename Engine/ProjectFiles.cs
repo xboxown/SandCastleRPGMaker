@@ -125,6 +125,38 @@ public static class ProjectFiles
         return $"{counter:0000}_{name}";
     }
 
+    /// <summary>
+    /// Where each unpacked picture and sound came from: the .sdbx it was in, and its name there. If its file is gone
+    /// when the project is saved (deleted by something else), its bytes are taken from that .sdbx again - never
+    /// silently left out of the new one (which lost a project's sprite pictures, build 462).
+    /// </summary>
+    private static readonly System.Collections.Concurrent.ConcurrentDictionary<string, (string Sdbx, string Key)> Unpacked = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>The pictures and sounds the last save couldn't find at all (file gone, and not in the file it came from): what they belong to.</summary>
+    public static List<string> LastSaveMissing { get; } = new();
+
+    /// <summary>The bytes of each file a database uses: read from disk, or - its file gone - from the .sdbx it was unpacked from.</summary>
+    private static void EmbedFiles(IEnumerable<(string Path, string Owner)> uses, Dictionary<string, byte[]> into, Func<string, Dictionary<string, byte[]>?> readSdbx)
+    {
+        var sdbxCache = new Dictionary<string, Dictionary<string, byte[]>?>(StringComparer.OrdinalIgnoreCase);
+        foreach (var (path, owner) in uses)
+        {
+            if (string.IsNullOrEmpty(path) || into.ContainsKey(path)) continue;
+            if (File.Exists(path)) { into[path] = File.ReadAllBytes(path); continue; }
+            if (Unpacked.TryGetValue(path, out var from) && File.Exists(from.Sdbx))
+            {
+                if (!sdbxCache.TryGetValue(from.Sdbx, out var old)) sdbxCache[from.Sdbx] = old = readSdbx(from.Sdbx);
+                if (old is not null && old.TryGetValue(from.Key, out var bytes))
+                {
+                    into[path] = bytes;
+                    try { Directory.CreateDirectory(Path.GetDirectoryName(path)!); File.WriteAllBytes(path, bytes); } catch (IOException) { } catch (UnauthorizedAccessException) { } // the editor shows it again
+                    continue;
+                }
+            }
+            if (!LastSaveMissing.Contains(owner)) LastSaveMissing.Add(owner);
+        }
+    }
+
     /// <summary>The unpack folder is only a cache of what's embedded in the project file - old copies from earlier loads are removed so they don't pile up. A file still in use is simply left alone.</summary>
     private static void ClearExtractFolder(string extractFolder)
     {
@@ -138,7 +170,11 @@ public static class ProjectFiles
 
     public static void SaveManifest(string path, ManifestPayload payload)
     {
-        string json = JsonSerializer.Serialize(payload, JsonOptions);
+        // Written through a stream, a little at a time: serialized to one string, a big project's JSON (80 MB and up)
+        // grew a shared buffer to twice its size, and the runtime's buffer pool kept that for good.
+        using var utf8 = new MemoryStream();
+        JsonSerializer.Serialize(utf8, payload, JsonOptions);
+        string json = System.Text.Encoding.UTF8.GetString(utf8.GetBuffer(), 0, (int)utf8.Length);
         ProjectContainer.Save(path, payload.Manifest.ProjectId, json);
     }
 
@@ -147,7 +183,11 @@ public static class ProjectFiles
     {
         Guid id = ProjectContainer.PeekProjectId(path);
         string json = ProjectContainer.Load(path, id);
-        var payload = JsonSerializer.Deserialize<ManifestPayload>(json, JsonOptions)
+        // Read from its UTF-8 bytes as they are (a span): from one string the whole JSON went through a pooled buffer
+        // (twice its size) that the runtime kept afterwards - hundreds of MB for a big project.
+        byte[] utf8 = System.Text.Encoding.UTF8.GetBytes(json);
+        json = string.Empty;
+        var payload = JsonSerializer.Deserialize<ManifestPayload>(new ReadOnlySpan<byte>(utf8), JsonOptions)
                        ?? throw new ProjectFileException($"\"{Path.GetFileName(path)}\" could not be read as a project manifest.");
         payload.Factions.SyncNextIdAfterLoad();
         payload.Variables.SyncNextIdAfterLoad();
@@ -179,10 +219,16 @@ public static class ProjectFiles
             }
         }
 
-        foreach (var p in uniquePaths)
+        LastSaveMissing.Clear();
+        var uses = database.Groups.SelectMany(g => g.Sprites.SelectMany(sp =>
+            new[] { (sp.FilePath, $"{g.Name}/{sp.Name}") }
+                .Concat(sp.Frames.Select(f => (f.FilePath, $"{g.Name}/{sp.Name}")))
+                .Concat(sp.Frames.SelectMany(f => f.LayerFilePaths.Values.Select(l => (l, $"{g.Name}/{sp.Name}"))))));
+        EmbedFiles(uses.Where(u => uniquePaths.Contains(u.Item1)), payload.EmbeddedFiles, sdbx =>
         {
-            if (File.Exists(p)) payload.EmbeddedFiles[p] = File.ReadAllBytes(p);
-        }
+            try { return JsonSerializer.Deserialize<ShapeContainerPayload>(ProjectContainer.Load(sdbx, projectId), JsonOptions)?.EmbeddedFiles; }
+            catch (Exception) { return null; }
+        });
 
         string json = JsonSerializer.Serialize(payload, JsonOptions);
         ProjectContainer.Save(path, projectId, json);
@@ -204,6 +250,7 @@ public static class ProjectFiles
             string extractedPath = Path.Combine(extractFolder, ExtractedFileName(counter, originalPath));
             File.WriteAllBytes(extractedPath, bytes);
             remap[originalPath] = extractedPath;
+            Unpacked[extractedPath] = (Path.GetFullPath(path), originalPath); // its bytes can be found again if the file goes
             counter++;
         }
 
@@ -235,10 +282,13 @@ public static class ProjectFiles
             .Where(p => !string.IsNullOrEmpty(p))
             .Distinct();
 
-        foreach (var p in uniquePaths)
+        LastSaveMissing.Clear();
+        var owners = database.Entries.Where(e => e.Kind is ResourceKind.Sound or ResourceKind.Music).GroupBy(e => e.FilePath).ToDictionary(g => g.Key ?? "", g => g.First().Name);
+        EmbedFiles(uniquePaths.Select(p => (p, owners.TryGetValue(p, out var n) ? $"sound \"{n}\"" : p)), payload.EmbeddedFiles, sdbx =>
         {
-            if (File.Exists(p)) payload.EmbeddedFiles[p] = File.ReadAllBytes(p);
-        }
+            try { return JsonSerializer.Deserialize<AudioContainerPayload>(ProjectContainer.Load(sdbx, projectId), JsonOptions)?.EmbeddedFiles; }
+            catch (Exception) { return null; }
+        });
 
         string json = JsonSerializer.Serialize(payload, JsonOptions);
         ProjectContainer.Save(path, projectId, json);
@@ -260,6 +310,7 @@ public static class ProjectFiles
             string extractedPath = Path.Combine(extractFolder, ExtractedFileName(counter, originalPath));
             File.WriteAllBytes(extractedPath, bytes);
             remap[originalPath] = extractedPath;
+            Unpacked[extractedPath] = (Path.GetFullPath(path), originalPath); // its bytes can be found again if the file goes
             counter++;
         }
 

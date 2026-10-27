@@ -51,8 +51,17 @@ public partial class MainWindow
         int local = TileSheets.Local(tileIndex), w = _tileset.TileWidth, h = _tileset.TileHeight;
         int col = local % sheet.Columns, row = local / sheet.Columns;
         if ((col + 1) * w > sheet.Bitmap.PixelWidth || (row + 1) * h > sheet.Bitmap.PixelHeight) return null; // the sheet lost tiles since
-        return new CroppedBitmap(sheet.Bitmap, new Int32Rect(col * w, row * h, w, h));
+        // One shared, frozen picture per tile (not a new one per cell): a big map is built in moments, not minutes.
+        // Keyed by the sheet's bitmap, so a sheet rebuilt after its tiles are edited gets fresh pictures.
+        var key = (sheet.Bitmap, local, w, h);
+        if (_tilePictures.TryGetValue(key, out var cached)) return cached;
+        if (_tilePictures.Count > 50000) _tilePictures.Clear();
+        var crop = new CroppedBitmap(sheet.Bitmap, new Int32Rect(col * w, row * h, w, h));
+        if (crop.CanFreeze) crop.Freeze();
+        return _tilePictures[key] = crop;
     }
+
+    private readonly Dictionary<(BitmapSource Sheet, int Local, int W, int H), BitmapSource> _tilePictures = new();
 
     /// <summary>A tile's picture by a given world's tileset (another world in the game may use other sheets than the one open here).</summary>
     private BitmapSource? TileSourceFor(TilesetDefinition tileset, int tileIndex)

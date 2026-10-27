@@ -1,3 +1,4 @@
+using System.IO;
 using System.Text.Json;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -11,13 +12,15 @@ namespace SandcastleRpgMaker.Editor;
 /// deleted, cut, pasted, moved or changed. What's on the map (all but its tiles) is kept as it was at each
 /// press of the mouse or key: anything changed since is one step. Tiles are kept cell by cell as they're
 /// painted (a whole stroke is one step), so a big map costs nothing to keep.
+/// Big maps (tens of thousands of objects): the state is compared by a 64-bit hash of its JSON, and the steps are
+/// kept gzipped, within UndoBudgetBytes (the oldest dropped first) - not a full copy per step.
 /// </summary>
 public partial class MainWindow
 {
-    /// <summary>One step back: what the map's things were (as JSON), and/or the tiles a stroke changed (their old numbers).</summary>
+    /// <summary>One step back: what the map's things were (JSON, gzipped), and/or the tiles a stroke changed (their old numbers).</summary>
     private sealed class UndoStep
     {
-        public string? Things;
+        public byte[]? Things;
         public List<(MapLayer Layer, int Index, int Tile)>? Tiles;
     }
 
@@ -26,13 +29,47 @@ public partial class MainWindow
         List<SpawnPoint> SpawnPoints, List<MapZone> Zones, int StartX, int StartY, int StartFloor);
 
     private const int UndoLimit = 200;
+    private const long UndoBudgetBytes = 128L * 1024 * 1024;
     private readonly List<UndoStep> _undoSteps = new(), _redoSteps = new();
     private MapData? _undoMap;
-    private string? _undoBaseline;
+    /// <summary>The things as they were at the last check: gzipped JSON, and its hash (to tell a change cheaply).</summary>
+    private byte[]? _undoBaseline;
+    private ulong _undoBaselineHash;
     private readonly List<(MapLayer Layer, int Index, int Tile)> _tileStroke = new();
 
-    private static string ThingsOf(MapData map) =>
-        JsonSerializer.Serialize(new ThingsState(map.Objects, map.Items, map.Events, map.Characters, map.SpawnPoints, map.Zones, map.StartX, map.StartY, map.StartFloor));
+    /// <summary>The map's things as UTF-8 JSON (through a stream: no buffer the size of a big map kept by the runtime).</summary>
+    private static byte[] ThingsOf(MapData map)
+    {
+        using var stream = new MemoryStream();
+        JsonSerializer.Serialize(stream, new ThingsState(map.Objects, map.Items, map.Events, map.Characters, map.SpawnPoints, map.Zones, map.StartX, map.StartY, map.StartFloor));
+        return stream.ToArray();
+    }
+
+    /// <summary>FNV-1a, 64 bits.</summary>
+    private static ulong HashOf(byte[] bytes)
+    {
+        ulong h = 14695981039346656037UL;
+        foreach (byte b in bytes) { h ^= b; h *= 1099511628211UL; }
+        return h;
+    }
+
+    private static byte[] Zip(byte[] bytes)
+    {
+        using var output = new MemoryStream();
+        using (var zip = new System.IO.Compression.GZipStream(output, System.IO.Compression.CompressionLevel.Fastest)) zip.Write(bytes);
+        return output.ToArray();
+    }
+
+    private static byte[] Unzip(byte[] zipped)
+    {
+        using var input = new System.IO.Compression.GZipStream(new MemoryStream(zipped), System.IO.Compression.CompressionMode.Decompress);
+        using var output = new MemoryStream();
+        input.CopyTo(output);
+        return output.ToArray();
+    }
+
+    /// <summary>The things now: their JSON and its hash.</summary>
+    private (byte[] Json, ulong Hash) ThingsNow() { var json = ThingsOf(_map!); return (json, HashOf(json)); }
 
     /// <summary>A tile set, its old number kept for Undo.</summary>
     private void SetTileUndoable(MapLayer layer, int x, int y, int tile)
@@ -53,26 +90,36 @@ public partial class MainWindow
             // Another map (opened, or another world): its own history.
             _undoSteps.Clear(); _redoSteps.Clear(); _tileStroke.Clear();
             _undoMap = _map;
-            _undoBaseline = ThingsOf(_map);
+            var (json, hash) = ThingsNow();
+            _undoBaseline = Zip(json);
+            _undoBaselineHash = hash;
             return;
         }
-        if (_tileStroke.Count > 0)
-        {
-            Push(new UndoStep { Tiles = _tileStroke.ToList() });
-            _tileStroke.Clear();
-        }
-        string now = ThingsOf(_map);
-        if (now != _undoBaseline)
+        FlushTileStroke();
+        var (now, nowHash) = ThingsNow();
+        if (nowHash != _undoBaselineHash)
         {
             Push(new UndoStep { Things = _undoBaseline });
-            _undoBaseline = now;
+            _undoBaseline = Zip(now);
+            _undoBaselineHash = nowHash;
         }
+    }
+
+    /// <summary>A stroke of tiles ended (the mouse let go): one step - cheap, the things aren't looked at.</summary>
+    private void FlushTileStroke()
+    {
+        if (_tileStroke.Count == 0) return;
+        Push(new UndoStep { Tiles = _tileStroke.ToList() });
+        _tileStroke.Clear();
     }
 
     private void Push(UndoStep step)
     {
         _undoSteps.Add(step);
-        if (_undoSteps.Count > UndoLimit) _undoSteps.RemoveAt(0);
+        // Kept within its count and its memory budget: the oldest steps go first.
+        static long Size(UndoStep s) => (s.Things?.Length ?? 0) + (s.Tiles?.Count ?? 0) * 24L;
+        long total = _undoSteps.Sum(Size);
+        while (_undoSteps.Count > 1 && (_undoSteps.Count > UndoLimit || total > UndoBudgetBytes)) { total -= Size(_undoSteps[0]); _undoSteps.RemoveAt(0); }
         _redoSteps.Clear();
     }
 
@@ -85,7 +132,7 @@ public partial class MainWindow
     {
         if (_map is null) return;
         if (from == _undoSteps) UndoCheckpoint(); // what was just done is a step too
-        else if (_tileStroke.Count > 0 || ThingsOf(_map) != _undoBaseline) { StatusText.Text = "Nothing to redo - something has changed since."; return; }
+        else if (_tileStroke.Count > 0 || ThingsNow().Hash != _undoBaselineHash) { StatusText.Text = "Nothing to redo - something has changed since."; return; }
         if (from.Count == 0) { StatusText.Text = what == "Undone" ? "Nothing to undo." : "Nothing to redo."; return; }
         var step = from[^1];
         from.RemoveAt(from.Count - 1);
@@ -102,13 +149,14 @@ public partial class MainWindow
             }
             back.Tiles.Reverse();
         }
-        if (step.Things is { } things && JsonSerializer.Deserialize<ThingsState>(things) is { } state)
+        if (step.Things is { } things && JsonSerializer.Deserialize<ThingsState>(Unzip(things)) is { } state)
         {
-            back.Things = ThingsOf(_map);
+            back.Things = _undoBaseline;
             _map.Objects = state.Objects; _map.Items = state.Items; _map.Events = state.Events; _map.Characters = state.Characters;
             _map.SpawnPoints = state.SpawnPoints; _map.Zones = state.Zones;
             _map.StartX = state.StartX; _map.StartY = state.StartY; _map.StartFloor = state.StartFloor;
             _undoBaseline = things;
+            _undoBaselineHash = HashOf(Unzip(things));
         }
         to.Add(back);
         SelectObjectInstance(null);

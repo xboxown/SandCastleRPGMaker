@@ -55,5 +55,8 @@ public partial class App : Application
         editor.ContentRendered += (_, _) => SplashWindow.CloseWhenEditorShown();
         MainWindow = editor;
         editor.Show();
+        // A project named on the command line (or a .msrp double-clicked): opened as File > Open does.
+        if (e.Args.FirstOrDefault(a => a.EndsWith(".msrp", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(a)) is { } project)
+            editor.Dispatcher.BeginInvoke(() => editor.OpenFromCommandLine(project), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
     }
 }

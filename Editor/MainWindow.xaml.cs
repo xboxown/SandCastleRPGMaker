@@ -848,7 +848,7 @@ public partial class MainWindow : Window
             // the next Save, they're ordinary loose-file-backed data again,
             // exactly like before any project existed (per spec: nothing about
             // "Integrated Into System" is true until a Save has happened).
-            string extractRoot = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SandcastleRpgMaker", manifest.ProjectId.ToString("N"));
+            string extractRoot = SessionUnpackFolder(manifest.ProjectId);
             var sprites = ProjectFiles.LoadShapeSdbx(shapePath, manifest.ProjectId, System.IO.Path.Combine(extractRoot, "sprites"));
             var books = ProjectFiles.LoadObjectsSdbx(objectsPath, manifest.ProjectId);
             var resources = ProjectFiles.LoadAudiosSdbx(audiosPath, manifest.ProjectId, System.IO.Path.Combine(extractRoot, "audio"));
@@ -882,6 +882,7 @@ public partial class MainWindow : Window
             _map = payload.Map;
             if (_map is not null) ShowMapInEditor();
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
+            CompactAfterLoad();
             return true;
         }
         catch (Exception ex) when (IsGameHost)
@@ -961,6 +962,36 @@ public partial class MainWindow : Window
         _autoSaveTimer.Start();
     }
 
+    /// <summary>
+    /// Where this editor (or game) unpacks the project's pictures and sounds: a folder of its own, under the project's.
+    /// It was one folder per project, emptied by every load - so a second editor, or a built game, opening the same
+    /// project deleted the files the first one's sprites were using, and its next save lost those pictures.
+    /// Folders left by editors and games no longer running are cleared away here.
+    /// </summary>
+    private static string SessionUnpackFolder(Guid projectId)
+    {
+        string project = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "SandcastleRpgMaker", projectId.ToString("N"));
+        var me = System.Diagnostics.Process.GetCurrentProcess();
+        string mine = System.IO.Path.Combine(project, $"session_{me.Id}_{me.StartTime.Ticks}");
+        try
+        {
+            if (System.IO.Directory.Exists(project))
+                foreach (var folder in System.IO.Directory.GetDirectories(project, "session_*"))
+                {
+                    var parts = System.IO.Path.GetFileName(folder).Split('_');
+                    if (parts.Length != 3 || !int.TryParse(parts[1], out int pid) || !long.TryParse(parts[2], out long started)) continue;
+                    bool alive;
+                    try { using var other = System.Diagnostics.Process.GetProcessById(pid); alive = other.StartTime.Ticks == started; }
+                    catch (ArgumentException) { alive = false; } // no such process any more
+                    catch (InvalidOperationException) { alive = false; }
+                    if (!alive && folder != mine) try { System.IO.Directory.Delete(folder, recursive: true); } catch (System.IO.IOException) { } catch (UnauthorizedAccessException) { }
+                }
+        }
+        catch (System.IO.IOException) { }
+        System.IO.Directory.CreateDirectory(mine);
+        return mine;
+    }
+
     /// <summary>Saves the open project (.msrp and its .sdbx files). False if there is none or saving failed (the reason was already shown).</summary>
     private bool SaveProject()
     {
@@ -973,8 +1004,14 @@ public partial class MainWindow : Window
             string audiosPath = System.IO.Path.Combine(_currentProjectFolder, "audios.sdbx");
 
             ProjectFiles.SaveShapeSdbx(shapePath, _currentProjectId.Value, _spriteDatabase);
+            var missingPictures = ProjectFiles.LastSaveMissing.ToList();
             ProjectFiles.SaveObjectsSdbx(objectsPath, _currentProjectId.Value, _bookDatabase);
             ProjectFiles.SaveAudiosSdbx(audiosPath, _currentProjectId.Value, _resourceDatabase);
+            var missingSounds = ProjectFiles.LastSaveMissing.ToList();
+            if (missingPictures.Count + missingSounds.Count > 0)
+                MessageBox.Show(this, "Saved - but these have files that can't be found any more (deleted outside the editor), so they were saved without them:\n\n"
+                    + string.Join("\n", missingPictures.Concat(missingSounds).Take(30)) + (missingPictures.Count + missingSounds.Count > 30 ? $"\n... and {missingPictures.Count + missingSounds.Count - 30} more" : ""),
+                    "Save", MessageBoxButton.OK, MessageBoxImage.Warning);
             VideoStore.Save(System.IO.Path.Combine(_currentProjectFolder, "videos.sdbx"), _currentProjectId.Value, _videoDatabase);
 
             // .msrp is re-saved every time too now, not written once and
@@ -1348,6 +1385,27 @@ public partial class MainWindow : Window
     /// <summary>This window only hosts a built game (never shown): its errors are the game's (System Settings > Errors).</summary>
     public bool IsGameHost { get; init; }
 
+    /// <summary>A project named on the command line: opened as File > Open does.</summary>
+    public void OpenFromCommandLine(string msrpPath) => LoadProjectFromPath(msrpPath);
+
+    /// <summary>
+    /// After a project is opened: what loading it left behind (its files read, the map built) handed back to Windows -
+    /// once when the editor is idle, and again 75 s on: the runtime's shared buffer pool lets go of buffers left unused
+    /// for a minute only at a full collection (a big project's are 128 MB each), which an idle editor seldom has.
+    /// </summary>
+    private void CompactAfterLoad()
+    {
+        static void Compact()
+        {
+            System.Runtime.GCSettings.LargeObjectHeapCompactionMode = System.Runtime.GCLargeObjectHeapCompactionMode.CompactOnce;
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        }
+        Dispatcher.BeginInvoke(Compact, System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        var later = new System.Windows.Threading.DispatcherTimer(System.Windows.Threading.DispatcherPriority.ApplicationIdle) { Interval = TimeSpan.FromSeconds(75) };
+        later.Tick += (_, _) => { later.Stop(); Compact(); };
+        later.Start();
+    }
+
     public bool RunStandaloneGame(string msrpPath)
     {
         if (!LoadProjectFromPath(msrpPath)) return false;
@@ -1511,9 +1569,13 @@ public partial class MainWindow : Window
             Dispatcher.BeginInvoke(() => StatusText.Text = $"{renumbered} placed object{(renumbered == 1 ? "" : "s")} shared a number with another and {(renumbered == 1 ? "was" : "were")} hidden here - now shown. Save the map to keep it.");
 
         MapCanvas.Children.Clear();
+        using var batch = MapCanvas.Batch(); // the children sorted by Z index once, at the end (BatchCanvas)
         foreach (var animator in _mapCellAnimators.Values) animator.Stop();
         _mapCellAnimators.Clear();
         _mapCellVisuals.Clear();
+        _tileChunks.Clear(); // tiles drawn by chunks (MainWindow.TileChunks.cs), once at the end
+        _dirtyChunks.Clear();
+        _deferChunks = true;
         _mapObjectVisuals.Clear();
         _landingVisuals.Clear();
         _mapEventVisuals.Clear();
@@ -1567,6 +1629,7 @@ public partial class MainWindow : Window
                     PaintCellVisual(x, y, tileIndex);
             }
         }
+        FlushChunks();
 
         // Draw any objects already placed on this map (on top of the tile layer).
         foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0))
@@ -1819,7 +1882,7 @@ public partial class MainWindow : Window
 
     private void MapCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
-        UndoCheckpoint(); // a stroke or a drag ends: one step
+        FlushTileStroke(); // a stroke of tiles ends: one step (MainWindow.Undo.cs); a drag is a step at the next press
         if (_map is null || _tileset is null) return;
 
         _isFreehandPainting = false;
@@ -1927,17 +1990,8 @@ public partial class MainWindow : Window
         {
             SetTileUndoable(CurrentFloorLayer, x, y, -1); // kept for Undo (MainWindow.Undo.cs)
 
-            if (_mapCellAnimators.TryGetValue((x, y), out var animator))
-            {
-                animator.Stop();
-                _mapCellAnimators.Remove((x, y));
-            }
-
-            if (_mapCellVisuals.TryGetValue((x, y), out var tileImg))
-            {
-                MapCanvas.Children.Remove(tileImg);
-                _mapCellVisuals.Remove((x, y));
-            }
+            RemoveAnimatedCell(x, y);
+            MarkChunk(x, y); // its chunk drawn again without it (MainWindow.TileChunks.cs)
         }
     }
 
@@ -2150,54 +2204,6 @@ public partial class MainWindow : Window
         return animGroup?.Sprites.FirstOrDefault(s => s.Name == props.AnimationSpriteName);
     }
 
-    private void PaintCellVisual(int x, int y, int tileIndex)
-    {
-        if (_tilesetBitmap is null || _tileset is null) return;
-
-        // Stop and clear this cell's old animator (if any) before doing
-        // anything else - whether it's about to become a different
-        // animated tile or a plain static one, a stale animator must never
-        // keep running in the background after its cell changes.
-        if (_mapCellAnimators.TryGetValue((x, y), out var oldAnimator))
-        {
-            oldAnimator.Stop();
-            _mapCellAnimators.Remove((x, y));
-        }
-
-        if (!_mapCellVisuals.TryGetValue((x, y), out var image))
-        {
-            image = new Image
-            {
-                Width = _tileset.TileWidth,
-                Height = _tileset.TileHeight,
-                IsHitTestVisible = false
-            };
-            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-            Canvas.SetLeft(image, x * _tileset.TileWidth);
-            Canvas.SetTop(image, y * _tileset.TileHeight);
-            MapCanvas.Children.Add(image);
-            _mapCellVisuals[(x, y)] = image;
-        }
-
-        var animationSprite = LinkedAnimationOfMapTile(tileIndex); // its own sheet's tile animation
-        if (animationSprite is not null && animationSprite.Frames.Count > 0)
-        {
-            _mapCellAnimators[(x, y)] = new SpriteAnimator(animationSprite, image, _resourceDatabase);
-            return;
-        }
-
-        image.Source = TileSource(tileIndex); // from whichever of the map's tilesheets it's from
-        if (_currentFloor <= 1 && UnderTileOf(tileIndex) is int under && TileSource(under) is { } below && image.Source is { } top)
-        {
-            // Its tile under it (Tile Properties): drawn first, through its see-through pixels.
-            var group = new DrawingGroup();
-            RenderOptions.SetBitmapScalingMode(group, BitmapScalingMode.NearestNeighbor);
-            group.Children.Add(new ImageDrawing(below, new Rect(0, 0, _tileset.TileWidth, _tileset.TileHeight)));
-            group.Children.Add(new ImageDrawing(top, new Rect(0, 0, _tileset.TileWidth, _tileset.TileHeight)));
-            image.Source = new DrawingImage(group);
-        }
-    }
-
     /// <summary>A ground tile's tile under it (Tile Properties), as a map tile number of the same sheet; null for none.</summary>
     private int? UnderTileOf(int tileIndex)
     {
@@ -2258,6 +2264,22 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>
+    /// The markers' pulse: one brush (and one animation, at 8 frames a second) for every marker of a colour -
+    /// six hundred events on a big map, one animation, instead of six hundred running at 60 frames each.
+    /// </summary>
+    private static SolidColorBrush PulseBrush(Color dim, Color bright)
+    {
+        if (PulseBrushes.TryGetValue((dim, bright), out var brush)) return brush;
+        brush = new SolidColorBrush(dim);
+        var pulse = new ColorAnimation { From = dim, To = bright, Duration = TimeSpan.FromSeconds(0.9), AutoReverse = true, RepeatBehavior = RepeatBehavior.Forever };
+        Timeline.SetDesiredFrameRate(pulse, 8);
+        brush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
+        return PulseBrushes[(dim, bright)] = brush;
+    }
+
+    private static readonly Dictionary<(Color, Color), SolidColorBrush> PulseBrushes = new();
+
     private void PlaceEventVisual(GameEvent gameEvent)
     {
         if (_tileset is null) return;
@@ -2271,16 +2293,7 @@ public partial class MainWindow : Window
         // reads as "glowing" rather than just fading in and out.
         var dimGreen = Color.FromArgb(160, 20, 140, 20);
         var brightGreen = Color.FromArgb(220, 60, 255, 60);
-        var fillBrush = new SolidColorBrush(dimGreen);
-        var pulse = new ColorAnimation
-        {
-            From = dimGreen,
-            To = brightGreen,
-            Duration = TimeSpan.FromSeconds(0.9),
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever
-        };
-        fillBrush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
+        var fillBrush = PulseBrush(dimGreen, brightGreen); // one shared pulse for every marker of its colour
 
         var marker = new Border
         {
@@ -2353,6 +2366,7 @@ public partial class MainWindow : Window
                 AutoReverse = true,
                 RepeatBehavior = RepeatBehavior.Forever
             };
+            Timeline.SetDesiredFrameRate(pulse, 8); // a pulse needn't redraw the map 60 times a second
             _shapePreviewBrush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
         }
 
@@ -2406,6 +2420,7 @@ public partial class MainWindow : Window
             AutoReverse = true,
             RepeatBehavior = RepeatBehavior.Forever
         };
+        Timeline.SetDesiredFrameRate(pulse, 8); // a pulse needn't redraw the map 60 times a second
         strokeBrush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
 
         _hoverCursorVisual = new Rectangle
@@ -2431,16 +2446,7 @@ public partial class MainWindow : Window
 
         var dimPurple = Color.FromArgb(160, 110, 20, 140);
         var brightPurple = Color.FromArgb(220, 190, 60, 255);
-        var fillBrush = new SolidColorBrush(dimPurple);
-        var pulse = new ColorAnimation
-        {
-            From = dimPurple,
-            To = brightPurple,
-            Duration = TimeSpan.FromSeconds(0.9),
-            AutoReverse = true,
-            RepeatBehavior = RepeatBehavior.Forever
-        };
-        fillBrush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
+        var fillBrush = PulseBrush(dimPurple, brightPurple); // one shared pulse for every marker of its colour
 
         var marker = new Border
         {
@@ -2590,20 +2596,8 @@ public partial class MainWindow : Window
         if (ReferenceEquals(_freeSelected, instance)) UpdateFreeSelectionVisual();
     }
 
-    private static BitmapImage? LoadStaticFrame(string path)
-    {
-        if (string.IsNullOrEmpty(path) || !File.Exists(path)) return null;
-        try
-        {
-            var bmp = new BitmapImage();
-            bmp.BeginInit();
-            bmp.CacheOption = BitmapCacheOption.OnLoad;
-            bmp.UriSource = new Uri(path);
-            bmp.EndInit();
-            return bmp;
-        }
-        catch { return null; }
-    }
+    /// <summary>A picture file decoded once and shared (FrameCache) - not a fresh copy for every thing that shows it.</summary>
+    private static BitmapImage? LoadStaticFrame(string path) => FrameCache.Get(path);
 
     private Border BuildLetteredItemMarker(string letter, Color fill, Brush border, string tooltip)
     {
