@@ -1060,11 +1060,7 @@ public partial class MainWindow : Window
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e) => Close();
 
-    private void UndoMenuItem_Click(object sender, RoutedEventArgs e)
-        => MessageBox.Show("Undo/redo history is planned for a later milestone.", "Not yet implemented",
-            MessageBoxButton.OK, MessageBoxImage.Information);
-
-    private void RedoMenuItem_Click(object sender, RoutedEventArgs e) => UndoMenuItem_Click(sender, e);
+    // Undo / Redo: MainWindow.Undo.cs
 
     // ---------- Menu: Mode ----------
 
@@ -1623,6 +1619,7 @@ public partial class MainWindow : Window
     private void MapCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_map is null || _tileset is null) return;
+        UndoCheckpoint(); // what was done before this press is one step back (MainWindow.Undo.cs)
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
@@ -1747,7 +1744,7 @@ public partial class MainWindow : Window
 
         if (_drawShape == DrawShape.Single)
         {
-            CurrentFloorLayer.SetTile(x, y, _map.Width, PaintTileIndex);
+            SetTileUndoable(CurrentFloorLayer, x, y, PaintTileIndex); // kept for Undo (MainWindow.Undo.cs)
             PaintCellVisual(x, y, PaintTileIndex);
             _isFreehandPainting = true; // per spec: click-and-drag paints continuously like a normal pencil tool, no modifier key needed
         }
@@ -1810,7 +1807,7 @@ public partial class MainWindow : Window
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
 
-        CurrentFloorLayer.SetTile(x, y, _map.Width, PaintTileIndex);
+        SetTileUndoable(CurrentFloorLayer, x, y, PaintTileIndex); // kept for Undo (MainWindow.Undo.cs)
         PaintCellVisual(x, y, PaintTileIndex);
     }
 
@@ -1822,6 +1819,7 @@ public partial class MainWindow : Window
 
     private void MapCanvas_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
     {
+        UndoCheckpoint(); // a stroke or a drag ends: one step
         if (_map is null || _tileset is null) return;
 
         _isFreehandPainting = false;
@@ -1858,7 +1856,7 @@ public partial class MainWindow : Window
             foreach (var (cx, cy) in cells)
             {
                 if (!IsInsideMap(cx, cy)) continue;
-                CurrentFloorLayer.SetTile(cx, cy, _map.Width, PaintTileIndex);
+                SetTileUndoable(CurrentFloorLayer, cx, cy, PaintTileIndex); // kept for Undo (MainWindow.Undo.cs)
                 PaintCellVisual(cx, cy, PaintTileIndex);
             }
         }
@@ -1869,6 +1867,7 @@ public partial class MainWindow : Window
     private void MapCanvas_MouseRightButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_map is null) return;
+        UndoCheckpoint();
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
         if (!IsInsideMap(x, y)) return;
@@ -1926,7 +1925,7 @@ public partial class MainWindow : Window
         }
 
         {
-            CurrentFloorLayer.SetTile(x, y, _map.Width, -1);
+            SetTileUndoable(CurrentFloorLayer, x, y, -1); // kept for Undo (MainWindow.Undo.cs)
 
             if (_mapCellAnimators.TryGetValue((x, y), out var animator))
             {
@@ -2075,6 +2074,7 @@ public partial class MainWindow : Window
     /// </summary>
     private void MainWindow_PreviewKeyDown(object sender, KeyEventArgs e)
     {
+        if (_map is not null && UndoKeys(e)) { e.Handled = true; return; } // Ctrl+Z / Ctrl+Y (MainWindow.Undo.cs)
         if (e.Key == Key.F5)
         {
             LaunchGameTest();

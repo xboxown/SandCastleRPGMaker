@@ -46,6 +46,7 @@ public partial class ContainerEditorWindow : Window
     public ContainerEditorWindow(ContainerDatabase containers, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources, VariableDatabase variables, StatDatabase stats, CharacterDatabase characters)
     {
         InitializeComponent();
+        PreviewKeyDown += ContentsUndoKeys; // Ctrl+Z over the contents (ContainerEditorWindow.Undo.cs)
         SolidSize.SizeEdited += (_, _) =>
         {
             if (ContainerListBox.SelectedItem is not ContainerData container) return;
@@ -746,6 +747,7 @@ public partial class ContainerEditorWindow : Window
 
     private void MoveContentsUp_Click(object sender, RoutedEventArgs e)
     {
+        ContentsCheckpoint(); // what was done before is a step for Undo
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
         if (ContentsListBox.SelectedItem is not ContentsRow row) return;
         int index = container.StartingContents.IndexOf(row.Instance);
@@ -759,6 +761,7 @@ public partial class ContainerEditorWindow : Window
 
     private void MoveContentsDown_Click(object sender, RoutedEventArgs e)
     {
+        ContentsCheckpoint(); // what was done before is a step for Undo
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
         if (ContentsListBox.SelectedItem is not ContentsRow row) return;
         int index = container.StartingContents.IndexOf(row.Instance);
@@ -869,40 +872,32 @@ public partial class ContainerEditorWindow : Window
             var capturedItem = item;
             visual.MouseLeftButtonDown += (_, e) =>
             {
+                ContentsCheckpoint(); // a move from here on is one step for Undo
                 ContentsListBox.SelectedItem = ContentsListBox.Items.Cast<ContentsRow>().FirstOrDefault(r => r.Instance == capturedItem);
                 _pendingContentsDragItem = capturedItem;
                 _pendingContentsDragStart = e.GetPosition(ContentsPreviewCanvas);
                 ContentsPreviewCanvas.CaptureMouse();
                 e.Handled = true;
             };
-            if (item.Category == ReferencedItemCategory.Object && _objects.Objects.FirstOrDefault(o => o.Id == item.ItemId) is { } faced && CanFace(faced))
-            {
-                // Right-click: which way it faces when it's taken out (a bedroll, a chair) - as on the map.
-                visual.MouseRightButtonUp += (_, e) =>
-                {
-                    var menu = new ContextMenu();
-                    var facingMenu = new MenuItem { Header = "Facing" };
-                    foreach (var direction in Enum.GetValues<SpriteDirection>())
-                    {
-                        bool hasLook = faced.Furniture.Facings.TryGetValue(direction, out var f) && f.Sprite.IsSet || faced.TurnLooks.TryGetValue(direction, out var t) && t.IsSet;
-                        var entry = new MenuItem { Header = hasLook ? direction.ToString() : $"{direction} (no sprite)", IsCheckable = true, IsChecked = capturedItem.FacingRuntime == direction };
-                        var d = direction;
-                        entry.Click += (_, _) => { capturedItem.FacingRuntime = d; BuildContentsPreview(container); };
-                        facingMenu.Items.Add(entry);
-                    }
-                    menu.Items.Add(facingMenu);
-                    menu.PlacementTarget = visual;
-                    menu.IsOpen = true;
-                    e.Handled = true;
-                };
-            }
+            // Right-click: Cut, Copy, Paste, Delete, Undo - and Facing for what faces a way (ContainerEditorWindow.Undo.cs).
+            visual.MouseRightButtonUp += (_, e) => { ShowContentsMenu(container, capturedItem, visual, e.GetPosition(ContentsPreviewCanvas)); e.Handled = true; };
             ContentsPreviewCanvas.Children.Add(visual);
         }
 
+        ContentsPreviewCanvas.MouseRightButtonUp -= ContentsPreviewCanvas_MouseRightButtonUp;
+        ContentsPreviewCanvas.MouseRightButtonUp += ContentsPreviewCanvas_MouseRightButtonUp;
         ContentsPreviewCanvas.MouseMove -= ContentsPreviewCanvas_MouseMove;
         ContentsPreviewCanvas.MouseMove += ContentsPreviewCanvas_MouseMove;
         ContentsPreviewCanvas.MouseLeftButtonUp -= ContentsPreviewCanvas_MouseLeftButtonUp;
         ContentsPreviewCanvas.MouseLeftButtonUp += ContentsPreviewCanvas_MouseLeftButtonUp;
+    }
+
+    /// <summary>Right-click the empty preview: Paste, Undo.</summary>
+    private void ContentsPreviewCanvas_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+    {
+        if (e.Handled || ContainerListBox.SelectedItem is not ContainerData container) return;
+        ShowContentsMenu(container, null, ContentsPreviewCanvas, e.GetPosition(ContentsPreviewCanvas));
+        e.Handled = true;
     }
 
     private void ContentsPreviewCanvas_MouseMove(object sender, MouseEventArgs e)
@@ -965,6 +960,7 @@ public partial class ContainerEditorWindow : Window
 
     private void AddContents_Click(object sender, RoutedEventArgs e)
     {
+        ContentsCheckpoint(); // what was done before is a step for Undo
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
         if (ContentsCategoryCombo.SelectedItem is not StartingContentsChoice { Category: var category }) return;
         int itemId = ContentsItemCombo.SelectedItem switch
@@ -1032,6 +1028,7 @@ public partial class ContainerEditorWindow : Window
 
     private void ContentsQuantity_Click(object sender, RoutedEventArgs e)
     {
+        ContentsCheckpoint(); // what was done before is a step for Undo
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
         if (ContentsListBox.SelectedItem is not ContentsRow row || StackableObject(row.Instance) is not { } obj) return;
         int most = obj.MaxStackSize > 0 ? obj.MaxStackSize : 9999;
@@ -1043,6 +1040,7 @@ public partial class ContainerEditorWindow : Window
 
     private void RemoveContents_Click(object sender, RoutedEventArgs e)
     {
+        ContentsCheckpoint(); // what was done before is a step for Undo
         if (ContainerListBox.SelectedItem is not ContainerData container) return;
         if (ContentsListBox.SelectedItem is not ContentsRow row) return;
         container.StartingContents.Remove(row.Instance);
