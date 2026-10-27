@@ -23,7 +23,7 @@ public partial class ObjectEditorWindow
             body.Children.Add(Note("A driver's seat must be a Chair - make a Chair object for it."));
         if (obj.VehicleRole == VehiclePartRole.Wheel)
             body.Children.Add(SpritePicker("Moving look (an animation: the wheel turning, the horse trotting)", () => (obj.MovingLook.SpriteGroup, obj.MovingLook.SpriteName),
-                (g, n) => { obj.MovingLook.SpriteGroup = g; obj.MovingLook.SpriteName = n; }));
+                (g, n) => { obj.MovingLook.SpriteGroup = g; obj.MovingLook.SpriteName = n; }, identity: SpriteFolderIdentity.Vehicle));
         var looks = new WrapPanel();
         foreach (var (direction, label) in new[] { (SpriteDirection.North, "Facing north"), (SpriteDirection.East, "Facing east"), (SpriteDirection.South, "Facing south (as built - empty: its own sprite)"), (SpriteDirection.West, "Facing west") })
         {
@@ -32,7 +32,7 @@ public partial class ObjectEditorWindow
                 {
                     if (string.IsNullOrEmpty(n)) obj.TurnLooks.Remove(direction);
                     else obj.TurnLooks[direction] = new SpriteLink { SpriteGroup = g, SpriteName = n };
-                }, compact: true));
+                }, compact: true, identity: SpriteFolderIdentity.Vehicle));
         }
         body.Children.Add(looks);
     }

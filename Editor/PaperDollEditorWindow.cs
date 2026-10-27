@@ -975,7 +975,8 @@ public class PaperDollEditorWindow : Window
     private List<SpriteChoice> SpriteChoices()
     {
         var choices = new List<SpriteChoice> { new("", "", "(none)") };
-        foreach (var group in _sprites.Groups.Where(g => g.Name != SpriteDatabase.TilesetGroupName && g.Name != SpriteDatabase.FontsGroupName))
+        // The paperdolls' folders (Sprite Editor > Identity); none given yet: every folder, as before.
+        foreach (var group in _sprites.FoldersFor(SpriteFolderIdentity.Paperdoll).Where(g => g.Name != SpriteDatabase.TilesetGroupName && g.Name != SpriteDatabase.FontsGroupName))
             choices.AddRange(group.Sprites.Select(s => new SpriteChoice(group.Name, s.Name, $"{s.Name}   ({group.Name})")));
         return choices;
     }
@@ -990,7 +991,19 @@ public class PaperDollEditorWindow : Window
             var c = combo.SelectedItem as SpriteChoice;
             set(new SpriteLink { SpriteGroup = c?.Group ?? "", SpriteName = c?.Name ?? "" });
         };
-        return Labeled(label, combo);
+        var expand = new Button { Content = "Expand...", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(4, 0, 0, 0), ToolTip = "The paperdolls' folders and their sprites, with their pictures and a search box, to pick one." };
+        expand.Click += (_, _) =>
+        {
+            var now = combo.SelectedItem as SpriteChoice;
+            if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Paperdoll, null, now?.Group, now?.Name) is not { } picked) return;
+            var choice = choices.FirstOrDefault(c => c.Group == picked.Group && c.Name == picked.Name);
+            if (choice is null) { choice = new SpriteChoice(picked.Group, picked.Name, $"{picked.Name}   ({picked.Group})"); choices.Add(choice); combo.Items.Refresh(); }
+            combo.SelectedItem = choice;
+        };
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(combo);
+        row.Children.Add(expand);
+        return Labeled(label, row);
     }
 
     private FrameworkElement SoundPicker(string label, Func<int> get, Action<int> set)

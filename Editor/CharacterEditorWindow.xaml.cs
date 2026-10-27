@@ -168,7 +168,6 @@ public partial class CharacterEditorWindow : Window
         ShowLevelTab(character);
 
         _faceFilterGroup = string.IsNullOrEmpty(character.FaceSpriteGroup) ? null : character.FaceSpriteGroup;
-        FaceFilterCheck.IsChecked = _faceFilterGroup is not null;
         PopulateFaceChoices(character.FaceSpriteGroup, character.FaceSpriteName);
 
         _stats.EnsureBuiltInMinimums(character); // blank stats start at 0 (Hits at Strength)
@@ -182,11 +181,9 @@ public partial class CharacterEditorWindow : Window
         BuildPosesPanel(character);
 
         _paperdollBodyFilterGroup = string.IsNullOrEmpty(character.Paperdoll.BodySpriteGroup) ? null : character.Paperdoll.BodySpriteGroup;
-        PaperdollFilterCheck.IsChecked = _paperdollBodyFilterGroup is not null;
         PopulatePaperdollBodyChoices(character.Paperdoll.BodySpriteGroup, character.Paperdoll.BodySpriteName);
 
         _exitButtonFilterGroup = string.IsNullOrEmpty(character.Paperdoll.ExitButtonSpriteGroup) ? null : character.Paperdoll.ExitButtonSpriteGroup;
-        ExitButtonFilterCheck.IsChecked = _exitButtonFilterGroup is not null;
         PopulateExitButtonChoices(character.Paperdoll.ExitButtonSpriteGroup, character.Paperdoll.ExitButtonSpriteName);
 
         // Real Navigate Sound picker, per spec - same honest flat-list pattern every other sound picker in this project already uses (ResourceDatabase.Entries has no real group concept to filter by at all).
@@ -572,30 +569,25 @@ public partial class CharacterEditorWindow : Window
         };
 
         var combo = new ComboBox { DisplayMemberPath = "Name", Margin = new Thickness(0, 0, 0, 8) };
-        var filterCheck = new CheckBox { Content = "Filter By Group", IsChecked = filterGroup is not null, Margin = new Thickness(0, 0, 0, 12) };
+        var filterCheck = new Button { Content = "Expand...", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 12),
+            ToolTip = "The characters' folders (Sprite Editor: right-click a folder > Identity) and their sprites, with their pictures and a search box, to pick one." };
 
         void PopulateChoices(string? group)
         {
             List<SpriteEntry> choices = string.IsNullOrEmpty(group)
-                ? _sprites.Groups.SelectMany(g => g.Sprites).ToList()
+                ? _sprites.SpritesFor(SpriteFolderIdentity.Character) // the characters' folders (Sprite Editor > Identity)
                 : _sprites.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.ToList() ?? new List<SpriteEntry>();
             combo.ItemsSource = choices;
             combo.SelectedItem = choices.FirstOrDefault(s => s.Name == currentLink?.SpriteName);
         }
         PopulateChoices(filterGroup);
 
-        filterCheck.Checked += (_, _) =>
+        filterCheck.Click += (_, _) =>
         {
-            var groupNames = _sprites.Groups.Select(g => g.Name).ToList();
-            string? chosen = SelectGroupWindow.Show(window, groupNames, filterGroup);
-            if (chosen is null) { filterCheck.IsChecked = false; return; }
-            filterGroup = chosen;
+            if (SpriteBrowserWindow.Pick(window, _sprites, SpriteFolderIdentity.Character, null, filterGroup, (combo.SelectedItem as SpriteEntry)?.Name ?? currentLink?.SpriteName) is not { } picked) return;
+            filterGroup = picked.Group;
             PopulateChoices(filterGroup);
-        };
-        filterCheck.Unchecked += (_, _) =>
-        {
-            filterGroup = null;
-            PopulateChoices(null);
+            combo.SelectedItem = (combo.ItemsSource as List<SpriteEntry>)?.FirstOrDefault(s => s.Name == picked.Name);
         };
 
         var okButton = new Button { Content = "OK", Width = 70, IsDefault = true, Margin = new Thickness(4) };
@@ -666,7 +658,7 @@ public partial class CharacterEditorWindow : Window
         }
         else
         {
-            choices = _sprites.Groups.SelectMany(g => g.Sprites).ToList();
+            choices = _sprites.SpritesFor(SpriteFolderIdentity.Character); // its kind's folders (Sprite Editor > Identity)
         }
 
         FaceCombo.ItemsSource = choices;
@@ -678,16 +670,9 @@ public partial class CharacterEditorWindow : Window
     {
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         var groupNames = _sprites.Groups.Select(g => g.Name).ToList();
-        string? chosen = SelectGroupWindow.Show(this, groupNames, _faceFilterGroup);
-        if (chosen is null)
-        {
-            _suppress = true;
-            FaceFilterCheck.IsChecked = false;
-            _suppress = false;
-            return;
-        }
-        _faceFilterGroup = chosen;
-        PopulateFaceChoices(chosen, character.FaceSpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Character, null, _faceFilterGroup, character.FaceSpriteName) is not { } picked) return;
+        _faceFilterGroup = picked.Group;
+        PopulateFaceChoices(picked.Group, picked.Name);
     }
 
     private void FaceFilterCheck_Unchecked(object sender, RoutedEventArgs e)
@@ -865,7 +850,7 @@ public partial class CharacterEditorWindow : Window
         }
         else
         {
-            choices = _sprites.Groups.SelectMany(g => g.Sprites).ToList();
+            choices = _sprites.SpritesFor(SpriteFolderIdentity.Paperdoll); // its kind's folders (Sprite Editor > Identity)
         }
         PaperdollBodyCombo.ItemsSource = choices;
         PaperdollBodyCombo.SelectedItem = choices.FirstOrDefault(s => s.Name == selectedName);
@@ -875,16 +860,9 @@ public partial class CharacterEditorWindow : Window
     {
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         var groupNames = _sprites.Groups.Select(g => g.Name).ToList();
-        string? chosen = SelectGroupWindow.Show(this, groupNames, _paperdollBodyFilterGroup);
-        if (chosen is null)
-        {
-            _suppress = true;
-            PaperdollFilterCheck.IsChecked = false;
-            _suppress = false;
-            return;
-        }
-        _paperdollBodyFilterGroup = chosen;
-        PopulatePaperdollBodyChoices(chosen, character.Paperdoll.BodySpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Paperdoll, null, _paperdollBodyFilterGroup, character.Paperdoll.BodySpriteName) is not { } picked) return;
+        _paperdollBodyFilterGroup = picked.Group;
+        PopulatePaperdollBodyChoices(picked.Group, picked.Name);
     }
 
     private void PaperdollFilterCheck_Unchecked(object sender, RoutedEventArgs e)
@@ -915,7 +893,7 @@ public partial class CharacterEditorWindow : Window
         }
         else
         {
-            choices = _sprites.Groups.SelectMany(g => g.Sprites).ToList();
+            choices = _sprites.SpritesFor(SpriteFolderIdentity.Paperdoll); // its kind's folders (Sprite Editor > Identity)
         }
         ExitButtonCombo.ItemsSource = choices;
         ExitButtonCombo.SelectedItem = choices.FirstOrDefault(s => s.Name == selectedName);
@@ -925,16 +903,9 @@ public partial class CharacterEditorWindow : Window
     {
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         var groupNames = _sprites.Groups.Select(g => g.Name).ToList();
-        string? chosen = SelectGroupWindow.Show(this, groupNames, _exitButtonFilterGroup);
-        if (chosen is null)
-        {
-            _suppress = true;
-            ExitButtonFilterCheck.IsChecked = false;
-            _suppress = false;
-            return;
-        }
-        _exitButtonFilterGroup = chosen;
-        PopulateExitButtonChoices(chosen, character.Paperdoll.ExitButtonSpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Paperdoll, null, _exitButtonFilterGroup, character.Paperdoll.ExitButtonSpriteName) is not { } picked) return;
+        _exitButtonFilterGroup = picked.Group;
+        PopulateExitButtonChoices(picked.Group, picked.Name);
     }
 
     private void ExitButtonFilterCheck_Unchecked(object sender, RoutedEventArgs e)

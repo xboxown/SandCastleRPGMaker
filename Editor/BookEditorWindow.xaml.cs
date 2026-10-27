@@ -239,19 +239,15 @@ public partial class BookEditorWindow : Window
         SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, _current.SpriteGroup, _current.SpriteName), _current.SizeX, _current.SizeY, _current.SizeZ, _current.SolidOffsetX, _current.SolidOffsetY, _current.IsSolid);
 
         _paperDollFilter = string.IsNullOrEmpty(_current.PaperDollSpriteGroup) ? null : _current.PaperDollSpriteGroup;
-        PaperDollFilterCheck.IsChecked = _paperDollFilter is not null;
         PopulateSpriteChoices(PaperDollNameCombo, _paperDollFilter, _current.PaperDollSpriteGroup, _current.PaperDollSpriteName);
 
         _spriteFilter = string.IsNullOrEmpty(_current.SpriteGroup) ? null : _current.SpriteGroup;
-        SpriteFilterCheck.IsChecked = _spriteFilter is not null;
         PopulateSpriteChoices(SpriteNameCombo, _spriteFilter, _current.SpriteGroup, _current.SpriteName);
 
         _chatteredFilter = string.IsNullOrEmpty(_current.ChatteredSpriteGroup) ? null : _current.ChatteredSpriteGroup;
-        ChatteredFilterCheck.IsChecked = _chatteredFilter is not null;
         PopulateSpriteChoices(ChatteredSpriteNameCombo, _chatteredFilter, _current.ChatteredSpriteGroup, _current.ChatteredSpriteName);
 
         _destroyedFilter = string.IsNullOrEmpty(_current.DestroyedSpriteGroup) ? null : _current.DestroyedSpriteGroup;
-        DestroyedFilterCheck.IsChecked = _destroyedFilter is not null;
         PopulateSpriteChoices(DestroyedSpriteNameCombo, _destroyedFilter, _current.DestroyedSpriteGroup, _current.DestroyedSpriteName);
 
         // Belong To: whose it is - taking it while someone sympathetic is watching is theft (Exult).
@@ -332,7 +328,7 @@ public partial class BookEditorWindow : Window
         }
         else
         {
-            choices = _sprites.Groups.SelectMany(g => g.Sprites.Select(s => new SpriteChoice(g.Name, s.Name, showGroup: true))).ToList();
+            choices = _sprites.FoldersFor(SpriteFolderIdentity.Book).SelectMany(g => g.Sprites.Select(s => new SpriteChoice(g.Name, s.Name, showGroup: true))).ToList(); // books' folders (Sprite Editor > Identity)
         }
         combo.ItemsSource = choices;
         combo.SelectedItem = choices.FirstOrDefault(c => c.Group == selectedGroup && c.Name == selectedName);
@@ -364,28 +360,14 @@ public partial class BookEditorWindow : Window
         UpdatePaperDollImage();
     }
 
-    /// <summary>
-    /// Shared "Filter By Group" handling for all four sprite fields: opens
-    /// the group-picker popup, and if a group is chosen, filters that
-    /// field's Sprite ComboBox down to just that group. Cancelling (or
-    /// picking nothing) reverts the checkbox to unchecked, since there's no
-    /// filter to apply.
-    /// </summary>
-    private void HandleFilterChecked(CheckBox checkBox, ComboBox combo, ref string? filterField, string currentGroup, string currentName)
+    /// <summary>"Expand..." beside a sprite field: the books' folders and their sprites to pick from; the field then lists the folder picked.</summary>
+    private void HandleFilterChecked(Button button, ComboBox combo, ref string? filterField, string currentGroup, string currentName)
     {
         if (_suppress || _current is null) return;
-        var groupNames = _sprites.Groups.Select(g => g.Name).ToList();
-        string? chosen = SelectGroupWindow.Show(this, groupNames, filterField);
-        if (chosen is null)
-        {
-            _suppress = true;
-            checkBox.IsChecked = false;
-            _suppress = false;
-            return;
-        }
-        filterField = chosen;
-        PopulateSpriteChoices(combo, chosen, currentGroup, currentName);
-        Field_Changed_Combo(checkBox, null!);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Book, null, filterField ?? currentGroup, currentName) is not { } picked) return;
+        filterField = picked.Group;
+        PopulateSpriteChoices(combo, picked.Group, picked.Group, picked.Name);
+        Field_Changed_Combo(button, null!);
     }
 
     private void HandleFilterUnchecked(ComboBox combo, ref string? filterField, string currentGroup, string currentName)

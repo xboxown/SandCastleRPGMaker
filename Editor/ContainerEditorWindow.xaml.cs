@@ -216,15 +216,12 @@ public partial class ContainerEditorWindow : Window
         SolidSize.Load(SolidSizeEditor.LoadSpriteFrame(_sprites, container.SpriteGroup, container.SpriteName), container.SizeX, container.SizeY, container.SizeZ, container.SolidOffsetX, container.SolidOffsetY, container.IsSolid);
 
         _worldSpriteFilterGroup = string.IsNullOrEmpty(container.SpriteGroup) ? null : container.SpriteGroup;
-        WorldSpriteFilterCheck.IsChecked = _worldSpriteFilterGroup is not null;
         PopulateSpriteChoices(WorldSpriteCombo, container.SpriteGroup, container.SpriteName);
 
         _lockedSpriteFilterGroup = string.IsNullOrEmpty(container.LockedSpriteGroup) ? null : container.LockedSpriteGroup;
-        LockedSpriteFilterCheck.IsChecked = _lockedSpriteFilterGroup is not null;
         PopulateSpriteChoices(LockedSpriteCombo, container.LockedSpriteGroup, container.LockedSpriteName);
 
         _paperDollFilterGroup = string.IsNullOrEmpty(container.PaperDollSpriteGroup) ? null : container.PaperDollSpriteGroup;
-        PaperDollFilterCheck.IsChecked = _paperDollFilterGroup is not null;
         PopulateSpriteChoices(PaperDollCombo, container.PaperDollSpriteGroup, container.PaperDollSpriteName);
 
         // Real sound pickers, per spec - a flat list, same honest pattern Book's own sound pickers already use (ResourceDatabase.Entries has no real group concept at all, unlike sprites, so there is genuinely nothing to filter by here).
@@ -367,7 +364,7 @@ public partial class ContainerEditorWindow : Window
         }
         else
         {
-            choices = _sprites.Groups.SelectMany(g => g.Sprites).ToList();
+            choices = _sprites.SpritesFor(SpriteFolderIdentity.Container); // containers' folders (Sprite Editor > Identity)
         }
         combo.ItemsSource = choices;
         combo.SelectedItem = choices.FirstOrDefault(s => s.Name == selectedName);
@@ -376,10 +373,9 @@ public partial class ContainerEditorWindow : Window
     private void WorldSpriteFilterCheck_Checked(object sender, RoutedEventArgs e)
     {
         if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
-        string? chosen = SelectGroupWindow.Show(this, _sprites.Groups.Select(g => g.Name).ToList(), _worldSpriteFilterGroup);
-        if (chosen is null) { _suppress = true; WorldSpriteFilterCheck.IsChecked = false; _suppress = false; return; }
-        _worldSpriteFilterGroup = chosen;
-        PopulateSpriteChoices(WorldSpriteCombo, chosen, container.SpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Container, null, _worldSpriteFilterGroup, container.SpriteName) is not { } picked) return;
+        _worldSpriteFilterGroup = picked.Group;
+        PopulateSpriteChoices(WorldSpriteCombo, picked.Group, picked.Name);
     }
 
     private void WorldSpriteFilterCheck_Unchecked(object sender, RoutedEventArgs e)
@@ -403,10 +399,9 @@ public partial class ContainerEditorWindow : Window
     private void LockedSpriteFilterCheck_Checked(object sender, RoutedEventArgs e)
     {
         if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
-        string? chosen = SelectGroupWindow.Show(this, _sprites.Groups.Select(g => g.Name).ToList(), _lockedSpriteFilterGroup);
-        if (chosen is null) { _suppress = true; LockedSpriteFilterCheck.IsChecked = false; _suppress = false; return; }
-        _lockedSpriteFilterGroup = chosen;
-        PopulateSpriteChoices(LockedSpriteCombo, chosen, container.LockedSpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Container, null, _lockedSpriteFilterGroup, container.LockedSpriteName) is not { } picked) return;
+        _lockedSpriteFilterGroup = picked.Group;
+        PopulateSpriteChoices(LockedSpriteCombo, picked.Group, picked.Name);
     }
 
     private void LockedSpriteFilterCheck_Unchecked(object sender, RoutedEventArgs e)
@@ -438,10 +433,9 @@ public partial class ContainerEditorWindow : Window
     private void PaperDollFilterCheck_Checked(object sender, RoutedEventArgs e)
     {
         if (_suppress || ContainerListBox.SelectedItem is not ContainerData container) return;
-        string? chosen = SelectGroupWindow.Show(this, _sprites.Groups.Select(g => g.Name).ToList(), _paperDollFilterGroup);
-        if (chosen is null) { _suppress = true; PaperDollFilterCheck.IsChecked = false; _suppress = false; return; }
-        _paperDollFilterGroup = chosen;
-        PopulateSpriteChoices(PaperDollCombo, chosen, container.PaperDollSpriteName);
+        if (SpriteBrowserWindow.Pick(this, _sprites, SpriteFolderIdentity.Container, null, _paperDollFilterGroup, container.PaperDollSpriteName) is not { } picked) return;
+        _paperDollFilterGroup = picked.Group;
+        PopulateSpriteChoices(PaperDollCombo, picked.Group, picked.Name);
     }
 
     private void PaperDollFilterCheck_Unchecked(object sender, RoutedEventArgs e)

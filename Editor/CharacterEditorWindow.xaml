@@ -69,8 +69,8 @@
 
                     <TextBlock Text="Face" FontWeight="Bold"/>
                     <DockPanel Margin="0,2,0,4">
-                        <CheckBox x:Name="FaceFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
-                                  Checked="FaceFilterCheck_Checked" Unchecked="FaceFilterCheck_Unchecked"/>
+                        <Button x:Name="FaceFilterCheck" DockPanel.Dock="Right" Content="Expand..." Padding="6,0" VerticalAlignment="Center" Margin="8,0,0,0"
+                                  Click="FaceFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                         <ComboBox x:Name="FaceCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name"/>
                     </DockPanel>
                     <TextBlock x:Name="FaceEmptyNote" Text="No sprites available yet - add one in the Sprite Editor first." Opacity="0.7" FontSize="11" Margin="0,0,0,10" Visibility="Collapsed"/>
@@ -101,14 +101,14 @@
                     <StackPanel Grid.Column="0" Margin="0,0,16,0">
                         <TextBlock Text="Paperdoll Body Sprite" FontWeight="Bold"/>
                         <DockPanel Margin="0,2,0,4">
-                            <CheckBox x:Name="PaperdollFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
-                                      Checked="PaperdollFilterCheck_Checked" Unchecked="PaperdollFilterCheck_Unchecked"/>
+                            <Button x:Name="PaperdollFilterCheck" DockPanel.Dock="Right" Content="Expand..." Padding="6,0" VerticalAlignment="Center" Margin="8,0,0,0"
+                                      Click="PaperdollFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                             <ComboBox x:Name="PaperdollBodyCombo" SelectionChanged="PaperdollBody_Changed" DisplayMemberPath="Name"/>
                         </DockPanel>
                         <TextBlock Text="Exit Button Sprite (2 frames - frame 1 unpressed, frame 2 pressed)" FontWeight="Bold" Margin="0,8,0,0"/>
                         <DockPanel Margin="0,2,0,4">
-                            <CheckBox x:Name="ExitButtonFilterCheck" DockPanel.Dock="Right" Content="Filter By Group" VerticalAlignment="Center" Margin="8,0,0,0"
-                                      Checked="ExitButtonFilterCheck_Checked" Unchecked="ExitButtonFilterCheck_Unchecked"/>
+                            <Button x:Name="ExitButtonFilterCheck" DockPanel.Dock="Right" Content="Expand..." Padding="6,0" VerticalAlignment="Center" Margin="8,0,0,0"
+                                      Click="ExitButtonFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                             <ComboBox x:Name="ExitButtonCombo" SelectionChanged="ExitButtonSprite_Changed" DisplayMemberPath="Name"/>
                         </DockPanel>
                         <ComboBox x:Name="PaperdollNavigateSoundCombo" SelectionChanged="PaperdollNavigateSound_Changed" DisplayMemberPath="Name" Visibility="Collapsed"/>

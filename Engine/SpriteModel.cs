@@ -102,10 +102,18 @@ public class SpriteEntry
 /// container. Any group name can become a "Preserved" one just by matching
 /// what a consuming editor looks for.
 /// </summary>
+/// <summary>What a folder's sprites are for (Sprite Editor > right-click a folder > Identity): the editors' sprite lists show the folders of their own kind.</summary>
+public enum SpriteFolderIdentity { None, Object, Container, Book, Character, House, Vehicle, Paperdoll }
+
+/// <summary>A folder of sprites (the Sprite Editor's folders; "group" in the data, as before).</summary>
 public class SpriteGroup
 {
     public string Name { get; set; } = "New Group";
     public List<SpriteEntry> Sprites { get; set; } = new();
+    /// <summary>What its sprites are for; None: anything (shown in every list).</summary>
+    public SpriteFolderIdentity Identity { get; set; }
+    /// <summary>Identity Object: the object type it's for (null: any object).</summary>
+    public ObjectType? ObjectKind { get; set; }
 }
 
 /// <summary>
@@ -116,6 +124,19 @@ public class SpriteGroup
 /// </summary>
 public class SpriteDatabase
 {
+    /// <summary>
+    /// The folders an editor's sprite list shows: those given its identity (an object type: that type's, or any object's) -
+    /// or, while no folder has it, every folder, as before identities existed.
+    /// </summary>
+    public List<SpriteGroup> FoldersFor(SpriteFolderIdentity identity, ObjectType? kind = null)
+    {
+        var own = Groups.Where(g => g.Identity == identity && (identity != SpriteFolderIdentity.Object || kind is null || g.ObjectKind is null || g.ObjectKind == kind)).ToList();
+        return own.Count > 0 ? own : Groups.ToList();
+    }
+
+    /// <summary>The sprites of FoldersFor.</summary>
+    public List<SpriteEntry> SpritesFor(SpriteFolderIdentity identity, ObjectType? kind = null) => FoldersFor(identity, kind).SelectMany(g => g.Sprites).ToList();
+
     /// <summary>
     /// Reserved group name for tilesets - always present, cannot be
     /// deleted or renamed. The Map Editor's tileset dropdown reads its

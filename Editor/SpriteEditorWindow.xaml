@@ -5,8 +5,8 @@
         Title="Sprite Editor" Height="600" Width="800" WindowStartupLocation="CenterOwner">
     <DockPanel>
         <ToolBar DockPanel.Dock="Top">
-            <Button Content="New Group..." Click="NewGroup_Click" Padding="6,2" Margin="2"/>
-            <Button Content="Delete Group" Click="DeleteGroup_Click" Padding="6,2" Margin="2"/>
+            <Button Content="New Folder..." Click="NewGroup_Click" Padding="6,2" Margin="2"/>
+            <Button Content="Delete Folder" Click="DeleteGroup_Click" Padding="6,2" Margin="2"/>
             <Separator/>
             <Button Content="New Sprite..." Click="NewSprite_Click" Padding="6,2" Margin="2"/>
             <Button Content="Add Sprite..." Click="AddSprite_Click" Padding="6,2" Margin="2"/>
@@ -23,59 +23,15 @@
             </Grid.ColumnDefinitions>
 
             <DockPanel Grid.Column="0">
-                <TextBlock DockPanel.Dock="Top" Text="Groups" FontWeight="Bold" Margin="6"/>
-                <!-- Value="Tileset" here must match SpriteDatabase.TilesetGroupName in code - XAML triggers can't reference a C# constant directly. -->
-                <ListBox x:Name="GroupListBox" Margin="6" DisplayMemberPath="Name"
-                         SelectionChanged="GroupListBox_SelectionChanged">
-                    <ListBox.ItemContainerStyle>
-                        <Style TargetType="ListBoxItem">
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Name}" Value="Tileset">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <!-- Value="Fonts" must match SpriteDatabase.FontsGroupName. -->
-                                <DataTrigger Binding="{Binding Name}" Value="Fonts">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <!-- Value="Ammo" / "Money" must match SpriteDatabase.AmmoGroupName / MoneyGroupName. -->
-                                <DataTrigger Binding="{Binding Name}" Value="Ammo">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Name}" Value="Money">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <!-- Value="Lockpick" / "Keychain" must match SpriteDatabase.LockpickGroupName / KeychainGroupName. -->
-                                <DataTrigger Binding="{Binding Name}" Value="Lockpick">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <DataTrigger Binding="{Binding Name}" Value="Keychain">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <!-- Value="DialogFrame" must match SpriteDatabase.DialogFrameGroupName. -->
-                                <DataTrigger Binding="{Binding Name}" Value="DialogFrame">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                                <!-- Value="Blood" must match SpriteDatabase.BloodGroupName. -->
-                                <DataTrigger Binding="{Binding Name}" Value="Blood">
-                                    <Setter Property="Foreground" Value="Red"/>
-                                    <Setter Property="FontWeight" Value="Bold"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </ListBox.ItemContainerStyle>
-                </ListBox>
+                <TextBlock DockPanel.Dock="Top" Text="Folders" FontWeight="Bold" Margin="6"/>
+                <!-- Built in code (SpriteEditorWindow.RefreshGroups): each folder with how many sprites it holds and its identity's badge.
+                     Red: the built-in folders; orange: given an identity; purple: holds a single sprite. Right-click: identity, rename, delete. -->
+                <ListBox x:Name="GroupListBox" Margin="6" SelectionChanged="GroupListBox_SelectionChanged"/>
             </DockPanel>
 
             <DockPanel Grid.Column="1">
-                <TextBlock DockPanel.Dock="Top" Text="Sprites in group" FontWeight="Bold" Margin="6"/>
-                <ListView x:Name="SpriteListView" Margin="6" MouseDoubleClick="SpriteListView_MouseDoubleClick">
+                <TextBlock DockPanel.Dock="Top" Text="Sprites in the folder (right-click: cut, copy, paste, rename, delete)" FontWeight="Bold" Margin="6"/>
+                <ListView x:Name="SpriteListView" Margin="6" SelectionMode="Extended" MouseDoubleClick="SpriteListView_MouseDoubleClick" MouseRightButtonUp="SpriteListView_MouseRightButtonUp">
                     <!-- The two locked font sprites (SpriteDatabase.InGameFontName / DialogFontName) show red like their group. -->
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem">

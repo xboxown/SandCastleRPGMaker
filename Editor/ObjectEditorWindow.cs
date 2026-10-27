@@ -1089,10 +1089,14 @@ public partial class ObjectEditorWindow : Window
     }
 
     /// <summary>A sprite from the Sprite Editor (optionally only from one group), with a still preview and a play button.</summary>
-    private FrameworkElement SpritePicker(string label, Func<(string Group, string Name)> get, Action<string, string> set, string? onlyGroup = null, bool compact = false)
+    private FrameworkElement SpritePicker(string label, Func<(string Group, string Name)> get, Action<string, string> set, string? onlyGroup = null, bool compact = false,
+        SpriteFolderIdentity identity = SpriteFolderIdentity.Object)
     {
         var choices = new List<SpriteChoice> { NoSprite };
-        foreach (var group in _sprites.Groups.Where(g => onlyGroup is null ? g.Name != SpriteDatabase.TilesetGroupName && g.Name != SpriteDatabase.FontsGroupName : g.Name == onlyGroup))
+        var kind = _current?.Type;
+        // The folders given this object type (or any object) in the Sprite Editor; none given yet: every folder, as before.
+        var folders = onlyGroup is null ? _sprites.FoldersFor(identity, kind) : _sprites.Groups.Where(g => g.Name == onlyGroup).ToList();
+        foreach (var group in folders.Where(g => onlyGroup is not null || g.Name != SpriteDatabase.TilesetGroupName && g.Name != SpriteDatabase.FontsGroupName))
             choices.AddRange(group.Sprites.Select(s => new SpriteChoice(group.Name, s.Name, onlyGroup is null ? $"{s.Name}   ({group.Name})" : s.Name)));
         var (curGroup, curName) = get();
         var combo = new ComboBox { Width = compact ? 150 : 300, ItemsSource = choices, DisplayMemberPath = nameof(SpriteChoice.Display) };
@@ -1118,6 +1122,19 @@ public partial class ObjectEditorWindow : Window
         ShowPreview();
         var row = new StackPanel { Orientation = Orientation.Horizontal };
         row.Children.Add(combo);
+        if (onlyGroup is null)
+        {
+            var expand = new Button { Content = "Expand...", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(4, 0, 0, 0), ToolTip = "This type's folders and their sprites, with their pictures and a search box, to pick one." };
+            expand.Click += (_, _) =>
+            {
+                var (g, n) = get();
+                if (SpriteBrowserWindow.Pick(this, _sprites, identity, kind, g, n) is not { } picked) return;
+                var choice = choices.FirstOrDefault(c => c.Group == picked.Group && c.Name == picked.Name);
+                if (choice is null) { choice = new SpriteChoice(picked.Group, picked.Name, $"{picked.Name}   ({picked.Group})"); choices.Add(choice); combo.Items.Refresh(); }
+                combo.SelectedItem = choice;
+            };
+            row.Children.Add(expand);
+        }
         row.Children.Add(new Border { Background = Brushes.Black, Child = picture, Margin = new Thickness(6, 0, 0, 0), BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1) });
         row.Children.Add(playHolder);
         return Labeled(label, row);

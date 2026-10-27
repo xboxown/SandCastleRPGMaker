@@ -84,28 +84,28 @@
                                     <TextBlock Text="Paper Doll Sprite" TextWrapping="Wrap"/>
                                     <StackPanel Orientation="Horizontal">
                                         <ComboBox x:Name="PaperDollNameCombo" Width="130" SelectionChanged="PaperDollNameCombo_SelectionChanged"/>
-                                        <CheckBox x:Name="PaperDollFilterCheck" Content="Filter By Group" Margin="8,0,0,0" VerticalAlignment="Center" Checked="PaperDollFilterCheck_Checked" Unchecked="PaperDollFilterCheck_Unchecked"/>
+                                        <Button x:Name="PaperDollFilterCheck" Content="Expand..." Padding="6,0" Margin="8,0,0,0" VerticalAlignment="Center" Click="PaperDollFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Margin="0,0,24,0">
                                     <TextBlock Text="Sprite" TextWrapping="Wrap" ToolTip="The book's world/map appearance - on a table, shelf, floor, or in inventory. Not the open-book reading art (that's Paper Doll)."/>
                                     <StackPanel Orientation="Horizontal">
                                         <ComboBox x:Name="SpriteNameCombo" Width="130" SelectionChanged="Field_Changed_Combo"/>
-                                        <CheckBox x:Name="SpriteFilterCheck" Content="Filter By Group" Margin="8,0,0,0" VerticalAlignment="Center" Checked="SpriteFilterCheck_Checked" Unchecked="SpriteFilterCheck_Unchecked"/>
+                                        <Button x:Name="SpriteFilterCheck" Content="Expand..." Padding="6,0" Margin="8,0,0,0" VerticalAlignment="Center" Click="SpriteFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Margin="0,0,24,0">
                                     <TextBlock Text="Destroying Sprite" TextWrapping="Wrap" ToolTip="The in-progress animation while it's being destroyed - catching fire, breaking apart, etc."/>
                                     <StackPanel Orientation="Horizontal">
                                         <ComboBox x:Name="ChatteredSpriteNameCombo" Width="130" SelectionChanged="Field_Changed_Combo"/>
-                                        <CheckBox x:Name="ChatteredFilterCheck" Content="Filter By Group" Margin="8,0,0,0" VerticalAlignment="Center" Checked="ChatteredFilterCheck_Checked" Unchecked="ChatteredFilterCheck_Unchecked"/>
+                                        <Button x:Name="ChatteredFilterCheck" Content="Expand..." Padding="6,0" Margin="8,0,0,0" VerticalAlignment="Center" Click="ChatteredFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel Margin="0,0,24,0">
                                     <TextBlock Text="Destroyed Sprite" TextWrapping="Wrap" ToolTip="The final result once destruction finishes - the remains, ash, or wreckage left behind."/>
                                     <StackPanel Orientation="Horizontal">
                                         <ComboBox x:Name="DestroyedSpriteNameCombo" Width="130" SelectionChanged="Field_Changed_Combo"/>
-                                        <CheckBox x:Name="DestroyedFilterCheck" Content="Filter By Group" Margin="8,0,0,0" VerticalAlignment="Center" Checked="DestroyedFilterCheck_Checked" Unchecked="DestroyedFilterCheck_Unchecked"/>
+                                        <Button x:Name="DestroyedFilterCheck" Content="Expand..." Padding="6,0" Margin="8,0,0,0" VerticalAlignment="Center" Click="DestroyedFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                                     </StackPanel>
                                 </StackPanel>
                                 <StackPanel HorizontalAlignment="Left">
