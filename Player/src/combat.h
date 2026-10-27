@@ -19,6 +19,7 @@ int combat_change_faction(const char *who, int factionId);
 void combat_gain_experience(int actor, int amount);
 int combat_silences_ambient(void);
 void combat_death_music(void);
+void combat_stop_cue(void);
 #include "pictures.h"
 int combat_launch(const Sprite *sprite, int from, int target, double tx, double ty, void (*arrive)(void *, int, double, double), void *context);
 void combat_fight_back(int defender, int attacker);

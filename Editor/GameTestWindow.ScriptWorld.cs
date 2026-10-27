@@ -286,9 +286,59 @@ public partial class GameTestWindow
             HealFully(who);
             return true;
         }
-        var dead = _bodies.Keys.FirstOrDefault(c => (whoKey == WhoChoice.Player ? c == _player : c.Id.ToString() == whoKey));
-        if (dead is null || dead == _player) return false; // the main character's death ends the game (load a save)
-        return ResurrectDead(dead);
+        // Any character - the main character too (its By Death event raising it, as Lord British the Avatar).
+        bool player = whoKey == WhoChoice.Player || _player is not null && _player.Id.ToString() == whoKey || CharacterDefinitionFor(whoKey) == _player;
+        CharacterDefinition? raised;
+        if (player)
+        {
+            if (_player is null || !IsDead(_player)) return false;
+            ResurrectPlayer();
+            raised = _player;
+        }
+        else
+        {
+            var dead = _bodies.Keys.FirstOrDefault(c => c.Id.ToString() == whoKey || CharacterDefinitionFor(whoKey) == c);
+            if (dead is null || !ResurrectDead(dead)) return false;
+            raised = dead;
+        }
+        if (command.Get("Where") == "At a spot" && int.TryParse(command.Get("X"), out int x) && int.TryParse(command.Get("Y"), out int y) && InsideMap(x, y))
+        {
+            int floor = int.TryParse(command.Get("Floor"), out int f) ? f : 1;
+            if (player)
+            {
+                _playerX = x; _playerY = y;
+                _playerPixelX = x * _tileWidth + _tileWidth / 2.0; _playerPixelY = y * _tileHeight + _tileHeight / 2.0;
+                _playerZ = StandingLiftOnFloor(PlayerFootprint(), floor);
+                _playerVisualLiftZ = _playerZ;
+                SnapPlayerPosition();
+                UpdateCamera();
+            }
+            else if (MapCharacterOf(raised) is { } mc)
+            {
+                Teleport(mc, (x, y));
+                mc.Lift = StandingLiftOnFloor(CharacterFootprint(mc), floor, mc.Placement);
+                PositionCharacterVisual(mc);
+            }
+        }
+        if (command.Get("Health") == "This many hit points")
+            SetStat(raised, BuiltInStatKind.Hits, Math.Clamp((int)Math.Round(FormulaNumber(command, "HP")), 1, Math.Max(1, Stat(raised, BuiltInStatKind.Strength, 1))));
+        return true;
+    }
+
+    /// <summary>The main character lives again (Resurrect in its By Death event): the game is no longer over - standing, healed, the map's music again.</summary>
+    private void ResurrectPlayer()
+    {
+        if (_player is null) return;
+        var vitals = VitalsOf(_player);
+        vitals.Dead = false;
+        vitals.Unconscious = false;
+        _gameOver = false;
+        HealFully(_player);
+        ApplyPoseSprite(_idlePose);
+        SoundPlayback.StopFor(BookEventPreviewExecutionContext.MusicOwner);
+        StopCombatMusic(); // the death music ends
+        _ambientPlaying = -2; // the map's own sound starts again
+        SnapPlayerPosition();
     }
 
     /// <summary>A dead character lives again where its body lies, with what's still in it (Resurrect, the spell or the command).</summary>

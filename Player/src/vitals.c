@@ -634,4 +634,18 @@ int vitals_resurrect(int characterId)
     return 1;
 }
 
+/* The main character lives again (Resurrect in its By Death event): the game is no longer over - standing, healed, the death music gone. */
+int vitals_resurrect_player(void)
+{
+    int id = world_actor_character(0);
+    Vital *v = vital_of(id);
+    if (!v || !v->dead) return 0;
+    v->dead = 0; v->unconscious = 0;
+    gameOver = 0;
+    vitals_heal_fully(id);
+    world_set_pose(0, "Idle", -1);
+    combat_stop_cue(); /* the death music ends */
+    return 1;
+}
+
 int vitals_can_get_hungry(int characterId) { return can_get_hungry(characterId); }

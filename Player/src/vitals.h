@@ -26,6 +26,7 @@ int vitals_bark(int characterId, int kind);
 #include "../third_party/cJSON.h"
 void vitals_save(cJSON *runtime);
 void vitals_add(int characterId);
+int vitals_resurrect_player(void);    /* the main character lives again (Resurrect) */
 int vitals_resurrect(int characterId);
 void vitals_restore(cJSON *runtime);        /* VerboseKind: Hungry 0 .. Uneasy 10 */
 

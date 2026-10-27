@@ -489,6 +489,7 @@ static void enemy_killed_music(int victim, int killer)
     play_cue(seconds > 15 && rnd(60) < seconds ? CUE_BATTLEOVER : CUE_VICTORY, NULL);
 }
 
+void combat_stop_cue(void) { stop_music(); } /* Resurrect: the death music ends */
 void combat_death_music(void) { nearDeath = 0; stop_music(); play_cue(CUE_DEATH, NULL); }
 
 /* ---------------- NPC combat (Combat_schedule) ---------------- */

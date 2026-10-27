@@ -1922,9 +1922,26 @@ static int execute(Run *r, const Cmd *c)
                 vitals_heal_fully(world_actor_character(actor));
                 return 1;
             }
-            /* back from death, where the body lies (the main character's death ends the game: load a save) */
+            /* back from death: any character - the main character too (its By Death event raising it); where its body lies or at a spot */
             int id = actor >= 0 ? world_actor_character(actor) : atoi(param(c, "Who"));
-            lastResult = id != world_actor_character(0) && vitals_resurrect(id);
+            if (id == world_actor_character(0))
+            {
+                lastResult = vitals_resurrect_player();
+                if (lastResult) { sound_stop_owner(OWNER_MUSIC); ambientPlaying = -2; } /* the map's own sound again */
+            }
+            else lastResult = vitals_resurrect(id);
+            if (!lastResult) return 1;
+            int raised = world_actor_by_character(id);
+            if (!strcmp(param(c, "Where"), "At a spot") && param(c, "X")[0] && param(c, "Y")[0] && raised >= 0)
+            {
+                if (raised == 0) world_teleport(0, atoi(param(c, "X")), atoi(param(c, "Y"))); /* as Teleport moves the main character */
+                world_actor_place(raised, atoi(param(c, "X")), atoi(param(c, "Y")), param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1);
+            }
+            if (!strcmp(param(c, "Health"), "This many hit points"))
+            {
+                int hp = (int)floor(formula_number(c, "HP") + 0.5), most = vitals_max_hp(id);
+                vitals_set_hp(id, hp < 1 ? 1 : most > 0 && hp > most ? most : hp);
+            }
             return 1;
         }
         case C_PlayPose:
