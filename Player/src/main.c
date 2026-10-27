@@ -28,6 +28,7 @@
 #include "prompt.h"
 #include "work.h"
 #include "traps.h"
+#include "eggs.h"
 #include "script.h"
 #include "conditions.h"
 #include "items.h"
@@ -319,6 +320,7 @@ static int rebuild(cJSON *root, cJSON *runtime)
     combat_load();
     if (runtime) { combat_restore(runtime); conditions_restore(runtime); world_restore_player(runtime); }
     else conditions_restore(NULL);
+    eggs_reset(); /* the eggs look afresh (eggs.c) */
     schedules_load();
     schedules_start();
     weather_load();
@@ -423,6 +425,7 @@ int main(int argc, char **argv)
     note("Events ready.");
     vitals_load();
     combat_load();
+    eggs_reset(); /* the eggs look afresh (eggs.c) */
     schedules_load();
     schedules_start();
     note("Characters ready.");
@@ -594,6 +597,7 @@ int main(int argc, char **argv)
             vehicles_update(seconds * 1000);
             work_update(seconds * 1000);
             traps_update(seconds * 1000);
+            eggs_update(seconds * 1000); /* spawn points and the other eggs */
             world_update_bleeding(seconds * 1000);
             events_player_moved();
         }

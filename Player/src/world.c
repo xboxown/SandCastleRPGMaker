@@ -27,6 +27,7 @@
 #include "pack.h"
 #include "sound.h"
 #include "items.h"
+#include "schedules.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
@@ -548,73 +549,120 @@ static int spawn_rnd(int n) { spawnRng = spawnRng * 1103515245u + 12345u; return
 /* As Ultima VII's monster eggs: the first time the map is built, each of a point's characters has its chance for each of how
    many - a copy of its own (id: the character's + 1000000 x (500 + n), clear of the copies of characters placed more than once)
    by the point, its timetable the point's all day: Loiter within its reach, or, free, Wander unbounded. */
+static Actor *actor_of(int i);
+
+/* Whether a cell is taken: by a placement on the map (while the map is built), or by someone on it (in play). */
+static int spawn_cell_taken(cJSON *placed, int x, int y, int onFloor)
+{
+    if (placed)
+    {
+        cJSON *p;
+        cJSON_ArrayForEach(p, placed) if (!flag(p, "Dead") && num(p, "X", -1) == x && num(p, "Y", -1) == y && num(p, "Floor", 1) == onFloor) return 1;
+        return 0;
+    }
+    for (int a = 0; a <= npcCount; a++)
+    {
+        Actor *who = actor_of(a);
+        if (!who || who->gone) continue;
+        if ((int)floor(who->px / tileW) == x && (int)floor(who->py / tileH) == y && floor_of(who->lift < 0 ? 0 : who->lift) == onFloor) return 1;
+    }
+    return 0;
+}
+
+/* SpawnCopies: a monster egg's characters, each by its chance for each of how many, a copy of its own on a free cell by the egg
+   (its own first, then the rings round it), its timetable the egg's all day. placed: the map's placements (as the map is built,
+   a placement each); NULL: in play (each put on the map at once). */
+static void spawn_copies(cJSON *spawn, cJSON *characters, cJSON *placed)
+{
+    int sx = num(spawn, "X", 0), sy = num(spawn, "Y", 0), sf = num(spawn, "Floor", 1), isFree = flag(spawn, "Free");
+    int reach = num(spawn, "WanderTiles", 12);
+    cJSON *entry;
+    cJSON_ArrayForEach(entry, get(spawn, "Entries"))
+    {
+        cJSON *kind = NULL, *ch;
+        cJSON_ArrayForEach(ch, characters) if (num(ch, "Id", -2) == num(entry, "CharacterId", -1)) { kind = ch; break; }
+        if (!kind || flag(kind, "IsTestPlayer")) continue;
+        int count = num(entry, "Count", 1);
+        for (int k = 0; k < (count > 1 ? count : 1); k++)
+        {
+            if (spawn_rnd(100) >= num(entry, "Percent", 100)) continue;
+            int at = -1, ax = 0, ay = 0;
+            for (int ring = 0; ring <= 3 && at < 0; ring++)
+                for (int dy = -ring; dy <= ring && at < 0; dy++)
+                    for (int dx = -ring; dx <= ring && at < 0; dx++)
+                    {
+                        if ((abs(dx) > abs(dy) ? abs(dx) : abs(dy)) != ring) continue;
+                        int x = sx + dx, y = sy + dy;
+                        if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
+                        if (!spawn_cell_taken(placed, x, y, sf)) { at = 1; ax = x; ay = y; }
+                    }
+            if (at < 0) break;
+            int base = num(kind, "Id", -1) % COPY_STEP, copies = 500;
+            cJSON_ArrayForEach(ch, characters) if (num(ch, "Id", -1) % COPY_STEP == base && num(ch, "Id", -1) / COPY_STEP >= copies) copies = num(ch, "Id", -1) / COPY_STEP + 1;
+            cJSON *copy = cJSON_Duplicate(kind, 1);
+            cJSON_ReplaceItemInObject(copy, "Id", cJSON_CreateNumber(base + COPY_STEP * copies));
+            if (get(copy, "IsInParty")) cJSON_ReplaceItemInObject(copy, "IsInParty", cJSON_CreateFalse());
+            cJSON *schedule = cJSON_CreateArray();
+            for (int period = 0; period < 8; period++)
+            {
+                cJSON *e = cJSON_CreateObject();
+                cJSON_AddNumberToObject(e, "Period", period);
+                cJSON_AddNumberToObject(e, "Type", isFree ? S_WANDER_TYPE : S_LOITER_TYPE); /* ScheduleType Wander / Loiter */
+                cJSON_AddNumberToObject(e, "X", sx); cJSON_AddNumberToObject(e, "Y", sy);
+                cJSON_AddNumberToObject(e, "WorkAreaTiles", isFree ? 0 : (reach > 1 ? reach : 1) * (tileW / 8 > 1 ? (int)floor(tileW / 8.0 + 0.5) : 1)); /* map squares as Exult tiles */
+                cJSON_AddItemToArray(schedule, e);
+            }
+            cJSON_DeleteItemFromObject(copy, "Schedules");
+            cJSON_AddItemToObject(copy, "Schedules", schedule);
+            cJSON_AddItemToArray(characters, copy);
+            if (!placed)
+            {
+                /* in play: on the map now, with its things, health and timetable (BringOntoMap) */
+                items_add_carrier(copy);
+                vitals_add(base + COPY_STEP * copies);
+                int actor = world_add_actor(copy, ax, ay, sf);
+                if (actor > 0) schedules_add(actor);
+                continue;
+            }
+            int top = 0;
+            cJSON *p;
+            cJSON_ArrayForEach(p, placed) if (num(p, "Id", 0) > top) top = num(p, "Id", 0);
+            cJSON *placement = cJSON_CreateObject();
+            cJSON_AddNumberToObject(placement, "Id", top + 1);
+            cJSON_AddNumberToObject(placement, "CharacterId", base + COPY_STEP * copies);
+            cJSON_AddNumberToObject(placement, "X", ax); cJSON_AddNumberToObject(placement, "Y", ay);
+            cJSON_AddNumberToObject(placement, "Floor", sf);
+            cJSON_AddNumberToObject(placement, "Facing", DIR_S);
+            cJSON_AddItemToArray(placed, placement);
+        }
+    }
+}
+
+static void set_flag(cJSON *o, const char *k, int v) { cJSON_DeleteItemFromObject(o, k); cJSON_AddItemToObject(o, k, cJSON_CreateBool(v)); }
+
+/* HatchSpawnPoints: as the map is built, the monster eggs set off as it's entered (CachedIn) and not hatched - their characters among
+   the placements. A nocturnal one waits for the eggs' first look (eggs.c), which knows the hour. */
 static void hatch_spawn_points(cJSON *map, cJSON *characters)
 {
     cJSON *spawn, *placed = get(map, "Characters");
     if (!cJSON_IsArray(placed)) { cJSON_DeleteItemFromObject(map, "Characters"); placed = cJSON_AddArrayToObject(map, "Characters"); }
     cJSON_ArrayForEach(spawn, get(map, "SpawnPoints"))
     {
-        if (flag(spawn, "HatchedRuntime")) continue;
-        cJSON_DeleteItemFromObject(spawn, "HatchedRuntime");
-        cJSON_AddTrueToObject(spawn, "HatchedRuntime");
-        int sx = num(spawn, "X", 0), sy = num(spawn, "Y", 0), sf = num(spawn, "Floor", 1), isFree = flag(spawn, "Free");
-        int reach = num(spawn, "WanderTiles", 12);
-        cJSON *entry;
-        cJSON_ArrayForEach(entry, get(spawn, "Entries"))
-        {
-            cJSON *kind = NULL, *ch;
-            cJSON_ArrayForEach(ch, characters) if (num(ch, "Id", -2) == num(entry, "CharacterId", -1)) { kind = ch; break; }
-            if (!kind || flag(kind, "IsTestPlayer")) continue;
-            int count = num(entry, "Count", 1);
-            for (int k = 0; k < (count > 1 ? count : 1); k++)
-            {
-                if (spawn_rnd(100) >= num(entry, "Percent", 100)) continue;
-                /* the point's own cell if free, else the nearest free one round it (up to 3 cells out) */
-                int at = -1, ax = 0, ay = 0;
-                for (int ring = 0; ring <= 3 && at < 0; ring++)
-                    for (int dy = -ring; dy <= ring && at < 0; dy++)
-                        for (int dx = -ring; dx <= ring && at < 0; dx++)
-                        {
-                            if ((abs(dx) > abs(dy) ? abs(dx) : abs(dy)) != ring) continue;
-                            int x = sx + dx, y = sy + dy, taken = 0;
-                            if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
-                            cJSON *p;
-                            cJSON_ArrayForEach(p, placed) if (!flag(p, "Dead") && num(p, "X", -1) == x && num(p, "Y", -1) == y && num(p, "Floor", 1) == sf) taken = 1;
-                            if (!taken) { at = 1; ax = x; ay = y; }
-                        }
-                if (at < 0) break;
-                int base = num(kind, "Id", -1) % COPY_STEP, copies = 500;
-                cJSON_ArrayForEach(ch, characters) if (num(ch, "Id", -1) % COPY_STEP == base && num(ch, "Id", -1) / COPY_STEP >= copies) copies = num(ch, "Id", -1) / COPY_STEP + 1;
-                cJSON *copy = cJSON_Duplicate(kind, 1);
-                cJSON_ReplaceItemInObject(copy, "Id", cJSON_CreateNumber(base + COPY_STEP * copies));
-                if (get(copy, "IsInParty")) cJSON_ReplaceItemInObject(copy, "IsInParty", cJSON_CreateFalse());
-                cJSON *schedule = cJSON_CreateArray();
-                for (int period = 0; period < 8; period++)
-                {
-                    cJSON *e = cJSON_CreateObject();
-                    cJSON_AddNumberToObject(e, "Period", period);
-                    cJSON_AddNumberToObject(e, "Type", isFree ? S_WANDER_TYPE : S_LOITER_TYPE); /* ScheduleType Wander / Loiter */
-                    cJSON_AddNumberToObject(e, "X", sx); cJSON_AddNumberToObject(e, "Y", sy);
-                    cJSON_AddNumberToObject(e, "WorkAreaTiles", isFree ? 0 : (reach > 1 ? reach : 1) * (tileW / 8 > 1 ? (int)floor(tileW / 8.0 + 0.5) : 1)); /* map squares as Exult tiles */
-                    cJSON_AddItemToArray(schedule, e);
-                }
-                cJSON_DeleteItemFromObject(copy, "Schedules");
-                cJSON_AddItemToObject(copy, "Schedules", schedule);
-                cJSON_AddItemToArray(characters, copy);
-                int top = 0;
-                cJSON *p;
-                cJSON_ArrayForEach(p, placed) if (num(p, "Id", 0) > top) top = num(p, "Id", 0);
-                cJSON *placement = cJSON_CreateObject();
-                cJSON_AddNumberToObject(placement, "Id", top + 1);
-                cJSON_AddNumberToObject(placement, "CharacterId", base + COPY_STEP * copies);
-                cJSON_AddNumberToObject(placement, "X", ax); cJSON_AddNumberToObject(placement, "Y", ay);
-                cJSON_AddNumberToObject(placement, "Floor", sf);
-                cJSON_AddNumberToObject(placement, "Facing", DIR_S);
-                cJSON_AddItemToArray(placed, placement);
-            }
-        }
+        if (num(spawn, "Kind", 0) != 0 || num(spawn, "Criteria", 0) != 0 || flag(spawn, "Nocturnal") || flag(spawn, "HatchedRuntime") || flag(spawn, "GoneRuntime")) continue;
+        set_flag(spawn, "HatchedRuntime", 1);
+        if (flag(spawn, "Once")) set_flag(spawn, "GoneRuntime", 1);
+        if (spawn_rnd(100) + 1 > num(spawn, "Probability", 100)) continue;
+        spawn_copies(spawn, characters, placed);
     }
 }
+
+/* A monster egg hatching in play (eggs.c): its characters on the map at once. */
+void world_spawn_now(void *spawn)
+{
+    spawn_copies((cJSON *)spawn, get(get(get(gameJson, "Project"), "Characters"), "Characters"), NULL);
+}
+
+int world_floor_of_lift(int lift) { return floor_of(lift < 0 ? 0 : lift); }
 
 int world_build(cJSON *root)
 {

@@ -50,6 +50,7 @@ public partial class GameTestWindow
         UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
         UpdateProjectiles(elapsedMs); // shooting traps, and whatever is flying
+        UpdateEggs(elapsedMs); // spawn points and the other eggs (GameTestWindow.Spawns.cs)
         UpdateWeather(elapsedMs); // rain, snow, clouds, lightning
     }
 

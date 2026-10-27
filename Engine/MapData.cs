@@ -329,10 +329,57 @@ public class PlacedCharacter
     public int SavedCharacterIndex { get; set; } = -1;
 }
 
+/// <summary>What an egg does when it hatches (Exult's Egg_types: monster, jukebox, soundsfx/voice, usecode, missile, teleport/intermap, weather, path, button).</summary>
+public enum EggKind
+{
+    /// <summary>Characters appear (Monster_egg): its Entries, each by its chance - a spawn point.</summary>
+    Monster,
+    /// <summary>A piece of music plays (Jukebox_egg); Continuous: it loops, and an auto-reset egg stops it as the party leaves.</summary>
+    Music,
+    /// <summary>A sound plays there (Soundsfx_egg, Voice_egg); Continuous: it loops till the party leaves.</summary>
+    Sound,
+    /// <summary>A Common Event runs (Usecode_egg).</summary>
+    Usecode,
+    /// <summary>A projectile is shot from it (Missile_egg / Missile_launcher): a direction or at a party member, again and again while the party is near.</summary>
+    Missile,
+    /// <summary>The party is taken to a spot, to a Path egg (by its number), or to another world (Teleport_egg, intermap).</summary>
+    Teleport,
+    /// <summary>The weather changes for so many game minutes (Weather_egg).</summary>
+    Weather,
+    /// <summary>A numbered spot teleport eggs can send the party to (Path_egg) - it does nothing itself.</summary>
+    Path,
+    /// <summary>It sets off the eggs within its distance that are only set off by another (Button_egg, External).</summary>
+    Button
+}
+
+/// <summary>When an egg hatches (Exult's Egg_criteria).</summary>
+public enum EggCriteria
+{
+    /// <summary>When the map is entered (Exult: its chunk is read in).</summary>
+    CachedIn,
+    /// <summary>When someone in the party (the main character too) comes within its distance.</summary>
+    PartyNear,
+    /// <summary>When the main character comes within its distance.</summary>
+    AvatarNear,
+    /// <summary>When the main character goes out of its distance.</summary>
+    AvatarFar,
+    /// <summary>When the main character steps on it.</summary>
+    AvatarFootpad,
+    /// <summary>When someone in the party steps on it.</summary>
+    PartyFootpad,
+    /// <summary>When something (not a character) is put down on it, or within its distance.</summary>
+    SomethingOn,
+    /// <summary>Only when a Button egg sets it off.</summary>
+    External
+}
+
 /// <summary>
-/// A spawn point (Map Editor > Mode > Spawn), as Ultima VII's monster eggs: when the map is first entered, each
-/// of its characters may appear here - by its chance, as many as it says - as a copy of its own. A copy roams
-/// round the point, coming back within its reach of it - or, set free, wanders anywhere (towns, caves).
+/// A spawn point - an egg (Map Editor > Mode > Spawn), as Ultima VII's: when it hatches (EggCriteria, Exult's
+/// is_active), and its chance (Probability) comes up, it does what its kind does (EggKind, Exult's hatch_now).
+/// A monster egg brings its characters - each by its chance, as many as it says - as copies of their own that
+/// roam round it, coming back within its reach of it, or, set free, wander anywhere (towns, caves).
+/// Nocturnal: only at night (Exult: 21:00 to 04:59). Once: gone after it hatches. Auto-reset: it can hatch again
+/// once the party has left it (Exult's unhatch).
 /// </summary>
 public class SpawnPoint
 {
@@ -340,13 +387,60 @@ public class SpawnPoint
     public int X { get; set; }
     public int Y { get; set; }
     public int Floor { get; set; } = 1;
+    public EggKind Kind { get; set; } = EggKind.Monster;
+    public EggCriteria Criteria { get; set; } = EggCriteria.CachedIn;
+    /// <summary>The chance (1-100 %) it does anything when it hatches (Exult rolls 1-100 against it).</summary>
+    public int Probability { get; set; } = 100;
+    /// <summary>How far (map squares) its area reaches round it (Exult's distance) - for "near", "far" and "something on" (the footpads: its own square).</summary>
+    public int Distance { get; set; } = 3;
+    public bool Nocturnal { get; set; }
+    public bool Once { get; set; }
+    public bool AutoReset { get; set; }
+
+    // Monster
     public List<SpawnEntry> Entries { get; set; } = new();
     /// <summary>How far (map squares) its characters roam round it - farther, they come back near it.</summary>
     public int WanderTiles { get; set; } = 12;
     /// <summary>Free to the wild: they wander anywhere, never brought back.</summary>
     public bool Free { get; set; }
-    /// <summary>In play: it has had its chance on this map (a save, or a world come back to, keeps it so).</summary>
+
+    // Music, Sound
+    public int SoundId { get; set; } = -1;
+    public bool Continuous { get; set; }
+
+    // Usecode
+    public int CommonEventId { get; set; } = -1;
+
+    // Missile
+    public int ProjectileId { get; set; } = -1;
+    /// <summary>0-7 (north, north-east ... north-west), or -1: at a party member within range.</summary>
+    public int Direction { get; set; } = -1;
+    /// <summary>Seconds between shots while the party stays near.</summary>
+    public double DelaySeconds { get; set; } = 2;
+    public int RangeTiles { get; set; } = 12;
+
+    // Teleport
+    /// <summary>Another world (Maps tab), or -1: this one.</summary>
+    public int TeleportWorld { get; set; } = -1;
+    public int TeleportX { get; set; } = -1;
+    public int TeleportY { get; set; } = -1;
+    public int TeleportFloor { get; set; } = 1;
+    /// <summary>To the Path egg with this number on this map instead of a spot; -1 none.</summary>
+    public int TeleportPath { get; set; } = -1;
+
+    // Path
+    public int PathNumber { get; set; }
+
+    // Weather
+    public string WeatherKind { get; set; } = "Rain";
+    public int WeatherIntensity { get; set; } = 50;
+    /// <summary>For how many game minutes; 0: it stays.</summary>
+    public int WeatherMinutes { get; set; }
+
+    /// <summary>In play: it has hatched (a save, or a world come back to, keeps it so).</summary>
     public bool HatchedRuntime { get; set; }
+    /// <summary>In play: a "once" egg that hatched - gone.</summary>
+    public bool GoneRuntime { get; set; }
 }
 
 /// <summary>One character a spawn point may bring: its chance (0-100 %) for each of how many.</summary>

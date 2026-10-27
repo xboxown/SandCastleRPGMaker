@@ -3,6 +3,7 @@
 #define SANDCASTLE_SCHEDULES_H
 
 void schedules_load(void);
+void schedules_add(int actor);              /* someone put on the map in play */
 void schedules_start(void);
 void schedules_update(double ms);           /* not while the game is paused */
 void schedules_let_go(int actor);           /* an event that held them is over */

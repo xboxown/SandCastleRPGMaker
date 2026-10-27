@@ -201,6 +201,8 @@ void world_camera_origin(double *x, double *y);   /* the view's top-left in worl
 uint32_t world_shade_colour(uint32_t c);   /* a colour under the sky's light (for what is drawn under it: clouds) */   /* for the timing diary */
 void world_keys_let_go(void);   /* the game paused or Cinema Mode began: no direction counts as held till pressed again */
 void world_walk_cancel(int actor);
+void world_spawn_now(void *spawn);                  /* a monster egg hatching in play (eggs.c) */
+int world_floor_of_lift(int lift);
 void world_levitate(int actor, double seconds);     /* Levitate (a spell) */
 void world_levitation_update(double ms);
 void world_actor_cell(int actor, int *x, int *y, int *onFloor);

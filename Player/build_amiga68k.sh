@@ -10,7 +10,7 @@ FLAGS="-noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall 
 # The real main is src/amiga_start.c (no floating point: it checks the FPU is on before anything uses it); main.c's becomes game_main.
 "$GCC" $FLAGS -Dmain=game_main -c src/main.c -o build/amiga68k/main.o
 "$GCC" $FLAGS -o build/amiga68k/Game \
-  src/amiga_start.c build/amiga68k/main.o src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/schedules.c src/use.c src/sound.c src/weather.c src/conditions.c src/screen.c src/vitals.c src/combat.c src/errors.c src/gumps.c src/dolls.c src/save.c src/magic.c src/mechanisms.c src/vehicles.c src/video.c src/books.c src/prompt.c src/work.c src/traps.c src/platform_video_none.c src/pack.c src/numbers.c src/platform_amiga.c src/platform_amiga_audio.c third_party/cJSON.c -lm
+  src/amiga_start.c build/amiga68k/main.o src/world.c src/pictures.c src/font.c src/dialog.c src/events.c src/items.c src/script.c src/lighting.c src/schedules.c src/use.c src/sound.c src/weather.c src/conditions.c src/screen.c src/vitals.c src/combat.c src/errors.c src/gumps.c src/dolls.c src/save.c src/magic.c src/mechanisms.c src/vehicles.c src/video.c src/books.c src/prompt.c src/work.c src/traps.c src/eggs.c src/platform_video_none.c src/pack.c src/numbers.c src/platform_amiga.c src/platform_amiga_audio.c third_party/cJSON.c -lm
 # The editor ships it: Build > Amiga 68k copies it into the game's drawer.
 mkdir -p ../Editor/Runtimes/Amiga68k && cp build/amiga68k/Game ../Editor/Runtimes/Amiga68k/Game
 echo "built build/amiga68k/Game (and Editor/Runtimes/Amiga68k/Game)"

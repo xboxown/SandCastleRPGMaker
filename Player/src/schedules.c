@@ -58,7 +58,8 @@ typedef struct Npc
     int served[8], servedCount;/* dishes put in front of it (uids) */
 } Npc;
 
-static Npc *npcs; static int npcCount;
+static Npc *npcs; static int npcCount, npcCap;
+static void add_npc(int a, cJSON *characters);
 static int leaderOf[256];          /* per actor: the actor it follows + 1 (0: nobody) */
 static unsigned char sittingWithPlayer[256]; /* party members who sat because the main character did */
 static double seatLookAgainAt[256], followClockMs;
@@ -87,20 +88,29 @@ void schedules_load(void)
 {
     schedules_house_keys();
     combat_doors_init(); /* hostile NPCs break doors down */
-    cJSON *project = get((cJSON *)world_json(), "Project"), *c;
+    cJSON *project = get((cJSON *)world_json(), "Project");
     cJSON *characters = get(get(project, "Characters"), "Characters");
     free(npcs); npcCount = 0; lastHour = -1; followThinkMs = 0;
     memset(leaderOf, 0, sizeof leaderOf); memset(untilMinute, 0, sizeof untilMinute); memset(sittingWithPlayer, 0, sizeof sittingWithPlayer); memset(seatLookAgainAt, 0, sizeof seatLookAgainAt);
     npcs = (Npc *)calloc((size_t)world_actor_count() + 1, sizeof(Npc));
-    for (int a = 1; a < world_actor_count(); a++)
+    npcCap = world_actor_count() + 1;
+    for (int a = 1; a < world_actor_count(); a++) add_npc(a, characters);
+}
+
+/* One character's timetable and When... rules (schedules_load, and one added in play). */
+static void add_npc(int a, cJSON *characters)
+{
+    cJSON *c;
     {
         int id = world_actor_character(a);
         cJSON *data = NULL;
         cJSON_ArrayForEach(c, characters) if (num(c, "Id", -2) == id) data = c;
+        if (npcCount >= npcCap) { npcCap = npcCap * 2 + 8; npcs = (Npc *)realloc(npcs, sizeof(Npc) * (size_t)npcCap); }
         Npc *n = &npcs[npcCount++];
+        memset(n, 0, sizeof *n);
         n->actor = a; n->characterId = id; n->paceDirection = 1;
         world_actor_cell(a, &n->homeX, &n->homeY, &(int){ 0 });
-        if (!data || cJSON_IsTrue(get(data, "IsInParty")) || cJSON_IsTrue(get(data, "IsTestPlayer"))) continue;
+        if (!data || cJSON_IsTrue(get(data, "IsInParty")) || cJSON_IsTrue(get(data, "IsTestPlayer"))) return;
         cJSON *list = get(data, "Schedules"), *e;
         n->entries = (Entry *)calloc((size_t)cJSON_GetArraySize(list) + 1, sizeof(Entry));
         cJSON_ArrayForEach(e, list)
@@ -1057,3 +1067,10 @@ static int holds_house_key(int actor, int doorUid)
 }
 
 void schedules_house_keys(void) { world_set_key_check(holds_house_key); }
+
+/* Someone put on the map in play (a monster egg's copy): its timetable, from the time it is now (BringOntoMap's UpdateSchedule). */
+void schedules_add(int actor)
+{
+    add_npc(actor, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters"));
+    if (lastHour >= 0) update_schedule(&npcs[npcCount - 1], lastHour / 3, 0);
+}

@@ -3235,14 +3235,14 @@ void events_log_once(int key, const char *text) { log_once(key, text); }
 
 /* A Custom schedule's commands, run as that character's own (Self = them). */
 typedef struct CustomList { cJSON *source; List list; } CustomList;
-static CustomList customs[64]; static int customCount;
+static CustomList customs[600]; static int customCount; /* custom effects, eggs' effects */
 
 void events_run_commands(cJSON *commands, int actor)
 {
     if (!cJSON_GetArraySize(commands)) return;
     const List *l = NULL;
     for (int i = 0; i < customCount; i++) if (customs[i].source == commands) l = &customs[i].list;
-    if (!l && customCount < 64) { customs[customCount].source = commands; customs[customCount].list = read_list(commands); l = &customs[customCount++].list; }
+    if (!l && customCount < 600) { customs[customCount].source = commands; customs[customCount].list = read_list(commands); l = &customs[customCount++].list; }
     if (!l) return;
     char key[48];
     snprintf(key, sizeof key, "char:%d", world_actor_character(actor));

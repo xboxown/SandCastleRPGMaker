@@ -54,8 +54,13 @@ public partial class MainWindow
         var marker = new Border
         {
             Width = _tileset.TileWidth, Height = _tileset.TileHeight, Background = fill, BorderBrush = Brushes.Gold, BorderThickness = new Thickness(1), IsHitTestVisible = false,
-            ToolTip = spawn.Entries.Count == 0 ? "Spawn point (nobody yet)" : $"Spawn point: {string.Join(", ", names)} - {(spawn.Free ? "free" : $"within {spawn.WanderTiles} tiles")}",
-            Child = new TextBlock { Text = "SP", Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 9, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
+            ToolTip = spawn.Kind != EggKind.Monster ? $"Egg: {spawn.Kind} ({spawn.Criteria}, {spawn.Probability}%)"
+                : spawn.Entries.Count == 0 ? "Spawn point (nobody yet)" : $"Spawn point: {string.Join(", ", names)} - {(spawn.Free ? "free" : $"within {spawn.WanderTiles} tiles")}",
+            Child = new TextBlock { Text = spawn.Kind switch // SP: a spawn point; the other eggs by what they do
+                {
+                    EggKind.Music => "MU", EggKind.Sound => "SN", EggKind.Usecode => "EV", EggKind.Missile => "MI", EggKind.Teleport => "TP",
+                    EggKind.Weather => "WE", EggKind.Path => "PA", EggKind.Button => "BU", _ => "SP"
+                }, Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 9, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         };
         Canvas.SetLeft(marker, spawn.X * _tileset.TileWidth);
         Canvas.SetTop(marker, spawn.Y * _tileset.TileHeight);
