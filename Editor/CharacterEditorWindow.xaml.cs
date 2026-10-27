@@ -69,6 +69,7 @@ public partial class CharacterEditorWindow : Window
     public CharacterEditorWindow(CharacterDatabase database, StatDatabase stats, PoseDatabase poses, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources)
     {
         InitializeComponent();
+        LevelLockBox.LostFocus += LevelLockBox_LostFocus; // made in code: the first stats column (BuildStatColumns)
         Title += $" [{BuildInfo.CurrentBuild}]";
         _database = database;
         _stats = stats;
@@ -175,7 +176,7 @@ public partial class CharacterEditorWindow : Window
         if (statRows.FirstOrDefault(r => r.Kind == BuiltInStatKind.Hits) is { } hitsRow)
             foreach (var strengthRow in statRows.Where(r => r.Kind == BuiltInStatKind.Strength))
                 strengthRow.Changed = row => hitsRow.Value = row.Value;
-        StatsItemsControl.ItemsSource = statRows;
+        BuildStatColumns(statRows);
         LevelLockBox.Text = character.LevelLock.ToString();
         BuildPosesPanel(character);
 
@@ -696,6 +697,55 @@ public partial class CharacterEditorWindow : Window
     }
 
     /// <summary>The highest level it can reach (0 = the game's Max Level): a whole number, 0 or more.</summary>
+    /// <summary>Level Lock: in the first column, after the built-in stats.</summary>
+    private readonly TextBox LevelLockBox = new() { Width = 60, VerticalAlignment = VerticalAlignment.Center };
+
+    /// <summary>
+    /// The stats as columns: the built-in ones (and Level Lock) first, each box just wide enough for a number;
+    /// then the custom stats, their names green, filling a column of the same height top to bottom and going
+    /// on in the next one - as many as there are, the window scrolling across.
+    /// </summary>
+    private void BuildStatColumns(List<StatRow> rows)
+    {
+        StatsColumns.Children.Clear();
+        FrameworkElement Row(string label, Control box, bool custom, string? tip = null)
+        {
+            var line = new DockPanel { Margin = new Thickness(0, 0, 0, 4), ToolTip = tip };
+            var name = new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, MinWidth = 150, Margin = new Thickness(0, 0, 8, 0) };
+            if (custom) { name.Foreground = Brushes.Green; name.FontWeight = FontWeights.SemiBold; }
+            DockPanel.SetDock(name, Dock.Left);
+            line.Children.Add(name);
+            line.Children.Add(box);
+            return line;
+        }
+        TextBox Box(StatRow row)
+        {
+            var box = new TextBox { Width = 60, VerticalAlignment = VerticalAlignment.Center, DataContext = row };
+            box.SetBinding(TextBox.TextProperty, new System.Windows.Data.Binding(nameof(StatRow.Value)) { Mode = System.Windows.Data.BindingMode.TwoWay, UpdateSourceTrigger = System.Windows.Data.UpdateSourceTrigger.LostFocus });
+            return box;
+        }
+        StackPanel Column(bool first)
+        {
+            var column = new StackPanel { Margin = first ? new Thickness(0) : new Thickness(14, 0, 0, 0) };
+            if (first) StatsColumns.Children.Add(column);
+            else StatsColumns.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1, 0, 0, 0), Margin = new Thickness(14, 0, 0, 0), Padding = new Thickness(14, 0, 0, 0), Child = column });
+            return column;
+        }
+        var builtIn = rows.Where(r => r.Kind != BuiltInStatKind.None).ToList();
+        var custom = rows.Where(r => r.Kind == BuiltInStatKind.None).ToList();
+        var firstColumn = Column(first: true);
+        foreach (var row in builtIn) firstColumn.Children.Add(Row(row.Label, Box(row), custom: false));
+        if (LevelLockBox.Parent is Panel old) old.Children.Remove(LevelLockBox);
+        firstColumn.Children.Add(Row("Level Lock (0 = game's max)", LevelLockBox, custom: false,
+            "The highest level this character can reach by experience. 0 = the game's Max Level (System Settings > Levels). Monsters level up too, from their kills."));
+        int perColumn = Math.Max(1, builtIn.Count + 1);
+        for (int i = 0; i < custom.Count; i += perColumn)
+        {
+            var column = Column(first: false);
+            foreach (var row in custom.Skip(i).Take(perColumn)) column.Children.Add(Row(row.Label, Box(row), custom: true));
+        }
+    }
+
     private void LevelLockBox_LostFocus(object sender, RoutedEventArgs e)
     {
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;

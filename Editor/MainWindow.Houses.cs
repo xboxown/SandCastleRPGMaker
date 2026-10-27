@@ -45,6 +45,47 @@ public partial class MainWindow
     private sealed record HouseRow(HouseTemplate House, bool Editing)
     {
         public override string ToString() => $"{(Editing ? "✎ " : "")}{House.Name}   ({House.Layout.Width} x {House.Layout.Height}{(House.Vehicle is { } v ? $", {v.Movement}" : "")})";
+        public string Label => ToString();
+        /// <summary>A small picture of it built (its tiles and objects; animated ones play, no sound).</summary>
+        public FrameworkElement? Preview { get; init; }
+    }
+
+    /// <summary>A house's or vehicle's layout as built, small: every floor's tiles, then its objects where they stand (animated, no sound).</summary>
+    private FrameworkElement? BuildLayoutPreview(MapData layout)
+    {
+        var tileset = layout.Tileset;
+        int tw = tileset.TileWidth > 0 ? tileset.TileWidth : 32, th = tileset.TileHeight > 0 ? tileset.TileHeight : 32;
+        if (layout.Width <= 0 || layout.Height <= 0) return null;
+        var canvas = new Canvas { Width = layout.Width * tw, Height = layout.Height * th, ClipToBounds = true };
+        int z = 0;
+        foreach (var layer in layout.Layers.OrderBy(l => l.Floor))
+        {
+            int lift = (layer.Floor - 1) * MapFloors.LiftsPerFloor;
+            for (int y = 0; y < layout.Height; y++)
+                for (int x = 0; x < layout.Width; x++)
+                {
+                    int tile = layer.GetTile(x, y, layout.Width);
+                    if (tile < 0 || TileSourceFor(tileset, tile) is not { } picture) continue;
+                    var image = new Image { Source = picture, Width = tw, Height = th, Stretch = Stretch.Fill };
+                    Canvas.SetLeft(image, x * tw - lift * 4);
+                    Canvas.SetTop(image, y * th - lift * 4);
+                    Panel.SetZIndex(image, z++);
+                    canvas.Children.Add(image);
+                }
+        }
+        foreach (var o in layout.Objects.Where(o => o.ContainerInstanceId < 0).OrderBy(o => o.X + o.Y).ThenBy(o => o.Z))
+        {
+            if (_objectDatabase.Objects.FirstOrDefault(d => d.Id == o.ObjectId) is not { } obj || ObjectLooks.SpriteFor(obj, ObjectLooks.StartState(obj, o), _spriteDatabase) is not { } sprite) continue;
+            var first = sprite.Frames.Count > 0 ? FrameCache.Get(sprite.Frames[0].FilePath) : null;
+            double w = first?.PixelWidth ?? tw, h = first?.PixelHeight ?? th;
+            double qw = Math.Ceiling(w / 8) * 8, qh = Math.Ceiling(h / 8) * 8;
+            var picture = new SpritePreview { Sprite = sprite, Width = qw, Height = qh };
+            Canvas.SetLeft(picture, o.X * tw + (tw - qw) / 2 + o.OffsetX * 8 - o.Z * 4);
+            Canvas.SetTop(picture, (o.Y + 1) * th - qh + o.OffsetY * 8 - o.Z * 4);
+            Panel.SetZIndex(picture, z++);
+            canvas.Children.Add(picture);
+        }
+        return new Viewbox { Width = 72, Height = 48, Stretch = Stretch.Uniform, Child = canvas, Margin = new Thickness(0, 2, 8, 2) };
     }
 
     /// <summary>The Houses and Vehicles tabs (after Characters) and Mode > Houses / Vehicles, made once.</summary>
@@ -141,7 +182,21 @@ public partial class MainWindow
             if (list is null) continue;
             bool vehicles = list.Tag is true;
             var picked = (list.SelectedItem as HouseRow)?.House;
-            list.ItemsSource = _houses.Where(h => (h.Vehicle is not null) == vehicles).Select(h => new HouseRow(h, ReferenceEquals(h, _editingHouse))).ToList();
+            list.ItemsSource = _houses.Where(h => (h.Vehicle is not null) == vehicles).Select(h => new HouseRow(h, ReferenceEquals(h, _editingHouse)) { Preview = BuildLayoutPreview(h.Layout) }).ToList();
+            if (list.ItemTemplate is null)
+            {
+                // Its picture, then its name and size.
+                var row = new FrameworkElementFactory(typeof(StackPanel));
+                row.SetValue(StackPanel.OrientationProperty, Orientation.Horizontal);
+                var picture = new FrameworkElementFactory(typeof(ContentPresenter));
+                picture.SetBinding(ContentPresenter.ContentProperty, new System.Windows.Data.Binding(nameof(HouseRow.Preview)));
+                var name = new FrameworkElementFactory(typeof(TextBlock));
+                name.SetBinding(TextBlock.TextProperty, new System.Windows.Data.Binding(nameof(HouseRow.Label)));
+                name.SetValue(TextBlock.VerticalAlignmentProperty, VerticalAlignment.Center);
+                row.AppendChild(picture);
+                row.AppendChild(name);
+                list.ItemTemplate = new DataTemplate { VisualTree = row };
+            }
             list.SelectedItem = list.Items.Cast<HouseRow>().FirstOrDefault(r => ReferenceEquals(r.House, picked ?? _editingHouse));
         }
         foreach (var (vehicles, banner, back) in _templateBanners)

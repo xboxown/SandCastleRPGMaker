@@ -153,7 +153,11 @@ public partial class ObjectEditorWindow
 
     private TreeViewItem ObjectNode(WorldObject obj)
     {
-        var item = new TreeViewItem { Header = new ListEntry(obj).ToString(), Tag = obj, FontWeight = FontWeights.Normal };
+        // Its sprite beside its name (animated, no sound) - what it looks like without opening it.
+        var header = new StackPanel { Orientation = Orientation.Horizontal };
+        header.Children.Add(new SpritePreview { Sprite = ObjectLooks.SpriteFor(obj, ObjectLooks.DefaultState(obj), _sprites), Width = 24, Height = 24, Margin = new Thickness(0, 1, 6, 1) });
+        header.Children.Add(new TextBlock { Text = new ListEntry(obj).ToString(), VerticalAlignment = VerticalAlignment.Center });
+        var item = new TreeViewItem { Header = header, Tag = obj, FontWeight = FontWeights.Normal };
         item.PreviewMouseLeftButtonDown += (_, e) => _dragStart = e.GetPosition(_list);
         item.PreviewMouseMove += (_, e) =>
         {
