@@ -635,6 +635,21 @@ public partial class MainWindow : Window
         }
         menu.Items.Add(propertiesMenu);
 
+        // A tile with see-through pixels on the ground: another tile drawn under it (else they show black - nothing is under a ground tile).
+        var underMenu = new MenuItem { Header = props.UnderTileIndex >= 0 ? $"Tile under it (#{props.UnderTileIndex})" : "Tile under it" };
+        var underNone = new MenuItem { Header = "None (see-through pixels show black)", IsCheckable = true, IsChecked = props.UnderTileIndex < 0 };
+        underNone.Click += (_, _) => { props.UnderTileIndex = -1; BuildMapCanvas(); };
+        underMenu.Items.Add(underNone);
+        if (_selectedTileIndex >= 0 && _selectedTileIndex != tileIndex)
+        {
+            var underPicked = new MenuItem { Header = $"Tile #{_selectedTileIndex} (the one picked in the palette)", IsCheckable = true, IsChecked = props.UnderTileIndex == _selectedTileIndex };
+            int picked = _selectedTileIndex;
+            underPicked.Click += (_, _) => { props.UnderTileIndex = picked; BuildMapCanvas(); };
+            underMenu.Items.Add(underPicked);
+        }
+        underMenu.ToolTip = "On the ground (floor 1), a tile drawn first under this one - showing through its see-through pixels: grass under a half floor tile. Pick the tile in the palette first, then right-click this one.";
+        menu.Items.Add(underMenu);
+
         var customEditorItem = new MenuItem { Header = "Custom..." };
         customEditorItem.Click += (_, _) =>
         {
@@ -2166,6 +2181,24 @@ public partial class MainWindow : Window
         }
 
         image.Source = TileSource(tileIndex); // from whichever of the map's tilesheets it's from
+        if (_currentFloor <= 1 && UnderTileOf(tileIndex) is int under && TileSource(under) is { } below && image.Source is { } top)
+        {
+            // Its tile under it (Tile Properties): drawn first, through its see-through pixels.
+            var group = new DrawingGroup();
+            RenderOptions.SetBitmapScalingMode(group, BitmapScalingMode.NearestNeighbor);
+            group.Children.Add(new ImageDrawing(below, new Rect(0, 0, _tileset.TileWidth, _tileset.TileHeight)));
+            group.Children.Add(new ImageDrawing(top, new Rect(0, 0, _tileset.TileWidth, _tileset.TileHeight)));
+            image.Source = new DrawingImage(group);
+        }
+    }
+
+    /// <summary>A ground tile's tile under it (Tile Properties), as a map tile number of the same sheet; null for none.</summary>
+    private int? UnderTileOf(int tileIndex)
+    {
+        if (_tileset is null || tileIndex < 0) return null;
+        string sheet = _tileset.SheetNameOf(tileIndex);
+        if (sheet.Length == 0 || !_tilePropertiesDatabase.ByTileKey.TryGetValue($"{sheet}:{TileSheets.Local(tileIndex)}", out var props) || props.UnderTileIndex < 0) return null;
+        return TileSheets.Make(TileSheets.Slot(tileIndex), props.UnderTileIndex);
     }
 
     /// <summary>

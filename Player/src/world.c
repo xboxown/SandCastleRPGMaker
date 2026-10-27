@@ -134,6 +134,7 @@ static int wraps; /* Maps tab: "Wraps around the edges" (Ultima V / VI): off the
 static int *floors[MAX_FLOORS + 1]; /* floors[1] = the ground; NULL = none painted */
 static char sheetNames[8][128]; static int sheetCount;
 static unsigned char *walkable; /* per ground cell */
+static int *underTile;          /* per ground cell: the tile drawn under its tile (Tile Properties "UnderTileIndex"), -1 none */
 static unsigned char *water;    /* per ground cell: Is Water (ships sail on it) */
 static ObjectDef *defs; static int defCount;
 static Thing *things; static int thingCount;
@@ -569,10 +570,12 @@ int world_build(cJSON *root)
     /* The ground's walkable cells (Tile Properties). */
     walkable = (unsigned char *)malloc((size_t)(mapW * mapH));
     water = (unsigned char *)calloc((size_t)(mapW * mapH), 1);
+    underTile = (int *)malloc(sizeof(int) * (size_t)(mapW * mapH));
     cJSON *byKey = get(get(project, "TileProperties"), "ByTileKey");
     for (int i = 0; i < mapW * mapH; i++)
     {
         walkable[i] = 1;
+        underTile[i] = -1;
         int tile = floors[1] ? floors[1][i] : -1;
         if (tile < 0) continue;
         char key[200];
@@ -581,6 +584,7 @@ int world_build(cJSON *root)
         cJSON *props = get(byKey, key);
         if (props && !flag(props, "Walkable")) walkable[i] = 0;
         if (props && flag(props, "IsWater")) water[i] = 1;
+        if (props && num(props, "UnderTileIndex", -1) >= 0) underTile[i] = slot * 100000 + num(props, "UnderTileIndex", -1);
     }
 
     /* Things: objects on the map, placed books and containers. */
@@ -1123,7 +1127,11 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     int x0 = cx / tileW - 1, y0 = cy / tileH - 1, x1 = (cx + SCREEN_W) / tileW + 1, y1 = (cy + SCREEN_H) / tileH + 1;
     for (int y = y0 < 0 ? 0 : y0; y <= y1 && y < mapH; y++)
         for (int x = x0 < 0 ? 0 : x0; x <= x1 && x < mapW; x++)
-            if (floors[1]) blit_box(tile_picture(floors[1][y * mapW + x], ms), x * tileW - cx, y * tileH - cy, tileW, tileH);
+            if (floors[1])
+            {
+                if (underTile[y * mapW + x] >= 0) blit_box(tile_picture(underTile[y * mapW + x], ms), x * tileW - cx, y * tileH - cy, tileW, tileH); /* its tile under it */
+                blit_box(tile_picture(floors[1][y * mapW + x], ms), x * tileW - cx, y * tileH - cy, tileW, tileH);
+            }
 
     int count = 0;
     /* Upper floors' tiles, at their floor's height. */
@@ -2856,6 +2864,7 @@ int world_set_tile(int x, int y, int onFloor, int tile)
     {
         cJSON *byKey = get(get(get(gameJson, "Project"), "TileProperties"), "ByTileKey");
         walkable[y * mapW + x] = 1;
+        underTile[y * mapW + x] = -1;
         if (tile >= 0)
         {
             char key[200];
@@ -2864,6 +2873,7 @@ int world_set_tile(int x, int y, int onFloor, int tile)
             cJSON *props = get(byKey, key);
             if (props && !flag(props, "Walkable")) walkable[y * mapW + x] = 0;
             water[y * mapW + x] = props && flag(props, "IsWater");
+            if (props && num(props, "UnderTileIndex", -1) >= 0) underTile[y * mapW + x] = slot * 100000 + num(props, "UnderTileIndex", -1);
         }
         else water[y * mapW + x] = 0;
         return 1;
@@ -3603,7 +3613,7 @@ const char *world_actor_name(int actor)
 void world_reset(void)
 {
     for (int f = 0; f <= MAX_FLOORS; f++) { free(floors[f]); floors[f] = NULL; }
-    free(walkable); free(water); water = NULL; walkable = NULL;
+    free(walkable); free(water); free(underTile); water = NULL; walkable = NULL; underTile = NULL;
     puddleCount = 0; bleedingCount = 0;
     free(defs); defs = NULL; defCount = 0;
     free(things); things = NULL; thingCount = 0;

@@ -57,6 +57,9 @@ public class TileTypeProperties
     /// <summary>Water: sea creatures (Character Editor > Moves on: Sea) swim here - and only here. Land walkers go by Walkable (deep water: not walkable).</summary>
     public bool IsWater { get; set; }
 
+    /// <summary>On the ground: a tile of the same sheet drawn first, under it, showing through its see-through pixels (grass under a half-tile floor); -1 none.</summary>
+    public int UnderTileIndex { get; set; } = -1;
+
     /// <summary>WorldObject ids required (equipped/carried) to enter this tile at all, independent of any damage effects (e.g. "needs a boat" for deep ocean).</summary>
     public List<int> RequiredObjectIds { get; set; } = new();
 

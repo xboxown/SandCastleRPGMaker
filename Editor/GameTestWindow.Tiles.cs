@@ -66,6 +66,8 @@ public partial class GameTestWindow
                     if (mx >= _map.Width || my >= _map.Height) continue;
                     int tile = ground.GetTile(mx, my, _map.Width);
                     if (tile < 0 || TilePicture(tile) is not { } picture) continue;
+                    if (TilePropertiesOf(tile).UnderTileIndex is >= 0 and int under && TilePicture(TileSheets.Make(TileSheets.Slot(tile), under)) is { } below)
+                        dc.DrawImage(below, new Rect(x * _tileWidth, y * _tileHeight, _tileWidth, _tileHeight)); // its tile under it, through its see-through pixels
                     dc.DrawImage(picture, new Rect(x * _tileWidth, y * _tileHeight, _tileWidth, _tileHeight));
                 }
         }
