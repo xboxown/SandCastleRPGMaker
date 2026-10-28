@@ -1797,6 +1797,7 @@ public partial class U8GameWindow : Window
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
+        UpdateWeaponsInHand(); // the weapon held, drawn in the hand of the frame shown (Exult's Actor::paint_weapon)
         FollowU8Bark(); // Ultima 8: the words over the speaker's head follow it (U8GameWindow.U8Talk.cs)
         UpdateGamePause(); // Ultima 8: windows don't pause - only a message box, choosing a target, sleeping, a video... (U8GameWindow.Pause.cs)
         SoakTest(deltaSeconds * 1000); // only when measuring (U8GameWindow.Perf.cs)

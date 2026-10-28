@@ -61,6 +61,8 @@ public partial class ObjectEditorWindow
         var row = new WrapPanel();
         row.Children.Add(GearSlotPicker("Wielded in (also fits either hand)", () => (w.EquipSlot, w.CustomSlotName), (s, c) => { w.EquipSlot = s; w.CustomSlotName = c; }));
         row.Children.Add(NumberField("Damage", () => w.Damage, v => w.Damage = (int)Math.Clamp(v, 0, 127), "Each blow that lands does 1 to this, plus 1 to Strength/3 (Exult's apply_damage). 127 always does 127."));
+        body.Children.Add(SpritePicker("In the hand (Sprite Editor > Weapon in hand; empty: not drawn in the hand)", () => (w.InHandSprite.SpriteGroup, w.InHandSprite.SpriteName),
+            (g, n) => { w.InHandSprite.SpriteGroup = g; w.InHandSprite.SpriteName = n; }, onlyGroup: SpriteDatabase.WeaponInHandGroupName));
         row.Children.Add(EnumPicker("Damage type", () => w.DamageType, v => w.DamageType = v, v => v.ToString(), 110));
         body.Children.Add(row);
 

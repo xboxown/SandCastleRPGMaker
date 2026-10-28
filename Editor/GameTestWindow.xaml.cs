@@ -1782,6 +1782,7 @@ public partial class GameTestWindow : Window
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
+        UpdateWeaponsInHand(); // the weapon held, drawn in the hand of the frame shown (Exult's Actor::paint_weapon)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         SoakTest(deltaSeconds * 1000); // only when measuring (GameTestWindow.Perf.cs)
         using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (GameTestWindow.Perf.cs)

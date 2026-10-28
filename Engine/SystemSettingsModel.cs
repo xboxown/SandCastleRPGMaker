@@ -138,6 +138,21 @@ public class SliderSettings
 
 public enum SliderStyle { Classic, Custom }
 
+/// <summary>
+/// How a weapon in the hand is drawn (Exult's Actor::paint_weapon). Exult's (the default): a weapon-in-hand sprite has 4
+/// frames - held, and the swing pointing north, east, south - mirrored for east- and west-facing characters. Smooth: each
+/// of the eight directions its own held frame and SwingFrames frames of swing. The Sprite Editor's Weapon in hand group
+/// follows this.
+/// </summary>
+public class WeaponInHandSettings
+{
+    public bool Smooth { get; set; }
+    /// <summary>Smooth: how many frames a swing takes in each direction (1-8).</summary>
+    public int SwingFrames { get; set; } = 3;
+    /// <summary>How many frames a weapon-in-hand sprite has now.</summary>
+    public int FrameCount => SpriteDatabase.WeaponInHandFrameNames(Smooth, SwingFrames).Length;
+}
+
 public enum SliderPieceKind
 {
     /// <summary>A button that takes Step off the number (and Left).</summary>
@@ -268,6 +283,8 @@ public class SystemSettings
     /// <summary>The game's errors: their paperdoll and their words by number (System Settings > Errors).</summary>
     public ErrorSettings Errors { get; set; } = new();
     public SliderSettings Slider { get; set; } = new();
+    /// <summary>Weapons drawn in the hand (Sprite Editor > Weapon in hand): Exult's frames, or smooth ones.</summary>
+    public WeaponInHandSettings WeaponInHand { get; set; } = new();
     /// <summary>Only an Ultima 8 project's engine reads these (Engine/Ultima8Model.cs).</summary>
     public Ultima8Settings Ultima8 { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();

@@ -9,6 +9,20 @@ public class SpriteFrame
     /// <summary>-1 = no sound attached to this frame.</summary>
     public int SoundResourceId { get; set; } = -1;
 
+    /// <summary>
+    /// A character's frame: where its weapon hand is, in this frame's pixels (Exult's weapon offset for an actor frame,
+    /// wihh) - -1: no weapon is drawn in this frame (lying down, asleep; Exult's 255).
+    /// </summary>
+    public int HandX { get; set; } = -1;
+    public int HandY { get; set; } = -1;
+    /// <summary>A character's frame: which frame of the weapon-in-hand sprite it shows (-1: chosen by itself - held, or the swing for an attack).</summary>
+    public int WeaponFrame { get; set; } = -1;
+    /// <summary>A character's frame: the weapon drawn behind the body (facing away) - else over it, as Exult paints it.</summary>
+    public bool WeaponBehind { get; set; }
+    /// <summary>A weapon-in-hand frame: where the hand holds it, in this frame's pixels (Exult's weapon offset for a weapon frame) - -1: its middle.</summary>
+    public int GripX { get; set; } = -1;
+    public int GripY { get; set; } = -1;
+
     /// <summary>Maps a SpriteLayer's Id to this frame's own image file for that layer. Empty means this frame predates layers (or the sprite has none) - FilePath alone is still authoritative in that case. Once layers exist, FilePath instead holds the composited (flattened) result of all visible layers, kept in sync automatically.</summary>
     public Dictionary<int, string> LayerFilePaths { get; set; } = new();
 }
@@ -207,7 +221,36 @@ public class SpriteDatabase
     /// </summary>
     public const string DialogFrameGroupName = "DialogFrame";
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || IsBundleGroup(name);
+    /// <summary>
+    /// Reserved group for weapons held in the hand (Exult's Actor::paint_weapon): each sprite is one weapon's in-hand
+    /// look, picked in the Object Editor; its frames are the poses the weapon is drawn in - states, not an animation:
+    /// as System Settings > Weapon in hand says (WeaponInHandFrameNames). Each frame has a grip point; each character
+    /// frame a hand point - the weapon is drawn with its grip on the hand.
+    /// </summary>
+    public const string WeaponInHandGroupName = "Weapon in hand";
+
+    /// <summary>The eight directions in the order a smooth weapon-in-hand sprite's frames go.</summary>
+    public static readonly string[] WeaponDirectionNames = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
+
+    /// <summary>
+    /// What each frame of a weapon-in-hand sprite is. Exult's (not smooth): 1 held, 2-4 the swing pointing north, east,
+    /// south (Exult's weapon frames 1-4) - east- and west-facing characters show them mirrored, as Exult reflects them.
+    /// Smooth: for each of the eight directions, held, then the swing in so many frames.
+    /// </summary>
+    public static string[] WeaponInHandFrameNames(bool smooth, int swingFrames)
+    {
+        if (!smooth) return new[] { "Held (facing north or south; mirrored east / west)", "Swing: pointing north", "Swing: pointing east", "Swing: pointing south" };
+        int k = Math.Clamp(swingFrames, 1, 8);
+        var names = new List<string>();
+        foreach (var dir in WeaponDirectionNames)
+        {
+            names.Add($"Held, facing {dir}");
+            for (int i = 1; i <= k; i++) names.Add($"Swing {i} of {k}, facing {dir}");
+        }
+        return names.ToArray();
+    }
+
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || IsBundleGroup(name);
 
     /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
     public SpriteEntry? FindDialogFrame(string name)
@@ -237,6 +280,7 @@ public class SpriteDatabase
         GetOrCreateGroup(LockpickGroupName);
         GetOrCreateGroup(KeychainGroupName);
         GetOrCreateGroup(DialogFrameGroupName);
+        GetOrCreateGroup(WeaponInHandGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

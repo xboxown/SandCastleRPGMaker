@@ -63,6 +63,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Languages", Content = BuildLanguagesTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
+        tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs
         if (ProjectSession.IsUltima8) tabs.Items.Add(new TabItem { Header = "Ultima 8", Content = BuildUltima8Tab() }); // only an Ultima 8 project (SystemSettingsWindow.Ultima8.cs)
 
         if (startTab is not null) tabs.SelectedItem = tabs.Items.OfType<TabItem>().FirstOrDefault(t => (t.Header as string) == startTab);

@@ -39,6 +39,10 @@ internal sealed class SpriteAnimator
 
     public event Action<int>? Ticked;
 
+    /// <summary>The sprite it plays, and the frame showing now (a weapon in the hand follows the hand in it).</summary>
+    public SpriteEntry Sprite => _sprite;
+    public int FrameIndex => _frameIndex;
+
     /// <summary>A picture in the game world: how its frame sounds are heard from where it is (GameTestWindow.Hearing) - null when too far, then they're not played. Unset: heard as they are (the editors, the windows).</summary>
     public Func<(double Volume, double Balance)?>? Hearing { get; set; }
 

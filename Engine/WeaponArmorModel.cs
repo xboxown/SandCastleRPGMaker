@@ -25,6 +25,8 @@ public class WeaponSettings
 
     /// <summary>Exult's damage: each landed blow does 1..Damage, plus 1..Strength/3 (apply_damage). 127 or more always does 127.</summary>
     public int Damage { get; set; } = 4;
+    /// <summary>Its look held in the hand on the map (a sprite in the Sprite Editor's Weapon in hand group) - unset: not drawn in the hand.</summary>
+    public SpriteLink InHandSprite { get; set; } = new();
     /// <summary>Ultima 8 only: damage is random(0..this) + Damage + Strength / 5 (WeaponInfo::_damageModifier).</summary>
     public int U8DamageModifier { get; set; }
     /// <summary>Ultima 8 only: added to the wielder's Dexterity when it attacks (WeaponInfo::_dexAttackBonus).</summary>

@@ -42,7 +42,7 @@ public partial class SpriteFrameEditorWindow : Window
         "Custom"
     };
 
-    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false, bool isKeychainSprite = false)
+    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false, bool isKeychainSprite = false, bool isWeaponInHandSprite = false)
     {
         InitializeComponent();
         _sprite = sprite;
@@ -97,6 +97,8 @@ public partial class SpriteFrameEditorWindow : Window
         if (_isBloodSprite) SetUpBloodMode();
         if (_isTilesetGroup) SetUpStatesMode(FrameStatesGuideWindow.Tileset, 0); // a tile a frame: no animation, no sound
         if (isKeychainSprite) SetUpStatesMode(FrameStatesGuideWindow.Keychain, SpriteDatabase.KeychainFrames); // frame by how many keys
+        if (isWeaponInHandSprite) SetUpWeaponInHandMode(); // a weapon held in the hand: its frames, each with a grip point (SpriteFrameEditorWindow.WeaponHand.cs)
+        else if (!isTilesetGroup && !isFontSprite && !isBloodSprite && !isKeychainSprite) SetUpHandPoints(); // a character's frames: where the weapon hand is
     }
 
     /// <summary>A blood type: puddle-size frames only - nothing that animates or makes sound - and the Blood Guide alongside.</summary>
@@ -1056,6 +1058,7 @@ public partial class SpriteFrameEditorWindow : Window
             AddOverlayLine(PixelToDisplay(rendered, bmp, 0, slice.Top), PixelToDisplay(rendered, bmp, bmp.PixelWidth, slice.Top), Brushes.Magenta);
             AddOverlayLine(PixelToDisplay(rendered, bmp, 0, bmp.PixelHeight - slice.Bottom), PixelToDisplay(rendered, bmp, bmp.PixelWidth, bmp.PixelHeight - slice.Bottom), Brushes.Magenta);
         }
+        DrawWeaponMarkers(rendered, bmp); // a weapon's grip, a character frame's hand (SpriteFrameEditorWindow.WeaponHand.cs)
     }
 
     private void AddOverlayLine(Point a, Point b, Brush brush)

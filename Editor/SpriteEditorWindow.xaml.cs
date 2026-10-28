@@ -84,6 +84,7 @@ public partial class SpriteEditorWindow : Window
     /// <summary>The folders the engine and editors rely on by name: never renamed, deleted or given an identity.</summary>
     private static bool IsProtected(string name) =>
         name is SpriteDatabase.TilesetGroupName or SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.DialogFrameGroupName
+            or SpriteDatabase.WeaponInHandGroupName
         || SpriteDatabase.IsBundleGroup(name);
 
     /// <summary>Right-click a folder: what it's for (its identity), rename, paste, delete.</summary>
@@ -290,6 +291,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Keychain group is hardcoded and can't be deleted - Keychain objects take their look (a frame for each number of keys) from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
+        {
+            MessageBox.Show("The Weapon in hand group is hardcoded and can't be deleted - weapons take their look held in the hand from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName)
         {
             MessageBox.Show("The DialogFrame group is hardcoded and can't be deleted - Show Text takes its dialog box frames from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -322,6 +328,8 @@ public partial class SpriteEditorWindow : Window
         if (SpriteDatabase.IsBundleGroup(_currentGroup.Name)) new BundleGuideWindow(_currentGroup.Name) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.KeychainGroupName) new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName) new DialogFrameGuideWindow { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
+            new FrameStatesGuideWindow(null, FrameStatesGuideWindow.WeaponInHand(ProjectSession.SettingsProvider?.Invoke()?.WeaponInHand ?? new WeaponInHandSettings())) { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 
@@ -332,7 +340,7 @@ public partial class SpriteEditorWindow : Window
         }
         // In the Fonts group a new sprite is an extra font - offered only in the Book Editor's Text Font list.
         // In the Blood group a new sprite is a blood type: puddle sizes, never animated.
-        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name is not (SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName) };
+        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name is not (SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.WeaponInHandGroupName) };
         _currentGroup.Sprites.Add(entry);
         RefreshGroups();
         RefreshSprites();
@@ -395,7 +403,8 @@ public partial class SpriteEditorWindow : Window
         bool isFont = _currentGroup?.Name == SpriteDatabase.FontsGroupName; // every sprite in Fonts is a font: glyph frames, no sound or animation
         bool isBlood = _currentGroup?.Name == SpriteDatabase.BloodGroupName; // every sprite in Blood is a blood type: size frames, no sound or animation
         bool isKeychain = _currentGroup?.Name == SpriteDatabase.KeychainGroupName; // frames by how many keys: no sound or animation
-        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood, isKeychain) { Owner = this };
+        bool isWeaponInHand = _currentGroup?.Name == SpriteDatabase.WeaponInHandGroupName; // a weapon held in the hand: its frames as System Settings says, grip points
+        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood, isKeychain, isWeaponInHand) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
     }

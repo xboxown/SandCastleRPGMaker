@@ -37,6 +37,19 @@ public class FrameStatesGuideWindow : Window
         "- Each tile's own properties (walkable or not, its effects) are set in the Map Editor's Tile Properties, by tile number - so keep the tiles in the same order once a map uses them.\n" +
         "- Animated water or lava, and sounds, belong on objects (Object Editor, type Tile), not on the tilesheet.");
 
+    /// <summary>The Weapon in hand group's guide: its frames as System Settings > Weapon in hand sets them.</summary>
+    public static GuideText WeaponInHand(WeaponInHandSettings settings) => new(
+        "Weapon in Hand Guide",
+        settings.Smooth
+            ? $"This sprite is one weapon as it is held in the hand - smooth: each of the eight directions its own held frame and a swing of {Math.Clamp(settings.SwingFrames, 1, 8)} frames, {settings.FrameCount} frames in all. States, not an animation: no sound, no animation."
+            : "This sprite is one weapon as it is held in the hand, as Exult draws it (Actor::paint_weapon): 4 frames - held, and the swing pointing north, east and south. Characters facing east or west show them mirrored. States, not an animation: no sound, no animation.",
+        SpriteDatabase.WeaponInHandFrameNames(settings.Smooth, settings.SwingFrames),
+        "- Draw each frame as the weapon looks in a hand, then click the picture to set its grip point (a red cross) - where the hand holds it.\n" +
+        "- In the Object Editor, a weapon picks this sprite as its look in the hand.\n" +
+        "- In each character's pose sprites (Sprite Editor, any other folder), every frame gets a hand point: Set hand point, then click where the weapon hand is - \"No weapon here\" for a frame without one (lying down, asleep).\n" +
+        "- In play, the weapon a character holds is drawn with its grip on the hand of whatever frame they show: held while standing and walking, the swing frames through an attack pose (or the frame a pose frame names). Over the body, as Exult - or behind it, where a frame says so.\n" +
+        "- Exult's 4 frames, or smooth ones: System Settings > Weapon in hand (and how many swing frames). Changing it changes what these frames are.");
+
     private readonly SpriteEntry? _sprite;
     private readonly GuideText _text;
     private readonly WrapPanel _cells = new() { MaxWidth = 560 };
