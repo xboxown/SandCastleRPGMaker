@@ -92,6 +92,9 @@ public partial class GameTestWindow
     /// <summary>Hung on the wall in the Map Editor (ObjectInstance / PlacedItemInstance.HangsOnWall).</summary>
     private static bool HangsOnWall(object entity) => entity is ObjectInstance { HangsOnWall: true } or PlacedItemInstance { HangsOnWall: true };
 
+    /// <summary>Stays where it's put in the Map Editor (ObjectInstance / PlacedItemInstance.StaysPut): no gravity, otherwise an ordinary thing.</summary>
+    private static bool StaysPut(object entity) => entity is ObjectInstance { StaysPut: true } or PlacedItemInstance { StaysPut: true };
+
     /// <summary>Where the item's solid box sits relative to its sprite (set by moving the box in the size editor), in 8px units - added on top of where the item itself stands.</summary>
     private (int X, int Y) ResolveSolidOffset(PlacedItemInstance? item, ObjectInstance? obj)
     {
@@ -138,6 +141,7 @@ public partial class GameTestWindow
         {
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             if (HangsOnWall(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
+            if (StaysPut(body.Entity)) { settled.Add(body); continue; } // staying where it's put (a potion on a cabinet): at its height, and it holds up what's on it
             if (IsWallSetPiece(body.Entity)) { settled.Add(body); continue; } // a wall set's piece: at its designed height (the window on its half wall), and it holds up what's on it
             if (body.Entity is ObjectInstance { VehicleStateId: > 0 }) { settled.Add(body); continue; } // a vehicle's piece: held in its place by the vehicle (flying, too), and it holds up what's on it
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);

@@ -259,6 +259,14 @@ public class ObjectInstance : IHasDollState
     /// </summary>
     public bool HangsOnWall { get; set; }
 
+    /// <summary>
+    /// Stays where it's put (Map Editor, Free Placement - this placed copy only, off by default): a potion on top of a
+    /// cabinet, a dagger on a shelf. Like hanging on the wall it keeps the height it was put at and never falls; unlike it,
+    /// it's an ordinary thing in every other way - drawn as anything there is, holding up what's on it, picked up as usual
+    /// (put down again by hand, it's an ordinary thing that falls onto what's under it).
+    /// </summary>
+    public bool StaysPut { get; set; }
+
     /// <summary>A piece of a wall set (Wall Designer), split from it when the game starts: it stays at the height it was designed at (never falls), and is otherwise its own object - a wall, a window, a door.</summary>
     public bool WallSetPiece { get; set; }
 

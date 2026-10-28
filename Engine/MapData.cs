@@ -300,6 +300,9 @@ public class PlacedItemInstance : IHasContainerContents
     /// <summary>Hangs on the wall (Map Editor, Free Placement): see ObjectInstance.HangsOnWall.</summary>
     public bool HangsOnWall { get; set; }
 
+    /// <summary>Stays where it's put (Map Editor, Free Placement): see ObjectInstance.StaysPut.</summary>
+    public bool StaysPut { get; set; }
+
     /// <summary>
     /// A container's own contents for THIS placement, set in the Map Editor
     /// (Ctrl + double-click it). Null: it starts with the Container Editor's

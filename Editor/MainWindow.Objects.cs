@@ -139,7 +139,7 @@ public partial class MainWindow
         if ((x, y) == (dragged.X, dragged.Y) || !IsInsideMap(x, y)) return true;
         dragged.X = x;
         dragged.Y = y;
-        if (!dragged.HangsOnWall) { dragged.Z = MapFloors.BaseLift(FloorOf(dragged)); dragged.LiesUnder = false; } // settles anew on its new spot
+        if (!dragged.HangsOnWall && !dragged.StaysPut) { dragged.Z = MapFloors.BaseLift(FloorOf(dragged)); dragged.LiesUnder = false; } // settles anew on its new spot
         RedrawAfterSettle(dragged);
         SelectObjectInstance(dragged);
         StatusText.Text = $"Moved \"{ObjectName(dragged)}\" to ({x}, {y}).";
@@ -158,7 +158,7 @@ public partial class MainWindow
         var menu = new ContextMenu();
         if (existing is not null && obj is not null)
         {
-            menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (existing.HangsOnWall ? $"  (hangs on the wall, {RaiseOf(existing.Z)} lift{(RaiseOf(existing.Z) == 1 ? "" : "s")} up)" : ""), IsEnabled = false });
+            menu.Items.Add(new MenuItem { Header = $"{obj.Name} ({ObjectTypes.Name(obj.Type)})" + (existing.HangsOnWall || existing.StaysPut ? $"  ({(existing.HangsOnWall ? "hangs on the wall" : "stays where it's put")}, {RaiseOf(existing.Z)} lift{(RaiseOf(existing.Z) == 1 ? "" : "s")} up)" : ""), IsEnabled = false });
             AddOtherThingsHere(menu, existing, here, t => OpenObjectMenu(x, y, p, (ObjectInstance)t));
             AddObjectStateMenuItems(menu, obj, existing);
             menu.Items.Add(new Separator());
@@ -279,7 +279,7 @@ public partial class MainWindow
         StartsOpen = source.StartsOpen, StartsLocked = source.StartsLocked, StartsLit = source.StartsLit, OffsetX = source.OffsetX, OffsetY = source.OffsetY,
         StartStage = source.StartStage, StartsFullOfId = source.StartsFullOfId, LinkedInstanceIds = source.LinkedInstanceIds.ToList(),
         DestinationX = source.DestinationX, DestinationY = source.DestinationY, DestinationLift = source.DestinationLift,
-        HangsOnWall = source.HangsOnWall, BelongsToId = source.BelongsToId
+        HangsOnWall = source.HangsOnWall, StaysPut = source.StaysPut, BelongsToId = source.BelongsToId
     };
 
     private void CopyObjectInstance(ObjectInstance source)

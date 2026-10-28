@@ -92,7 +92,7 @@ typedef struct Thing
     cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
     const Sprite *lookOverride;                      /* Change Object Look: another sprite (NULL: its own) */
     int seq;                                         /* when last put down (0: when made, its uid) - ties in drawing order go to the later */
-    int elevates, liesUnder, wallSetPiece, vehicle, homeFloor; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
+    int elevates, liesUnder, wallSetPiece, vehicle, homeFloor, staysPut; /* gravity: rests on top / holds things up; put underneath; fixed pieces; the floor it's on */
     int hp, hpSet;                                   /* hit points left in play (Attack Object) */
     int spawned;                                     /* made at the start (a bed's cover): not saved, made again */
     int bodyN;                                       /* how many boxes it has from body on (stairs: a box a step) */
@@ -767,7 +767,7 @@ int world_build(cJSON *root)
         t->sizeZ = flat ? 0 : d->sizeZ;
         t->solid = d->solid && !(d->type == T_DOOR && t->open);
         t->solidOffX = turned ? d->solidOffY : d->solidOffX; t->solidOffY = turned ? d->solidOffX : d->solidOffY;
-        t->hangs = flag(o, "HangsOnWall");
+        t->hangs = flag(o, "HangsOnWall"); t->staysPut = flag(o, "StaysPut");
         t->elevates = d->elevates; t->liesUnder = flag(o, "LiesUnder"); t->wallSetPiece = flag(o, "WallSetPiece"); t->vehicle = num(o, "VehicleStateId", 0) > 0 ? num(o, "VehicleStateId", 0) : 0;
         t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
         if (t->sizeX < 1) t->sizeX = 1;
@@ -791,7 +791,7 @@ int world_build(cJSON *root)
         t->x = num(o, "X", 0); t->y = num(o, "Y", 0); t->z = num(o, "Z", 0); t->offX = num(o, "OffsetX", 0); t->offY = num(o, "OffsetY", 0);
         t->sizeX = num(data, "SizeX", 1); t->sizeY = num(data, "SizeY", 1); t->sizeZ = num(data, "SizeZ", 1);
         t->solid = flag(data, "IsSolid"); t->solidOffX = num(data, "SolidOffsetX", 0); t->solidOffY = num(data, "SolidOffsetY", 0);
-        t->hangs = flag(o, "HangsOnWall");
+        t->hangs = flag(o, "HangsOnWall"); t->staysPut = flag(o, "StaysPut");
         t->elevates = flag(data, "AllowElevation"); t->liesUnder = flag(o, "LiesUnder");
         t->homeFloor = floor_of(t->z < 0 ? 0 : t->z);
         add_thing_body(t);
@@ -2804,7 +2804,7 @@ static void settle_all(void)
         *s = (SettleBody){ b.left, b.top, b.width, b.depth, b.z, b.height, t->elevates || slab, slab || type == 32 /* Table */ || (type == T_TILE && t->def->solid),
                            slab || (type == T_TILE && t->def->solid), t->liesUnder, t->hangs, 0, n, t };
         /* a tile has no gravity (a floor, a roof); hung on the wall, a wall set's piece, a vehicle's piece: they stay where they are */
-        s->fixed = type == T_TILE || t->hangs || t->wallSetPiece || t->vehicle;
+        s->fixed = type == T_TILE || t->hangs || t->staysPut || t->wallSetPiece || t->vehicle; /* staying where it's put: at its height, holding up what's on it */
         n++;
     }
     qsort(all, (size_t)n, sizeof(SettleBody), by_lift);
@@ -2953,6 +2953,10 @@ void world_thing_move(int uid, int x, int y, int onFloor)
     if (!t || x < 0 || y < 0 || x >= mapW || y >= mapH) return;
     t->x = x; t->y = y; t->offX = t->offY = 0;
     t->seq = nextUid++; /* put down again: over what it ties with, as the Windows engine re-adds its visual */
+    /* put down by hand: no longer tucked underneath anything, hung on the wall, nor staying put (DropOnMap) */
+    int wasHung = t->hangs;
+    t->liesUnder = 0; t->hangs = 0; t->staysPut = 0;
+    if (wasHung && t->solid && t->body < 0) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); } /* off the wall: in the way again */
     Body b;
     thing_box(t, &b);
     if (t->body >= 0) bodies[t->body].z = -100000;
@@ -3654,7 +3658,7 @@ static cJSON *thing_json(const Thing *t, int instanceId, cJSON *(*extra)(int uid
     else { set_num(e, "Category", t->category); set_num(e, "ItemId", t->itemId); }
     set_num(e, "X", t->x); set_num(e, "Y", t->y); set_num(e, "Z", t->z);
     set_num(e, "OffsetX", t->offX); set_num(e, "OffsetY", t->offY); set_num(e, "Facing", t->facing);
-    set_bool(e, "HangsOnWall", t->hangs); set_bool(e, "LiesUnder", t->liesUnder);
+    set_bool(e, "HangsOnWall", t->hangs); set_bool(e, "StaysPut", t->staysPut); set_bool(e, "LiesUnder", t->liesUnder);
     if (t->owner) set_num(e, "BelongsToId", t->owner - 1);
     if (extra) extra(t->uid, e);
     return e;

@@ -762,8 +762,8 @@ public partial class GameTestWindow
         SetMapPosition(item, obj, newCellX, newCellY, newOffsetX, newOffsetY);
         SetZ((object?)item ?? obj!, newZ);
         ForgetHomeFloor((object?)item ?? obj!); // put down on the floor the player is on
-        if (item is not null) (item.LiesUnder, item.HangsOnWall) = (false, false); // put down by hand: no longer tucked underneath anything, nor hung on the wall
-        if (obj is not null) (obj.LiesUnder, obj.HangsOnWall) = (false, false);
+        if (item is not null) (item.LiesUnder, item.HangsOnWall, item.StaysPut) = (false, false, false); // put down by hand: no longer tucked underneath anything, hung on the wall, nor staying put
+        if (obj is not null) (obj.LiesUnder, obj.HangsOnWall, obj.StaysPut) = (false, false, false);
         if (obj is not null) NoteGlassFall(obj, _playerZ, newZ); // glass let go of above a lower floor falls - and maybe shatters
         // Gravity everywhere: whatever rested on it where it came from falls, and so does the player if it was under them.
         SettleWorld();
