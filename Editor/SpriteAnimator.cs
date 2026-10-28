@@ -92,12 +92,13 @@ internal sealed class SpriteAnimator
     }
 
     /// <summary>The shared clock's tick: on (or past) its time, the next frame.</summary>
-    internal void Tick(double nowMs)
+    internal bool Tick(double nowMs)
     {
-        if (!_running || nowMs < _dueMs) return;
+        if (!_running || nowMs < _dueMs) return false;
         // Behind by more than a frame (the window was busy): catch up the time, not every frame.
         _dueMs = nowMs - _dueMs > _intervalMs ? nowMs + _intervalMs : _dueMs + _intervalMs;
         Advance();
+        return true;
     }
 
     private void Advance()
@@ -151,6 +152,9 @@ internal static class AnimationClock
 
     public static double NowMs => Watch.Elapsed.TotalMilliseconds;
 
+    /// <summary>After a tick that moved any animator on a frame: what follows a frame (a weapon in the hand) moves with it, not a game frame later.</summary>
+    public static event Action? FramesChanged;
+
     public static void Add(SpriteAnimator animator)
     {
         if (!Running.Add(animator)) return;
@@ -180,7 +184,9 @@ internal static class AnimationClock
         long start = System.Diagnostics.Stopwatch.GetTimestamp();
         if (_changed) { _snapshot = Running.ToArray(); _changed = false; }
         double now = NowMs;
-        foreach (var animator in _snapshot) animator.Tick(now);
+        bool changed = false;
+        foreach (var animator in _snapshot) changed |= animator.Tick(now);
+        if (changed) FramesChanged?.Invoke();
         TickMs += System.Diagnostics.Stopwatch.GetElapsedTime(start).TotalMilliseconds;
     }
 }

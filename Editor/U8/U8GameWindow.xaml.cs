@@ -226,6 +226,7 @@ public partial class U8GameWindow : Window
         Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (U8GameWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
+        AnimationClock.FramesChanged += UpdateWeaponsInHand; // a character's frame changed: its weapon moves to that frame's hand at once
 
         _stayTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _stayTimer.Tick += (_, _) =>
@@ -235,7 +236,7 @@ public partial class U8GameWindow : Window
         };
         _stayTimer.Start();
 
-        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); SoundPlayback.StopAll(); StopVideo(); }; // the game's music and sounds end with it
+        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; AnimationClock.FramesChanged -= UpdateWeaponsInHand; StopAllAnimators(); SoundPlayback.StopAll(); StopVideo(); }; // the game's music and sounds end with it
     }
 
     /// <summary>
@@ -1788,7 +1789,11 @@ public partial class U8GameWindow : Window
         _lastRenderTime = now;
         _logicFrame++;
         _frameWork.Restart();
-        try { GameFrame(deltaSeconds); }
+        try
+        {
+            GameFrame(deltaSeconds);
+            UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
+        }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }
 
@@ -1798,7 +1803,6 @@ public partial class U8GameWindow : Window
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
-        UpdateWeaponsInHand(); // the weapon held, drawn in the hand of the frame shown (Exult's Actor::paint_weapon)
         FollowU8Bark(); // Ultima 8: the words over the speaker's head follow it (U8GameWindow.U8Talk.cs)
         UpdateGamePause(); // Ultima 8: windows don't pause - only a message box, choosing a target, sleeping, a video... (U8GameWindow.Pause.cs)
         SoakTest(deltaSeconds * 1000); // only when measuring (U8GameWindow.Perf.cs)

@@ -220,6 +220,7 @@ public partial class GameTestWindow : Window
         Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
+        AnimationClock.FramesChanged += UpdateWeaponsInHand; // a character's frame changed: its weapon moves to that frame's hand at once
 
         _stayTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(1) };
         _stayTimer.Tick += (_, _) =>
@@ -229,7 +230,7 @@ public partial class GameTestWindow : Window
         };
         _stayTimer.Start();
 
-        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; StopAllAnimators(); SoundPlayback.StopAll(); StopVideo(); }; // the game's music and sounds end with it
+        Closed += (_, _) => { _stayTimer?.Stop(); _identifyTimer?.Stop(); CompositionTarget.Rendering -= GameLoop_Rendering; AnimationClock.FramesChanged -= UpdateWeaponsInHand; StopAllAnimators(); SoundPlayback.StopAll(); StopVideo(); }; // the game's music and sounds end with it
     }
 
     /// <summary>
@@ -1772,7 +1773,11 @@ public partial class GameTestWindow : Window
         _lastRenderTime = now;
         _logicFrame++;
         _frameWork.Restart();
-        try { GameFrame(deltaSeconds); }
+        try
+        {
+            GameFrame(deltaSeconds);
+            UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
+        }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }
 
@@ -1782,7 +1787,6 @@ public partial class GameTestWindow : Window
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
-        UpdateWeaponsInHand(); // the weapon held, drawn in the hand of the frame shown (Exult's Actor::paint_weapon)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         SoakTest(deltaSeconds * 1000); // only when measuring (GameTestWindow.Perf.cs)
         using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (GameTestWindow.Perf.cs)

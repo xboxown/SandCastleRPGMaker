@@ -11,10 +11,15 @@ public class SpriteFrame
 
     /// <summary>
     /// A character's frame: where its weapon hand is, in this frame's pixels (Exult's weapon offset for an actor frame,
-    /// wihh) - -1: no weapon is drawn in this frame (lying down, asleep; Exult's 255).
+    /// wihh) - it may be a little outside the picture, a weapon held out from the body. Both NoHand (-1, -1): no weapon
+    /// is drawn in this frame (lying down, asleep; Exult's 255).
     /// </summary>
-    public int HandX { get; set; } = -1;
-    public int HandY { get; set; } = -1;
+    public int HandX { get; set; } = NoHand;
+    public int HandY { get; set; } = NoHand;
+    public const int NoHand = -1;
+    /// <summary>This frame has a hand point (HandX/HandY aren't both NoHand).</summary>
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasHand => HandX != NoHand || HandY != NoHand;
     /// <summary>A character's frame: which frame of the weapon-in-hand sprite it shows (-1: chosen by itself - held, or the swing for an attack).</summary>
     public int WeaponFrame { get; set; } = -1;
     /// <summary>A character's frame: the weapon drawn behind the body (facing away) - else over it, as Exult paints it.</summary>

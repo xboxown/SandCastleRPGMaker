@@ -26,6 +26,7 @@ public partial class SpriteFrameEditorWindow
     private CheckBox? _weaponBehindCheck;
     private TextBlock? _handText;
     private bool _weaponUiSuppress;
+    private WeaponPreviewWindow? _weaponPreview;
 
     private static WeaponInHandSettings WeaponSettings => ProjectSession.SettingsProvider?.Invoke()?.WeaponInHand ?? new WeaponInHandSettings();
 
@@ -60,16 +61,19 @@ public partial class SpriteFrameEditorWindow
         place.Unchecked += (_, _) => { _placingHand = false; OverlayCanvas.Background = null; OverlayCanvas.Cursor = null; };
         row.Children.Add(place);
         var none = new Button { Content = "No weapon here", ToolTip = "This frame shows no weapon (lying down, asleep) - Exult's 255", Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(6, 0, 6, 0) };
-        none.Click += (_, _) => { if (CurrentFrame() is { } f) { (f.HandX, f.HandY) = (-1, -1); RedrawOverlay(); } };
+        none.Click += (_, _) => { if (CurrentFrame() is { } f) { (f.HandX, f.HandY) = (SpriteFrame.NoHand, SpriteFrame.NoHand); RedrawOverlay(); } };
         row.Children.Add(none);
+        var preview = new Button { Content = "Preview weapon...", ToolTip = "A window showing a weapon in this frame's hand, as the game draws it - it follows the frame you're on. Drag the weapon there to move this frame's hand point", Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(6, 0, 6, 0) };
+        preview.Click += (_, _) => ShowWeaponPreview();
+        row.Children.Add(preview);
         var choices = new List<string> { "Automatic" };
         choices.AddRange(SpriteDatabase.WeaponInHandFrameNames(settings.Smooth, settings.SwingFrames));
         _weaponFrameCombo = new ComboBox { ItemsSource = choices, Width = 200, ToolTip = "Which frame of the weapon in hand this frame shows. Automatic: held - or, in an attack pose, the swing frame for this frame of it", Margin = new Thickness(0, 0, 4, 0) };
-        _weaponFrameCombo.SelectionChanged += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) f.WeaponFrame = _weaponFrameCombo.SelectedIndex - 1; };
+        _weaponFrameCombo.SelectionChanged += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) { f.WeaponFrame = _weaponFrameCombo.SelectedIndex - 1; _weaponPreview?.ShowFrame(_currentFrameIndex); } };
         row.Children.Add(_weaponFrameCombo);
         _weaponBehindCheck = new CheckBox { Content = "Behind the body", VerticalAlignment = VerticalAlignment.Center, ToolTip = "The weapon drawn behind the body in this frame (facing away) - else over it, as Exult", Margin = new Thickness(0, 0, 6, 0) };
-        _weaponBehindCheck.Checked += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) f.WeaponBehind = true; };
-        _weaponBehindCheck.Unchecked += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) f.WeaponBehind = false; };
+        _weaponBehindCheck.Checked += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) { f.WeaponBehind = true; _weaponPreview?.ShowFrame(_currentFrameIndex); } };
+        _weaponBehindCheck.Unchecked += (_, _) => { if (!_weaponUiSuppress && CurrentFrame() is { } f) { f.WeaponBehind = false; _weaponPreview?.ShowFrame(_currentFrameIndex); } };
         row.Children.Add(_weaponBehindCheck);
         _handText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Opacity = 0.75 };
         row.Children.Add(_handText);
@@ -82,6 +86,18 @@ public partial class SpriteFrameEditorWindow
             RedrawOverlay();
             e.Handled = true;
         };
+    }
+
+    /// <summary>The weapon preview window (WeaponPreviewWindow): opened once, it follows this editor's frame.</summary>
+    private void ShowWeaponPreview()
+    {
+        if (_weaponPreview is not null) { _weaponPreview.Activate(); return; }
+        _weaponPreview = new WeaponPreviewWindow(_sprite) { Owner = this };
+        _weaponPreview.Closed += (_, _) => _weaponPreview = null;
+        _weaponPreview.HandMoved += RedrawOverlay; // dragged there in the preview: the ring follows
+        _weaponPreview.ChoiceChanged += RedrawOverlay; // another weapon, facing or attacking: the hand point checked again
+        _weaponPreview.Show();
+        _weaponPreview.ShowFrame(_currentFrameIndex);
     }
 
     private SpriteFrame? CurrentFrame() => _currentFrameIndex >= 0 && _currentFrameIndex < _sprite.Frames.Count ? _sprite.Frames[_currentFrameIndex] : null;
@@ -111,14 +127,25 @@ public partial class SpriteFrameEditorWindow
             return;
         }
         if (_handText is null) return;
+        _weaponPreview?.ShowFrame(_currentFrameIndex); // the preview follows the frame and its hand point
         _weaponUiSuppress = true;
         if (_weaponFrameCombo is not null) _weaponFrameCombo.SelectedIndex = Math.Clamp(frame.WeaponFrame + 1, 0, _weaponFrameCombo.Items.Count - 1);
         if (_weaponBehindCheck is not null) _weaponBehindCheck.IsChecked = frame.WeaponBehind;
         _weaponUiSuppress = false;
-        if (frame.HandX < 0) { _handText.Text = "No weapon in this frame."; return; }
+        if (!frame.HasHand) { _handText.Text = "No weapon in this frame."; return; }
         _handText.Text = $"Hand at {frame.HandX}, {frame.HandY}.";
         var h = PixelToDisplay(rendered, bmp, frame.HandX, frame.HandY);
         var ring = new Ellipse { Width = 12, Height = 12, Stroke = Brushes.Gold, StrokeThickness = 2, IsHitTestVisible = false };
+        // The weapon (the preview's, else the last previewed) reaching out of the frame: the ring pulses red.
+        var (weapon, facing, attacking) = _weaponPreview?.Choice ?? WeaponPreviewWindow.DefaultChoice(_sprite);
+        if (weapon is not null && WeaponInHandLook.WeaponBounds(WeaponSettings, _sprite, _currentFrameIndex, weapon, facing, attacking) is { } reach
+            && !new Rect(0, 0, bmp.PixelWidth, bmp.PixelHeight).Contains(reach))
+        {
+            ring.Stroke = Brushes.Red;
+            ring.Fill = new SolidColorBrush(Color.FromArgb(0x60, 0xFF, 0, 0));
+            ring.BeginAnimation(OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(1, 0.2, TimeSpan.FromMilliseconds(450)) { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever });
+            _handText.Text += $" {weapon.Name} reaches out of the frame.";
+        }
         Canvas.SetLeft(ring, h.X - 6);
         Canvas.SetTop(ring, h.Y - 6);
         OverlayCanvas.Children.Add(ring);

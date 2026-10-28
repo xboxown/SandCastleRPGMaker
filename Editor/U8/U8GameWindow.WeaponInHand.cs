@@ -40,7 +40,7 @@ public partial class U8GameWindow
         int index = animator.FrameIndex;
         if (index < 0 || index >= sprite.Frames.Count) return;
         var frame = sprite.Frames[index];
-        if (frame.HandX < 0 || FrameCache.Get(frame.FilePath) is not { } bodyPicture) return; // no weapon in this frame
+        if (!frame.HasHand || FrameCache.Get(frame.FilePath) is not { } bodyPicture) return; // no weapon in this frame
         var (weaponFrame, mirrored) = WeaponFrameFor(frame, index, sprite.Frames.Count, facing, IsAttackPose(weapon, poseName));
         var heldFrame = held.Frames[Math.Clamp(weaponFrame, 0, held.Frames.Count - 1)];
         if (FrameCache.Get(heldFrame.FilePath) is not { } weaponPicture) return;
@@ -67,7 +67,7 @@ public partial class U8GameWindow
         Canvas.SetLeft(image, handX - gripX);
         Canvas.SetTop(image, handY - gripY);
         // Exult's reflected frames swap x and y (about the grip): a character facing east or west.
-        image.RenderTransform = mirrored ? new MatrixTransform(0, 1, 1, 0, gripX - gripY, gripY - gripX) : Transform.Identity;
+        image.RenderTransform = mirrored ? WeaponInHandLook.MirrorAboutGrip(gripX, gripY) : Transform.Identity;
         image.Opacity = body.Opacity;
         Panel.SetZIndex(image, Panel.GetZIndex(body) + (frame.WeaponBehind ? -1 : 1));
         shown.Add(body);
@@ -77,25 +77,7 @@ public partial class U8GameWindow
     private static bool IsAttackPose(WorldObject weapon, string? poseName) =>
         poseName is { Length: > 0 } name && (name == weapon.Weapon.AttackPose || name == weapon.Weapon.ShootPose || name is "Attacking Melee" or "Shooting" or "Attack");
 
-    /// <summary>
-    /// Which weapon frame a character frame shows, and whether mirrored. Its own choice, else: Exult's - held, or through
-    /// an attack the swing pointing south, east, north (figure_weapon_pos: 4, 3, 2), mirrored facing east or west;
-    /// smooth - the direction's held frame, or its swing frame for this point of the attack.
-    /// </summary>
-    private (int Frame, bool Mirrored) WeaponFrameFor(SpriteFrame frame, int index, int count, SpriteDirection facing, bool attacking)
-    {
-        var settings = _systemSettings.WeaponInHand;
-        if (!settings.Smooth)
-        {
-            bool mirrored = facing is SpriteDirection.East or SpriteDirection.West;
-            if (frame.WeaponFrame >= 0) return (frame.WeaponFrame, mirrored);
-            if (!attacking) return (0, mirrored);
-            int phase = Math.Min(2, index * 3 / Math.Max(1, count));
-            return (3 - phase, mirrored);
-        }
-        if (frame.WeaponFrame >= 0) return (frame.WeaponFrame, false);
-        int swing = Math.Clamp(settings.SwingFrames, 1, 8), first = (int)facing * (1 + swing);
-        if (!attacking) return (first, false);
-        return (first + 1 + Math.Min(swing - 1, index * swing / Math.Max(1, count)), false);
-    }
+    /// <summary>Which weapon frame a character frame shows, and whether mirrored (WeaponInHandLook - the Sprite Editor's preview shows the same).</summary>
+    private (int Frame, bool Mirrored) WeaponFrameFor(SpriteFrame frame, int index, int count, SpriteDirection facing, bool attacking) =>
+        WeaponInHandLook.FrameFor(_systemSettings.WeaponInHand, frame, index, count, facing, attacking);
 }
