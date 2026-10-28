@@ -788,6 +788,9 @@ public partial class ObjectEditorWindow : Window
             RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
             Canvas.SetLeft(picture, pad * zoom);
             Canvas.SetTop(picture, pad * zoom);
+            // The game's depth (GameTestWindow.ChairOverSitter, Exult's Sit_actor_action offsets + Game_object::compare): a chair facing
+            // north or west is in front of its sitter - drawn over them; facing south or east, the sitter is over it. Beds: the sleeper over it.
+            Panel.SetZIndex(picture, !bed && _furnitureFacing is SpriteDirection.North or SpriteDirection.West or SpriteDirection.NorthWest ? 2 : 0);
             canvas.Children.Add(picture);
         }
 
@@ -821,11 +824,12 @@ public partial class ObjectEditorWindow : Window
                 {
                     // Exactly as the game draws it: in a box rounded up to 8 pixels (fitted, centred), the box's bottom middle on the spot.
                     var (bw, bh) = SpriteSizing.Quantize(body.PixelWidth, body.PixelHeight);
-                    var ghost = new Image { Source = body, Width = bw * zoom, Height = bh * zoom, Stretch = Stretch.Uniform, Opacity = 0.8, Tag = i, Cursor = Cursors.SizeAll,
+                    var ghost = new Image { Source = body, Width = bw * zoom, Height = bh * zoom, Stretch = Stretch.Uniform, Tag = i, Cursor = Cursors.SizeAll, // solid, as the game draws it
                         ToolTip = $"{(bed ? "Sleeper" : "Sitter")} {i + 1} - drag to move, right-click to remove" };
                     RenderOptions.SetBitmapScalingMode(ghost, BitmapScalingMode.NearestNeighbor);
                     Canvas.SetLeft(ghost, (spot.X + pad - bw / 2.0) * zoom);
                     Canvas.SetTop(ghost, (spot.Y + pad - bh) * zoom);
+                    Panel.SetZIndex(ghost, 1); // under a chair facing north or west, over any other
                     ghost.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
                     ghost.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
                     canvas.Children.Add(ghost);
@@ -835,6 +839,7 @@ public partial class ObjectEditorWindow : Window
                 dot.Children.Add(new TextBlock { Text = (i + 1).ToString(), FontSize = 10, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center });
                 Canvas.SetLeft(dot, (spot.X + pad) * zoom - 9);
                 Canvas.SetTop(dot, (spot.Y + pad) * zoom - 9);
+                Panel.SetZIndex(dot, 3); // always on top, to grab
                 dot.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
                 dot.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
                 canvas.Children.Add(dot);
