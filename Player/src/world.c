@@ -61,7 +61,7 @@ typedef struct ObjectDef
 {
     int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile, portable;
     const Sprite *own, *open, *lit, *spent;
-    const Sprite *facing[8], *turned[8];
+    const Sprite *facing[8], *turned[8], *back[8]; /* back: a chair's back per facing, drawn over its sitter (FurnitureFacing.BackSprite) */
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
     int brightness, gives;            /* a light: how bright, what it gives (Exult levels, the dusk look, daylight) */
@@ -220,6 +220,7 @@ static void read_objects(cJSON *project)
         {
             int dir = dir_of(f->string);
             d->facing[dir] = link_of(get(f, "Sprite"));
+            d->back[dir] = get(get(f, "BackSprite"), "SpriteName") && str(get(f, "BackSprite"), "SpriteName")[0] ? link_of(get(f, "BackSprite")) : NULL;
             cJSON *spot;
             cJSON_ArrayForEach(spot, get(f, "Spots"))
                 if (d->spotCount[dir] < 8) { d->spotX[dir][d->spotCount[dir]] = get(spot, "X") ? get(spot, "X")->valuedouble : 0; d->spotY[dir][d->spotCount[dir]++] = get(spot, "Y") ? get(spot, "Y")->valuedouble : 0; }
@@ -1161,7 +1162,7 @@ static void frame_sound(int key, const Sprite *s, uint32_t ms, double cx, double
     double v, b;
     if (changed && s->frames[f].sound >= 0 && world_hearing_at(cx, cy, &v, &b)) sound_play_at(s->frames[f].sound, v, b); /* from where it's drawn */
 }
-static void seated_draw_order(int count);
+static int seated_draw_order(int count);
 static uint32_t lastMs;
 
 static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
@@ -1415,7 +1416,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         }
         if (liftTo >= 0) d->key = liftTo * 10000000.0 - 2500000.0 + (d->key - d->band * 10000000.0) * 0.1; /* over that floor's slabs, under all that stands on it */
     }
-    seated_draw_order(count);
+    count = seated_draw_order(count);
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
     for (int i = 0; i < count; i++)
     {
@@ -2592,22 +2593,33 @@ static void spawn_bed_covers(void)
 void world_cancel_player_sit(void) { pendingSit.phase = 0; }
 
 /* Someone sitting or lying is drawn over their chair or bed, and a bed's cover over its sleeper (or over the empty bed). */
-static void seated_draw_order(int count)
+/* The chair (or bed) under its sitter whichever way it faces; a chair's back (if it has one) laid over the chair, over them. Returns the new count. */
+static int seated_draw_order(int count)
 {
     seats_ready();
+    int total = count;
     for (int i = 0; i < count; i++)
     {
         Drawn *d = &drawn[i];
         if (d->actor < 0 || d->actor > npcCount || !seats[d->actor].uid) continue;
         Thing *f = thing_by_uid(seats[d->actor].uid);
-        /* Exult (Sit_actor_action::offsets, Game_object::compare): a chair facing north or west is drawn over its sitter, else the sitter over it */
-        int under = f && !seats[d->actor].bed && (f->facing == DIR_N || f->facing == DIR_W || f->facing == DIR_NW);
+        int chair = -1;
         for (int j = 0; j < count; j++)
             if (drawn[j].thing == seats[d->actor].uid)
             {
                 if (drawn[j].key + 0.5 > d->key) d->key = drawn[j].key + 0.5;
-                if (under) drawn[j].key = d->key + 0.25; /* over what the chair is over, the chair itself just over the sitter */
+                chair = j;
             }
+        int fi = f && f->def && !seats[d->actor].bed ? furniture_facing(f->def, f->facing) : -1;
+        const Picture *backPic = fi >= 0 && f->def->back[fi] ? sprite_picture_at(f->def->back[fi], lastMs) : NULL;
+        if (chair >= 0 && backPic)
+        {
+            Drawn copy = drawn[chair];
+            double key = drawn[i].key + 0.25;
+            Drawn *b = add_drawn(copy.band, 0, backPic, copy.x, copy.y, copy.w, copy.h, &total); /* may move the array: d is not used after this */
+            if (b) { int order = b->order; *b = copy; b->picture = backPic; b->key = key; b->order = order; }
+            d = &drawn[i];
+        }
         Thing *c = f && seats[d->actor].bed ? cover_of(f) : NULL;
         if (c) for (int j = 0; j < count; j++) if (drawn[j].thing == c->uid) drawn[j].key = d->key + 0.25;
     }
@@ -2618,6 +2630,7 @@ static void seated_draw_order(int count)
         Thing *c = cover_of(bed);
         if (c) for (int j = 0; j < count; j++) if (drawn[j].thing == c->uid && drawn[j].key < drawn[i].key + 0.5) drawn[j].key = drawn[i].key + 0.5;
     }
+    return total;
 }
 
 /* What a click lands on: the topmost character (actor) or thing (uid) whose picture is under the point. */

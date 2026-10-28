@@ -681,6 +681,12 @@ public partial class ObjectEditorWindow : Window
 
             detail.Children.Add(SpritePicker($"{_furnitureFacing} sprite", () => (facing.Sprite.SpriteGroup, facing.Sprite.SpriteName),
                 (g, n) => { facing.Sprite.SpriteGroup = g; facing.Sprite.SpriteName = n; ShowFacing(); }));
+            if (!bed)
+            {
+                detail.Children.Add(SpritePicker($"{_furnitureFacing} chair back (drawn over the sitter - optional)", () => (facing.BackSprite.SpriteGroup, facing.BackSprite.SpriteName),
+                    (g, n) => { facing.BackSprite.SpriteGroup = g; facing.BackSprite.SpriteName = n; ShowFacing(); }));
+                detail.Children.Add(Note("The chair is always drawn under whoever sits in it. For a chair facing north or west, give it its back: a copy of this sprite with everything but the backrest erased (see-through), the same size - it is laid exactly over the chair and drawn over the sitter, so the seat is under them and the back covers their back."));
+            }
             detail.Children.Add(BuildSpotEditor(facing, bed));
         }
         block.Children.Add(poseBorder);
@@ -788,10 +794,18 @@ public partial class ObjectEditorWindow : Window
             RenderOptions.SetBitmapScalingMode(picture, BitmapScalingMode.NearestNeighbor);
             Canvas.SetLeft(picture, pad * zoom);
             Canvas.SetTop(picture, pad * zoom);
-            // The game's depth (GameTestWindow.ChairOverSitter, Exult's Sit_actor_action offsets + Game_object::compare): a chair facing
-            // north or west is in front of its sitter - drawn over them; facing south or east, the sitter is over it. Beds: the sleeper over it.
-            Panel.SetZIndex(picture, !bed && _furnitureFacing is SpriteDirection.North or SpriteDirection.West or SpriteDirection.NorthWest ? 2 : 0);
+            Panel.SetZIndex(picture, 0); // the chair or bed: always under the sitter or sleeper, as in the game
             canvas.Children.Add(picture);
+            // A chair's back (optional): laid exactly over the chair, over the sitter - as the game draws it.
+            if (!bed && facing.BackSprite.IsSet && SolidSizeEditor.LoadSpriteFrame(_sprites, facing.BackSprite.SpriteGroup, facing.BackSprite.SpriteName) is { } back)
+            {
+                var backPicture = new Image { Source = back, Width = w * zoom, Height = h * zoom, Stretch = Stretch.Uniform, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(backPicture, BitmapScalingMode.NearestNeighbor);
+                Canvas.SetLeft(backPicture, pad * zoom);
+                Canvas.SetTop(backPicture, pad * zoom);
+                Panel.SetZIndex(backPicture, 2);
+                canvas.Children.Add(backPicture);
+            }
         }
 
         // The body drawn on each spot: a character's Sleeping (bed) or Sit (chair) pose for this facing.
@@ -829,7 +843,7 @@ public partial class ObjectEditorWindow : Window
                     RenderOptions.SetBitmapScalingMode(ghost, BitmapScalingMode.NearestNeighbor);
                     Canvas.SetLeft(ghost, (spot.X + pad - bw / 2.0) * zoom);
                     Canvas.SetTop(ghost, (spot.Y + pad - bh) * zoom);
-                    Panel.SetZIndex(ghost, 1); // under a chair facing north or west, over any other
+                    Panel.SetZIndex(ghost, 1); // over the chair, under its back
                     ghost.MouseLeftButtonDown += (_, e) => { dragging = index; canvas.CaptureMouse(); e.Handled = true; };
                     ghost.MouseRightButtonDown += (_, e) => { facing.Spots.RemoveAt(index); Redraw(); e.Handled = true; };
                     canvas.Children.Add(ghost);

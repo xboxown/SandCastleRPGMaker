@@ -1,3 +1,4 @@
+using System.Windows.Media;
 using System.Windows;
 using System.Windows.Controls;
 using SandcastleRpgMaker.Engine;
@@ -361,27 +362,57 @@ public partial class GameTestWindow
     {
         if (!_seats.TryGetValue(who, out var seat) || VisualOf(seat.Furniture) is not { } furnitureVisual) return null;
         int z = Math.Max(zIndex, Panel.GetZIndex(furnitureVisual) + 1);
-        if (ChairOverSitter(seat)) { Panel.SetZIndex(furnitureVisual, z + 1); return z; } // its back nearer the viewer: over what the chair is over, the chair itself just over them
+        if (_chairBacks.TryGetValue(seat.Furniture, out var back)) Panel.SetZIndex(back, z + 1); // the chair's back over them
         if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
             Panel.SetZIndex(coverVisual, z + 1);
         return z;
     }
 
-    /// <summary>Exult (Sit_actor_action::offsets + Game_object::compare): the sitter sits a tile off the chair the way it faces - a chair facing north or west is then in front of them.</summary>
-    private static bool ChairOverSitter(Seat seat) => !seat.Bed && seat.Furniture.Facing is SpriteDirection.North or SpriteDirection.West or SpriteDirection.NorthWest;
+    /// <summary>Occupied chairs' backs (FurnitureFacing.BackSprite): a picture laid exactly over the chair, drawn over its sitter.</summary>
+    private readonly Dictionary<ObjectInstance, Image> _chairBacks = new(ReferenceEqualityComparer.Instance);
+
+    /// <summary>The chair's back for its facing, if it has one.</summary>
+    private SpriteEntry? ChairBackOf(ObjectInstance chair) =>
+        DefinitionOf(chair) is { Type: ObjectType.Chair } obj && obj.Furniture.Resolve(chair.Facing) is { BackSprite.IsSet: true } facing
+            ? ObjectLooks.Find(_sprites, facing.BackSprite.SpriteGroup, facing.BackSprite.SpriteName) : null;
+
+    /// <summary>Each occupied chair with a back gets it, laid exactly over the chair; a chair nobody sits in any more loses it.</summary>
+    private void SyncChairBacks()
+    {
+        var occupied = _seats.Values.Where(s => !s.Bed).Select(s => s.Furniture).ToHashSet(ReferenceEqualityComparer.Instance);
+        foreach (var (chair, back) in _chairBacks.ToList())
+            if (!occupied.Contains(chair) || ChairBackOf(chair) is null || VisualOf(chair) is null) { GameCanvas.Children.Remove(back); _chairBacks.Remove(chair); }
+        foreach (var chair in occupied.Cast<ObjectInstance>())
+        {
+            if (ChairBackOf(chair) is not { Frames.Count: > 0 } sprite || VisualOf(chair) is not FrameworkElement chairVisual) continue;
+            if (!_chairBacks.TryGetValue(chair, out var back))
+            {
+                back = new Image { Stretch = Stretch.Uniform, IsHitTestVisible = false, Source = LoadStaticFrame(sprite.Frames[0].FilePath) };
+                RenderOptions.SetBitmapScalingMode(back, BitmapScalingMode.NearestNeighbor);
+                GameCanvas.Children.Add(back);
+                _chairBacks[chair] = back;
+            }
+            (back.Width, back.Height) = (chairVisual.Width, chairVisual.Height);
+            Canvas.SetLeft(back, Canvas.GetLeft(chairVisual));
+            Canvas.SetTop(back, Canvas.GetTop(chairVisual));
+            back.RenderTransform = chairVisual.RenderTransform;
+            back.Visibility = chairVisual.Visibility;
+            back.Opacity = chairVisual.Opacity;
+        }
+    }
 
     private void FixFurnitureDrawOrder()
     {
+        SyncChairBacks();
         foreach (var (who, seat) in _seats)
         {
             if (VisualOf(seat.Furniture) is not { } furnitureVisual) continue;
             int z = Panel.GetZIndex(furnitureVisual) + 1;
             UIElement? sitter = who == _player ? _playerImage : MapCharacterOf(who)?.Visual;
             if (sitter is null) continue;
-            // Exult (Sit_actor_action::offsets, Game_object::compare): the sitter is a tile off the chair the way it faces, so a chair
-            // facing north or west (its back nearer the viewer) is drawn over the sitter; facing south or east, the sitter over it.
+            // The chair under its sitter (whichever way it faces); its back, if it has one, over them.
             Panel.SetZIndex(sitter, Math.Max(Panel.GetZIndex(sitter), z));
-            if (ChairOverSitter(seat)) Panel.SetZIndex(furnitureVisual, Panel.GetZIndex(sitter) + 1);
+            if (_chairBacks.TryGetValue(seat.Furniture, out var back)) Panel.SetZIndex(back, Panel.GetZIndex(sitter) + 1);
             if (seat.Bed && DefinitionOf(seat.Furniture) is { } obj && CoverOf(seat.Furniture, obj) is { } cover && VisualOf(cover) is { } coverVisual)
                 Panel.SetZIndex(coverVisual, Panel.GetZIndex(sitter) + 1);
         }

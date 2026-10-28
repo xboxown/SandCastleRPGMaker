@@ -363,6 +363,12 @@ public class FurnitureFacing
 {
     public SpriteLink Sprite { get; set; } = new();
     public List<SeatSpot> Spots { get; set; } = new();
+    /// <summary>
+    /// Chair only, optional: the chair's back alone (the rest see-through), laid exactly over the chair and drawn over
+    /// whoever sits in it - so the seat is under them and the back covers their back (a chair facing north or west).
+    /// The chair itself is always drawn under its sitter.
+    /// </summary>
+    public SpriteLink BackSprite { get; set; } = new();
 }
 
 /// <summary>Chairs and beds: one look per facing (like a character pose), each with its own seats or sleeping places.</summary>
