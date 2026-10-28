@@ -553,13 +553,144 @@ public partial class GameTestWindow
 
     // ================= Dropping =================
 
+    /// <summary>
+    /// drag.cc Dragging_info::drop: a stack of more than one dropped on the map, or on a window other than the one it came
+    /// from, asks how many (prompt_for_number, 0 to all of it, starting at all) - unless Ctrl is held (Exult's alternate
+    /// drop: the whole stack). 0 or Escape: nothing moves. Moving within one window (inside a chest, onto a pouch in that
+    /// chest, between one character's slots) never asks.
+    /// </summary>
     private void CompleteDrop(PointerSession session, Point screen)
     {
+        var origin = session.Origin!;
+        int whole = origin is DollPartOrigin ? 1 : PayloadQuantity(origin);
+        bool sameWindow = HitTestGumpLayer(screen, out var onGump, out _) && onGump is not null && ReferenceEquals(onGump, SourceWindowOf(session));
+        if (whole > 1 && !sameWindow && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        {
+            EndDragVisuals(session);
+            ShowNumberSlider(_systemSettings.Slider.QuantityQuestion, 0, whole, 1, whole, chosen => { if (chosen > 0) FinishDrop(session, screen, chosen); });
+            return;
+        }
+        FinishDrop(session, screen, whole);
+    }
+
+    /// <summary>The window a drag started from (Exult's Dragging_info.gump); null: the map.</summary>
+    private static object? SourceWindowOf(PointerSession session) => session.Target switch
+    {
+        SlotTarget s => s.Gump,
+        BackpackRowTarget b => b.Gump.BackpackGump,
+        ContainerItemTarget c => c.Gump,
+        DollItemTarget d => d.Gump,
+        _ => null
+    };
+
+    /// <summary>The drop with so many of the stack (drag.cc: a copy of that many dropped; the rest put back where it was).</summary>
+    private void FinishDrop(PointerSession session, Point screen, int count)
+    {
+        var origin = session.Origin!;
+        int whole = origin is DollPartOrigin ? 1 : PayloadQuantity(origin), rest = whole - count;
+        var source = rest > 0 ? NoteSplitSource(origin) : null;
+        if (source is not null) SetPayloadQuantity(origin, count);
         bool dropped = false;
-        try { dropped = TryDrop(session.Origin!, session, screen); }
-        finally { EndDragVisuals(session); }
-        if (dropped) CheckTheft(session.Origin!); // drag.cc drop: "Check for theft"
-        if (dropped && session.Origin is DollItemOrigin fromDoll) FireDollPartEvent(fromDoll.State, fromDoll.PartId, BookTriggerConditionBased.ByPickupItem, new ItemReference { Category = fromDoll.Item.Category, ItemId = fromDoll.Item.ItemId }); // taken out of a paperdoll's slot
+        try { dropped = TryDrop(origin, session, screen); }
+        finally
+        {
+            EndDragVisuals(session);
+            if (source is not null) PutBackRest(origin, source, rest);
+        }
+        if (dropped) CheckTheft(origin); // drag.cc drop: "Check for theft"
+        if (dropped && origin is DollItemOrigin fromDoll) FireDollPartEvent(fromDoll.State, fromDoll.PartId, BookTriggerConditionBased.ByPickupItem, new ItemReference { Category = fromDoll.Item.Category, ItemId = fromDoll.Item.ItemId }); // taken out of a paperdoll's slot
+    }
+
+    /// <summary>Where a split stack was, before the drop: its id and spot, and a copy of it for the rest.</summary>
+    private sealed record SplitSource(int InstanceId, int X, int Y, int OffsetX, int OffsetY, int Z, object Copy);
+
+    private static T CloneOf<T>(T value) => System.Text.Json.JsonSerializer.Deserialize<T>(System.Text.Json.JsonSerializer.Serialize(value))!;
+
+    private static SplitSource? NoteSplitSource(DragOrigin origin) => PayloadObject(origin) switch
+    {
+        ObjectInstance o => new SplitSource(o.InstanceId, o.X, o.Y, o.OffsetX, o.OffsetY, o.Z, CloneOf(o)),
+        InventoryItemInstance i => new SplitSource(i.InstanceId, 0, 0, 0, 0, 0, CloneOf(i)),
+        _ => null
+    };
+
+    private void SetPayloadQuantity(DragOrigin origin, int quantity)
+    {
+        switch (PayloadObject(origin))
+        {
+            case ObjectInstance o: o.Quantity = quantity; break;
+            case InventoryItemInstance i: i.Quantity = quantity; break;
+        }
+    }
+
+    /// <summary>Still where it came from, untouched (the drop refused, or only part of it used up)?</summary>
+    private bool StillAtSource(DragOrigin origin, SplitSource from) => origin switch
+    {
+        MapObjectOrigin o => _map.Objects.Contains(o.Obj) && (o.Obj.X, o.Obj.Y, o.Obj.OffsetX, o.Obj.OffsetY, o.Obj.Z) == (from.X, from.Y, from.OffsetX, from.OffsetY, from.Z),
+        SlotOrigin s => s.Character.Inventory.Contains(s.Item) && s.Item.InstanceId == from.InstanceId && TryGetEquippedInstanceId(s.Character, s.SlotKey, out int held) && held == s.Item.InstanceId,
+        BackpackOrigin b => b.Character.Inventory.Contains(b.Item) && b.Item.InstanceId == from.InstanceId && !IsEquippedAnywhere(b.Character, b.Item),
+        ContainerOrigin c => c.Container.Contents.Contains(c.Item) && c.Item.InstanceId == from.InstanceId,
+        DollItemOrigin d => d.State.Parts.TryGetValue(d.PartId, out var part) && part.Items.Contains(d.Item) && d.Item.InstanceId == from.InstanceId,
+        _ => true
+    };
+
+    private static bool IsEquippedAnywhere(CharacterDefinition character, InventoryItemInstance item) =>
+        character.EquippedSlots.ContainsValue(item.InstanceId) || character.CustomEquippedSlots.ContainsValue(item.InstanceId);
+
+    /// <summary>drag.cc "Put back the rest": the rest of a split stack stays where it was - joined back onto it if it never left.</summary>
+    private void PutBackRest(DragOrigin origin, SplitSource from, int rest)
+    {
+        if (StillAtSource(origin, from))
+        {
+            switch (PayloadObject(origin))
+            {
+                case ObjectInstance o: o.Quantity += rest; RefreshObjectLook(o); break;
+                case InventoryItemInstance i: i.Quantity += rest; break;
+            }
+            RefreshAfterMove();
+            return;
+        }
+        switch (origin)
+        {
+            case MapObjectOrigin:
+            {
+                var copy = (ObjectInstance)from.Copy;
+                copy.Quantity = rest;
+                copy.InstanceId = _map.GetNextInstanceId();
+                AddMapEntity(null, copy);
+                break;
+            }
+            case SlotOrigin s:
+            {
+                var copy = (InventoryItemInstance)from.Copy;
+                (copy.Quantity, copy.InstanceId) = (rest, s.Character.GetNextInventoryInstanceId());
+                s.Character.Inventory.Add(copy);
+                if (s.SlotKey is EquipmentSlot slot) s.Character.EquippedSlots[slot] = copy.InstanceId;
+                else if (s.SlotKey is int custom) s.Character.CustomEquippedSlots[custom] = copy.InstanceId;
+                break;
+            }
+            case BackpackOrigin b:
+            {
+                var copy = (InventoryItemInstance)from.Copy;
+                (copy.Quantity, copy.InstanceId) = (rest, b.Character.GetNextInventoryInstanceId());
+                b.Character.Inventory.Add(copy);
+                break;
+            }
+            case ContainerOrigin c:
+            {
+                var copy = (InventoryItemInstance)from.Copy;
+                (copy.Quantity, copy.InstanceId) = (rest, c.Data.GetNextContentsInstanceId());
+                c.Container.Contents.Add(copy);
+                break;
+            }
+            case DollItemOrigin d when d.State.Parts.TryGetValue(d.PartId, out var part):
+            {
+                var copy = (InventoryItemInstance)from.Copy;
+                (copy.Quantity, copy.InstanceId) = (rest, d.State.NextItemInstanceId++);
+                part.Items.Add(copy);
+                break;
+            }
+        }
+        RefreshAfterMove();
     }
 
     /// <summary>Exult Dragging_info::drop: a gump under the pointer gets the drop (drop_on_gump); otherwise the map does (drop_on_map). False = rejected; nothing has changed anywhere, so the item is simply still at its origin.</summary>

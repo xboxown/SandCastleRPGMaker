@@ -214,6 +214,10 @@ int world_thing_there(int uid);
 void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x, int *y, int *instanceId);
 void world_thing_remove(int uid);
 int world_thing_put(int category, int itemId, int quantity, int x, int y, int onFloor);
+/* Where a placed thing is exactly: its cell, its offsets within it, its lift. */
+void world_thing_spot(int uid, int *x, int *y, int *offX, int *offY, int *z);
+/* drag.cc "put back the rest": a copy of a thing (even one since picked up), so many of it, exactly at that spot. Its uid (-1: none). */
+int world_thing_copy_at(int fromUid, int quantity, int x, int y, int offX, int offY, int z);
 int world_pose_length(int actor, const char *pose);
 void world_face_cell(int actor, int x, int y, const char *pose);
 /* Words over someone's head for a while (Show Bark), drawn by world_draw_barks over everything. */

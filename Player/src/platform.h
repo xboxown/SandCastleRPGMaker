@@ -42,6 +42,8 @@ void platform_present(const uint32_t *pixels);
 
 /* Milliseconds since some fixed moment. */
 uint32_t platform_ticks(void);
+/* Ctrl held down now (a drop with Ctrl: the whole stack, no slider - Exult's alternate drop). */
+int platform_ctrl_held(void);
 double platform_ms_precise(void);
 void platform_warp_mouse(int x, int y);   /* testing: the system's pointer put there (game pixels) */   /* milliseconds since starting, to a fraction (the timing diary in Game.log) */
 void platform_sleep(uint32_t ms);

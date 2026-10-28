@@ -37,6 +37,7 @@
 #include "platform.h"
 #include "pictures.h"
 #include "dolls.h"
+#include "slider.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -1136,6 +1137,82 @@ void gumps_mouse_move(int x, int y)
     else pressing = 0;
 }
 
+/* ---------------- How many (drag.cc Dragging_info::drop) ---------------- */
+
+/* The window the drag came from is the one it's dropped on (moving within a chest, onto a pouch in it, between one character's slots). */
+static int same_window(const Target *under)
+{
+    if (pressed.kind == T_DOLL_ITEM) return under->doll >= 0 && under->doll == pressed.doll && (under->kind == T_DOLL_PART || under->kind == T_DOLL_ITEM || under->kind == T_DOLL_BODY);
+    if (pressed.kind != T_SLOT && pressed.kind != T_ROW && pressed.kind != T_BOX_ITEM) return 0; /* from the map: never */
+    return pressed.gump >= 0 && under->gump == pressed.gump && under->kind != T_THING && under->kind != T_ACTOR;
+}
+
+/* The drop with so many of the stack: a stack of that many dropped, the rest put back where it was (joined back on if it never left). */
+static void drop_count(int count)
+{
+    int whole = drag.quantity, rest = whole - count;
+    if (rest <= 0) { drop(); return; }
+    if (drag.fromMap)
+    {
+        int uid = drag.uid, x, y, ox, oy, z;
+        world_thing_spot(uid, &x, &y, &ox, &oy, &z);
+        world_thing_add_quantity(uid, count - whole);
+        drag.quantity = count;
+        drop();
+        int nx, ny, nox, noy, nz;
+        world_thing_spot(uid, &nx, &ny, &nox, &noy, &nz);
+        if (world_thing_there(uid) && nx == x && ny == y && nox == ox && noy == oy && nz == z) world_thing_add_quantity(uid, rest); /* it never left */
+        else world_thing_copy_at(uid, rest, x, y, ox, oy, z);
+        return;
+    }
+    Item *it = drag.item;
+    if (drag.dollState)
+    {
+        DollState *state = drag.dollState;
+        int part = drag.dollPart;
+        Item *copy = items_copy_stack(it, rest);
+        items_set_quantity(it, count);
+        drag.quantity = count;
+        drop();
+        int at = dolls_take_item(state, part, it);
+        if (at >= 0) { dolls_restore_item(state, part, it, at); items_set_quantity(it, items_quantity(it) + rest); items_free(copy); } /* it never left */
+        else dolls_restore_item(state, part, copy, -1);
+        return;
+    }
+    ItemPlace from, now;
+    if (!items_place_of(it, &from)) { drop(); return; }
+    Item *copy = items_copy_stack(it, rest);
+    items_set_quantity(it, count);
+    drag.quantity = count;
+    drop();
+    if (items_place_of(it, &now) && now.characterId == from.characterId && now.holder == from.holder && now.slotKey == from.slotKey) { items_set_quantity(it, items_quantity(it) + rest); items_free(copy); } /* it never left */
+    else items_put_back_copy(&from, copy);
+}
+
+static void quantity_chosen(int ok, int count, void *context)
+{
+    (void)context;
+    if (ok && count > 0) drop_count(count);
+    ghost = NULL;
+    memset(&drag, 0, sizeof drag);
+}
+
+/* A stack of more than one dropped on the map, or on another window than its own, asks how many (prompt_for_number: 0 to all of it,
+   starting at all) - unless Ctrl is held (Exult's alternate drop: the whole stack). 0 or Escape: nothing moves. */
+static void drop_asking(void)
+{
+    Target under = hit(mouseX, mouseY);
+    if (!drag.partDragged && drag.quantity > 1 && !same_window(&under) && !platform_ctrl_held())
+    {
+        ghost = NULL;
+        slider_open(str(get(get(project(), "Settings"), "Slider"), "QuantityQuestion"), 0, drag.quantity, 1, drag.quantity, quantity_chosen, NULL);
+        return;
+    }
+    drop();
+    ghost = NULL;
+    memset(&drag, 0, sizeof drag);
+}
+
 void gumps_mouse_up(int x, int y)
 {
     mouseX = x; mouseY = y;
@@ -1143,7 +1220,7 @@ void gumps_mouse_up(int x, int y)
     if (movingDoll >= 0) { movingDoll = -1; return; }
     if (!pressing) return;
     pressing = 0;
-    if (dragging) { dragging = 0; drop(); ghost = NULL; memset(&drag, 0, sizeof drag); return; }
+    if (dragging) { dragging = 0; drop_asking(); return; }
     click_released(&pressed);
 }
 

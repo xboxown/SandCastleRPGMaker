@@ -1055,6 +1055,45 @@ int items_detach(Item *it, ItemPlace *from)
     return 1;
 }
 
+int items_place_of(const Item *it, ItemPlace *place)
+{
+    memset(place, 0, sizeof *place);
+    place->slotKey = -1;
+    int where = items_where(it, &place->characterId, &place->holder, &place->slotKey);
+    if (!where || where == 2) return 0;
+    if (place->holder) { for (int i = 0; i < place->holder->count; i++) if (place->holder->contents[i] == it) place->index = i; return 1; }
+    Carrier *k = carrier_of(place->characterId);
+    if (!k) return 0;
+    for (int i = 0; i < k->count; i++) if (k->items[i] == it) place->index = i;
+    return 1;
+}
+
+Item *items_copy_stack(const Item *it, int quantity)
+{
+    Item *c = new_item(it->category, it->itemId, quantity);
+    c->instanceId = it->instanceId;
+    c->locked = it->locked; c->lit = it->lit; c->spent = it->spent; c->burnLeft = it->burnLeft;
+    memcpy(c->keys, it->keys, sizeof c->keys); c->keyCount = it->keyCount; c->keysSet = it->keysSet;
+    c->charges = it->charges; c->cx = it->cx; c->cy = it->cy; c->autoPlaced = it->autoPlaced;
+    c->liquid = it->liquid; c->liquidSet = it->liquidSet; c->facing = it->facing;
+    for (int i = 0; i < it->learnedCount; i++) items_learn_spell(c, it->learned[i]);
+    return c;
+}
+
+void items_set_quantity(Item *it, int quantity) { if (it) it->quantity = quantity > 0 ? quantity : 1; }
+
+void items_put_back_copy(const ItemPlace *place, Item *copy)
+{
+    if (place->holder)
+    {
+        int top = 0;
+        for (int i = 0; i < place->holder->count; i++) if (place->holder->contents[i]->instanceId > top) top = place->holder->contents[i]->instanceId;
+        copy->instanceId = top + 1;
+    }
+    else { Carrier *k = carrier_of(place->characterId); if (!k) { items_free(copy); return; } copy->instanceId = k->nextInstanceId++; }
+    items_restore(place, copy);
+}
+
 /* Put back exactly where it was (the drop was refused). */
 void items_restore(const ItemPlace *from, Item *it)
 {

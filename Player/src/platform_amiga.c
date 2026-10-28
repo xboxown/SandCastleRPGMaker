@@ -35,6 +35,8 @@
 #include <intuition/pointerclass.h>
 struct Library *KeymapBase;
 static int pendingText; /* a letter typed, given as EV_TEXT after its key */
+static UWORD heldQualifier; /* the qualifier keys with the last input event */
+int platform_ctrl_held(void) { return (heldQualifier & IEQUALIFIER_CONTROL) != 0; }
 #include <string.h>
 #include <stdio.h>
 
@@ -234,6 +236,7 @@ int platform_poll(PlatformEvent *event)
     {
         ULONG cls = m->Class;
         UWORD code = m->Code, qualifier = m->Qualifier;
+        heldQualifier = qualifier; /* Ctrl held (platform_ctrl_held) */
         if (cls == IDCMP_RAWKEY && !(code & IECODE_UP_PREFIX) && KeymapBase)
         {
             /* the letter this key makes, by the keymap (shift, dead keys) */

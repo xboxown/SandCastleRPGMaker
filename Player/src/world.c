@@ -2186,6 +2186,29 @@ int world_thing_put(int category, int itemId, int quantity, int x, int y, int on
     return t->uid;
 }
 
+void world_thing_spot(int uid, int *x, int *y, int *offX, int *offY, int *z)
+{
+    const Thing *t = thing_by_uid(uid);
+    *x = t ? t->x : -1; *y = t ? t->y : -1; *offX = t ? t->offX : 0; *offY = t ? t->offY : 0; *z = t ? t->z : 0;
+}
+
+int world_thing_copy_at(int fromUid, int quantity, int x, int y, int offX, int offY, int z)
+{
+    int i = 0;
+    while (i < thingCount && things[i].uid != fromUid) i++; /* gone too: it may have been picked up */
+    if (i >= thingCount) return -1;
+    int category = things[i].category, itemId = things[i].itemId;
+    int uid = world_thing_put(category, itemId, quantity, x, y, floor_of(z < 0 ? 0 : z));
+    if (uid < 0) return -1;
+    Thing *from = &things[i], *t = thing_by_uid(uid); /* after the put: the array may have moved */
+    t->offX = offX; t->offY = offY; t->z = z; t->homeFloor = floor_of(z < 0 ? 0 : z);
+    t->facing = from->facing; t->lit = from->lit; t->spent = from->spent; t->burnLeft = from->burnLeft; t->liquid = from->liquid;
+    t->hangs = from->hangs; t->staysPut = from->staysPut; t->liesUnder = from->liesUnder;
+    if (t->body >= 0) thing_box(t, &bodies[t->body]);
+    settle_all();
+    return uid;
+}
+
 /* How long a pose plays once as they face now (PoseLengthMs): its frames' times, 500 when it has none. */
 int world_pose_length(int actor, const char *pose)
 {

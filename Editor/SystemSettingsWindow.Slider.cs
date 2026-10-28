@@ -11,7 +11,7 @@ namespace SandcastleRpgMaker.Editor;
 /// VII's Slider_gump) - its sprites (from the Sprite Editor) and where each
 /// part sits on the background - with a live preview to click, drag and try
 /// the keys on. Used wherever the game asks "how many" (a bed: how many hours
-/// to sleep). Exult's own layout is the default.
+/// to sleep; a stack being moved; a haggle). Exult's own layout is the default.
 /// </summary>
 public partial class SystemSettingsWindow
 {
@@ -23,12 +23,19 @@ public partial class SystemSettingsWindow
         var panel = new StackPanel { Margin = new Thickness(10) };
         panel.Children.Add(new TextBlock
         {
-            Text = "The slider the game shows whenever it asks \"how many\" - how many hours to sleep in a bed, and later more. As Ultima VII's (Exult's Slider_gump): " +
+            Text = "The slider the game shows whenever it asks \"how many\" - how many hours to sleep in a bed, how many of a stack (gold, lockpicks...) to pick up, give or drop, a merchant's haggle. As Ultima VII's (Exult's Slider_gump): " +
                    "a background, a left and a right arrow with a diamond sliding on a track between them, the number, and a check mark to accept. " +
                    "Arrows step, the diamond drags, Left / Right keys step, Enter accepts, Escape cancels. Each use sets its own range (never past 999). " +
                    "Pick the sprites to give it your game's look; with none, a plain stand-in is drawn.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 0, 0, 10)
         });
+        // The words over it when a stack is moved (gold, lockpicks...) and the game asks how many - none in Exult.
+        var quantityRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 10) };
+        quantityRow.Children.Add(new TextBlock { Text = "Over it when a stack is moved (how many?):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) });
+        var quantityQuestion = new TextBox { Text = s.QuantityQuestion, Width = 260, ToolTip = "Empty: no words, as in Exult. E.g. \"How many?\"" };
+        quantityQuestion.TextChanged += (_, _) => s.QuantityQuestion = quantityQuestion.Text;
+        quantityRow.Children.Add(quantityQuestion);
+        panel.Children.Add(quantityRow);
 
         var previewHost = new Border { Background = Brushes.Black, Padding = new Thickness(12), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 6, 0, 0) };
         var previewNote = new TextBlock { Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 4, 0, 0) };

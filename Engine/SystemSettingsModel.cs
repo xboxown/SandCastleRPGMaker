@@ -128,6 +128,9 @@ public class SliderSettings
     /// <summary>Played each time the value changes.</summary>
     public int ClickSoundResourceId { get; set; } = -1;
 
+    /// <summary>Over the slider when a stack is moved and the game asks how many of it (drag.cc prompt_for_number shows no words - empty, as Exult).</summary>
+    public string QuantityQuestion { get; set; } = string.Empty;
+
     /// <summary>Classic: Ultima VII's slider (everything above). Custom: one built from pieces (Custom below).</summary>
     public SliderStyle Style { get; set; } = SliderStyle.Classic;
     public CustomSliderDesign Custom { get; set; } = new();

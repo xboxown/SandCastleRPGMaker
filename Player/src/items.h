@@ -99,6 +99,13 @@ typedef struct ItemPlace { int characterId, slotKey, index; Item *holder; } Item
 int items_detach(Item *it, ItemPlace *from);
 void items_restore(const ItemPlace *from, Item *it);
 void items_detach_done(const ItemPlace *from, Item *it);
+/* Where it is now (as items_detach would note it), without taking it out; 0: nowhere carried. */
+int items_place_of(const Item *it, ItemPlace *place);
+/* drag.cc's split-off copy of a stack: so many of it, everything else the same (no contents, its paperdoll fresh). */
+Item *items_copy_stack(const Item *it, int quantity);
+void items_set_quantity(Item *it, int quantity);
+/* The rest of a split stack put back where it was (a new id of that place's own). */
+void items_put_back_copy(const ItemPlace *place, Item *copy);
 int items_check_weight(int characterId, const Item *it);
 int items_fits_slot(int characterId, const Item *it, int slotKey);
 int items_slot_free(int characterId, int slotKey);

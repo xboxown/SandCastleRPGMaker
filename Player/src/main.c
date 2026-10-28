@@ -77,6 +77,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'q') { int x = atoi(what + 1), y = 0, id = -1; const char *comma = strchr(what, ' '); comma = strchr(what, '/'); const char *semi = strchr(what, ';'); if (comma) y = atoi(comma + 1); if (semi) id = atoi(semi + 1); int uid = world_thing_at_cell(4, id, x, y, 0); char line[96]; snprintf(line, sizeof line, "DBG qty: floor %d/%d %d, carried %d", x, y, uid ? world_thing_quantity(uid) : 0, items_count_any(world_actor_character(0), 4, id)); note(line); } /* q11/7;80: the stack of object 80 on cell 11,7, and how many of it the player carries */
         else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
         else if (*what == 'Z') gumps_next_stats(); /* Z: the stats paperdoll */
         else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); int dbgHp = 0; vitals_hp(world_actor_character(a), &dbgHp); char line[160]; snprintf(line, sizeof line, "DBG actor %d char %d at (%d,%d) floor %d gone %d food %d hp %d seat %d fight %d", a, world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a)), dbgHp, world_seated_on(a), combat_busy(a)); note(line); } } /* Q: where everyone is (testing) */
@@ -101,7 +102,7 @@ static void scripted_presses(const char *presses, double t, double *done)
         else
         {
             enum PlatformKey key = *what == 'E' ? KEY_ENTER : *what == 'S' ? KEY_SPACE : *what >= '1' && *what <= '9' ? (enum PlatformKey)(KEY_1 + (*what - '1'))
-                : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : *what == 'l' ? KEY_LEFT : *what == 'r' ? KEY_RIGHT : KEY_OTHER;
+                : *what == 'u' ? KEY_UP : *what == 'd' ? KEY_DOWN : *what == 'l' ? KEY_LEFT : *what == 'r' ? KEY_RIGHT : *what == 'e' ? KEY_ESCAPE : KEY_OTHER;
             if (slider_key(key)) { } /* the slider (slider.c) */
             else if (dialog_showing()) dialog_key(key);
             else if (!prompt_key(key, 0) && !dolls_key(key, 0)) mechanisms_key(key); /* a question, a paperdoll, the sleep slider */
