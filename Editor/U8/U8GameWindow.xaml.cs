@@ -820,6 +820,8 @@ public partial class U8GameWindow : Window
             gump.BodyCanvas.Background = new SolidColorBrush(Color.FromArgb(238, 26, 26, 26));
         }
 
+        AddU8PaperdollStats(gump); // Ultima 8: STR INT DEX ARMR HITS MANA WGHT beside the body (U8GameWindow.U8Paperdoll.cs)
+
         foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(character.Paperdoll.IsSlotShown)) // a slot turned off isn't drawn
         {
             if (!character.Paperdoll.SlotPositions.TryGetValue(slot, out var pos)) pos = new PaperdollSlotPosition { X = 140, Y = 10 };

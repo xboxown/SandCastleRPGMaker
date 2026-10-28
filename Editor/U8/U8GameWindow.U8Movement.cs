@@ -22,7 +22,8 @@ public partial class U8GameWindow
 {
     private const int U8UnitsPerLift = 8;
     private const double U8RunFactor = 2.0, U8StepFactor = 0.5;
-    private const int U8WalkThreshold = 50, U8RunThreshold = 160; // of 255 (ScummVM's walk_threshold / run_threshold)
+    private int U8WalkThreshold => _systemSettings.Ultima8.WalkThreshold; // of 255 (Pentagram's walk_threshold, 50) - System Settings > Ultima 8
+    private int U8RunThreshold => _systemSettings.Ultima8.RunThreshold;   // (run_threshold, 160)
 
     private bool _rightMouseHeld;
     private Point _mouseOnCanvas;

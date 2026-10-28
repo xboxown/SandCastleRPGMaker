@@ -268,6 +268,8 @@ public class SystemSettings
     /// <summary>The game's errors: their paperdoll and their words by number (System Settings > Errors).</summary>
     public ErrorSettings Errors { get; set; } = new();
     public SliderSettings Slider { get; set; } = new();
+    /// <summary>Only an Ultima 8 project's engine reads these (Engine/Ultima8Model.cs).</summary>
+    public Ultima8Settings Ultima8 { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();
     public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();
