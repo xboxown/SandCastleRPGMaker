@@ -33,6 +33,17 @@ public sealed class U8ProjectionCanvas : Canvas
             new FrameworkPropertyMetadata(U8Placement.Thing, FrameworkPropertyMetadataOptions.AffectsParentArrange));
 
     public static U8Placement GetPlacement(UIElement element) => (U8Placement)element.GetValue(PlacementProperty);
+
+    /// <summary>
+    /// The picture's own hot spot (Pentagram's frame offset; the Sprite Editor's Origin), as a fraction of its width and
+    /// height: that point sits on its map point instead of its bottom-middle. Null: not set.
+    /// </summary>
+    public static readonly DependencyProperty AnchorProperty =
+        DependencyProperty.RegisterAttached("Anchor", typeof(Point?), typeof(U8ProjectionCanvas),
+            new FrameworkPropertyMetadata(null, FrameworkPropertyMetadataOptions.AffectsParentArrange));
+
+    public static Point? GetAnchor(UIElement element) => (Point?)element.GetValue(AnchorProperty);
+    public static void SetAnchor(UIElement element, Point? value) { if (GetAnchor(element) != value) element.SetValue(AnchorProperty, value); }
     public static void SetPlacement(UIElement element, U8Placement value) { if (GetPlacement(element) != value) element.SetValue(PlacementProperty, value); }
 
     /// <summary>A map cell's size in map pixels (square).</summary>
@@ -87,6 +98,7 @@ public sealed class U8ProjectionCanvas : Canvas
             case U8Placement.Cell: ax = left + CellSize; ay = top + CellSize; break; // ...its cell's nearest corner
         }
         var s = ToScreen(ax, ay);
+        if (GetAnchor(child) is { } hot) return new Rect(s.X - hot.X * size.Width, s.Y - hot.Y * size.Height, size.Width, size.Height); // its own hot spot on the point
         return new Rect(s.X - size.Width / 2, s.Y - size.Height, size.Width, size.Height);
     }
 }

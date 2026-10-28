@@ -525,6 +525,7 @@ public partial class U8GameWindow : Window
         var (quantW, quantH) = QuantizedSpriteSize(sprite);
         _playerImage.Width = quantW;
         _playerImage.Height = quantH;
+        SetU8Anchor(_playerImage, sprite); // its Origin on its feet (Pentagram's frame offset; U8GameWindow.U8Anchor.cs)
         SnapPlayerPosition();
         _playerAnimator = new SpriteAnimator(sprite, _playerImage, _resources, volume);
         _currentAppliedPose = pose;
@@ -1839,6 +1840,7 @@ public partial class U8GameWindow : Window
             _wasMovingLastFrame = false;
         }
         _u8Running = _wasMovingLastFrame && _u8SpeedFactor >= U8RunFactor;
+        UpdateU8Idle(deltaSeconds, idle: !_wasMovingLastFrame && _playerWalkPath is null && _pendingSit is null && !IsShowingMessage); // looking about, standing still (U8GameWindow.U8Movement.cs)
     }
 
     /// <summary>The most recently pressed still-held direction wins if more than one is held - a simple, predictable rule rather than diagonal combination, matching the existing cardinal-only movement model.</summary>

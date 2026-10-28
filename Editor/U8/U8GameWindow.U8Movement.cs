@@ -229,6 +229,49 @@ public partial class U8GameWindow
         UpdateCamera();
     }
 
+    // ---------- Standing idle (U8AvatarMoverProcess::idle) ----------
+
+    private double _u8IdleTicks;           // Pentagram's _idleTime: its ticks (30 a second) standing still
+    private bool _u8Looking;               // looking left or right now
+    private string _u8LastLook = "Look Left";
+
+    /// <summary>
+    /// Standing still: after a while the Avatar looks left or right (random(3000) + 150 under the ticks idle - usually
+    /// the other way from last time, 1 in 5 the same), and goes back to standing (random(1500) + 30 under them).
+    /// Only with art for it (the Look Left / Look Right poses). Anything else the Avatar does starts the count again.
+    /// </summary>
+    private void UpdateU8Idle(double deltaSeconds, bool idle)
+    {
+        if (!idle || _combatMode || _player is null || PlayerSeated || IsIncapacitated(_player) || _jump is not null)
+        {
+            _u8IdleTicks = 0;
+            if (_u8Looking) { _u8Looking = false; if (idle) ApplyPoseSprite(_idlePose); }
+            return;
+        }
+        double before = _u8IdleTicks;
+        _u8IdleTicks += deltaSeconds * 30;
+        for (int tick = (int)before + 1; tick <= (int)_u8IdleTicks; tick++)
+        {
+            if (_u8Looking)
+            {
+                if (U8Random(1500) + 30 >= tick) continue;
+                _u8Looking = false;
+                ApplyPoseSprite(_idlePose);
+            }
+            else
+            {
+                if (U8Random(3000) + 150 >= tick) continue;
+                string look = U8Random(4) == 0 ? _u8LastLook : _u8LastLook == "Look Left" ? "Look Right" : "Look Left";
+                if (PoseByName(look) is not { } pose) { _u8IdleTicks = 1; return; } // no art for it: just standing
+                _u8LastLook = look;
+                _u8Looking = true;
+                ApplyPoseSprite(pose);
+            }
+            _u8IdleTicks = 1;
+            return;
+        }
+    }
+
     // ---------- Falling ----------
 
     /// <summary>Walked off a ledge (more than a step down): the fall is drawn, and hurts on landing.</summary>

@@ -77,6 +77,7 @@ public partial class U8GameWindow
             var (width, height) = QuantizedSpriteSize(sprite);
             var image = new Image { Width = width, Height = height, IsHitTestVisible = true };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            SetU8Anchor(image, sprite); // its Origin on the nearest corner of its cell (Pentagram's frame offset; U8GameWindow.U8Anchor.cs)
             if (obj.FramesAreStates && sprite.Frames.Count > 0)
                 image.Source = LoadStaticFrame(sprite.Frames[Math.Clamp(instance.FrameRuntime, 0, sprite.Frames.Count - 1)].FilePath);
             else

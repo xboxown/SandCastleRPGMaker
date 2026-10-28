@@ -124,6 +124,7 @@ public partial class U8GameWindow
             var (width, height) = QuantizedSpriteSize(sprite);
             var image = new Image { Width = width, Height = height, IsHitTestVisible = true };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            SetU8Anchor(image, sprite); // its Origin on its feet (Pentagram's frame offset)
             RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources, volume));
             mapCharacter.ShownSprite = key;
             return image;
@@ -153,6 +154,7 @@ public partial class U8GameWindow
         var (width, height) = QuantizedSpriteSize(sprite);
         image.Width = width;
         image.Height = height;
+        SetU8Anchor(image, sprite); // its Origin on its feet (Pentagram's frame offset)
         UnregisterWorldAnimator(image);
         RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources, volume));
         mapCharacter.ShownSprite = key;
