@@ -525,6 +525,7 @@ public partial class GameTestWindow
         {
             source.Visibility = Visibility.Hidden;
             session.HiddenSource = source;
+            SyncChairBacks(); // a chair's back hides with it
         }
         session.Origin = origin;
         CaptureMouse();
@@ -549,6 +550,7 @@ public partial class GameTestWindow
         session.Ghost = null;
         if (session.HiddenSource is not null) session.HiddenSource.Visibility = Visibility.Visible;
         session.HiddenSource = null;
+        SyncChairBacks();
     }
 
     // ================= Dropping =================
@@ -1448,6 +1450,7 @@ public partial class GameTestWindow
     private void RefreshAfterMove()
     {
         RefreshStackingVisuals();
+        SyncChairBacks(); // a chair's back follows its chair
         foreach (var gump in _openPaperdolls.ToList()) RefreshPaperdollGump(gump);
         foreach (var gump in _openContainers.ToList()) RefreshContainerGump(gump);
         foreach (var gump in _openDolls.ToList()) RefreshDollGump(gump);

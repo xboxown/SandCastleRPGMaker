@@ -290,6 +290,7 @@ public partial class GameTestWindow
     {
         _headingToSeat.Remove(who);
         if (!_seats.Remove(who, out var seat)) return;
+        SyncChairBacks(); // the chair's back goes at once - nobody sits under it any more
         var obj = DefinitionOf(seat.Furniture);
         if (seat.Bed && obj is not null && !_seats.Values.Any(s => ReferenceEquals(s.Furniture, seat.Furniture))) SetCover(seat.Furniture, obj, turnedDown: false);
         if (obj is { Type: ObjectType.Bedroll } && !_seats.Values.Any(s => ReferenceEquals(s.Furniture, seat.Furniture)) && _map.Objects.Contains(seat.Furniture))
