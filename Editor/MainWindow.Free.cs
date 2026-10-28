@@ -130,7 +130,7 @@ public partial class MainWindow
             _ => (0, 0, 0, 0, 0, false)
         };
         var (left, top) = FootprintCorner(x, y, ox + info.SolidX, oy + info.SolidY, info.SizeX, info.SizeY);
-        if (IsHanging(entity)) return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, false, false, false, false); // on the wall: holds nothing up
+        if (IsPinned(entity)) return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z, info.SizeZ, false, false, false, false); // on the wall: holds nothing up
         if (entity is ObjectInstance slabTile && z >= MapFloors.BaseLift(2) && z == MapFloors.BaseLift(MapFloors.FloorOfLift(z))
             && _objectDatabase.Objects.FirstOrDefault(d => d.Id == slabTile.ObjectId) is { Type: ObjectType.Tile, IsSolid: true, IsFloorTile: true })
             return new EditorBody(entity, left, top, info.SizeX, info.SizeY, z - 1, 1, true, true, true, under); // the floor itself: a slab under its floor's height, as the game has it
@@ -424,13 +424,13 @@ public partial class MainWindow
             foreach (var over in Near(body))
                 if (!ReferenceEquals(over.Entity, body.Entity) && !over.Under && over.Overlaps(body))
                     order[body.Entity] = Math.Min(order[body.Entity], order[over.Entity] - 1);
-        // Hung on the wall: on the face of whatever its picture is over.
-        foreach (var body in bodies.Where(b => IsHanging(b.Entity)))
+        // Hung on the wall (or staying where it's put, the same): on the face of whatever its picture is over.
+        foreach (var body in bodies.Where(b => IsPinned(b.Entity)))
         {
             if (VisualOfThing(body.Entity) is not { } hungVisual) continue;
             var picture = new Rect(Canvas.GetLeft(hungVisual), Canvas.GetTop(hungVisual), hungVisual.Width, hungVisual.Height);
             foreach (var other in bodies)
-                if (!ReferenceEquals(other.Entity, body.Entity) && !IsHanging(other.Entity) && VisualOfThing(other.Entity) is { } otherVisual
+                if (!ReferenceEquals(other.Entity, body.Entity) && !IsPinned(other.Entity) && VisualOfThing(other.Entity) is { } otherVisual
                     && picture.IntersectsWith(new Rect(Canvas.GetLeft(otherVisual), Canvas.GetTop(otherVisual), otherVisual.Width, otherVisual.Height)))
                     order[body.Entity] = Math.Max(order[body.Entity], order[other.Entity] + 1);
         }
@@ -635,8 +635,8 @@ public partial class MainWindow
         var hang = new MenuItem { Header = "Hangs on the wall (stays where it is, never falls)", IsCheckable = true, IsChecked = hanging };
         hang.Click += (_, _) => SetHanging(entity, !hanging);
         menu.Items.Add(hang);
-        var stay = new MenuItem { Header = "Stays where it's put (never falls - can be picked up, holds things up)", IsCheckable = true, IsChecked = staying,
-            ToolTip = "A potion on top of a cabinet, a dagger on a shelf: it keeps its height like a hung thing, but it's an ordinary thing - drawn as usual, picked up as usual." };
+        var stay = new MenuItem { Header = "Stays where it's put (like hung on the wall - and can be used and picked up)", IsCheckable = true, IsChecked = staying,
+            ToolTip = "A potion on top of a cabinet, a dagger on a shelf: it sticks exactly where it's put and is drawn over what it's on, as a hung thing - and the player reaches it over what it's stuck in or on, to use it or pick it up." };
         stay.Click += (_, _) => SetStaysPut(entity, !staying);
         menu.Items.Add(stay);
         var height = new MenuItem { Header = "Height", IsEnabled = hanging || staying };

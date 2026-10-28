@@ -64,7 +64,10 @@ public partial class GameTestWindow
     private bool IsReachable(object entity)
     {
         var body = WorldBodies().FirstOrDefault(b => ReferenceEquals(b.Entity, entity));
-        return body.Entity is null || IsGrabable(VolumeOf(body), isSpot: false);
+        if (body.Entity is null) return true;
+        var volume = VolumeOf(body);
+        // Staying where it's put (a potion on a cabinet, against a wall): what it's stuck in or on doesn't stand in the way of reaching it.
+        return IsGrabable(volume, isSpot: false, stuckIn: StaysPut(entity) ? volume : null);
     }
 
     /// <summary>
@@ -94,7 +97,7 @@ public partial class GameTestWindow
     private bool IsSpotReachable(int x, int y, int z) => IsGrabable(new Volume(x, y, z, 1, 1, 1), isSpot: true);
 
     /// <summary>Fast_pathfinder_client::is_grabable(Actor*, Game_object*) / (Actor*, Tile_coord).</summary>
-    private bool IsGrabable(Volume target, bool isSpot)
+    private bool IsGrabable(Volume target, bool isSpot, Volume? stuckIn = null)
     {
         var from = PlayerVolume();
         // Game_object::distance(Tile_coord) treats a spot as having no width/height of its own.
@@ -107,13 +110,13 @@ public partial class GameTestWindow
             var destBox = isSpot
                 ? new UnitRect(target.X - margin, target.Y - margin, 2 * margin, 2 * margin)
                 : new UnitRect(target.X - margin, target.Y - margin, target.W + 2 * margin, target.D + 2 * margin);
-            if (IsGrabableInternal(from, AnchorOf(target), target, destBox, query)) return true;
+            if (IsGrabableInternal(from, AnchorOf(target), target, destBox, query, stuckIn)) return true;
         }
         return false;
     }
 
     /// <summary>Fast_pathfinder_client::is_grabable_internal.</summary>
-    private static bool IsGrabableInternal(Volume fromVol, Tile3 targetTile, Volume toVol, UnitRect destBox, ReachQuery query)
+    private static bool IsGrabableInternal(Volume fromVol, Tile3 targetTile, Volume toVol, UnitRect destBox, ReachQuery query, Volume? stuckIn = null)
     {
         var fromTile = AnchorOf(fromVol);
         var src = fromTile;
@@ -152,7 +155,8 @@ public partial class GameTestWindow
         foreach (var p in line)
         {
             if (toVol.Has(p) || srcVol.Has(p) || movedVol.Has(p)) continue;
-            if (query.ReachBlockerAt(p) is { } blocker && !query.Movable(blocker.Entity)) return false;
+            if (query.ReachBlockerAt(p) is { } blocker && !query.Movable(blocker.Entity)
+                && !(stuckIn is { } s && blocker.Left < s.X + s.W && s.X < blocker.Right && blocker.Top < s.Y + s.D && s.Y < blocker.Bottom)) return false; // not what a staying thing is stuck in or on
         }
         return true;
     }

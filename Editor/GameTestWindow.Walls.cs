@@ -179,7 +179,7 @@ public partial class GameTestWindow
         {
             var body = entity is PlacedItemInstance item ? BodyOf(item, null) : BodyOf(null, (ObjectInstance)entity);
             var foot = new UnitRect(body.Left, body.Top, body.Width, body.Depth);
-            if (HangsOnWall(entity))
+            if (HangsOnWall(entity) || StaysPut(entity)) // staying where it's put: drawn as a hung thing
             {
                 // On the wall's face: drawn over every wall its picture is over.
                 var screen = ScreenRectOf(visual);

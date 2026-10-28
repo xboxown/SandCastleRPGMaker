@@ -314,7 +314,7 @@ static void add_thing_body(Thing *t)
 {
     t->body = -1;
     t->bodyN = 1;
-    if (t->def && t->def->type == T_STAIRS && t->solid && !t->hangs)
+    if (t->def && t->def->type == T_STAIRS && t->solid && !t->hangs && !t->staysPut)
     {
         Body steps[64];
         int n = 0;
@@ -328,7 +328,7 @@ static void add_thing_body(Thing *t)
         }
     }
     int door = t->def && t->def->type == T_DOOR && t->def->solid;
-    if ((!t->solid && !door) || t->hangs) return;
+    if ((!t->solid && !door) || t->hangs || t->staysPut) return; /* hung on the wall, or staying where it's put (the same): in nobody's way */
     t->body = bodyCount;
     if (door && !t->solid) { Body *b = &bodies[bodyCount++]; memset(b, 0, sizeof *b); b->z = -100000; return; } /* open: no box till it closes */
     thing_box(t, &bodies[bodyCount++]);
@@ -1327,7 +1327,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         set_box(d, b.left, b.top, b.width, b.depth, b.z, flat ? 0 : b.height);
         d->wall = t->def && (t->def->type == T_WALL || t->def->type == T_DOOR || t->def->type == 12 /* Window */);
         d->occludes = t->def && t->def->occludes;
-        d->hangs = t->hangs;
+        d->hangs = t->hangs || t->staysPut; /* staying where it's put: drawn as a hung thing */
         d->thing = t->uid; d->order = t->seq ? t->seq : t->uid;
         if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
         { d->slab = 1; d->sl = b.left; d->sr = b.left + b.width - 1; d->sf = b.top; d->sn = b.top + b.depth - 1; } /* a tile object that is part of an upper floor */
@@ -2838,9 +2838,9 @@ static void settle_all(void)
         int slab = t->def && type == T_TILE && t->def->solid && t->def->floorTile && t->z >= LIFTS_PER_FLOOR && t->z % LIFTS_PER_FLOOR == 0;
         SettleBody *s = &all[n];
         *s = (SettleBody){ b.left, b.top, b.width, b.depth, b.z, b.height, t->elevates || slab, slab || type == 32 /* Table */ || (type == T_TILE && t->def->solid),
-                           slab || (type == T_TILE && t->def->solid), t->liesUnder, t->hangs, 0, n, t };
+                           slab || (type == T_TILE && t->def->solid), t->liesUnder, t->hangs || t->staysPut, 0, n, t };
         /* a tile has no gravity (a floor, a roof); hung on the wall, a wall set's piece, a vehicle's piece: they stay where they are */
-        s->fixed = type == T_TILE || t->hangs || t->staysPut || t->wallSetPiece || t->vehicle; /* staying where it's put: at its height, holding up what's on it */
+        s->fixed = type == T_TILE || t->hangs || t->staysPut || t->wallSetPiece || t->vehicle; /* staying where it's put: at its height, like a hung thing */
         n++;
     }
     qsort(all, (size_t)n, sizeof(SettleBody), by_lift);
@@ -2990,7 +2990,7 @@ void world_thing_move(int uid, int x, int y, int onFloor)
     t->x = x; t->y = y; t->offX = t->offY = 0;
     t->seq = nextUid++; /* put down again: over what it ties with, as the Windows engine re-adds its visual */
     /* put down by hand: no longer tucked underneath anything, hung on the wall, nor staying put (DropOnMap) */
-    int wasHung = t->hangs;
+    int wasHung = t->hangs || t->staysPut;
     t->liesUnder = 0; t->hangs = 0; t->staysPut = 0;
     if (wasHung && t->solid && t->body < 0) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); } /* off the wall: in the way again */
     Body b;
@@ -3550,6 +3550,9 @@ static int zombie_line(T3 from, T3 to, T3 *out, int max)
     return n;
 }
 
+/* Staying where it's put (IsReachable's stuckIn): what it's stuck in or on - solids over its footprint - doesn't stand in the way. */
+static const Vol *reachStuckIn;
+
 /* Fast_pathfinder_client::is_grabable_internal */
 static int grabable_internal(const Vol *fromVol, T3 targetTile, const Vol *toVol, int bl, int bt, int bw, int bd)
 {
@@ -3577,7 +3580,12 @@ static int grabable_internal(const Vol *fromVol, T3 targetTile, const Vol *toVol
     {
         if (vol_has(toVol, line[i]) || vol_has(fromVol, line[i]) || vol_has(&moved, line[i])) continue;
         int b = reach_blocker(line[i], 1);
-        if (b >= 0 && !reachSolids[b].movable) return 0;
+        if (b >= 0 && !reachSolids[b].movable)
+        {
+            const Body *o = &reachSolids[b].b;
+            const Vol *s = reachStuckIn;
+            if (!(s && o->left < s->x + s->w && s->x < o->left + o->width && o->top < s->y + s->d && s->y < o->top + o->depth)) return 0;
+        }
     }
     return 1;
 }
@@ -3616,7 +3624,10 @@ int world_reachable_thing(int uid)
     Body b;
     thing_box(t, &b);
     Vol v = { b.left, b.top, b.z, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1, b.height > 0 ? b.height : 1 };
-    return grabable(v, 0);
+    reachStuckIn = t->staysPut ? &v : NULL;
+    int reached = grabable(v, 0);
+    reachStuckIn = NULL;
+    return reached;
 }
 
 /* Is this spot (the middle of a cell, at a lift) within the player's reach (IsSpotReachable)? */
@@ -3944,7 +3955,7 @@ void world_thing_become(int uid, int objectId)
     t->sizeZ = d->type == T_TRAP || (d->type == T_TILE && !d->solid) ? 0 : d->sizeZ;
     t->solid = d->solid; t->solidOffX = d->solidOffX; t->solidOffY = d->solidOffY;
     if (t->body >= 0) { if (t->solid) thing_box(t, &bodies[t->body]); else { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; } }
-    else if (t->solid && !t->hangs) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); }
+    else if (t->solid && !t->hangs && !t->staysPut) { ensure_bodies(1); t->body = bodyCount; t->bodyN = 1; thing_box(t, &bodies[bodyCount++]); }
     settle_all();
 }
 

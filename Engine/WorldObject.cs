@@ -261,9 +261,9 @@ public class ObjectInstance : IHasDollState
 
     /// <summary>
     /// Stays where it's put (Map Editor, Free Placement - this placed copy only, off by default): a potion on top of a
-    /// cabinet, a dagger on a shelf. Like hanging on the wall it keeps the height it was put at and never falls; unlike it,
-    /// it's an ordinary thing in every other way - drawn as anything there is, holding up what's on it, picked up as usual
-    /// (put down again by hand, it's an ordinary thing that falls onto what's under it).
+    /// cabinet, a dagger on a shelf. It acts exactly as a thing hung on the wall - stuck where it was put, at its height,
+    /// drawn over what it's on, in nobody's way, holding nothing up - except that the player reaches it over whatever it's
+    /// stuck in or on, so it can be used and picked up (put down again by hand, it's an ordinary thing).
     /// </summary>
     public bool StaysPut { get; set; }
 
