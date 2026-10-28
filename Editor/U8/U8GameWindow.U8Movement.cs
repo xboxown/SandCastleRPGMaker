@@ -43,6 +43,8 @@ public partial class U8GameWindow
     {
         PreviewMouseDown += (_, e) =>
         {
+            if (e.ChangedButton == MouseButton.Right) _rightMouseHeld = true;
+            if (U8CombatMouseDown(e)) { e.Handled = true; return; } // combat mode: a swing, a kick, a block (U8GameWindow.U8Combat.cs)
             if (e.ChangedButton == MouseButton.Right)
             {
                 _rightMouseHeld = true;
@@ -51,7 +53,7 @@ public partial class U8GameWindow
             }
             else if (e.ChangedButton == MouseButton.Left && _rightMouseHeld) { TryStartU8Jump(fromMouse: true); e.Handled = true; } // both buttons: a jump
         };
-        PreviewMouseUp += (_, e) => { if (e.ChangedButton == MouseButton.Right) _rightMouseHeld = false; };
+        PreviewMouseUp += (_, e) => { if (e.ChangedButton == MouseButton.Right) _rightMouseHeld = false; U8CombatMouseUp(e); };
         PreviewMouseMove += (_, e) => _mouseOnCanvas = e.GetPosition(GameCanvas);
         LostMouseCapture += (_, _) => { if (Mouse.RightButton != MouseButtonState.Pressed) _rightMouseHeld = false; };
     }

@@ -111,7 +111,7 @@ public partial class U8GameWindow
         }
         PlaySoundFrom(weapon?.Weapon.HitSoundResourceId ?? -1, defender);
         bool noDamage = powers.HasFlag(WeaponPowers.NoDamage);
-        int damage = noDamage || points == 0 ? 0 : WeaponDamage(attacker, defender, points, type);
+        int damage = noDamage || (points == 0 && !_u8Kicking) ? 0 : U8Damage(attacker, defender, weapon, ammo, type); // Ultima 8's damage (U8GameWindow.U8Combat.cs)
         if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
         if (damage <= 0 && !noDamage) return; // no damage, no powers
         if (damage > 0)

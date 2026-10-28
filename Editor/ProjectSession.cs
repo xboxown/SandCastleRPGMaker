@@ -26,6 +26,10 @@ internal static class ProjectSession
         _openCharacterEditor = openCharacterEditor;
     }
 
+    /// <summary>The project's style (GameStyle): an Ultima 8 project's editors show what Ultima 8 adds. MainWindow sets it.</summary>
+    public static Func<string>? StyleProvider;
+    public static bool IsUltima8 => StyleProvider?.Invoke() == GameStyle.Ultima8;
+
     /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
     public static Func<ResourceDatabase>? ResourcesProvider;
     public static Func<VideoDatabase>? VideosProvider;

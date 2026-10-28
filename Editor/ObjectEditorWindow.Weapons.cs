@@ -129,6 +129,18 @@ public partial class ObjectEditorWindow
         sounds.Children.Add(SoundPicker("Attack sound", () => w.AttackSoundResourceId, v => w.AttackSoundResourceId = v));
         sounds.Children.Add(SoundPicker("Hit sound", () => w.HitSoundResourceId, v => w.HitSoundResourceId = v));
         body.Children.Add(sounds);
+        if (ProjectSession.IsUltima8)
+        {
+            // An Ultima 8 project: its engine's own numbers (Pentagram's WeaponInfo).
+            var u8 = new WrapPanel();
+            u8.Children.Add(NumberField("Ultima 8: damage modifier", () => w.U8DamageModifier, v => w.U8DamageModifier = (int)Math.Clamp(v, 0, 127), "Ultima 8: a blow does random 0..this, plus Damage, plus Strength/5."));
+            u8.Children.Add(NumberField("Attack Dex bonus", () => w.U8DexAttackBonus, v => w.U8DexAttackBonus = (int)Math.Clamp(v, -50, 50), "Ultima 8: added to the wielder's Dexterity when it attacks (to hit)."));
+            u8.Children.Add(NumberField("Defend Dex bonus", () => w.U8DexDefendBonus, v => w.U8DexDefendBonus = (int)Math.Clamp(v, -50, 50), "Ultima 8: added to the wielder's Dexterity when it is attacked."));
+            u8.Children.Add(NumberField("Armour bonus", () => w.U8ArmourBonus, v => w.U8ArmourBonus = (int)Math.Clamp(v, 0, 50), "Ultima 8: added to the wielder's armour class (a shield-like weapon)."));
+            body.Children.Add(u8);
+            body.Children.Add(Note("Ultima 8 (Pentagram): a blow lands when random 0..(attacking Dex + 2) beats random 0..(defending Dex - 1); it does random 0..modifier + Damage + Strength/5; " +
+                                   "bare hands random 0..Strength/2 + 1; armour takes 3 x its armour class percent off (half against fire), blocking the blocker's Strength/5."));
+        }
         body.Children.Add(Note("As Exult (combat.cc, actors.cc): a 30-sided roll plus the wielder's Combat (+3 lucky) against the foe's Combat decides a hit; damage is 1..Damage plus 1..Strength/3, " +
                                "less 1..(all the armor the foe wears) - lightning, ethereal and sonic damage ignore armor. A ranged weapon always shoots; a thrown one is thrown at a foe out of reach, " +
                                "losing aim with distance (badly: the whole distance, well: half). The strike style sets how long a blow takes (reach is quickest, slow swing slowest); " +
@@ -141,7 +153,8 @@ public partial class ObjectEditorWindow
         var body = Group("Armor");
         var row = new WrapPanel();
         row.Children.Add(GearSlotPicker("Worn in (also fits either hand: a shield)", () => (a.EquipSlot, a.CustomSlotName), (s, c) => { a.EquipSlot = s; a.CustomSlotName = c; }));
-        row.Children.Add(NumberField("Armor points", () => a.ArmorPoints, v => a.ArmorPoints = (int)Math.Clamp(v, 0, 127), "All the armor a character wears adds up; every blow is reduced by 1 to that total (Exult's apply_damage)."));
+        row.Children.Add(NumberField("Armor points", () => a.ArmorPoints, v => a.ArmorPoints = (int)Math.Clamp(v, 0, 127), "All the armor a character wears adds up; every blow is reduced by 1 to that total (Exult's apply_damage). Ultima 8: its armour class - every blow 3 x that percent less."));
+        if (ProjectSession.IsUltima8) row.Children.Add(NumberField("Ultima 8: kick bonus", () => a.U8KickBonus, v => a.U8KickBonus = (int)Math.Clamp(v, 0, 50), "Ultima 8: added to a kick's damage (boots)."));
         body.Children.Add(row);
         var immune = new WrapPanel();
         immune.Children.Add(new TextBlock { Text = "Makes its wearer immune to:", Margin = new Thickness(0, 4, 8, 0) });

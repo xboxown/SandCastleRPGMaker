@@ -25,6 +25,14 @@ public class WeaponSettings
 
     /// <summary>Exult's damage: each landed blow does 1..Damage, plus 1..Strength/3 (apply_damage). 127 or more always does 127.</summary>
     public int Damage { get; set; } = 4;
+    /// <summary>Ultima 8 only: damage is random(0..this) + Damage + Strength / 5 (WeaponInfo::_damageModifier).</summary>
+    public int U8DamageModifier { get; set; }
+    /// <summary>Ultima 8 only: added to the wielder's Dexterity when it attacks (WeaponInfo::_dexAttackBonus).</summary>
+    public int U8DexAttackBonus { get; set; }
+    /// <summary>Ultima 8 only: added to the wielder's Dexterity when it is attacked (WeaponInfo::_dexDefendBonus).</summary>
+    public int U8DexDefendBonus { get; set; }
+    /// <summary>Ultima 8 only: added to the wielder's armour class (WeaponInfo::_armourBonus).</summary>
+    public int U8ArmourBonus { get; set; }
     public DamageType DamageType { get; set; } = DamageType.Normal;
     public WeaponPowers Powers { get; set; } = WeaponPowers.None;
 
@@ -66,6 +74,8 @@ public class ArmorSettings
     public string? CustomSlotName { get; set; }
     /// <summary>Exult's armor: every blow is reduced by 1..(all the armor worn) points (apply_damage).</summary>
     public int ArmorPoints { get; set; } = 2;
+    /// <summary>Ultima 8 only: added to a kick's damage (ArmourInfo::_kickAttackBonus - boots).</summary>
+    public int U8KickBonus { get; set; }
     /// <summary>Damage types that do nothing at all to whoever wears it (Exult's armor immunity: the blow just clangs).</summary>
     public List<DamageType> Immunities { get; set; } = new();
     /// <summary>The clang when a blow does nothing because of it.</summary>

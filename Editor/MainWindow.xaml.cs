@@ -114,6 +114,7 @@ public partial class MainWindow : Window
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
         ProjectSession.PosesProvider = () => _poseDatabase;
+        ProjectSession.StyleProvider = () => _projectStyle; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
         ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
         ProjectSession.HousesProvider = () => _houses; // MainWindow.Houses.cs

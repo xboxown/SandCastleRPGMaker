@@ -370,10 +370,11 @@ public partial class U8GameWindow
     {
         _combatMode = !_combatMode;
         if (!_combatMode) { _playerTarget = null; _playerTargetThing = null; }
+        U8CombatModeChanged(); // the combat stance, the weapon drawn (U8GameWindow.U8Combat.cs)
         CombatModeChangedMusic(); // running from a foe close by (U8GameWindow.CombatMusic.cs)
         ShowPointer(RestingPointer); // the attack pointer while in combat mode
         StatusText.Text = _combatMode
-            ? "Combat mode: double-click someone to attack them; you strike whenever they're in reach. C to stop."
+            ? "Combat mode: double-click to swing toward the pointer, double right-click to kick, hold the left button to block. C (or double right-click yourself) to stop."
             : "Combat mode off.";
         ShowClock();
     }
@@ -397,7 +398,9 @@ public partial class U8GameWindow
     /// <summary>In combat mode, the player builds up Dexterity points every standard delay and strikes the target whenever it's in reach.</summary>
     private void UpdatePlayerAttack(double elapsedMs)
     {
-        if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0) ApplyPoseSprite(_idlePose);
+        if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0 && !_u8Blocking) ApplyPoseSprite(_idlePose);
+        // Ultima 8: the Avatar fights only when told - a swing, a kick, a block (U8GameWindow.U8Combat.cs) - except a foe an event has set it on (Attack).
+        if (_playerTarget is null && _playerTargetThing is null) return;
         // Not Manual (the paperdoll's combat behavior): in combat mode the player picks a foe by its mode, as Exult's Avatar does (find_foe).
         if (_combatMode && _player is not null && _playerTarget is null && _playerTargetThing is null && _player.AttackMode != AttackMode.Manual
             && FindFoeFor(_player) is { } autoFoe && !IsUnconscious(autoFoe)) _playerTarget = autoFoe;
@@ -466,7 +469,7 @@ public partial class U8GameWindow
         PlaySoundFrom(weapon?.Weapon.AttackSoundResourceId ?? -1, attacker);
         int attval = Stat(attacker, BuiltInStatKind.Combat, 10) + (weapon?.Weapon.Lucky == true ? 3 : 0); // lucky: +3
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
-        bool hit = weapon?.Weapon.AutoHit == true || IsMotionless(defender) || RollToWin(attval, defval); // lying still, it can't ward off a blow
+        bool hit = weapon?.Weapon.AutoHit == true || U8Hits(attacker, defender); // Ultima 8's to-hit: Dexterity against Dexterity (U8GameWindow.U8Combat.cs)
         FightBack(defender, attacker);
         if (!hit)
         {
