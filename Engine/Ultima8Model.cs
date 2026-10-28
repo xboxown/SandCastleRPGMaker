@@ -26,4 +26,14 @@ public class Ultima8Settings
     public int WalkThreshold { get; set; } = 50;
     /// <summary>Further than this (of 255) runs.</summary>
     public int RunThreshold { get; set; } = 160;
+
+    // ---------- Conversations (Pentagram's BarkGump / AskGump) ----------
+
+    /// <summary>What a character says floats over its head, wrapped to this width (game pixels; BarkGump's text 194 wide).</summary>
+    public int BarkWidth { get; set; } = 194;
+    /// <summary>The answers over the Avatar, in rows of at most this width (AskGump: 160).</summary>
+    public int AskWidth { get; set; } = 160;
+    /// <summary>A page with no answers stays this long per letter (at least BarkMinMs), then goes on by itself.</summary>
+    public int BarkMsPerChar { get; set; } = 60;
+    public int BarkMinMs { get; set; } = 1500;
 }

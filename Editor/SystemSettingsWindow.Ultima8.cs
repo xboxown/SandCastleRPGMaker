@@ -45,6 +45,15 @@ public partial class SystemSettingsWindow
         mouse.Children.Add(Number("Run beyond (of 255)", () => u8.RunThreshold, v => u8.RunThreshold = Math.Clamp(v, 0, 255)));
         panel.Children.Add(mouse);
         panel.Children.Add(new TextBlock { Text = "How far the pointer is from the Avatar, out of 255 of half the view: nearer than Walk is a step, beyond Run is a run (Pentagram's 50 and 160).", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+
+        panel.Children.Add(new TextBlock { Text = "Conversations (words over the speaker's head, answers over the Avatar)", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        var talk = new WrapPanel { Margin = new Thickness(0, 4, 0, 0) };
+        talk.Children.Add(Number("Words wrap at (pixels)", () => u8.BarkWidth, v => u8.BarkWidth = Math.Clamp(v, 40, 320)));
+        talk.Children.Add(Number("Answer rows (pixels)", () => u8.AskWidth, v => u8.AskWidth = Math.Clamp(v, 40, 320)));
+        talk.Children.Add(Number("Time per letter (ms)", () => u8.BarkMsPerChar, v => u8.BarkMsPerChar = Math.Max(0, v)));
+        talk.Children.Add(Number("At least (ms)", () => u8.BarkMinMs, v => u8.BarkMinMs = Math.Max(200, v)));
+        panel.Children.Add(talk);
+        panel.Children.Add(new TextBlock { Text = "A page with no answers goes on by itself after its time (or a click). Pentagram's BarkGump is 194 wide, its AskGump rows 160. Narration (nobody on the map speaking) keeps its box.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
         static FrameworkElement Number(string label, Func<int> get, Action<int> set)

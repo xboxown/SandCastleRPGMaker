@@ -85,6 +85,7 @@ public partial class U8GameWindow
     {
         dx = dy = 0;
         if (_pointer is { IsDragging: true }) return false; // holding something on the mouse: no walking until it's put down
+        if (IsShowingMessage || InCinema) return false; // talking (the world goes on; the Avatar waits for the answer), or a cutscene
         int sx = 0, sy = 0;
         if (_heldDirectionKeys.Contains(Key.Left)) sx--;
         if (_heldDirectionKeys.Contains(Key.Right)) sx++;

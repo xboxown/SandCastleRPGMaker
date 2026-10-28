@@ -38,9 +38,10 @@ public partial class U8GameWindow
     /// Ultima 8: no window pauses the game - a paperdoll, the inventory, a container (a drawer, a chest), a stats window, a
     /// PaperDoll Editor paperdoll, a book: the world goes on while it's open (Pentagram's ContainerGump and PaperdollGump
     /// are plain gumps; its books - ReadableGump, a ModalGump - pause there, but not here, by the designer's rule).
-    /// What still waits: a message box, choosing a target, a map being looked at, sleeping, a video, a number being typed.
+    /// A conversation doesn't either (Pentagram's BarkGump / AskGump aren't modal): the world goes on, the Avatar waits for the answer.
+    /// What still waits: choosing a target, a map being looked at, sleeping, a video, a number being typed.
     /// </summary>
-    private bool IsGamePaused => IsShowingMessage || _gameOver || IsChoosingTarget || _objectOverlayOpen || _restingNow || IsPlayingVideo || _scriptInput is not null; // Get_click pauses the time queue while a target is chosen
+    private bool IsGamePaused => _gameOver || IsChoosingTarget || _objectOverlayOpen || _restingNow || IsPlayingVideo || _scriptInput is not null; // Get_click pauses the time queue while a target is chosen
 
     /// <summary>Checked every frame by the game loop: pauses or resumes the game the moment the first gump opens or the last one closes (Time_queue::pause / resume).</summary>
     private void UpdateGamePause()

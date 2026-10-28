@@ -362,6 +362,7 @@ public partial class U8GameWindow
         if (_currentMessage is not { } message) return;
         _messageDrawing?.Stop();
         MessageLayer.Children.Clear();
+        if (TryDrawU8Message(message)) return; // Ultima 8: over the speaker's head, the answers over the Avatar (U8GameWindow.U8Talk.cs)
         var content = new DialogBoxContent(message.Title, message.Text, _messageFace, message.FaceRight, message.Position, message.Dim, message.Frame,
             message.Replies?.Select(r => r.Text).ToList() ?? new List<string>())
         {
