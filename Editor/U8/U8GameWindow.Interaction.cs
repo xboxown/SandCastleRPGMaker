@@ -621,7 +621,7 @@ public partial class U8GameWindow
     {
         switch (PayloadObject(origin))
         {
-            case ObjectInstance o: o.Quantity = quantity; break;
+            case ObjectInstance o: o.Quantity = quantity; RefreshObjectLook(o); break; // its picture for its new number (gold_1, gold_2...)
             case InventoryItemInstance i: i.Quantity = quantity; break;
         }
     }
@@ -765,6 +765,20 @@ public partial class U8GameWindow
             && ContainerDef(occupant.ItemId) is { } occupantData)
             return TryPutIntoContainer(origin, occupantData, occupant, dropTopLeft: null); // refused: it stays where it was
 
+        // The same kind of stack in the slot under the pointer: joined, if the total stays within 100 (Game_object::drop).
+        if (hitTarget is SlotTarget { SlotKey: var stackSlotKey }
+            && TryGetEquippedInstanceId(character, stackSlotKey, out int stackId)
+            && character.Inventory.FirstOrDefault(i => i.InstanceId == stackId) is { Category: ReferencedItemCategory.Object } held
+            && !ReferenceEquals(held, PayloadObject(origin)) && PayloadIdentity(origin) is (ReferencedItemCategory.Object, var payloadId) && payloadId == held.ItemId
+            && CanCombine(ObjectDef(held.ItemId)) && held.Quantity + PayloadQuantity(origin) <= ObjectTypes.MaxQuantity)
+        {
+            if (!CheckWeight(origin, character)) return false;
+            held.Quantity += PayloadQuantity(origin);
+            RemoveFromSource(origin);
+            FinishCharacterReceive(character, PayloadName(origin));
+            return true;
+        }
+
         if (FindClosestFreeSlot(gump, PaperdollGumpsCanvas.TranslatePoint(screen, gump.BodyCanvas), origin) is { } slotKey)
         {
             // Dropped back on the slot it came from - nothing to do; it's still there.
@@ -840,8 +854,12 @@ public partial class U8GameWindow
         if (PayloadIdentity(origin) is (ReferencedItemCategory.Object, var stackId) && CanCombine(ObjectDef(stackId)))
         {
             int adding = PayloadQuantity(origin);
-            var stack = _map.Objects.LastOrDefault(o => !ReferenceEquals(o, PayloadObject(origin)) && o.ContainerInstanceId < 0 && o.ObjectId == stackId
-                && o.X == newCellX && o.Y == newCellY && o.Quantity + adding <= ObjectTypes.MaxQuantity);
+            // drag.cc drop_on_map: what is under the pointer gets the drop first (found->drop) - else a stack on the cell it lands on.
+            var underPointer = HitTestStack(mouseInWorld).obj;
+            var stack = underPointer is not null && !ReferenceEquals(underPointer, PayloadObject(origin)) && underPointer.ObjectId == stackId && underPointer.ContainerInstanceId < 0
+                    && underPointer.Quantity + adding <= ObjectTypes.MaxQuantity ? underPointer
+                : _map.Objects.LastOrDefault(o => !ReferenceEquals(o, PayloadObject(origin)) && o.ContainerInstanceId < 0 && o.ObjectId == stackId
+                    && o.X == newCellX && o.Y == newCellY && o.Quantity + adding <= ObjectTypes.MaxQuantity);
             if (stack is not null)
             {
                 RemoveFromSource(origin);
@@ -933,6 +951,14 @@ public partial class U8GameWindow
         var (category, itemId) = PayloadIdentity(origin);
         var payloadObject = PayloadObject(origin);
         bool isTwoHanded = PayloadIsTwoHanded(origin);
+
+        // Actor::add (combine): a stack of the same kind they already carry - in a hand, a slot, their own list - joins it, if the total stays within 100.
+        if (TryCombineIntoContents(character.Inventory, category, itemId, PayloadQuantity(origin), except: payloadObject))
+        {
+            RemoveFromSource(origin);
+            FinishCharacterReceive(character, PayloadName(origin));
+            return true;
+        }
 
         // Ammo goes to its own slot (Object Editor > Ammo), joining a stack of the same ammo already there.
         if (category == ReferencedItemCategory.Object && ObjectDef(itemId) is { Type: ObjectType.Ammo } ammo

@@ -518,11 +518,12 @@ public partial class GameTestWindow
     /// <summary>Exult Game_object::drop: the same kind of stackable thing dropped on a stack joins it, up to 100. True = it all fitted (the dropped thing is used up).</summary>
     private static bool CanCombine(WorldObject? obj) => obj is not null && (ObjectTypes.IsBundle(obj.Type) || obj.IsStackable);
 
-    /// <summary>Into a list of contents: joins a stack of the same object if the total stays within 100. True if joined.</summary>
-    private bool TryCombineIntoContents(List<InventoryItemInstance> contents, ReferencedItemCategory category, int itemId, int quantity)
+    /// <summary>Into a list of contents: joins a stack of the same object if the total stays within 100 (Exult's Game_object::drop). True if joined.</summary>
+    /// <param name="except">The stack being moved: never joined with itself.</param>
+    private bool TryCombineIntoContents(List<InventoryItemInstance> contents, ReferencedItemCategory category, int itemId, int quantity, object? except = null)
     {
         if (category != ReferencedItemCategory.Object || !CanCombine(ObjectDef(itemId))) return false;
-        var stack = contents.FirstOrDefault(i => i.Category == category && i.ItemId == itemId && i.Quantity + quantity <= ObjectTypes.MaxQuantity);
+        var stack = contents.FirstOrDefault(i => !ReferenceEquals(i, except) && i.Category == category && i.ItemId == itemId && i.Quantity + quantity <= ObjectTypes.MaxQuantity);
         if (stack is null) return false;
         stack.Quantity += quantity;
         return true;
