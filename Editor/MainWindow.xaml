@@ -12,6 +12,7 @@
                 <MenuItem x:Name="NewProjectMenuItem" Header="New Project" Click="NewProjectMenuItem_Click"/>
                 <MenuItem x:Name="OpenProjectMenuItem" Header="Open Project..." Click="OpenProjectMenuItem_Click"/>
                 <MenuItem x:Name="SaveProjectMenuItem" Header="Save Project" Click="SaveProjectMenuItem_Click" IsEnabled="False"/>
+                <MenuItem x:Name="CloseProjectMenuItem" Header="Close Project" Click="CloseProjectMenuItem_Click"/>
                 <Separator/>
                 <MenuItem Header="Exit" Click="ExitMenuItem_Click"/>
             </MenuItem>

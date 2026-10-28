@@ -800,6 +800,12 @@ public partial class MainWindow : Window
     {
         var dialog = new NewProjectWindow { Owner = this };
         if (dialog.ShowDialog() != true || !dialog.Result || dialog.ProjectFilePath is null) return;
+        // The project open now is closed first, so nothing of it goes into the new one (MainWindow.CloseProject.cs).
+        if (!CloseCurrentProject("starting the new project"))
+        {
+            MessageBox.Show(this, $"The new project was made at:\n{dialog.ProjectFilePath}\n\nOpen it with File > Open Project when you're ready.", "New Project", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
 
         // A brand-new project's shapes.sdbx/objects.sdbx/audios.sdbx were just
         // written empty by NewProjectWindow - start this session with equally-
@@ -831,6 +837,7 @@ public partial class MainWindow : Window
     {
         var pick = new OpenFileDialog { Filter = "Sandcastle Project (*.msrp)|*.msrp" };
         if (pick.ShowDialog() != true) return;
+        if (!CloseCurrentProject("opening another project")) return; // the project open now is closed first (MainWindow.CloseProject.cs)
         LoadProjectFromPath(pick.FileName);
     }
 
@@ -1392,7 +1399,7 @@ public partial class MainWindow : Window
     public bool IsGameHost { get; init; }
 
     /// <summary>A project named on the command line: opened as File > Open does.</summary>
-    public void OpenFromCommandLine(string msrpPath) => LoadProjectFromPath(msrpPath);
+    public void OpenFromCommandLine(string msrpPath) { if (CloseCurrentProject("opening another project")) LoadProjectFromPath(msrpPath); }
 
     /// <summary>
     /// After a project is opened: what loading it left behind (its files read, the map built) handed back to Windows -
