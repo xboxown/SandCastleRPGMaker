@@ -1,7 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.NewProjectWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="New Project" Height="420" Width="520" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
+        Title="New Project" Height="520" Width="520" WindowStartupLocation="CenterOwner" ResizeMode="NoResize">
     <StackPanel Margin="16">
         <TextBlock Text="New Project" FontSize="18" FontWeight="Bold" Margin="0,0,0,16"/>
 
@@ -22,6 +22,14 @@
             <Button Grid.Column="1" Content="Browse..." Width="80" Click="BrowseButton_Click"/>
         </Grid>
         <TextBlock x:Name="FullPathPreviewText" Margin="0,0,0,14" Opacity="0.7" FontSize="11" FontFamily="Consolas" TextWrapping="Wrap"/>
+
+        <TextBlock Text="Style:" FontWeight="SemiBold" Margin="0,0,0,4"/>
+        <ComboBox x:Name="StyleBox" Margin="0,0,0,4" SelectedIndex="0">
+            <ComboBoxItem Content="Ultima 7" Tag="Ultima7" ToolTip="Ultima VII's engine (as Exult): everything built so far"/>
+            <ComboBoxItem Content="Ultima 8" Tag="Ultima8" ToolTip="Ultima 8's engine (as Pentagram): the same editor, with more for Ultima 8 - its own engine"/>
+        </ComboBox>
+        <TextBlock Margin="0,0,0,14" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
+                   Text="The same editor for both. An Ultima 8 project also gets Ultima 8's own features, and its game runs in the Ultima 8 engine."/>
 
         <TextBlock Margin="0,0,0,16" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
                    Text="One project for every platform: you choose Windows, Linux, Mac, MorphOS, AmigaOS 4 or Amiga 68k when you build the game (Game > Build...)."/>

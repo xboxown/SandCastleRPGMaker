@@ -10,6 +10,15 @@ public class ProjectManifest
     public string ProjectName { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; }
+    /// <summary>The game's style (File > New Project): GameStyle.Ultima7 (every project made before styles existed) or GameStyle.Ultima8 - its own engine.</summary>
+    public string Style { get; set; } = GameStyle.Ultima7;
+}
+
+/// <summary>A project's style: which engine its game runs in.</summary>
+public static class GameStyle
+{
+    public const string Ultima7 = "Ultima7";
+    public const string Ultima8 = "Ultima8";
 }
 
 /// <summary>

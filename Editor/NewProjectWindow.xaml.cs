@@ -21,6 +21,8 @@ public partial class NewProjectWindow : Window
     public string ProjectName { get; private set; } = string.Empty;
     public string Platform { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }
+    /// <summary>GameStyle.Ultima7 or GameStyle.Ultima8.</summary>
+    public string Style { get; private set; } = GameStyle.Ultima7;
 
     public NewProjectWindow()
     {
@@ -115,8 +117,10 @@ public partial class NewProjectWindow : Window
                 ProjectId = id,
                 ProjectName = projectName,
                 Platform = "All", // the platform is chosen at Build
-                CreatedAtUtc = DateTime.UtcNow
+                CreatedAtUtc = DateTime.UtcNow,
+                Style = (StyleBox.SelectedItem as ComboBoxItem)?.Tag as string ?? GameStyle.Ultima7
             };
+            Style = manifest.Style;
 
             // All four files are married from the moment the project exists,
             // not only once the person first hits Save - every one of them is

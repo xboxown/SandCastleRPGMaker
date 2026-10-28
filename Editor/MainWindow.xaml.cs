@@ -821,6 +821,7 @@ public partial class MainWindow : Window
         _tilePropertiesDatabase = new TilePropertiesDatabase();
         LoadHouses(null);
 
+        _projectStyle = dialog.Style; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
         SetActiveProject(dialog.ProjectFilePath, dialog.ProjectId, dialog.ProjectName, dialog.Platform, dialog.CreatedAtUtc);
     }
 
@@ -881,6 +882,7 @@ public partial class MainWindow : Window
             LoadHouses(payload.Houses); // the House Editor's houses (MainWindow.Houses.cs)
             _map = payload.Map;
             if (_map is not null) ShowMapInEditor();
+            _projectStyle = manifest.Style is GameStyle.Ultima8 ? GameStyle.Ultima8 : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             CompactAfterLoad();
             return true;
@@ -955,7 +957,7 @@ public partial class MainWindow : Window
             var auto = _systemSettings.AutoSave;
             if (!auto.Enabled || _currentProjectFilePath is null) return;
             if ((DateTime.UtcNow - _lastSaved).TotalMinutes < Math.Max(1, auto.Minutes)) return;
-            if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible) || System.Windows.Application.Current.Windows.OfType<GameTestWindow>().Any()) return; // Game Test or a window open over the editor: later
+            if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible) || System.Windows.Application.Current.Windows.OfType<GameTestWindow>().Any() || System.Windows.Application.Current.Windows.OfType<U8GameWindow>().Any()) return; // Game Test or a window open over the editor: later
             if (SaveProject()) StatusText.Text = $"Autosaved at {DateTime.Now:HH:mm}.";
             else _lastSaved = DateTime.UtcNow; // failed (already told): try again after the next interval
         };
@@ -1049,7 +1051,8 @@ public partial class MainWindow : Window
                     ProjectId = _currentProjectId.Value,
                     ProjectName = _currentProjectName ?? string.Empty,
                     Platform = _currentProjectPlatform ?? "Windows",
-                    CreatedAtUtc = _currentProjectCreatedAtUtc
+                    CreatedAtUtc = _currentProjectCreatedAtUtc,
+                    Style = _projectStyle
                 },
                 Factions = _factionDatabase,
                 Characters = _characterDatabase,
@@ -1092,7 +1095,7 @@ public partial class MainWindow : Window
         MainToolBar.IsEnabled = true;
         MainContentGrid.IsEnabled = true;
 
-        Title = $"Sandcastle RPG Maker - Map Editor - {System.IO.Path.GetFileNameWithoutExtension(projectFilePath)}";
+        Title = $"Sandcastle RPG Maker - Map Editor - {System.IO.Path.GetFileNameWithoutExtension(projectFilePath)}{StyleTitleSuffix}";
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e) => Close();
@@ -1311,7 +1314,7 @@ public partial class MainWindow : Window
             MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var platform = new BuildPlatformWindow { Owner = this }; // which platform (BuildPlatformWindow.cs)
+        var platform = new BuildPlatformWindow(ultima8: IsUltima8) { Owner = this }; // which platform (BuildPlatformWindow.cs); an Ultima 8 game: Windows so far
         if (platform.ShowDialog() != true) return;
         if (platform.Picked != BuildPlatform.Windows) { BuildForPlayer(platform.Picked); return; } // the Sandcastle player's platforms (MainWindow.PlayerBuild.cs)
         if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
@@ -1414,7 +1417,8 @@ public partial class MainWindow : Window
             GameDataException.ShowPlain(GameErrors.CantStart, "it has no map to play.", msrpPath, _currentProjectName ?? "Game");
             return false;
         }
-        RunStandalone(NewGameWindow(atTitle: true, shipped: true));
+        if (IsUltima8) RunStandaloneU8(NewU8GameWindow(atTitle: true, shipped: true)); // an Ultima 8 game: its own engine
+        else RunStandalone(NewGameWindow(atTitle: true, shipped: true));
         return true;
     }
 
@@ -1477,6 +1481,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (IsUltima8) { LaunchU8GameTest(atTitle); return; } // an Ultima 8 project: its own engine (MainWindow.U8.cs)
         // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs); Return To Title and New Game start a fresh one.
         for (GameTestWindow? game = NewGameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextGameWindow(game, shipped: false))
         {

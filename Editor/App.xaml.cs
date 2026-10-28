@@ -16,6 +16,17 @@ public partial class App : Application
         DispatcherUnhandledException += (_, args) =>
         {
             // A bug while a game runs: error 900 in the game's error paperdoll, and the game goes on (it can be saved or loaded) - unless it keeps happening.
+            // An Ultima 8 game (its own engine): the same handling.
+            var u8 = Windows.OfType<U8GameWindow>().FirstOrDefault(w => w.IsActive) ?? Windows.OfType<U8GameWindow>().FirstOrDefault();
+            if (u8 is not null && u8.UnexpectedError(args.Exception)) { args.Handled = true; return; }
+            if (u8 is { IsShippedGame: false })
+            {
+                GameDataException.ShowPlain(GameErrors.Unexpected, args.Exception.Message, null, u8.Title);
+                args.Handled = true;
+                u8.Close();
+                return;
+            }
+            if (u8 is not null) { GameDataException.ShowPlain(GameErrors.Unexpected, args.Exception.Message, null, u8.Title); args.Handled = true; Shutdown(); return; }
             var game = Windows.OfType<GameTestWindow>().FirstOrDefault(w => w.IsActive) ?? Windows.OfType<GameTestWindow>().FirstOrDefault();
             if (game is not null && game.UnexpectedError(args.Exception)) { args.Handled = true; return; }
             if (game is { IsShippedGame: false })

@@ -33,7 +33,8 @@ internal sealed class BuildPlatformWindow : Window
         new(BuildPlatform.AmigaVampire, "Amiga Vampire", "A Vampire (V4 Standalone, Firebird, V2 cards) only: its SAGA graphics, the 68080's AMMX and the sound hardware driven directly, for the most speed. Won't start on any other Amiga or in an emulator (use Amiga 68k (RTG) there). Kickstart 3.1 or later or ApolloOS; 128 MB of RAM at least; a hard drive. Built as \"Game\" with its icon \"Game.info\".", false),
     };
 
-    public BuildPlatformWindow()
+    /// <param name="ultima8">An Ultima 8 project: its engine runs on Windows so far - the Sandcastle player gets it later (the Amiga / MorphOS work is done on Saturdays).</param>
+    public BuildPlatformWindow(bool ultima8 = false)
     {
         Title = "Build the Game";
         Width = 520;
@@ -46,10 +47,11 @@ internal sealed class BuildPlatformWindow : Window
         var list = new ListBox { Height = 300 };
         foreach (var c in Choices)
         {
-            var item = new StackPanel { Margin = new Thickness(2, 4, 2, 4), Opacity = c.Ready ? 1 : 0.55 };
-            item.Children.Add(new TextBlock { Text = c.Name + (c.Ready ? "" : "   (its player is being written)"), FontWeight = FontWeights.SemiBold });
+            bool ready = c.Ready && (!ultima8 || c.Platform == BuildPlatform.Windows);
+            var item = new StackPanel { Margin = new Thickness(2, 4, 2, 4), Opacity = ready ? 1 : 0.55 };
+            item.Children.Add(new TextBlock { Text = c.Name + (ready ? "" : ultima8 && c.Ready ? "   (the Ultima 8 engine comes to this player later)" : "   (its player is being written)"), FontWeight = FontWeights.SemiBold });
             item.Children.Add(new TextBlock { Text = c.Needs, TextWrapping = TextWrapping.Wrap, FontSize = 11, Width = 450, Foreground = Brushes.DimGray });
-            list.Items.Add(new ListBoxItem { Content = item, Tag = c, IsEnabled = c.Ready });
+            list.Items.Add(new ListBoxItem { Content = item, Tag = c, IsEnabled = ready });
         }
         list.SelectedIndex = 0;
         rows.Children.Add(list);
