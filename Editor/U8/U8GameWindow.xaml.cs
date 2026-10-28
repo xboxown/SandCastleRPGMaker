@@ -163,6 +163,7 @@ public partial class U8GameWindow : Window
         _tileWidth = tileHeight;
         _tileHeight = tileHeight;
         U8ProjectionCanvas.SetPlacement(_playerImage, U8Placement.Character);
+        InitU8Movement(); // the right mouse button walks, both jump (U8GameWindow.U8Movement.cs)
         _columns = columns;
         _tilesetSpriteName = tilesetSpriteName;
         _resources = resources;
@@ -1592,6 +1593,7 @@ public partial class U8GameWindow : Window
 
         if (IsGamePaused) return; // movement stays blocked while any gump is open (Exult: start_actor refuses in gump mode - paperdolls, containers and books alike), matching real Exult's "gumps pause games"
 
+        if (e.Key == Key.J) { if (!e.IsRepeat) TryStartU8Jump(fromMouse: false); e.Handled = true; return; } // Ultima 8: jump (both mouse buttons too)
         var (dx, dy) = DirectionFor(e.Key);
         if (dx == 0 && dy == 0) return;
         e.Handled = true;
@@ -1806,8 +1808,10 @@ public partial class U8GameWindow : Window
         UpdatePlayerFallAnimation(deltaSeconds);
 
         if (IsIncapacitated(_player)) { _heldDirectionKeys.Clear(); _wasMovingLastFrame = false; } // asleep, paralyzed or dead: can't walk
-        if (DriveFrame(deltaSeconds)) _wasMovingLastFrame = false; // at a vehicle's controls: the keys drive it (U8GameWindow.Vehicles.cs)
-        else if (TryGetActiveHeldDirection(out int dx, out int dy))
+        UpdateFallU8(); // walked off a ledge and landed: hurt by the height (U8GameWindow.U8Movement.cs)
+        if (UpdateU8Jump(deltaSeconds)) _wasMovingLastFrame = false; // in the air (U8GameWindow.U8Movement.cs)
+        else if (DriveFrame(deltaSeconds)) _wasMovingLastFrame = false; // at a vehicle's controls: the keys drive it (U8GameWindow.Vehicles.cs)
+        else if (!IsIncapacitated(_player!) && TryGetU8Direction(out int dx, out int dy)) // Ultima 8: the screen's way, 8 directions, the right mouse button too
         {
             CancelPlayerWalk(); // the keys take over from walking to a chair or bed
             CancelPendingSit();
@@ -1830,6 +1834,7 @@ public partial class U8GameWindow : Window
             ApplyPoseSprite(_idlePose); // genuinely stopped now - nothing held any more
             _wasMovingLastFrame = false;
         }
+        _u8Running = _wasMovingLastFrame && _u8SpeedFactor >= U8RunFactor;
     }
 
     /// <summary>The most recently pressed still-held direction wins if more than one is held - a simple, predictable rule rather than diagonal combination, matching the existing cardinal-only movement model.</summary>
@@ -1860,24 +1865,19 @@ public partial class U8GameWindow : Window
     private void StepPlayerContinuous(int dx, int dy, double deltaSeconds)
     {
         if (PlayerSeated) { StandUp(_player!); return; } // moving gets you up off the chair or bed
-        var newFacing = (dx, dy) switch
-        {
-            (-1, 0) => SpriteDirection.West,
-            (1, 0) => SpriteDirection.East,
-            (0, -1) => SpriteDirection.North,
-            (0, 1) => SpriteDirection.South,
-            _ => _playerFacing
-        };
+        var newFacing = FacingOf(dx, dy); // Ultima 8: eight directions (the world's - north is up-right on the screen)
         if (newFacing != _playerFacing)
         {
             _playerFacing = newFacing;
             ApplyPoseSprite(_idlePose); // turning to face a new direction shows Idle in that direction, even before we know whether the move itself succeeds
         }
-        if (_currentAppliedPose != _walkingPose) ApplyPoseSprite(_walkingPose);
+        var movePose = U8MovePose(); // walking, running, a step
+        if (_currentAppliedPose != movePose) ApplyPoseSprite(movePose);
 
-        double distance = PlayerTilesPerSecond * _tileWidth * deltaSeconds; // _tileWidth/_tileHeight share one grid, so one distance serves both axes
-        double newPixelX = _playerPixelX + dx * distance;
-        double newPixelY = _playerPixelY + dy * distance;
+        double distance = PlayerTilesPerSecond * _u8SpeedFactor * _tileWidth * deltaSeconds; // _tileWidth/_tileHeight share one grid, so one distance serves both axes
+        double norm = dx != 0 && dy != 0 ? Math.Sqrt(0.5) : 1.0; // a diagonal as fast as a straight line
+        double newPixelX = _playerPixelX + dx * distance * norm;
+        double newPixelY = _playerPixelY + dy * distance * norm;
         var (wrapDX, wrapDY) = WrapPixel(ref newPixelX, ref newPixelY); // over the edge of a map that wraps around: the other side (U8GameWindow.Wrap.cs)
 
         int prospectiveTileX = (int)Math.Floor(newPixelX / _tileWidth);
@@ -1889,7 +1889,7 @@ public partial class U8GameWindow : Window
         bool tileOffMap = prospectiveTileX < 0 || prospectiveTileY < 0 || prospectiveTileX >= _map.Width || prospectiveTileY >= _map.Height;
         if (tileOffMap || PlayerFootprintAt(newPixelX, newPixelY) != PlayerFootprint() && !(PlayerLevitating
             ? TryFlyStep(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, null, null, out newLift, out blockReason) // floating: room at this height, nothing under needed
-            : TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason)))
+            : TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason, maxDrop: int.MaxValue))) // Ultima 8: off a ledge is a fall
         {
             StatusText.Text = tileOffMap ? "Blocked: edge of the map." : blockReason;
             // Actor::is_really_blocked: a character in the way is asked to move aside (or swap places).
@@ -1902,8 +1902,9 @@ public partial class U8GameWindow : Window
             StatusText.Text = newLift > _playerZ
                 ? $"Stepped up to lift {newLift} ({newLift * 4}px)."
                 : $"Stepped down to lift {newLift} ({newLift * 4}px).";
+            if (_playerZ - newLift > ActorMaxDrop) StartFallU8(_playerZ); // off a ledge: drawn falling (UpdatePlayerFallAnimation), hurt on landing
+            else _playerVisualLiftZ = newLift; // a step up or down: instant, both directions - per spec ("make it instant just like the books or container")
             _playerZ = newLift;
-            _playerVisualLiftZ = _playerZ; // instant, both directions - per spec ("make it instant just like the books or container")
         }
 
         _playerPixelX = newPixelX;

@@ -822,6 +822,7 @@ public partial class MainWindow : Window
         LoadHouses(null);
 
         _projectStyle = dialog.Style; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
+        if (IsUltima8) _poseDatabase.EnsureUltima8Poses(); // as the new project was saved
         SetActiveProject(dialog.ProjectFilePath, dialog.ProjectId, dialog.ProjectName, dialog.Platform, dialog.CreatedAtUtc);
     }
 
@@ -883,6 +884,7 @@ public partial class MainWindow : Window
             _map = payload.Map;
             if (_map is not null) ShowMapInEditor();
             _projectStyle = manifest.Style is GameStyle.Ultima8 ? GameStyle.Ultima8 : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
+            if (IsUltima8) _poseDatabase.EnsureUltima8Poses(); // an Ultima 8 project: its poses (an earlier one may be missing some)
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             CompactAfterLoad();
             return true;

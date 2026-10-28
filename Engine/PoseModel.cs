@@ -112,4 +112,23 @@ public class PoseDatabase
                 Poses.Add(new PoseDefinition { Id = GetNextId(), Name = name, IsBuiltIn = true });
         }
     }
+
+    /// <summary>
+    /// An Ultima 8 project's poses as well (Pentagram's Animation::Sequence): what its engine plays for running, jumping,
+    /// climbing, landing, Ultima 8's combat and magic. Added only to Ultima 8 projects; an Ultima 7 project never calls this.
+    /// </summary>
+    public void EnsureUltima8Poses()
+    {
+        EnsureBuiltInPoses();
+        foreach (string name in Ultima8PoseNames)
+            if (!Poses.Any(p => p.IsBuiltIn && p.Name == name))
+                Poses.Add(new PoseDefinition { Id = GetNextId(), Name = name, IsBuiltIn = true });
+    }
+
+    public static readonly string[] Ultima8PoseNames =
+    {
+        "Run", "Step", "Jump", "Jump Up", "Running Jump", "Land", "Climb", "Climb Up", "Hang", "Keep Balance",
+        "Fall Backwards", "Stumble Backwards", "Combat Stand", "Ready Weapon", "Unready Weapon", "Advance", "Retreat",
+        "Kick", "Block", "Cast", "Kneel", "Look Left", "Look Right", "Shake Head", "Talk", "Work", "Drown", "Burn", "Die"
+    };
 }

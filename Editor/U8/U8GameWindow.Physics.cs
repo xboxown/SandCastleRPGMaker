@@ -306,7 +306,8 @@ public partial class U8GameWindow
     /// and must have headroom there over the whole footprint.
     /// </summary>
     /// <param name="mover">The character taking the step (a PlacedCharacter), or null for the player: the mover never blocks itself, and for a character the player is in the way like any other actor.</param>
-    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason, object? mover = null, BodySource? world = null, bool explain = true)
+    /// <param name="maxDrop">How far down a step may go (the Ultima 8 Avatar walks off ledges and falls: any).</param>
+    private bool TryStepActor(UnitRect to, int lift, int height, out int newLift, out string blockReason, object? mover = null, BodySource? world = null, bool explain = true, int maxDrop = ActorMaxDrop)
     {
         newLift = lift;
         blockReason = "";
@@ -343,9 +344,9 @@ public partial class U8GameWindow
         // The drop is judged by where the walker will stand (the highest support under its feet), not by every square under
         // them: going down stairs with steps shallower than the feet, the back of the feet is over a step two lifts lower
         // while the walker stands on the one just below - a 1-lift step down, as walking down stairs is.
-        if (lift - standLift > ActorMaxDrop)
+        if (lift - standLift > maxDrop)
         {
-            blockReason = explain ? $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {ActorMaxDrop} at a time." : "Blocked.";
+            blockReason = explain ? $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {maxDrop} at a time." : "Blocked.";
             return false;
         }
         // Standing on the highest support under any part of the footprint, the whole footprint must be clear for the actor's full height.

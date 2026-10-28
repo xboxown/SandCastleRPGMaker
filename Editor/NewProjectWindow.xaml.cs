@@ -137,6 +137,7 @@ public partial class NewProjectWindow : Window
                 Poses = PoseDatabase.CreateDefault(),
                 TileProperties = new TilePropertiesDatabase()
             };
+            if (manifest.Style == GameStyle.Ultima8) payload.Poses.EnsureUltima8Poses(); // an Ultima 8 project: its poses too (run, jump, climb, kick, block...)
             ProjectFiles.SaveManifest(msrpPath, payload);
             var freshSprites = new SpriteDatabase();
             freshSprites.EnsureBuiltInGroups();
