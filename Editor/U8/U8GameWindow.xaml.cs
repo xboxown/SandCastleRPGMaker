@@ -1793,11 +1793,11 @@ public partial class U8GameWindow : Window
 
         FollowHitOutlines(); // the red hit outline stays round its character as it moves
         using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
-        UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
+        UpdateGamePause(); // Ultima 8: windows don't pause - only a message box, choosing a target, sleeping, a video... (U8GameWindow.Pause.cs)
         SoakTest(deltaSeconds * 1000); // only when measuring (U8GameWindow.Perf.cs)
         using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (U8GameWindow.Perf.cs)
         using (Measure("UpdateScripts")) UpdateScripts(deltaSeconds * 1000); // long loops go on, Wait Until checks - paused or not (U8GameWindow.Script.cs)
-        if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
+        if (_gamePaused) return; // paused: nothing in the world moves, the avatar included (Ultima 8: a book open doesn't pause - the world goes on while it's read)
 
         using (Measure("UpdateClockAndCharacters")) UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
         UpdateVehicleTravel(deltaSeconds); // vehicles on autopilot, flying ones climbing or landing (U8GameWindow.VehicleTravel.cs)
