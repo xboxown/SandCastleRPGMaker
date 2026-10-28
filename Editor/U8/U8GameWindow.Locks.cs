@@ -108,7 +108,7 @@ public partial class U8GameWindow
     {
         if (_choosingTarget is not { } onChosen) return false;
         _choosingTarget = null;
-        _lastTargetClickWorld = e.GetPosition(GameCanvas); // Get_click's x, y - where on the floor, for a spill
+        _lastTargetClickWorld = GameCanvas.ToMap(e.GetPosition(GameCanvas)); // Get_click's x, y - where on the floor, for a spill (the Ultima 8 view back on the map)
         var target = FindInteractionTarget(e.GetPosition(PaperdollGumpsCanvas));
         ShowPointer(RestingPointer);
         e.Handled = true;

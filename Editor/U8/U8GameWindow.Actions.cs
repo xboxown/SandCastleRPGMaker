@@ -682,6 +682,7 @@ public partial class U8GameWindow
     private void PlaceEffect(Image image, (double X, double Y) feet, int lift)
     {
         if (double.IsNaN(feet.X)) return;
+        U8ProjectionCanvas.SetPlacement(image, U8Placement.Character);
         Canvas.SetLeft(image, feet.X - image.Width / 2 - lift * LiftPixelShift);
         Canvas.SetTop(image, feet.Y + _tileHeight / 2.0 - image.Height - lift * LiftPixelShift);
     }

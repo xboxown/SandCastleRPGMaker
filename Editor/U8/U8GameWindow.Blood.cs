@@ -145,6 +145,7 @@ public partial class U8GameWindow
         image.RenderTransform = new ScaleTransform(puddle.Mirrored ? -1 : 1, 1);
         double centerX = puddle.UnitX * SpriteSizing.BaseUnit + SpriteSizing.BaseUnit / 2.0;
         double centerY = puddle.UnitY * SpriteSizing.BaseUnit + SpriteSizing.BaseUnit / 2.0;
+        U8ProjectionCanvas.SetPlacement(image, U8Placement.Center);
         Canvas.SetLeft(image, centerX - image.Width / 2 - puddle.Lift * LiftPixelShift);
         Canvas.SetTop(image, centerY - image.Height / 2 - puddle.Lift * LiftPixelShift);
         // On the ground: just above the map tiles. Up on something: just under whatever stands on that spot.

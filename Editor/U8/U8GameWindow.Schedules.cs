@@ -743,7 +743,8 @@ public partial class U8GameWindow
         double margin = 6 * SpriteSizing.BaseUnit;
         foreach (var (dx, dy) in WrapShifts()) // a map that wraps around: seen over the seam too
         {
-            double x = pixelX + dx, y = pixelY + dy;
+            var drawn = GameCanvas.ToScreen(pixelX + dx, pixelY + dy); // the Ultima 8 view: the camera is on the screen
+            double x = drawn.X, y = drawn.Y;
             if (x >= _cameraX - margin && x <= _cameraX + ViewportWidth + margin
                 && y >= _cameraY - margin && y <= _cameraY + ViewportHeight + margin) return true;
         }

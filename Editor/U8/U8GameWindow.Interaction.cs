@@ -288,9 +288,10 @@ public partial class U8GameWindow
         var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, ViewportBorder);
         if (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight) return null;
 
-        var world = PaperdollGumpsCanvas.TranslatePoint(screen, GameCanvas);
-        int cellX = (int)Math.Floor(world.X / _tileWidth);
-        int cellY = (int)Math.Floor(world.Y / _tileHeight);
+        var world = PaperdollGumpsCanvas.TranslatePoint(screen, GameCanvas); // on the canvas, where things are drawn: what hit tests take
+        var onMap = GameCanvas.ToMap(world); // the Ultima 8 view back on the map
+        int cellX = (int)Math.Floor(onMap.X / _tileWidth);
+        int cellY = (int)Math.Floor(onMap.Y / _tileHeight);
         if (cellX < 0 || cellY < 0 || cellX >= _map.Width || cellY >= _map.Height) return null;
 
         // A character standing on the map, if it's the topmost thing under the pointer.
@@ -825,7 +826,11 @@ public partial class U8GameWindow
             return DropOnCharacter(origin, member.Character);
 
         // The ghost's top-left in world pixels - exactly where it was showing, which is where it lands.
-        var ghostTopLeft = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), GameCanvas);
+        var ghostOnScreen = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), GameCanvas);
+        // The Ultima 8 view: the ghost's bottom-middle is the nearest corner of the cell it lands on - back on the map, where the
+        // engine's own placement (bottom-middle on its cell) would have put its top-left.
+        var nearCorner = GameCanvas.ToMap(new Point(ghostOnScreen.X + session.NativeWidth / 2, ghostOnScreen.Y + session.NativeHeight));
+        var ghostTopLeft = new Point(nearCorner.X - _tileWidth / 2.0 - session.NativeWidth / 2, nearCorner.Y - session.NativeHeight);
         double visualLeft = Math.Clamp(ghostTopLeft.X, 0, Math.Max(0, GameCanvas.Width - _tileWidth));
         double visualTop = Math.Clamp(ghostTopLeft.Y, 0, Math.Max(0, GameCanvas.Height - _tileHeight));
         double visualWidth = session.NativeWidth, visualHeight = session.NativeHeight;

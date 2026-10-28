@@ -195,7 +195,8 @@ public partial class U8GameWindow
         }
         if (exempt || onScreen) return false;
         double cx = _cameraX + ViewportWidth / 2, cy = _cameraY + ViewportHeight / 2;
-        var (awayX, awayY) = WrappedDelta(mapCharacter.PixelX - cx, mapCharacter.PixelY - cy); // over the seam of a map that wraps around, if nearer
+        var drawn = GameCanvas.ToScreen(mapCharacter.PixelX, mapCharacter.PixelY); // the Ultima 8 view: on the screen
+        var (awayX, awayY) = WrappedDelta(drawn.X - cx, drawn.Y - cy); // over the seam of a map that wraps around, if nearer
         if (Math.Max(Math.Abs(awayX), Math.Abs(awayY)) <= ViewportWidth + SpriteSizing.BaseUnit) return false; // within a screenful
         StopWalking(mapCharacter);
         npc.Dormant = true;
@@ -241,7 +242,7 @@ public partial class U8GameWindow
 
     private void KeepIfNear(System.Windows.UIElement visual)
     {
-        var at = ScreenRectOf(visual);
+        var at = GameCanvas.ScreenRectOf(visual); // where it is drawn (the Ultima 8 view) - the camera is on the screen
         bool near = at.IsEmpty || double.IsNaN(at.X) || double.IsNaN(at.Y) || at.IntersectsWith(_streamRect)
             || Wraps && WrapShifts().Skip(1).Any(s => new System.Windows.Rect(at.X - s.DX, at.Y - s.DY, at.Width, at.Height).IntersectsWith(_streamRect)); // seen over the seam of a map that wraps around
         var parent = System.Windows.Media.VisualTreeHelper.GetParent(visual);

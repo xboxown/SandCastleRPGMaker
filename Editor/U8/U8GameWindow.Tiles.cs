@@ -33,17 +33,27 @@ public partial class U8GameWindow
         return picture;
     }
 
+    /// <summary>A chunk's diamond on the screen (the Ultima 8 view): from its north corner, as wide as two chunks of cells and one tall.</summary>
+    private Rect ChunkOnScreen(int cx, int cy)
+    {
+        double side = ChunkTiles * _tileWidth;
+        var north = GameCanvas.ToScreen(cx * side, cy * side);
+        return new Rect(north.X - side, north.Y, 2 * side, side);
+    }
+
     private void BuildGroundChunks()
     {
         int columns = (_map.Width + ChunkTiles - 1) / ChunkTiles, rows = (_map.Height + ChunkTiles - 1) / ChunkTiles;
         for (int cy = 0; cy < rows; cy++)
             for (int cx = 0; cx < columns; cx++)
             {
-                var image = new Image { Width = ChunkTiles * _tileWidth, Height = ChunkTiles * _tileHeight, IsHitTestVisible = false, Stretch = Stretch.Fill }; // all shown at first; the camera hides the far ones
+                var at = ChunkOnScreen(cx, cy);
+                var image = new Image { Width = at.Width, Height = at.Height, IsHitTestVisible = false, Stretch = Stretch.Fill }; // all shown at first; the camera hides the far ones
                 RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                 image.Source = GroundChunkPicture(cx, cy);
-                Canvas.SetLeft(image, cx * ChunkTiles * _tileWidth);
-                Canvas.SetTop(image, cy * ChunkTiles * _tileHeight);
+                U8ProjectionCanvas.SetPlacement(image, U8Placement.Screen); // drawn as diamonds already
+                Canvas.SetLeft(image, at.X);
+                Canvas.SetTop(image, at.Y);
                 GameCanvas.Children.Insert(0, image); // the ground is under everything
                 _groundChunks[(cx, cy)] = image;
             }
@@ -57,19 +67,23 @@ public partial class U8GameWindow
         var group = new DrawingGroup();
         RenderOptions.SetBitmapScalingMode(group, BitmapScalingMode.NearestNeighbor);
         RenderOptions.SetEdgeMode(group, EdgeMode.Aliased); // no seams between tiles
+        double t = _tileWidth, side = ChunkTiles * t;
         using (var dc = group.Open())
         {
-            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, ChunkTiles * _tileWidth, ChunkTiles * _tileHeight));
-            for (int y = 0; y < ChunkTiles; y++)
-                for (int x = 0; x < ChunkTiles; x++)
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, 2 * side, side));
+            // The Ultima 8 view: each cell's diamond, back to front, its north corner (x - y) cells across and (x + y) / 2 down from the chunk's.
+            for (int sum = 0; sum <= 2 * (ChunkTiles - 1); sum++)
+                for (int y = Math.Max(0, sum - ChunkTiles + 1); y <= Math.Min(sum, ChunkTiles - 1); y++)
                 {
+                    int x = sum - y;
                     int mx = cx * ChunkTiles + x, my = cy * ChunkTiles + y;
                     if (mx >= _map.Width || my >= _map.Height) continue;
                     int tile = ground.GetTile(mx, my, _map.Width);
                     if (tile < 0 || TilePicture(tile) is not { } picture) continue;
+                    var cell = new Rect(side + (x - y) * t - t, (x + y) * t / 2, 2 * t, t);
                     if (TilePropertiesOf(tile).UnderTileIndex is >= 0 and int under && TilePicture(TileSheets.Make(TileSheets.Slot(tile), under)) is { } below)
-                        dc.DrawImage(below, new Rect(x * _tileWidth, y * _tileHeight, _tileWidth, _tileHeight)); // its tile under it, through its see-through pixels
-                    dc.DrawImage(picture, new Rect(x * _tileWidth, y * _tileHeight, _tileWidth, _tileHeight));
+                        dc.DrawImage(below, cell); // its tile under it, through its see-through pixels
+                    dc.DrawImage(picture, cell);
                 }
         }
         group.Freeze();
@@ -82,17 +96,14 @@ public partial class U8GameWindow
     private void ShowGroundNearView()
     {
         if (_groundChunks.Count == 0) return;
-        double chunkW = ChunkTiles * _tileWidth, chunkH = ChunkTiles * _tileHeight;
-        int x0 = (int)Math.Floor((_cameraX - chunkW) / chunkW), y0 = (int)Math.Floor((_cameraY - chunkH) / chunkH);
-        int x1 = (int)Math.Floor((_cameraX + ViewportWidth + chunkW) / chunkW), y1 = (int)Math.Floor((_cameraY + ViewportHeight + chunkH) / chunkH);
-        var now = (x0, y0, x1, y1);
+        double chunkW = ChunkTiles * _tileWidth;
+        // The Ultima 8 view: a chunk is drawn while its diamond is in or next to the view, on the screen.
+        var now = ((int)Math.Floor(_cameraX / chunkW), (int)Math.Floor(_cameraY / chunkW), 0, 0);
         if (now == _shownChunks) return;
-        var shifts = WrapShifts().Skip(1).ToList(); // a map that wraps around: the chunks over the seam are seen too
-        var view = new Rect(_cameraX - chunkW, _cameraY - chunkH, ViewportWidth + 2 * chunkW, ViewportHeight + 2 * chunkH);
+        var view = new Rect(_cameraX - chunkW, _cameraY - chunkW, ViewportWidth + 2 * chunkW, ViewportHeight + 2 * chunkW);
         foreach (var ((cx, cy), image) in _groundChunks)
         {
-            bool near = cx >= x0 && cx <= x1 && cy >= y0 && cy <= y1
-                || shifts.Any(s => new Rect(cx * chunkW - s.DX, cy * chunkH - s.DY, chunkW, chunkH).IntersectsWith(view));
+            bool near = ChunkOnScreen(cx, cy).IntersectsWith(view);
             var wanted = near ? System.Windows.Visibility.Visible : System.Windows.Visibility.Collapsed;
             if (image.Visibility != wanted) image.Visibility = wanted;
         }
@@ -140,8 +151,9 @@ public partial class U8GameWindow
 
     private Image NewTileImage(int tile, bool hitTest)
     {
-        var image = new Image { Width = _tileWidth, Height = _tileHeight, IsHitTestVisible = hitTest, Source = TileSource(tile) };
+        var image = new Image { Width = _sheetTileWidth, Height = _sheetTileHeight, IsHitTestVisible = hitTest, Source = TileSource(tile) };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        U8ProjectionCanvas.SetPlacement(image, U8Placement.Cell); // its cell's diamond (the Ultima 8 view)
         return image;
     }
 }

@@ -87,6 +87,7 @@ public partial class U8GameWindow
             var source = (BitmapSource)outline.Outline.Source;
             outline.Outline.Width = source.PixelWidth * scale;
             outline.Outline.Height = source.PixelHeight * scale;
+            U8ProjectionCanvas.SetPlacement(outline.Outline, U8ProjectionCanvas.GetPlacement(visual)); // placed as what it outlines
             Canvas.SetLeft(outline.Outline, Canvas.GetLeft(visual) - scale);
             Canvas.SetTop(outline.Outline, Canvas.GetTop(visual) - scale);
             Panel.SetZIndex(outline.Outline, Panel.GetZIndex(visual) + 1);

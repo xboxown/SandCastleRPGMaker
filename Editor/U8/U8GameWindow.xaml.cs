@@ -157,8 +157,12 @@ public partial class U8GameWindow : Window
         _map = CloneMapData(map);
         HouseBuilder.BuildInto(_map, ProjectSession.Houses); // houses plotted on it: real pieces, each copy its own (Engine/HouseModel.cs)
         _tilesetBitmap = tilesetBitmap;
-        _tileWidth = tileWidth;
+        // Ultima 8: a tile on the sheet is a diamond W x H; on the map it is a square cell H x H, drawn as that diamond (U8ProjectionCanvas).
+        _sheetTileWidth = tileWidth;
+        _sheetTileHeight = tileHeight;
+        _tileWidth = tileHeight;
         _tileHeight = tileHeight;
+        U8ProjectionCanvas.SetPlacement(_playerImage, U8Placement.Character);
         _columns = columns;
         _tilesetSpriteName = tilesetSpriteName;
         _resources = resources;
@@ -305,6 +309,10 @@ public partial class U8GameWindow : Window
         double pixelHeight = _map.Height * _tileHeight;
         GameCanvas.Width = pixelWidth;
         GameCanvas.Height = pixelHeight;
+        // The Ultima 8 view: the map's cells as diamonds; the camera moves over the screen the whole map covers.
+        GameCanvas.CellSize = _tileWidth;
+        GameCanvas.OriginX = pixelHeight;
+        _viewSize = GameCanvas.ScreenSize(pixelWidth, pixelHeight);
 
         BuildGroundChunks(); // the ground in pictures of 16 x 16 tiles, not a picture a tile (U8GameWindow.Tiles.cs)
     }
@@ -1092,7 +1100,8 @@ public partial class U8GameWindow : Window
     /// <summary>Real hit test against the player's own current, actual visual bounds on GameCanvas - confirmed real Exult behavior (dropping an item onto the avatar picks it up, with or without a gump open).</summary>
     private bool IsPointOverPlayer(Point pointInGameCanvas)
     {
-        double left = Canvas.GetLeft(_playerImage), top = Canvas.GetTop(_playerImage);
+        var drawnAt = _playerImage.TranslatePoint(new Point(0, 0), GameCanvas); // where it is drawn (the Ultima 8 view)
+        double left = drawnAt.X, top = drawnAt.Y;
         return pointInGameCanvas.X >= left && pointInGameCanvas.X <= left + _playerImage.Width
             && pointInGameCanvas.Y >= top && pointInGameCanvas.Y <= top + _playerImage.Height;
     }
@@ -1713,8 +1722,9 @@ public partial class U8GameWindow : Window
         var (followX, followY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } followedOnMap
             ? (followedOnMap.PixelX - followedOnMap.Lift * LiftPixelShift, followedOnMap.PixelY - followedOnMap.Lift * LiftPixelShift)
             : (_playerPixelX - _playerVisualLiftZ * LiftPixelShift, _playerPixelY - _playerVisualLiftZ * LiftPixelShift); // where they're drawn: up and to the left by their lift (high up on floor 11 in a flying vehicle, too)
-        double playerCenterX = followX;
-        double playerCenterY = followY;
+        var followOnScreen = GameCanvas.ToScreen(followX, followY); // the Ultima 8 view: where they are drawn
+        double playerCenterX = followOnScreen.X;
+        double playerCenterY = followOnScreen.Y;
 
         double relativeX = playerCenterX - _cameraX;
         double relativeY = playerCenterY - _cameraY;
@@ -1734,8 +1744,8 @@ public partial class U8GameWindow : Window
 
         // Boundary clamp - never shows outside the valid world/map area. A map smaller than the viewport on an axis is centered on that axis instead of clamped to a negative range.
         // A map that wraps around has no edge to stop at: the land on the other side is shown beyond it (U8GameWindow.Wrap.cs).
-        if (!WrapsAcross) _cameraX = GameCanvas.Width <= ViewportWidth ? (GameCanvas.Width - ViewportWidth) / 2.0 : Math.Clamp(_cameraX, 0, GameCanvas.Width - ViewportWidth);
-        if (!WrapsUpDown) _cameraY = GameCanvas.Height <= ViewportHeight ? (GameCanvas.Height - ViewportHeight) / 2.0 : Math.Clamp(_cameraY, 0, GameCanvas.Height - ViewportHeight);
+        if (!WrapsAcross) _cameraX = _viewSize.Width <= ViewportWidth ? (_viewSize.Width - ViewportWidth) / 2.0 : Math.Clamp(_cameraX, 0, _viewSize.Width - ViewportWidth);
+        if (!WrapsUpDown) _cameraY = _viewSize.Height <= ViewportHeight ? (_viewSize.Height - ViewportHeight) / 2.0 : Math.Clamp(_cameraY, 0, _viewSize.Height - ViewportHeight);
 
         // Instant, per spec - confirmed directly from Exult's own documentation: the original game's camera scrolling is "jerky" (non-interpolated) by default; smooth scrolling is only an optional, later Exult enhancement, not authentic default behavior. Since the avatar's own position is now genuinely continuous (see StepPlayerContinuous), tracking it instantly every frame already looks smooth in practice - no separate interpolation layer is needed, and none of the earlier animation-conflict bugs can recur because nothing here is animated at all.
         CameraTransform.X = -_cameraX;
@@ -2541,8 +2551,8 @@ public partial class U8GameWindow : Window
     {
         if (TileSheets.Slot(tileIndex) > 0) return ProjectSession.WorldTileProvider?.Invoke(_map.Tileset, tileIndex) ?? ProjectSession.TileSourceProvider?.Invoke(tileIndex);
         int col = tileIndex % _columns, row = tileIndex / _columns;
-        if ((col + 1) * _tileWidth > _tilesetBitmap.PixelWidth || (row + 1) * _tileHeight > _tilesetBitmap.PixelHeight) return null;
-        return new CroppedBitmap(_tilesetBitmap, new Int32Rect(col * _tileWidth, row * _tileHeight, _tileWidth, _tileHeight));
+        if ((col + 1) * _sheetTileWidth > _tilesetBitmap.PixelWidth || (row + 1) * _sheetTileHeight > _tilesetBitmap.PixelHeight) return null;
+        return new CroppedBitmap(_tilesetBitmap, new Int32Rect(col * _sheetTileWidth, row * _sheetTileHeight, _sheetTileWidth, _sheetTileHeight));
     }
 
     /// <summary>A painted tile's properties, from its own sheet.</summary>

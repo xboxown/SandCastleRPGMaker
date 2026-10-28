@@ -189,6 +189,7 @@ public partial class U8GameWindow
     private void PlaceFlying(Flying flying)
     {
         if (VisualOf(flying.Instance) is not FrameworkElement visual) return;
+        U8ProjectionCanvas.SetPlacement(visual, U8Placement.Center); // in flight: by its middle
         Canvas.SetLeft(visual, flying.X - visual.Width / 2);
         Canvas.SetTop(visual, flying.Y - visual.Height / 2 - flying.Lift * LiftPixelShift);
         Panel.SetZIndex(visual, AboveEverythingZIndex - 100); // in the air: over what it flies past

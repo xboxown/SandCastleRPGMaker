@@ -78,12 +78,13 @@ public partial class U8GameWindow
                     if (tileIndex < 0) continue;
                     var image = new Image
                     {
-                        Width = _tileWidth,
-                        Height = _tileHeight,
+                        Width = _sheetTileWidth,
+                        Height = _sheetTileHeight,
                         IsHitTestVisible = true, // it catches clicks: what's under the floor (the room below) can't be identified or used through it
                         Source = TileSource(tileIndex) // from whichever of the map's tilesheets it's from
                     };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                    U8ProjectionCanvas.SetPlacement(image, U8Placement.Cell); // its cell's diamond
                     Canvas.SetLeft(image, x * _tileWidth - lift * LiftPixelShift);
                     Canvas.SetTop(image, y * _tileHeight - lift * LiftPixelShift);
                     Panel.SetZIndex(image, SlabZIndex(layer.Floor, MapFloors.SlabLift(layer.Floor))); // under everything standing on it, over the floors below - except what stands in front of it (U8GameWindow.UpperFloorOrder.cs)

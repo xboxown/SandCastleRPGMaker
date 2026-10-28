@@ -65,6 +65,7 @@ public partial class U8GameWindow
     {
         foreach (var (outline, visual, scale) in _hitOutlines)
         {
+            U8ProjectionCanvas.SetPlacement(outline, U8ProjectionCanvas.GetPlacement(visual)); // placed as what it outlines
             Canvas.SetLeft(outline, Canvas.GetLeft(visual) - scale);
             Canvas.SetTop(outline, Canvas.GetTop(visual) - scale);
             Panel.SetZIndex(outline, Panel.GetZIndex(visual) + 1);

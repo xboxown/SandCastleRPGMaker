@@ -650,6 +650,7 @@ public partial class U8GameWindow
         label.IsHitTestVisible = false; // words in the air never catch a click
         label.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         double height = MapCharacterOf(over)?.Visual?.Height ?? _playerImage.Height;
+        U8ProjectionCanvas.SetPlacement(label, U8Placement.Character); // over the head it floats above
         Canvas.SetLeft(label, x - label.DesiredSize.Width / 2);
         Canvas.SetTop(label, y + _tileHeight / 2.0 - height - label.DesiredSize.Height - 2 - LiftOf(over) * LiftPixelShift);
         Panel.SetZIndex(label, AboveEverythingZIndex);

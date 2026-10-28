@@ -1,6 +1,7 @@
 <Window x:Class="SandcastleRpgMaker.Editor.U8GameWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:u8="clr-namespace:SandcastleRpgMaker.Editor"
         Title="Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)" Height="700" Width="900"
         WindowStartupLocation="CenterOwner" Background="Black">
     <Grid>
@@ -44,10 +45,10 @@
                         declared second) without changing anything else about how either behaves.
                     -->
                     <Grid>
-                        <Canvas x:Name="GameCanvas" Background="Black" Focusable="True" RenderOptions.BitmapScalingMode="NearestNeighbor">
-                            <Canvas.RenderTransform>
+                        <u8:U8ProjectionCanvas x:Name="GameCanvas" Background="Transparent" Focusable="True" RenderOptions.BitmapScalingMode="NearestNeighbor">
+                            <u8:U8ProjectionCanvas.RenderTransform>
                                 <TranslateTransform x:Name="CameraTransform" X="0" Y="0"/>
-                            </Canvas.RenderTransform>
+                            </u8:U8ProjectionCanvas.RenderTransform>
                             <!--
                                 Same identify mechanic as Book Preview's own NameLabel,
                                 per spec - single-click shows an object's name here for
@@ -57,7 +58,7 @@
                             <TextBlock x:Name="IdentifyLabel" Foreground="White" FontWeight="Bold" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30"/>
                             <!-- The same label drawn in the game's own font (Fonts > InGameFont) once that font has glyphs. -->
                             <Image x:Name="IdentifyFontImage" Visibility="Collapsed" IsHitTestVisible="False" Panel.ZIndex="30" Stretch="None" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
-                        </Canvas>
+                        </u8:U8ProjectionCanvas>
                         <!--
                             Real, live lighting overlay, per spec ("Make sure all the commands are LIVE world wide") -
                             the exact same real mechanism (and the exact same real, palette-derived colors) as Book
