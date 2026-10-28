@@ -287,6 +287,14 @@ public partial class ObjectEditorWindow
         body.Children.Add(Note("Exult's rules: casting costs mana equal to the spell's circle (unless you set a cost), needs the caster's Level to be at least its circle, and uses up one of each of its reagents (Reagent objects carried). Linear spells (circle 0) cost nothing."));
         body.Children.Add(Check("Every copy knows all its spells (unticked: only those learned with Learn Spell, as Exult's spellbooks)", () => book.StartsWithAllSpells, v => book.StartsWithAllSpells = v));
         body.Children.Add(CharacterIdList("Who can read it (empty = anyone with Can cast magic ticked, Character Editor)", book.AllowedCharacterIds));
+        if (ProjectSession.IsUltima8)
+        {
+            // An Ultima 8 project: a focus casts its spell when double-clicked (a wand, a rod, a symbol, an amulet).
+            var focus = new WrapPanel();
+            focus.Children.Add(Check("Ultima 8: a focus - double-clicked, it casts its spell at once", () => book.U8Focus, v => book.U8Focus = v));
+            focus.Children.Add(NumberField("Charges (-1 = never runs out)", () => book.U8FocusCharges, v => book.U8FocusCharges = (int)Math.Max(-1, v)));
+            body.Children.Add(focus);
+        }
         var looks = new WrapPanel();
         looks.Children.Add(SpritePicker("Open book (both pages; optional)", () => (book.OpenBookSprite.SpriteGroup, book.OpenBookSprite.SpriteName), (g, n) => { book.OpenBookSprite.SpriteGroup = g; book.OpenBookSprite.SpriteName = n; }, compact: true));
         looks.Children.Add(SpritePicker("Bookmark (optional)", () => (book.BookmarkSprite.SpriteGroup, book.BookmarkSprite.SpriteName), (g, n) => { book.BookmarkSprite.SpriteGroup = g; book.BookmarkSprite.SpriteName = n; }, compact: true));
@@ -312,6 +320,14 @@ public partial class ObjectEditorWindow
                 top.Children.Add(NumberField("Mana (-1 = its circle)", () => spell.ManaCost, v => spell.ManaCost = (int)Math.Max(-1, v)));
                 top.Children.Add(TextField("Words of power", 120, () => spell.Words, v => spell.Words = v));
                 top.Children.Add(Check("Click a target", () => spell.NeedsTarget, v => spell.NeedsTarget = v));
+                if (ProjectSession.IsUltima8)
+                {
+                    var schools = new[] { "", "Necromancy", "Theurgy", "Sorcery", "Thaumaturgy", "Tempestry" };
+                    var school = new ComboBox { Width = 120, IsEditable = true, ItemsSource = schools, Text = spell.School };
+                    school.LostFocus += (_, _) => spell.School = school.Text.Trim();
+                    school.SelectionChanged += (_, _) => { if (school.SelectedItem is string s) spell.School = s; };
+                    top.Children.Add(Labeled("Ultima 8 school", school));
+                }
                 inner.Children.Add(top);
                 inner.Children.Add(SpritePicker("Icon (on its page)", () => (spell.Icon.SpriteGroup, spell.Icon.SpriteName), (g, n) => { spell.Icon.SpriteGroup = g; spell.Icon.SpriteName = n; }, compact: true));
                 if (spell.Reagents.Count == 0 && spell.ReagentObjectIds.Count > 0)

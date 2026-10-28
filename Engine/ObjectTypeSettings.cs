@@ -353,6 +353,8 @@ public class SpellDefinition
     public SpriteLink Animation { get; set; } = new();
 
     public int EffectiveManaCost => ManaCost >= 0 ? ManaCost : Math.Max(0, Circle);
+    /// <summary>Ultima 8 only: its school - Necromancy, Theurgy, Sorcery, Thaumaturgy, Tempestry (empty: none). Shown with it; the Ultima 7 engine ignores it.</summary>
+    public string School { get; set; } = string.Empty;
 }
 
 public class SpellbookSettings
@@ -360,6 +362,10 @@ public class SpellbookSettings
     public List<SpellDefinition> Spells { get; set; } = new();
     /// <summary>Ticked: every copy of the book knows all its spells. Unticked: a copy knows only those it learned (Learn Spell) - Exult's spellbooks.</summary>
     public bool StartsWithAllSpells { get; set; } = true;
+    /// <summary>Ultima 8 only: a focus (a wand, a rod, a symbol, an amulet) - double-clicked it casts its spell (the first it knows) at once, no book opened.</summary>
+    public bool U8Focus { get; set; }
+    /// <summary>Ultima 8 only: a focus's charges - each cast uses one; none left, it can't cast (-1 = never runs out). Each copy keeps its own.</summary>
+    public int U8FocusCharges { get; set; } = -1;
     /// <summary>Who can read it (characters' ids); empty = anyone who can cast magic (Character Editor).</summary>
     public List<int> AllowedCharacterIds { get; set; } = new();
     /// <summary>The open book, both pages (Exult's spellbook gump). Not set: a plain book is drawn.</summary>

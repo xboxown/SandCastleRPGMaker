@@ -62,6 +62,7 @@ public partial class U8GameWindow
         var caster = UserOf(u);
         if (caster is null || RefusedSpellbook(u.Obj, caster)) return;
         var book = u.Obj.Spellbook;
+        if (book.U8Focus) { CastFromFocus(u, caster); return; } // Ultima 8: a focus casts its spell at once (U8GameWindow.U8Magic.cs)
         var spells = book.Spells.Where(s => KnowsSpell(u.Obj, u.Carried?.LearnedSpellsRuntime, s)).OrderBy(s => s.Circle).ToList(); // only those this copy knows
         object key = (object?)u.Placed ?? (object?)u.Carried ?? u.Obj;
 
@@ -230,6 +231,7 @@ public partial class U8GameWindow
         foreach (var reagent in spell.AllReagents()) TakeFrom(carried, reagent.ObjectId, Math.Max(1, reagent.Quantity));
         RefreshAfterMove();
         if (spell.Words.Trim().Length > 0) ShowFloatingText(caster, spell.Words.Trim(), 2500); // begin_casting: the words of power
+        if (caster == _player && PoseByName("Cast") is { } castPose) { ApplyPoseSprite(castPose); _playerPoseResetMs = 3 * StdDelay; } // Ultima 8: the Cast pose
         PlaySoundFrom(spell.CastSoundResourceId, caster);
         ShowClock();
         StatusText.Text = "";
