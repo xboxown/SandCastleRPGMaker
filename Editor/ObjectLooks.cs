@@ -30,6 +30,7 @@ internal static class ObjectLooks
         switch (obj.Type)
         {
             case ObjectType.Door:
+                if (state.Open && obj.Door.Opening == DoorOpening.Slide) return own; // slid away: the door itself, moved (DoorMotion)
                 if (state.Open) return Find(sprites, obj.Door.OpenSprite) ?? own;
                 if (state.Locked) return Find(sprites, obj.Door.LockedSprite) ?? own;
                 return own;

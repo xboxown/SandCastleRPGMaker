@@ -375,7 +375,7 @@ public partial class GameTestWindow
         BeginScriptAction(who, elapsed =>
         {
             var result = walk(elapsed);
-            if (result == false) StatusText.Text = $"{who.Name} can't find a way to ({x}, {y}).";
+            if (result == false) _execContext.ScriptData.AddLog($"{who.Name} can't find a way to ({x}, {y})."); // in the F9 debug log too: the next command shows its own words straight away
             return result;
         }, done);
         return true;
@@ -393,7 +393,7 @@ public partial class GameTestWindow
         BeginScriptAction(who, elapsed =>
         {
             var result = walk(elapsed);
-            if (result == false) StatusText.Text = $"{who.Name} can't find a way to ({x}, {y}) on floor {floor}.";
+            if (result == false) _execContext.ScriptData.AddLog($"{who.Name} can't find a way to ({x}, {y}) on floor {floor}."); // in the F9 debug log too: the next command shows its own words straight away
             return result;
         }, done);
         return true;

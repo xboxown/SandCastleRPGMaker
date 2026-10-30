@@ -131,12 +131,11 @@ public partial class GameTestWindow
         }
     }
 
-    /// <summary>An open door is drawn at its open position (Object Editor), hanging from its hinge.</summary>
+    /// <summary>An open door as it stays open (DoorMotion.ApplyOpen): at its open position, hanging from its hinge - or slid away, or faded.</summary>
     private void ShiftOpenDoor(ObjectInstance instance, FrameworkElement visual)
     {
         if (!IsDoorOpen(instance) || DefinitionOf(instance) is not { Type: ObjectType.Door } door) return;
-        Canvas.SetLeft(visual, Canvas.GetLeft(visual) + door.Door.OpenOffsetX);
-        Canvas.SetTop(visual, Canvas.GetTop(visual) + door.Door.OpenOffsetY);
+        DoorMotion.ApplyOpen(visual, door.Door);
     }
 
     /// <summary>After an object's state changes (a door opens, a light goes out, a stack grows): its picture is rebuilt for the new state.</summary>
@@ -283,6 +282,12 @@ public partial class GameTestWindow
     private void UseDoor(ObjectInstance door, WorldObject obj)
     {
         if (FireObjectEvent(door, obj, BookTriggerConditionBased.ByUseItem)) return;
+        if (!OpensByHand(obj))
+        {
+            FlashPointer(MousePointerKind.Blocked);
+            StatusText.Text = $"\"{obj.Name}\" doesn't open by hand.";
+            return;
+        }
         if (!IsDoorOpen(door) && IsDoorLocked(door))
         {
             PlaySoundAt(obj.Door.LockedRattleSoundResourceId, door);
@@ -294,17 +299,20 @@ public partial class GameTestWindow
         else OpenDoor(door, obj, null);
     }
 
-    private void OpenDoor(ObjectInstance door, WorldObject obj, MapCharacter? by)
+    /// <param name="quiet">No words on the status bar (a door opening by itself, or with its double).</param>
+    private void OpenDoor(ObjectInstance door, WorldObject obj, MapCharacter? by, bool quiet = false)
     {
         door.IsOpenRuntime = true;
         PlaySoundAt(obj.Door.OpenSoundResourceId, door);
         RefreshObjectLook(door);
-        if (by is null) StatusText.Text = $"You open \"{obj.Name}\".";
+        StartDoorMove(door, obj, opening: true); // its look takes its time (GameTestWindow.Doors.cs)
+        if (by is null && !quiet) StatusText.Text = $"You open \"{obj.Name}\".";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByAfterReadItem, by);
+        MoveDoorPartners(door, obj, opening: true, by); // a double door: the other one too
     }
 
     /// <summary>Closes it - unless someone is standing in the doorway.</summary>
-    private bool TryCloseDoor(ObjectInstance door, WorldObject obj, MapCharacter? by)
+    private bool TryCloseDoor(ObjectInstance door, WorldObject obj, MapCharacter? by, bool quiet = false)
     {
         var foot = BodyOf(null, door);
         var doorway = new UnitRect(foot.Left, foot.Top, foot.Width, foot.Depth);
@@ -312,14 +320,16 @@ public partial class GameTestWindow
             || CharacterBodies().Any(b => b.Overlaps(doorway) && (by is null || !ReferenceEquals(b.Entity, by.Placement)));
         if (someoneThere)
         {
-            if (by is null) Refuse(MousePointerKind.Blocked, $"Someone is in the way of \"{obj.Name}\".");
+            if (by is null && !quiet) Refuse(MousePointerKind.Blocked, $"Someone is in the way of \"{obj.Name}\".");
             return false;
         }
         door.IsOpenRuntime = false;
         PlaySoundAt(obj.Door.CloseSoundResourceId, door);
         RefreshObjectLook(door);
-        if (by is null) StatusText.Text = $"You close \"{obj.Name}\".";
+        StartDoorMove(door, obj, opening: false);
+        if (by is null && !quiet) StatusText.Text = $"You close \"{obj.Name}\".";
         FireObjectEvent(door, obj, BookTriggerConditionBased.ByEnter, by);
+        MoveDoorPartners(door, obj, opening: false, by);
         return true;
     }
 
@@ -385,7 +395,7 @@ public partial class GameTestWindow
     {
         foreach (var instance in _map.Objects)
         {
-            if (DefinitionOf(instance) is not { Type: ObjectType.Door } || IsDoorOpen(instance) || IsDoorLocked(instance)) continue;
+            if (DefinitionOf(instance) is not { Type: ObjectType.Door } obj || IsDoorOpen(instance) || IsDoorLocked(instance) || !OpensByHand(obj)) continue;
             if (BodyOf(null, instance).Overlaps(foot)) return instance;
         }
         return null;

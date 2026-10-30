@@ -46,6 +46,7 @@ public partial class SpriteFrameEditorWindow : Window
     {
         InitializeComponent();
         _sprite = sprite;
+        Loaded += (_, _) => TakeIntegratedSnapshot(); // integrated already: as it is once open (after any setting-up of its frames), to compare when it closes (SpriteFrameEditorWindow.Integrated.cs)
         _resources = resources;
         _isTilesetGroup = isTilesetGroup;
         _isFontSprite = isFontSprite;

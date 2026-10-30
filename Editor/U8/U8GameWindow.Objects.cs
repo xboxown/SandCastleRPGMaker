@@ -137,8 +137,7 @@ public partial class U8GameWindow
     private void ShiftOpenDoor(ObjectInstance instance, FrameworkElement visual)
     {
         if (!IsDoorOpen(instance) || DefinitionOf(instance) is not { Type: ObjectType.Door } door) return;
-        Canvas.SetLeft(visual, Canvas.GetLeft(visual) + door.Door.OpenOffsetX);
-        Canvas.SetTop(visual, Canvas.GetTop(visual) + door.Door.OpenOffsetY);
+        DoorMotion.ApplyOpen(visual, door.Door); // at its hinge - or slid away, or faded (the motion itself: the Ultima 7 engine only, so far)
     }
 
     /// <summary>After an object's state changes (a door opens, a light goes out, a stack grows): its picture is rebuilt for the new state.</summary>

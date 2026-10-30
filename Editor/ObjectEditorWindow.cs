@@ -311,6 +311,7 @@ public partial class ObjectEditorWindow : Window
         var body = Group("Door");
         body.Children.Add(SpritePicker("Open sprite", () => (d.OpenSprite.SpriteGroup, d.OpenSprite.SpriteName), (g, n) => { d.OpenSprite.SpriteGroup = g; d.OpenSprite.SpriteName = n; }));
         body.Children.Add(SpritePicker("Locked sprite (optional - how it looks closed and locked)", () => (d.LockedSprite.SpriteGroup, d.LockedSprite.SpriteName), (g, n) => { d.LockedSprite.SpriteGroup = g; d.LockedSprite.SpriteName = n; }));
+        BuildDoorOpening(obj, body); // how it opens: swing, animation, slide, fade; double doors; by itself; the preview (ObjectEditorWindow.DoorKinds.cs)
         var states = new WrapPanel();
         states.Children.Add(Check("Starts open", () => d.StartsOpen, v => d.StartsOpen = v));
         states.Children.Add(Check("Starts locked", () => d.StartsLocked, v => d.StartsLocked = v));

@@ -269,7 +269,14 @@ public class SpriteLink
     public bool IsSet => !string.IsNullOrEmpty(SpriteName);
 }
 
-/// <summary>Door settings (Ultima VII / Exult doors).</summary>
+/// <summary>
+/// How a door opens. Swing: Ultima VII's - the open sprite at its hinge, at once. Animation: an opening animation (a double
+/// door, a void door, anything drawn), then the open sprite. Slide: the door glides away (a sliding door, a portcullis).
+/// Fade: it fades out (a laser, a force field) - the open sprite, if any, is what stays.
+/// </summary>
+public enum DoorOpening { Swing, Animation, Slide, Fade }
+
+/// <summary>Door settings (Ultima VII / Exult doors, and other kinds of door: DoorOpening).</summary>
 public class DoorSettings
 {
     /// <summary>How it looks open. (The object's own sprite is how it looks closed.)</summary>
@@ -287,6 +294,28 @@ public class DoorSettings
     public int PickLockDifficulty { get; set; } = 10;
     /// <summary>Exult's magically locked doors (frame % 4 == 3): no key or lockpick opens them, and they can't be broken.</summary>
     public bool MagicallyLocked { get; set; }
+
+    /// <summary>How it opens: swings (Ultima VII: the open sprite, at its hinge), plays an animation, slides away, or fades.</summary>
+    public DoorOpening Opening { get; set; } = DoorOpening.Swing;
+    /// <summary>Animation: played once as it opens, then the open sprite shows (drawn where the closed door is).</summary>
+    public SpriteLink OpeningSprite { get; set; } = new();
+    /// <summary>Animation: played once as it closes (empty: the opening animation backwards).</summary>
+    public SpriteLink ClosingSprite { get; set; } = new();
+    /// <summary>Slide: how far the door moves to open, in pixels (sideways for a sliding door, up for a portcullis).</summary>
+    public int SlideX { get; set; }
+    public int SlideY { get; set; }
+    /// <summary>Slide: what slides past where the closed door is drawn is hidden - into the wall, or the ceiling.</summary>
+    public bool SlideHidden { get; set; } = true;
+    /// <summary>Slide and Fade: how long opening (and closing) takes, in milliseconds.</summary>
+    public int MotionMs { get; set; } = 600;
+    /// <summary>Not opened by hand (a double-click, people walking through): only a lever, a button, an event (Open Door, Set Door State) or opening by itself. A sliding door never is.</summary>
+    public bool NotByHand { get; set; }
+    /// <summary>A double door: it opens and closes with the double doors right next to it.</summary>
+    public bool OpensWithNeighbours { get; set; }
+    /// <summary>Opens by itself when anyone comes within OpensWithinCells cells (a sci-fi door), and closes StaysOpenMs after they've gone.</summary>
+    public bool OpensByItself { get; set; }
+    public int OpensWithinCells { get; set; } = 1;
+    public int StaysOpenMs { get; set; } = 1500;
 
     public int OpenSoundResourceId { get; set; } = -1;
     public int CloseSoundResourceId { get; set; } = -1;

@@ -141,6 +141,7 @@ public partial class MainWindow : Window
             return things;
         };
         ProjectSession.SettingsProvider = () => _systemSettings;
+        ProjectSession.SaveProjectNow = SaveProject;
         ProjectSession.TileSourceProvider = TileSource;
         ProjectSession.WorldsProvider = () => _worlds;
         ProjectSession.WorldTileProvider = TileSourceFor;

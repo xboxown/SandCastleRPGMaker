@@ -456,6 +456,7 @@ public partial class GameTestWindow
         switch (ThingOf(command))
         {
             case ObjectInstance door when DefinitionOf(door) is { } obj:
+                bool wasOpen = IsDoorOpen(door);
                 switch (value)
                 {
                     case "Locked":
@@ -467,6 +468,7 @@ public partial class GameTestWindow
                     case "Open": door.IsLockedRuntime = false; door.IsOpenRuntime = true; break;
                 }
                 RefreshObjectLook(door);
+                if (IsDoorOpen(door) != wasOpen) StartDoorMove(door, obj, IsDoorOpen(door)); // it slides, fades or plays as it does by hand (GameTestWindow.Doors.cs)
                 return true;
             case PlacedItemInstance chest when chest.Category == ReferencedItemCategory.Container:
                 if (value is "Locked" or "Unlocked") chest.IsLockedRuntime = value == "Locked";

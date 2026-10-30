@@ -186,8 +186,8 @@ public partial class GameTestWindow
     {
         var (_, index, doors) = StillBodies(); // everything still, kept (GameTestWindow.Perf.cs); only the doors depend on the walker
         var extra = doors.Select(b => b.Entity is ObjectInstance o && DefinitionOf(o) is { Type: ObjectType.Door } door && !IsDoorOpen(o)
-            && ((!IsDoorLocked(o) && (walker is null || walker.Character.IsHuman)) // a human opens it on the way
-                || (walker is not null && IsDoorLocked(o) && HoldsHouseKey(walker, door)) // its own door: it has the key
+            && ((!IsDoorLocked(o) && OpensByHand(door) && (walker is null || walker.Character.IsHuman)) // a human opens it on the way
+                || (walker is not null && IsDoorLocked(o) && OpensByHand(door) && HoldsHouseKey(walker, door)) // its own door: it has the key
                 || (walker is not null && WouldBreakDown(walker, door, IsDoorLocked(o)))) // or it breaks it down
             ? b with { Solid = false } : b).ToList();
         extra.AddRange(CharacterBodies());

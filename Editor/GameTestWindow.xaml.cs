@@ -1795,6 +1795,8 @@ public partial class GameTestWindow : Window
 
         using (Measure("UpdateClockAndCharacters")) UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
         UpdateVehicleTravel(deltaSeconds); // vehicles on autopilot, flying ones climbing or landing (GameTestWindow.VehicleTravel.cs)
+        UpdateDoorMoves(deltaSeconds * 1000); // doors sliding, fading or playing as they open and close (GameTestWindow.Doors.cs)
+        UpdateSelfOpeningDoors(deltaSeconds * 1000); // doors that open by themselves when someone is near
 
         // Real, confirmed fall physics, purely additive - runs every real frame regardless of whether a direction is currently held, so a fall that starts right as the key is released still finishes landing smoothly instead of snapping the instant input stops. Never touches _playerX/_playerY, deltaSeconds's own clamping, or anything else about the real movement/input system above and below this.
         UpdatePlayerFallAnimation(deltaSeconds);

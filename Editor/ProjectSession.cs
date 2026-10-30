@@ -75,6 +75,8 @@ internal static class ProjectSession
     public static Func<List<string>>? EventNamesProvider;
     /// <summary>The project's System Settings.</summary>
     public static Func<SystemSettings>? SettingsProvider;
+    /// <summary>Saves the open project now (as File > Save Project) - true if it was saved. An integrated sprite's changes kept (SpriteFrameEditorWindow).</summary>
+    public static Func<bool>? SaveProjectNow;
     /// <summary>System Settings > Sounds: one opening sound for every paperdoll - each one's own picker is then greyed out.</summary>
     public static bool PaperdollSoundIsGlobal => SettingsProvider?.Invoke()?.Sounds.PaperdollOpenSoundEnabled == true;
     public const string PaperdollSoundIsGlobalTip = "System Settings > Sounds > Paperdoll open sound is ticked: every paperdoll uses that one.";
