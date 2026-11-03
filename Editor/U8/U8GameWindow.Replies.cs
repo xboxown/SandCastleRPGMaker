@@ -142,17 +142,17 @@ public partial class U8GameWindow
         _messageDrawing.Highlight(index >= 0 ? index : _replyCursor);
     }
 
-    /// <summary>Keys while a box is up: with replies, 1-9 pick one and Up/Down + Enter/Space choose; without, Enter, Space or Escape go on.</summary>
+    /// <summary>Keys while a box is up: with replies, the number keys pick one and Previous / Next + Accept choose; without, Accept or Cancel go on.</summary>
     private void MessageKey(Key key)
     {
         if (_currentMessage is not { HasReplies: true } || _messageDrawing is not { ReplySlots.Count: > 0 } drawing)
         {
-            if (key is Key.Enter or Key.Space or Key.Escape) AdvanceMessage();
+            if (KeyIs(key, "Accept") || KeyIs(key, "Accept2") || KeyIs(key, "Cancel")) AdvanceMessage();
             return;
         }
         // The spots on the box now (this page's replies, More / Previous), in reading order.
         int count = drawing.ReplySlots.Count;
-        int number = key is >= Key.D1 and <= Key.D9 ? key - Key.D1 : key is >= Key.NumPad1 and <= Key.NumPad9 ? key - Key.NumPad1 : -1;
+        int number = NumberOf(key);
         if (number >= 0)
         {
             // 1-9: this page's replies, counted without More / Previous.
@@ -160,25 +160,27 @@ public partial class U8GameWindow
             if (number < replySpots.Count) PickReplySlot(replySpots[number]);
             return;
         }
-        switch (key)
+        if (KeyIs(key, "ScreenUp") || KeyIs(key, "ScreenUp2"))
         {
-            case Key.Up or Key.Left:
-                _replyCursor = _replyCursor <= 0 ? count - 1 : _replyCursor - 1;
-                drawing.Highlight(_replyCursor);
-                break;
-            case Key.Down or Key.Right or Key.Tab:
-                _replyCursor = (_replyCursor + 1) % count;
-                drawing.Highlight(_replyCursor);
-                break;
-            case Key.PageDown when drawing.ReplyPage < drawing.ReplyPageCount - 1:
-                PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.More));
-                break;
-            case Key.PageUp when drawing.ReplyPage > 0:
-                PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.Previous));
-                break;
-            case Key.Enter or Key.Space:
-                if (_replyCursor >= 0) PickReplySlot(_replyCursor);
-                break;
+            _replyCursor = _replyCursor <= 0 ? count - 1 : _replyCursor - 1;
+            drawing.Highlight(_replyCursor);
+        }
+        else if (KeyIs(key, "ScreenDown") || KeyIs(key, "ScreenDown2") || KeyIs(key, "ScreenDown3"))
+        {
+            _replyCursor = (_replyCursor + 1) % count;
+            drawing.Highlight(_replyCursor);
+        }
+        else if (KeyIs(key, "PageNext"))
+        {
+            if (drawing.ReplyPage < drawing.ReplyPageCount - 1) PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.More));
+        }
+        else if (KeyIs(key, "PagePrev"))
+        {
+            if (drawing.ReplyPage > 0) PickReplySlot(drawing.ReplySlots.IndexOf(DialogBoxDrawing.Previous));
+        }
+        else if (KeyIs(key, "Accept") || KeyIs(key, "Accept2"))
+        {
+            if (_replyCursor >= 0) PickReplySlot(_replyCursor);
         }
     }
 }

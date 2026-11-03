@@ -42,7 +42,7 @@ public partial class U8GameWindow
         slider.Cancelled += () => { CloseObjectOverlay(); cancelled?.Invoke(); };
         ShowObjectOverlay(panel, takesClicks: true, scaleLikeViewport: true);
         _overlayKeys = slider.HandleKey;
-        StatusText.Text = $"{question.Trim()} ({min}-{max}: arrows or drag, Enter to accept, Escape to cancel)";
+        StatusText.Text = $"{question.Trim()} ({min}-{max}: {KeyWords("ScreenUp2")} / {KeyWords("ScreenDown2")} or drag, {KeyWords("Accept")} to accept, {KeyWords("Cancel")} to cancel)";
     }
 
     private void ShowObjectOverlay(UIElement content, bool takesClicks, bool scaleLikeViewport)

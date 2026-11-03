@@ -322,10 +322,10 @@ public static class ScriptCommands
             new[] { Who("Caster"), F("Value", "Spell name (formula)", def: "\"\""), new("Other", "At (target, optional)", ScriptFieldKind.Who) }, "{Who}: {Value}"),
 
         // ---- Ultima 8 projects only: the keyboard (Engine/U8Keys.cs) ----
-        new(EventCommandType.U8AskKey, "Ask For Key", Ultima8Tab, "Keyboard", "The event waits for the player to press a key, and that key does this action from now on - kept for good, through new games and loads. %key... on a paperdoll shows the waiting words meanwhile. Escape: no change (\"last command succeeded\" is false). The party's 1-9 and Alt can't be taken: it goes on waiting.",
+        new(EventCommandType.U8AskKey, "Ask For Key", Ultima8Tab, "Keyboard", "The event waits for the player to press a key, and that key does this action from now on - kept for good, through new games and loads. %key... on a paperdoll shows the waiting words meanwhile. A key can be held with Ctrl, Shift or Alt. The Cancel key: no change (\"last command succeeded\" is false).",
             new[] { Choice("Action", "The action", U8Keys.ActionNames), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}"),
         new(EventCommandType.U8SetKey, "Set Key", Ultima8Tab, "Keyboard", "This key does this action from now on - kept for good, through new games and loads.",
-            new[] { Choice("Action", "The action", U8Keys.ActionNames), Choice("Key", "The key", U8Keys.BindableWords), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}: {Key}"),
+            new[] { Choice("Action", "The action", U8Keys.ActionNames), Choice("Key", "The key", U8Keys.BindableWords), Choice("With", "Held with", new[] { "Nothing" }.Concat(U8Keys.HeldWith).ToArray()), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}: {Key}"),
         new(EventCommandType.U8GetKeyName, "Get Key Name", Ultima8Tab, "Keyboard", "The name of an action's key, as words, into a variable (for a Show Text: \"Press Space to jump\").",
             new[] { Choice("Action", "The action", U8Keys.ActionNames), Var() }, "{Action} into {Variable}"),
         new(EventCommandType.U8ResetKeys, "Reset Keys", Ultima8Tab, "Keyboard", "Forgets what the player changed: an action, or every key, is back to the keys in System Settings > Ultima 8.",

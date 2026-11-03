@@ -570,7 +570,7 @@ public partial class U8GameWindow
         var origin = session.Origin!;
         int whole = origin is DollPartOrigin ? 1 : PayloadQuantity(origin);
         bool sameWindow = HitTestGumpLayer(screen, out var onGump, out _) && onGump is not null && ReferenceEquals(onGump, SourceWindowOf(session));
-        if (whole > 1 && !sameWindow && !Keyboard.Modifiers.HasFlag(ModifierKeys.Control))
+        if (whole > 1 && !sameWindow && !KeyHeld("WholeStack"))
         {
             EndDragVisuals(session);
             ShowNumberSlider(_systemSettings.Slider.QuantityQuestion, 0, whole, 1, whole, chosen => { if (chosen > 0) FinishDrop(session, screen, chosen); });

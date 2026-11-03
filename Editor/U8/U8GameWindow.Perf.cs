@@ -303,7 +303,7 @@ public partial class U8GameWindow
     {
         if (!Profiling) return;
         SoakHide();
-        if (_currentMessage is not null && (_soakMessageMs += elapsedMs) > 500) { _soakMessageMs = 0; MessageKey(System.Windows.Input.Key.Enter); }
+        if (_currentMessage is not null && (_soakMessageMs += elapsedMs) > 500) { _soakMessageMs = 0; MessageKey(_keyOf["Accept"].Key); }
         if (Environment.GetEnvironmentVariable("SANDCASTLE_PERF_SKIP") is not null && (_soakPeriodMs += elapsedMs) > 20000) { _soakPeriodMs = 0; using (Measure("SkipToNextPeriod")) SkipToNextPeriod(); }
         if (!_soakWatching)
         {

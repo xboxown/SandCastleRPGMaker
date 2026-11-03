@@ -48,10 +48,11 @@ public partial class SystemSettingsWindow
     {
         var section = new StackPanel();
         section.Children.Add(new TextBlock { Text = "The keyboard", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
-        section.Children.Add(new TextBlock { Text = "The keys this game starts with. Click a key, then press the new one (Escape: no change). A key another action has: they swap.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) });
+        section.Children.Add(new TextBlock { Text = "The keys this game starts with: every key the game reads. Click a key, then press the new one, alone or held with Ctrl, Shift or Alt (click elsewhere: no change). A key that clashes: they swap.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) });
 
         var keys = U8Keys.MakerKeys(u8);
         var buttons = new Dictionary<string, Button>();
+        var refused = new TextBlock { Foreground = System.Windows.Media.Brushes.IndianRed, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 4, 0, 4) };
         void ShowKeys()
         {
             foreach (var action in U8Keys.Actions) buttons[action.Id].Content = U8Keys.Display(keys[action.Id]);
@@ -60,31 +61,48 @@ public partial class SystemSettingsWindow
         {
             u8.Keys = keys.Where(kv => U8Keys.Actions.First(a => a.Id == kv.Key).DefaultKey != kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value);
         }
-        foreach (var action in U8Keys.Actions)
+        foreach (var (group, heading) in new[] { (U8KeyGroup.World, "On the map"), (U8KeyGroup.Everywhere, "Everywhere (no other action can share these keys)"), (U8KeyGroup.Screens, "On dialogs and screens (can share a key with the map's)") })
         {
-            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
-            row.Children.Add(new TextBlock { Text = action.Name + ":", Width = 170, VerticalAlignment = VerticalAlignment.Center });
-            var button = new Button { Width = 130 };
-            buttons[action.Id] = button;
-            bool waiting = false;
-            button.Click += (_, _) => { waiting = true; button.Content = u8.KeyAskWords; };
-            button.LostFocus += (_, _) => { waiting = false; ShowKeys(); };
-            button.PreviewKeyDown += (_, e) =>
+            section.Children.Add(new TextBlock { Text = heading, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 2) });
+            foreach (var action in U8Keys.Actions.Where(a => a.Group == group))
             {
-                if (!waiting) return;
-                e.Handled = true;
-                if (e.Key == System.Windows.Input.Key.Escape) { waiting = false; ShowKeys(); return; }
-                if (U8Keys.Bindable.FirstOrDefault(name => Enum.Parse<System.Windows.Input.Key>(name) == e.Key) is not { } key) return; // can't be taken: still waiting
-                waiting = false;
-                U8Keys.Assign(keys, action.Id, key, swap: true);
-                Store();
-                ShowKeys();
-            };
-            row.Children.Add(button);
-            section.Children.Add(row);
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+                row.Children.Add(new TextBlock { Text = action.Name + ":", Width = 270, VerticalAlignment = VerticalAlignment.Center });
+                var button = new Button { Width = 130 };
+                buttons[action.Id] = button;
+                var capture = new U8KeyCapture();
+                bool waiting = false;
+                void Take(string key)
+                {
+                    waiting = false;
+                    bool ok = U8Keys.Assign(keys, action.Id, key, swap: true);
+                    refused.Text = ok ? "" : $"{U8Keys.Display(key)} can't go to \"{action.Name}\": the action that has it can't take {U8Keys.Display(keys[action.Id])} in return. Move that one first.";
+                    Store();
+                    ShowKeys();
+                }
+                button.Click += (_, _) => { waiting = true; capture.Reset(); refused.Text = ""; button.Content = u8.KeyAskWords; };
+                button.LostFocus += (_, _) => { waiting = false; ShowKeys(); };
+                button.PreviewKeyDown += (_, e) =>
+                {
+                    if (!waiting) return;
+                    var pressed = U8KeyCapture.RealKey(e);
+                    if (pressed == System.Windows.Input.Key.F4 && System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Alt)) return; // Windows' own: the window closes
+                    e.Handled = true;
+                    if (!e.IsRepeat && capture.Down(pressed, System.Windows.Input.Keyboard.Modifiers) is { } key) Take(key);
+                };
+                button.PreviewKeyUp += (_, e) =>
+                {
+                    if (!waiting) return;
+                    e.Handled = true;
+                    if (capture.Up(U8KeyCapture.RealKey(e)) is { } key) Take(key);
+                };
+                row.Children.Add(button);
+                section.Children.Add(row);
+            }
         }
         ShowKeys();
-        section.Children.Add(new TextBlock { Text = "The party's 1-9, Escape, Alt, F6, F9 and F10 stay as they are and can't be taken. Dialogs and the Save/Load screen keep their own keys.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 4, 0, 4) });
+        section.Children.Add(refused);
+        section.Children.Add(new TextBlock { Text = "Only what Windows keeps for itself can't be taken: the Windows key, Print Screen, Alt+F4. While a name is typed, a key that writes a letter writes it, whatever it does elsewhere.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 4, 0, 4) });
         var back = new Button { Content = "Back to Ultima 8's keys", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 10) };
         back.Click += (_, _) =>
         {
@@ -108,7 +126,7 @@ public partial class SystemSettingsWindow
         wordsRow.Children.Add(new TextBlock { Text = "While it waits for a key:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
         wordsRow.Children.Add(words);
         section.Children.Add(wordsRow);
-        section.Children.Add(new TextBlock { Text = "On a paperdoll, %keyup %keydown %keyleft %keyright %keyrun %keyjump %keycombat %keyinventory %keystats %keysaveload %keymenu show each key's name in a text or a caption. Its buttons use the commands in the event editor's Ultima 8 tab: Ask For Key, Set Key, Get Key Name, Reset Keys.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) });
+        section.Children.Add(new TextBlock { Text = "On a paperdoll, %keyup %keydown %keyleft %keyright %keyrun %keyjump %keycombat %keyinventory %keystats %keysaveload %keymenu %keycancel %keyaccept and so on (%key + the action's id, CommandList Guide 23) show each key's name in a text or a caption. Its buttons use the commands in the event editor's Ultima 8 tab: Ask For Key, Set Key, Get Key Name, Reset Keys.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) });
 
         if (ProjectSession.ProjectIdProvider?.Invoke() is { } projectId)
         {

@@ -346,21 +346,22 @@ public partial class U8GameWindow
         return true;
     }
 
-    /// <summary>Keys while the Save/Load screen is open: typing the name, Backspace, Enter saves, Up / Down pick. True = handled.</summary>
+    /// <summary>Keys while the Save/Load screen is open: typing the name, Erase, Accept saves, Previous / Next choice pick. True = handled.</summary>
     private bool SaveScreenKey(Key key)
     {
         if (_saveScreen is not { } screen) return false;
+        bool up = TypingKeyIs(key, "ScreenUp"), down = TypingKeyIs(key, "ScreenDown");
         switch (key)
         {
-            case Key.Back:
+            case var _ when TypingKeyIs(key, "Erase"):
                 if (screen.Name.Length > 0) screen.Name = screen.Name[..^1];
                 break;
-            case Key.Enter:
+            case var _ when TypingKeyIs(key, "Accept"):
                 SaveFromScreen(screen, null);
                 return true;
-            case Key.Up or Key.Down:
+            case var _ when up || down:
             {
-                int step = key == Key.Up ? -1 : 1;
+                int step = up ? -1 : 1;
                 var slots = screen.Slots;
                 if (slots.Count > 0 && (screen.PickedSlot > 0 || !HasPart(screen, DollPartKind.SaveList))) // from slot to slot
                 {
@@ -374,7 +375,7 @@ public partial class U8GameWindow
                 break;
             }
             default:
-                return false; // typed letters arrive as text (SaveScreenText); Escape closes it as any paperdoll
+                return false; // typed letters arrive as text (SaveScreenText); Cancel closes it as any paperdoll
         }
         screen.Confirming = null;
         RefreshDollGump(screen.Gump);

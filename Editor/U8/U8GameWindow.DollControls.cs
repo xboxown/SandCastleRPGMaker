@@ -206,7 +206,7 @@ public partial class U8GameWindow
             case DollPartKind.TextBox:
                 _typing = (gump, part);
                 RefreshDollGump(gump);
-                StatusText.Text = $"\"{part.Name}\": type, then Enter.";
+                StatusText.Text = $"\"{part.Name}\": type, then {KeyWords("Accept")}.";
                 return true;
             case DollPartKind.CheckBox:
                 runtime.Value = runtime.Look = runtime.Value != 0 ? 0 : 1;
@@ -278,23 +278,18 @@ public partial class U8GameWindow
 
     // ================= Typing =================
 
-    /// <summary>A key while a text box is typed in: Backspace, Enter / Tab / Escape end it. True = handled.</summary>
+    /// <summary>A key while a text box is typed in: Erase; Accept, the third Next choice key (Tab) and Cancel end it. True = handled.</summary>
     private bool DollTypingKey(Key key)
     {
         if (_typing is not { } typing) return false;
-        switch (key)
+        if (TypingKeyIs(key, "Erase"))
         {
-            case Key.Back:
-            {
-                var runtime = typing.Gump.State.Of(typing.Part);
-                if (runtime.Text.Length > 0) runtime.Text = runtime.Text[..^1];
-                RefreshDollGump(typing.Gump);
-                break;
-            }
-            case Key.Enter or Key.Tab or Key.Escape:
-                StopTyping();
-                break;
+            var runtime = typing.Gump.State.Of(typing.Part);
+            if (runtime.Text.Length > 0) runtime.Text = runtime.Text[..^1];
+            RefreshDollGump(typing.Gump);
         }
+        else if (TypingKeyIs(key, "Accept") || TypingKeyIs(key, "ScreenDown3") || TypingKeyIs(key, "Cancel"))
+            StopTyping();
         return true; // letters arrive as text (DollTypingText); no other key does anything while typing
     }
 
@@ -321,11 +316,11 @@ public partial class U8GameWindow
         ControlChanged(typing.Gump, typing.Part, typing.Gump.State.Of(typing.Part), "typed in");
     }
 
-    /// <summary>A key while a modal paperdoll is open: Escape answers no, Enter presses its Yes / OK button. Nothing else reaches the game.</summary>
+    /// <summary>A key while a modal paperdoll is open: Cancel answers no, Accept presses its Yes / OK button. Nothing else reaches the game.</summary>
     private void ModalDollKey(OpenDollGump gump, Key key)
     {
-        if (key == Key.Escape) { if (!ReferenceEquals(gump, _titleGump)) AnswerDoll(gump, false); return; } // Escape doesn't close the Title Screen
-        if (key == Key.Enter && gump.Design.Parts.FirstOrDefault(p => p.Kind == DollPartKind.ConfirmButton && gump.State.Of(p).Visible) is { } confirm)
+        if (KeyIs(key, "Cancel")) { if (!ReferenceEquals(gump, _titleGump)) AnswerDoll(gump, false); return; } // Cancel doesn't close the Title Screen
+        if (KeyIs(key, "Accept") && gump.Design.Parts.FirstOrDefault(p => p.Kind == DollPartKind.ConfirmButton && gump.State.Of(p).Visible) is { } confirm)
         {
             PlayControlClick(confirm);
             DollControlClicked(gump, confirm, gump.State.Of(confirm));

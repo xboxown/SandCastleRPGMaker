@@ -100,7 +100,7 @@ public partial class U8GameWindow
         CancelPendingIdentify();
         _choosingTarget = onChosen;
         ShowPointer(RestingPointer); // Green Select while choosing
-        StatusText.Text = prompt + " (Escape to cancel)";
+        StatusText.Text = prompt + $" ({KeyWords("Cancel")} to cancel)";
     }
 
     /// <summary>The next left press while choosing picks the target. True = it was consumed.</summary>

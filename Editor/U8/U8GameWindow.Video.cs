@@ -67,11 +67,11 @@ public partial class U8GameWindow
         return true;
     }
 
-    /// <summary>A key while a video plays: Escape, Space or Enter skips it (if allowed); no other key does anything.</summary>
+    /// <summary>A key while a video plays: Cancel or Accept skips it (if allowed); no other key does anything.</summary>
     private bool VideoKey(Key key)
     {
         if (_video is null) return false;
-        if (key is Key.Escape or Key.Space or Key.Enter) SkipVideo();
+        if (KeyIs(key, "Cancel") || KeyIs(key, "Accept") || KeyIs(key, "Accept2")) SkipVideo();
         return true;
     }
 

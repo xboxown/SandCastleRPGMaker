@@ -422,7 +422,7 @@ public partial class U8GameWindow
         var panel = new StackPanel();
         if (prompt.Length > 0) panel.Children.Add(new TextBlock { Text = prompt, Foreground = Brushes.White, FontSize = 16, TextWrapping = TextWrapping.Wrap, MaxWidth = 360 });
         panel.Children.Add(input);
-        panel.Children.Add(new TextBlock { Text = "Enter: OK    Escape: cancel", Foreground = Brushes.LightGray, FontSize = 11, Margin = new Thickness(0, 6, 0, 0) });
+        panel.Children.Add(new TextBlock { Text = $"{KeyWords("Accept")}: OK    {KeyWords("Cancel")}: cancel", Foreground = Brushes.LightGray, FontSize = 11, Margin = new Thickness(0, 6, 0, 0) });
         _scriptInput = new Border
         {
             Background = new SolidColorBrush(Color.FromArgb(230, 20, 16, 12)), BorderBrush = Brushes.Goldenrod, BorderThickness = new Thickness(2),
@@ -431,8 +431,9 @@ public partial class U8GameWindow
         Panel.SetZIndex(_scriptInput, 900000);
         input.PreviewKeyDown += (_, e) =>
         {
-            if (e.Key == Key.Enter) { FinishScriptInput(true); e.Handled = true; }
-            else if (e.Key == Key.Escape) { FinishScriptInput(false); e.Handled = true; }
+            var pressed = U8KeyCapture.RealKey(e);
+            if (TypingKeyIs(pressed, "Accept")) { FinishScriptInput(true); e.Handled = true; }
+            else if (TypingKeyIs(pressed, "Cancel")) { FinishScriptInput(false); e.Handled = true; }
         };
         _scriptInputDone = finished;
         ((Grid)Content).Children.Add(_scriptInput);
@@ -464,7 +465,7 @@ public partial class U8GameWindow
     private void ShowScriptState()
     {
         if (IsShippedGame) return;
-        new U8ScriptStateWindow(_execContext, "The game's script data now (F9).") { Owner = this }.Show();
+        new U8ScriptStateWindow(_execContext, $"The game's script data now ({KeyWords("TestScriptState")}).") { Owner = this }.Show();
     }
 }
 
