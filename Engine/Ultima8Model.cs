@@ -26,4 +26,13 @@ public class Ultima8Settings
     /// <summary>A page with no answers stays this long per letter (at least BarkMinMs), then goes on by itself.</summary>
     public int BarkMsPerChar { get; set; } = 60;
     public int BarkMinMs { get; set; } = 1500;
+
+    // ---------- The keyboard (Engine/U8Keys.cs) ----------
+
+    /// <summary>The keys the maker changed: action id -> key. An action not here has Ultima 8's own.</summary>
+    public Dictionary<string, string> Keys { get; set; } = new();
+    /// <summary>The paperdoll its Keys paperdoll key opens, where the player changes the keys (-1 = none).</summary>
+    public int KeysDollDesignId { get; set; } = -1;
+    /// <summary>What %key... shows while Ask For Key waits for that key.</summary>
+    public string KeyAskWords { get; set; } = "Press a key...";
 }

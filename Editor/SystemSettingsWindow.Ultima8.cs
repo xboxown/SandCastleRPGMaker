@@ -29,6 +29,7 @@ public partial class SystemSettingsWindow
         talk.Children.Add(Number("At least (ms)", () => u8.BarkMinMs, v => u8.BarkMinMs = Math.Max(200, v)));
         panel.Children.Add(talk);
         panel.Children.Add(new TextBlock { Text = "A page with no answers goes on by itself after its time (or a click). Pentagram's BarkGump is 194 wide, its AskGump rows 160. Narration (nobody on the map speaking) keeps its box.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(BuildU8KeysSection(u8));
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 
         static FrameworkElement Number(string label, Func<int> get, Action<int> set)
@@ -40,5 +41,82 @@ public partial class SystemSettingsWindow
             row.Children.Add(box);
             return row;
         }
+    }
+
+    /// <summary>The keys the game starts with, the paperdoll the player changes them on and the words shown while it waits (Engine/U8Keys.cs).</summary>
+    private UIElement BuildU8KeysSection(Ultima8Settings u8)
+    {
+        var section = new StackPanel();
+        section.Children.Add(new TextBlock { Text = "The keyboard", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        section.Children.Add(new TextBlock { Text = "The keys this game starts with. Click a key, then press the new one (Escape: no change). A key another action has: they swap.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) });
+
+        var keys = U8Keys.MakerKeys(u8);
+        var buttons = new Dictionary<string, Button>();
+        void ShowKeys()
+        {
+            foreach (var action in U8Keys.Actions) buttons[action.Id].Content = U8Keys.Display(keys[action.Id]);
+        }
+        void Store()
+        {
+            u8.Keys = keys.Where(kv => U8Keys.Actions.First(a => a.Id == kv.Key).DefaultKey != kv.Value).ToDictionary(kv => kv.Key, kv => kv.Value);
+        }
+        foreach (var action in U8Keys.Actions)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+            row.Children.Add(new TextBlock { Text = action.Name + ":", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+            var button = new Button { Width = 130 };
+            buttons[action.Id] = button;
+            bool waiting = false;
+            button.Click += (_, _) => { waiting = true; button.Content = u8.KeyAskWords; };
+            button.LostFocus += (_, _) => { waiting = false; ShowKeys(); };
+            button.PreviewKeyDown += (_, e) =>
+            {
+                if (!waiting) return;
+                e.Handled = true;
+                if (e.Key == System.Windows.Input.Key.Escape) { waiting = false; ShowKeys(); return; }
+                if (U8Keys.Bindable.FirstOrDefault(name => Enum.Parse<System.Windows.Input.Key>(name) == e.Key) is not { } key) return; // can't be taken: still waiting
+                waiting = false;
+                U8Keys.Assign(keys, action.Id, key, swap: true);
+                Store();
+                ShowKeys();
+            };
+            row.Children.Add(button);
+            section.Children.Add(row);
+        }
+        ShowKeys();
+        section.Children.Add(new TextBlock { Text = "The party's 1-9, Escape, Alt, F6, F9 and F10 stay as they are and can't be taken. Dialogs and the Save/Load screen keep their own keys.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 4, 0, 4) });
+        var back = new Button { Content = "Back to Ultima 8's keys", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 0, 10) };
+        back.Click += (_, _) =>
+        {
+            foreach (var action in U8Keys.Actions) keys[action.Id] = action.DefaultKey;
+            Store();
+            ShowKeys();
+        };
+        section.Children.Add(back);
+
+        var designs = (ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>()).Select(d => new DollChoice(d.Id, d.Name)).ToList();
+        designs.Insert(0, new DollChoice(-1, "(None - the key does nothing)"));
+        var doll = new ComboBox { Width = 260, ItemsSource = designs, SelectedItem = designs.FirstOrDefault(c => c.Id == u8.KeysDollDesignId) ?? designs[0] };
+        doll.SelectionChanged += (_, _) => u8.KeysDollDesignId = (doll.SelectedItem as DollChoice)?.Id ?? -1;
+        var dollRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        dollRow.Children.Add(new TextBlock { Text = "Keys paperdoll:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        dollRow.Children.Add(doll);
+        section.Children.Add(dollRow);
+        var words = new TextBox { Text = u8.KeyAskWords, Width = 260 };
+        words.TextChanged += (_, _) => u8.KeyAskWords = words.Text;
+        var wordsRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 4) };
+        wordsRow.Children.Add(new TextBlock { Text = "While it waits for a key:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        wordsRow.Children.Add(words);
+        section.Children.Add(wordsRow);
+        section.Children.Add(new TextBlock { Text = "On a paperdoll, %keyup %keydown %keyleft %keyright %keyrun %keyjump %keycombat %keyinventory %keystats %keysaveload %keymenu show each key's name in a text or a caption. Its buttons use the commands in the event editor's Ultima 8 tab: Ask For Key, Set Key, Get Key Name, Reset Keys.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 8) });
+
+        if (ProjectSession.ProjectIdProvider?.Invoke() is { } projectId)
+        {
+            var forget = new Button { Content = "Forget the keys changed while playing", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), IsEnabled = U8Keys.HasPlayerKeys(projectId) };
+            forget.ToolTip = "What was changed in Game Test on this computer wins over the keys above. This forgets it, so Game Test starts with the keys above again.";
+            forget.Click += (_, _) => { U8Keys.ForgetPlayerKeys(projectId); forget.IsEnabled = false; };
+            section.Children.Add(forget);
+        }
+        return section;
     }
 }

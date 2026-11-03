@@ -177,6 +177,7 @@ public partial class U8GameWindow
         UntrackGumpFocus(gump);
         DollControlsClosed(gump); // last: an unanswered question hears no once it's gone
         TitleClosed(gump); // the Title Screen closing starts the game (U8GameWindow.Title.cs)
+        CancelKeyAsk(); // Ask For Key from a paperdoll closed meanwhile: the event goes on, the key unchanged (U8GameWindow.U8Keys.cs)
         if (_openPaperdolls.Count == 0 && _openContainers.Count == 0 && _openDolls.Count == 0) GameCanvas.Focus();
     }
 
@@ -250,6 +251,7 @@ public partial class U8GameWindow
     {
         part = part.WithRuntime(runtime); // its words and choices as events set them
         if (gump.Fill is { } error && part.Text.Contains('%')) part = part.WithText(GameErrors.Fill(part.Text, error.Number, error.Words, error.Detail));
+        if (part.Text.Contains("%key", StringComparison.OrdinalIgnoreCase)) part = part.WithText(FillKeyWords(part.Text)); // Ultima 8: the keys (U8GameWindow.U8Keys.cs)
         if (DollPart.IsControlKind(part.Kind)) return DollControlVisual(gump, part, runtime); // buttons with captions, boxes, lists (DollControls)
         var size = DollLook.SizeOf(part, runtime.Look, _sprites);
         switch (part.Kind)

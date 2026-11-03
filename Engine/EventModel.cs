@@ -121,7 +121,8 @@ public enum EventCommandType
     DriveVehicle, StopDriving, TravelVehicle, SetVehicleSpeed,
     Earthquake,
     LearnLanguage,
-    Shop
+    Shop,
+    U8AskKey, U8SetKey, U8GetKeyName, U8ResetKeys
 }
 
 /// <summary>

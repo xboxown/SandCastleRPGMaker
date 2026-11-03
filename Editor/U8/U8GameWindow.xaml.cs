@@ -535,8 +535,6 @@ public partial class U8GameWindow : Window
         _currentAppliedPose = pose;
     }
 
-    private static bool IsArrowKey(Key key) => key is Key.Left or Key.Right or Key.Up or Key.Down;
-
     private static (int dx, int dy) DirectionFor(Key key) => key switch
     {
         Key.Left => (-1, 0),
@@ -1555,6 +1553,7 @@ public partial class U8GameWindow : Window
     {
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (U8GameWindow.Video.cs)
         if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
+        if (KeyAskTook(e)) return; // Ask For Key: this key press is the answer (U8GameWindow.U8Keys.cs)
         if (_currentMessage is not null)
         {
             MessageKey(e.Key); // a dialog box is up: Enter/Space/Escape go on, or the keys pick a reply - nothing else happens
@@ -1564,8 +1563,8 @@ public partial class U8GameWindow : Window
         if (_typing is not null) { DollTypingKey(e.Key); e.Handled = true; return; } // a paperdoll's text box takes the keys (Escape / Enter end the typing)
         if (TopModalDoll is { } modal) { ModalDollKey(modal, e.Key); e.Handled = true; return; } // a modal paperdoll: only Escape (no) and Enter (yes)
         if (_saveScreen is not null && e.Key != Key.Escape) { if (SaveScreenKey(e.Key)) e.Handled = true; return; } // the Save/Load screen takes the keys - its name is typed (U8GameWindow.SaveLoad.cs)
-        if (_keysForbidden && !IsArrowKey(e.Key)) { e.Handled = true; return; } // Allow / Forbid Controls > Keys: only walking
-        if (e.Key == Key.S && !InCinema && !PlayerKnockedOut) { OpenSaveLoad(); e.Handled = true; return; } // Exult: S opens the Save/Load screen - even after dying, to load
+        if (_keysForbidden && WalkArrowFor(e.Key) == Key.None) { e.Handled = true; return; } // Allow / Forbid Controls > Keys: only walking
+        if (KeyIs(e.Key, "SaveLoad") && !InCinema && !PlayerKnockedOut) { OpenSaveLoad(); e.Handled = true; return; } // Exult: S opens the Save/Load screen - even after dying, to load
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (PlayerKnockedOut && e.Key != Key.F6) { e.Handled = true; return; } // unconscious: nothing until back on your feet
         if (e.Key == Key.Escape && _isReadingBook) { _bookClose?.Invoke(); e.Handled = true; return; } // Exult Get_click: Escape ends the book
@@ -1585,14 +1584,15 @@ public partial class U8GameWindow : Window
         if (e.Key == Key.F6 && !IsShippedGame) { SkipToNextPeriod(); e.Handled = true; return; } // Exult's fake_next_period, for testing schedules
         if (e.Key == Key.F9 && !IsShippedGame) { ShowScriptState(); e.Handled = true; return; } // the script data and debug log (Game Test only)
         if (e.Key == Key.F10 && !IsShippedGame) { _showFps = !_showFps; StatusText.Text = _showFps ? "Frame rate: measuring..." : ""; e.Handled = true; return; } // the frame rate (Game Test only)
-        if (e.Key == Key.C && !_combatForbidden) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
-        if (e.Key == Key.Z) { NextPartyStats(); e.Handled = true; return; } // Exult ActionStats: the next party member's stats (held down: everyone's)
+        if (KeyIs(e.Key, "Menu")) { ToggleKeysPaperdoll(); e.Handled = true; return; } // Ultima 8: where the player changes the keys, if the maker made one
+        if (KeyIs(e.Key, "Combat") && !_combatForbidden) { ToggleCombatMode(); e.Handled = true; return; } // Exult: C toggles combat mode
+        if (KeyIs(e.Key, "Stats")) { NextPartyStats(); e.Handled = true; return; } // Exult ActionStats: the next party member's stats (held down: everyone's)
 
         // Real Exult access model, confirmed from Exult's own docs and documented real play - I opens/closes the current test player's own gump; a number key 1-9 opens a specific party member's directly (Exult's own real keys: 1 = Avatar, 2-8 = party member), or brings their already-open gump to front. Escape closes the single topmost gump only. All of this works even while gumps are already open, since these are real in-world overlays on the same canvas, not separate focusable windows.
         // Escape mid-drag cancels the drag (the item never left its origin, so it's simply still there) instead of closing a gump out from under it - Exult likewise refuses Escape while dragging.
         if (e.Key == Key.Escape && _pointer is { IsDragging: true }) { CancelPointer(); e.Handled = true; return; }
         if (e.Key == Key.Escape && _gumpFocusOrder.Count > 0) { CloseTopmostPaperdoll(); e.Handled = true; return; }
-        if (e.Key == Key.I) { NextPartyInventory(); e.Handled = true; return; } // Exult ActionInventory: the next party member's inventory (held down: everyone's)
+        if (KeyIs(e.Key, "Inventory")) { NextPartyInventory(); e.Handled = true; return; } // Exult ActionInventory: the next party member's inventory (held down: everyone's)
         int? partyIndex = e.Key switch
         {
             Key.D1 or Key.NumPad1 => 0, Key.D2 or Key.NumPad2 => 1, Key.D3 or Key.NumPad3 => 2,
@@ -1609,24 +1609,26 @@ public partial class U8GameWindow : Window
 
         if (IsGamePaused) return; // movement stays blocked while any gump is open (Exult: start_actor refuses in gump mode - paperdolls, containers and books alike), matching real Exult's "gumps pause games"
 
-        if (e.Key == Key.J) { if (!e.IsRepeat) TryStartU8Jump(fromMouse: false); e.Handled = true; return; } // Ultima 8: jump (both mouse buttons too)
-        var (dx, dy) = DirectionFor(e.Key);
+        if (KeyIs(e.Key, "Jump")) { if (!e.IsRepeat) TryStartU8Jump(fromMouse: false); e.Handled = true; return; } // Ultima 8: jump (both mouse buttons too)
+        var arrow = WalkArrowFor(e.Key); // the key that walks this way, whichever it is (U8GameWindow.U8Keys.cs)
+        var (dx, dy) = DirectionFor(arrow);
         if (dx == 0 && dy == 0) return;
         e.Handled = true;
         if (e.IsRepeat) return; // the OS's own repeat plays no role at all - the real per-frame game loop (GameLoop_Rendering) is what drives continuous movement now, on its own schedule, exactly matching Exult's own real mechanics
 
         // Purely records that this direction is now held, for the real per-frame game loop to act on.
-        _lastDirectionKeyPressed = e.Key;
-        _heldDirectionKeys.Add(e.Key);
+        _lastDirectionKeyPressed = arrow;
+        _heldDirectionKeys.Add(arrow);
     }
 
     private void GameCanvas_PreviewKeyUp(object sender, KeyEventArgs e)
     {
-        var (dx, dy) = DirectionFor(e.Key);
+        var arrow = WalkArrowFor(e.Key);
+        var (dx, dy) = DirectionFor(arrow);
         if (dx == 0 && dy == 0) return;
         e.Handled = true;
 
-        _heldDirectionKeys.Remove(e.Key);
+        _heldDirectionKeys.Remove(arrow);
         // The Idle switch itself happens in GameLoop_Rendering, via _wasMovingLastFrame, the instant nothing is held any more - continuous movement has no "in-flight transition" to finish first any more, so there is nothing to wait on here.
     }
 

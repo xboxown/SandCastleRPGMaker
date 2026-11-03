@@ -94,7 +94,7 @@ public partial class U8GameWindow
         if (_heldDirectionKeys.Contains(Key.Right)) sx++;
         if (_heldDirectionKeys.Contains(Key.Up)) sy--;
         if (_heldDirectionKeys.Contains(Key.Down)) sy++;
-        bool shift = Keyboard.Modifiers.HasFlag(ModifierKeys.Shift);
+        bool shift = RunKeyHeld; // Shift unless changed (U8GameWindow.U8Keys.cs)
         if (sx != 0 || sy != 0)
         {
             (dx, dy) = WorldFromScreen(sx, sy);

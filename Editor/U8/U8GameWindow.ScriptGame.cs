@@ -46,6 +46,7 @@ public partial class U8GameWindow
         a[EventCommandType.Shop] = ShopCommand; // U8GameWindow.Shop.cs
         h[EventCommandType.FlashScreen] = FlashScreenCommand;
         a[EventCommandType.MoveCamera] = MoveCameraCommand;
+        InitializeU8Keys(); // the keys and their commands (U8GameWindow.U8Keys.cs)
         InitializeVehicleCommands(); // Drive Vehicle, Stop Driving, Travel Vehicle (U8GameWindow.VehicleTravel.cs)
         h[EventCommandType.CameraFollow] = c =>
         {
