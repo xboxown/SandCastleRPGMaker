@@ -15,7 +15,24 @@ public class PaperdollButton
 }
 
 public enum StatsElementKind { Text, Name, Stat, Ailment, Hunger }
-public enum StatShowAs { Number, Bar, Pie, SpriteFrames }
+
+/// <summary>How an inventory paperdoll brings up a PaperDoll Editor paperdoll: a button on it (click: open / close), or opening and closing with it.</summary>
+public enum DollLinkWay { Button, WithInventory }
+
+/// <summary>
+/// A PaperDoll Editor paperdoll this inventory brings up - Ultima 8's small hit points / mana bars under the inventory.
+/// Opened for this character: its parts following "the character it was opened for" show their stats.
+/// A button: its X / Y, sprite (frames: closed, open) and click sound are the button's.
+/// </summary>
+public class PaperdollDollLink : PaperdollButton
+{
+    public int DesignId { get; set; } = -1;
+    public DollLinkWay Way { get; set; } = DollLinkWay.Button;
+    /// <summary>Where it opens, from the inventory's top-left, in the inventory's own 320 x 400 pixels (330, 0: just to its right).</summary>
+    public double DollX { get; set; } = 330;
+    public double DollY { get; set; }
+}
+public enum StatShowAs { Number, Bar, Pie, SpriteFrames, Icons }
 
 /// <summary>One thing on a stats paperdoll: a label, the name, a stat (as a number or a gauge), an ailment's picture while it lasts, or how hungry they are.</summary>
 public class StatsDollElement

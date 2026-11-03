@@ -26,6 +26,11 @@ public class MousePointerSettings
     public int Width { get; set; }
     public int Height { get; set; }
     public Dictionary<MousePointerKind, MousePointerSprite> Sprites { get; set; } = new();
+    /// <summary>
+    /// Ultima 8 projects: the direction arrows (Pentagram's mouse frames) - "Walk.North", "Step.SouthEast", "Run.West",
+    /// "Combat.NorthWest"... - eight screen directions (North: up the screen) for walking, stepping, running and combat mode.
+    /// </summary>
+    public Dictionary<string, MousePointerSprite> U8Arrows { get; set; } = new();
 }
 
 /// <summary>How conversations show.</summary>
@@ -217,6 +222,10 @@ public class SaveLoadSettings
     public int ConfirmDollDesignId { get; set; } = -1;
     /// <summary>The paperdoll shown once a game is saved, closed by its own button (-1 = none: a "Game saved" label).</summary>
     public int SavedDollDesignId { get; set; } = -1;
+    /// <summary>The paperdoll shown while the game saves or loads - its progress bars and displays following "the save / load progress" fill as it goes (-1 = none).</summary>
+    public int ProgressDollDesignId { get; set; } = -1;
+    /// <summary>It stays at least this long (ms), so a quick save is still seen - full once the work is done.</summary>
+    public int ProgressShownAtLeastMs { get; set; } = 600;
 }
 
 /// <summary>The Title Screen (System Settings > Title Screen): a PaperDoll Editor paperdoll shown before the game, its music and an intro video.</summary>

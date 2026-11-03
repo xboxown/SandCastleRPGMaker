@@ -69,7 +69,7 @@ public partial class U8GameWindow
                 Placement = placement, Character = character, Size = ActorSizing.Resolve(character, _poseDatabase, _sprites),
                 PixelX = placement.X * _tileWidth + _tileWidth / 2.0,
                 PixelY = placement.Y * _tileHeight + _tileHeight / 2.0,
-                Facing = placement.Facing
+                Facing = WorldOfSlot(placement.Facing) // picked as seen on the screen (U8GameWindow.U8Movement.cs)
             };
             _mapCharacters.Add(mapCharacter);
             // Standing on top of whatever solid thing is under it, like the player at the Start Position.
@@ -108,7 +108,7 @@ public partial class U8GameWindow
     {
         volume = 0;
         key = null;
-        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(facing) is not { } link) return null;
+        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(ScreenSlot(facing)) is not { } link) return null; // the screen's slot (U8GameWindow.U8Movement.cs)
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
         key = link.SpriteGroup + "/" + link.SpriteName;
         return _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);
@@ -118,14 +118,17 @@ public partial class U8GameWindow
     {
         var placement = mapCharacter.Placement;
         var pose = placement.PoseId >= 0 ? PoseById(placement.PoseId) : PoseByName("Idle");
-        var sprite = ResolveCharacterSprite(mapCharacter.Character, pose, placement.Facing, out double volume, out string? key);
+        var sprite = ResolveCharacterSprite(mapCharacter.Character, pose, mapCharacter.Facing, out double volume, out string? key);
         if (sprite is not null && (sprite.Frames.Count > 0 || !string.IsNullOrEmpty(sprite.FilePath)))
         {
             var (width, height) = QuantizedSpriteSize(sprite);
             var image = new Image { Width = width, Height = height, IsHitTestVisible = true };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
             SetU8Anchor(image, sprite); // its Origin on its feet (Pentagram's frame offset)
-            RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources, volume));
+            var animator = new SpriteAnimator(sprite, image, _resources, volume);
+            RegisterWorldAnimator(image, animator);
+            FitToFrame(image, sprite, 0); // each frame at its own size, feet kept (U8GameWindow.U8Anchor.cs)
+            animator.Ticked += _ => FitToFrame(image, sprite, animator.FrameIndex);
             mapCharacter.ShownSprite = key;
             return image;
         }
@@ -156,7 +159,10 @@ public partial class U8GameWindow
         image.Height = height;
         SetU8Anchor(image, sprite); // its Origin on its feet (Pentagram's frame offset)
         UnregisterWorldAnimator(image);
-        RegisterWorldAnimator(image, new SpriteAnimator(sprite, image, _resources, volume));
+        var animator = new SpriteAnimator(sprite, image, _resources, volume);
+        RegisterWorldAnimator(image, animator);
+        FitToFrame(image, sprite, 0); // each frame at its own size, feet kept
+        animator.Ticked += _ => FitToFrame(image, sprite, animator.FrameIndex);
         mapCharacter.ShownSprite = key;
         PositionCharacterVisual(mapCharacter);
     }

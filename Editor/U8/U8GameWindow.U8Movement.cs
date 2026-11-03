@@ -24,6 +24,7 @@ public partial class U8GameWindow
     private const double U8RunFactor = 2.0, U8StepFactor = 0.5;
     private int U8WalkThreshold => _systemSettings.Ultima8.WalkThreshold; // of 255 (Pentagram's walk_threshold, 50) - System Settings > Ultima 8
     private int U8RunThreshold => _systemSettings.Ultima8.RunThreshold;   // (run_threshold, 160)
+    private int U8StepThreshold => _systemSettings.Ultima8.StepThreshold; // nearer: still (0: never - Pentagram)
 
     private bool _rightMouseHeld;
     private Point _mouseOnCanvas;
@@ -76,7 +77,9 @@ public partial class U8GameWindow
         var screen = dirs[((sector % 8) + 8) % 8];
         double halfW = ViewportWidth / 2, halfH = ViewportHeight / 2;
         int length = Math.Abs(dx) > halfW * U8RunThreshold / 255 || Math.Abs(dy) > halfH * U8RunThreshold / 255 ? 2
-            : Math.Abs(dx) > halfW * U8WalkThreshold / 255 || Math.Abs(dy) > halfH * U8WalkThreshold / 255 ? 1 : 0;
+            : Math.Abs(dx) > halfW * U8WalkThreshold / 255 || Math.Abs(dy) > halfH * U8WalkThreshold / 255 ? 1
+            : U8StepThreshold <= 0 || Math.Abs(dx) > halfW * U8StepThreshold / 255 || Math.Abs(dy) > halfH * U8StepThreshold / 255 ? 0
+            : -1; // nearer than Step beyond: the Avatar stays put
         return (screen, length);
     }
 
@@ -101,6 +104,7 @@ public partial class U8GameWindow
         if (_rightMouseHeld && Mouse.RightButton == MouseButtonState.Pressed)
         {
             var (screen, length) = PointerFromAvatar();
+            if (length < 0) return false; // the pointer too close (System Settings > Ultima 8 > Step beyond): stays put
             (dx, dy) = WorldFromScreen(screen.X, screen.Y);
             // a run only once walking (or running) already, as U8AvatarMoverProcess
             _u8SpeedFactor = length == 0 ? U8StepFactor : length == 2 && (_wasMovingLastFrame || shift) ? U8RunFactor : 1.0;
@@ -109,6 +113,16 @@ public partial class U8GameWindow
         _rightMouseHeld = false;
         return false;
     }
+
+    /// <summary>
+    /// The sprite slot (Character Editor) for a facing: the slots are the screen's - South faces down the screen, as the
+    /// editor shows it - while the engine keeps Ultima 8's world directions (north up-right on the screen). The world's
+    /// direction turned one step clockwise is the screen's: south-east is down the screen, north is up-right.
+    /// </summary>
+    private static SpriteDirection ScreenSlot(SpriteDirection world) => (SpriteDirection)(((int)world + 1) % 8);
+
+    /// <summary>A direction the designer picked (a placed character's facing, Turn To Face, a pose's facing) - the screen's, as they see it - as the world's.</summary>
+    private static SpriteDirection WorldOfSlot(SpriteDirection screen) => (SpriteDirection)(((int)screen + 7) % 8);
 
     private static SpriteDirection FacingOf(int dx, int dy) => (dx, dy) switch
     {
@@ -123,8 +137,91 @@ public partial class U8GameWindow
     };
 
     /// <summary>The pose for moving at this speed: Run (Ultima 8) when running and the project has it, Step when stepping, else Walking.</summary>
-    private PoseDefinition? U8MovePose() =>
-        (_u8SpeedFactor >= U8RunFactor ? PoseByName("Run") : _u8SpeedFactor <= U8StepFactor ? PoseByName("Step") : null) ?? _walkingPose;
+    private PoseDefinition? U8MovePose(bool retreating = false) =>
+        _u8Step is not null ? U8StepPoseWithArt() // a step: its own animation, played through
+        : _combatMode && _u8SpeedFactor < U8RunFactor ? WithArt(PoseByName(retreating ? "Retreat" : "Advance"), _walkingPose) // combat: advancing, or backing away (U8AvatarMoverProcess)
+        : _u8SpeedFactor >= U8RunFactor ? WithArt(PoseByName("Run"), _walkingPose) // a run in combat: out of the stance (combat-run)
+        : _u8SpeedFactor <= U8StepFactor ? WithArt(PoseByName("Step"), _walkingPose)
+        : _walkingPose;
+
+    /// <summary>Standing still: in combat, the combat stance (Pentagram's combatStand); else Idle.</summary>
+    private PoseDefinition? U8RestPose() => _combatMode ? WithArt(PoseByName("Combat Stand"), _idlePose) : _idlePose;
+
+    /// <summary>
+    /// An Ultima 8 pose the main character has art for, facing the way they face - else the plain one (Walking, Idle). A
+    /// pose without its sprites left the last picture showing: a step with no Step art slid along standing still.
+    /// </summary>
+    private PoseDefinition? WithArt(PoseDefinition? pose, PoseDefinition? plain) =>
+        pose is not null && ResolveFacingSprite(pose, out _) is { Frames.Count: > 0 } ? pose : plain;
+
+    // ---------- Stepping (the pointer close to the Avatar) ----------
+
+    /// <summary>How far one step goes: a quarter of a floor tile (Ultima 8's units: a tile is 128).</summary>
+    private const int U8StepUnits = 32;
+    /// <summary>A turn before a step that way: how long it holds before the step starts.</summary>
+    private const double U8TurnMs = 180;
+
+    private sealed class U8StepMove
+    {
+        public int Dx, Dy;
+        public SpriteEntry? Sprite; // the step's animation (its frames that hold still don't move)
+        public bool TurnOnly;
+        public double ElapsedMs, DurationMs, DistancePx;
+    }
+    private U8StepMove? _u8Step;
+
+    /// <summary>
+    /// U8AvatarMoverProcess: a step is one whole Animation::step - played through once, moving one short step - and only then
+    /// is the pointer read again (waitFor), so the Avatar tiptoes step by step and doesn't spin with the pointer round his
+    /// feet. A step another way turns first (checkTurn), then steps.
+    /// </summary>
+    private void StartU8Step(int dx, int dy)
+    {
+        var facing = FacingOf(dx, dy);
+        if (facing != _playerFacing)
+        {
+            _playerFacing = facing;
+            ApplyPoseSprite(U8RestPose());
+            _u8Step = new U8StepMove { Dx = dx, Dy = dy, TurnOnly = true, DurationMs = U8TurnMs };
+            return;
+        }
+        var pose = U8StepPoseWithArt();
+        var sprite = ResolveFacingSprite(pose, out _);
+        double duration = sprite is { Frames.Count: > 0 } ? sprite.Frames.Count * 1000.0 / Math.Max(1, sprite.Fps) : 600; // the step animation once through
+        _u8Step = new U8StepMove { Dx = dx, Dy = dy, Sprite = sprite, DurationMs = Math.Max(150, duration), DistancePx = U8StepUnits * _tileWidth / 128.0 };
+        _currentAppliedPose = null; // from its first frame
+        ApplyPoseSprite(pose);
+    }
+
+    private PoseDefinition? U8StepPoseWithArt() => WithArt(PoseByName("Step"), _walkingPose);
+
+    /// <summary>Each frame of a step: on (its distance spread over its animation), or done - then the pointer is read again.</summary>
+    private void ContinueU8Step(double deltaSeconds)
+    {
+        if (_u8Step is not { } step) return;
+        step.ElapsedMs += deltaSeconds * 1000;
+        if (!step.TurnOnly)
+        {
+            // Only in the frames that move (Pentagram: each frame's own distance; a standing frame none), its distance spread over them.
+            var sprite = step.Sprite;
+            int frames = sprite?.Frames.Count ?? 0;
+            bool anyTicked = sprite is not null && sprite.Frames.Any(f => f.HoldsStill);
+            bool Still(int i) => frames > 1 && (anyTicked ? sprite!.Frames[i].HoldsStill : i == 0);
+            int moving = frames == 0 ? 1 : Enumerable.Range(0, frames).Count(i => !Still(i));
+            int shown = Math.Clamp(_playerAnimator?.FrameIndex ?? 0, 0, Math.Max(0, frames - 1));
+            if (moving > 0 && !(frames > 0 && Still(shown)))
+            {
+                double movingMs = frames == 0 ? step.DurationMs : step.DurationMs * moving / frames;
+                // Its pace: the step's distance over its moving frames' time (no faster than a walk).
+                _u8SpeedFactor = Math.Min(U8StepFactor, step.DistancePx / (movingMs / 1000.0) / (PlayerTilesPerSecond * _tileWidth));
+                StepPlayerContinuous(step.Dx, step.Dy, deltaSeconds);
+            }
+        }
+        if (step.ElapsedMs >= step.DurationMs) _u8Step = null;
+    }
+
+    /// <summary>The way straight behind.</summary>
+    private static SpriteDirection Behind(SpriteDirection facing) => (SpriteDirection)(((int)facing + 4) % 8);
 
     // ---------- Jumping ----------
 
@@ -138,7 +235,7 @@ public partial class U8GameWindow
         {
             var (screen, length) = PointerFromAvatar();
             (dx, dy) = WorldFromScreen(screen.X, screen.Y);
-            up = length == 0; // the pointer on the Avatar: up
+            up = length <= 0; // the pointer on the Avatar: up
         }
         else if (TryGetU8Direction(out dx, out dy)) up = false;
         else { (dx, dy) = VectorOf(_playerFacing); up = true; }

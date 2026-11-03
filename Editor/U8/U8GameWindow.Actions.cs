@@ -311,7 +311,7 @@ public partial class U8GameWindow
     private static double Amount(EventCommand command) =>
         double.TryParse(command.Get("Duration"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) || double.TryParse(command.Get("Duration"), out v) ? Math.Max(0.01, v) : 1;
 
-    private static SpriteDirection? FacingParam(EventCommand command) => Enum.TryParse<SpriteDirection>(command.Get("Facing"), out var f) ? f : null;
+    private static SpriteDirection? FacingParam(EventCommand command) => Enum.TryParse<SpriteDirection>(command.Get("Facing"), out var f) ? WorldOfSlot(f) : null; // picked as seen on the screen
 
     // ================= Things on the map =================
 

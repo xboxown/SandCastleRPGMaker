@@ -92,8 +92,9 @@ public partial class U8GameWindow
                     StatusText.Text = "There's no saved game to continue.";
                     return;
                 }
-                try { LoadGame(GameSaveStore.Read(projectId, newest), $"Loaded \"{newest.Name}\"."); }
-                catch (Exception ex) { StatusText.Text = $"\"{newest.Name}\" couldn't be loaded: {ex.Message}"; }
+                BeginDiskProgress(); // DiskProgress.cs
+                try { LoadGame(GameSaveStore.Read(projectId, newest, ReportDiskProgress), $"Loaded \"{newest.Name}\"."); EndDiskProgress(); }
+                catch (Exception ex) { CancelDiskProgress(); StatusText.Text = $"\"{newest.Name}\" couldn't be loaded: {ex.Message}"; }
                 break;
             }
             case DollPartKind.LoadGameButton:

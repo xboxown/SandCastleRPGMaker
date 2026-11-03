@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
+using System.Windows.Shapes;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
@@ -95,7 +96,8 @@ internal static class DollControls
     /// into its picture (animated in play, a still frame in the editor);
     /// <paramref name="barValue"/> is a progress bar's value (its own, or the slider's it follows).
     /// </summary>
-    public static FrameworkElement Build(DollPart part, Shown shown, SpriteDatabase sprites, Func<SpriteEntry, FrameworkElement> look, int? barValue = null)
+    /// <param name="lostFrom">Icons: the value they had just before a loss - the hearts lost flash (Flashes the hearts lost).</param>
+    public static FrameworkElement Build(DollPart part, Shown shown, SpriteDatabase sprites, Func<SpriteEntry, FrameworkElement> look, int? barValue = null, int? barMax = null, int? lostFrom = null)
     {
         var size = SizeOf(part, shown, sprites);
         var holder = new Canvas { Width = size.Width, Height = size.Height, Background = Brushes.Transparent };
@@ -193,19 +195,157 @@ internal static class DollControls
             case DollPartKind.ProgressBar:
             {
                 int value = barValue ?? shown.Value;
-                double t = Math.Clamp((value - part.Min) / (double)Math.Max(1, part.Max - part.Min), 0, 1);
-                if (Sprite(0) is { } empty) Place(holder, look(empty), 0, 0);
-                else Place(holder, Plain(size.Width, size.Height, PlainBox, PlainEdge), 0, 0);
-                var full = Sprite(1) is { } fullSprite ? look(fullSprite) : new Border { Width = size.Width, Height = size.Height, Background = PlainFill, IsHitTestVisible = false };
-                // Only as much of the full bar as the value reaches: left to right, or (Vertical) bottom up.
-                full.Clip = part.Vertical
-                    ? new RectangleGeometry(new Rect(0, size.Height * (1 - t), size.Width, size.Height * t))
-                    : new RectangleGeometry(new Rect(0, 0, size.Width * t, size.Height));
+                int max = barMax ?? part.Max;
+                double t = Math.Clamp((value - part.Min) / (double)Math.Max(1, max - part.Min), 0, 1);
+                if (part.BarStyle == DollGaugeStyle.Icons) return Icons(part, value - part.Min, max - part.Min, Sprite(0), lostFrom is { } from ? from - part.Min : null);
+                FrameworkElement Skin(SpriteEntry sprite) => Fitted(part, sprite, size, look);
+                if (part.BarStyle == DollGaugeStyle.Pie)
+                    return Pie(holder, size, t,
+                        Sprite(0) is { } emptyPie ? Skin(emptyPie) : new Ellipse { Width = size.Width, Height = size.Height, Fill = EmptyBrush(part), Stroke = PlainEdge, IsHitTestVisible = false },
+                        Sprite(1) is { } fullPie ? Skin(fullPie) : new Ellipse { Width = size.Width, Height = size.Height, Fill = FillBrush(part), IsHitTestVisible = false });
+                if (Sprite(0) is { } empty) Place(holder, Skin(empty), 0, 0);
+                else Place(holder, Plain(size.Width, size.Height, EmptyBrush(part), PlainEdge), 0, 0);
+                var full = Sprite(1) is { } fullSprite ? Skin(fullSprite) : new Border { Width = size.Width, Height = size.Height, Background = FillBrush(part), IsHitTestVisible = false };
+                // Only as much of the full bar as the value reaches: left to right (or right to left), or Upright bottom up (or top down).
+                double w = size.Width, h = size.Height;
+                full.Clip = new RectangleGeometry((part.Vertical, part.ReverseFill) switch
+                {
+                    (true, false) => new Rect(0, h * (1 - t), w, h * t),
+                    (true, true) => new Rect(0, 0, w, h * t),
+                    (false, true) => new Rect(w * (1 - t), 0, w * t, h),
+                    _ => new Rect(0, 0, w * t, h)
+                });
                 Place(holder, full, 0, 0);
                 holder.ClipToBounds = true;
                 break;
             }
         }
+        return holder;
+    }
+
+    private static Brush FillBrush(DollPart part) => PaperdollReadouts.Brush(part.FillColor) ?? PlainFill;
+    private static Brush EmptyBrush(DollPart part) => PaperdollReadouts.Brush(part.EmptyColor) ?? PlainBox;
+
+    /// <summary>A skin (a look's sprite) fitted to the bar: as drawn, stretched to its size, or tiled across it (its first frame).</summary>
+    private static FrameworkElement Fitted(DollPart part, SpriteEntry sprite, Size size, Func<SpriteEntry, FrameworkElement> look)
+    {
+        switch (part.SkinFit)
+        {
+            case DollSkinFit.Stretch:
+            {
+                var box = new Viewbox { Width = size.Width, Height = size.Height, Stretch = Stretch.Fill, Child = look(sprite), IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(box, BitmapScalingMode.NearestNeighbor);
+                return box;
+            }
+            case DollSkinFit.Tile when DollLook.Frame(sprite) is { } tile:
+            {
+                var brush = new ImageBrush(tile) { TileMode = TileMode.Tile, Stretch = Stretch.None, ViewportUnits = BrushMappingMode.Absolute, Viewport = new Rect(0, 0, tile.PixelWidth, tile.PixelHeight) };
+                var area = new Rectangle { Width = size.Width, Height = size.Height, Fill = brush, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(area, BitmapScalingMode.NearestNeighbor);
+                return area;
+            }
+            default:
+                return look(sprite);
+        }
+    }
+
+    /// <summary>The size icons take: as many as the range holds (Max - Min, its own Max), at the icon's size.</summary>
+    public static Size IconsSize(DollPart part, SpriteEntry? icon)
+    {
+        int per = Math.Max(1, part.IconValue), count = Math.Clamp((int)Math.Ceiling(Math.Max(0, part.Max - part.Min) / (double)per), 1, 200);
+        int perRow = Math.Max(1, part.IconsPerRow), gap = Math.Max(0, part.IconGap);
+        var first = DollLook.Frame(icon, 0);
+        double w = first?.PixelWidth ?? 8, h = first?.PixelHeight ?? 8;
+        return new Size(Math.Max(4, Math.Min(count, perRow) * (w + gap) - gap), Math.Max(4, (int)Math.Ceiling(count / (double)perRow) * (h + gap) - gap));
+    }
+
+    /// <summary>
+    /// Icons (hearts, Zelda's way): one icon per IconValue of the range, IconsPerRow to a row. The icon's sprite has its frames
+    /// from full to empty - 2 frames: full, empty; 3: full, half, empty; 5: quarters - each icon showing as much as is in it.
+    /// No sprite: dots in its Full / Empty colours. Beats: the last one holding something pulses while low. Flashes: the
+    /// ones just lost blink as they were before emptying.
+    /// </summary>
+    private static FrameworkElement Icons(DollPart part, int value, int range, SpriteEntry? icon, int? lostFrom)
+    {
+        int per = Math.Max(1, part.IconValue), count = Math.Clamp((int)Math.Ceiling(Math.Max(0, range) / (double)per), 0, 200);
+        int perRow = Math.Max(1, part.IconsPerRow), gap = Math.Max(0, part.IconGap);
+        var first = DollLook.Frame(icon, 0);
+        double w = first?.PixelWidth ?? 8, h = first?.PixelHeight ?? 8;
+        int frames = icon?.Frames.Count ?? 0;
+        var holder = new Canvas
+        {
+            Width = Math.Max(1, Math.Min(count, perRow) * (w + gap) - gap),
+            Height = Math.Max(1, (int)Math.Ceiling(count / (double)perRow) * (h + gap) - gap),
+            Background = Brushes.Transparent, IsHitTestVisible = false
+        };
+        // How the icon looks this full; null: not drawn (one frame only, and empty).
+        FrameworkElement? IconAt(double inIt)
+        {
+            if (frames > 0)
+            {
+                if (frames == 1 && inIt <= 0) return null; // one frame only: an empty one isn't drawn
+                int frame = frames == 1 ? 0 : (int)Math.Round((1 - inIt) * (frames - 1)); // frame 1 full ... the last empty
+                var image = new Image { Source = DollLook.Frame(icon, frame), Width = w, Height = h, Stretch = Stretch.Fill, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                return image;
+            }
+            var dot = new Grid { Width = w, Height = h, IsHitTestVisible = false };
+            dot.Children.Add(new Ellipse { Fill = PaperdollReadouts.Brush(part.EmptyColor) ?? Brushes.DimGray });
+            if (inIt > 0) dot.Children.Add(new Ellipse { Fill = PaperdollReadouts.Brush(part.FillColor) ?? Brushes.Crimson, Clip = new RectangleGeometry(new Rect(0, 0, w * inIt, h)) });
+            return dot;
+        }
+        bool beating = part.IconsBeatBelow > 0 && range > 0 && value > 0 && value * 100.0 / range <= part.IconsBeatBelow;
+        int lastHolding = (int)Math.Ceiling(value / (double)per) - 1;
+        for (int i = 0; i < count; i++)
+        {
+            double inIt = Math.Clamp((value - i * per) / (double)per, 0, 1); // how full this one is
+            double x = i % perRow * (w + gap), y = i / perRow * (h + gap);
+            if (IconAt(inIt) is { } shown)
+            {
+                if (beating && i == lastHolding)
+                {
+                    var pulse = new ScaleTransform(1, 1, w / 2, h / 2);
+                    shown.RenderTransform = pulse;
+                    var beat = new System.Windows.Media.Animation.DoubleAnimation(1, 1.25, TimeSpan.FromMilliseconds(220)) { AutoReverse = true, RepeatBehavior = System.Windows.Media.Animation.RepeatBehavior.Forever };
+                    pulse.BeginAnimation(ScaleTransform.ScaleXProperty, beat);
+                    pulse.BeginAnimation(ScaleTransform.ScaleYProperty, beat);
+                }
+                Canvas.SetLeft(shown, x);
+                Canvas.SetTop(shown, y);
+                holder.Children.Add(shown);
+            }
+            // Just lost: as it was, blinking three times over it, then gone.
+            if (part.IconsFlashOnLoss && lostFrom is { } from && from > value)
+            {
+                double before = Math.Clamp((from - i * per) / (double)per, 0, 1);
+                if (before > inIt && IconAt(before) is { } was)
+                {
+                    was.Opacity = 0;
+                    was.BeginAnimation(UIElement.OpacityProperty, new System.Windows.Media.Animation.DoubleAnimation(1, 0, TimeSpan.FromMilliseconds(150))
+                        { AutoReverse = true, RepeatBehavior = new System.Windows.Media.Animation.RepeatBehavior(3), FillBehavior = System.Windows.Media.Animation.FillBehavior.Stop });
+                    Canvas.SetLeft(was, x);
+                    Canvas.SetTop(was, y);
+                    holder.Children.Add(was);
+                }
+            }
+        }
+        return holder;
+    }
+
+    /// <summary>A pie: its empty look, and as much of its full look as the value reaches - from the top, clockwise.</summary>
+    private static FrameworkElement Pie(Canvas holder, Size size, double t, FrameworkElement empty, FrameworkElement full)
+    {
+        holder.Children.Add(empty);
+        if (t <= 0) return holder;
+        if (t < 1)
+        {
+            double cx = size.Width / 2, cy = size.Height / 2, r = Math.Sqrt(cx * cx + cy * cy) + 1, angle = t * 2 * Math.PI;
+            var figure = new PathFigure { StartPoint = new Point(cx, cy), IsClosed = true };
+            figure.Segments.Add(new LineSegment(new Point(cx, cy - r), false));
+            figure.Segments.Add(new ArcSegment(new Point(cx + r * Math.Sin(angle), cy - r * Math.Cos(angle)), new Size(r, r), 0, t > 0.5, SweepDirection.Clockwise, false));
+            full.Clip = new PathGeometry(new[] { figure });
+        }
+        holder.Children.Add(full);
         return holder;
     }
 

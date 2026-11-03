@@ -53,7 +53,7 @@ public partial class MainWindow
         var names = spawn.Entries.Select(e => $"{_characterDatabase.Characters.FirstOrDefault(c => c.Id == e.CharacterId)?.Name ?? "(gone)"} {e.Count} x {e.Percent}%");
         var marker = new Border
         {
-            Width = _tileset.TileWidth, Height = _tileset.TileHeight, Background = fill, BorderBrush = Brushes.Gold, BorderThickness = new Thickness(1), IsHitTestVisible = false,
+            Width = CellW, Height = CellH, Background = fill, BorderBrush = Brushes.Gold, BorderThickness = new Thickness(1), IsHitTestVisible = false,
             ToolTip = spawn.Kind != EggKind.Monster ? $"Egg: {spawn.Kind} ({spawn.Criteria}, {spawn.Probability}%)"
                 : spawn.Entries.Count == 0 ? "Spawn point (nobody yet)" : $"Spawn point: {string.Join(", ", names)} - {(spawn.Free ? "free" : $"within {spawn.WanderTiles} tiles")}",
             Child = new TextBlock { Text = spawn.Kind switch // SP: a spawn point; the other eggs by what they do
@@ -62,8 +62,9 @@ public partial class MainWindow
                     EggKind.Weather => "WE", EggKind.Path => "PA", EggKind.Button => "BU", _ => "SP"
                 }, Foreground = Brushes.Black, FontWeight = FontWeights.Bold, FontSize = 9, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
         };
-        Canvas.SetLeft(marker, spawn.X * _tileset.TileWidth);
-        Canvas.SetTop(marker, spawn.Y * _tileset.TileHeight);
+        FlatOnMap(marker); // an Ultima 8 map: a diamond, its letters upright
+        Canvas.SetLeft(marker, spawn.X * CellW);
+        Canvas.SetTop(marker, spawn.Y * CellH);
         Panel.SetZIndex(marker, MarkerZIndex);
         MapCanvas.Children.Add(marker);
         _spawnVisuals[spawn] = marker;

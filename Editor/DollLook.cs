@@ -36,6 +36,8 @@ internal static class DollLook
     {
         if (part.Kind is DollPartKind.CheckBox or DollPartKind.RadioButton) // its box and the words beside it
             return DollControls.SizeOf(part, DollControls.StartOf(part) with { Look = look }, sprites);
+        if (part.Kind == DollPartKind.ProgressBar && part.BarStyle == DollGaugeStyle.Icons) // as big as its icons
+            return DollControls.IconsSize(part, LookSprite(part, 0, sprites));
         if (DollPart.IsAreaKind(part.Kind))
             return new Size(Math.Max(4, part.Width), Math.Max(4, part.Height));
         if (part.Kind == DollPartKind.Slider) look = 0; // the track

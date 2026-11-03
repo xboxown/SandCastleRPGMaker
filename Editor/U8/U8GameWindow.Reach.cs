@@ -67,8 +67,9 @@ public partial class U8GameWindow
         var body = WorldBodies().FirstOrDefault(b => ReferenceEquals(b.Entity, entity));
         if (body.Entity is null) return true;
         var volume = VolumeOf(body);
-        // Staying where it's put (a potion on a cabinet, against a wall): what it's stuck in or on doesn't stand in the way of reaching it.
-        return IsGrabable(volume, isSpot: false, stuckIn: StaysPut(entity) ? volume : null);
+        // Ultima 8: Pentagram's reach - 128 and a clear line (U8GameWindow.U8Reach.cs). Staying where it's put (a potion on a
+        // cabinet, against a wall): what it's stuck in or on doesn't stand in the way of reaching it.
+        return CanReachU8(volume, U8ReachUnits, entity, StaysPut(entity) ? volume : null);
     }
 
     /// <summary>
@@ -95,7 +96,7 @@ public partial class U8GameWindow
     }
 
     /// <summary>Is this spot (a tile at a lift) within the player's reach?</summary>
-    private bool IsSpotReachable(int x, int y, int z) => IsGrabable(new Volume(x, y, z, 1, 1, 1), isSpot: true);
+    private bool IsSpotReachable(int x, int y, int z) => _landingThrow || CanReachU8(new Volume(x, y, z, 1, 1, 1), U8ReachUnits); // Ultima 8: Pentagram's reach; a thrown thing lands where it falls
 
     /// <summary>Fast_pathfinder_client::is_grabable(Actor*, Game_object*) / (Actor*, Tile_coord).</summary>
     private bool IsGrabable(Volume target, bool isSpot, Volume? stuckIn = null)

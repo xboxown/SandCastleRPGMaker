@@ -351,23 +351,33 @@ public partial class MainWindow
         if (_houseGhost is null || _houseGhostOf != (house.Id, _currentFloor))
         {
             HideHouseGhost();
-            var picture = HousePicture(house, _currentFloor);
-            picture.Opacity = 0.6;
-            var grid = new Grid { IsHitTestVisible = false };
-            grid.Children.Add(picture);
-            grid.Children.Add(new Rectangle { StrokeThickness = 3, Tag = "outline" });
-            Panel.SetZIndex(grid, 50);
-            _houseGhost = grid;
+            if (IsUltima8)
+            {
+                // The Ultima 8 view: its footprint's diamond, green where it fits, red where it doesn't.
+                var footprint = FlatOnMap(new Rectangle { StrokeThickness = 3, Width = house.Layout.Width * CellW, Height = house.Layout.Height * CellH, IsHitTestVisible = false });
+                Panel.SetZIndex(footprint, 50);
+                _houseGhost = footprint;
+            }
+            else
+            {
+                var picture = HousePicture(house, _currentFloor);
+                picture.Opacity = 0.6;
+                var grid = new Grid { IsHitTestVisible = false };
+                grid.Children.Add(picture);
+                grid.Children.Add(new Rectangle { StrokeThickness = 3, Tag = "outline" });
+                Panel.SetZIndex(grid, 50);
+                _houseGhost = grid;
+            }
             _houseGhostOf = (house.Id, _currentFloor);
-            MapCanvas.Children.Add(grid);
+            MapCanvas.Children.Add(_houseGhost);
         }
         var (x, y) = HouseCornerAt(house, cellX, cellY);
         bool fits = CanPlotHouse(house, x, y, out string why);
-        var outline = ((Grid)_houseGhost).Children.OfType<Rectangle>().First();
+        var outline = _houseGhost as Rectangle ?? ((Grid)_houseGhost).Children.OfType<Rectangle>().First();
         outline.Stroke = fits ? Brushes.LimeGreen : Brushes.Red;
         outline.Fill = new SolidColorBrush(fits ? Color.FromArgb(40, 0, 255, 0) : Color.FromArgb(80, 255, 0, 0));
-        Canvas.SetLeft(_houseGhost, x * _tileset.TileWidth);
-        Canvas.SetTop(_houseGhost, y * _tileset.TileHeight);
+        Canvas.SetLeft(_houseGhost, x * CellW);
+        Canvas.SetTop(_houseGhost, y * CellH);
         _houseGhost.Visibility = Visibility.Visible;
         StatusText.Text = fits ? $"\"{house.Name}\" fits at ({x}, {y}) - click to plot it." : $"\"{house.Name}\" can't go at ({x}, {y}): {why}.";
     }
@@ -418,6 +428,7 @@ public partial class MainWindow
         foreach (var placed in _map.Houses)
         {
             if (_houses.FirstOrDefault(t => t.Id == placed.HouseId) is not { } house) continue;
+            if (IsUltima8) { DrawPlottedU8House(placed, house); continue; } // the diamond view (below)
             var grid = new Grid { IsHitTestVisible = false };
             grid.Children.Add(HousePicture(house, _currentFloor));
             grid.Children.Add(new Rectangle { Stroke = Brushes.DarkOrange, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 4, 3 } });
@@ -426,11 +437,44 @@ public partial class MainWindow
                 Background = new SolidColorBrush(Color.FromArgb(190, 255, 255, 255)), HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
                 Child = new TextBlock { Text = (house.Vehicle is null ? "🏠 " : "🚗 ") + house.Name, FontSize = 10, Margin = new Thickness(3, 0, 3, 0), Foreground = Brushes.SaddleBrown }
             });
-            Canvas.SetLeft(grid, placed.X * _tileset.TileWidth);
-            Canvas.SetTop(grid, placed.Y * _tileset.TileHeight);
+            Canvas.SetLeft(grid, placed.X * CellW);
+            Canvas.SetTop(grid, placed.Y * CellH);
             Panel.SetZIndex(grid, 8);
             MapCanvas.Children.Add(grid);
             _placedHouseVisuals.Add(grid);
+        }
+    }
+
+    /// <summary>
+    /// Ultima 8: a plotted house in the diamond view - its picture (drawn in its own diamond view) set where its corner is,
+    /// its footprint's diamond outlined, its name upright at its north corner.
+    /// </summary>
+    private void DrawPlottedU8House(PlacedHouse placed, HouseTemplate house)
+    {
+        var picture = (BatchCanvas)HousePicture(house, _currentFloor);
+        picture.IsHitTestVisible = false;
+        var corner = MapCanvas.ToScreen(placed.X * CellW, placed.Y * CellH); // its north corner on the screen
+        U8ProjectionCanvas.SetPlacement(picture, U8Placement.Screen);
+        Canvas.SetLeft(picture, corner.X - picture.OriginX);
+        Canvas.SetTop(picture, corner.Y - picture.OriginY);
+        Panel.SetZIndex(picture, 8);
+        var outline = FlatOnMap(new Rectangle { Width = house.Layout.Width * CellW, Height = house.Layout.Height * CellH, Stroke = Brushes.DarkOrange, StrokeThickness = 2, StrokeDashArray = new DoubleCollection { 4, 3 }, IsHitTestVisible = false });
+        Canvas.SetLeft(outline, placed.X * CellW);
+        Canvas.SetTop(outline, placed.Y * CellH);
+        Panel.SetZIndex(outline, 8);
+        var label = new Border
+        {
+            Background = new SolidColorBrush(Color.FromArgb(190, 255, 255, 255)), IsHitTestVisible = false,
+            Child = new TextBlock { Text = (house.Vehicle is null ? "🏠 " : "🚗 ") + house.Name, FontSize = 10, Margin = new Thickness(3, 0, 3, 0), Foreground = Brushes.SaddleBrown }
+        };
+        U8ProjectionCanvas.SetPlacement(label, U8Placement.Screen);
+        Canvas.SetLeft(label, corner.X - 20);
+        Canvas.SetTop(label, corner.Y - 14);
+        Panel.SetZIndex(label, 9);
+        foreach (var part in new FrameworkElement[] { picture, outline, label })
+        {
+            MapCanvas.Children.Add(part);
+            _placedHouseVisuals.Add(part);
         }
     }
 
@@ -438,18 +482,25 @@ public partial class MainWindow
     private Canvas HousePicture(HouseTemplate house, int floor)
     {
         var layout = house.Layout;
-        int tw = _tileset!.TileWidth, th = _tileset.TileHeight;
-        var canvas = new Canvas { Width = layout.Width * tw, Height = layout.Height * th, ClipToBounds = false };
+        int tw = CellW, th = CellH;
+        Canvas canvas = IsUltima8
+            ? new BatchCanvas // the Ultima 8 view, as the map's: its pieces in its own map coordinates, drawn as diamonds
+            {
+                Diamond = true, CellSize = th, OriginX = layout.Height * th, OriginY = DiamondHeadroomCells * th,
+                Width = (layout.Width + layout.Height) * th, Height = (layout.Width + layout.Height) * th / 2.0 + DiamondHeadroomCells * th, ClipToBounds = false
+            }
+            : new Canvas { Width = layout.Width * tw, Height = layout.Height * th, ClipToBounds = false };
         if (layout.LayerForFloor(floor) is { } layer)
             for (int y = 0; y < layout.Height; y++)
                 for (int x = 0; x < layout.Width; x++)
                 {
                     int tile = layer.GetTile(x, y, layout.Width);
                     if (tile < 0 || TileSource(tile) is not { } source) continue;
-                    var image = new Image { Source = source, Width = tw, Height = th };
+                    var image = new Image { Source = source, Width = IsUltima8 ? _tileset!.TileWidth : tw, Height = IsUltima8 ? _tileset!.TileHeight : th };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
                     Canvas.SetLeft(image, x * tw);
                     Canvas.SetTop(image, y * th);
+                    if (IsUltima8) U8ProjectionCanvas.SetPlacement(image, U8Placement.Cell); // its diamond on its cell
                     canvas.Children.Add(image);
                 }
         foreach (var instance in layout.Objects.Where(o => o.ContainerInstanceId < 0 && FloorOf(o) == floor).OrderBy(o => o.Y).ThenBy(o => o.Z))

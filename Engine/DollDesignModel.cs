@@ -72,6 +72,18 @@ public enum DollPartKind
     QuitButton
 }
 
+/// <summary>How a progress bar draws its value: a bar, a pie, or a row of icons (hearts - each full, part-full or empty).</summary>
+public enum DollGaugeStyle { Bar, Pie, Icons }
+
+/// <summary>How a progress bar's sprite skins fit it: as drawn, stretched to the bar's size, or repeated (tiled) across it.</summary>
+public enum DollSkinFit { AsDrawn, Stretch, Tile }
+
+/// <summary>The corner of the game's view an always-on-screen paperdoll keeps to.</summary>
+public enum DollScreenCorner { TopLeft, TopRight, BottomLeft, BottomRight }
+
+/// <summary>Whose stat a part follows: the main character's, or its paperdoll's own character's (an inventory's, opened for them).</summary>
+public enum DollStatOwner { MainCharacter, OwnCharacter }
+
 /// <summary>One look (state) of a part: its name and its sprite.</summary>
 public class DollPartLook
 {
@@ -155,6 +167,36 @@ public class DollPart
     public bool Vertical { get; set; }
     /// <summary>Display: the slider whose value it shows (-1 = its own value, set by events).</summary>
     public int ShowsPartId { get; set; } = -1;
+
+    // ---- Following a stat (Progress bar, Display) ----
+    /// <summary>The stat it shows, kept up to date in play (-1: none - its own value, its slider's, its variable's).</summary>
+    public int StatId { get; set; } = -1;
+    /// <summary>Whose stat: the main character's, or its paperdoll's own character's.</summary>
+    public DollStatOwner StatOwner { get; set; } = DollStatOwner.MainCharacter;
+    /// <summary>The top of its range from another stat (Hits out of Strength); -1: its own Max.</summary>
+    public int MaxStatId { get; set; } = -1;
+    /// <summary>Progress bar: drawn as a bar, a pie, or icons (hearts).</summary>
+    public DollGaugeStyle BarStyle { get; set; } = DollGaugeStyle.Bar;
+    /// <summary>Icons: what one icon is worth (a heart of 2: two hit points), how many to a row, the gap between them.</summary>
+    public int IconValue { get; set; } = 2;
+    public int IconsPerRow { get; set; } = 10;
+    public int IconGap { get; set; } = 1;
+    /// <summary>Progress bar: its plain colours (#RRGGBB) when it has no sprites - full and empty; "" = the plain green and dark grey.</summary>
+    public string FillColor { get; set; } = string.Empty;
+    public string EmptyColor { get; set; } = string.Empty;
+    /// <summary>Progress bar: its sprite skins as drawn, stretched to its Width x Height, or tiled across it.</summary>
+    public DollSkinFit SkinFit { get; set; } = DollSkinFit.AsDrawn;
+    /// <summary>Progress bar: fills the other way - right to left (or, Upright, top down).</summary>
+    public bool ReverseFill { get; set; }
+    /// <summary>Icons: the last heart still holding something beats while the bar is at or below this % full (0: never).</summary>
+    public int IconsBeatBelow { get; set; }
+    /// <summary>Icons: the hearts just lost flash before they empty.</summary>
+    public bool IconsFlashOnLoss { get; set; }
+
+    /// <summary>StatId for "the save / load progress" (0 to 100 while the game saves or loads).</summary>
+    public const int DiskProgressStat = -2;
+    /// <summary>It follows a stat, or the save / load progress.</summary>
+    public bool FollowsStat => StatId >= 0 || StatId == DiskProgressStat;
 
     // ---- Save slot ----
     /// <summary>Which saved game it holds (1, 2, 3...); 0 = by its place among the paperdoll's Save slots.</summary>
@@ -277,7 +319,9 @@ public class DollPart
         StartsWith = StartsWith.Select(s => new ItemReference { Category = s.Category, ItemId = s.ItemId, DisplayName = s.DisplayName }).ToList(),
         Text = Text, FontName = FontName, TextScale = TextScale, TextColor = TextColor,
         Min = Min, Max = Max, StartValue = StartValue, Vertical = Vertical, ShowsPartId = ShowsPartId, SaveSlot = SaveSlot,
-        Options = new List<string>(Options), VariableName = VariableName, RadioGroup = RadioGroup, NumbersOnly = NumbersOnly, MaxLength = MaxLength
+        Options = new List<string>(Options), VariableName = VariableName, RadioGroup = RadioGroup, NumbersOnly = NumbersOnly, MaxLength = MaxLength,
+        StatId = StatId, StatOwner = StatOwner, MaxStatId = MaxStatId, BarStyle = BarStyle, IconValue = IconValue, IconsPerRow = IconsPerRow, IconGap = IconGap,
+        FillColor = FillColor, EmptyColor = EmptyColor, SkinFit = SkinFit, ReverseFill = ReverseFill, IconsBeatBelow = IconsBeatBelow, IconsFlashOnLoss = IconsFlashOnLoss
         // Event pages are not copied: a duplicate starts with no behaviour of its own.
     };
 }
@@ -292,6 +336,12 @@ public class DollDesign
     public int Height { get; set; } = 240;
     public int OpenSoundResourceId { get; set; } = -1;
     public int CloseSoundResourceId { get; set; } = -1;
+    /// <summary>Always on screen in play (a HUD: health bars, a compass) - kept to a corner of the view, not paused for, not closed by Escape.</summary>
+    public bool OnScreen { get; set; }
+    public DollScreenCorner ScreenCorner { get; set; } = DollScreenCorner.BottomLeft;
+    /// <summary>How far in from that corner, in the paperdoll's own pixels.</summary>
+    public int ScreenX { get; set; } = 4;
+    public int ScreenY { get; set; } = 4;
     public List<DollPart> Parts { get; set; } = new();
 
     public int NextPartId() => Parts.Count == 0 ? 1 : Parts.Max(p => p.Id) + 1;

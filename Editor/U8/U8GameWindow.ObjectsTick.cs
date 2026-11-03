@@ -51,6 +51,7 @@ public partial class U8GameWindow
         UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
         UpdateProjectiles(elapsedMs); // shooting traps, and whatever is flying
+        UpdateThrownU8(elapsedMs); // something the Avatar threw (U8GameWindow.U8Reach.cs)
         UpdateEggs(elapsedMs); // spawn points and the other eggs (U8GameWindow.Spawns.cs)
         UpdateWeather(elapsedMs); // rain, snow, clouds, lightning
     }

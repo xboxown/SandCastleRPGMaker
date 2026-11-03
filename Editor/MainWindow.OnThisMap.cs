@@ -275,19 +275,32 @@ public partial class MainWindow
             GameEvent gameEvent => _mapEventVisuals.GetValueOrDefault(gameEvent.Id) as FrameworkElement,
             _ => null
         };
-        double tileW = _tileset.TileWidth, tileH = _tileset.TileHeight;
+        double tileW = CellW, tileH = CellH;
         var area = new Rect(entry.X * tileW, entry.Y * tileH, entry.Width * tileW, entry.Height * tileH);
         if (visual is not null && !double.IsNaN(Canvas.GetLeft(visual)) && !double.IsNaN(Canvas.GetTop(visual)))
         {
             double width = double.IsNaN(visual.Width) ? visual.ActualWidth : visual.Width, height = double.IsNaN(visual.Height) ? visual.ActualHeight : visual.Height;
             if (width > 0 && height > 0) area = new Rect(Canvas.GetLeft(visual), Canvas.GetTop(visual), width, height);
         }
+        if (MapCanvas.Diamond) area = ScreenAreaOf(area, visual); // the Ultima 8 view: where it's drawn on the screen
 
         double scale = ZoomScale;
         MapScrollViewer.ScrollToHorizontalOffset((area.X + area.Width / 2) * scale - MapScrollViewer.ViewportWidth / 2);
         MapScrollViewer.ScrollToVerticalOffset((area.Y + area.Height / 2) * scale - MapScrollViewer.ViewportHeight / 2);
         HighlightOnMap(area, scale);
         StatusText.Text = $"\"{entry.Name}\" - cell ({entry.X}, {entry.Y}), floor {entry.Floor}" + (entry.InHouse is not null ? $", in house \"{entry.InHouse}\"." : ".");
+    }
+
+    /// <summary>
+    /// The Ultima 8 view: a picture where the canvas drew it (its layout slot), or a map area's diamond - the box round it
+    /// on the screen.
+    /// </summary>
+    private Rect ScreenAreaOf(Rect mapArea, FrameworkElement? visual)
+    {
+        if (visual is not null && System.Windows.Controls.Primitives.LayoutInformation.GetLayoutSlot(visual) is { Width: > 0, Height: > 0 } slot) return slot;
+        var corners = new[] { MapCanvas.ToScreen(mapArea.Left, mapArea.Top), MapCanvas.ToScreen(mapArea.Right, mapArea.Top), MapCanvas.ToScreen(mapArea.Left, mapArea.Bottom), MapCanvas.ToScreen(mapArea.Right, mapArea.Bottom) };
+        double left = corners.Min(c => c.X), top = corners.Min(c => c.Y);
+        return new Rect(left, top, corners.Max(c => c.X) - left, corners.Max(c => c.Y) - top);
     }
 
     /// <summary>A bright outline round it and a wider ring round that, pulsing, gone after a few seconds (or the next one).</summary>
@@ -303,6 +316,7 @@ public partial class MainWindow
                 Width = area.Width + grow * 2, Height = area.Height + grow * 2, Stroke = brush, StrokeThickness = line, IsHitTestVisible = false,
                 StrokeDashArray = dashed ? new DoubleCollection { 2, 1 } : null
             };
+            if (MapCanvas.Diamond) U8ProjectionCanvas.SetPlacement(ring, U8Placement.Screen); // already worked out on the screen
             Canvas.SetLeft(ring, area.X - grow);
             Canvas.SetTop(ring, area.Y - grow);
             Panel.SetZIndex(ring, int.MaxValue);

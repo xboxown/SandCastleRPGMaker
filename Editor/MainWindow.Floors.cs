@@ -109,14 +109,13 @@ public partial class MainWindow
                     if (ChunkPicture(layer, cx, cy, skipAnimated: false, withUnder: floor <= 1) is not { } picture) continue;
                     var image = new Image { Source = picture, IsHitTestVisible = false, Stretch = Stretch.None };
                     RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-                    Canvas.SetLeft(image, cx * EditorChunkCells * _tileset.TileWidth + shift);
-                    Canvas.SetTop(image, cy * EditorChunkCells * _tileset.TileHeight + shift);
+                    PlaceChunk(image, cx, cy, shift); // its cells' place (the diamond view: placed as drawn)
                     Panel.SetZIndex(image, -LowerFloorZIndexStep * (_currentFloor - floor));
                     MapCanvas.Children.Add(image);
                 }
             // A veil over each floor below: out of focus, and darker the further down.
             double reach = LowerFloorShift(_currentFloor - 1);
-            var veil = new Rectangle { Width = _map.Width * _tileset.TileWidth + reach, Height = _map.Height * _tileset.TileHeight + reach, Fill = Brushes.Black, Opacity = 0.45, IsHitTestVisible = false };
+            var veil = FlatOnMap(new Rectangle { Width = _map.Width * CellW + reach, Height = _map.Height * CellH + reach, Fill = Brushes.Black, Opacity = 0.45, IsHitTestVisible = false });
             Panel.SetZIndex(veil, -LowerFloorZIndexStep * (_currentFloor - floor) + LowerFloorZIndexStep / 2);
             MapCanvas.Children.Add(veil);
         }

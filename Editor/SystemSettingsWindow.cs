@@ -28,6 +28,8 @@ public partial class SystemSettingsWindow : Window
     private readonly Dictionary<MousePointerKind, (TextBlock Info, Button Edit)> _spriteDetails = new();
     /// <summary>Where each pointer's play/stop button goes, under its preview.</summary>
     private readonly Dictionary<MousePointerKind, ContentControl> _playHolders = new();
+    /// <summary>Ultima 8 projects: the direction arrows' pickers, by key ("Walk.North"...).</summary>
+    private readonly Dictionary<string, (ComboBox Combo, Image Preview)> _arrowRows = new();
     /// <summary>Every sprite with its frame size, measured once when the window opens.</summary>
     private readonly List<(string Group, SpriteEntry Sprite, int Width, int Height)> _measured = new();
     private bool _suppress;
@@ -105,6 +107,16 @@ public partial class SystemSettingsWindow : Window
         Row("\"Are you sure?\" prompt:", "(None - press the button again)", () => _settings.SaveLoad.ConfirmDollDesignId, v => _settings.SaveLoad.ConfirmDollDesignId = v);
         Row("\"Game saved\" message:", "(None - a \"Game saved\" label)", () => _settings.SaveLoad.SavedDollDesignId, v => _settings.SaveLoad.SavedDollDesignId = v);
         Row("Quit prompt:", "(None - Ctrl+Q / Quit quit at once)", () => _settings.Quit.DollDesignId, v => _settings.Quit.DollDesignId = v);
+        Row("Saving / loading progress:", "(None)", () => _settings.SaveLoad.ProgressDollDesignId, v => _settings.SaveLoad.ProgressDollDesignId = v);
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+            row.Children.Add(new TextBlock { Text = "Progress shown at least:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+            var ms = new TextBox { Width = 60, Text = _settings.SaveLoad.ProgressShownAtLeastMs.ToString() };
+            ms.LostFocus += (_, _) => { if (int.TryParse(ms.Text, out int v)) _settings.SaveLoad.ProgressShownAtLeastMs = Math.Clamp(v, 0, 10000); ms.Text = _settings.SaveLoad.ProgressShownAtLeastMs.ToString(); };
+            row.Children.Add(ms);
+            row.Children.Add(new TextBlock { Text = " ms (a quick save is still seen)", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.75 });
+            panel.Children.Add(row);
+        }
         panel.Children.Add(new TextBlock
         {
             Text = "The paperdoll the player saves and loads the game with. Make it in the PaperDoll Editor like any paperdoll - its look is all yours - with these parts from its toolbox:\n" +
@@ -115,7 +127,9 @@ public partial class SystemSettingsWindow : Window
                    "In the game the S key opens it (as in Exult). It opens with the paperdoll opening sound and the game is paused while it's open. " +
                    "Saves are kept per game on the player's PC, as many as they like.\n\n" +
                    "The \"Are you sure?\" prompt opens over the Save/Load screen before a save is written over or deleted: make it like any paperdoll - a Text part (\"Are you sure?\"), a Yes / OK button (it goes ahead) and a No / Cancel button (it closes the prompt, back to the Save/Load screen). " +
-                   "The \"Game saved\" message opens once the game is saved: your words, and a No / Cancel button captioned OK to close it. Both are modal - nothing else can be clicked till they close.",
+                   "The \"Game saved\" message opens once the game is saved: your words, and a No / Cancel button captioned OK to close it. Both are modal - nothing else can be clicked till they close.\n\n" +
+                   "The saving / loading progress paperdoll opens while the game is saved or loaded (the Save/Load screen, the Save Game and Load Game commands, Continue): " +
+                   "give it a Progress bar (or a Display) that follows \"the save / load progress\" - it fills as each step is done. It stays at least the time above, full at the end, then closes by itself.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
         return panel;
@@ -561,6 +575,8 @@ public partial class SystemSettingsWindow : Window
             var text = new StackPanel { Width = 230, VerticalAlignment = VerticalAlignment.Center };
             text.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.Bold });
             text.Children.Add(new TextBlock { Text = when, FontSize = 11, Opacity = 0.7, TextWrapping = TextWrapping.Wrap });
+            if (ProjectSession.IsUltima8 && MousePointerCatalog.IsRefusal(kind))
+                text.Children.Add(new TextBlock { Text = "Ultima 8: left empty, the Red X shows for it.", FontSize = 11, Foreground = Brushes.DarkRed, TextWrapping = TextWrapping.Wrap });
 
             // A pointer's animation and sound are its sprite's own - frames, speed, looping and each frame's sound, all set in the Sprite Editor. Shown here, and editable from here.
             var info = new TextBlock { FontSize = 11, Opacity = 0.75, TextWrapping = TextWrapping.Wrap, Width = 260, Margin = new Thickness(0, 3, 0, 0) };
@@ -588,8 +604,73 @@ public partial class SystemSettingsWindow : Window
             _playHolders[kind] = playHolder;
             _spriteDetails[kind] = (info, editFrames);
         }
+        if (ProjectSession.IsUltima8) panel.Children.Add(BuildU8ArrowsSection()); // Ultima 8 projects only
 
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
+    /// <summary>Ultima 8 projects: the direction arrows (MousePointerCatalog.U8ArrowSets), eight a set, laid out as a compass.</summary>
+    private UIElement BuildU8ArrowsSection()
+    {
+        var section = new StackPanel { Margin = new Thickness(0, 14, 0, 0) };
+        section.Children.Add(new TextBlock { Text = "Ultima 8 - direction arrows", FontWeight = FontWeights.Bold, FontSize = 14 });
+        section.Children.Add(new TextBlock
+        {
+            Text = "As Ultima 8: walking with the right mouse button held, the pointer is an arrow from the Avatar toward the pointer - a short one for a step, " +
+                   "a longer one for a walk or a run, by how far the pointer is. In combat mode it's always the combat arrow. Let go, and it's the hand again. " +
+                   "Up is up the screen. Stepping and Running may be left empty: the walking arrows show. Combat left empty: the walking arrows too.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 2, 0, 8)
+        });
+        // The compass: where each direction sits in a 3 x 3 grid (the middle empty).
+        var place = new Dictionary<SpriteDirection, (int Row, int Column)>
+        {
+            [SpriteDirection.NorthWest] = (0, 0), [SpriteDirection.North] = (0, 1), [SpriteDirection.NorthEast] = (0, 2),
+            [SpriteDirection.West] = (1, 0), [SpriteDirection.East] = (1, 2),
+            [SpriteDirection.SouthWest] = (2, 0), [SpriteDirection.South] = (2, 1), [SpriteDirection.SouthEast] = (2, 2)
+        };
+        foreach (var (set, name, when) in MousePointerCatalog.U8ArrowSets)
+        {
+            section.Children.Add(new TextBlock { Text = name, FontWeight = FontWeights.Bold, Margin = new Thickness(0, 8, 0, 0) });
+            section.Children.Add(new TextBlock { Text = when, FontSize = 11, Opacity = 0.7, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 4) });
+            var grid = new Grid();
+            for (int i = 0; i < 3; i++) { grid.RowDefinitions.Add(new RowDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); }
+            foreach (var direction in MousePointerCatalog.ArrowDirections)
+            {
+                string key = MousePointerCatalog.ArrowKey(set, direction);
+                var combo = new ComboBox { Width = 150, DisplayMemberPath = nameof(PointerChoice.Display) };
+                var preview = new Image { Width = 28, Height = 28, Stretch = Stretch.Uniform };
+                RenderOptions.SetBitmapScalingMode(preview, BitmapScalingMode.NearestNeighbor);
+                var cell = new StackPanel { Margin = new Thickness(0, 0, 10, 6) };
+                cell.Children.Add(new TextBlock { Text = MousePointerCatalog.ArrowLabel(direction), FontSize = 11 });
+                var line = new StackPanel { Orientation = Orientation.Horizontal };
+                line.Children.Add(combo);
+                line.Children.Add(new Border { Width = 32, Height = 32, Background = Brushes.Black, Child = preview, Margin = new Thickness(4, 0, 0, 0) });
+                cell.Children.Add(line);
+                var (row, column) = place[direction];
+                Grid.SetRow(cell, row);
+                Grid.SetColumn(cell, column);
+                grid.Children.Add(cell);
+                combo.SelectionChanged += (_, _) => ArrowChanged(key);
+                _arrowRows[key] = (combo, preview);
+            }
+            section.Children.Add(grid);
+        }
+        return section;
+    }
+
+    private void ArrowChanged(string key)
+    {
+        if (_suppress) return;
+        var arrows = _settings.MousePointers.U8Arrows;
+        if (_arrowRows[key].Combo.SelectedItem is PointerChoice { Name.Length: > 0 } choice) arrows[key] = new MousePointerSprite { SpriteGroup = choice.Group, SpriteName = choice.Name };
+        else arrows.Remove(key);
+        ShowArrowPreview(key);
+    }
+
+    private void ShowArrowPreview(string key)
+    {
+        var sprite = MousePointerCatalog.Resolve(_sprites, _settings.MousePointers.U8Arrows.GetValueOrDefault(key));
+        _arrowRows[key].Preview.Source = sprite is { Frames.Count: > 0 } ? FrameCache.Get(sprite.Frames[0].FilePath) : null;
     }
 
     private void LoadSizes()
@@ -618,27 +699,51 @@ public partial class SystemSettingsWindow : Window
         pointers.Width = size.Width;
         pointers.Height = size.Height;
 
-        // Only sprites of exactly this size can be pointers - any assignment of another size no longer applies.
-        foreach (var kind in pointers.Sprites.Keys.ToList())
-        {
-            var sprite = MousePointerCatalog.Resolve(_sprites, pointers.Sprites[kind]);
-            if (sprite is null || MousePointerCatalog.PixelSize(sprite) != (size.Width, size.Height)) pointers.Sprites.Remove(kind);
-        }
+        // Ultima 7: only sprites of exactly this size can be pointers - any assignment of another size no longer applies.
+        // Ultima 8: the size only picks what the lists offer - a pointer already given a sprite keeps it (locked), whatever its size.
+        bool locked = ProjectSession.IsUltima8;
+        if (!locked)
+            foreach (var kind in pointers.Sprites.Keys.ToList())
+            {
+                var sprite = MousePointerCatalog.Resolve(_sprites, pointers.Sprites[kind]);
+                if (sprite is null || MousePointerCatalog.PixelSize(sprite) != (size.Width, size.Height)) pointers.Sprites.Remove(kind);
+            }
 
-        var choices = new List<PointerChoice> { NoSprite };
-        choices.AddRange(_measured
+        var sized = _measured
             .Where(m => m.Width == size.Width && m.Height == size.Height)
-            .Select(m => new PointerChoice(m.Group, m.Sprite.Name, $"{m.Sprite.Name}   ({m.Group})")));
+            .Select(m => new PointerChoice(m.Group, m.Sprite.Name, $"{m.Sprite.Name}   ({m.Group})")).ToList();
+        // A list: none, its own locked sprite (Ultima 8, when it's another size), then the sprites of the size picked.
+        List<PointerChoice> ChoicesFor(MousePointerSprite? link)
+        {
+            var list = new List<PointerChoice> { NoSprite };
+            if (locked && link is { SpriteName.Length: > 0 } && !sized.Any(c => c.Group == link.SpriteGroup && c.Name == link.SpriteName))
+            {
+                var own = MousePointerCatalog.Resolve(_sprites, link);
+                string ownSize = own is not null && MousePointerCatalog.PixelSize(own) is { } px ? $"{px.Width} x {px.Height}" : "?";
+                list.Add(new PointerChoice(link.SpriteGroup, link.SpriteName, $"{link.SpriteName}   ({link.SpriteGroup}) - kept, {ownSize}"));
+            }
+            list.AddRange(sized);
+            return list;
+        }
 
         _suppress = true;
         foreach (var (kind, (combo, _)) in _rows)
         {
-            combo.ItemsSource = choices;
             var link = pointers.Sprites.GetValueOrDefault(kind);
+            var choices = ChoicesFor(link);
+            combo.ItemsSource = choices;
+            combo.SelectedItem = link is null ? NoSprite : choices.FirstOrDefault(c => c.Group == link.SpriteGroup && c.Name == link.SpriteName) ?? NoSprite;
+        }
+        foreach (var (key, (combo, _)) in _arrowRows)
+        {
+            var link = pointers.U8Arrows.GetValueOrDefault(key);
+            var choices = ChoicesFor(link);
+            combo.ItemsSource = choices;
             combo.SelectedItem = link is null ? NoSprite : choices.FirstOrDefault(c => c.Group == link.SpriteGroup && c.Name == link.SpriteName) ?? NoSprite;
         }
         _suppress = false;
         foreach (var kind in _rows.Keys) ShowPreview(kind);
+        foreach (var key in _arrowRows.Keys) ShowArrowPreview(key);
     }
 
     private void PointerChanged(MousePointerKind kind)

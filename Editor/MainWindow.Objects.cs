@@ -387,8 +387,8 @@ public partial class MainWindow
             if (StairLook.LandingImage(landing, _spriteDatabase) is not { } image) continue;
             // The game's spot for it (anchor cell + picture offset, which carries its lift, - the staircase's lift), seen from its own floor.
             int shift = (MapFloors.BaseLift(floor) - instance.Z) * 4;
-            Canvas.SetLeft(image, instance.X * _tileset.TileWidth + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX + shift);
-            Canvas.SetTop(image, instance.Y * _tileset.TileHeight + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY + shift);
+            Canvas.SetLeft(image, instance.X * CellW + instance.OffsetX * SpriteSizing.BaseUnit + landing.PictureX + shift);
+            Canvas.SetTop(image, instance.Y * CellH + instance.OffsetY * SpriteSizing.BaseUnit + landing.PictureY + shift);
             Panel.SetZIndex(image, 9); // a floor tile: under everything standing on its floor
             if (FitToFloor(image, floor) is null) continue; // a floor above the picked one
             MapCanvas.Children.Add(image);
@@ -437,8 +437,7 @@ public partial class MainWindow
         ClearLinkVisuals();
         if (_selectedObjectInstance is not { } selected || !_mapObjectVisuals.TryGetValue(selected.InstanceId, out var visual)) return;
         _objectSelectionVisual = new Border { BorderBrush = Brushes.Yellow, BorderThickness = new Thickness(1.5), IsHitTestVisible = false, Width = visual.Width + 4, Height = visual.Height + 4 };
-        Canvas.SetLeft(_objectSelectionVisual, Canvas.GetLeft(visual) - 2);
-        Canvas.SetTop(_objectSelectionVisual, Canvas.GetTop(visual) - 2);
+        PlaceOutline(_objectSelectionVisual, visual, 2); // round it wherever it's drawn (MainWindow.U8.cs)
         Panel.SetZIndex(_objectSelectionVisual, SelectionZIndex);
         MapCanvas.Children.Add(_objectSelectionVisual);
         ShowLinksOf(selected);

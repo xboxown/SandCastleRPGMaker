@@ -164,7 +164,7 @@ public partial class U8GameWindow
         var mapCharacter = new MapCharacter
         {
             Placement = placement, Character = character, Size = ActorSizing.Resolve(character, _poseDatabase, _sprites),
-            PixelX = placement.X * _tileWidth + _tileWidth / 2.0, PixelY = placement.Y * _tileHeight + _tileHeight / 2.0, Facing = placement.Facing
+            PixelX = placement.X * _tileWidth + _tileWidth / 2.0, PixelY = placement.Y * _tileHeight + _tileHeight / 2.0, Facing = WorldOfSlot(placement.Facing) // picked as seen on the screen
         };
         _mapCharacters.Add(mapCharacter);
         mapCharacter.Lift = StandingLiftOnFloor(CharacterFootprint(mapCharacter), placement.Floor, placement);
@@ -182,7 +182,7 @@ public partial class U8GameWindow
         var (fromX, fromY) = PixelOf(who);
         SpriteDirection? facing = command.Get("Towards") switch
         {
-            "North" => SpriteDirection.North, "South" => SpriteDirection.South, "East" => SpriteDirection.East, "West" => SpriteDirection.West,
+            "North" => WorldOfSlot(SpriteDirection.North), "South" => WorldOfSlot(SpriteDirection.South), "East" => WorldOfSlot(SpriteDirection.East), "West" => WorldOfSlot(SpriteDirection.West), // as seen on the screen
             "The main player" => FacingTowards(fromX, fromY, _playerPixelX, _playerPixelY),
             "Whoever set it off" when (_activator?.Character ?? _player) is { } a => PixelOf(a) is var p ? FacingTowards(fromX, fromY, p.X, p.Y) : null,
             "Another character" when CharacterDefinitionFor(command.Get("Other")) is { } other => PixelOf(other) is var q ? FacingTowards(fromX, fromY, q.X, q.Y) : null,

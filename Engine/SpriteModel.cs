@@ -27,6 +27,20 @@ public class SpriteFrame
     /// <summary>A weapon-in-hand frame: where the hand holds it, in this frame's pixels (Exult's weapon offset for a weapon frame) - -1: its middle.</summary>
     public int GripX { get; set; } = -1;
     public int GripY { get; set; } = -1;
+    /// <summary>
+    /// Ultima 8: where this frame stands - the point (on the feet) that sits on the character's spot, in this frame's own
+    /// pixels: Pentagram's frame offset, lost when frames are cut to what's drawn in each, so a walk would sway. -1: its
+    /// bottom-middle (or the sprite's Origin). Set in the Sprite Editor (Ultima 8 projects only).
+    /// </summary>
+    public int AnchorX { get; set; } = -1;
+    public int AnchorY { get; set; } = -1;
+    [System.Text.Json.Serialization.JsonIgnore]
+    public bool HasAnchor => AnchorX >= 0 && AnchorY >= 0;
+    /// <summary>
+    /// Ultima 8: a step doesn't move in this frame (both feet planted) - Pentagram's animations move by each frame's own
+    /// distance, nothing in a standing frame. None ticked in a step's sprite: its first frame holds still.
+    /// </summary>
+    public bool HoldsStill { get; set; }
 
     /// <summary>Maps a SpriteLayer's Id to this frame's own image file for that layer. Empty means this frame predates layers (or the sprite has none) - FilePath alone is still authoritative in that case. Once layers exist, FilePath instead holds the composited (flattened) result of all visible layers, kept in sync automatically.</summary>
     public Dictionary<int, string> LayerFilePaths { get; set; } = new();

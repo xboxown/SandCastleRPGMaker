@@ -1060,6 +1060,7 @@ public partial class SpriteFrameEditorWindow : Window
             AddOverlayLine(PixelToDisplay(rendered, bmp, 0, bmp.PixelHeight - slice.Bottom), PixelToDisplay(rendered, bmp, bmp.PixelWidth, bmp.PixelHeight - slice.Bottom), Brushes.Magenta);
         }
         DrawWeaponMarkers(rendered, bmp); // a weapon's grip, a character frame's hand (SpriteFrameEditorWindow.WeaponHand.cs)
+        DrawStandMarker(rendered, bmp); // Ultima 8: the frame's stand point (SpriteFrameEditorWindow.StandPoint.cs)
     }
 
     private void AddOverlayLine(Point a, Point b, Brush brush)

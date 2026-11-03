@@ -6,21 +6,11 @@ namespace SandcastleRpgMaker.Engine;
 /// </summary>
 public class Ultima8Settings
 {
-    // ---------- The paperdoll's stats (Pentagram's PaperdollGump::PaintStats) ----------
-
-    /// <summary>The stats are written on the paperdoll, beside the body, as Ultima 8 shows them.</summary>
-    public bool ShowPaperdollStats { get; set; } = true;
-    /// <summary>The labels, in Ultima 8's order: Strength, Intelligence, Dexterity, armour class, hit points, mana, weight carried.</summary>
-    public List<string> StatLabels { get; set; } = new() { "STR", "INT", "DEX", "ARMR", "HITS", "MANA", "WGHT" };
-    /// <summary>Where they are written on the paperdoll (its 320 x 400 layout): the labels' left edge, the values' right edge, the first line, the line height.</summary>
-    public int StatsLabelX { get; set; } = 196;
-    public int StatsValueX { get; set; } = 300;
-    public int StatsTopY { get; set; } = 52;
-    public int StatsLineHeight { get; set; } = 20;
-    /// <summary>The weight shown is the weight carried divided by this (Ultima 8: weight / 10).</summary>
-    public int WeightDivisor { get; set; } = 10;
-
     // ---------- Moving with the mouse (Pentagram's walk_threshold / run_threshold) ----------
+    // (The paperdoll's stats are the PaperDoll Editor's and the Character Editor's - nothing of them here.)
+
+    /// <summary>The pointer nearer the Avatar than this (of 255, of half the view) doesn't move them at all; beyond it, a step. 0: always at least a step (Pentagram).</summary>
+    public int StepThreshold { get; set; }
 
     /// <summary>The pointer further from the Avatar than this (of 255, of half the view) walks rather than steps.</summary>
     public int WalkThreshold { get; set; } = 50;

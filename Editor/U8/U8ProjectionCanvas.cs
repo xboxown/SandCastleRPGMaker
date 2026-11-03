@@ -1,5 +1,6 @@
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Media;
 
 namespace SandcastleRpgMaker.Editor;
 
@@ -15,7 +16,9 @@ public enum U8Placement
     /// <summary>Placed by its middle (a blood puddle, a thing in flight): its middle on its own point.</summary>
     Center,
     /// <summary>Already in screen space (the ground's chunks): not projected.</summary>
-    Screen
+    Screen,
+    /// <summary>Lying flat on the map (the Map Editor's grid, markers, cell highlights): the whole thing turned into the diamond view - a square cell becomes its diamond.</summary>
+    Flat
 }
 
 /// <summary>
@@ -66,24 +69,42 @@ public sealed class U8ProjectionCanvas : Canvas
     protected override Size ArrangeOverride(Size arrangeSize)
     {
         foreach (UIElement child in InternalChildren)
-            if (child is not null) child.Arrange(Place(child, child.DesiredSize));
+            if (child is not null) ArrangeChild(child, CellSize, OriginX);
         return arrangeSize;
+    }
+
+    /// <summary>Square map (x, y) to the diamond view, without the origin: a Flat thing's own turn (x - y, (x + y) / 2).</summary>
+    public static readonly Transform FlatTransform = Frozen(new MatrixTransform(1, 0.5, -1, 0.5, 0, 0));
+    /// <summary>The Flat turn undone - a letter on a flat marker stays upright (about its middle).</summary>
+    public static readonly Transform UprightTransform = Frozen(new MatrixTransform(0.5, -0.5, 1, 1, 0, 0));
+
+    private static Transform Frozen(Transform t) { t.Freeze(); return t; }
+
+    /// <summary>Lays a child out in the diamond view (this canvas, or the Map Editor's when it shows an Ultima 8 map).</summary>
+    public static void ArrangeChild(UIElement child, double cellSize, double originX, double originY = 0)
+    {
+        child.Arrange(PlaceIn(child, child.DesiredSize, cellSize, originX, originY));
+        if (GetPlacement(child) == U8Placement.Flat) { if (!ReferenceEquals(child.RenderTransform, FlatTransform)) child.RenderTransform = FlatTransform; }
     }
 
     /// <summary>Where a picture is drawn on this canvas (its own Width / Height when it has them), by its placement.</summary>
     public Rect ScreenRectOf(UIElement child)
     {
         var size = child is FrameworkElement fe && !double.IsNaN(fe.Width) && !double.IsNaN(fe.Height) ? new Size(fe.Width, fe.Height) : child.DesiredSize;
-        return Place(child, size);
+        return PlaceIn(child, size, CellSize, OriginX);
     }
 
-    private Rect Place(UIElement child, Size size)
+    /// <summary>Where a picture is drawn in the diamond view (a Flat one: its square's top corner, before its turn).</summary>
+    public static Rect PlaceIn(UIElement child, Size size, double cellSize, double originX, double originY = 0)
     {
+        Point ToScreen(double mapX, double mapY) => new(mapX - mapY + originX, (mapX + mapY) / 2 + originY);
+        double CellSize = cellSize;
         double left = GetLeft(child), top = GetTop(child);
         if (double.IsNaN(left)) left = 0;
         if (double.IsNaN(top)) top = 0;
         var placement = GetPlacement(child);
         if (placement == U8Placement.Screen) return new Rect(new Point(left, top), size);
+        if (placement == U8Placement.Flat) return new Rect(ToScreen(left, top), size);
         if (placement == U8Placement.Center)
         {
             var c = ToScreen(left + size.Width / 2, top + size.Height / 2);

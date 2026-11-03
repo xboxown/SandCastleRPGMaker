@@ -285,6 +285,15 @@ public sealed class StatsDollEditorWindow : Window
         if (gauge)
         {
             if (e.ShowAs == StatShowAs.SpriteFrames) _elementProps.Children.Add(SpritePicker("Sprite (first frame empty ... last frame full)", () => e.Gauge.Sprite, v => e.Gauge.Sprite = v));
+            else if (e.ShowAs == StatShowAs.Icons)
+            {
+                _elementProps.Children.Add(SpritePicker("Icon (frames: full ... empty - 2: full, empty; 3: full, half, empty)", () => e.Gauge.Sprite, v => e.Gauge.Sprite = v));
+                var icons = new WrapPanel();
+                icons.Children.Add(NumberBox("One is worth", () => e.Gauge.IconValue, v => e.Gauge.IconValue = Math.Max(1, (int)v)));
+                icons.Children.Add(NumberBox("To a row", () => e.Gauge.IconsPerRow, v => e.Gauge.IconsPerRow = Math.Max(1, (int)v)));
+                icons.Children.Add(NumberBox("Gap", () => e.Gauge.IconGap, v => e.Gauge.IconGap = Math.Max(0, (int)v)));
+                _elementProps.Children.Add(icons);
+            }
             else
             {
                 var g = new WrapPanel();
@@ -416,7 +425,8 @@ internal static class StatsDollLook
             case StatsElementKind.Stat:
                 if (e.ShowAs == StatShowAs.Number) return PaperdollReadouts.Readout(e.Style, statText, sprites, 1);
                 double value = statValue(e.StatId), max = e.MaxStatId >= 0 ? statValue(e.MaxStatId) : e.Max;
-                return Gauge(e, fraction ?? (max - e.Min <= 0 ? 0 : (value - e.Min) / (max - e.Min)), sprites);
+                double full = fraction ?? (max - e.Min <= 0 ? 0 : (value - e.Min) / (max - e.Min));
+                return Gauge(e, full, sprites, value: fraction is { } f ? f * (max - e.Min) : value - e.Min, range: max - e.Min);
             case StatsElementKind.Ailment:
                 return ailmentActive ? Gauge(e, 0, sprites, picture: true) : null;
             default:
@@ -425,12 +435,12 @@ internal static class StatsDollLook
         }
     }
 
-    private static FrameworkElement? Gauge(StatsDollElement e, double fraction, SpriteDatabase sprites, bool picture = false)
+    private static FrameworkElement? Gauge(StatsDollElement e, double fraction, SpriteDatabase sprites, bool picture = false, double value = 0, double range = 0)
     {
         var g = e.Gauge;
         g.X = e.Style.X;
         g.Y = e.Style.Y;
-        g.Kind = picture || e.ShowAs == StatShowAs.SpriteFrames ? GaugeKind.SpriteFrames : e.ShowAs == StatShowAs.Pie ? GaugeKind.Pie : GaugeKind.Bar;
-        return PaperdollReadouts.Gauge(g, picture ? 0 : fraction, sprites, 1);
+        g.Kind = picture ? GaugeKind.SpriteFrames : PaperdollReadouts.KindOf(e.ShowAs);
+        return PaperdollReadouts.Gauge(g, picture ? 0 : fraction, sprites, 1, value, range);
     }
 }

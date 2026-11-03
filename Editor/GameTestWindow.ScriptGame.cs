@@ -342,12 +342,18 @@ public partial class GameTestWindow
         {
             var existing = GameSaveStore.List(projectId).FirstOrDefault(s => s.Slot == slot);
             var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
-            GameSaveStore.Write(projectId, CaptureSave(), info, TakeScreenshot(), existing);
+            var shot = TakeScreenshot(); // before the progress paperdoll opens over the game
+            BeginDiskProgress(); // DiskProgress.cs
+            var data = CaptureSave();
+            ReportDiskProgress(0.15);
+            GameSaveStore.Write(projectId, data, info, shot, existing, f => ReportDiskProgress(0.15 + 0.85 * f));
+            EndDiskProgress();
             StatusText.Text = $"Game saved: \"{name}\".";
             return true;
         }
         catch (Exception ex)
         {
+            CancelDiskProgress();
             GameError(ex, GameErrors.SaveFailed); // the disk full, read-only... - the player is told, whatever the event does next
             return false;
         }
@@ -359,9 +365,10 @@ public partial class GameTestWindow
         int slot = Math.Max(1, (int)FormulaNumber(command, "Slot"));
         if (GameSaveStore.List(projectId).FirstOrDefault(s => s.Slot == slot) is not { } save) { StatusText.Text = $"Slot {slot} is empty."; return false; }
         GameSaveData data;
-        try { data = GameSaveStore.Read(projectId, save); }
-        catch (Exception ex) { GameError(GameErrors.ClassifyLoad(ex), ex.Message); return false; }
-        Dispatcher.BeginInvoke(new Action(() => LoadGame(data, $"Loaded \"{save.Name}\".")));
+        BeginDiskProgress(); // DiskProgress.cs
+        try { data = GameSaveStore.Read(projectId, save, ReportDiskProgress); }
+        catch (Exception ex) { CancelDiskProgress(); GameError(GameErrors.ClassifyLoad(ex), ex.Message); return false; }
+        Dispatcher.BeginInvoke(new Action(() => { LoadGame(data, $"Loaded \"{save.Name}\"."); EndDiskProgress(); }));
         return true;
     }
 

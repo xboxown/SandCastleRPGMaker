@@ -94,12 +94,32 @@ public class NumberSliderControl : Canvas
         MouseLeftButtonUp += (_, _) => { _dragging = false; ReleaseMouseCapture(); };
 
         // ---------- The check mark ----------
+        // Frame 2 of its sprite while pressed; it accepts when let go over it (Exult's Gump_button), not on the press.
         var checkArt = Load(sprites, settings.CheckMark);
-        var check = checkArt is not null ? (FrameworkElement)new Image { Source = checkArt, Width = checkArt.PixelWidth, Height = checkArt.PixelHeight }
-            : new TextBlock { Text = "✔", Foreground = Brushes.LimeGreen, FontSize = 9, FontWeight = FontWeights.Bold };
+        var checkSprite = settings.CheckMark.IsSet ? ObjectLooks.Find(sprites, settings.CheckMark.SpriteGroup, settings.CheckMark.SpriteName) : null;
+        var checkPressed = checkSprite is { Frames.Count: > 1 } ? SolidSizeEditor.LoadImageFile(checkSprite.Frames[1].FilePath) : null;
+        Image? checkImage = checkArt is not null ? new Image { Source = checkArt, Width = checkArt.PixelWidth, Height = checkArt.PixelHeight } : null;
+        FrameworkElement check = checkImage ?? (FrameworkElement)new TextBlock { Text = "✔", Foreground = Brushes.LimeGreen, FontSize = 9, FontWeight = FontWeights.Bold };
         check.Cursor = Cursors.Hand;
         check.ToolTip = "Accept (Enter)";
-        check.MouseLeftButtonDown += (_, e) => { Accepted?.Invoke(_value); e.Handled = true; };
+        bool checkHeld = false;
+        check.MouseLeftButtonDown += (_, e) =>
+        {
+            if (checkImage is not null && checkPressed is not null) checkImage.Source = checkPressed;
+            checkHeld = true;
+            check.CaptureMouse();
+            e.Handled = true;
+        };
+        check.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (!checkHeld) return;
+            checkHeld = false;
+            check.ReleaseMouseCapture();
+            if (checkImage is not null) checkImage.Source = checkArt;
+            var at = e.GetPosition(check);
+            if (at.X >= 0 && at.Y >= 0 && at.X <= check.ActualWidth && at.Y <= check.ActualHeight) Accepted?.Invoke(_value); // dragged off before letting go: no
+        };
         Add(check, settings.CheckX, settings.CheckY);
 
         ShowValue(playSound: false);

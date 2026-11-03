@@ -149,25 +149,33 @@ public static class GameSaveStore
     }
 
     /// <summary>Writes a save - into <paramref name="overwrite"/>'s folder, or a new one. The screenshot is PNG bytes (or null).</summary>
-    public static SaveSlotInfo Write(Guid projectId, GameSaveData data, SaveSlotInfo info, byte[]? screenshotPng, SaveSlotInfo? overwrite)
+    /// <param name="progress">Told how far it is (0 to 1) after each step - the progress paperdoll.</param>
+    public static SaveSlotInfo Write(Guid projectId, GameSaveData data, SaveSlotInfo info, byte[]? screenshotPng, SaveSlotInfo? overwrite, Action<double>? progress = null)
     {
         string folder = overwrite?.Folder ?? Path.Combine(GameFolder(projectId), $"save_{DateTime.UtcNow:yyyyMMdd_HHmmss_fff}");
         Directory.CreateDirectory(folder);
         string json = JsonSerializer.Serialize(data, JsonOptions);
+        progress?.Invoke(0.35); // put into words
         string temp = Path.Combine(folder, SaveFileName + ".saving");
         ProjectContainer.Save(temp, projectId, json);
         File.Move(temp, Path.Combine(folder, SaveFileName), overwrite: true);
+        progress?.Invoke(0.8); // locked and on the disk
         if (screenshotPng is not null) File.WriteAllBytes(Path.Combine(folder, ScreenshotFileName), screenshotPng);
+        progress?.Invoke(0.9);
         info.Folder = folder;
         File.WriteAllText(Path.Combine(folder, InfoFileName), JsonSerializer.Serialize(info, JsonOptions));
+        progress?.Invoke(1);
         return info;
     }
 
-    public static GameSaveData Read(Guid projectId, SaveSlotInfo save)
+    /// <param name="progress">Told how far it is (0 to 1) after each step - the progress paperdoll.</param>
+    public static GameSaveData Read(Guid projectId, SaveSlotInfo save, Action<double>? progress = null)
     {
         string json = ProjectContainer.Load(Path.Combine(save.Folder, SaveFileName), projectId);
+        progress?.Invoke(0.5); // read and unlocked
         var data = JsonSerializer.Deserialize<GameSaveData>(json, JsonOptions)
                    ?? throw new ProjectFileException($"The save \"{save.Name}\" couldn't be read.");
+        progress?.Invoke(0.8); // understood - the game itself is set up from it next
         if (data.Format > GameSaveData.CurrentFormat)
             throw new SaveTooNewException($"The save \"{save.Name}\" was made by a newer version of this game.");
         return data;

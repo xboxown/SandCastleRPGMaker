@@ -83,6 +83,9 @@ public partial class U8GameWindow
             gump.BodyCanvas.Children.Add(image);
         }
         if (isPlayer) Add(pd.CombatButton, () => _combatMode ? 1 : 0, ToggleCombatMode);
+        // Buttons opening a PaperDoll Editor paperdoll (Other paperdolls) - frames: closed, open (DollLinks.cs).
+        foreach (var link in pd.DollLinks.Where(l => l.Way == DollLinkWay.Button && DesignById(l.DesignId) is not null))
+            Add(link, () => LinkedDollOpen(gump, link) is not null && FrameOf(link.Sprite, 1) is not null ? 1 : 0, () => ToggleLinkedDoll(gump, link));
         Add(pd.CombatModeButton, () => (int)character.AttackMode, () =>
         {
             // Combat_mode_button::activate: the next mode; only the player gets the last one (Manual).
@@ -114,7 +117,14 @@ public partial class U8GameWindow
     private string PaperdollLabelText(PaperdollLabel label) => PaperdollReadouts.LabelText(label, _variables, _execContext.GetVariable);
 
     private string LabelsSignature(CharacterDefinition character) =>
-        string.Join("\u0001", character.Paperdoll.Labels.Where(l => l.Kind == PaperdollLabelKind.Number).Select(PaperdollLabelText));
+        string.Join("\u0001", character.Paperdoll.Labels.Where(l => l.Kind != PaperdollLabelKind.Text)
+            .Select(l => l.Kind == PaperdollLabelKind.Stat ? StatText(character, l.StatId) + "/" + (l.MaxStatId >= 0 ? StatText(character, l.MaxStatId) : "") : PaperdollLabelText(l)));
+
+    /// <summary>A label on the inventory: text, a variable's number, or one of the character's stats (a number or a gauge).</summary>
+    private FrameworkElement? PaperdollLabelVisual(PaperdollLabel label, CharacterDefinition character, double counterScale) =>
+        label.Kind == PaperdollLabelKind.Stat
+            ? PaperdollReadouts.StatLabel(label, StatText(character, label.StatId), id => StatNumber(character, id), _sprites, counterScale)
+            : PaperdollReadouts.Readout(label, PaperdollLabelText(label), _sprites, counterScale);
 
     /// <summary>Twice a second: an open paperdoll whose variable numbers changed is redrawn.</summary>
     private void WatchPaperdollLabels()

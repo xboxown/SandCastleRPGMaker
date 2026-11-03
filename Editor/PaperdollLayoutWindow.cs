@@ -31,6 +31,15 @@ public sealed class PaperdollLayoutWindow : Window
     private readonly ScaleTransform _zoom = new(2, 2);
     private readonly StackPanel _settings = new() { Margin = new Thickness(8) };
     private readonly VariableDatabase _variables = ProjectSession.VariablesProvider?.Invoke() ?? new VariableDatabase();
+    private readonly StatDatabase _stats = ProjectSession.StatsProvider?.Invoke() ?? new StatDatabase();
+    private List<DollDesign> Designs => ProjectSession.ObjectsProvider?.Invoke()?.DollDesigns ?? new List<DollDesign>();
+
+    private string StatName(int id) => _stats.Stats.FirstOrDefault(s => s.Id == id)?.Name ?? "(no stat)";
+
+    /// <summary>This character's own stat (Character Editor), for the preview.</summary>
+    private double StatNumber(int id) => _character.StatValues.TryGetValue(id, out var text) && double.TryParse(text, out double v) ? v : 0;
+
+    private string StatText(int id) => _character.StatValues.TryGetValue(id, out var text) && !string.IsNullOrWhiteSpace(text) ? text : "0";
     private object? _dragging, _selected;
     private Point _dragStart, _dragFrom;
 
@@ -48,7 +57,7 @@ public sealed class PaperdollLayoutWindow : Window
         _canvas.LayoutTransform = _zoom;
         _canvas.MouseLeftButtonDown += Canvas_Down;
         _canvas.MouseMove += Canvas_Move;
-        _canvas.MouseLeftButtonUp += (_, _) => { if (_dragging is ResizeGrip) BuildSettings(); _dragging = null; _canvas.ReleaseMouseCapture(); };
+        _canvas.MouseLeftButtonUp += (_, _) => { if (_dragging is not null && _dragging is not EquipmentSlot and not CustomEquipmentSlot) BuildSettings(); /* the typed X / Y boxes show where it was dragged */ _dragging = null; _canvas.ReleaseMouseCapture(); };
         PreviewKeyDown += (_, e) =>
         {
             // Delete: the picked label goes (not while typing in a box).
@@ -134,10 +143,20 @@ public sealed class PaperdollLayoutWindow : Window
         return Labeled(label, combo);
     }
 
+    /// <summary>X and Y typed in - exact places (a column of stats at one X, 32 apart) the mouse can't give. Dragging updates them.</summary>
+    private FrameworkElement PlaceRow(Func<double> x, Action<double> setX, Func<double> y, Action<double> setY)
+    {
+        var row = new WrapPanel();
+        row.Children.Add(NumberBox("X", x, v => setX(Math.Round(Math.Clamp(v, 0, LayoutWidth)))));
+        row.Children.Add(NumberBox("Y", y, v => setY(Math.Round(Math.Clamp(v, 0, LayoutHeight)))));
+        return row;
+    }
+
     private void ReadoutSettings(string title, PaperdollReadout r)
     {
         _settings.Children.Add(Check(title, () => r.Enabled, v => r.Enabled = v));
         var row = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        row.Children.Add(PlaceRow(() => r.X, v => r.X = v, () => r.Y, v => r.Y = v));
         row.Children.Add(FontPicker(r));
         row.Children.Add(NumberBox("Size x", () => r.Scale, v => r.Scale = (int)Math.Clamp(v, 1, 8)));
         row.Children.Add(TextBoxField("Tint (#RRGGBB)", 80, () => r.Tint, v => r.Tint = v));
@@ -153,9 +172,19 @@ public sealed class PaperdollLayoutWindow : Window
         delete.Click += (_, _) => { _character.Paperdoll.Labels.Remove(label); if (Equals(_selected, label)) _selected = null; BuildSettings(); Redraw(); };
         DockPanel.SetDock(delete, Dock.Right);
         header.Children.Add(delete);
-        header.Children.Add(new TextBlock { Text = $"{(label.Kind == PaperdollLabelKind.Text ? "Text" : "Number")} {number}", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        header.Children.Add(new TextBlock { Text = $"{label.Kind} {number}", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
         panel.Children.Add(header);
-        if (label.Kind == PaperdollLabelKind.Text)
+        panel.Children.Add(PlaceRow(() => label.X, v => label.X = v, () => label.Y, v => label.Y = v));
+        if (label.Kind == PaperdollLabelKind.Stat)
+        {
+            StatLabelSettings(label, panel);
+            if (label.ShowAs != StatShowAs.Number)
+            {
+                _settings.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Padding = new Thickness(6), Margin = new Thickness(0, 2, 0, 4), Child = panel });
+                return;
+            }
+        }
+        else if (label.Kind == PaperdollLabelKind.Text)
         {
             var box = new TextBox { Width = 300, Text = label.Text, HorizontalAlignment = HorizontalAlignment.Left };
             box.TextChanged += (_, _) => { label.Text = box.Text; Redraw(); };
@@ -174,6 +203,86 @@ public sealed class PaperdollLayoutWindow : Window
         row.Children.Add(TextBoxField("Tint (#RRGGBB)", 80, () => label.Tint, v => label.Tint = v));
         row.Children.Add(EnumCombo("Lined up by its", () => label.Align, v => label.Align = v, 80));
         panel.Children.Add(row);
+        _settings.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Padding = new Thickness(6), Margin = new Thickness(0, 2, 0, 4), Child = panel });
+    }
+
+    /// <summary>A stat label: which stat, shown as a number or a gauge - its range and its look.</summary>
+    private void StatLabelSettings(PaperdollLabel label, StackPanel panel)
+    {
+        var stats = new WrapPanel();
+        var names = _stats.Stats.Select(s => s.Name).ToList();
+        var stat = new ComboBox { Width = 160, ItemsSource = names, SelectedIndex = _stats.Stats.FindIndex(s => s.Id == label.StatId) };
+        stat.SelectionChanged += (_, _) => { if (stat.SelectedIndex >= 0) { label.StatId = _stats.Stats[stat.SelectedIndex].Id; Redraw(); } };
+        stats.Children.Add(Labeled("Stat", stat));
+        stats.Children.Add(EnumCombo("Shown as", () => label.ShowAs, v => label.ShowAs = v, 110));
+        panel.Children.Add(stats);
+        if (label.ShowAs == StatShowAs.Number) return;
+
+        var range = new WrapPanel();
+        range.Children.Add(NumberBox("Empty at", () => label.Min, v => label.Min = (int)v));
+        range.Children.Add(NumberBox("Full at", () => label.Max, v => label.Max = (int)v));
+        var ids = new List<int> { -1 };
+        ids.AddRange(_stats.Stats.Select(s => s.Id));
+        var maxStat = new ComboBox { Width = 150, ItemsSource = ids.Select(id => id < 0 ? "(the number)" : StatName(id)).ToList(), SelectedIndex = Math.Max(0, ids.IndexOf(label.MaxStatId)) };
+        maxStat.SelectionChanged += (_, _) => { label.MaxStatId = ids[Math.Max(0, maxStat.SelectedIndex)]; Redraw(); };
+        range.Children.Add(Labeled("...or full at this stat", maxStat));
+        panel.Children.Add(range);
+
+        var g = label.Gauge;
+        var look = new WrapPanel();
+        switch (label.ShowAs)
+        {
+            case StatShowAs.SpriteFrames:
+                look.Children.Add(SpritePicker("Sprite (first frame empty ... last frame full)", () => g.Sprite, v => g.Sprite = v));
+                break;
+            case StatShowAs.Icons:
+                look.Children.Add(SpritePicker("Icon (frames full ... empty; none: circles)", () => g.Sprite, v => g.Sprite = v));
+                look.Children.Add(NumberBox("One is worth", () => g.IconValue, v => g.IconValue = Math.Max(1, (int)v)));
+                look.Children.Add(NumberBox("To a row", () => g.IconsPerRow, v => g.IconsPerRow = Math.Max(1, (int)v)));
+                look.Children.Add(NumberBox("Gap", () => g.IconGap, v => g.IconGap = Math.Max(0, (int)v)));
+                look.Children.Add(NumberBox("Circle size", () => g.Height, v => g.Height = Math.Clamp(v, 2, 100)));
+                look.Children.Add(TextBoxField("Full colour", 80, () => g.FillColor, v => g.FillColor = v));
+                look.Children.Add(TextBoxField("Empty colour", 80, () => g.BackColor, v => g.BackColor = v));
+                break;
+            default:
+                look.Children.Add(NumberBox("Width", () => g.Width, v => g.Width = Math.Clamp(v, 2, 320)));
+                look.Children.Add(NumberBox("Height", () => g.Height, v => g.Height = Math.Clamp(v, 2, 400)));
+                look.Children.Add(TextBoxField("Full colour (#RRGGBB)", 80, () => g.FillColor, v => g.FillColor = v));
+                look.Children.Add(TextBoxField("Empty colour", 80, () => g.BackColor, v => g.BackColor = v));
+                break;
+        }
+        panel.Children.Add(look);
+        panel.Children.Add(Note("Shown with this character's own stats here; in the game it goes up and down as they change."));
+    }
+
+    /// <summary>Other paperdolls: PaperDoll Editor paperdolls this inventory brings up - a button on it, or opening with it.</summary>
+    private void DollLinkSettings(PaperdollDollLink link, int number)
+    {
+        var pd = _character.Paperdoll;
+        var panel = new StackPanel();
+        var header = new DockPanel { Margin = new Thickness(0, 0, 0, 2) };
+        var delete = new Button { Content = "Delete", Padding = new Thickness(6, 0, 6, 0), FontSize = 11 };
+        delete.Click += (_, _) => { pd.DollLinks.Remove(link); if (Equals(_selected, link)) _selected = null; BuildSettings(); Redraw(); };
+        DockPanel.SetDock(delete, Dock.Right);
+        header.Children.Add(delete);
+        header.Children.Add(new TextBlock { Text = link.Way == DollLinkWay.Button ? $"Button {number} - opens / closes" : $"Opens with the inventory {number}", FontWeight = FontWeights.SemiBold, VerticalAlignment = VerticalAlignment.Center });
+        panel.Children.Add(header);
+        var designs = Designs;
+        var design = new ComboBox { Width = 220, ItemsSource = designs.Select(d => d.Name).ToList(), SelectedIndex = designs.FindIndex(d => d.Id == link.DesignId), HorizontalAlignment = HorizontalAlignment.Left };
+        design.SelectionChanged += (_, _) => { if (design.SelectedIndex >= 0) { link.DesignId = designs[design.SelectedIndex].Id; Redraw(); } };
+        panel.Children.Add(Labeled(designs.Count == 0 ? "Paperdoll (none yet - make one in the PaperDoll Editor)" : "Paperdoll (PaperDoll Editor)", design));
+        var row = new WrapPanel();
+        if (link.Way == DollLinkWay.Button)
+        {
+            row.Children.Add(PlaceRow(() => link.X, v => link.X = v, () => link.Y, v => link.Y = v));
+            row.Children.Add(SpritePicker("Button sprite (frames: closed, open)", () => link.Sprite, v => link.Sprite = v));
+            panel.Children.Add(row);
+            panel.Children.Add(Note("Drag the button on the picture to place it."));
+        }
+        row.Children.Add(NumberBox("Opens at x", () => link.DollX, v => link.DollX = v));
+        row.Children.Add(NumberBox("y", () => link.DollY, v => link.DollY = v));
+        if (link.Way != DollLinkWay.Button) panel.Children.Add(row);
+        panel.Children.Add(Note("Where it opens, from the inventory's top-left in its 320 x 400 pixels (330, 0: just to its right; 0, 400: just under it)."));
         _settings.Children.Add(new Border { BorderBrush = Brushes.LightGray, BorderThickness = new Thickness(1), Padding = new Thickness(6), Margin = new Thickness(0, 2, 0, 4), Child = panel });
     }
 
@@ -197,6 +306,7 @@ public sealed class PaperdollLayoutWindow : Window
     {
         _settings.Children.Add(Check(title, () => button.Enabled, v => button.Enabled = v));
         var row = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        row.Children.Add(PlaceRow(() => button.X, v => button.X = v, () => button.Y, v => button.Y = v));
         row.Children.Add(SpritePicker("Sprite", () => button.Sprite, v => button.Sprite = v));
         _settings.Children.Add(row);
     }
@@ -209,6 +319,8 @@ public sealed class PaperdollLayoutWindow : Window
         yield return (pd.StatsButton, "heart (stats)");
         yield return (pd.DiskButton, "disk (save / load)");
         yield return (pd.HaloButton, "halo (protect)");
+        foreach (var link in pd.DollLinks.Where(l => l.Way == DollLinkWay.Button))
+            yield return (link, "opens " + (Designs.FirstOrDefault(d => d.Id == link.DesignId)?.Name ?? "(no paperdoll)"));
     }
 
     private void BuildSettings()
@@ -243,6 +355,7 @@ public sealed class PaperdollLayoutWindow : Window
         var g = pd.WeightGauge;
         _settings.Children.Add(Check("Show how full as a gauge", () => g.Enabled, v => g.Enabled = v));
         var gauge = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        gauge.Children.Add(PlaceRow(() => g.X, v => g.X = v, () => g.Y, v => g.Y = v));
         gauge.Children.Add(EnumCombo("Drawn as", () => g.Kind, v => g.Kind = v, 120));
         if (g.Kind == GaugeKind.SpriteFrames)
         {
@@ -282,8 +395,43 @@ public sealed class PaperdollLayoutWindow : Window
         }
         addRow.Children.Add(new Button { Content = "+ Text", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLabel(PaperdollLabelKind.Text)));
         addRow.Children.Add(new Button { Content = "+ Number", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLabel(PaperdollLabelKind.Number)));
+        addRow.Children.Add(new Button { Content = "+ Stat", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4),
+            ToolTip = "One of this character's stats - Strength, Hits, Mana... - as a number, a bar, a pie, icons (hearts) or sprite frames, kept up to date in the game" }
+            .Also(b => b.Click += (_, _) =>
+            {
+                var label = new PaperdollLabel { Enabled = true, Kind = PaperdollLabelKind.Stat, X = 200, Y = 60, Text = "", StatId = _stats.Stats.FirstOrDefault()?.Id ?? -1 };
+                pd.Labels.Add(label);
+                _selected = label;
+                BuildSettings();
+                Redraw();
+            }));
         _settings.Children.Add(addRow);
         for (int i = 0; i < pd.Labels.Count; i++) LabelSettings(pd.Labels[i], i + 1);
+
+        _settings.Children.Add(Heading("Other paperdolls"));
+        _settings.Children.Add(Note("PaperDoll Editor paperdolls this inventory brings up, opened for this character: their parts that follow \"the character it was opened for\" show this character's stats " +
+                                    "(Ultima 8's hit points / mana bars). A button on the inventory opens and closes one; or it opens and closes with the inventory. " +
+                                    "Always on screen instead: PaperDoll Editor > the paperdoll > Always on screen."));
+        var linkRow = new WrapPanel();
+        void AddLink(DollLinkWay way)
+        {
+            var link = new PaperdollDollLink { Enabled = true, Way = way, X = 20, Y = 360, DesignId = Designs.FirstOrDefault()?.Id ?? -1, DollX = way == DollLinkWay.Button ? 330 : 0, DollY = way == DollLinkWay.Button ? 0 : 400 };
+            pd.DollLinks.Add(link);
+            _selected = link;
+            BuildSettings();
+            Redraw();
+        }
+        linkRow.Children.Add(new Button { Content = "+ Button that opens a paperdoll", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLink(DollLinkWay.Button)));
+        linkRow.Children.Add(new Button { Content = "+ Opens with the inventory", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLink(DollLinkWay.WithInventory)));
+        _settings.Children.Add(linkRow);
+        for (int i = 0; i < pd.DollLinks.Count; i++) DollLinkSettings(pd.DollLinks[i], i + 1);
+
+        _settings.Children.Add(Heading("Close button"));
+        _settings.Children.Add(Note("Its sprite is the Character Editor's Exit button (frame 1 up, frame 2 while pressed; it closes when let go over it). None: Escape closes the paperdoll. Drag it on the picture, or type where."));
+        var exitRow = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        exitRow.Children.Add(PlaceRow(() => pd.ExitButtonX, v => pd.ExitButtonX = v, () => pd.ExitButtonY, v => pd.ExitButtonY = v));
+        exitRow.Children.Add(Check("At its own size (else in a 24 x 24 box)", () => pd.ExitButtonOwnSize, v => pd.ExitButtonOwnSize = v));
+        _settings.Children.Add(exitRow);
 
         _settings.Children.Add(Heading("Buttons (Exult's paperdoll)"));
         _settings.Children.Add(Note("Each is a sprite whose frames are its states. Combat and the disk show on the player's paperdoll only, as in Exult."));
@@ -441,6 +589,23 @@ public sealed class PaperdollLayoutWindow : Window
             var (w, h) = SizeOf(element);
             AddHandle(tag, Canvas.GetLeft(element), Canvas.GetTop(element), w, h, Brushes.Orange, label);
         }
+        // The close button (the Character Editor's Exit button sprite), where it is in play.
+        {
+            var exitSprite = ObjectLooks.Find(_sprites, pd.ExitButtonSpriteGroup, pd.ExitButtonSpriteName);
+            if (FirstFrame(exitSprite) is { } exitPicture)
+            {
+                bool own = pd.ExitButtonOwnSize;
+                var image = new Image { Source = exitPicture, Width = own ? exitPicture.PixelWidth * ItemScale : 24, Height = own ? exitPicture.PixelHeight * ItemScale : 24,
+                    Stretch = own ? Stretch.Fill : Stretch.Uniform, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                Canvas.SetLeft(image, pd.ExitButtonX);
+                Canvas.SetTop(image, pd.ExitButtonY);
+                Panel.SetZIndex(image, 20);
+                _canvas.Children.Add(image);
+                AddHandle("ExitButton", pd.ExitButtonX, pd.ExitButtonY, image.Width, image.Height, Brushes.Violet, "close");
+            }
+            else AddHandle("ExitButton", pd.ExitButtonX, pd.ExitButtonY, 24, 24, Brushes.Violet, "close (no sprite - Escape closes)");
+        }
         foreach (var (button, name) in Buttons())
         {
             if (!button.Enabled) continue;
@@ -459,16 +624,23 @@ public sealed class PaperdollLayoutWindow : Window
         }
         foreach (var label in pd.Labels)
         {
-            // In the editor a number shows 0 (its value comes from play); the handle names its variable.
-            string text = PaperdollReadouts.LabelText(label, _variables, _ => 0);
-            var element = PaperdollReadouts.Readout(label, text, _sprites, ItemScale);
+            // In the editor a number shows 0 (its value comes from play); the handle names its variable. A stat shows this character's own.
+            var element = label.Kind == PaperdollLabelKind.Stat
+                ? PaperdollReadouts.StatLabel(label, StatText(label.StatId), StatNumber, _sprites, ItemScale)
+                : PaperdollReadouts.Readout(label, PaperdollReadouts.LabelText(label, _variables, _ => 0), _sprites, ItemScale);
+            string name = label.Kind switch
+            {
+                PaperdollLabelKind.Text => "text",
+                PaperdollLabelKind.Stat => StatName(label.StatId),
+                _ => _variables.Variables.FirstOrDefault(v => v.Id == label.VariableId)?.Name ?? "(no variable)"
+            };
+            if (element is null) { AddHandle(label, label.X, label.Y, 24, 8, Brushes.Gold, name + " (no sprite)"); continue; }
             Panel.SetZIndex(element, 20);
             _canvas.Children.Add(element);
             var (w, h) = SizeOf(element);
             double x = Canvas.GetLeft(element), y = Canvas.GetTop(element);
-            string name = label.Kind == PaperdollLabelKind.Text ? "text" : _variables.Variables.FirstOrDefault(v => v.Id == label.VariableId)?.Name ?? "(no variable)";
             AddHandle(label, x, y, w, h, Brushes.Gold, name);
-            if (!Equals(_selected, label)) continue;
+            if (!Equals(_selected, label) || (label.Kind == PaperdollLabelKind.Stat && label.ShowAs != StatShowAs.Number)) continue; // a gauge has no size grip
             var grip = new Rectangle { Width = 5, Height = 5, Fill = Brushes.Yellow, Stroke = Brushes.Black, StrokeThickness = 0.5, Cursor = Cursors.SizeNWSE, Tag = new ResizeGrip(label, Math.Max(1, h / Math.Max(1, label.Scale))) };
             Canvas.SetLeft(grip, x + w - 2.5);
             Canvas.SetTop(grip, y + h - 2.5);
@@ -477,7 +649,7 @@ public sealed class PaperdollLayoutWindow : Window
         }
         Readout("WeightCurrent", pd.WeightCurrent, $"{Math.Round(carried):0}", "carried");
         Readout("WeightMax", pd.WeightMax, $"{Math.Round(max):0}", "max");
-        if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, ItemScale) is { } gauge)
+        if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, ItemScale, carried, max) is { } gauge)
         {
             Panel.SetZIndex(gauge, 20);
             _canvas.Children.Add(gauge);
@@ -498,6 +670,7 @@ public sealed class PaperdollLayoutWindow : Window
             "WeightCurrent" => new Point(pd.WeightCurrent.X, pd.WeightCurrent.Y),
             "WeightMax" => new Point(pd.WeightMax.X, pd.WeightMax.Y),
             "WeightGauge" => new Point(pd.WeightGauge.X, pd.WeightGauge.Y),
+            "ExitButton" => new Point(pd.ExitButtonX, pd.ExitButtonY),
             PaperdollButton b => new Point(b.X, b.Y),
             PaperdollLabel l => new Point(l.X, l.Y),
             _ => default
@@ -516,6 +689,7 @@ public sealed class PaperdollLayoutWindow : Window
             case "WeightCurrent": pd.WeightCurrent.X = x; pd.WeightCurrent.Y = y; break;
             case "WeightMax": pd.WeightMax.X = x; pd.WeightMax.Y = y; break;
             case "WeightGauge": pd.WeightGauge.X = x; pd.WeightGauge.Y = y; break;
+            case "ExitButton": pd.ExitButtonX = x; pd.ExitButtonY = y; break;
             case PaperdollButton b: b.X = x; b.Y = y; break;
             case PaperdollLabel l: l.X = x; l.Y = y; break;
         }

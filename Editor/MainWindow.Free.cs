@@ -253,10 +253,10 @@ public partial class MainWindow
         (int, int, int, int, int) At(int lift)
         {
             double l = left + lift * 4, t = top + lift * 4;
-            int cellX = Math.Clamp((int)Math.Floor((l + width / 2) / _tileset!.TileWidth), 0, _map!.Width - 1);
-            int cellY = Math.Clamp((int)Math.Floor((t + height / 2) / _tileset.TileHeight), 0, _map.Height - 1);
-            double defaultLeft = cellX * _tileset.TileWidth + (_tileset.TileWidth - width) / 2.0;
-            double defaultTop = (cellY + 1) * _tileset.TileHeight - height;
+            int cellX = Math.Clamp((int)Math.Floor((l + width / 2) / CellW), 0, _map!.Width - 1);
+            int cellY = Math.Clamp((int)Math.Floor((t + height / 2) / CellH), 0, _map.Height - 1);
+            double defaultLeft = cellX * CellW + (CellW - width) / 2.0;
+            double defaultTop = (cellY + 1) * CellH - height;
             int ox = (int)Math.Round((l - defaultLeft) / SpriteSizing.BaseUnit), oy = (int)Math.Round((t - defaultTop) / SpriteSizing.BaseUnit);
             var (fl, ft) = FootprintCorner(cellX, cellY, ox + info.SolidX, oy + info.SolidY, info.SizeX, info.SizeY);
             var body = new EditorBody(self ?? new object(), fl, ft, info.SizeX, info.SizeY, floorBase + lift, info.SizeZ, info.Elevates, info.Surface, false, false);
@@ -346,8 +346,8 @@ public partial class MainWindow
     {
         if (_tileset is null) return;
         int raised = z - MapFloors.BaseLift(MapFloors.FloorOfLift(z));
-        Canvas.SetLeft(visual, cellX * _tileset.TileWidth + (_tileset.TileWidth - width) / 2.0 + offsetX * SpriteSizing.BaseUnit - raised * 4);
-        Canvas.SetTop(visual, (cellY + 1) * _tileset.TileHeight - height + offsetY * SpriteSizing.BaseUnit - raised * 4);
+        Canvas.SetLeft(visual, cellX * CellW + (CellW - width) / 2.0 + offsetX * SpriteSizing.BaseUnit - raised * 4);
+        Canvas.SetTop(visual, (cellY + 1) * CellH - height + offsetY * SpriteSizing.BaseUnit - raised * 4);
     }
 
     private FrameworkElement? VisualOfThing(object entity) => entity switch
@@ -452,8 +452,7 @@ public partial class MainWindow
         _freeSelectionVisual = null;
         if (_freeSelected is null || VisualOfThing(_freeSelected) is not { } visual) return;
         _freeSelectionVisual = new Border { BorderBrush = Brushes.Yellow, BorderThickness = new Thickness(1), IsHitTestVisible = false, Width = visual.Width + 2, Height = visual.Height + 2 };
-        Canvas.SetLeft(_freeSelectionVisual, Canvas.GetLeft(visual) - 1);
-        Canvas.SetTop(_freeSelectionVisual, Canvas.GetTop(visual) - 1);
+        PlaceOutline(_freeSelectionVisual, visual, 1); // round it wherever it's drawn (MainWindow.U8.cs)
         Panel.SetZIndex(_freeSelectionVisual, SelectionZIndex);
         MapCanvas.Children.Add(_freeSelectionVisual);
     }
@@ -462,7 +461,7 @@ public partial class MainWindow
     private object? ThingAtPoint(Point p, Func<object, bool>? filter = null) =>
         MapThings().Where(OnCurrentFloor).Where(t => filter is null || filter(t))
             .Select(t => (Thing: t, Visual: VisualOfThing(t)))
-            .Where(t => t.Visual is not null && new Rect(Canvas.GetLeft(t.Visual), Canvas.GetTop(t.Visual), t.Visual.Width, t.Visual.Height).Contains(p))
+            .Where(t => t.Visual is not null && DrawnRect(t.Visual).Contains(p)) // where it's drawn (the Ultima 8 view: its diamond-view spot)
             .OrderByDescending(t => Panel.GetZIndex(t.Visual!))
             .Select(t => t.Thing).FirstOrDefault();
 
@@ -470,7 +469,7 @@ public partial class MainWindow
     private List<object> ThingsAtPoint(Point p) =>
         MapThings().Where(OnCurrentFloor)
             .Select(t => (Thing: t, Visual: VisualOfThing(t)))
-            .Where(t => t.Visual is not null && new Rect(Canvas.GetLeft(t.Visual), Canvas.GetTop(t.Visual), t.Visual.Width, t.Visual.Height).Contains(p))
+            .Where(t => t.Visual is not null && DrawnRect(t.Visual).Contains(p))
             .OrderByDescending(t => Panel.GetZIndex(t.Visual!))
             .Select(t => t.Thing).ToList();
 
@@ -506,7 +505,7 @@ public partial class MainWindow
         {
             SelectFree(hit);
             _freeDragging = hit;
-            _freeDragGrab = p - new Point(Canvas.GetLeft(visual), Canvas.GetTop(visual));
+            _freeDragGrab = p - DrawnRect(visual).TopLeft; // where on its picture it was taken hold of
             return;
         }
         if (PickedThing is not { } picked)
@@ -515,10 +514,11 @@ public partial class MainWindow
             return;
         }
         var (w, h) = PictureSizeOf(picked.Category, picked.Id);
-        if (PlaceFreeThing(picked.Category, picked.Id, p.X - w / 2, p.Y - h / 2, w, h) is { } placed && VisualOfThing(placed) is { } placedVisual)
+        var corner = PictureCornerFor(new Point(p.X - w / 2, p.Y - h / 2), w, h); // its picture centred under the mouse
+        if (PlaceFreeThing(picked.Category, picked.Id, corner.X, corner.Y, w, h) is { } placed && VisualOfThing(placed) is { } placedVisual)
         {
             _freePainting = true;
-            _lastStampRect = new Rect(p.X - w / 2, p.Y - h / 2, w, h);
+            _lastStampRect = new Rect(corner.X, corner.Y, w, h);
         }
     }
 
@@ -533,14 +533,15 @@ public partial class MainWindow
         }
         if (_freeDragging is { } dragged && VisualOfThing(dragged) is { } visual)
         {
-            Canvas.SetLeft(visual, p.X - _freeDragGrab.X); // follows the mouse; it settles where it's let go
-            Canvas.SetTop(visual, p.Y - _freeDragGrab.Y);
+            var at = PictureCornerFor(p - _freeDragGrab, visual.Width, visual.Height); // follows the mouse; it settles where it's let go
+            Canvas.SetLeft(visual, at.X);
+            Canvas.SetTop(visual, at.Y);
             UpdateFreeSelectionVisual();
             return;
         }
         if (!_freePainting || PickedThing is not { } picked) return;
         var (w, h) = PictureSizeOf(picked.Category, picked.Id);
-        var stamp = new Rect(p.X - w / 2, p.Y - h / 2, w, h);
+        var stamp = new Rect(PictureCornerFor(new Point(p.X - w / 2, p.Y - h / 2), w, h), new Size(w, h));
         if (stamp.IntersectsWith(_lastStampRect)) return; // the brush hasn't cleared the last one yet
         if (PlaceFreeThing(picked.Category, picked.Id, stamp.X, stamp.Y, w, h) is not null) _lastStampRect = stamp;
     }
@@ -556,7 +557,8 @@ public partial class MainWindow
         bool hanging = IsPinned(dragged);
         int raise = RaiseOf(dragged switch { ObjectInstance d => d.Z, PlacedItemInstance d => d.Z, _ => 0 });
         // A hung (or staying) thing is moved by where its picture is now, at the same height.
-        var (x, y, ox, oy, z) = ResolveFreeSpot(category, id, p.X - _freeDragGrab.X + (hanging ? raise * 4 : 0), p.Y - _freeDragGrab.Y + (hanging ? raise * 4 : 0), visual.Width, visual.Height, dragged);
+        var dropped = PictureCornerFor(p - _freeDragGrab, visual.Width, visual.Height);
+        var (x, y, ox, oy, z) = ResolveFreeSpot(category, id, dropped.X + (hanging ? raise * 4 : 0), dropped.Y + (hanging ? raise * 4 : 0), visual.Width, visual.Height, dragged);
         if (hanging) z = MapFloors.BaseLift(_currentFloor) + raise;
         switch (dragged)
         {
@@ -782,7 +784,8 @@ public partial class MainWindow
         if (_freeCopied is null) return;
         var (category, id) = IdentityOf(_freeCopied);
         var (w, h) = PictureSizeOf(category, id);
-        PlaceFreeThing(category, id, p.X - w / 2, p.Y - h / 2, w, h, _freeCopied as ObjectInstance, _freeCopied as PlacedItemInstance);
+        var corner = PictureCornerFor(new Point(p.X - w / 2, p.Y - h / 2), w, h);
+        PlaceFreeThing(category, id, corner.X, corner.Y, w, h, _freeCopied as ObjectInstance, _freeCopied as PlacedItemInstance);
     }
 
     private void DeleteFreeThing(object entity)

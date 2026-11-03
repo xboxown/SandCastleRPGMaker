@@ -69,7 +69,7 @@ public partial class U8GameWindow
         ShowPointer(kind);
         if (!playSound) { _pointerFlashTimer?.Stop(); _pointerFlashTimer?.Start(); return; } // something else makes the sound
         // Exult plays a sound together with the flash (drag.cc: flash_shape(Mouse::redx); play_sound_effect(76)) - here that sound is the pointer sprite's own, set per frame in the Sprite Editor: its first frame's sound plays the moment it flashes, the rest as the animation reaches them.
-        if (MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.Sprites.GetValueOrDefault(kind)) is { } sprite)
+        if (PointerSprite(kind) is { } sprite)
             MousePointerCatalog.PlayFirstFrameSound(sprite, _resources);
         _pointerFlashTimer?.Stop();
         _pointerFlashTimer?.Start();
@@ -83,15 +83,70 @@ public partial class U8GameWindow
 
     }
 
+    /// <summary>
+    /// A pointer's sprite. Ultima 8: a refusal's own pointer (Too Heavy, Out of Range, Out of Ammo, Won't Fit, Blocked) left
+    /// without a sprite shows the X - Ultima 8's one refusal pointer (Mouse::flashCrossCursor); with one, its own, as Ultima 7.
+    /// </summary>
+    private SpriteEntry? PointerSprite(MousePointerKind kind) =>
+        MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.Sprites.GetValueOrDefault(kind))
+        ?? (MousePointerCatalog.IsRefusal(kind) ? MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.Sprites.GetValueOrDefault(MousePointerKind.RedX)) : null);
+
+    /// <summary>The direction arrow showing now ("Walk.North"...), or null.</summary>
+    private string? _shownArrow;
+
     private void ShowPointer(MousePointerKind kind)
     {
-        if (_shownPointer == kind) return;
+        if (_shownPointer == kind && _shownArrow is null) return;
         _shownPointer = kind;
+        _shownArrow = null;
+        ShowPointerSprite(PointerSprite(kind));
+    }
+
+    /// <summary>A direction arrow (MousePointerCatalog.U8ArrowSets): its set's arrow, else the walking one. False: none set.</summary>
+    private bool ShowArrow(string set, SpriteDirection direction)
+    {
+        var arrows = _systemSettings.MousePointers.U8Arrows;
+        string key = MousePointerCatalog.ArrowKey(set, direction);
+        var sprite = MousePointerCatalog.Resolve(_sprites, arrows.GetValueOrDefault(key));
+        if (sprite is null && set != "Walk") { key = MousePointerCatalog.ArrowKey("Walk", direction); sprite = MousePointerCatalog.Resolve(_sprites, arrows.GetValueOrDefault(key)); }
+        if (sprite is null) return false;
+        if (_shownArrow == key) return true;
+        _shownArrow = key;
+        _shownPointer = null;
+        ShowPointerSprite(sprite);
+        return true;
+    }
+
+    /// <summary>
+    /// Each frame (Pentagram's Mouse::getMouseFrame): in combat mode the combat arrow toward the pointer (the running arrow
+    /// while running); walking with the right mouse button, the step, walk or run arrow by how far the pointer is; else the
+    /// hand (or the pointer for choosing a target). A flashed refusal, a drag or a choice keeps its own.
+    /// </summary>
+    private void UpdateU8Pointer()
+    {
+        if (_pointerFlashTimer is { IsEnabled: true } || IsChoosingTarget || _pointer is { IsDragging: true } || _gameOver) return;
+        bool moving = _rightMouseHeld && Mouse.RightButton == MouseButtonState.Pressed && !IsShowingMessage && !InCinema;
+        if (!_combatMode && !moving) { ShowPointer(RestingPointer); return; }
+        var (screen, length) = PointerFromAvatar();
+        var direction = screen switch
+        {
+            (0, -1) => SpriteDirection.North, (1, -1) => SpriteDirection.NorthEast, (1, 0) => SpriteDirection.East, (1, 1) => SpriteDirection.SouthEast,
+            (0, 1) => SpriteDirection.South, (-1, 1) => SpriteDirection.SouthWest, (-1, 0) => SpriteDirection.West, _ => SpriteDirection.NorthWest
+        };
+        if (!_combatMode && length < 0) { ShowPointer(RestingPointer); return; } // too close to move (Step beyond): the hand
+        string set = _combatMode && !(moving && length == 2) ? "Combat" : length <= 0 ? "Step" : length == 2 ? "Run" : "Walk"; // the combat arrows are off while running
+        if (!ShowArrow(set, direction)) ShowPointer(RestingPointer);
+    }
+
+    /// <summary>Ultima 8: a pointer is drawn at its own sprite's size (pointers of different sizes may be picked, each locked to its sprite).</summary>
+    private (int Width, int Height)? _pointerOwnSize;
+
+    private void ShowPointerSprite(SpriteEntry? sprite)
+    {
+        _pointerOwnSize = sprite is not null ? MousePointerCatalog.PixelSize(sprite) : null;
         _pointerAnimator?.Stop();
         _pointerAnimator = null;
         _pointerImage.Source = null;
-
-        var sprite = MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.Sprites.GetValueOrDefault(kind));
         if (sprite is not null)
         {
             _pointerHost.Background = null;
@@ -111,6 +166,7 @@ public partial class U8GameWindow
     /// <summary>All pointers share one size (System Settings); 16x16 until one is chosen.</summary>
     private (int Width, int Height) PointerSize()
     {
+        if (_pointerOwnSize is { } own) return own; // its own size
         var pointers = _systemSettings.MousePointers;
         return pointers.Width > 0 && pointers.Height > 0 ? (pointers.Width, pointers.Height) : (16, 16);
     }

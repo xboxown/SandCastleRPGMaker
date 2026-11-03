@@ -23,6 +23,21 @@ public partial class MainWindow : Window
     private TilesetDefinition? _tileset;
     private int _paletteColumns;
     private int _paletteRows;
+    /// <summary>
+    /// The palette's tiles in one long strip: as many columns as fit the panel's width, as many rows as it takes - only
+    /// ever scrolled up and down (the sheet's own columns, _paletteColumns, are only where each tile is cut from).
+    /// </summary>
+    private int _paletteShownColumns = 1;
+    private int _paletteShownRows;
+
+    private int PaletteTileCount => GetCurrentTilesetSprite()?.Frames.Count ?? _paletteColumns * _paletteRows;
+
+    /// <summary>How many tiles fit across the palette's panel.</summary>
+    private int PaletteFitColumns()
+    {
+        double width = PaletteScroll.ViewportWidth > 0 ? PaletteScroll.ViewportWidth : PaletteScroll.ActualWidth > 0 ? PaletteScroll.ActualWidth - 18 : 240;
+        return _tileset is null ? 1 : Math.Max(1, (int)Math.Floor(width / Math.Max(1, _tileset.TileWidth)));
+    }
     private int _selectedTileIndex = -1;
     /// <summary>Ctrl-click adds/removes a tile here without disturbing _selectedTileIndex (which stays "the tile you paint with"). This set is purely for bulk Duplicate/Delete from the right-click menu - non-contiguous, any tiles at any positions, per spec.</summary>
     private readonly HashSet<int> _multiSelectedTileIndices = new();
@@ -309,11 +324,28 @@ public partial class MainWindow : Window
         _paletteHighlight = null;
         _selectedTileIndex = -1;
 
+        // The tiles one after another, wrapped to the panel's width: cut from the sheet (its own columns), laid out in ours.
+        int tw = _tileset.TileWidth, th = _tileset.TileHeight, count = PaletteTileCount;
+        _paletteShownColumns = PaletteFitColumns();
+        _paletteShownRows = (count + _paletteShownColumns - 1) / _paletteShownColumns;
+        var strip = new DrawingGroup();
+        RenderOptions.SetBitmapScalingMode(strip, BitmapScalingMode.NearestNeighbor);
+        using (var dc = strip.Open())
+        {
+            dc.DrawRectangle(Brushes.Transparent, null, new Rect(0, 0, _paletteShownColumns * tw, Math.Max(1, _paletteShownRows) * th));
+            for (int i = 0; i < count; i++)
+            {
+                int sx = i % Math.Max(1, _paletteColumns) * tw, sy = i / Math.Max(1, _paletteColumns) * th;
+                if (sx + tw > _tilesetBitmap.PixelWidth || sy + th > _tilesetBitmap.PixelHeight) continue;
+                dc.DrawImage(new CroppedBitmap(_tilesetBitmap, new Int32Rect(sx, sy, tw, th)), new Rect(i % _paletteShownColumns * tw, i / _paletteShownColumns * th, tw, th));
+            }
+        }
+        strip.Freeze();
         var image = new Image
         {
-            Source = _tilesetBitmap,
-            Width = _tilesetBitmap.PixelWidth,
-            Height = _tilesetBitmap.PixelHeight
+            Source = new DrawingImage(strip),
+            Width = _paletteShownColumns * tw,
+            Height = Math.Max(1, _paletteShownRows) * th
         };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
         Canvas.SetLeft(image, 0);
@@ -321,27 +353,27 @@ public partial class MainWindow : Window
         PaletteCanvas.Children.Add(image);
 
         // Grid lines over the palette so individual tiles are easy to see.
-        for (int col = 0; col <= _paletteColumns; col++)
+        for (int col = 0; col <= _paletteShownColumns; col++)
         {
             var line = new Line
             {
                 X1 = col * _tileset.TileWidth,
                 Y1 = 0,
                 X2 = col * _tileset.TileWidth,
-                Y2 = _paletteRows * _tileset.TileHeight,
+                Y2 = _paletteShownRows * _tileset.TileHeight,
                 Stroke = Brushes.Black,
                 StrokeThickness = 0.5,
                 Opacity = 0.4
             };
             PaletteCanvas.Children.Add(line);
         }
-        for (int row = 0; row <= _paletteRows; row++)
+        for (int row = 0; row <= _paletteShownRows; row++)
         {
             var line = new Line
             {
                 X1 = 0,
                 Y1 = row * _tileset.TileHeight,
-                X2 = _paletteColumns * _tileset.TileWidth,
+                X2 = _paletteShownColumns * _tileset.TileWidth,
                 Y2 = row * _tileset.TileHeight,
                 Stroke = Brushes.Black,
                 StrokeThickness = 0.5,
@@ -350,8 +382,11 @@ public partial class MainWindow : Window
             PaletteCanvas.Children.Add(line);
         }
 
-        PaletteCanvas.Width = _paletteColumns * _tileset.TileWidth;
-        PaletteCanvas.Height = _paletteRows * _tileset.TileHeight;
+        PaletteCanvas.Width = _paletteShownColumns * _tileset.TileWidth;
+        PaletteCanvas.Height = _paletteShownRows * _tileset.TileHeight;
+        // Wrapped again when the panel is made wider or narrower (the tile picked stays picked).
+        PaletteScroll.SizeChanged -= PaletteScroll_SizeChanged;
+        PaletteScroll.SizeChanged += PaletteScroll_SizeChanged;
         // -= before += so repeated DrawPalette() calls (every Duplicate/
         // Delete/tileset switch calls this) never accumulate a second,
         // third, etc. copy of the same handler - that would have caused
@@ -379,8 +414,8 @@ public partial class MainWindow : Window
                 var animationSprite = GetLinkedAnimationSprite(i);
                 if (animationSprite is null || animationSprite.Frames.Count == 0) continue;
 
-                int col = i % _paletteColumns;
-                int row = i / _paletteColumns;
+                int col = i % _paletteShownColumns;
+                int row = i / _paletteShownColumns;
                 var animatedImage = new Image
                 {
                     Width = _tileset.TileWidth,
@@ -407,8 +442,8 @@ public partial class MainWindow : Window
                 string? glyph = GetTileGlyph(props);
                 if (glyph is null) continue;
 
-                int col = i % _paletteColumns;
-                int row = i / _paletteColumns;
+                int col = i % _paletteShownColumns;
+                int row = i / _paletteShownColumns;
                 var glyphText = new TextBlock
                 {
                     Text = glyph,
@@ -423,6 +458,26 @@ public partial class MainWindow : Window
         }
     }
 
+    /// <summary>The panel made wider or narrower: the strip wrapped again if a different number of tiles now fit across, the picked tiles still picked.</summary>
+    private void PaletteScroll_SizeChanged(object sender, SizeChangedEventArgs e)
+    {
+        if (_tileset is null || _tilesetBitmap is null || !e.WidthChanged || PaletteFitColumns() == _paletteShownColumns) return;
+        int picked = _selectedTileIndex;
+        var multi = _multiSelectedTileIndices.ToList();
+        DrawPalette();
+        _multiSelectedTileIndices.Clear();
+        foreach (int index in multi) _multiSelectedTileIndices.Add(index);
+        if (picked >= 0)
+        {
+            _selectedTileIndex = picked;
+            _paletteHighlight = new Rectangle { Stroke = Brushes.Yellow, StrokeThickness = 2, Fill = Brushes.Transparent, Width = _tileset.TileWidth, Height = _tileset.TileHeight };
+            Canvas.SetLeft(_paletteHighlight, picked % _paletteShownColumns * _tileset.TileWidth);
+            Canvas.SetTop(_paletteHighlight, picked / _paletteShownColumns * _tileset.TileHeight);
+            PaletteCanvas.Children.Add(_paletteHighlight);
+        }
+        RedrawMultiSelectHighlights();
+    }
+
     private void PaletteCanvas_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_tileset is null) return;
@@ -431,10 +486,10 @@ public partial class MainWindow : Window
         int col = (int)(p.X / _tileset.TileWidth);
         int row = (int)(p.Y / _tileset.TileHeight);
 
-        if (col < 0 || col >= _paletteColumns || row < 0 || row >= _paletteRows)
+        if (col < 0 || col >= _paletteShownColumns || row < 0 || row >= _paletteShownRows)
             return;
 
-        int clickedIndex = row * _paletteColumns + col;
+        int clickedIndex = row * _paletteShownColumns + col;
         var sprite = GetCurrentTilesetSprite();
         if (sprite is null || clickedIndex >= sprite.Frames.Count) return; // grid cell past the tileset's real tile count
 
@@ -494,8 +549,8 @@ public partial class MainWindow : Window
         foreach (int index in _multiSelectedTileIndices)
         {
             if (index == _selectedTileIndex) continue; // primary tile already has the yellow highlight
-            int col = index % _paletteColumns;
-            int row = index / _paletteColumns;
+            int col = index % _paletteShownColumns;
+            int row = index / _paletteShownColumns;
             var rect = new Rectangle
             {
                 Width = _tileset.TileWidth,
@@ -518,9 +573,9 @@ public partial class MainWindow : Window
         Point p = e.GetPosition(PaletteCanvas);
         int col = (int)(p.X / _tileset.TileWidth);
         int row = (int)(p.Y / _tileset.TileHeight);
-        if (col < 0 || col >= _paletteColumns || row < 0 || row >= _paletteRows) return;
+        if (col < 0 || col >= _paletteShownColumns || row < 0 || row >= _paletteShownRows) return;
 
-        int tileIndex = row * _paletteColumns + col;
+        int tileIndex = row * _paletteShownColumns + col;
         var sprite = GetCurrentTilesetSprite();
         if (sprite is null || tileIndex >= sprite.Frames.Count) return; // clicked a grid cell past the tileset's real tile count
 
@@ -888,11 +943,12 @@ public partial class MainWindow : Window
             {
                 try { _objectDatabase = ObjectDatabaseSerializer.Load(oldMap.ObjectDatabasePath); } catch { /* unreadable: start with none */ }
             }
+            // Its style before its map is drawn: an Ultima 8 map shows in the diamond view (MainWindow.U8.cs).
+            _projectStyle = manifest.Style is GameStyle.Ultima8 ? GameStyle.Ultima8 : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
             LoadWorlds(payload.Map, payload.Worlds); // the starting world and the others (Maps tab)
             LoadHouses(payload.Houses); // the House Editor's houses (MainWindow.Houses.cs)
             _map = payload.Map;
             if (_map is not null) ShowMapInEditor();
-            _projectStyle = manifest.Style is GameStyle.Ultima8 ? GameStyle.Ultima8 : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
             if (IsUltima8) _poseDatabase.EnsureUltima8Poses(); // an Ultima 8 project: its poses (an earlier one may be missing some)
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             CompactAfterLoad();
@@ -1606,29 +1662,28 @@ public partial class MainWindow : Window
         foreach (var animator in _itemHoverAnimators) animator.Stop();
         _itemHoverAnimators.Clear();
 
-        double pixelWidth = _map.Width * _tileset.TileWidth;
-        double pixelHeight = _map.Height * _tileset.TileHeight;
-        MapCanvas.Width = pixelWidth;
-        MapCanvas.Height = pixelHeight;
+        double pixelWidth = _map.Width * CellW;
+        double pixelHeight = _map.Height * CellH;
+        SetUpMapView(pixelWidth, pixelHeight); // an Ultima 8 project: the diamond view (MainWindow.U8.cs)
 
         // Grid lines.
         for (int col = 0; col <= _map.Width; col++)
         {
-            MapCanvas.Children.Add(new Line
+            MapCanvas.Children.Add(FlatOnMap(new Line
             {
-                X1 = col * _tileset.TileWidth, Y1 = 0,
-                X2 = col * _tileset.TileWidth, Y2 = pixelHeight,
+                X1 = col * CellW, Y1 = 0,
+                X2 = col * CellW, Y2 = pixelHeight,
                 Stroke = Brushes.Gray, StrokeThickness = GridLineThickness, Opacity = 0.5, Tag = GridLineTag
-            });
+            }));
         }
         for (int row = 0; row <= _map.Height; row++)
         {
-            MapCanvas.Children.Add(new Line
+            MapCanvas.Children.Add(FlatOnMap(new Line
             {
-                X1 = 0, Y1 = row * _tileset.TileHeight,
-                X2 = pixelWidth, Y2 = row * _tileset.TileHeight,
+                X1 = 0, Y1 = row * CellH,
+                X2 = pixelWidth, Y2 = row * CellH,
                 Stroke = Brushes.Gray, StrokeThickness = GridLineThickness, Opacity = 0.5, Tag = GridLineTag
-            });
+            }));
         }
 
         // The floors below the picked one, darkened (MainWindow.Floors.cs).
@@ -1855,8 +1910,8 @@ public partial class MainWindow : Window
             EnsureHoverCursorVisual();
             if (_hoverCursorVisual is not null)
             {
-                Canvas.SetLeft(_hoverCursorVisual, hoverX * _tileset.TileWidth);
-                Canvas.SetTop(_hoverCursorVisual, hoverY * _tileset.TileHeight);
+                Canvas.SetLeft(_hoverCursorVisual, hoverX * CellW);
+                Canvas.SetTop(_hoverCursorVisual, hoverY * CellH);
                 _hoverCursorVisual.Visibility = Visibility.Visible;
             }
         }
@@ -2202,7 +2257,12 @@ public partial class MainWindow : Window
     private (int x, int y) CellFromPoint(Point p)
     {
         if (_tileset is null) return (-1, -1);
-        return ((int)(p.X / _tileset.TileWidth), (int)(p.Y / _tileset.TileHeight));
+        if (MapCanvas.Diamond) // the Ultima 8 view: the point back on the map first
+        {
+            var map = MapCanvas.ToMap(p);
+            return ((int)Math.Floor(map.X / CellW), (int)Math.Floor(map.Y / CellH));
+        }
+        return ((int)(p.X / CellW), (int)(p.Y / CellH));
     }
 
     private bool IsInsideMap(int x, int y)
@@ -2240,8 +2300,8 @@ public partial class MainWindow : Window
     private void PositionQuantizedVisual(UIElement visual, int cellX, int cellY, double quantizedWidth, double quantizedHeight)
     {
         if (_tileset is null) return;
-        double left = cellX * _tileset.TileWidth + (_tileset.TileWidth - quantizedWidth) / 2.0;
-        double top = (cellY + 1) * _tileset.TileHeight - quantizedHeight;
+        double left = cellX * CellW + (CellW - quantizedWidth) / 2.0;
+        double top = (cellY + 1) * CellH - quantizedHeight;
         Canvas.SetLeft(visual, left);
         Canvas.SetTop(visual, top);
     }
@@ -2313,8 +2373,8 @@ public partial class MainWindow : Window
 
         var marker = new Border
         {
-            Width = _tileset.TileWidth,
-            Height = _tileset.TileHeight,
+            Width = CellW,
+            Height = CellH,
             Background = fillBrush,
             BorderBrush = Brushes.LimeGreen,
             BorderThickness = new Thickness(1),
@@ -2331,8 +2391,9 @@ public partial class MainWindow : Window
                 VerticalAlignment = VerticalAlignment.Center
             }
         };
-        Canvas.SetLeft(marker, gameEvent.X * _tileset.TileWidth);
-        Canvas.SetTop(marker, gameEvent.Y * _tileset.TileHeight);
+        FlatOnMap(marker); // an Ultima 8 map: a diamond, its letter upright
+        Canvas.SetLeft(marker, gameEvent.X * CellW);
+        Canvas.SetTop(marker, gameEvent.Y * CellH);
         Panel.SetZIndex(marker, MarkerZIndex); // Above tiles and objects.
 
         MapCanvas.Children.Add(marker);
@@ -2397,17 +2458,17 @@ public partial class MainWindow : Window
         foreach (var (cx, cy) in cells)
         {
             if (!IsInsideMap(cx, cy)) continue;
-            var square = new Rectangle
+            var square = FlatOnMap(new Rectangle
             {
-                Width = _tileset.TileWidth,
-                Height = _tileset.TileHeight,
+                Width = CellW,
+                Height = CellH,
                 Fill = Brushes.Transparent,
                 Stroke = _shapePreviewBrush,
                 StrokeThickness = 2,
                 IsHitTestVisible = false
-            };
-            Canvas.SetLeft(square, cx * _tileset.TileWidth);
-            Canvas.SetTop(square, cy * _tileset.TileHeight);
+            });
+            Canvas.SetLeft(square, cx * CellW);
+            Canvas.SetTop(square, cy * CellH);
             Panel.SetZIndex(square, MarkerZIndex + 4); // just below the hover cursor (25), above everything else
             MapCanvas.Children.Add(square);
             _shapePreviewVisuals.Add(square);
@@ -2439,16 +2500,16 @@ public partial class MainWindow : Window
         Timeline.SetDesiredFrameRate(pulse, 8); // a pulse needn't redraw the map 60 times a second
         strokeBrush.BeginAnimation(SolidColorBrush.ColorProperty, pulse);
 
-        _hoverCursorVisual = new Rectangle
+        _hoverCursorVisual = FlatOnMap(new Rectangle
         {
-            Width = _tileset.TileWidth,
-            Height = _tileset.TileHeight,
+            Width = CellW,
+            Height = CellH,
             Fill = Brushes.Transparent,
             Stroke = strokeBrush,
             StrokeThickness = 2,
             IsHitTestVisible = false,
             Visibility = Visibility.Collapsed
-        };
+        });
         Panel.SetZIndex(_hoverCursorVisual, MarkerZIndex + 5); // above even the "S" marker (21) - always visible regardless of what's underneath
         MapCanvas.Children.Add(_hoverCursorVisual);
     }
@@ -2466,8 +2527,8 @@ public partial class MainWindow : Window
 
         var marker = new Border
         {
-            Width = _tileset.TileWidth,
-            Height = _tileset.TileHeight,
+            Width = CellW,
+            Height = CellH,
             Background = fillBrush,
             BorderBrush = Brushes.MediumPurple,
             BorderThickness = new Thickness(1),
@@ -2482,8 +2543,9 @@ public partial class MainWindow : Window
                 VerticalAlignment = VerticalAlignment.Center
             }
         };
-        Canvas.SetLeft(marker, x * _tileset.TileWidth);
-        Canvas.SetTop(marker, y * _tileset.TileHeight);
+        FlatOnMap(marker);
+        Canvas.SetLeft(marker, x * CellW);
+        Canvas.SetTop(marker, y * CellH);
         Panel.SetZIndex(marker, MarkerZIndex + 1); // Above even the "E" event markers - there's only ever one of these, it should never get visually buried.
 
         MapCanvas.Children.Add(marker);
@@ -2538,7 +2600,7 @@ public partial class MainWindow : Window
         }
 
         UIElement marker;
-        double markerW = _tileset.TileWidth, markerH = _tileset.TileHeight;
+        double markerW = CellW, markerH = CellH;
         if (sprite is not null && sprite.Frames.Count > 0 && File.Exists(sprite.Frames[0].FilePath))
         {
             string firstFramePath = sprite.Frames[0].FilePath;
@@ -2618,17 +2680,17 @@ public partial class MainWindow : Window
     private Border BuildLetteredItemMarker(string letter, Color fill, Brush border, string tooltip)
     {
         if (_tileset is null) return new Border();
-        return new Border
+        return FlatOnMap(new Border
         {
-            Width = _tileset.TileWidth,
-            Height = _tileset.TileHeight,
+            Width = CellW,
+            Height = CellH,
             Background = new SolidColorBrush(fill),
             BorderBrush = border,
             BorderThickness = new Thickness(1),
             IsHitTestVisible = false,
             ToolTip = tooltip,
             Child = new TextBlock { Text = letter, Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center }
-        };
+        });
     }
 
     /// <summary>Opens the real, shared Select Item picker (same one Complex Condition and everywhere else uses) defaulting to whichever type is currently chosen in the Item submenu - not a separate custom picker.</summary>

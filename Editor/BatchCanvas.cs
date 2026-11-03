@@ -35,6 +35,38 @@ public sealed class BatchCanvas : Canvas
         protected override string GetClassNameCore() => "MapCanvas";
     }
 
+    /// <summary>
+    /// An Ultima 8 map: laid out in its diamond view exactly as the game's U8ProjectionCanvas does - everything stays in
+    /// the map's own square coordinates (Canvas.Left / Top), and each child is drawn by its U8Placement (default: a thing,
+    /// standing on its cell's near corner; Flat: turned into the diamond view itself).
+    /// </summary>
+    public bool Diamond { get; set; }
+    /// <summary>Diamond: a map cell's size in map pixels (square).</summary>
+    public double CellSize { get; set; } = 32;
+    /// <summary>Diamond: added to every screen x so the map's west corner is at 0 (the map's height in map pixels).</summary>
+    public double OriginX { get; set; }
+    /// <summary>Diamond: added to every screen y - room above the map's north corner for what stands tall there.</summary>
+    public double OriginY { get; set; }
+
+    /// <summary>A map point in the diamond view (Diamond only; else as it is).</summary>
+    public Point ToScreen(double mapX, double mapY) => Diamond ? new Point(mapX - mapY + OriginX, (mapX + mapY) / 2 + OriginY) : new Point(mapX, mapY);
+
+    /// <summary>A point on this canvas back on the map (Diamond: at lift 0; else as it is).</summary>
+    public Point ToMap(Point screen)
+    {
+        if (!Diamond) return screen;
+        double a = screen.X - OriginX, b = 2 * (screen.Y - OriginY);
+        return new Point((a + b) / 2, (b - a) / 2);
+    }
+
+    protected override Size ArrangeOverride(Size arrangeSize)
+    {
+        if (!Diamond) return base.ArrangeOverride(arrangeSize);
+        foreach (UIElement child in InternalChildren)
+            if (child is not null) U8ProjectionCanvas.ArrangeChild(child, CellSize, OriginX, OriginY);
+        return arrangeSize;
+    }
+
     protected override void OnVisualChildrenChanged(DependencyObject visualAdded, DependencyObject visualRemoved)
     {
         if (_batches > 0) { _changed = true; return; } // sorted once, at the end of the batch

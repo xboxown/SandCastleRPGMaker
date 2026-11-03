@@ -102,9 +102,15 @@ public partial class U8GameWindow
     }
 
     /// <summary>A swing (or a kick) toward the pointer: whoever is in reach that way is struck; nobody - the air.</summary>
+    private double _u8LastSwingMs = double.NegativeInfinity;
+
     private void U8Swing(bool kick)
     {
         if (_player is null) return;
+        // U8AvatarMoverProcess: not again till 25 - Dexterity frames (30 a second) after the last one.
+        double now = AnimationClock.NowMs, wait = Math.Max(0, 25 - Stat(_player, BuiltInStatKind.Dexterity, 10)) * 1000.0 / 30;
+        if (now - _u8LastSwingMs < wait) return;
+        _u8LastSwingMs = now;
         var (screen, _) = PointerFromAvatar();
         var (dx, dy) = WorldFromScreen(screen.X, screen.Y);
         _playerFacing = FacingOf(dx, dy);

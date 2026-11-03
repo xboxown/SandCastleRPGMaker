@@ -417,6 +417,7 @@ public partial class U8GameWindow
             case MapEntityTarget { Entity: PlacedCharacter placedCharacter }:
                 // Exult: in combat mode, double-clicking someone attacks them; otherwise it talks to them (or, dead, opens the body).
                 if (_combatMode && _mapCharacters.FirstOrDefault(mc => mc.Placement == placedCharacter) is { } foe && !IsDead(foe.Character) && !foe.Character.IsInParty) SetPlayerTarget(foe.Character); // never a party member
+                else if (!IsBesideU8(placedCharacter)) Refuse(MousePointerKind.Blocked, "You must stand beside them to talk."); // Ultima 8: beside them (U8GameWindow.U8Reach.cs)
                 else TalkTo(placedCharacter);
                 break;
             case SlotTarget slot when _openPaperdolls.Contains(slot.Gump):
@@ -450,6 +451,7 @@ public partial class U8GameWindow
     private bool TryStartDrag(PointerSession session)
     {
         if (PlayerKnockedOut) return false; // can't pick anything up while unconscious
+        if (_thrown is not null) { Refuse(MousePointerKind.Blocked, "Wait - something is still in the air."); return false; } // one throw at a time
         DragOrigin? origin = null;
         UIElement? source = null;
         switch (session.Target)
@@ -825,7 +827,7 @@ public partial class U8GameWindow
     {
         // Exult drop_on_map: "Attempting to drop off screen?" -> refused.
         var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, ViewportBorder);
-        if (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight)
+        if (!_landingThrow && (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight)) // a thrown thing lands wherever the view is now
         {
             Refuse(MousePointerKind.RedX, "You can't drop that there."); // drop_on_map: off screen -> red X
             return false;
@@ -837,7 +839,15 @@ public partial class U8GameWindow
         // Exult Actor::drop: a party member standing there takes it too (its inventory needn't be open); anyone else doesn't - it goes on the map.
         if (HitTestCharacter(mouseInWorld) is { } droppedOn && _mapCharacters.FirstOrDefault(mc => mc.Placement == droppedOn) is { } member
             && member.Character.IsInParty && !IsDead(member.Character))
+        {
+            var foot = CharacterFootprint(member); // Ultima 8: handed over only within reach (U8GameWindow.U8Reach.cs)
+            if (!_landingThrow && !CanReachU8(new Volume(foot.Left, foot.Top, member.Lift, foot.Width, foot.Depth, member.Size.Z), U8ReachUnits, droppedOn))
+            {
+                Refuse(MousePointerKind.Blocked, $"{member.Character.Name} is too far away to hand it to.");
+                return false;
+            }
             return DropOnCharacter(origin, member.Character);
+        }
 
         // The ghost's top-left in world pixels - exactly where it was showing, which is where it lands.
         var ghostOnScreen = PaperdollGumpsCanvas.TranslatePoint(new Point(screen.X - session.GrabOffset.X, screen.Y - session.GrabOffset.Y), GameCanvas);
@@ -849,6 +859,9 @@ public partial class U8GameWindow
         double visualTop = Math.Clamp(ghostTopLeft.Y, 0, Math.Max(0, GameCanvas.Height - _tileHeight));
         double visualWidth = session.NativeWidth, visualHeight = session.NativeHeight;
         var (newCellX, newCellY) = ComputeDropCell(visualLeft, visualTop, visualWidth, visualHeight);
+
+        // Ultima 8 (GameMapGump::DropItem): beyond reach it's thrown, if it can be (U8GameWindow.U8Reach.cs) - it lands by itself.
+        if (!_landingThrow && !CanReachU8(CellSpot(newCellX, newCellY, _playerZ), U8ReachUnits)) return TryThrowU8(origin, session, mouseInWorld, newCellX, newCellY);
 
         // Exult Game_object::drop: the same kind of stackable thing dropped on a stack joins it (up to 100).
         if (PayloadIdentity(origin) is (ReferencedItemCategory.Object, var stackId) && CanCombine(ObjectDef(stackId)))

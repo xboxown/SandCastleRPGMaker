@@ -49,6 +49,50 @@ public partial class U8GameWindow
         public double? Scale;
         /// <summary>The Title Screen: it stays where the engine puts it (filling the view) - it can't be dragged.</summary>
         public bool Fixed;
+        /// <summary>The character it was opened for (an inventory's button, with the inventory): its parts' "own character" stats are theirs.</summary>
+        public CharacterDefinition? Character;
+        /// <summary>The stats its stat-following parts last showed (value, max) - drawn again only when one changes.</summary>
+        public readonly Dictionary<int, (double Value, double Max)> StatsShown = new();
+        /// <summary>The inventory that brought it up (DollLinks.cs): it closes with it.</summary>
+        public object? OpenedWith;
+        /// <summary>Always on screen (PaperDoll Editor > Always on screen): doesn't pause the game, isn't closed by Escape, stays under the windows.</summary>
+        public bool Hud;
+        /// <summary>Icons that just lost value: what they had before - drawn once, blinking (Flashes the hearts lost).</summary>
+        public readonly Dictionary<int, int> LostFrom = new();
+    }
+
+    /// <summary>A part following a stat (Progress bar, Display): its value and the top of its range now - null: it follows none.</summary>
+    private (double Value, double Max)? DollStat(OpenDollGump gump, DollPart part)
+    {
+        if (part.StatId == DollPart.DiskProgressStat) return (_diskProgress * 100, 100); // DiskProgress.cs
+        if (part.StatId < 0) return null;
+        var who = part.StatOwner == DollStatOwner.OwnCharacter && gump.Character is { } own ? own : _player;
+        if (who is null) return null;
+        double value = StatNumber(who, part.StatId);
+        double max = part.MaxStatId >= 0 ? StatNumber(who, part.MaxStatId) : part.Max;
+        return (value, max);
+    }
+
+    private double _dollStatCheckMs;
+
+    /// <summary>Four times a second: a paperdoll whose stat-following parts would show another value is drawn again (hit points lost, mana spent).</summary>
+    private void UpdateDollStats(double elapsedMs)
+    {
+        if ((_dollStatCheckMs += elapsedMs) < 250) return;
+        _dollStatCheckMs = 0;
+        KeepHudDolls(); // DollLinks.cs
+        foreach (var gump in _openDolls.ToList())
+        {
+            bool changed = false;
+            foreach (var part in gump.Design.Parts)
+                if (DollStat(gump, part) is { } now && (!gump.StatsShown.TryGetValue(part.Id, out var was) || was != now))
+                {
+                    if (was != default && now.Value < was.Value) gump.LostFrom[part.Id] = (int)Math.Round(was.Value); // lost: the hearts lost blink
+                    gump.StatsShown[part.Id] = now;
+                    changed = true;
+                }
+            if (changed) RefreshDollGump(gump);
+        }
     }
 
     private readonly List<OpenDollGump> _openDolls = new();
@@ -117,6 +161,7 @@ public partial class U8GameWindow
 
     private void BringDollToFront(OpenDollGump gump)
     {
+        if (gump.Hud) return; // always on screen: stays under the windows, out of Escape's reach
         Panel.SetZIndex(gump.GumpBorder, gump.ModalLayer > 0 ? gump.ModalLayer + 1 : 200);
         TrackGumpFocus(gump);
     }
@@ -234,6 +279,20 @@ public partial class U8GameWindow
                 knob.IsHitTestVisible = false;
                 holder.Children.Add(knob);
                 return holder;
+            }
+            case DollPartKind.Display when DollStat(gump, part) is { } stat:
+            {
+                // Following a stat: its frames from empty (frame 1) to full (the last), by how full its range is.
+                var frames = DollLook.LookSprite(part, 0, _sprites);
+                int count = Math.Max(1, frames?.Frames.Count ?? 1);
+                double fraction = Math.Clamp((stat.Value - part.Min) / Math.Max(1, stat.Max - part.Min), 0, 1);
+                if (DollLook.Frame(frames, (int)Math.Round(fraction * (count - 1))) is { } shownFrame)
+                {
+                    var image = new AlphaHitImage { Source = shownFrame, Width = shownFrame.PixelWidth, Height = shownFrame.PixelHeight, Stretch = Stretch.Fill };
+                    RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                    return image;
+                }
+                return new TextBlock { Text = ((int)stat.Value).ToString(), Foreground = Brushes.White, FontSize = 10 };
             }
             case DollPartKind.Display:
             {

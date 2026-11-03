@@ -682,6 +682,7 @@ public partial class GameTestWindow : Window
         BringPaperdollToFront(gump);
         RefreshPaperdollGump(gump);
         WatchPaperdollLabels();
+        OpenDollsWithInventory(gump); // its "opens with the inventory" paperdolls (DollLinks.cs)
     }
 
     /// <summary>Real, unified focus order, per spec - a container gump is just as real a "topmost" candidate for Escape as a character's own paperdoll, so both kinds share this one list instead of Escape only ever knowing about paperdolls. Bringing a gump to front (of either kind) moves it to the end here; closing a gump (of either kind, whether by its own exit control or by Escape) removes it here too.</summary>
@@ -714,6 +715,7 @@ public partial class GameTestWindow : Window
         foreach (var animator in gump.ItemAnimators) animator.Stop();
         gump.ItemAnimators.Clear();
         if (gump.BackpackGump is not null) CloseBackpackGump(gump);
+        CloseDollsWithInventory(gump); // DollLinks.cs
         PaperdollGumpsCanvas.Children.Remove(gump.GumpBorder);
         _openPaperdolls.Remove(gump);
         UntrackGumpFocus(gump);
@@ -894,9 +896,9 @@ public partial class GameTestWindow : Window
             double max = ItemWeights.MaxCarry(Stat(character, BuiltInStatKind.Strength, 10));
             if (pd.WeightCurrent.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightCurrent, $"{Math.Round(carried):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             if (pd.WeightMax.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightMax, $"{Math.Round(max):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
-            if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
+            if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale, carried, max) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
             // Free text and variable numbers (Paperdoll layout > Text and numbers).
-            foreach (var label in pd.Labels) { var e = PaperdollReadouts.Readout(label, PaperdollLabelText(label), _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
+            foreach (var label in pd.Labels) { if (PaperdollLabelVisual(label, character, paperdollItemCounterScale) is not { } e) continue; Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             gump.LabelsShown = LabelsSignature(character);
         }
 
@@ -904,8 +906,16 @@ public partial class GameTestWindow : Window
 
         // The real exit button, per spec - a genuine 2-frame sprite, not a text glyph, positioned top-right of the body. Its own MouseLeftButtonDown/Up already mark themselves Handled (see BuildExitButton), so it never also triggers the body's drag handler.
         var exitButton = BuildExitButton(character, () => ClosePaperdollGump(gump));
-        Canvas.SetLeft(exitButton, 320 - 28);
-        Canvas.SetTop(exitButton, 4);
+        // Where the Paperdoll layout puts it (the top-right corner by default); at its own size, or in a 24 x 24 box.
+        if (character.Paperdoll.ExitButtonOwnSize && exitButton.Source is System.Windows.Media.Imaging.BitmapSource own)
+        {
+            exitButton.Width = own.PixelWidth * paperdollItemCounterScale;
+            exitButton.Height = own.PixelHeight * paperdollItemCounterScale;
+            exitButton.Stretch = Stretch.Fill;
+            RenderOptions.SetBitmapScalingMode(exitButton, BitmapScalingMode.NearestNeighbor);
+        }
+        Canvas.SetLeft(exitButton, character.Paperdoll.ExitButtonX);
+        Canvas.SetTop(exitButton, character.Paperdoll.ExitButtonY);
         Panel.SetZIndex(exitButton, 20);
         gump.BodyCanvas.Children.Add(exitButton);
 
@@ -1777,6 +1787,7 @@ public partial class GameTestWindow : Window
         {
             GameFrame(deltaSeconds);
             UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
+            UpdateDollStats(deltaSeconds * 1000); // paperdoll gauges following a stat: drawn again when it changes (Dolls.cs)
         }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }

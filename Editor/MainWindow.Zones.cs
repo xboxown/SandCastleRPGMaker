@@ -45,9 +45,9 @@ public partial class MainWindow
         if (_zoneLayer is not null) MapCanvas.Children.Remove(_zoneLayer);
         _zoneLayer = null;
         if (_editMode != EditMode.Zone || _map is null || _tileset is null) return;
-        _zoneLayer = new Canvas { IsHitTestVisible = false };
+        _zoneLayer = FlatOnMap(new Canvas { IsHitTestVisible = false }); // the Ultima 8 view: the zones lie flat, as diamonds
         Panel.SetZIndex(_zoneLayer, 5000);
-        int w = _tileset.TileWidth, h = _tileset.TileHeight;
+        int w = CellW, h = CellH;
         foreach (var zone in ZonesOnFloor)
         {
             var color = ZoneColor(zone);
@@ -68,6 +68,7 @@ public partial class MainWindow
             };
             Canvas.SetLeft(label, zone.X * w + 2);
             Canvas.SetTop(label, zone.Y * h + 2);
+            if (IsUltima8) label.RenderTransform = U8ProjectionCanvas.UprightTransform; // its words upright over the diamond
             _zoneLayer.Children.Add(label);
         }
         if (_zoneDrawStart is { } start && _lastHoverCell is var (hx, hy))

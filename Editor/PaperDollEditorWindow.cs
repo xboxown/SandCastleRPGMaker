@@ -39,6 +39,21 @@ public class PaperDollEditorWindow : Window
     private int _selectedPartId = -1;
     private bool _refreshing;
     private (Point Start, int X, int Y)? _drag;
+    /// <summary>Dragging the picked part's yellow corner: its size.</summary>
+    private (Point Start, int Width, int Height)? _resize;
+
+    /// <summary>The picked part's size is its Width x Height (an area, a bar, a button without a picture): it has a yellow corner to drag.</summary>
+    private bool Resizable(DollPart part) =>
+        !(part.Kind == DollPartKind.ProgressBar && part.BarStyle == DollGaugeStyle.Icons) && part.Kind is not (DollPartKind.CheckBox or DollPartKind.RadioButton)
+        && (DollPart.IsAreaKind(part.Kind)
+            || ((DollPart.IsButtonKind(part.Kind) || part.Kind is DollPartKind.Slider or DollPartKind.Switch or DollPartKind.Lid) && DollLook.Frame(DollLook.LookSprite(part, part.StartLook, _sprites)) is null));
+
+    private Rect GripRect(DollPart part)
+    {
+        double z = Zoom;
+        var size = DollLook.SizeOf(part, part.StartLook, _sprites);
+        return new Rect((PageMargin + part.X + size.Width) * z - 4, (PageMargin + part.Y + size.Height) * z - 4, 8, 8);
+    }
 
     private const int PageMargin = 24; // around the paperdoll on the canvas
 
@@ -160,7 +175,14 @@ public class PaperDollEditorWindow : Window
         _showNames.Click += (_, _) => Redraw();
         _canvas.MouseLeftButtonDown += Canvas_MouseLeftButtonDown;
         _canvas.MouseMove += Canvas_MouseMove;
-        _canvas.MouseLeftButtonUp += (_, _) => { if (_drag is not null) { _drag = null; _canvas.ReleaseMouseCapture(); ShowPartProps(); } };
+        _canvas.MouseLeftButtonUp += (_, _) =>
+        {
+            if (_drag is null && _resize is null) return;
+            _drag = null;
+            _resize = null;
+            _canvas.ReleaseMouseCapture();
+            ShowPartProps();
+        };
         PreviewKeyDown += Window_PreviewKeyDown;
 
         _designList.SelectedItem = _objects.DollDesigns.FirstOrDefault(d => d.Id == selectDesignId) ?? _objects.DollDesigns.FirstOrDefault();
@@ -220,7 +242,8 @@ public class PaperDollEditorWindow : Window
         var copy = new DollDesign
         {
             Id = _objects.NextDollDesignId(), Name = source.Name + " copy", Width = source.Width, Height = source.Height,
-            OpenSoundResourceId = source.OpenSoundResourceId, CloseSoundResourceId = source.CloseSoundResourceId
+            OpenSoundResourceId = source.OpenSoundResourceId, CloseSoundResourceId = source.CloseSoundResourceId,
+            OnScreen = source.OnScreen, ScreenCorner = source.ScreenCorner, ScreenX = source.ScreenX, ScreenY = source.ScreenY
         };
         // Same part ids, so lids still cover the same parts and displays still follow the same sliders.
         foreach (var part in source.Parts) copy.Parts.Add(part.Clone(part.Id));
@@ -257,6 +280,23 @@ public class PaperDollEditorWindow : Window
             ? "No object opens it yet: Object Editor > an object > Opens paperdoll."
             : $"Opened by: {string.Join(", ", users)}. In play: double-click it."));
         _designProps.Children.Add(Note("320 x 240 is the size of a container's window in the game."));
+
+        // A HUD: always on screen in play, kept to a corner of the view.
+        _designProps.Children.Add(Check("Always on screen in the game (a HUD: health bars, a compass...)", () => design.OnScreen, v => { design.OnScreen = v; ShowDesignProps(); }));
+        if (design.OnScreen)
+        {
+            var corners = new[] { DollScreenCorner.TopLeft, DollScreenCorner.TopRight, DollScreenCorner.BottomLeft, DollScreenCorner.BottomRight };
+            var corner = new ComboBox { Width = 150, ItemsSource = new[] { "Top left", "Top right", "Bottom left", "Bottom right" }, SelectedIndex = Array.IndexOf(corners, design.ScreenCorner) };
+            corner.SelectionChanged += (_, _) => design.ScreenCorner = corners[Math.Max(0, corner.SelectedIndex)];
+            _designProps.Children.Add(Labeled("In the view's", corner));
+            var inFrom = new WrapPanel();
+            inFrom.Children.Add(IntField("In from the side (px)", () => design.ScreenX, v => design.ScreenX = Math.Max(0, v)));
+            inFrom.Children.Add(IntField("In from the top / bottom (px)", () => design.ScreenY, v => design.ScreenY = Math.Max(0, v)));
+            _designProps.Children.Add(inFrom);
+            _designProps.Children.Add(Note("Shown from the start of play (not on the Title Screen): it doesn't pause the game, Escape doesn't close it, windows open over it. " +
+                                           "Its stat parts follow the main character."));
+        }
+        _designProps.Children.Add(Note("An inventory can bring it up too: Character Editor > Paperdoll > Other paperdolls (a button on it, or opening with it)."));
     }
 
     // ================= Parts =================
@@ -683,7 +723,7 @@ public class PaperDollEditorWindow : Window
                 break;
             case DollPartKind.ProgressBar:
                 body.Children.Add(DisplayEditor(design, part));
-                body.Children.Add(Check("Upright (fills from the bottom up)", () => part.Vertical, v => { part.Vertical = v; Redraw(); }));
+                body.Children.Add(GaugeStyleEditor(part));
                 break;
         }
         if (DollPart.HasVariable(part.Kind))
@@ -738,6 +778,9 @@ public class PaperDollEditorWindow : Window
     private UIElement DisplayEditor(DollDesign design, DollPart display)
     {
         var body = new StackPanel();
+        body.Children.Add(StatFollower(display));
+        if (display.FollowsStat)
+            return new GroupBox { Header = display.Kind == DollPartKind.ProgressBar ? "Progress bar" : "Display", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
         var none = new DollPart { Id = -1, Name = "(its own value - set by events)" };
         var sources = new List<DollPart> { none };
         sources.AddRange(design.Parts.Where(p => p.Kind == DollPartKind.Slider));
@@ -746,6 +789,134 @@ public class PaperDollEditorWindow : Window
         body.Children.Add(Labeled("Shows the value of", combo));
         if (display.ShowsPartId < 0) body.Children.Add(RangeEditor(display, "Starts at"));
         return new GroupBox { Header = "Display", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
+    }
+
+    /// <summary>
+    /// Follows a stat (Progress bar, Display): its value is a character's stat, kept up to date in play - hit points, mana,
+    /// strength... - out of its Max or another stat (Hits out of Strength). Whose: the main character's (a HUD, a bars window),
+    /// or the character its paperdoll was opened for (from their inventory).
+    /// </summary>
+    private UIElement StatFollower(DollPart part)
+    {
+        var body = new StackPanel();
+        var stats = (ProjectSession.StatsProvider?.Invoke() ?? new StatDatabase()).Stats;
+        var none = new StatDefinition { Id = -1, Name = "(none)" };
+        var choices = new List<StatDefinition> { none, new() { Id = DollPart.DiskProgressStat, Name = "(the save / load progress, 0 - 100)" } };
+        choices.AddRange(stats);
+        var stat = new ComboBox { Width = 200, ItemsSource = choices, DisplayMemberPath = nameof(StatDefinition.Name), SelectedItem = choices.FirstOrDefault(s => s.Id == part.StatId) ?? none };
+        stat.SelectionChanged += (_, _) =>
+        {
+            part.StatId = (stat.SelectedItem as StatDefinition)?.Id ?? -1;
+            if (part.FollowsStat) part.ShowsPartId = -1;
+            if (part.StatId == DollPart.DiskProgressStat) { part.Min = 0; part.Max = 100; part.MaxStatId = -1; }
+            ShowPartProps();
+            Redraw();
+        };
+        body.Children.Add(Labeled("Follows the stat", stat));
+        if (part.StatId == DollPart.DiskProgressStat)
+        {
+            body.Children.Add(IntField("In the editor, shown at (0 - 100)", () => part.StartValue, v => { part.StartValue = Math.Clamp(v, 0, 100); Redraw(); }));
+            body.Children.Add(Note("Fills from 0 to 100 while the game saves or loads. Make this paperdoll the progress paperdoll: System Settings > Save / Load > Saving / loading progress."));
+            return body;
+        }
+        if (part.StatId < 0) return body;
+
+        var owners = new[] { DollStatOwner.MainCharacter, DollStatOwner.OwnCharacter };
+        var owner = new ComboBox { Width = 330, ItemsSource = new[] { "The main character's", "The character it was opened for (from an inventory; else the main one)" }, SelectedIndex = Array.IndexOf(owners, part.StatOwner) };
+        owner.SelectionChanged += (_, _) => part.StatOwner = owners[Math.Max(0, owner.SelectedIndex)];
+        body.Children.Add(Labeled("Whose", owner));
+
+        var noMax = new StatDefinition { Id = -1, Name = "(its own Max)" };
+        var maxChoices = new List<StatDefinition> { noMax };
+        maxChoices.AddRange(stats.Where(s => s.Id != part.StatId));
+        var maxStat = new ComboBox { Width = 200, ItemsSource = maxChoices, DisplayMemberPath = nameof(StatDefinition.Name), SelectedItem = maxChoices.FirstOrDefault(s => s.Id == part.MaxStatId) ?? noMax };
+        maxStat.SelectionChanged += (_, _) => { part.MaxStatId = (maxStat.SelectedItem as StatDefinition)?.Id ?? -1; ShowPartProps(); Redraw(); };
+        body.Children.Add(Labeled("Full at (another stat - Hits out of Strength)", maxStat));
+        body.Children.Add(IntField("Empty at", () => part.Min, v => { part.Min = v; Redraw(); }));
+        if (part.MaxStatId < 0) body.Children.Add(IntField("Full at", () => part.Max, v => { part.Max = Math.Max(part.Min + 1, v); Redraw(); }));
+        body.Children.Add(IntField("In the editor, shown at", () => part.StartValue, v => { part.StartValue = v; Redraw(); }));
+        body.Children.Add(Note(part.Kind == DollPartKind.Display
+            ? "Its frames go from empty (frame 1) to full (the last), by how full the stat is. In play it goes up and down as the stat does."
+            : "In play it goes up and down as the stat does - hit points lost, mana spent, a potion drunk."));
+        return body;
+    }
+
+    /// <summary>Full and empty colours of a plain bar, pie or dots (no sprites): a swatch to click (the colour picker), and Plain to go back.</summary>
+    private UIElement ColorRow(DollPart part)
+    {
+        var row = new WrapPanel { Margin = new Thickness(0, 2, 0, 2) };
+        void Swatch(string label, Func<string> get, Action<string> set, Color plain)
+        {
+            var color = PaperdollReadouts.Brush(get()) is SolidColorBrush b ? b.Color : plain;
+            var swatch = new Button { Width = 34, Height = 18, Background = new SolidColorBrush(color), ToolTip = "Pick the colour", Margin = new Thickness(4, 0, 2, 0) };
+            swatch.Click += (_, _) =>
+            {
+                var picker = new ColorPickerWindow(color) { Owner = this };
+                if (picker.ShowDialog() != true) return;
+                set($"#{picker.Result.R:X2}{picker.Result.G:X2}{picker.Result.B:X2}");
+                ShowPartProps();
+                Redraw();
+            };
+            var reset = new Button { Content = "Plain", Padding = new Thickness(4, 0, 4, 0), Margin = new Thickness(0, 0, 12, 0), ToolTip = "Back to the plain colour" };
+            reset.Click += (_, _) => { set(""); ShowPartProps(); Redraw(); };
+            row.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center });
+            row.Children.Add(swatch);
+            row.Children.Add(reset);
+        }
+        Swatch("Full colour", () => part.FillColor, v => part.FillColor = v, Color.FromRgb(0x4C, 0xA8, 0x50));
+        Swatch("Empty colour", () => part.EmptyColor, v => part.EmptyColor = v, Color.FromRgb(0x1C, 0x1C, 0x20));
+        return row;
+    }
+
+    /// <summary>How its sprite skins fit the bar.</summary>
+    private UIElement SkinRow(DollPart part)
+    {
+        var fits = new[] { DollSkinFit.AsDrawn, DollSkinFit.Stretch, DollSkinFit.Tile };
+        var fit = new ComboBox { Width = 230, ItemsSource = new[] { "As drawn", "Stretched to the bar's size", "Tiled (repeated across it)" }, SelectedIndex = Array.IndexOf(fits, part.SkinFit) };
+        fit.SelectionChanged += (_, _) => { part.SkinFit = fits[Math.Max(0, fit.SelectedIndex)]; Redraw(); };
+        return Labeled("Sprite skins", fit);
+    }
+
+    /// <summary>A progress bar's look: a bar, a pie, or icons (hearts) - and the icons' worth, row, gap.</summary>
+    private UIElement GaugeStyleEditor(DollPart part)
+    {
+        var body = new StackPanel();
+        var styles = new[] { DollGaugeStyle.Bar, DollGaugeStyle.Pie, DollGaugeStyle.Icons };
+        var style = new ComboBox { Width = 200, ItemsSource = new[] { "Bar", "Pie", "Icons (hearts...)" }, SelectedIndex = Array.IndexOf(styles, part.BarStyle) };
+        style.SelectionChanged += (_, _) => { part.BarStyle = styles[Math.Max(0, style.SelectedIndex)]; ShowPartProps(); Redraw(); };
+        body.Children.Add(Labeled("Drawn as", style));
+        switch (part.BarStyle)
+        {
+            case DollGaugeStyle.Bar:
+            {
+                var ways = new[] { (false, false), (false, true), (true, false), (true, true) };
+                var fills = new ComboBox { Width = 150, ItemsSource = new[] { "Left to right", "Right to left", "Bottom up", "Top down" }, SelectedIndex = Array.IndexOf(ways, (part.Vertical, part.ReverseFill)) };
+                fills.SelectionChanged += (_, _) => { (part.Vertical, part.ReverseFill) = ways[Math.Max(0, fills.SelectedIndex)]; Redraw(); };
+                body.Children.Add(Labeled("Fills", fills));
+                body.Children.Add(ColorRow(part));
+                body.Children.Add(SkinRow(part));
+                body.Children.Add(Note("Size: Width and Height above, or drag the yellow corner on the picture. Skins: the Empty bar and Full bar looks (any sprite - a mesh, liquid, chain links); " +
+                                       "only as much of the Full one shows as the value reaches. An animated sprite plays in the game."));
+                break;
+            }
+            case DollGaugeStyle.Pie:
+                body.Children.Add(ColorRow(part));
+                body.Children.Add(SkinRow(part));
+                body.Children.Add(Note("Its Empty look, and as much of its Full look as the value reaches - from the top, clockwise (no sprites: circles in its colours)."));
+                break;
+            case DollGaugeStyle.Icons:
+                body.Children.Add(IntField("One icon is worth", () => part.IconValue, v => { part.IconValue = Math.Max(1, v); Redraw(); }));
+                body.Children.Add(IntField("Icons to a row", () => part.IconsPerRow, v => { part.IconsPerRow = Math.Max(1, v); Redraw(); }));
+                body.Children.Add(IntField("Gap between them", () => part.IconGap, v => { part.IconGap = Math.Max(0, v); Redraw(); }));
+                body.Children.Add(IntField("Beats when at or below (% full; 0 = never)", () => part.IconsBeatBelow, v => { part.IconsBeatBelow = Math.Clamp(v, 0, 100); Redraw(); }));
+                body.Children.Add(Check("Flashes the hearts lost (they blink before emptying)", () => part.IconsFlashOnLoss, v => part.IconsFlashOnLoss = v));
+                body.Children.Add(ColorRow(part));
+                body.Children.Add(Note("The icon is the Empty bar look's sprite (draw it in the Sprite Editor), its frames from full to empty: 2 frames - full, empty; 3 - full, half, empty; " +
+                                       "5 - full, 75%, half, 25%, empty. Each icon shows as much as is in it. Gone when empty: give it one frame only, or leave its last frame blank. " +
+                                       "No sprite: dots in the colours above. Beats: the last heart still holding something pulses while low (as Zelda warns you)."));
+                break;
+        }
+        return new GroupBox { Header = "Look", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
     }
 
     // ================= Drawing =================
@@ -783,6 +954,14 @@ public class PaperDollEditorWindow : Window
                 Canvas.SetLeft(outline, (PageMargin + part.X) * z - 1);
                 Canvas.SetTop(outline, (PageMargin + part.Y) * z - 1);
                 _canvas.Children.Add(outline);
+                if (Resizable(part))
+                {
+                    var r = GripRect(part);
+                    var grip = new Rectangle { Width = r.Width, Height = r.Height, Fill = Brushes.Yellow, Stroke = Brushes.Black, StrokeThickness = 1, IsHitTestVisible = false };
+                    Canvas.SetLeft(grip, r.X);
+                    Canvas.SetTop(grip, r.Y);
+                    _canvas.Children.Add(grip);
+                }
             }
             if (_showNames.IsChecked == true || picked)
             {
@@ -804,7 +983,8 @@ public class PaperDollEditorWindow : Window
         if (DollPart.IsControlKind(part.Kind)) // drawn as in play (DollControls), still frames, at this zoom
         {
             int? bar = part.Kind == DollPartKind.ProgressBar && part.ShowsPartId >= 0 && design.Part(part.ShowsPartId) is { } source ? source.StartValue : null;
-            var control = DollControls.Build(part, DollControls.StartOf(part), _sprites, sprite => DollLook.Frame(sprite) is { } frame ? Pixel(frame, frame.PixelWidth, frame.PixelHeight, 1) : new Border(), bar);
+            int? barMax = part.StatId >= 0 && part.MaxStatId >= 0 ? Math.Max(part.Min + 1, part.Max) : null; // full at another stat: shown against its own Max here
+            var control = DollControls.Build(part, DollControls.StartOf(part), _sprites, sprite => DollLook.Frame(sprite) is { } frame ? Pixel(frame, frame.PixelWidth, frame.PixelHeight, 1) : new Border(), bar, barMax);
             control.LayoutTransform = new ScaleTransform(z, z);
             return control;
         }
@@ -841,6 +1021,12 @@ public class PaperDollEditorWindow : Window
                 int value = DollLook.DisplayValue(part, design, p => p.StartValue);
                 var sprite = DollLook.LookSprite(part, 0, _sprites);
                 int min = part.ShowsPartId >= 0 && design.Part(part.ShowsPartId) is { } source ? source.Min : part.Min;
+                if (part.FollowsStat) // following a stat: frames from empty to full by how full it is
+                {
+                    int count = Math.Max(1, sprite?.Frames.Count ?? 1);
+                    value = (int)Math.Round(Math.Clamp((part.StartValue - part.Min) / (double)Math.Max(1, part.Max - part.Min), 0, 1) * (count - 1));
+                    min = 0;
+                }
                 if (DollLook.Frame(sprite, value - min) is { } frame) holder.Children.Add(Pixel(frame, frame.PixelWidth, frame.PixelHeight, z));
                 else holder.Children.Add(Dashed(size, z, Brushes.SlateGray, $"= {value}"));
                 return holder;
@@ -914,6 +1100,12 @@ public class PaperDollEditorWindow : Window
     {
         _canvas.Focus();
         var p = e.GetPosition(_canvas);
+        if (Part is { } sized && Resizable(sized) && GripRect(sized).Contains(p)) // its yellow corner: resize
+        {
+            _resize = (p, sized.Width, sized.Height);
+            _canvas.CaptureMouse();
+            return;
+        }
         // The picked part keeps the click while it's under the mouse, so a small part on top of it can't steal a drag.
         var hit = Part is { } picked && PartContains(picked, p) ? picked : PartAt(p);
         if (hit is null) return;
@@ -935,6 +1127,15 @@ public class PaperDollEditorWindow : Window
 
     private void Canvas_MouseMove(object sender, MouseEventArgs e)
     {
+        if (_resize is { } resize && Part is { } resized && e.LeftButton == MouseButtonState.Pressed)
+        {
+            var at = e.GetPosition(_canvas);
+            resized.Width = Math.Max(4, resize.Width + (int)Math.Round((at.X - resize.Start.X) / Zoom));
+            resized.Height = Math.Max(4, resize.Height + (int)Math.Round((at.Y - resize.Start.Y) / Zoom));
+            Redraw();
+            return;
+        }
+        if (_drag is null) _canvas.Cursor = Part is { } hovered && Resizable(hovered) && GripRect(hovered).Contains(e.GetPosition(_canvas)) ? Cursors.SizeNWSE : null;
         if (_drag is not { } drag || Part is not { } part || e.LeftButton != MouseButtonState.Pressed) return;
         var p = e.GetPosition(_canvas);
         part.X = drag.X + (int)Math.Round((p.X - drag.Start.X) / Zoom);

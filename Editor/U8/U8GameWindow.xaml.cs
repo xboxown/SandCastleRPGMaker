@@ -90,7 +90,7 @@ public partial class U8GameWindow : Window
     /// </summary>
     private double _playerPixelX;
     private double _playerPixelY;
-    private SpriteDirection _playerFacing = SpriteDirection.South;
+    private SpriteDirection _playerFacing = SpriteDirection.SouthEast; // the world's south-east: facing down the screen (its South slot)
     private CharacterDefinition? _player;
     private PoseDefinition? _idlePose;
     private PoseDefinition? _walkingPose;
@@ -513,7 +513,7 @@ public partial class U8GameWindow : Window
         if (_player is null || pose is null) return null;
         if (!_player.PoseSprites.TryGetValue(pose.Id, out var assignment)) return null;
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
-        var link = assignment.Resolve(_playerFacing);
+        var link = assignment.Resolve(ScreenSlot(_playerFacing)); // the slot for the way they face on the screen (U8GameWindow.U8Movement.cs)
         return link is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);
     }
 
@@ -528,7 +528,10 @@ public partial class U8GameWindow : Window
         _playerImage.Height = quantH;
         SetU8Anchor(_playerImage, sprite); // its Origin on its feet (Pentagram's frame offset; U8GameWindow.U8Anchor.cs)
         SnapPlayerPosition();
-        _playerAnimator = new SpriteAnimator(sprite, _playerImage, _resources, volume);
+        var animator = new SpriteAnimator(sprite, _playerImage, _resources, volume);
+        _playerAnimator = animator;
+        FitToFrame(_playerImage, sprite, 0); // each frame at its own size, feet kept (U8GameWindow.U8Anchor.cs)
+        animator.Ticked += _ => FitToFrame(_playerImage, sprite, animator.FrameIndex);
         _currentAppliedPose = pose;
     }
 
@@ -693,6 +696,7 @@ public partial class U8GameWindow : Window
         BringPaperdollToFront(gump);
         RefreshPaperdollGump(gump);
         WatchPaperdollLabels();
+        OpenDollsWithInventory(gump); // its "opens with the inventory" paperdolls (DollLinks.cs)
     }
 
     /// <summary>Real, unified focus order, per spec - a container gump is just as real a "topmost" candidate for Escape as a character's own paperdoll, so both kinds share this one list instead of Escape only ever knowing about paperdolls. Bringing a gump to front (of either kind) moves it to the end here; closing a gump (of either kind, whether by its own exit control or by Escape) removes it here too.</summary>
@@ -725,6 +729,7 @@ public partial class U8GameWindow : Window
         foreach (var animator in gump.ItemAnimators) animator.Stop();
         gump.ItemAnimators.Clear();
         if (gump.BackpackGump is not null) CloseBackpackGump(gump);
+        CloseDollsWithInventory(gump); // DollLinks.cs
         PaperdollGumpsCanvas.Children.Remove(gump.GumpBorder);
         _openPaperdolls.Remove(gump);
         UntrackGumpFocus(gump);
@@ -822,7 +827,6 @@ public partial class U8GameWindow : Window
             gump.BodyCanvas.Background = new SolidColorBrush(Color.FromArgb(238, 26, 26, 26));
         }
 
-        AddU8PaperdollStats(gump); // Ultima 8: STR INT DEX ARMR HITS MANA WGHT beside the body (U8GameWindow.U8Paperdoll.cs)
 
         foreach (var slot in Enum.GetValues<EquipmentSlot>().Where(character.Paperdoll.IsSlotShown)) // a slot turned off isn't drawn
         {
@@ -907,9 +911,9 @@ public partial class U8GameWindow : Window
             double max = ItemWeights.MaxCarry(Stat(character, BuiltInStatKind.Strength, 10));
             if (pd.WeightCurrent.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightCurrent, $"{Math.Round(carried):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             if (pd.WeightMax.Enabled) { var e = PaperdollReadouts.Readout(pd.WeightMax, $"{Math.Round(max):0}", _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
-            if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
+            if (pd.WeightGauge.Enabled && PaperdollReadouts.Gauge(pd.WeightGauge, max <= 0 ? 0 : carried / max, _sprites, paperdollItemCounterScale, carried, max) is { } gaugeVisual) { Panel.SetZIndex(gaugeVisual, 15); gump.BodyCanvas.Children.Add(gaugeVisual); }
             // Free text and variable numbers (Paperdoll layout > Text and numbers).
-            foreach (var label in pd.Labels) { var e = PaperdollReadouts.Readout(label, PaperdollLabelText(label), _sprites, paperdollItemCounterScale); Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
+            foreach (var label in pd.Labels) { if (PaperdollLabelVisual(label, character, paperdollItemCounterScale) is not { } e) continue; Panel.SetZIndex(e, 15); gump.BodyCanvas.Children.Add(e); }
             gump.LabelsShown = LabelsSignature(character);
         }
 
@@ -917,8 +921,16 @@ public partial class U8GameWindow : Window
 
         // The real exit button, per spec - a genuine 2-frame sprite, not a text glyph, positioned top-right of the body. Its own MouseLeftButtonDown/Up already mark themselves Handled (see BuildExitButton), so it never also triggers the body's drag handler.
         var exitButton = BuildExitButton(character, () => ClosePaperdollGump(gump));
-        Canvas.SetLeft(exitButton, 320 - 28);
-        Canvas.SetTop(exitButton, 4);
+        // Where the Paperdoll layout puts it (the top-right corner by default); at its own size, or in a 24 x 24 box.
+        if (character.Paperdoll.ExitButtonOwnSize && exitButton.Source is System.Windows.Media.Imaging.BitmapSource own)
+        {
+            exitButton.Width = own.PixelWidth * paperdollItemCounterScale;
+            exitButton.Height = own.PixelHeight * paperdollItemCounterScale;
+            exitButton.Stretch = Stretch.Fill;
+            RenderOptions.SetBitmapScalingMode(exitButton, BitmapScalingMode.NearestNeighbor);
+        }
+        Canvas.SetLeft(exitButton, character.Paperdoll.ExitButtonX);
+        Canvas.SetTop(exitButton, character.Paperdoll.ExitButtonY);
         Panel.SetZIndex(exitButton, 20);
         gump.BodyCanvas.Children.Add(exitButton);
 
@@ -1793,6 +1805,8 @@ public partial class U8GameWindow : Window
         {
             GameFrame(deltaSeconds);
             UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
+            UpdateDollStats(deltaSeconds * 1000); // paperdoll gauges following a stat: drawn again when it changes (Dolls.cs)
+            UpdateU8Pointer(); // Ultima 8's arrows: walking, stepping, running, combat - else the hand (U8GameWindow.Pointer.cs)
         }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }
@@ -1820,11 +1834,17 @@ public partial class U8GameWindow : Window
         UpdateFallU8(); // walked off a ledge and landed: hurt by the height (U8GameWindow.U8Movement.cs)
         if (UpdateU8Jump(deltaSeconds)) _wasMovingLastFrame = false; // in the air (U8GameWindow.U8Movement.cs)
         else if (DriveFrame(deltaSeconds)) _wasMovingLastFrame = false; // at a vehicle's controls: the keys drive it (U8GameWindow.Vehicles.cs)
+        else if (_u8Step is not null && !IsIncapacitated(_player!)) // a step under way finishes, the button held or not (U8GameWindow.U8Movement.cs)
+        {
+            ContinueU8Step(deltaSeconds);
+            _wasMovingLastFrame = true;
+        }
         else if (!IsIncapacitated(_player!) && TryGetU8Direction(out int dx, out int dy)) // Ultima 8: the screen's way, 8 directions, the right mouse button too
         {
             CancelPlayerWalk(); // the keys take over from walking to a chair or bed
             CancelPendingSit();
-            StepPlayerContinuous(dx, dy, deltaSeconds);
+            if (_u8SpeedFactor <= U8StepFactor) StartU8Step(dx, dy); // the pointer close: a whole step at a time
+            else StepPlayerContinuous(dx, dy, deltaSeconds);
             _wasMovingLastFrame = true;
         }
         else if (_playerWalkPath is not null && !IsIncapacitated(_player))
@@ -1840,7 +1860,7 @@ public partial class U8GameWindow : Window
         }
         else if (_wasMovingLastFrame)
         {
-            ApplyPoseSprite(_idlePose); // genuinely stopped now - nothing held any more
+            ApplyPoseSprite(U8RestPose()); // genuinely stopped now - nothing held any more (in combat: the combat stance)
             _wasMovingLastFrame = false;
         }
         _u8Running = _wasMovingLastFrame && _u8SpeedFactor >= U8RunFactor;
@@ -1876,12 +1896,14 @@ public partial class U8GameWindow : Window
     {
         if (PlayerSeated) { StandUp(_player!); return; } // moving gets you up off the chair or bed
         var newFacing = FacingOf(dx, dy); // Ultima 8: eight directions (the world's - north is up-right on the screen)
-        if (newFacing != _playerFacing)
+        // In combat, the way straight behind backs away facing the foe (Animation::retreat) - else they turn and advance.
+        bool retreating = _combatMode && _u8SpeedFactor < U8RunFactor && newFacing == Behind(_playerFacing);
+        if (newFacing != _playerFacing && !retreating)
         {
             _playerFacing = newFacing;
-            ApplyPoseSprite(_idlePose); // turning to face a new direction shows Idle in that direction, even before we know whether the move itself succeeds
+            ApplyPoseSprite(U8RestPose()); // turning to face a new direction shows Idle (the combat stance) that way, even before we know whether the move itself succeeds
         }
-        var movePose = U8MovePose(); // walking, running, a step
+        var movePose = U8MovePose(retreating); // walking, running, a step; in combat advancing or retreating
         if (_currentAppliedPose != movePose) ApplyPoseSprite(movePose);
 
         double distance = PlayerTilesPerSecond * _u8SpeedFactor * _tileWidth * deltaSeconds; // _tileWidth/_tileHeight share one grid, so one distance serves both axes
@@ -2314,10 +2336,22 @@ public partial class U8GameWindow : Window
     {
         var shown = SetIdentifyText(name);
         Panel.SetZIndex(shown, AboveEverythingZIndex); // above everything on the map, so nothing covers the name
-        Canvas.SetLeft(shown, cellX * _tileWidth);
-        double topAnchor = visual is not null ? Canvas.GetTop(visual) : cellY * _tileHeight;
-        Canvas.SetTop(shown, topAnchor - (shown == IdentifyFontImage ? shown.Height + 4 : 20));
+        // Ultima 8's diamond view: centred just over where the picture really is on screen (not its square-map cell).
+        U8ProjectionCanvas.SetPlacement(shown, U8Placement.Screen);
         shown.Visibility = Visibility.Visible;
+        shown.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        double labelW = shown == IdentifyFontImage ? shown.Width : shown.DesiredSize.Width;
+        double labelH = shown == IdentifyFontImage ? shown.Height : shown.DesiredSize.Height;
+        Rect drawn;
+        if (visual is not null && visual.IsVisible && visual.ActualWidth > 0 && GameCanvas.IsAncestorOf(visual))
+            drawn = visual.TransformToAncestor(GameCanvas).TransformBounds(new Rect(0, 0, visual.ActualWidth, visual.ActualHeight));
+        else
+        {
+            var feet = GameCanvas.ToScreen((cellX + 0.5) * _tileWidth, (cellY + 0.5) * _tileHeight);
+            drawn = new Rect(feet.X, feet.Y - _tileHeight, 0, _tileHeight);
+        }
+        Canvas.SetLeft(shown, Math.Round(drawn.X + drawn.Width / 2 - labelW / 2));
+        Canvas.SetTop(shown, Math.Round(drawn.Y - labelH - 4));
 
         _identifyTimer?.Stop();
         _identifyTimer = new DispatcherTimer { Interval = TimeSpan.FromSeconds(2) };

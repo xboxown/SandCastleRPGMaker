@@ -446,15 +446,11 @@ public partial class GameTestWindow
         if (WhatIsHappening() is { } happening) { SaveScreenError(screen, GameErrors.CantSaveNow, happening, button); return; }
         try
         {
+            BeginDiskProgress(); // the saving progress paperdoll, if there is one (DiskProgress.cs)
             var data = CaptureSave();
+            ReportDiskProgress(0.15);
             var info = new SaveSlotInfo { Name = name, SavedAtUtc = DateTime.UtcNow, GameTime = _clock.ToString(), PlayerName = _player?.Name ?? string.Empty, Slot = slot };
-            GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing);
-            if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.SavedDollDesignId) is { } saved)
-            {
-                StatusText.Text = $"Game saved: \"{name}\".";
-                OpenForm(saved, modal: true, answered: null, fresh: true); // the maker's own "Game saved" paperdoll, closed by its own button
-            }
-            else SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
+            GameSaveStore.Write(screen.ProjectId, data, info, screen.Screenshot, existing, f => ReportDiskProgress(0.15 + 0.85 * f));
             // Exult's Newfile_gump::save: the screen stays open, nothing is picked any more (selected = -3) and the slot shows its new save
             screen.Saves = GameSaveStore.List(screen.ProjectId);
             screen.PickedSlot = 0;
@@ -462,9 +458,19 @@ public partial class GameTestWindow
             screen.Name = string.Empty;
             screen.Confirming = null;
             RefreshDollGump(screen.Gump);
+            EndDiskProgress(() =>
+            {
+                if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.SavedDollDesignId) is { } saved)
+                {
+                    StatusText.Text = $"Game saved: \"{name}\".";
+                    OpenForm(saved, modal: true, answered: null, fresh: true); // the maker's own "Game saved" paperdoll, closed by its own button
+                }
+                else SaveScreenSay(screen, $"Game saved: \"{name}\".", button);
+            });
         }
         catch (Exception ex)
         {
+            CancelDiskProgress();
             SaveScreenError(screen, GameErrors.Classify(ex, GameErrors.SaveFailed), ex.Message, button);
         }
     }
@@ -494,13 +500,16 @@ public partial class GameTestWindow
     {
         if (screen.PickedSave is not { } save) { SaveScreenError(screen, screen.PickedSlot > 0 ? GameErrors.EmptySlot : GameErrors.PickSaveToLoad, "", null); return; }
         GameSaveData data;
-        try { data = GameSaveStore.Read(screen.ProjectId, save); }
+        BeginDiskProgress(); // the loading progress paperdoll, if there is one (DiskProgress.cs)
+        try { data = GameSaveStore.Read(screen.ProjectId, save, ReportDiskProgress); }
         catch (Exception ex)
         {
+            CancelDiskProgress();
             GameError(GameErrors.ClassifyLoad(ex), ex.Message);
             return;
         }
         LoadGame(data, $"Loaded \"{save.Name}\".");
+        EndDiskProgress();
     }
 
     private void DeleteFromScreen(SaveScreen screen, DollPart part)

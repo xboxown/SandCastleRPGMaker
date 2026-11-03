@@ -22,6 +22,35 @@ public static class MousePointerCatalog
         (MousePointerKind.Attack, "Attack", "Shown instead of the hand while in combat mode (C), so you know a double-click attacks (Exult shows its red combat arrows)."),
     };
 
+    /// <summary>
+    /// Ultima 8 projects: the direction arrows, as Pentagram's mouse (Mouse::getMouseFrame) - an arrow from the Avatar toward
+    /// the pointer: while walking with the right mouse button, short (a step), medium (a walk) or long (a run) by how far the
+    /// pointer is; in combat mode the combat arrows (not while running). Step and Run may be left empty: Walk's arrows then.
+    /// </summary>
+    public static readonly (string Set, string Name, string When)[] U8ArrowSets =
+    {
+        ("Walk", "Walking", "While walking with the right mouse button held: the arrow points the way the Avatar goes."),
+        ("Step", "Stepping (optional)", "The pointer close to the Avatar - a step (Pentagram's short arrows). Empty: the walking arrows."),
+        ("Run", "Running (optional)", "The pointer far from the Avatar - a run (Pentagram's long arrows). Empty: the walking arrows."),
+        ("Combat", "Combat mode", "In combat mode (C), always - pointing from the Avatar to the pointer (Pentagram's red combat arrows). Empty: the walking arrows."),
+    };
+
+    /// <summary>The eight directions an arrow points, as on the screen (North: up the screen).</summary>
+    public static readonly SpriteDirection[] ArrowDirections =
+        { SpriteDirection.North, SpriteDirection.NorthEast, SpriteDirection.East, SpriteDirection.SouthEast, SpriteDirection.South, SpriteDirection.SouthWest, SpriteDirection.West, SpriteDirection.NorthWest };
+
+    public static string ArrowKey(string set, SpriteDirection direction) => $"{set}.{direction}";
+
+    public static string ArrowLabel(SpriteDirection direction) => direction switch
+    {
+        SpriteDirection.North => "↑ Up", SpriteDirection.NorthEast => "↗ Up-right", SpriteDirection.East => "→ Right", SpriteDirection.SouthEast => "↘ Down-right",
+        SpriteDirection.South => "↓ Down", SpriteDirection.SouthWest => "↙ Down-left", SpriteDirection.West => "← Left", _ => "↖ Up-left"
+    };
+
+    /// <summary>A refusal's own pointer (Too Heavy, Out of Range...): in an Ultima 8 project, with no sprite of its own, the X shows instead.</summary>
+    public static bool IsRefusal(MousePointerKind kind) =>
+        kind is MousePointerKind.TooHeavy or MousePointerKind.OutOfRange or MousePointerKind.OutOfAmmo or MousePointerKind.WontFit or MousePointerKind.Blocked;
+
     /// <summary>Exult (mouse.cc Mouse::flash_shape): a flashed pointer shows for 600 ms, then the previous pointer returns.</summary>
     public const int FlashMilliseconds = 600;
 

@@ -57,7 +57,8 @@ public partial class SpriteFrameEditorWindow
         var settings = WeaponSettings;
         var row = new WrapPanel { Margin = new Thickness(6, 0, 0, 0) };
         var place = new System.Windows.Controls.Primitives.ToggleButton { Content = "Set hand point", ToolTip = "Then click the picture: where this frame's weapon hand is - the weapon held is drawn with its grip there", Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(6, 0, 6, 0) };
-        place.Checked += (_, _) => { _placingHand = true; OverlayCanvas.Background = Brushes.Transparent; OverlayCanvas.Cursor = Cursors.Cross; };
+        _handToggle = place;
+        place.Checked += (_, _) => { _placingHand = true; if (_standToggle is { IsChecked: true } stand) stand.IsChecked = false; OverlayCanvas.Background = Brushes.Transparent; OverlayCanvas.Cursor = Cursors.Cross; };
         place.Unchecked += (_, _) => { _placingHand = false; OverlayCanvas.Background = null; OverlayCanvas.Cursor = null; };
         row.Children.Add(place);
         var none = new Button { Content = "No weapon here", ToolTip = "This frame shows no weapon (lying down, asleep) - Exult's 255", Margin = new Thickness(0, 0, 4, 0), Padding = new Thickness(6, 0, 6, 0) };
@@ -78,6 +79,7 @@ public partial class SpriteFrameEditorWindow
         _handText = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Opacity = 0.75 };
         row.Children.Add(_handText);
         panel.Children.Add(row);
+        if (ProjectSession.IsUltima8) SetUpStandPoints(panel); // Ultima 8 projects: each frame's stand point (SpriteFrameEditorWindow.StandPoint.cs)
         OverlayCanvas.MouseLeftButtonDown += (_, e) =>
         {
             if (!_placingHand || !TryPixelUnderMouse(e, out int x, out int y)) return;

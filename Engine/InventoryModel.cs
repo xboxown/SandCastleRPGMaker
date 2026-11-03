@@ -134,6 +134,10 @@ public class PaperdollDefinition
     /// <summary>Real, configurable exit-button art, per spec - a 2-frame sprite (frame 1 = unpressed, frame 2 = pressed while held down, returning to frame 1 on release before the gump actually closes), picked from the sprite library exactly like the body is, rather than a hardcoded placeholder glyph.</summary>
     public string ExitButtonSpriteGroup { get; set; } = string.Empty;
     public string ExitButtonSpriteName { get; set; } = string.Empty;
+    /// <summary>Where the close button is on the paperdoll (its 320 x 400 layout; the top-right corner by default), and whether it's drawn at its own size (else in a 24 x 24 box).</summary>
+    public double ExitButtonX { get; set; } = 292;
+    public double ExitButtonY { get; set; } = 4;
+    public bool ExitButtonOwnSize { get; set; }
 
     /// <summary>Real, per spec - plays once the player releases an item onto a real slot on this character's own paperdoll (dropping it back into a hand, say), same real principle as a container's own Navigate Sound.</summary>
     public int NavigateSoundResourceId { get; set; } = -1;
@@ -169,6 +173,8 @@ public class PaperdollDefinition
 
     /// <summary>The stats paperdoll (Z, or the heart).</summary>
     public StatsDollDefinition StatsDoll { get; set; } = new();
+    /// <summary>PaperDoll Editor paperdolls this inventory brings up: by a button on it, or with it (Ultima 8's hit points / mana bars).</summary>
+    public List<PaperdollDollLink> DollLinks { get; set; } = new();
 
     private int _nextCustomSlotId = 1;
     /// <summary>Never serialized (a plain field, not a property) - resynced after load the same real way every other per-instance id counter in this project already is, from whatever the highest existing id actually is.</summary>
@@ -206,18 +212,27 @@ public class PaperdollReadout
     public string Tint { get; set; } = string.Empty;
 }
 
-public enum PaperdollLabelKind { Text, Number }
+public enum PaperdollLabelKind { Text, Number, Stat }
 
 /// <summary>A label placed on the paperdoll, drawn like the weight numbers (font, size, tint, alignment): text typed in, or a global variable's value, kept up to date in play.</summary>
 public class PaperdollLabel : PaperdollReadout
 {
     public PaperdollLabelKind Kind { get; set; } = PaperdollLabelKind.Text;
     public string Text { get; set; } = "Text";
+    /// <summary>Stat: which of this character's stats (built-in or custom), as a number or a gauge (bar, pie, icons, sprite frames).</summary>
+    public int StatId { get; set; } = -1;
+    public StatShowAs ShowAs { get; set; } = StatShowAs.Number;
+    /// <summary>A stat gauge's range: from Min to Max, or to another stat's value (Hits out of Strength).</summary>
+    public int Min { get; set; }
+    public int Max { get; set; } = 30;
+    public int MaxStatId { get; set; } = -1;
+    /// <summary>A stat gauge's look; its X / Y follow the label's.</summary>
+    public PaperdollGauge Gauge { get; set; } = new() { Enabled = true };
     /// <summary>Number: the global variable shown (Variables), by id; -1 none.</summary>
     public int VariableId { get; set; } = -1;
 }
 
-public enum GaugeKind { Bar, Pie, SpriteFrames }
+public enum GaugeKind { Bar, Pie, SpriteFrames, Icons }
 
 /// <summary>An amount shown as a picture (how full the pack is): a bar filling left to right, a pie, or a sprite whose frames go from empty (first) to full (last) - like the bundle pictures of gold and arrows.</summary>
 public class PaperdollGauge
@@ -231,4 +246,8 @@ public class PaperdollGauge
     public string FillColor { get; set; } = "#C8A040";
     public string BackColor { get; set; } = "#402818";
     public SpriteLink Sprite { get; set; } = new();
+    /// <summary>Icons (hearts): what one is worth, how many to a row, the gap between them. The sprite's frames go from full to empty.</summary>
+    public int IconValue { get; set; } = 2;
+    public int IconsPerRow { get; set; } = 10;
+    public int IconGap { get; set; } = 1;
 }

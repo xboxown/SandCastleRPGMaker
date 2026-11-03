@@ -87,8 +87,76 @@ internal static class PaperdollReadouts
         };
     }
 
-    /// <summary>A gauge at a fraction (0 empty .. 1 full).</summary>
-    public static FrameworkElement? Gauge(PaperdollGauge g, double fraction, SpriteDatabase sprites, double counterScale)
+    /// <summary>A stat on a paperdoll: its number (in the label's font), or a gauge of it from Min to Max (or to another stat).</summary>
+    public static FrameworkElement? StatLabel(PaperdollLabel l, string text, Func<int, double> statValue, SpriteDatabase sprites, double counterScale)
+    {
+        if (l.ShowAs == StatShowAs.Number) return Readout(l, text, sprites, counterScale);
+        double value = statValue(l.StatId), max = l.MaxStatId >= 0 ? statValue(l.MaxStatId) : l.Max;
+        var g = l.Gauge;
+        g.X = l.X;
+        g.Y = l.Y;
+        g.Kind = KindOf(l.ShowAs);
+        return Gauge(g, max - l.Min <= 0 ? 0 : (value - l.Min) / (max - l.Min), sprites, counterScale, value - l.Min, max - l.Min);
+    }
+
+    public static GaugeKind KindOf(StatShowAs showAs) => showAs switch
+    {
+        StatShowAs.Pie => GaugeKind.Pie,
+        StatShowAs.SpriteFrames => GaugeKind.SpriteFrames,
+        StatShowAs.Icons => GaugeKind.Icons,
+        _ => GaugeKind.Bar
+    };
+
+    /// <summary>
+    /// Icons (hearts, Zelda's way): one per IconValue of the range, IconsPerRow to a row; each shows as much as is in it - the
+    /// sprite's frames from full (frame 1) to empty (the last): 2 frames full / empty, 3 with a half, 5 quarters. One frame
+    /// only: empty ones aren't drawn. No sprite: circles in the full and empty colours.
+    /// </summary>
+    private static FrameworkElement Icons(PaperdollGauge g, double value, double range, SpriteDatabase sprites, double counterScale)
+    {
+        int per = Math.Max(1, g.IconValue), count = Math.Clamp((int)Math.Ceiling(Math.Max(0, range) / per), 0, 200);
+        int perRow = Math.Max(1, g.IconsPerRow);
+        var sprite = ObjectLooks.Find(sprites, g.Sprite.SpriteGroup, g.Sprite.SpriteName);
+        int frames = sprite?.Frames.Count ?? 0;
+        var first = frames > 0 ? Load(sprite!.Frames[0].FilePath) : null;
+        double w = first is not null ? first.PixelWidth * counterScale : Math.Max(2, g.Height);
+        double h = first is not null ? first.PixelHeight * counterScale : Math.Max(2, g.Height);
+        double gap = Math.Max(0, g.IconGap) * (first is not null ? counterScale : 1);
+        var canvas = new Canvas
+        {
+            Width = Math.Max(1, Math.Min(count, perRow) * (w + gap) - gap),
+            Height = Math.Max(1, (int)Math.Ceiling(count / (double)perRow) * (h + gap) - gap),
+            Background = Brushes.Transparent, IsHitTestVisible = false
+        };
+        for (int i = 0; i < count; i++)
+        {
+            double inIt = Math.Clamp((value - i * per) / per, 0, 1);
+            FrameworkElement icon;
+            if (frames > 0)
+            {
+                if (frames == 1 && inIt <= 0) continue;
+                int frame = frames == 1 ? 0 : (int)Math.Round((1 - inIt) * (frames - 1));
+                if (Load(sprite!.Frames[frame].FilePath) is not { } bitmap) continue;
+                var image = new Image { Source = bitmap, Width = w, Height = h, Stretch = Stretch.Fill, IsHitTestVisible = false };
+                RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+                icon = image;
+            }
+            else
+            {
+                var dot = new Grid { Width = w, Height = h, IsHitTestVisible = false };
+                dot.Children.Add(new Ellipse { Fill = Brush(g.BackColor) ?? Brushes.DimGray });
+                if (inIt > 0) dot.Children.Add(new Ellipse { Fill = Brush(g.FillColor) ?? Brushes.Crimson, Clip = new RectangleGeometry(new Rect(0, 0, w * inIt, h)) });
+                icon = dot;
+            }
+            Canvas.SetLeft(icon, i % perRow * (w + gap));
+            Canvas.SetTop(icon, i / perRow * (h + gap));
+            canvas.Children.Add(icon);
+        }
+        return canvas;
+    }
+
+    /// <summary>A gauge at a fraction (0 empty .. 1 full); icons count the value itself, out of the range.</summary>
+    public static FrameworkElement? Gauge(PaperdollGauge g, double fraction, SpriteDatabase sprites, double counterScale, double value = 0, double range = 0)
     {
         fraction = Math.Clamp(double.IsNaN(fraction) ? 0 : fraction, 0, 1);
         FrameworkElement? element = null;
@@ -121,6 +189,9 @@ internal static class PaperdollReadouts
                 element = canvas;
                 break;
             }
+            case GaugeKind.Icons:
+                element = Icons(g, value, range, sprites, counterScale);
+                break;
             case GaugeKind.SpriteFrames:
             {
                 var sprite = ObjectLooks.Find(sprites, g.Sprite.SpriteGroup, g.Sprite.SpriteName);

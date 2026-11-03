@@ -255,7 +255,7 @@ public partial class MainWindow
         var character = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
         var bitmap = character is null ? null : LoadCharacterFrame(character, placed.PoseId, placed.Facing);
         FrameworkElement visual;
-        double width = _tileset.TileWidth, height = _tileset.TileHeight;
+        double width = CellW, height = CellH;
         string tip = character is null ? $"Character #{placed.CharacterId} (not found)" : $"{character.Name} - right-click for Pose, Facing, Cut, Copy, Paste, Delete";
         if (bitmap is not null)
         {
@@ -268,6 +268,11 @@ public partial class MainWindow
         else
         {
             visual = BuildLetteredItemMarker("C", Color.FromArgb(200, 160, 60, 160), Brushes.Orchid, tip);
+        }
+        if (IsUltima8 && character is not null)
+        {
+            StandLikeU8Character(visual, ResolveCharacterSprite(character, placed.PoseId, placed.Facing), bitmap); // as its game draws it (MainWindow.U8.cs)
+            if (bitmap is not null) (width, height) = (bitmap.PixelWidth, bitmap.PixelHeight);
         }
         PositionQuantizedVisual(visual, placed.X, placed.Y, width, height);
         Panel.SetZIndex(visual, CharacterZIndex); // above objects and items, below the event/start markers
@@ -294,8 +299,7 @@ public partial class MainWindow
             BorderBrush = Brushes.Yellow, BorderThickness = new Thickness(1.5), IsHitTestVisible = false,
             Width = visual.Width + 4, Height = visual.Height + 4
         };
-        Canvas.SetLeft(_characterSelectionVisual, Canvas.GetLeft(visual) - 2);
-        Canvas.SetTop(_characterSelectionVisual, Canvas.GetTop(visual) - 2);
+        PlaceOutline(_characterSelectionVisual, visual, 2); // round it wherever it's drawn (MainWindow.U8.cs)
         Panel.SetZIndex(_characterSelectionVisual, SelectionZIndex);
         MapCanvas.Children.Add(_characterSelectionVisual);
     }

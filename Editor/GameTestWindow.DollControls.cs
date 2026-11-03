@@ -147,7 +147,10 @@ public partial class GameTestWindow
         bool typing = _typing is { } t && t.Gump == gump && t.Part.Id == part.Id;
         bool open = IsOpenDropDown(gump, part);
         int? bar = part.Kind == DollPartKind.ProgressBar && part.ShowsPartId >= 0 && gump.Design.Part(part.ShowsPartId) is { } source ? gump.State.Of(source).Value : null;
-        return DollControls.Build(part, new DollControls.Shown(runtime.Look, runtime.Value, runtime.Text, typing, open), _sprites, sprite => AnimatedLook(gump, sprite), bar);
+        int? barMax = null;
+        if (part.Kind == DollPartKind.ProgressBar && DollStat(gump, part) is { } stat) (bar, barMax) = ((int)Math.Round(stat.Value), (int)Math.Round(stat.Max)); // following a stat (GameTestWindow.Dolls.cs)
+        int? lostFrom = gump.LostFrom.Remove(part.Id, out int from) ? from : null; // blinks once, on this drawing
+        return DollControls.Build(part, new DollControls.Shown(runtime.Look, runtime.Value, runtime.Text, typing, open), _sprites, sprite => AnimatedLook(gump, sprite), bar, barMax, lostFrom);
     }
 
     private bool IsOpenDropDown(OpenDollGump gump, DollPart part) => _openDropDown is { } list && list.Gump == gump && list.PartId == part.Id;
