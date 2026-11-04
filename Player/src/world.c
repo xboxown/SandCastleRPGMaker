@@ -4050,7 +4050,7 @@ void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entr
     {
         const Thing *t = &things[i];
         if (t->spawned) continue;
-        if (t->gone || t->wallSetPiece) { if (t->wallSetPiece && !t->gone && t->placed) cJSON_AddItemToArray(objects, cJSON_Duplicate(t->placed, 1)); continue; }
+        if (t->gone) continue;
         int id = t->instanceId > 0 ? t->instanceId : ++top;
         cJSON_AddItemToArray(t->category == 4 ? objects : items, thing_json(t, id, extra));
     }

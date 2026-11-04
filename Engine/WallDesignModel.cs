@@ -60,3 +60,74 @@ public class WallSettings
 {
     public int DesignId { get; set; } = -1;
 }
+
+/// <summary>
+/// Wall sets in play: a set is placed in the Map Editor as one object; when
+/// the game starts it becomes its pieces, each the real object it is, standing
+/// where and as high as it was designed. The Windows games split the map they
+/// open; a player pack (Amiga, MorphOS) holds its maps already split.
+/// </summary>
+public static class WallSets
+{
+    /// <summary>A world unit in pixels (SpriteSizing.BaseUnit).</summary>
+    private const int BaseUnit = 8;
+
+    public static WallDesign? DesignOf(WorldObject? obj, ObjectDatabase objects) =>
+        obj is { Type: ObjectType.Wall, Wall.DesignId: >= 0 } ? objects.WallDesigns.FirstOrDefault(d => d.Id == obj.Wall.DesignId) : null;
+
+    /// <summary>The pieces for a placed copy facing this way, or null when the object isn't a wall set.</summary>
+    public static WallPose? PoseOf(WorldObject? obj, ObjectDatabase objects, SpriteDirection facing) =>
+        DesignOf(obj, objects)?.Resolve(WallDesign.RunOf(facing));
+
+    /// <summary>Every placed wall set on this map becomes its pieces (a save holds the pieces, so a loaded game has none left to split).</summary>
+    public static void SplitInto(MapData map, ObjectDatabase objects, int tileWidth, int tileHeight)
+    {
+        if (objects.WallDesigns.Count == 0) return;
+        var sets = map.Objects.Where(o => o.ContainerInstanceId < 0 && !o.WallSetPiece
+            && PoseOf(objects.Objects.FirstOrDefault(d => d.Id == o.ObjectId), objects, o.Facing) is not null).ToList();
+        int next = map.GetNextInstanceId(); // every piece its own number
+        foreach (var set in sets)
+        {
+            var pose = PoseOf(objects.Objects.First(d => d.Id == set.ObjectId), objects, set.Facing)!;
+            map.Objects.Remove(set);
+            var pieces = Pieces(set, pose, tileWidth, tileHeight, () => next++);
+            // The set's starting open / locked (Map Editor, right-click) is its door's; a window's shutters start as the Window object says.
+            foreach (var piece in pieces.Where(p => objects.Objects.FirstOrDefault(d => d.Id == p.ObjectId)?.Type != ObjectType.Door))
+            {
+                piece.StartsOpen = null;
+                piece.StartsLocked = null;
+            }
+            map.Objects.AddRange(pieces);
+        }
+    }
+
+    /// <summary>
+    /// The real objects a placed set is made of, in play: each piece at the
+    /// set's cell plus its offset (whole cells carried into the cell, the rest
+    /// kept as the sub-tile offset) and the set's lift plus its own. Doors and
+    /// windows take the set's starting state from the Map Editor (open,
+    /// locked).
+    /// </summary>
+    private static List<ObjectInstance> Pieces(ObjectInstance set, WallPose pose, int tileWidth, int tileHeight, Func<int> nextInstanceId)
+    {
+        int unitsX = Math.Max(1, tileWidth / BaseUnit), unitsY = Math.Max(1, tileHeight / BaseUnit);
+        var pieces = new List<ObjectInstance>();
+        foreach (var piece in pose.Pieces.Where(p => p.ObjectId >= 0))
+        {
+            int ox = set.OffsetX + piece.OffsetX, oy = set.OffsetY + piece.OffsetY;
+            int cellsX = (int)Math.Floor(ox / (double)unitsX), cellsY = (int)Math.Floor(oy / (double)unitsY);
+            pieces.Add(new ObjectInstance
+            {
+                ObjectId = piece.ObjectId,
+                InstanceId = nextInstanceId(),
+                X = set.X + cellsX, Y = set.Y + cellsY,
+                OffsetX = ox - cellsX * unitsX, OffsetY = oy - cellsY * unitsY,
+                Z = set.Z + piece.Lift,
+                Facing = set.Facing,
+                StartsOpen = set.StartsOpen, StartsLocked = set.StartsLocked, StartsLit = set.StartsLit,
+                WallSetPiece = true
+            });
+        }
+        return pieces;
+    }
+}

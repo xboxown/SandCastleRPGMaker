@@ -15,26 +15,7 @@ namespace SandcastleRpgMaker.Editor;
 public partial class U8GameWindow
 {
     /// <summary>Every placed wall set becomes its pieces (on the game's own copy of the map).</summary>
-    private void SplitWallSets()
-    {
-        if (_objects.WallDesigns.Count == 0) return;
-        var sets = _map.Objects.Where(o => o.ContainerInstanceId < 0 && !o.WallSetPiece
-            && WallLook.PoseOf(_objects.Objects.FirstOrDefault(d => d.Id == o.ObjectId), _objects, o.Facing) is not null).ToList();
-        int next = _map.GetNextInstanceId(); // every piece its own number
-        foreach (var set in sets)
-        {
-            var pose = WallLook.PoseOf(_objects.Objects.First(d => d.Id == set.ObjectId), _objects, set.Facing)!;
-            _map.Objects.Remove(set);
-            var pieces = WallLook.Pieces(set, pose, _tileWidth, _tileHeight, () => next++);
-            // The set's starting open / locked (Map Editor, right-click) is its door's; a window's shutters start as the Window object says.
-            foreach (var piece in pieces.Where(p => _objects.Objects.FirstOrDefault(d => d.Id == p.ObjectId)?.Type != ObjectType.Door))
-            {
-                piece.StartsOpen = null;
-                piece.StartsLocked = null;
-            }
-            _map.Objects.AddRange(pieces);
-        }
-    }
+    private void SplitWallSets() => WallSets.SplitInto(_map, _objects, _tileWidth, _tileHeight);
 
     /// <summary>A piece of a wall set: it stays at its designed height.</summary>
     private static bool IsWallSetPiece(object entity) => entity is ObjectInstance { WallSetPiece: true };

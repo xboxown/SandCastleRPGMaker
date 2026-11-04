@@ -27,10 +27,14 @@ public static class PlayerPack
     public static void Export(string folder, ManifestPayload project, BookDatabase books, SpriteDatabase sprites, ResourceDatabase? resources = null, VideoDatabase? videos = null, Func<string, string>? richText = null)
     {
         Directory.CreateDirectory(folder);
-        // The project as it plays: a copy, every plotted house and vehicle built into its map (as a game starts).
+        // The project as it plays: a copy, every plotted house and vehicle built into its map and every wall set split into its pieces (as a game starts).
         var game = JsonSerializer.Deserialize<ManifestPayload>(JsonSerializer.Serialize(project))!;
         foreach (var map in new[] { game.Map }.Concat(game.Worlds))
-            if (map is not null) HouseBuilder.BuildInto(map, game.Houses);
+            if (map is not null)
+            {
+                HouseBuilder.BuildInto(map, game.Houses);
+                WallSets.SplitInto(map, game.Objects, map.Tileset.TileWidth, map.Tileset.TileHeight);
+            }
         var id = project.Manifest.ProjectId;
         foreach (string old in new[] { "game.json", "sprites.json", "sounds.json" }) File.Delete(Path.Combine(folder, old)); // an older, plain pack
         foreach (string old in new[] { "pictures", "sounds" }) if (Directory.Exists(Path.Combine(folder, old))) Directory.Delete(Path.Combine(folder, old), recursive: true);

@@ -19,12 +19,10 @@ internal static class WallLook
     public readonly record struct Layout(double Width, double Height, double OriginX, double OriginY);
     private const int LiftPixels = 4;
 
-    public static WallDesign? DesignOf(WorldObject? obj, ObjectDatabase objects) =>
-        obj is { Type: ObjectType.Wall, Wall.DesignId: >= 0 } ? objects.WallDesigns.FirstOrDefault(d => d.Id == obj.Wall.DesignId) : null;
+    public static WallDesign? DesignOf(WorldObject? obj, ObjectDatabase objects) => WallSets.DesignOf(obj, objects);
 
     /// <summary>The pieces for a placed copy facing this way, or null when the object isn't a wall set.</summary>
-    public static WallPose? PoseOf(WorldObject? obj, ObjectDatabase objects, SpriteDirection facing) =>
-        DesignOf(obj, objects)?.Resolve(WallDesign.RunOf(facing));
+    public static WallPose? PoseOf(WorldObject? obj, ObjectDatabase objects, SpriteDirection facing) => WallSets.PoseOf(obj, objects, facing);
 
     /// <summary>A piece's picture: its object's sprite in its starting state, first frame.</summary>
     public static BitmapImage? PictureOf(WallPiece piece, ObjectDatabase objects, SpriteDatabase sprites)
@@ -100,35 +98,5 @@ internal static class WallLook
         bitmap.Render(drawing);
         bitmap.Freeze();
         return bitmap;
-    }
-
-    /// <summary>
-    /// The real objects a placed set is made of, in play: each piece at the
-    /// set's cell plus its offset (whole cells carried into the cell, the rest
-    /// kept as the sub-tile offset) and the set's lift plus its own. Doors and
-    /// windows take the set's starting state from the Map Editor (open,
-    /// locked).
-    /// </summary>
-    public static List<ObjectInstance> Pieces(ObjectInstance set, WallPose pose, int tileWidth, int tileHeight, Func<int> nextInstanceId)
-    {
-        int unitsX = Math.Max(1, tileWidth / SpriteSizing.BaseUnit), unitsY = Math.Max(1, tileHeight / SpriteSizing.BaseUnit);
-        var pieces = new List<ObjectInstance>();
-        foreach (var piece in pose.Pieces.Where(p => p.ObjectId >= 0))
-        {
-            int ox = set.OffsetX + piece.OffsetX, oy = set.OffsetY + piece.OffsetY;
-            int cellsX = (int)Math.Floor(ox / (double)unitsX), cellsY = (int)Math.Floor(oy / (double)unitsY);
-            pieces.Add(new ObjectInstance
-            {
-                ObjectId = piece.ObjectId,
-                InstanceId = nextInstanceId(),
-                X = set.X + cellsX, Y = set.Y + cellsY,
-                OffsetX = ox - cellsX * unitsX, OffsetY = oy - cellsY * unitsY,
-                Z = set.Z + piece.Lift,
-                Facing = set.Facing,
-                StartsOpen = set.StartsOpen, StartsLocked = set.StartsLocked, StartsLit = set.StartsLit,
-                WallSetPiece = true
-            });
-        }
-        return pieces;
     }
 }
