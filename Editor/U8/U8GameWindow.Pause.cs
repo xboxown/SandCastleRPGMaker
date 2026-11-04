@@ -63,7 +63,7 @@ public partial class U8GameWindow
             _heldDirectionKeys.Clear();
             if (_wasMovingLastFrame)
             {
-                ApplyPoseSprite(_idlePose);
+                if (!IsIncapacitated(_player)) ApplyPoseSprite(_idlePose); // dead or knocked out mid-step: they stay down
                 _wasMovingLastFrame = false;
             }
             _playerAnimator?.Pause(); // ApplyPoseSprite builds a fresh animator - freeze that one too

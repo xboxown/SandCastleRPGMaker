@@ -1069,7 +1069,7 @@ public partial class GameTestWindow
     private void FinishCharacterReceive(CharacterDefinition character, string name)
     {
         // The one place an item lands on a character - fresh pickup or a slot-to-slot move alike - so the paperdoll's own Navigate Sound plays here.
-        PlayNavigateSound(character.Paperdoll.NavigateSoundResourceId);
+        if (!_settingUpScenario) PlayNavigateSound(character.Paperdoll.NavigateSoundResourceId);
         StatusText.Text = $"Picked up \"{name}\".";
         RefreshAfterMove();
         // Inventory possession just changed, so every map event gets its chance to react.

@@ -27,15 +27,26 @@ public partial class GameTestWindow
         foreach (var rule in scenario.Characters)
         {
             if (_characters?.Characters.FirstOrDefault(c => c.Id == rule.CharacterId) is not { } character) continue;
-            foreach (var item in rule.Items.Where(i => i.ItemId >= 0))
+            if (rule.Dead) continue;
+            // Bags first, whatever order they were listed in, so what follows can go inside them.
+            foreach (var item in rule.Items.Where(i => i.ItemId >= 0).OrderBy(i => i.Category == ReferencedItemCategory.Container ? 0 : 1))
                 foreach (var gift in MakeGifts(item.Category, item.ItemId, Math.Clamp(item.Quantity, 1, ObjectTypes.MaxQuantity)))
                 {
-                    gift.InstanceId = character.GetNextInventoryInstanceId();
-                    character.Inventory.Add(gift);
+                    _settingUpScenario = true;
+                    bool carried = HandOver(gift, character);
+                    _settingUpScenario = false;
+                    if (!carried) // no bag or hand has room, or too heavy: it can't be carried, so it's at their feet, in sight
+                    {
+                        PutDownAt(gift, character);
+                        SoakLog($"scenario: {character.Name} can't carry {item.DisplayName}: at their feet");
+                    }
                 }
-            SoakLog($"scenario: {character.Name} carries " + string.Join(", ", character.Inventory.Select(i => $"{i.Quantity} of {i.Category} {i.ItemId} holding {i.Contents.Count}")));
+            SoakLog($"scenario: {character.Name} carries " + string.Join(", ", character.Inventory.Select(i => $"{i.Quantity} of {i.Category} {i.ItemId} holding {i.Contents.Count}")) + "; in slots " + string.Join(", ", character.EquippedSlots.Select(s => $"{s.Key}")));
         }
     }
+
+    /// <summary>Handing out a scenario's items as the game starts: no pick-up sound for each.</summary>
+    private bool _settingUpScenario;
 
     private Scenario? _scenarioKeyScenario;
     private Key _scenarioKeyHeld;
