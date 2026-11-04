@@ -2589,6 +2589,7 @@ static int action_tick(Run *r, double ms, int *ok)
         int category, itemId, quantity, x, y, instance;
         world_thing_info(r->thing, &category, &itemId, &quantity, &x, &y, &instance);
         if (!items_can_lift(category, itemId)) { game_log("Pickup Item: that's too heavy to move."); *ok = 0; return 0; }
+        if (world_thing_occupied(r->thing)) { game_log("Pickup Item: someone is on it."); *ok = 0; return 0; }
         Item *item = items_unpark(r->thing, category, itemId, quantity);
         { int lit, spent; double burn; world_light_state(r->thing, &lit, &spent, &burn); items_set_light_state(item, lit, spent, burn); } /* a torch's flame goes with it */
         if (!items_give_to(who, item))

@@ -167,6 +167,7 @@ int world_arrive_furniture(int actor);      /* 1 seated, -1 the spot was taken m
 void world_stand_up(int actor);
 int world_seated(int actor);
 int world_seated_on(int actor);
+int world_thing_occupied(int uid);
 int world_in_bed(int actor);
 int world_player_sit(int uid);
 int world_player_sitting_down(void);

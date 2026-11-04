@@ -1213,6 +1213,18 @@ static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, 
     return d;
 }
 
+/* An upper floor's tiles out of sight under a roof: not drawn, but what is under them on a lower floor still stays under them
+   (GameTestWindow.UpperSlabs holds them all, shown or not). */
+typedef struct HiddenSlab { int band, x, y, w, h, sl, sr, sf, sn; } HiddenSlab;
+static HiddenSlab *hiddenSlabs; static int hiddenSlabCount, hiddenSlabCap;
+
+static void add_hidden_slab(int floorBand, int x, int y, int w, int h, int left, int top, int width, int depth)
+{
+    if (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H) return;
+    if (hiddenSlabCount >= hiddenSlabCap) { hiddenSlabCap = hiddenSlabCap ? hiddenSlabCap * 2 : 256; hiddenSlabs = (HiddenSlab *)realloc(hiddenSlabs, sizeof(HiddenSlab) * (size_t)hiddenSlabCap); }
+    hiddenSlabs[hiddenSlabCount++] = (HiddenSlab){ floorBand, x, y, w, h, left, left + width - 1, top, top + depth - 1 };
+}
+
 /* Exult's roofs: something solid over the player's head - everything from its height up isn't drawn. */
 static int ceilingIsFloor; /* the lowest ceiling over the player is the floor above (its slab), not a roof */
 
@@ -1418,6 +1430,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     int cx = (int)floor(cameraX), cy = (int)floor(cameraY);
     int ceiling = ceiling_over_player();
     int draggedUid = gumps_dragged_map_thing();
+    hiddenSlabCount = 0;
 
     /* The ground. */
     int x0 = cx / tileW - 1, y0 = cy / tileH - 1, x1 = (cx + SCREEN_W) / tileW + 1, y1 = (cy + SCREEN_H) / tileH + 1;
@@ -1433,13 +1446,14 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     /* Upper floors' tiles, at their floor's height. */
     for (int f = 2; f <= MAX_FLOORS; f++)
     {
-        if (!floors[f] || (ceiling < (1 << 30) && base_lift(f) >= ceiling + ceilingIsFloor)) continue; /* the floors overhead go */
-        int lift = base_lift(f);
+        if (!floors[f]) continue;
+        int lift = base_lift(f), overhead = ceiling < (1 << 30) && lift >= ceiling + ceilingIsFloor; /* the floors overhead go */
         for (int y = y0 < 0 ? 0 : y0; y <= y1 + 4 && y < mapH; y++)
             for (int x = x0 < 0 ? 0 : x0; x <= x1 + 4 && x < mapW; x++)
             {
                 int tile = floors[f][y * mapW + x];
                 if (tile < 0) continue;
+                if (overhead) { add_hidden_slab(f - 1, x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, x * unitsX, y * unitsY, unitsX, unitsY); continue; }
                 Drawn *d = add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count); /* a floor: before everything standing on it */
                 if (d) { d->slab = 1; d->sl = x * unitsX; d->sr = (x + 1) * unitsX - 1; d->sf = y * unitsY; d->sn = (y + 1) * unitsY - 1; }
             }
@@ -1448,7 +1462,28 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < thingCount; i++)
     {
         const Thing *t = &things[i];
-        if (t->gone || hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling)) continue;
+        if (t->gone) continue;
+        if (hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling))
+        {
+            if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
+            {
+                Body b;
+                thing_box(t, &b);
+                add_hidden_slab(floor_of(t->z) - 1, b.left * UNIT - t->z * LIFT_SHIFT - cx, b.top * UNIT - t->z * LIFT_SHIFT - cy, b.width * UNIT, b.depth * UNIT, b.left, b.top, b.width, b.depth);
+            }
+            if (t->steps)
+            {
+                cJSON *step;
+                cJSON_ArrayForEach(step, t->steps)
+                {
+                    if (!flag(step, "IsLanding")) continue;
+                    int al = t->x * unitsX + t->offX + num(step, "FootX", 0), at = t->y * unitsY + t->offY + num(step, "FootY", 0), top = t->z + num(step, "TopLift", 1);
+                    int sw = num(step, "SizeX", 1) > 1 ? num(step, "SizeX", 1) : 1, sd = num(step, "SizeY", 1) > 1 ? num(step, "SizeY", 1) : 1;
+                    add_hidden_slab(floor_of(top) - 1, al * UNIT - top * LIFT_SHIFT - cx, at * UNIT - top * LIFT_SHIFT - cy, sw * UNIT, sd * UNIT, al, at, sw, sd);
+                }
+            }
+            continue;
+        }
         if (t->uid == draggedUid) continue; /* being dragged: only the one under the pointer is seen */
         if (t->def && t->def->type == T_TRAP && t->def->trapHidden && !t->sprung) continue; /* a hidden trap: unseen till it goes off */
         if (t->steps)
@@ -1468,7 +1503,12 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 if (landing)
                 {
                     int slab = t->z + (topLift - 1 > 0 ? topLift - 1 : 0);
-                    if (ceiling < (1 << 30) && slab + 1 >= ceiling + ceilingIsFloor) continue;
+                    if (ceiling < (1 << 30) && slab + 1 >= ceiling + ceilingIsFloor)
+                    {
+                        int landingLift = t->z + topLift;
+                        add_hidden_slab(floor_of(landingLift) - 1, al * UNIT - landingLift * LIFT_SHIFT - cx, at * UNIT - landingLift * LIFT_SHIFT - cy, sw * UNIT, sd * UNIT, al, at, sw, sd);
+                        continue;
+                    }
                     Drawn *ld = add_drawn(floor_of(t->z + topLift) - 1, -5000000.0 + (t->x + t->y) * 100.0 + index * 0.01, sp, sx - cx, sy - cy, sp->width, sp->height, &count); /* with that floor's tiles */
                     if (ld) { ld->slab = 1; ld->sl = al; ld->sr = al + sw - 1; ld->sf = at; ld->sn = at + sd - 1; }
                     continue;
@@ -1627,6 +1667,13 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
             int south = d->yf > s->sn, east = d->xl > s->sr, north = d->yn < s->sf, west = d->xr < s->sl;
             if ((south || east) && !north && !west) { if (s->band > liftTo) liftTo = s->band; }
             else if (!(south && west) && !(north && east)) { liftTo = -2; break; } /* under it or behind it: the floor above covers it */
+        }
+        for (int j = 0; j < hiddenSlabCount && liftTo != -2; j++)
+        {
+            const HiddenSlab *s = &hiddenSlabs[j];
+            if (s->band <= d->band || d->x >= s->x + s->w || s->x >= d->x + d->w || d->y >= s->y + s->h || s->y >= d->y + d->h) continue;
+            int south = d->yf > s->sn, east = d->xl > s->sr, north = d->yn < s->sf, west = d->xr < s->sl;
+            if (!((south || east) && !north && !west) && !(south && west) && !(north && east)) liftTo = -2; /* under it: stays covered, as under a slab that shows */
         }
         if (liftTo >= 0) d->key = liftTo * 10000000.0 - 2500000.0 + (d->key - d->band * 10000000.0) * 0.1; /* over that floor's slabs, under all that stands on it */
     }
@@ -2653,6 +2700,14 @@ static Thing *cover_of(const Thing *bed)
 static void set_cover(const Thing *bed, int turnedDown) { Thing *c = cover_of(bed); if (c) c->fixedFrame = turnedDown ? 2 : 1; }
 
 static int someone_on(int uid) { for (int a = 0; a <= npcCount; a++) if (seats[a].uid == uid) return 1; return 0; }
+
+/* Not Exult (which lets you): a chair or bed someone is sitting or lying on, or walking to, is too heavy to move. */
+int world_thing_occupied(int uid)
+{
+    seats_ready();
+    for (int a = 0; a <= npcCount; a++) if (seats[a].uid == uid || heading[a].uid == uid) return 1;
+    return 0;
+}
 
 /* Sits or lies them down on the spot. */
 static void take_seat(int actor, Thing *t, int spot)

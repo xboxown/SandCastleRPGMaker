@@ -885,6 +885,7 @@ static int start_drag(const Target *t)
         int x, y, instance;
         world_thing_info(t->uid, &drag.category, &drag.itemId, &drag.quantity, &x, &y, &instance);
         if (!items_can_lift(drag.category, drag.itemId) || drag.itemId <= -1000) { gumps_refuse(P_TOO_HEAVY, "That's too heavy to move."); return 0; }
+        if (world_thing_occupied(t->uid)) { gumps_refuse(P_TOO_HEAVY, "Someone is on it - it's too heavy to move."); return 0; }
         if (!world_reachable_thing(t->uid)) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
         drag.fromMap = 1; drag.uid = t->uid;
         ghost = world_thing_sprite(t->uid);
