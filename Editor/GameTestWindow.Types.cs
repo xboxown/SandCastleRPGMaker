@@ -276,6 +276,7 @@ public partial class GameTestWindow
         UpdateCraftingWork(elapsedMs);
         UpdateRoofs();
         UpdateKites(elapsedMs);
+        UpdateJoining(elapsedMs); // monsters that touch (their .Joining.cs)
     }
 
     // ================= Invisibility (Exult's invisible flag) =================

@@ -146,6 +146,7 @@ public partial class GameTestWindow
         mapCharacter.Facing = facing;
         mapCharacter.PoseName = poseName;
         if (mapCharacter.Visual is not Image image) return; // the no-art marker has no poses to show
+        if (_joinedFrame.ContainsKey(mapCharacter)) return; // its look is its joined frame (.Joining.cs)
         var sprite = ResolveCharacterSprite(mapCharacter.Character, PoseByName(poseName), facing, out double volume, out string? key)
                      ?? ResolveCharacterSprite(mapCharacter.Character, PoseByName("Idle"), facing, out volume, out key);
         if (sprite is null || key == mapCharacter.ShownSprite) return;

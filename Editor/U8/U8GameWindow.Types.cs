@@ -277,6 +277,7 @@ public partial class U8GameWindow
         UpdateCraftingWork(elapsedMs);
         UpdateRoofs();
         UpdateKites(elapsedMs);
+        UpdateJoining(elapsedMs); // monsters that touch (their .Joining.cs)
     }
 
     // ================= Invisibility (Exult's invisible flag) =================

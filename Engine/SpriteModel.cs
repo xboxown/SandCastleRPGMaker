@@ -247,6 +247,8 @@ public class SpriteDatabase
     /// frame a hand point - the weapon is drawn with its grip on the hand.
     /// </summary>
     public const string WeaponInHandGroupName = "Weapon in hand";
+    /// <summary>Monsters drawn joining up with their own kind: 32 frames by which sides touch (Exult's slimes). See JoiningGuideWindow.</summary>
+    public const string JoinedMonstersGroupName = "Joined Monsters";
 
     /// <summary>The eight directions in the order a smooth weapon-in-hand sprite's frames go.</summary>
     public static readonly string[] WeaponDirectionNames = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
@@ -300,6 +302,7 @@ public class SpriteDatabase
         GetOrCreateGroup(KeychainGroupName);
         GetOrCreateGroup(DialogFrameGroupName);
         GetOrCreateGroup(WeaponInHandGroupName);
+        GetOrCreateGroup(JoinedMonstersGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

@@ -174,6 +174,60 @@ public partial class CharacterEditorWindow
         });
         ShowHurtRules();
 
+        // ---------- Joining ----------
+        HealthPanel.Children.Add(Heading("Joining (monsters that touch)"));
+        HealthPanel.Children.Add(new TextBlock
+        {
+            Text = "Ultima 7's slimes, but for any monster. Joined look: a sprite in the Sprite Editor's Joined Monsters group (New Sprite there shows a guide): it shows which sides touch its own kind, and each stays its own character. Rules: touching, it multiplies, or fuses into a new monster.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 4)
+        });
+        var joining = character.Joining;
+        var lookChoices = new List<string> { "(None - its ordinary poses)" };
+        lookChoices.AddRange(_sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.JoinedMonstersGroupName)?.Sprites.Select(b => b.Name) ?? Enumerable.Empty<string>());
+        var lookCombo = new ComboBox { ItemsSource = lookChoices, Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 4), SelectedIndex = Math.Max(0, lookChoices.IndexOf(joining.JoinedSprite.SpriteName)) };
+        lookCombo.SelectionChanged += (_, _) =>
+        {
+            joining.JoinedSprite.SpriteGroup = lookCombo.SelectedIndex <= 0 ? string.Empty : SpriteDatabase.JoinedMonstersGroupName;
+            joining.JoinedSprite.SpriteName = lookCombo.SelectedIndex <= 0 ? string.Empty : (string)lookCombo.SelectedItem;
+        };
+        HealthPanel.Children.Add(lookCombo);
+        var kinds = (ProjectSession.CharactersProvider?.Invoke()?.Characters ?? new List<CharacterDefinition>()).ToList();
+        var rules = new StackPanel();
+        void ShowRules()
+        {
+            rules.Children.Clear();
+            foreach (var rule in joining.Rules.ToList())
+            {
+                var row = new WrapPanel { Margin = new Thickness(0, 2, 0, 6) };
+                var partnerChoices = new List<string> { "its own kind" };
+                partnerChoices.AddRange(kinds.Select(k => k.Name));
+                var partner = new ComboBox { Width = 130, ItemsSource = partnerChoices, SelectedIndex = rule.PartnerCharacterId < 0 ? 0 : kinds.FindIndex(k => k.Id == rule.PartnerCharacterId) + 1 };
+                partner.SelectionChanged += (_, _) => rule.PartnerCharacterId = partner.SelectedIndex <= 0 ? -1 : kinds[partner.SelectedIndex - 1].Id;
+                var how = new ComboBox { Width = 100, ItemsSource = new[] { "multiplies", "fuses" }, SelectedIndex = rule.Fuses ? 1 : 0, Margin = new Thickness(4, 0, 4, 0) };
+                how.SelectionChanged += (_, _) => rule.Fuses = how.SelectedIndex == 1;
+                var result = new ComboBox { Width = 130, ItemsSource = kinds.Select(k => k.Name).ToList(), SelectedIndex = kinds.FindIndex(k => k.Id == rule.ResultCharacterId) };
+                result.SelectionChanged += (_, _) => rule.ResultCharacterId = result.SelectedIndex < 0 ? -1 : kinds[result.SelectedIndex].Id;
+                row.Children.Add(new TextBlock { Text = "Touching ", VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(partner);
+                row.Children.Add(how);
+                row.Children.Add(new TextBlock { Text = "into ", VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(result);
+                var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(6, 0, 0, 0) };
+                remove.Click += (_, _) => { joining.Rules.Remove(rule); ShowRules(); };
+                row.Children.Add(remove);
+                rules.Children.Add(row);
+                rules.Children.Add(NumberRow("Chance %:", () => rule.ChancePercent, v => rule.ChancePercent = Math.Clamp(v, 0, 100), "each time they touch"));
+                rules.Children.Add(NumberRow("Wait (seconds):", () => rule.CooldownSeconds, v => rule.CooldownSeconds = Math.Max(1, v), "before the same two can try again"));
+                rules.Children.Add(NumberRow("Touching within:", () => rule.ReachTiles, v => rule.ReachTiles = Math.Max(1, v), "tiles of 8 pixels"));
+                rules.Children.Add(NumberRow("Most on the map:", () => rule.MaxOnMap, v => rule.MaxOnMap = Math.Max(0, v), "of the new monster (0: no limit)"));
+            }
+        }
+        ShowRules();
+        HealthPanel.Children.Add(rules);
+        var addRule = new Button { Content = "Add a rule", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 2, 0, 0) };
+        addRule.Click += (_, _) => { joining.Rules.Add(new JoinRule { ResultCharacterId = character.Id }); ShowRules(); };
+        HealthPanel.Children.Add(addRule);
+
         // ---------- Immunities ----------
         HealthPanel.Children.Add(Heading("Immune to"));
         var immunities = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };

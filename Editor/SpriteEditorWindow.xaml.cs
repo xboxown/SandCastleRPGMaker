@@ -84,7 +84,7 @@ public partial class SpriteEditorWindow : Window
     /// <summary>The folders the engine and editors rely on by name: never renamed, deleted or given an identity.</summary>
     private static bool IsProtected(string name) =>
         name is SpriteDatabase.TilesetGroupName or SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.DialogFrameGroupName
-            or SpriteDatabase.WeaponInHandGroupName
+            or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName
         || SpriteDatabase.IsBundleGroup(name);
 
     /// <summary>Right-click a folder: what it's for (its identity), rename, paste, delete.</summary>
@@ -291,6 +291,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Keychain group is hardcoded and can't be deleted - Keychain objects take their look (a frame for each number of keys) from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName)
+        {
+            MessageBox.Show("The Joined Monsters group is hardcoded and can't be deleted - monsters that join up take their joined look from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
         {
             MessageBox.Show("The Weapon in hand group is hardcoded and can't be deleted - weapons take their look held in the hand from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -328,6 +333,7 @@ public partial class SpriteEditorWindow : Window
         if (SpriteDatabase.IsBundleGroup(_currentGroup.Name)) new BundleGuideWindow(_currentGroup.Name) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.KeychainGroupName) new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName) new DialogFrameGuideWindow { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName) new JoiningGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
             new FrameStatesGuideWindow(null, FrameStatesGuideWindow.WeaponInHand(ProjectSession.SettingsProvider?.Invoke()?.WeaponInHand ?? new WeaponInHandSettings())) { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");

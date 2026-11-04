@@ -2,6 +2,34 @@ namespace SandcastleRpgMaker.Engine;
 
 public enum CharacterGender { Male, Female }
 
+/// <summary>When a monster touches another: it multiplies (another appears) or fuses (both go, a new monster stands there).</summary>
+public class JoinRule
+{
+    /// <summary>The kind it joins with; -1: its own kind.</summary>
+    public int PartnerCharacterId { get; set; } = -1;
+    /// <summary>The kind that appears.</summary>
+    public int ResultCharacterId { get; set; } = -1;
+    /// <summary>True: both go and the result stands there. False: both stay and the result appears beside them.</summary>
+    public bool Fuses { get; set; }
+    public int ChancePercent { get; set; } = 25;
+    /// <summary>Seconds before the same two can try again.</summary>
+    public int CooldownSeconds { get; set; } = 10;
+    /// <summary>How near counts as touching, in tiles of 8 pixels.</summary>
+    public int ReachTiles { get; set; } = 3;
+    /// <summary>No more than this many of the result on the map; 0: no limit.</summary>
+    public int MaxOnMap { get; set; } = 12;
+    public int SoundResourceId { get; set; } = -1;
+}
+
+/// <summary>Monsters joining up (Character Editor > Health > Joining): any monster, as Ultima 7's slimes.</summary>
+public class JoiningSettings
+{
+    /// <summary>A sprite in the Joined Monsters group: its frame shows which sides touch its own kind (Exult's Slime_actor). Not set: its ordinary poses.</summary>
+    public SpriteLink JoinedSprite { get; set; } = new();
+    public List<JoinRule> Rules { get; set; } = new();
+    public bool IsSet => JoinedSprite.SpriteName.Length > 0 || Rules.Count > 0;
+}
+
 /// <summary>
 /// Basic character sheet, shared shape for PC and NPC (the doc only
 /// details the PC Editor today, but nothing here is PC-specific - an NPC
@@ -92,6 +120,8 @@ public class CharacterDefinition
     /// <summary>Only this spell hurts it (Character Editor > Health).</summary>
     public bool RequiresSpell { get; set; }
     public string RequiredSpellName { get; set; } = string.Empty;
+
+    public JoiningSettings Joining { get; set; } = new();
 
     /// <summary>Its blood type: a sprite in the Sprite Editor's Blood group, or empty for none (it never bleeds - Exult's cant_bleed).</summary>
     public string BloodSpriteName { get; set; } = string.Empty;
