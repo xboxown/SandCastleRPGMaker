@@ -105,6 +105,15 @@ int sprites_load(const char *folder)
             {
                 s->frames[i].file = copy_text(cJSON_GetStringValue(cJSON_GetObjectItem(frame, "File")));
                 s->frames[i].ms = cJSON_GetObjectItem(frame, "Ms")->valueint;
+                {
+                    cJSON *v;
+                    v = cJSON_GetObjectItem(frame, "HandX"); s->frames[i].handX = cJSON_IsNumber(v) ? v->valueint : -1;
+                    v = cJSON_GetObjectItem(frame, "HandY"); s->frames[i].handY = cJSON_IsNumber(v) ? v->valueint : -1;
+                    v = cJSON_GetObjectItem(frame, "WeaponFrame"); s->frames[i].weaponFrame = cJSON_IsNumber(v) ? v->valueint : -1;
+                    s->frames[i].weaponBehind = cJSON_IsTrue(cJSON_GetObjectItem(frame, "WeaponBehind"));
+                    v = cJSON_GetObjectItem(frame, "GripX"); s->frames[i].gripX = cJSON_IsNumber(v) ? v->valueint : -1;
+                    v = cJSON_GetObjectItem(frame, "GripY"); s->frames[i].gripY = cJSON_IsNumber(v) ? v->valueint : -1;
+                }
                 cJSON *sound = cJSON_GetObjectItem(frame, "Sound");
                 s->frames[i].sound = cJSON_IsNumber(sound) ? sound->valueint : -1;
                 s->totalMs += s->frames[i].ms;

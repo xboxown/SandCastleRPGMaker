@@ -23,6 +23,8 @@ typedef struct Frame
     int ms;
     int sound;        /* a sound played when this frame comes round (-1: none) */
     Picture *picture; /* decoded on first use */
+    /* A weapon held in the hand: a character's frame says where the hand is (-1: no weapon in this frame), which weapon frame (-1: by itself), behind the body or over it; a weapon's frame, where it's gripped (-1: its middle). */
+    int handX, handY, weaponFrame, weaponBehind, gripX, gripY;
 } Frame;
 
 typedef struct Sprite

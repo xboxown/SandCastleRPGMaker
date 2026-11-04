@@ -349,6 +349,8 @@ static void move_caster(int caster, int x, int y, int floorOf)
     for (int a = 1; a < world_actor_count(); a++) if (!world_actor_gone(a) && in_party(a)) world_actor_place(a, x, y, floorOf); /* the party comes along */
 }
 
+static int lastSummoned;
+
 static void summon(cJSON *kind, int caster, int cx, int cy, int count, double seconds)
 {
     if (!kind) return;
@@ -385,8 +387,17 @@ static void summon(cJSON *kind, int caster, int cx, int cy, int count, double se
         items_add_carrier(copy);
         vitals_add(num(copy, "Id", -1));
         int actor = world_add_actor(copy, sx, sy, fl);
-        if (actor > 0) timed_add(summoned, &summonedCount, 32, actor, seconds * 1000);
+        if (actor > 0 && seconds > 0) timed_add(summoned, &summonedCount, 32, actor, seconds * 1000);
+        if (actor > 0) lastSummoned = actor;
     }
+}
+
+/* A new monster of this kind beside that one, for good (a joining rule): its own character from now on. Its actor, or -1. */
+int magic_appear(cJSON *kind, int beside, int cx, int cy)
+{
+    lastSummoned = -1;
+    summon(kind, beside, cx, cy, 1, 0);
+    return lastSummoned;
 }
 
 static void spot_effect(cJSON *effect, int caster, int cx, int cy, int radius, int who)

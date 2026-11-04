@@ -933,6 +933,20 @@ static int drop_on_box(int gi, const Target *under)
 static int drop_on_doll(int gi, const Target *under)
 {
     Gump *g = &gumps[gi];
+    /* the same kind of stack in the slot under the pointer: joined, if the total stays within 100 (Game_object::drop) */
+    if (under->kind == T_SLOT && under->item && under->item != drag.item && drag.category == CAT_OBJECT && items_category(under->item) == CAT_OBJECT
+        && items_item_id(under->item) == drag.itemId && items_stackable(CAT_OBJECT, drag.itemId) && items_quantity(under->item) + drag.quantity <= 100)
+    {
+        ItemPlace from;
+        Item *it = lift(&from);
+        if (!it) return 0;
+        if (!items_check_weight(g->characterId, it)) { refused(items_refusal()); put_back(it, &from); return 0; }
+        items_set_quantity(under->item, items_quantity(under->item) + items_quantity(it));
+        landed(NULL, &from);
+        items_free(it);
+        navigate_sound(g->characterId);
+        return 1;
+    }
     if (under->kind == T_SLOT && under->item && under->item != drag.item && items_category(under->item) == CAT_CONTAINER) return drop_into(under->item, 0, 0, 0);
     double s = scale_of(g), px = (mouseX - g->x) / s, py = (mouseY - g->y) / s, best = SLOT_DROP_RADIUS * SLOT_DROP_RADIUS;
     int keys[64], n = slot_keys(g->characterId, keys), slot = -1;
@@ -978,8 +992,9 @@ static int drop_on_map(void)
     world_actor_cell(0, &px, &py, &pf);
     if (!world_reachable(x, y, world_actor_lift(0))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
     if (drag.fromMap && !world_thing_there(drag.uid)) return 0;
-    /* a stack of the same stackable thing there grows */
+    /* a stack of the same stackable thing grows: what's under the pointer first (drag.cc drop_on_map: found->drop), else one on the cell it lands on */
     int stack = drag.category == CAT_OBJECT ? world_thing_at_cell(CAT_OBJECT, drag.itemId, x, y, drag.fromMap ? drag.uid : 0) : 0;
+    if (drag.category == CAT_OBJECT && uid && (!drag.fromMap || uid != drag.uid) && world_thing_object_id(uid) == drag.itemId && world_thing_quantity(uid) + drag.quantity <= 100) stack = uid;
     if (stack && items_stackable(drag.category, drag.itemId) && world_thing_quantity(stack) + drag.quantity <= 100)
     {
         ItemPlace from;

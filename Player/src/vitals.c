@@ -21,6 +21,9 @@
  * All of it stands still while the game is paused.
  */
 #include "vitals.h"
+#include <math.h>
+#include "pictures.h"
+#include "sound.h"
 #include "events.h"
 #include "items.h"
 #include "conditions.h"
@@ -661,9 +664,128 @@ static void update_tile_effects(Vital *v, double ms)
         if (!v->exposures[k].onTile && (v->exposures[k].recovery -= ms) <= 0) { v->exposures[k] = v->exposures[--v->exposureCount]; k--; }
 }
 
+/* ---------------- Monsters that join (GameTestWindow.Joining; Character Editor > Health > Joining) ---------------- */
+
+int magic_appear(cJSON *kind, int beside, int cx, int cy);
+
+typedef struct JoinWait { int a, b; double ms; } JoinWait;
+static JoinWait joinWaits[64];
+static int joinWaitCount;
+static double joinCheckMs;
+
+static int same_kind_alive(int actor, int kindId, int floorThere)
+{
+    int id = world_actor_character(actor), x, y, f;
+    if (world_actor_gone(actor) || vitals_dead(id) || world_character_source(id) != kindId) return 0;
+    world_actor_cell(actor, &x, &y, &f);
+    return f == floorThere;
+}
+
+static cJSON *character_of_kind(int kindId) { return character_json(kindId); }
+
+/* update_frames: bit 0 wobbles as it moves; a neighbour two tiles to the north sets 2, east 4, south 8, west 16. */
+static void joined_look(int actor, cJSON *look)
+{
+    const Sprite *sprite = sprite_find(cJSON_GetStringValue(get(look, "SpriteGroup")), cJSON_GetStringValue(get(look, "SpriteName")));
+    if (!sprite || !sprite->frameCount) return;
+    int id = world_actor_character(actor), kind = world_character_source(id), mask = 0, x, y, f;
+    double px, py;
+    world_actor_cell(actor, &x, &y, &f);
+    world_actor_pixel(actor, &px, &py);
+    for (int o = 1; o < world_actor_count(); o++)
+    {
+        if (o == actor || !same_kind_alive(o, kind, f)) continue;
+        double ox, oy;
+        world_actor_pixel(o, &ox, &oy);
+        double dx = world_wrap_dx(ox - px), dy = world_wrap_dy(oy - py);
+        if (fabs(dx) < 8 && fabs(dy + 16) < 8) mask |= 2;
+        else if (fabs(dy) < 8 && fabs(dx - 16) < 8) mask |= 4;
+        else if (fabs(dx) < 8 && fabs(dy - 16) < 8) mask |= 8;
+        else if (fabs(dy) < 8 && fabs(dx + 16) < 8) mask |= 16;
+    }
+    int wobble = world_walking(actor) ? rnd(2) : 0, frame = mask | wobble;
+    int shown = sprite->frameCount >= 32 ? frame : sprite->frameCount >= 16 ? mask >> 1 : (wobble < sprite->frameCount ? wobble : sprite->frameCount - 1);
+    world_actor_joined(actor, sprite, shown);
+}
+
+static void try_join(int actor, cJSON *rule)
+{
+    int id = world_actor_character(actor), kind = world_character_source(id), x, y, f;
+    cJSON *result = character_of_kind(num(rule, "ResultCharacterId", -1));
+    if (!result || items_in_party(id)) return;
+    int partner = num(rule, "PartnerCharacterId", -1);
+    if (partner < 0) partner = kind;
+    double reach = (num(rule, "ReachTiles", 3) > 1 ? num(rule, "ReachTiles", 3) : 1) * 8.0, px, py;
+    world_actor_cell(actor, &x, &y, &f);
+    world_actor_pixel(actor, &px, &py);
+    for (int o = 1; o < world_actor_count(); o++)
+    {
+        if (o == actor || !same_kind_alive(o, partner, f) || items_in_party(world_actor_character(o))) continue;
+        double ox, oy;
+        world_actor_pixel(o, &ox, &oy);
+        double dx = fabs(world_wrap_dx(ox - px)), dy = fabs(world_wrap_dy(oy - py));
+        if ((dx > dy ? dx : dy) > reach) continue;
+        int waiting = 0;
+        for (int w = 0; w < joinWaitCount; w++) if ((joinWaits[w].a == actor && joinWaits[w].b == o) || (joinWaits[w].a == o && joinWaits[w].b == actor)) waiting = 1;
+        if (waiting) continue;
+        if (joinWaitCount < 64) joinWaits[joinWaitCount++] = (JoinWait){ actor, o, (num(rule, "CooldownSeconds", 10) > 1 ? num(rule, "CooldownSeconds", 10) : 1) * 1000.0 };
+        int most = num(rule, "MaxOnMap", 12);
+        if (most > 0)
+        {
+            int on = 0;
+            for (int k = 1; k < world_actor_count(); k++) on += same_kind_alive(k, num(result, "Id", -1), f);
+            if (on >= most) continue;
+        }
+        if (rnd(100) >= num(rule, "ChancePercent", 25)) continue;
+        sound_play(num(rule, "SoundResourceId", -1));
+        int fuses = flag(rule, "Fuses");
+        Item *carried[2] = { NULL, NULL };
+        if (fuses)
+        {
+            int ids[2] = { id, world_actor_character(o) }, actors[2] = { actor, o };
+            for (int k = 0; k < 2; k++)
+            {
+                carried[k] = items_strip(ids[k]);
+                Vital *v = vital_of(ids[k]);
+                if (v) v->dead = 1;
+                world_walk_cancel(actors[k]);
+                world_actor_joined(actors[k], NULL, 0);
+                world_actor_remove(actors[k]);
+            }
+        }
+        int born = magic_appear(result, actor, x, y);
+        if (fuses)
+            for (int k = 0; k < 2; k++)
+            {
+                if (!carried[k]) continue;
+                if (born > 0) { Item *out[64]; int n = items_take_all(carried[k], out, 64); for (int i = 0; i < n; i++) items_add_loose(world_actor_character(born), out[i]); }
+                items_free(carried[k]);
+            }
+        return;
+    }
+}
+
+static void update_joining(double ms)
+{
+    for (int w = 0; w < joinWaitCount; w++) if ((joinWaits[w].ms -= ms) <= 0) joinWaits[w--] = joinWaits[--joinWaitCount];
+    if ((joinCheckMs += ms) < 200) return;
+    joinCheckMs = 0;
+    for (int a = 1; a < world_actor_count(); a++)
+    {
+        if (world_actor_gone(a) || vitals_dead(world_actor_character(a))) continue;
+        cJSON *joining = get(character_json(world_actor_character(a)), "Joining"), *rule;
+        if (!joining) continue;
+        cJSON *look = get(joining, "JoinedSprite");
+        const char *name = cJSON_GetStringValue(get(look, "SpriteName"));
+        if (name && *name) joined_look(a, look);
+        cJSON_ArrayForEach(rule, get(joining, "Rules")) if (!world_actor_gone(a)) try_join(a, rule);
+    }
+}
+
 void vitals_update(double ms)
 {
     if (gameOver) return;
+    update_joining(ms);
     int hour = events_hour();
     int hourChanged = hour != lastHour;
     lastHour = hour;

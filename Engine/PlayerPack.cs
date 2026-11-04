@@ -56,7 +56,7 @@ public static class PlayerPack
             {
                 s.Name, s.Fps, s.Loop, s.OriginX, s.OriginY, // a pointer's hot spot
                 NineSlice = s.NineSlice.Enabled ? new { s.NineSlice.Left, s.NineSlice.Top, s.NineSlice.Right, s.NineSlice.Bottom } : null, // a dialog frame's borders
-                Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs), Sound = f.SoundResourceId }).ToList()
+                Frames = s.Frames.Select(f => new { File = Picture(f.FilePath), Ms = Math.Max(1, f.DurationMs), Sound = f.SoundResourceId, f.HandX, f.HandY, f.WeaponFrame, f.WeaponBehind, f.GripX, f.GripY }).ToList()
             }).ToList()
         }).ToList();
         File.WriteAllBytes(Path.Combine(folder, "sprites.sdbx"), ProjectContainer.Encrypt(id, JsonSerializer.SerializeToUtf8Bytes(new { Format = FormatVersion, Groups = index }, Json)));

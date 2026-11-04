@@ -119,6 +119,7 @@ typedef struct Actor
     int walkingNow;
     int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
     int human;                      /* Exult: only the sentient open doors */
+    const Sprite *joinedSprite; int joinedFrame; /* a monster joining up: this frame instead of its poses (vitals.c) */
     int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies), 3 stationary */
     int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
     double levitateMs; int levitateLift, groundMovement; /* Levitate (a spell): how long still, at what height, how it moved before */
@@ -1250,6 +1251,68 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     screen = pixels;
 }
 
+/* A picture with x and y swapped (Exult's reflected frames), kept once made. */
+static const Picture *swapped_picture(const Picture *p)
+{
+    static struct { const Picture *from; Picture *to; } made[64];
+    static int madeCount;
+    for (int i = 0; i < madeCount; i++) if (made[i].from == p) return made[i].to;
+    if (madeCount >= 64) return p;
+    Picture *q = (Picture *)calloc(1, sizeof(Picture));
+    q->width = p->height; q->height = p->width; q->opaque = p->opaque;
+    q->pixels = (uint32_t *)malloc((size_t)q->width * (size_t)q->height * 4);
+    for (int y = 0; y < p->height; y++)
+        for (int x = 0; x < p->width; x++) q->pixels[(size_t)x * (size_t)q->width + y] = p->pixels[(size_t)y * (size_t)p->width + x];
+    made[madeCount].from = p; made[madeCount].to = q; madeCount++;
+    return q;
+}
+
+/* Exult's Actor::paint_weapon (GameTestWindow.WeaponInHand): the frame a character shows gives the hand and which weapon frame; the weapon frame is drawn with its grip on the hand, over the body or behind it. */
+static void draw_weapon_in_hand(const Actor *a, const Sprite *body, uint32_t at, const Picture *bodyPic, int x, int y, int w, int h, int band, double depth, int *count)
+{
+    if (a->characterId < 0 || vitals_dead(a->characterId)) return;
+    cJSON *weapon = items_weapon(a->characterId, NULL), *link = get(get(weapon, "Weapon"), "InHandSprite");
+    const Sprite *held = weapon && link ? link_of(link) : NULL;
+    if (!held || !held->frameCount || !body || !body->frameCount) return;
+    int index = sprite_frame_at(body, at);
+    if (index < 0 || index >= body->frameCount) return;
+    const Frame *frame = &body->frames[index];
+    if (frame->handX < 0 || frame->handY < 0) return; /* no weapon in this frame */
+    cJSON *settings = get(get(get(gameJson, "Project"), "Settings"), "WeaponInHand"), *wset = get(weapon, "Weapon");
+    const char *pose = a->shownPose >= 0 ? a->poses[a->shownPose].name : "";
+    int attacking = pose[0] && (!strcmp(pose, str(wset, "AttackPose")) || !strcmp(pose, str(wset, "ShootPose")) || !strcmp(pose, "Attacking Melee") || !strcmp(pose, "Shooting") || !strcmp(pose, "Attack"));
+    static const int WIN_DIR[8] = { 0, 1, 2, 3, 4, 5, 6, 7 }; /* SpriteDirection: north, clockwise */
+    int weaponFrame, mirrored = 0;
+    if (!flag(settings, "Smooth"))
+    {
+        mirrored = a->facing == DIR_E || a->facing == DIR_W;
+        if (frame->weaponFrame >= 0) weaponFrame = frame->weaponFrame;
+        else if (!attacking) weaponFrame = 0;
+        else { int phase = index * 3 / (body->frameCount > 0 ? body->frameCount : 1); weaponFrame = 3 - (phase < 2 ? phase : 2); }
+    }
+    else
+    {
+        int swing = num(settings, "SwingFrames", 3);
+        if (swing < 1) swing = 1; else if (swing > 8) swing = 8;
+        int first = WIN_DIR[a->facing & 7] * (1 + swing);
+        if (frame->weaponFrame >= 0) weaponFrame = frame->weaponFrame;
+        else if (!attacking) weaponFrame = first;
+        else { int k = index * swing / (body->frameCount > 0 ? body->frameCount : 1); weaponFrame = first + 1 + (k < swing - 1 ? k : swing - 1); }
+    }
+    if (weaponFrame < 0) weaponFrame = 0;
+    if (weaponFrame >= held->frameCount) weaponFrame = held->frameCount - 1;
+    const Frame *hf = &held->frames[weaponFrame];
+    const Picture *wp = frame_picture(hf);
+    if (!wp) return;
+    double scale = fmin((double)w / bodyPic->width, (double)h / bodyPic->height);
+    double handX = x + (w - bodyPic->width * scale) / 2 + frame->handX * scale, handY = y + (h - bodyPic->height * scale) / 2 + frame->handY * scale;
+    double gripX = (hf->gripX >= 0 ? hf->gripX : wp->width / 2.0) * scale, gripY = (hf->gripY >= 0 ? hf->gripY : wp->height / 2.0) * scale;
+    const Picture *shown = mirrored ? swapped_picture(wp) : wp;
+    if (mirrored) { double t = gripX; gripX = gripY; gripY = t; }
+    Drawn *d = add_drawn(band, depth + (frame->weaponBehind ? -0.25 : 0.25), shown, (int)floor(handX - gripX + 0.5), (int)floor(handY - gripY + 0.5), (int)(shown->width * scale + 0.5), (int)(shown->height * scale + 0.5), count);
+    if (d) d->order = 1 << 30;
+}
+
 static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
@@ -1363,6 +1426,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         uint32_t at = a->walkingNow ? ms : 0;
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
         const Picture *pic = sprite_picture_at(s, at);
+        if (a->joinedSprite && a->joinedFrame < a->joinedSprite->frameCount) pic = frame_picture(&a->joinedSprite->frames[a->joinedFrame]);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
@@ -1374,6 +1438,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         double feetY = a->py + tileH / 2.0;
         set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
         d->actor = i + 1; d->order = 1 << 30;
+        if (!a->joinedSprite) draw_weapon_in_hand(a, s, at, pic, left - cx, top - cy, qw, qh, floor_of(a->lift) - 1, d->key - (floor_of(a->lift) - 1) * 10000000.0, &count);
     }
     /* Whatever rests on something is drawn after it (Exult: greater in z). */
     for (int pass = 0; pass < 2; pass++)
@@ -3690,6 +3755,12 @@ void world_thing_set_flying(int uid, int lift)
     t->flying = lift >= 0 ? lift + 1 : 0;
     if (lift >= 0) t->z = lift;
     else settle_all();
+}
+
+void world_actor_joined(int actor, const Sprite *sprite, int frame)
+{
+    Actor *a = actor_of(actor);
+    if (a) { a->joinedSprite = sprite; a->joinedFrame = frame; }
 }
 
 int world_reachable_thing(int uid)
