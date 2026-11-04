@@ -60,6 +60,8 @@ public class BodySettings
     public float Volume { get; set; } = 20;
     /// <summary>Can't be picked up or moved at all - only opened and looted where it lies.</summary>
     public bool TooHeavy { get; set; }
+    /// <summary>Leaves no body: what it carried falls on the ground around where it died (Exult's has_no_body, within 5 tiles).</summary>
+    public bool NoBody { get; set; }
 }
 
 /// <summary>

@@ -319,6 +319,7 @@ public partial class U8GameWindow
             blockReason = "Blocked: edge of the map.";
             return false;
         }
+        if (movement == MovementKind.Ghost) return true; // Exult's MOVE_ETHEREAL: walls and everything else are nothing to it
 
         var solids = SolidsOverlapping(to, mover, world).ToList(); // only the bodies near it (U8GameWindow.Perf.cs)
         if (mover is not null && _player is not null && !_planningThroughPlayer && PlayerBody() is { } playerBody && playerBody.Overlaps(to)) solids.Add(playerBody);

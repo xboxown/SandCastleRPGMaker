@@ -192,7 +192,7 @@ public partial class U8GameWindow
         int old = IntStat(who, stat);
         if (stat.Kind == BuiltInStatKind.Hits && value < old && GetHp(who) is not null)
         {
-            Damage(who, old - value, cause);
+            DamageAllowed(who, old - value, cause);
             return;
         }
         who.StatValues[stat.Id] = value.ToString();
@@ -321,7 +321,7 @@ public partial class U8GameWindow
             timer.Stop();
             if (IsDead(who)) return;
             // The fatal blow: more than enough to go past -(Strength / 3), so it kills rather than knocks out.
-            if (GetHp(who) is int hp) Damage(who, Math.Max(1, hp + MaxHp(who) / 3 + 1), "a fatal blow");
+            if (GetHp(who) is int hp) DamageAllowed(who, Math.Max(1, hp + MaxHp(who) / 3 + 1), "a fatal blow");
             if (!IsDead(who)) Die(who, "a fatal blow");
         };
         timer.Start();

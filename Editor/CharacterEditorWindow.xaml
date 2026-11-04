@@ -49,11 +49,12 @@
                     <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
                         <TextBlock Text="Moves on" VerticalAlignment="Center" Margin="0,0,8,0"/>
                         <ComboBox x:Name="MovementCombo" Width="330" SelectionChanged="Field_Changed"
-                                  ToolTip="Land: walks. Sea: swims, only on Water tiles (Tile Properties). Air: flies at floor 10 under the open sky (only missiles and spells reach it), under the ceiling indoors, in through doors; knocked out, it falls. Stationary: never moves from where it is placed - it still talks, fights from where it stands (reach or shooting) and does its schedules there.">
+                                  ToolTip="Land: walks. Sea: swims, only on Water tiles (Tile Properties). Air: flies at floor 10 under the open sky (only missiles and spells reach it), under the ceiling indoors, in through doors; knocked out, it falls. Stationary: never moves from where it is placed - it still talks, fights from where it stands (reach or shooting) and does its schedules there. Ghost: walks through walls, doors, furniture and everything else (Exult's ethereal).">
                             <ComboBoxItem Content="Land (walks - people, animals)"/>
                             <ComboBoxItem Content="Sea (swims - only on Water tiles)"/>
                             <ComboBoxItem Content="Air (flies - birds, bats, dragons)"/>
                             <ComboBoxItem Content="Stationary (doesn't move - a reaper, a tree that shoots)"/>
+                            <ComboBoxItem Content="Ghost (passes through walls and everything else)"/>
                         </ComboBox>
                     </StackPanel>
 

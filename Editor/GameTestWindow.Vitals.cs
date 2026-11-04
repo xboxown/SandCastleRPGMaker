@@ -112,13 +112,38 @@ public partial class GameTestWindow
     private int MaxHp(CharacterDefinition character) =>
         StrengthStat() is { } str && character.StatValues.TryGetValue(str.Id, out var text) && int.TryParse(text, out int max) ? max : 0;
 
+    /// <summary>System Settings > Combat: starving goes on hurting someone knocked out by it, until they die.</summary>
+    private bool StarvationKills => _systemSettings.StarvationKills ?? false;
+
+    /// <summary>A weapon or spell it needs is doing this damage (or an event is).</summary>
+    private bool _specialWound;
+
+    /// <summary>Only a certain weapon or spell hurts it: nothing else does, not traps, fire or hunger. Immortal: these don't apply.</summary>
+    private static bool NeedsSpecialWound(CharacterDefinition character) => !character.Immortal && (character.RequiresWeapon || character.RequiresSpell);
+
+    /// <summary>This weapon, or this spell, is one that hurts it.</summary>
+    private static bool WoundsIt(CharacterDefinition character, WorldObject? weapon, string? spell) =>
+        !NeedsSpecialWound(character)
+        || (character.RequiresWeapon && weapon is not null && weapon.Id == character.RequiredWeaponId)
+        || (character.RequiresSpell && spell is not null && spell == character.RequiredSpellName);
+
+    /// <summary>Damage from what's allowed to do it: its weapon, its spell, or an event (the maker's word).</summary>
+    private void DamageAllowed(CharacterDefinition character, int amount, string cause)
+    {
+        _specialWound = true;
+        try { Damage(character, amount, cause); }
+        finally { _specialWound = false; }
+    }
+
     private void Damage(CharacterDefinition character, int amount, string cause)
     {
         if (amount <= 0 || IsDead(character) || GetHp(character) is not int hp) return;
+        if (NeedsSpecialWound(character) && !_specialWound) return; // only its weapon or spell hurts it (Character Editor > Health)
         FlashHit(character, amount, hp); // Exult's red outline (or, badly hurt, the red screen)
         int half = MaxHp(character) / 2;
         if (hp >= half && hp - amount < half && hp - amount > 0 && Rng.Next(2) == 0) Bark(character, VerboseKind.Hurt); // reduce_health: "A little oomph." 
         hp -= amount;
+        if (character.Immortal) hp = Math.Max(hp, 0); // knocked out at worst
         SetHp(character, hp);
         if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {hp} left.";
         // Exult: dead below -(Strength / 3); otherwise at 0 or below, knocked out.
@@ -130,6 +155,7 @@ public partial class GameTestWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
+        if (character.Immortal) { KnockOut(character); return; }
         Record($"killed:{character.Id}"); // Character killed (GameTestWindow.Conditions.cs)
         Record("killed:*");
         StandUp(character);
@@ -220,7 +246,8 @@ public partial class GameTestWindow
     private void HungerMinute(CharacterDefinition character)
     {
         var s = character.Survival;
-        if (!s.CanGetHungry || IsIncapacitated(character)) return;
+        bool starvesOn = StarvationKills && IsUnconscious(character) && !IsDead(character); // it goes on losing health where it lies
+        if (!s.CanGetHungry || (IsIncapacitated(character) && !starvesOn)) return;
         var vitals = VitalsOf(character);
         if (vitals.Food > s.HungryAtOrBelow) return;
         if (character == _player && Rng.Next(3) == 0) StatusText.Text = vitals.Food <= 0 ? "You are starving!" : "You are hungry.";

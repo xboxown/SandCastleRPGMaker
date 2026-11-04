@@ -25,10 +25,6 @@ public partial class SelectItemPickerWindow : Window
         _containers = containers;
         _sprites = sprites;
 
-        BuildEmptyCategoryTab(WeaponsTabContent, "No Weapon Editor built yet.");
-        BuildEmptyCategoryTab(ArmorsTabContent, "No Armor Editor built yet.");
-        BuildEmptyCategoryTab(ItemsTabContent, "No Item Editor built yet.");
-
         // Books reference a real animated SpriteEntry (Frames/FPS/Loop) - show it animating, same as the Preview window's paper doll and world icon, instead of a frozen single frame.
         BuildAnimatedCategoryTab(BooksTabContent, _books.Books,
             b => b.Id, b => b.Name,
@@ -51,17 +47,16 @@ public partial class SelectItemPickerWindow : Window
             c => ResolveSpriteEntry(c.SpriteGroup, c.SpriteName),
             ReferencedItemCategory.Container);
 
+        CategoryTabs.SelectedIndex = 1; // Objects: weapons, armor and everything else are objects now
         if (current is not null)
         {
             Result = current;
-            int tabIndex = current.Category switch
+            CategoryTabs.SelectedIndex = current.Category switch
             {
-                ReferencedItemCategory.Book => 3,
-                ReferencedItemCategory.Object => 4,
-                ReferencedItemCategory.Container => 5,
-                _ => 0
+                ReferencedItemCategory.Book => 0,
+                ReferencedItemCategory.Container => 2,
+                _ => 1
             };
-            CategoryTabs.SelectedIndex = tabIndex;
         }
 
         Closing += (_, _) =>
@@ -73,18 +68,6 @@ public partial class SelectItemPickerWindow : Window
     private SpriteEntry? ResolveSpriteEntry(string group, string name)
     {
         return _sprites.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name);
-    }
-
-    private void BuildEmptyCategoryTab(Grid container, string message)
-    {
-        container.Children.Add(new TextBlock
-        {
-            Text = message,
-            FontStyle = FontStyles.Italic,
-            Foreground = Brushes.Gray,
-            HorizontalAlignment = HorizontalAlignment.Center,
-            VerticalAlignment = VerticalAlignment.Center
-        });
     }
 
     private void BuildCategoryTab<T>(Grid container, IEnumerable<T> entries,

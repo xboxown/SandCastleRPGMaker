@@ -63,7 +63,7 @@ public partial class U8GameWindow
                     _lightCheckMs = 0;
                     break;
                 case MagicEffectKind.Damage:
-                    if (amount > 0) Damage(target, amount, cause);
+                    if (amount > 0 && WoundsIt(target, null, by is not null ? cause : null)) DamageAllowed(target, amount, cause); // cause: the spell's name
                     if (by is not null && by != target && IsDead(target)) AwardKill(by, target); // a spell's kill (U8GameWindow.Levels.cs)
                     break;
                 case MagicEffectKind.Charm or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.RevealInvisible or MagicEffectKind.Clone:

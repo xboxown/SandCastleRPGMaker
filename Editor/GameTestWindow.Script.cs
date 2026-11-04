@@ -282,7 +282,7 @@ public partial class GameTestWindow
         if (target < hp)
         {
             if (!canKill) target = Math.Max(target, -(MaxHp(who) / 3)); // knocked out at worst
-            Damage(who, hp - target, "an event");
+            DamageAllowed(who, hp - target, "an event");
             return true;
         }
         SetHp(who, target);

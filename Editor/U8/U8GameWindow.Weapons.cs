@@ -112,14 +112,15 @@ public partial class U8GameWindow
         PlaySoundFrom(weapon?.Weapon.HitSoundResourceId ?? -1, defender);
         bool noDamage = powers.HasFlag(WeaponPowers.NoDamage);
         int damage = noDamage || (points == 0 && !_u8Kicking) ? 0 : U8Damage(attacker, defender, weapon, ammo, type); // Ultima 8's damage (U8GameWindow.U8Combat.cs)
+        if (!WoundsIt(defender, weapon, null)) damage = 0; // it takes another weapon or a spell to hurt this one (Character Editor > Health)
         if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
         if (damage <= 0 && !noDamage) return; // no damage, no powers
         if (damage > 0)
         {
-            bool willDie = (GetHp(defender) ?? 99) - damage <= 0;
+            bool willDie = !defender.Immortal && (GetHp(defender) ?? 99) - damage <= 0;
             if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
             MaybeStartBleeding(defender, damage);
-            Damage(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
+            DamageAllowed(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
             if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
             if (willDie && IsDead(defender)) AwardKill(attacker, defender); // Exult: the killing blow's experience (U8GameWindow.Levels.cs)
         }

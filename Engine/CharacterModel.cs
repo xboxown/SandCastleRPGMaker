@@ -84,6 +84,15 @@ public class CharacterDefinition
     /// <summary>What it says in each situation (Character Editor > Verbose).</summary>
     public VerboseLines Verbose { get; set; } = new();
 
+    /// <summary>Can be hurt and knocked out, but never killed (Character Editor > Health). Weapon and spell requirements don't apply to it.</summary>
+    public bool Immortal { get; set; }
+    /// <summary>Only a blow with this weapon equipped hurts it (Character Editor > Health). With RequiresSpell too: either one.</summary>
+    public bool RequiresWeapon { get; set; }
+    public int RequiredWeaponId { get; set; } = -1;
+    /// <summary>Only this spell hurts it (Character Editor > Health).</summary>
+    public bool RequiresSpell { get; set; }
+    public string RequiredSpellName { get; set; } = string.Empty;
+
     /// <summary>Its blood type: a sprite in the Sprite Editor's Blood group, or empty for none (it never bleeds - Exult's cant_bleed).</summary>
     public string BloodSpriteName { get; set; } = string.Empty;
 
@@ -155,7 +164,7 @@ public class CharacterDefinition
 /// <summary>Every PC defined in the project. Per spec, stored in .msrp, not a separate file.</summary>
 /// <summary>How a character gets about: mammals walk, sea creatures swim, birds fly.</summary>
 /// <summary>How a character gets about. Stationary: it never moves from where it is placed (a reaper, a tree that shoots lightning) - still a character: it talks, fights from where it stands, has its schedules' activities there.</summary>
-public enum MovementKind { Land, Sea, Air, Stationary }
+public enum MovementKind { Land, Sea, Air, Stationary, Ghost }
 
 public class CharacterDatabase
 {

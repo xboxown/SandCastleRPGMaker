@@ -280,6 +280,8 @@ public class LanguageDefinition
 
 public class SystemSettings
 {
+    /// <summary>Starvation can kill (System Settings > Combat). Not set: Ultima 7's way, off (it only knocks out, again and again); Ultima 8 starts with it on.</summary>
+    public bool? StarvationKills { get; set; }
     /// <summary>The game's own languages (System Settings > Languages).</summary>
     public List<LanguageDefinition> Languages { get; set; } = new();
     public AutoSaveSettings AutoSave { get; set; } = new();

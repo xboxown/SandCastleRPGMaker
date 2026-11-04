@@ -8,9 +8,6 @@
             <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
         </StackPanel>
         <TabControl x:Name="CategoryTabs" SelectionChanged="CategoryTabs_SelectionChanged">
-            <TabItem Header="Weapons"><Grid x:Name="WeaponsTabContent"/></TabItem>
-            <TabItem Header="Armors"><Grid x:Name="ArmorsTabContent"/></TabItem>
-            <TabItem Header="Items"><Grid x:Name="ItemsTabContent"/></TabItem>
             <TabItem Header="Books"><Grid x:Name="BooksTabContent"/></TabItem>
             <TabItem Header="Objects"><Grid x:Name="ObjectsTabContent"/></TabItem>
             <TabItem Header="Containers"><Grid x:Name="ContainersTabContent"/></TabItem>

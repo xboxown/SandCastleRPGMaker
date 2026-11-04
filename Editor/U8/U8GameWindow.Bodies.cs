@@ -42,6 +42,7 @@ public partial class U8GameWindow
     {
         var character = mapCharacter.Character;
         var (cellX, cellY, lift) = (mapCharacter.Placement.X, mapCharacter.Placement.Y, IsFlier(mapCharacter) ? GroundBelow(mapCharacter) : mapCharacter.Lift); // a flier falls
+        if (character.Body.NoBody) { LeaveNoBody(mapCharacter, lift); return; }
 
         // The body's container: the Body Container template, looking like this character's Body pose, weighing what its settings say.
         string json = System.Text.Json.JsonSerializer.Serialize(_bodyContainerTemplate);
@@ -97,6 +98,50 @@ public partial class U8GameWindow
         SetMapPosition(body, null, cellX, cellY, 0, 0);
         SetZ(body, lift);
         ForgetHomeFloor(body);
+        SettleWorld();
+        RefreshAfterMove();
+    }
+
+    /// <summary>
+    /// Exult's has_no_body: no body is left. What it carried falls on the ground, each thing on the nearest free spot within 5 tiles of
+    /// where it died (Actor::die's find_spot); nothing but the things stays.
+    /// </summary>
+    private void LeaveNoBody(MapCharacter mapCharacter, int lift)
+    {
+        var character = mapCharacter.Character;
+        var (homeX, homeY) = (mapCharacter.Placement.X, mapCharacter.Placement.Y);
+        var belongings = character.Inventory.ToList();
+        character.Inventory.Clear();
+        character.EquippedSlots.Clear();
+        character.CustomEquippedSlots.Clear();
+        if (!character.IsHuman)
+            foreach (var drop in character.DeathDrops)
+                if (ObjectDef(drop.ObjectId) is not null && _random.Next(100) < drop.Percent) belongings.AddRange(MakeGifts(ReferencedItemCategory.Object, drop.ObjectId, Math.Max(1, drop.Quantity)));
+
+        int radius = CellsForTiles(5), floor = MapFloors.FloorOfLift(lift);
+        var spots = new List<(int X, int Y)>();
+        var world = WorldNow();
+        for (int dy = -radius; dy <= radius; dy++)
+            for (int dx = -radius; dx <= radius; dx++)
+            {
+                var cell = (X: homeX + dx, Y: homeY + dy);
+                if (InsideMap(cell.X, cell.Y) && CanStandAt(mapCharacter, cell, lift, world, out int at) && MapFloors.FloorOfLift(at) == floor) spots.Add(cell);
+            }
+        var order = spots.OrderBy(c => Math.Max(Math.Abs(c.X - homeX), Math.Abs(c.Y - homeY))).ThenBy(_ => _random.Next()).ToList();
+        for (int i = 0; i < belongings.Count; i++)
+        {
+            var (x, y) = order.Count > 0 ? order[i % order.Count] : (homeX, homeY); // more things than spots: they pile up
+            PlaceNewThing(belongings[i], x, y, floor);
+        }
+
+        if (mapCharacter.Visual is { } visual)
+        {
+            UnregisterWorldAnimator(visual);
+            GameCanvas.Children.Remove(visual);
+        }
+        _mapCharacters.Remove(mapCharacter);
+        mapCharacter.Placement.Dead = true;
+        mapCharacter.Placement.BodyInstanceId = -1;
         SettleWorld();
         RefreshAfterMove();
     }

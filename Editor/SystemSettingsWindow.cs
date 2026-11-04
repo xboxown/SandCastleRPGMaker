@@ -376,6 +376,16 @@ public partial class SystemSettingsWindow : Window
                    "and a big hit on the main character (a third of its health or more, or while below a quarter) flashes the whole screen red instead.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
+        var starvation = new CheckBox { Content = "Starvation kills", IsChecked = _settings.StarvationKills ?? ProjectSession.IsUltima8, Margin = new Thickness(0, 12, 0, 6) };
+        starvation.Checked += (_, _) => _settings.StarvationKills = true;
+        starvation.Unchecked += (_, _) => _settings.StarvationKills = false;
+        panel.Children.Add(starvation);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Unchecked (Ultima 7's way): at food 0 a character is hurt until it falls unconscious, wakes after a long time, and falls again; hunger alone never kills it.\n" +
+                   "Checked (an Ultima 8 project starts with this): it goes on losing health where it lies, and dies. An Immortal character is never killed either way.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75
+        });
         return panel;
     }
 

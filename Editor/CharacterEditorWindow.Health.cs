@@ -129,6 +129,50 @@ public partial class CharacterEditorWindow
         tooHeavy.Checked += (_, _) => body.TooHeavy = true;
         tooHeavy.Unchecked += (_, _) => body.TooHeavy = false;
         HealthPanel.Children.Add(tooHeavy);
+        var noBody = new CheckBox { Content = "No Body (it leaves no body: what it carried falls on the ground around where it died)", IsChecked = body.NoBody, Margin = new Thickness(0, 2, 0, 0) };
+        noBody.Checked += (_, _) => body.NoBody = true;
+        noBody.Unchecked += (_, _) => body.NoBody = false;
+        HealthPanel.Children.Add(noBody);
+
+        // ---------- What it takes to hurt it ----------
+        HealthPanel.Children.Add(Heading("What it takes to hurt it"));
+        var immortal = new CheckBox { Content = "Immortal (it loses health and can go unconscious, but can't be killed)", IsChecked = character.Immortal };
+        var needsWeapon = new CheckBox { Content = "Only hurt by this weapon, equipped:", IsChecked = character.RequiresWeapon, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        var needsSpell = new CheckBox { Content = "Only hurt by this spell:", IsChecked = character.RequiresSpell, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 8, 0) };
+        var allObjects = ProjectSession.ObjectsProvider?.Invoke()?.Objects ?? new List<WorldObject>();
+        var weapons = allObjects.Where(o => o.Type == ObjectType.Weapon).OrderBy(o => o.Name).ToList();
+        var weaponBox = new ComboBox { Width = 220, ItemsSource = weapons, DisplayMemberPath = nameof(WorldObject.Name), SelectedItem = weapons.FirstOrDefault(o => o.Id == character.RequiredWeaponId) };
+        weaponBox.SelectionChanged += (_, _) => character.RequiredWeaponId = (weaponBox.SelectedItem as WorldObject)?.Id ?? -1;
+        var spellBox = new ComboBox { Width = 220, IsEditable = true, ItemsSource = allObjects.Where(o => o.Type == ObjectType.Spellbook).SelectMany(o => o.Spellbook.Spells).Select(sp => sp.Name).Distinct().OrderBy(n => n).ToList(), Text = character.RequiredSpellName };
+        spellBox.LostFocus += (_, _) => character.RequiredSpellName = spellBox.Text.Trim();
+        spellBox.SelectionChanged += (_, _) => { if (spellBox.SelectedItem is string name) character.RequiredSpellName = name; };
+        void ShowHurtRules()
+        {
+            needsWeapon.IsEnabled = needsSpell.IsEnabled = immortal.IsChecked != true;
+            weaponBox.IsEnabled = needsWeapon.IsEnabled && needsWeapon.IsChecked == true;
+            spellBox.IsEnabled = needsSpell.IsEnabled && needsSpell.IsChecked == true;
+        }
+        immortal.Checked += (_, _) => { character.Immortal = true; ShowHurtRules(); };
+        immortal.Unchecked += (_, _) => { character.Immortal = false; ShowHurtRules(); };
+        needsWeapon.Checked += (_, _) => { character.RequiresWeapon = true; ShowHurtRules(); };
+        needsWeapon.Unchecked += (_, _) => { character.RequiresWeapon = false; ShowHurtRules(); };
+        needsSpell.Checked += (_, _) => { character.RequiresSpell = true; ShowHurtRules(); };
+        needsSpell.Unchecked += (_, _) => { character.RequiresSpell = false; ShowHurtRules(); };
+        HealthPanel.Children.Add(immortal);
+        var weaponRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        weaponRow.Children.Add(needsWeapon);
+        weaponRow.Children.Add(weaponBox);
+        HealthPanel.Children.Add(weaponRow);
+        var spellRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        spellRow.Children.Add(needsSpell);
+        spellRow.Children.Add(spellBox);
+        HealthPanel.Children.Add(spellRow);
+        HealthPanel.Children.Add(new TextBlock
+        {
+            Text = "Both ticked: either one hurts it. With either ticked, nothing else does: not other weapons, traps, fire, poison or hunger. An event's Set HP or Kill Character still works.",
+            TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 4, 0, 4)
+        });
+        ShowHurtRules();
 
         // ---------- Immunities ----------
         HealthPanel.Children.Add(Heading("Immune to"));
