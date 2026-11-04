@@ -119,7 +119,7 @@ public partial class GameTestWindow
             bool willDie = !defender.Immortal && (GetHp(defender) ?? 99) - damage <= 0;
             if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
             MaybeStartBleeding(defender, damage);
-            DamageAllowed(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}");
+            DamageAllowed(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}", type);
             if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
             if (willDie && IsDead(defender)) AwardKill(attacker, defender); // Exult: the killing blow's experience (GameTestWindow.Levels.cs)
         }

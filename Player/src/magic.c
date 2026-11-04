@@ -248,7 +248,7 @@ void magic_apply_effects(cJSON *effects, int target, const char *cause, int by)
             case E_INVISIBILITY: vitals_inflict(id, A_INVISIBLE); break;
             case E_LIGHT: lighting_special(amount); break;
             case E_DAMAGE:
-                if (amount > 0 && vitals_wounds_it(id, -1, by >= 0 ? cause : NULL)) vitals_damage_allowed(id, amount, cause); /* cause: the spell's name */
+                if (amount > 0 && vitals_wounds_it(id, -1, by >= 0 ? cause : NULL)) { vitals_hit_type(2); vitals_damage_allowed(id, amount, cause); vitals_hit_type(0); } /* cause: the spell's name; 2: DamageType.Magic */
                 if (by >= 0 && by != target && vitals_dead(id)) { int worth = stat_of(target, K_EXP, 0); if (worth > 0) combat_gain_experience(by, worth); } /* a spell's kill */
                 break;
             case E_CHARM: case E_FEAR: case E_DANCE: case E_REVEAL_INVISIBLE: case E_CLONE: character_spell(e, target, by); break;
@@ -349,7 +349,7 @@ static void move_caster(int caster, int x, int y, int floorOf)
     for (int a = 1; a < world_actor_count(); a++) if (!world_actor_gone(a) && in_party(a)) world_actor_place(a, x, y, floorOf); /* the party comes along */
 }
 
-static int lastSummoned;
+static int lastSummoned, appearing; /* appearing: a monster's own kind (a joining rule, a split), not a caster's helper */
 
 static void summon(cJSON *kind, int caster, int cx, int cy, int count, double seconds)
 {
@@ -358,15 +358,18 @@ static void summon(cJSON *kind, int caster, int cx, int cy, int count, double se
     cell_of(caster, &x0, &y0, &fl);
     cJSON *list = get(get(project(), "Characters"), "Characters");
     int base = num(kind, "Id", -1) % COPY_STEP;
+    int nearest = 1;
+    if (appearing && world_tile_w() < 16) nearest = (16 + world_tile_w() - 1) / world_tile_w(); /* far enough not to stand on it */
     for (int n = 0; n < count; n++)
     {
         /* a free spot round the cell */
         int sx = -1, sy = -1;
-        for (int ring = 1; ring <= 3 && sx < 0; ring++)
+        for (int ring = nearest; ring <= nearest + 2 && sx < 0; ring++)
             for (int dy = -ring; dy <= ring && sx < 0; dy++)
                 for (int dx = -ring; dx <= ring && sx < 0; dx++)
                 {
                     int x = cx + dx, y = cy + dy, taken = 0;
+                    if (abs(dx) != ring && abs(dy) != ring) continue;
                     if (x < 0 || y < 0 || x >= world_map_w() || y >= world_map_h()) continue;
                     for (int a = 0; a < world_actor_count() && !taken; a++) { int ax, ay, af; if (world_actor_gone(a)) continue; world_actor_cell(a, &ax, &ay, &af); taken = ax == x && ay == y; }
                     if (!taken && world_can_stand(0, x, y, fl)) { sx = x; sy = y; }
@@ -376,19 +379,22 @@ static void summon(cJSON *kind, int caster, int cx, int cy, int count, double se
         int copies = 1;
         cJSON *c;
         cJSON_ArrayForEach(c, list) if (num(c, "Id", -1) % COPY_STEP == base && num(c, "Id", -1) / COPY_STEP >= copies) copies = num(c, "Id", -1) / COPY_STEP + 1;
+        if (copies > 2146) break; /* its id would not fit a whole number */
         cJSON *copy = cJSON_Duplicate(kind, 1);
+        if (!copy) break; /* no memory: no new one */
         cJSON_ReplaceItemInObject(copy, "Id", cJSON_CreateNumber(base + COPY_STEP * copies));
-        cJSON_ReplaceItemInObject(copy, "FactionId", cJSON_CreateNumber(num(character_json(id_of(caster)), "FactionId", -1)));
+        if (!appearing) cJSON_ReplaceItemInObject(copy, "FactionId", cJSON_CreateNumber(num(character_json(id_of(caster)), "FactionId", -1)));
         if (get(copy, "IsInParty")) cJSON_ReplaceItemInObject(copy, "IsInParty", cJSON_CreateFalse());
         if (get(copy, "IsTestPlayer")) cJSON_ReplaceItemInObject(copy, "IsTestPlayer", cJSON_CreateFalse());
-        if (get(copy, "Schedules")) cJSON_ReplaceItemInObject(copy, "Schedules", cJSON_CreateArray());
-        if (get(copy, "Inventory")) cJSON_ReplaceItemInObject(copy, "Inventory", cJSON_CreateArray());
+        if (!appearing && get(copy, "Schedules")) cJSON_ReplaceItemInObject(copy, "Schedules", cJSON_CreateArray());
+        if (!appearing && get(copy, "Inventory")) cJSON_ReplaceItemInObject(copy, "Inventory", cJSON_CreateArray());
         cJSON_AddItemToArray(list, copy);
         items_add_carrier(copy);
         vitals_add(num(copy, "Id", -1));
         int actor = world_add_actor(copy, sx, sy, fl);
         if (actor > 0 && seconds > 0) timed_add(summoned, &summonedCount, 32, actor, seconds * 1000);
         if (actor > 0) lastSummoned = actor;
+        if (actor > 0 && appearing) schedules_add(actor); /* Actor::clone: the same side and the same schedule */
     }
 }
 
@@ -396,7 +402,9 @@ static void summon(cJSON *kind, int caster, int cx, int cy, int count, double se
 int magic_appear(cJSON *kind, int beside, int cx, int cy)
 {
     lastSummoned = -1;
+    appearing = 1;
     summon(kind, beside, cx, cy, 1, 0);
+    appearing = 0;
     return lastSummoned;
 }
 

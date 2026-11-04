@@ -39,6 +39,9 @@ public partial class U8GameWindow
         public int Frame;
         public bool Mirrored;
         public required Image Visual;
+        /// <summary>A trail's: HP it takes from whoever steps on it (0: none), and the kind it never hurts.</summary>
+        public int Hurts;
+        public int MadeByKind = -1;
     }
 
     private readonly Dictionary<CharacterDefinition, Bleeding> _bleeding = new();
@@ -108,9 +111,14 @@ public partial class U8GameWindow
     {
         if (BloodOf(character) is not { } blood) return;
         var (ux, uy) = FeetUnit(character);
-        int lift = LiftOf(character);
+        DropPuddle(blood, ux, uy, LiftOf(character));
+    }
+
+    /// <summary>Actor::bleed(first_frame, last_frame, loc): grow this kind of puddle on this spot, or start a new small one.</summary>
+    private void DropPuddle(SpriteEntry blood, int ux, int uy, int lift, int hurts = 0, int madeByKind = -1)
+    {
         int last = Math.Min(SpriteDatabase.BloodSizes, blood.Frames.Count) - 1;
-        if (_puddles.FirstOrDefault(p => p.UnitX == ux && p.UnitY == uy && p.Lift == lift) is { } puddle)
+        if (_puddles.FirstOrDefault(p => p.UnitX == ux && p.UnitY == uy && p.Lift == lift && p.Blood == blood) is { } puddle)
         {
             if (puddle.Frame < last)
             {
@@ -122,7 +130,7 @@ public partial class U8GameWindow
         }
         var fresh = new BloodPuddle
         {
-            UnitX = ux, UnitY = uy, Lift = lift, Blood = blood,
+            UnitX = ux, UnitY = uy, Lift = lift, Blood = blood, Hurts = hurts, MadeByKind = madeByKind,
             Frame = Rng.Next(Math.Min(2, last + 1)), // "Lets start with a smaller pool."
             Mirrored = Rng.Next(2) == 1,
             Visual = new Image { IsHitTestVisible = false, Stretch = Stretch.Fill, RenderTransformOrigin = new Point(0.5, 0.5) }

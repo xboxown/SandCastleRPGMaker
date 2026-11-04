@@ -17,17 +17,36 @@ public class JoinRule
     /// <summary>How near counts as touching, in tiles of 8 pixels.</summary>
     public int ReachTiles { get; set; } = 3;
     /// <summary>No more than this many of the result on the map; 0: no limit.</summary>
-    public int MaxOnMap { get; set; } = 12;
+    public int MaxOnMap { get; set; }
     public int SoundResourceId { get; set; } = -1;
+}
+
+/// <summary>What makes a new monster (Character Editor > Health > Joining). Saved as a number: add new ones at the end.</summary>
+public enum JoinGrowth
+{
+    /// <summary>Its "multiplies" rules: near its own kind.</summary>
+    OurEngine = 0,
+    /// <summary>Exult's Actor::reduce_health: a hit it survives splits it, 1 chance in 2; its "multiplies" rules do nothing.</summary>
+    Ultima7 = 1,
+    /// <summary>A hit and its "multiplies" rules.</summary>
+    Both = 2
 }
 
 /// <summary>Monsters joining up (Character Editor > Health > Joining): any monster, as Ultima 7's slimes.</summary>
 public class JoiningSettings
 {
+    public JoinGrowth Growth { get; set; } = JoinGrowth.OurEngine;
+    /// <summary>Hits of these kinds never split it (Exult: the damage a monster is vulnerable to).</summary>
+    public List<DamageType> NoSplitFrom { get; set; } = new();
+    /// <summary>A sprite in the Slime Trail group: as it walks, 1 step in 6 leaves a puddle (Exult's Slime_actor::step). Empty: no trail.</summary>
+    public string TrailSpriteName { get; set; } = string.Empty;
+    /// <summary>Its puddles hurt whoever steps on them, except its own kind.</summary>
+    public bool TrailHurts { get; set; }
+    public int TrailDamage { get; set; } = 1;
     /// <summary>A sprite in the Joined Monsters group: its frame shows which sides touch its own kind (Exult's Slime_actor). Not set: its ordinary poses.</summary>
     public SpriteLink JoinedSprite { get; set; } = new();
     public List<JoinRule> Rules { get; set; } = new();
-    public bool IsSet => JoinedSprite.SpriteName.Length > 0 || Rules.Count > 0;
+    public bool IsSet => JoinedSprite.SpriteName.Length > 0 || Rules.Count > 0 || Growth != JoinGrowth.OurEngine || TrailSpriteName.Length > 0;
 }
 
 /// <summary>

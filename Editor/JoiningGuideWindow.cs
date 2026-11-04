@@ -32,12 +32,13 @@ public sealed class JoiningGuideWindow : Window
         panel.Children.Add(Words("Step by step", bold: true));
         foreach (string step in new[]
         {
-            "1. Make the sprite here: New Sprite in this group. Give it 32 frames, all the same size (16 frames also works, without the wobble).",
+            "1. Make the sprite here: New Sprite in this group. Give it 32 frames, all the same size: as wide and tall as one square of your map, so neighbours meet (16 frames also works, without the wobble).",
             "2. Draw each frame with bulges reaching out on the sides the table below says. Two monsters side by side must meet in the middle of their shared edge, so the seam can't be seen.",
             "3. Each pair of frames is the same join drawn two ways (frame 0 and 1, frame 2 and 3...). The game flips between them as it moves, so it wobbles.",
             "4. Character Editor > the monster > Health > Joining: pick this sprite as its Joined look.",
-            "5. In play, each monster shows the frame for which sides have another of its own kind two tiles away (16 pixels). The frames change by themselves as they move.",
-            "6. To make them grow or fuse: in the same place add a rule. Multiply: touching, another one appears (a slime). Fuse: both go and a different monster stands there (body parts forming a horror). Pick the other monster and the new one; Chance, Wait and Most on the map keep it under control.",
+            "5. In play, each monster shows the frame for which sides have another of its own kind right next to it: one map square away, or 16 pixels if your squares are smaller. Diagonals don't count. The frames change by themselves as they move.",
+            "6. To make them grow: in the same place choose What makes a new one. Ultima 7 / Exult: a hit it survives may split it, with no limit. Our engine: being near its own kind, by a multiplies rule. Or Both. To fuse: add a rule, and both go and a different monster stands there (body parts forming a horror).",
+            "7. For a trail: the Slime Trail group holds the puddles. Pick one as the monster's Trail, and tick whether it hurts to step on.",
         }) panel.Children.Add(Words(step));
 
         panel.Children.Add(Words("Which frame shows what (a neighbour on that side)", bold: true));

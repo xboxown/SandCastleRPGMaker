@@ -27,6 +27,7 @@ public partial class SpriteFrameEditorWindow : Window
     private FontGuideWindow? _fontGuide;
     /// <summary>A blood type (a sprite in the Blood group): frames are puddle sizes, small to large, at most SpriteDatabase.BloodSizes - no sound, no animation - with the Blood Guide alongside.</summary>
     private readonly bool _isBloodSprite;
+    private readonly bool _isTrailSprite; // a Slime Trail puddle: _isBloodSprite too, in its own words
     private BloodGuideWindow? _bloodGuide;
     private bool _suppress;
 
@@ -42,7 +43,7 @@ public partial class SpriteFrameEditorWindow : Window
         "Custom"
     };
 
-    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false, bool isKeychainSprite = false, bool isWeaponInHandSprite = false)
+    public SpriteFrameEditorWindow(SpriteEntry sprite, ResourceDatabase resources, bool isTilesetGroup = false, bool isFontSprite = false, bool isBloodSprite = false, bool isKeychainSprite = false, bool isWeaponInHandSprite = false, bool isTrailSprite = false)
     {
         InitializeComponent();
         _sprite = sprite;
@@ -51,6 +52,7 @@ public partial class SpriteFrameEditorWindow : Window
         _isTilesetGroup = isTilesetGroup;
         _isFontSprite = isFontSprite;
         _isBloodSprite = isBloodSprite;
+        _isTrailSprite = isTrailSprite;
         PreviewKeyDown += SpriteFrameEditorWindow_PreviewKeyDown;
 
         OriginAnchorCombo.ItemsSource = AnchorOptions;
@@ -110,10 +112,11 @@ public partial class SpriteFrameEditorWindow : Window
         foreach (UIElement control in new UIElement[] { FpsBox, LoopCheck, PlayPauseButton })
         {
             control.IsEnabled = false;
-            ((FrameworkElement)control).ToolTip = "Blood doesn't animate - each frame is one puddle size";
+            ((FrameworkElement)control).ToolTip = (_isTrailSprite ? "A trail" : "Blood") + " doesn't animate - each frame is one puddle size";
         }
-        Title = $"Blood: {_sprite.Name}";
+        Title = $"{(_isTrailSprite ? "Slime Trail" : "Blood")}: {_sprite.Name}";
         TrimBloodFrames();
+        if (_isTrailSprite) return; // the Blood Guide is about bleeding: the Sprite Editor's New Sprite says how trails work
 
         var guideButton = new Button { Content = "Blood Guide...", Margin = new Thickness(0, 0, 6, 0), ToolTip = "What each frame is, and how bleeding works" };
         guideButton.Click += (_, _) => ShowBloodGuide();
@@ -130,8 +133,8 @@ public partial class SpriteFrameEditorWindow : Window
         _sprite.Frames.RemoveRange(SpriteDatabase.BloodSizes, extra);
         foreach (var frame in _sprite.Frames) frame.SoundResourceId = -1;
         if (_currentFrameIndex >= _sprite.Frames.Count) _currentFrameIndex = _sprite.Frames.Count - 1;
-        MessageBox.Show($"Blood has {SpriteDatabase.BloodSizes} sizes (frames 1-{SpriteDatabase.BloodSizes}, small to large), as in Exult - the {extra} extra frame{(extra == 1 ? " was" : "s were")} removed.",
-            "Blood", MessageBoxButton.OK, MessageBoxImage.Information);
+        MessageBox.Show($"{(_isTrailSprite ? "A trail" : "Blood")} has {SpriteDatabase.BloodSizes} sizes (frames 1-{SpriteDatabase.BloodSizes}, small to large), as in Exult - the {extra} extra frame{(extra == 1 ? " was" : "s were")} removed.",
+            _isTrailSprite ? "Slime Trail" : "Blood", MessageBoxButton.OK, MessageBoxImage.Information);
     }
 
     private void ShowBloodGuide()

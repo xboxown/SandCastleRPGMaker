@@ -123,6 +123,7 @@ typedef struct Actor
     int characterId, body;          /* body: its solid box in bodies[] (-1 for the player) */
     int human;                      /* Exult: only the sentient open doors */
     const Sprite *joinedSprite; int joinedFrame; /* a monster joining up: this frame instead of its poses (vitals.c) */
+    const Sprite *trail; int trailKnown, trailHurts, trailUx, trailUy, trailLift, trailSeen; double trailHurtWait; /* the puddles it leaves (Character Editor > Health > Joining) */
     int movement;                   /* Character Editor > Moves on: 0 land, 1 sea (water only), 2 air (flies), 3 stationary */
     int flyPrefer;                  /* a flier's height on its way: floor 10 in the open, or the floor it's headed for */
     double levitateMs; int levitateLift, groundMovement; /* Levitate (a spell): how long still, at what height, how it moved before */
@@ -962,8 +963,13 @@ static void camera_update(void)
 
 static uint32_t *screen;
 
-typedef struct Puddle { int ux, uy, lift, frame, mirrored; const Sprite *blood; } Puddle;
-static Puddle puddles[128]; static int puddleCount;
+typedef struct Puddle { int ux, uy, lift, frame, mirrored, hurts, madeBy; const Sprite *blood; } Puddle; /* hurts, madeBy: a trail's HP on stepping in, and the kind it spares */
+#ifdef FRAME_HIRES
+#define PUDDLE_MAX 512
+#else
+#define PUDDLE_MAX 128 /* Amiga 68k: speed first */
+#endif
+static Puddle puddles[PUDDLE_MAX]; static int puddleCount, puddleOldest;
 typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
 static Bleeding bleeding[32]; static int bleedingCount;
 static void draw_status_outlines(uint32_t *pixels);
@@ -4571,6 +4577,13 @@ static double puddleSweepMs;
 static uint32_t bloodRng = 2718281828u;
 static int blood_rnd(int n) { bloodRng ^= bloodRng << 13; bloodRng ^= bloodRng >> 17; bloodRng ^= bloodRng << 5; return n > 0 ? (int)(((uint64_t)bloodRng * (uint32_t)n) >> 32) : 0; }
 
+static cJSON *character_json_of(int characterId)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(get(gameJson, "Project"), "Characters"), "Characters")) if (num(c, "Id", -2) == characterId) return c;
+    return NULL;
+}
+
 static const Sprite *blood_of(int actor)
 {
     Actor *a = actor_of(actor);
@@ -4589,21 +4602,87 @@ static const Sprite *blood_of(int actor)
 static void feet_unit(Actor *a, int *ux, int *uy) { *ux = (int)floor(a->px / UNIT); *uy = (int)floor((a->py + tileH / 2.0 - 1) / UNIT); }
 
 /* Actor::bleed: the puddle on this tile grows, else a new small one. */
+static void drop_puddle(const Sprite *blood, int ux, int uy, int lift, int hurts, int madeBy)
+{
+    int last = (blood->frameCount < 4 ? blood->frameCount : 4) - 1;
+    for (int i = 0; i < puddleCount; i++)
+        if (puddles[i].ux == ux && puddles[i].uy == uy && puddles[i].lift == lift && puddles[i].blood == blood)
+        {
+            if (puddles[i].frame < last) { puddles[i].frame++; puddles[i].mirrored = blood_rnd(2); }
+            return;
+        }
+    int at = puddleCount;
+    if (puddleCount >= PUDDLE_MAX) { at = puddleOldest; puddleOldest = (puddleOldest + 1) % PUDDLE_MAX; } /* full: the oldest goes */
+    else puddleCount++;
+    puddles[at] = (Puddle){ ux, uy, lift, blood_rnd(last + 1 < 2 ? last + 1 : 2), blood_rnd(2), hurts, madeBy, blood }; /* "Lets start with a smaller pool." */
+}
+
 static void bleed(int actor)
 {
     Actor *a = actor_of(actor);
     const Sprite *blood = blood_of(actor);
     if (!a || !blood) return;
-    int ux, uy, last = (blood->frameCount < 4 ? blood->frameCount : 4) - 1;
+    int ux, uy;
     feet_unit(a, &ux, &uy);
-    for (int i = 0; i < puddleCount; i++)
-        if (puddles[i].ux == ux && puddles[i].uy == uy && puddles[i].lift == a->lift)
+    drop_puddle(blood, ux, uy, a->lift, 0, -1);
+}
+
+/* Slime_actor::step: 1 step in 6 leaves a puddle where it stood (GameTestWindow.Joining UpdateTrails). */
+static double trailCheckMs;
+static void update_trails(double ms)
+{
+    for (int i = -1; i < npcCount; i++)
+    {
+        Actor *a = i < 0 ? &player : &npcs[i];
+        if (a->trailHurtWait > 0) a->trailHurtWait -= ms;
+    }
+    if ((trailCheckMs += ms) < 100) return;
+    trailCheckMs = 0;
+    for (int i = 0; i < npcCount; i++)
+    {
+        Actor *a = &npcs[i];
+        if (!a->trailKnown)
         {
-            if (puddles[i].frame < last) { puddles[i].frame++; puddles[i].mirrored = blood_rnd(2); }
-            return;
+            a->trailKnown = 1;
+            cJSON *joining = get(character_json_of(a->characterId), "Joining");
+            const char *name = joining ? str(joining, "TrailSpriteName") : "";
+            const Sprite *s = name[0] ? sprite_find("Slime Trail", name) : NULL;
+            a->trail = s && s->frameCount ? s : NULL;
+            if (a->trail && flag(joining, "TrailHurts")) { a->trailHurts = num(joining, "TrailDamage", 1); if (a->trailHurts < 1) a->trailHurts = 1; }
         }
-    if (puddleCount >= 128) return;
-    puddles[puddleCount++] = (Puddle){ ux, uy, a->lift, blood_rnd(last + 1 < 2 ? last + 1 : 2), blood_rnd(2), blood }; /* "Lets start with a smaller pool." */
+        if (!a->trail || a->gone || vitals_dead(a->characterId)) continue;
+        int ux, uy;
+        feet_unit(a, &ux, &uy);
+        if (a->trailSeen)
+        {
+            int dx = abs(ux - a->trailUx), dy = abs(uy - a->trailUy), steps = dx > dy ? dx : dy;
+            if (steps > 4) steps = 4;
+            for (int s = 0; s < steps; s++)
+                if (blood_rnd(6) == 0) { drop_puddle(a->trail, a->trailUx, a->trailUy, a->trailLift, a->trailHurts, a->characterId % COPY_STEP); break; }
+        }
+        a->trailSeen = 1; a->trailUx = ux; a->trailUy = uy; a->trailLift = a->lift;
+    }
+    int any = 0;
+    for (int p = 0; p < puddleCount && !any; p++) any = puddles[p].hurts > 0;
+    if (!any) return;
+    /* Whoever stands on one that hurts, never its own kind: on stepping in, then each second. */
+    for (int i = -1; i < npcCount; i++)
+    {
+        Actor *a = i < 0 ? &player : &npcs[i];
+        if (a->gone || a->trailHurtWait > 0 || vitals_dead(a->characterId)) continue;
+        double feetY = a->py + tileH / 2.0 - 1;
+        for (int p = 0; p < puddleCount; p++)
+        {
+            Puddle *pd = &puddles[p];
+            if (pd->hurts <= 0 || pd->lift != a->lift || pd->madeBy == a->characterId % COPY_STEP) continue;
+            const Picture *pic = pd->frame < pd->blood->frameCount ? frame_picture(&pd->blood->frames[pd->frame]) : NULL;
+            double halfW = pic && pic->width > 8 ? pic->width / 2.0 : 4, halfH = pic && pic->height > 8 ? pic->height / 2.0 : 4;
+            if (fabs(a->px - (pd->ux * 8 + 4.0)) > halfW || fabs(feetY - (pd->uy * 8 + 4.0)) > halfH) continue;
+            a->trailHurtWait = 1000;
+            vitals_damage(a->characterId, pd->hurts, "a slime trail");
+            break;
+        }
+    }
 }
 
 /* reduce_health: a blow of this much may start the character bleeding (rand() % 10 < damage, not with 2 puddles round it already). */
@@ -4626,6 +4705,7 @@ void world_maybe_bleed(int actor, int damage)
 /* Npc_bleed_timer: a drip every 0.5-1 s for 1-3 minutes - healing or dying stops it; far-off puddles are let go. */
 void world_update_bleeding(double ms)
 {
+    update_trails(ms);
     for (int i = 0; i < bleedingCount; i++)
     {
         Bleeding *b = &bleeding[i];
@@ -4643,7 +4723,7 @@ void world_update_bleeding(double ms)
     puddleSweepMs = 2000;
     double cx = cameraX + SCREEN_W / 2.0, cy = cameraY + SCREEN_H / 2.0;
     for (int i = 0; i < puddleCount; i++)
-        if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) puddles[i--] = puddles[--puddleCount];
+        if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) { puddles[i--] = puddles[--puddleCount]; puddleOldest = 0; }
 }
 
 /* ---------------- Characters in each other's way (actors.cc Actor::move_aside, objs.cc swap_positions) ---------------- */

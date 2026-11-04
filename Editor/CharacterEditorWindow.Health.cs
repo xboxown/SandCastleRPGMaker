@@ -178,7 +178,7 @@ public partial class CharacterEditorWindow
         HealthPanel.Children.Add(Heading("Joining (monsters that touch)"));
         HealthPanel.Children.Add(new TextBlock
         {
-            Text = "Ultima 7's slimes, but for any monster. Joined look: a sprite in the Sprite Editor's Joined Monsters group (New Sprite there shows a guide): it shows which sides touch its own kind, and each stays its own character. Rules: touching, it multiplies, or fuses into a new monster.",
+            Text = "Ultima 7's slimes, but for any monster. Joined look: a sprite in the Sprite Editor's Joined Monsters group (New Sprite there shows a guide): it shows which sides touch its own kind, and each stays its own character. Trail: a sprite in the Slime Trail group. Rules: near its own kind, it multiplies, or fuses into a new monster.",
             TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7, Margin = new Thickness(0, 0, 0, 4)
         });
         var joining = character.Joining;
@@ -191,6 +191,41 @@ public partial class CharacterEditorWindow
             joining.JoinedSprite.SpriteName = lookCombo.SelectedIndex <= 0 ? string.Empty : (string)lookCombo.SelectedItem;
         };
         HealthPanel.Children.Add(lookCombo);
+
+        // What makes a new one (Exult's Actor::reduce_health and our rules)
+        HealthPanel.Children.Add(new TextBlock { Text = "What makes a new one:", Margin = new Thickness(0, 6, 0, 0) });
+        var growths = new[] { JoinGrowth.Ultima7, JoinGrowth.OurEngine, JoinGrowth.Both };
+        var growthCombo = new ComboBox
+        {
+            Width = 430, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2), SelectedIndex = Array.IndexOf(growths, joining.Growth),
+            ItemsSource = new[] { "Ultima 7 / Exult: a hit it survives may split it (1 chance in 2)", "Our engine: being near its own kind (the multiplies rules below)", "Both" }
+        };
+        growthCombo.SelectionChanged += (_, _) => joining.Growth = growths[Math.Max(0, growthCombo.SelectedIndex)];
+        HealthPanel.Children.Add(growthCombo);
+        HealthPanel.Children.Add(new TextBlock { Text = "No limit unless a rule's Most on the map says so; new ones stay, in saves too. Fuses rules work with every choice. With Ultima 7 / Exult, multiplies rules do nothing.", TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7 });
+        HealthPanel.Children.Add(new TextBlock { Text = "A hit of these kinds never splits it (Exult: damage it is vulnerable to):", Margin = new Thickness(0, 4, 0, 0) });
+        var noSplit = new WrapPanel { Margin = new Thickness(0, 2, 0, 4) };
+        foreach (var kind in Enum.GetValues<DamageType>())
+        {
+            var box = new CheckBox { Content = kind.ToString(), IsChecked = joining.NoSplitFrom.Contains(kind), Margin = new Thickness(0, 0, 12, 2) };
+            box.Checked += (_, _) => { if (!joining.NoSplitFrom.Contains(kind)) joining.NoSplitFrom.Add(kind); };
+            box.Unchecked += (_, _) => joining.NoSplitFrom.Remove(kind);
+            noSplit.Children.Add(box);
+        }
+        HealthPanel.Children.Add(noSplit);
+
+        // Its trail (Exult's Slime_actor::step)
+        HealthPanel.Children.Add(new TextBlock { Text = "Trail (1 step in 6 leaves a puddle: a sprite in the Slime Trail group):", Margin = new Thickness(0, 2, 0, 0) });
+        var trailChoices = new List<string> { "(None - no trail)" };
+        trailChoices.AddRange(_sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.TrailGroupName)?.Sprites.Select(b => b.Name) ?? Enumerable.Empty<string>());
+        var trailCombo = new ComboBox { ItemsSource = trailChoices, Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 2, 0, 2), SelectedIndex = Math.Max(0, trailChoices.IndexOf(joining.TrailSpriteName)) };
+        trailCombo.SelectionChanged += (_, _) => joining.TrailSpriteName = trailCombo.SelectedIndex <= 0 ? string.Empty : (string)trailCombo.SelectedItem;
+        HealthPanel.Children.Add(trailCombo);
+        var trailHurts = new CheckBox { Content = "Its puddles hurt whoever steps on them (never its own kind)", IsChecked = joining.TrailHurts, Margin = new Thickness(0, 2, 0, 2) };
+        trailHurts.Checked += (_, _) => joining.TrailHurts = true;
+        trailHurts.Unchecked += (_, _) => joining.TrailHurts = false;
+        HealthPanel.Children.Add(trailHurts);
+        HealthPanel.Children.Add(NumberRow("Puddle damage:", () => joining.TrailDamage, v => joining.TrailDamage = Math.Max(1, v), "HP on stepping in, and each second standing in it"));
         var kinds = (ProjectSession.CharactersProvider?.Invoke()?.Characters ?? new List<CharacterDefinition>()).ToList();
         var rules = new StackPanel();
         void ShowRules()
@@ -207,7 +242,7 @@ public partial class CharacterEditorWindow
                 how.SelectionChanged += (_, _) => rule.Fuses = how.SelectedIndex == 1;
                 var result = new ComboBox { Width = 130, ItemsSource = kinds.Select(k => k.Name).ToList(), SelectedIndex = kinds.FindIndex(k => k.Id == rule.ResultCharacterId) };
                 result.SelectionChanged += (_, _) => rule.ResultCharacterId = result.SelectedIndex < 0 ? -1 : kinds[result.SelectedIndex].Id;
-                row.Children.Add(new TextBlock { Text = "Touching ", VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(new TextBlock { Text = "Near ", VerticalAlignment = VerticalAlignment.Center });
                 row.Children.Add(partner);
                 row.Children.Add(how);
                 row.Children.Add(new TextBlock { Text = "into ", VerticalAlignment = VerticalAlignment.Center });
@@ -216,9 +251,9 @@ public partial class CharacterEditorWindow
                 remove.Click += (_, _) => { joining.Rules.Remove(rule); ShowRules(); };
                 row.Children.Add(remove);
                 rules.Children.Add(row);
-                rules.Children.Add(NumberRow("Chance %:", () => rule.ChancePercent, v => rule.ChancePercent = Math.Clamp(v, 0, 100), "each time they touch"));
+                rules.Children.Add(NumberRow("Chance %:", () => rule.ChancePercent, v => rule.ChancePercent = Math.Clamp(v, 0, 100), "each time they are near"));
                 rules.Children.Add(NumberRow("Wait (seconds):", () => rule.CooldownSeconds, v => rule.CooldownSeconds = Math.Max(1, v), "before the same two can try again"));
-                rules.Children.Add(NumberRow("Touching within:", () => rule.ReachTiles, v => rule.ReachTiles = Math.Max(1, v), "tiles of 8 pixels"));
+                rules.Children.Add(NumberRow("Near means within:", () => rule.ReachTiles, v => rule.ReachTiles = Math.Max(1, v), "tiles of 8 pixels (the next map square always counts)"));
                 rules.Children.Add(NumberRow("Most on the map:", () => rule.MaxOnMap, v => rule.MaxOnMap = Math.Max(0, v), "of the new monster (0: no limit)"));
             }
         }

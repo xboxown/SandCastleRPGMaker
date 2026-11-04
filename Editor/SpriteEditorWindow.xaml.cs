@@ -84,7 +84,7 @@ public partial class SpriteEditorWindow : Window
     /// <summary>The folders the engine and editors rely on by name: never renamed, deleted or given an identity.</summary>
     private static bool IsProtected(string name) =>
         name is SpriteDatabase.TilesetGroupName or SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.DialogFrameGroupName
-            or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName
+            or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName or SpriteDatabase.TrailGroupName
         || SpriteDatabase.IsBundleGroup(name);
 
     /// <summary>Right-click a folder: what it's for (its identity), rename, paste, delete.</summary>
@@ -291,6 +291,11 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show("The Keychain group is hardcoded and can't be deleted - Keychain objects take their look (a frame for each number of keys) from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (_currentGroup.Name == SpriteDatabase.TrailGroupName)
+        {
+            MessageBox.Show("The Slime Trail group is hardcoded and can't be deleted - monsters that leave a trail take their puddles from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName)
         {
             MessageBox.Show("The Joined Monsters group is hardcoded and can't be deleted - monsters that join up take their joined look from it.", "Protected Group", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -334,6 +339,8 @@ public partial class SpriteEditorWindow : Window
         if (_currentGroup.Name == SpriteDatabase.KeychainGroupName) new FrameStatesGuideWindow(null, FrameStatesGuideWindow.Keychain) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName) new DialogFrameGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName) new JoiningGuideWindow { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.TrailGroupName)
+            MessageBox.Show(this, "A sprite here is one kind of puddle a monster leaves as it walks, as in Ultima 7.\n\nGive it up to 4 frames, small to large: they are sizes, not an animation. New puddles start at frame 1 or 2 and grow if it drips on the same spot.\n\nThen Character Editor > the monster > Health > Joining > Trail: pick this sprite, and tick whether its puddles hurt.", "Slime Trail", MessageBoxButton.OK, MessageBoxImage.Information);
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
             new FrameStatesGuideWindow(null, FrameStatesGuideWindow.WeaponInHand(ProjectSession.SettingsProvider?.Invoke()?.WeaponInHand ?? new WeaponInHandSettings())) { Owner = this }.ShowDialog();
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
@@ -346,7 +353,7 @@ public partial class SpriteEditorWindow : Window
         }
         // In the Fonts group a new sprite is an extra font - offered only in the Book Editor's Text Font list.
         // In the Blood group a new sprite is a blood type: puddle sizes, never animated.
-        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name is not (SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.WeaponInHandGroupName) };
+        var entry = new SpriteEntry { Name = name.Trim(), Loop = _currentGroup.Name is not (SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.TrailGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.WeaponInHandGroupName) };
         _currentGroup.Sprites.Add(entry);
         RefreshGroups();
         RefreshSprites();
@@ -407,10 +414,11 @@ public partial class SpriteEditorWindow : Window
         }
         bool isTilesetGroup = _currentGroup?.Name == SpriteDatabase.TilesetGroupName;
         bool isFont = _currentGroup?.Name == SpriteDatabase.FontsGroupName; // every sprite in Fonts is a font: glyph frames, no sound or animation
-        bool isBlood = _currentGroup?.Name == SpriteDatabase.BloodGroupName; // every sprite in Blood is a blood type: size frames, no sound or animation
+        bool isTrail = _currentGroup?.Name == SpriteDatabase.TrailGroupName; // a puddle a monster leaves: size frames, as blood
+        bool isBlood = isTrail || _currentGroup?.Name == SpriteDatabase.BloodGroupName; // every sprite in Blood is a blood type: size frames, no sound or animation
         bool isKeychain = _currentGroup?.Name == SpriteDatabase.KeychainGroupName; // frames by how many keys: no sound or animation
         bool isWeaponInHand = _currentGroup?.Name == SpriteDatabase.WeaponInHandGroupName; // a weapon held in the hand: its frames as System Settings says, grip points
-        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood, isKeychain, isWeaponInHand) { Owner = this };
+        var editor = new SpriteFrameEditorWindow(entry, _resources, isTilesetGroup, isFont, isBlood, isKeychain, isWeaponInHand, isTrail) { Owner = this };
         editor.ShowDialog();
         RefreshSprites(); // reflect any name change in the list
     }

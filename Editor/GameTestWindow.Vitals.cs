@@ -148,6 +148,7 @@ public partial class GameTestWindow
         if (character.Immortal) hp = Math.Max(hp, 0); // knocked out at worst
         SetHp(character, hp);
         if (character == _player) StatusText.Text = $"You lose {amount} HP ({cause}) - {hp} left.";
+        if (hp > 0) MaybeSplit(character); // reduce_health: slimes (their .Joining.cs)
         // Exult: dead below -(Strength / 3); otherwise at 0 or below, knocked out.
         if (IsDying(character, hp)) Die(character, cause);
         else if (hp <= 0) KnockOut(character);

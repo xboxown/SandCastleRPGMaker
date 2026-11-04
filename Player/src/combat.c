@@ -850,7 +850,9 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
         char cause[160];
         if (attacker == 0) snprintf(cause, sizeof cause, "slain by you");
         else snprintf(cause, sizeof cause, "slain by %s", name_of(attacker));
+        vitals_hit_type(type);
         vitals_damage_allowed(id_of(defender), damage, cause);
+        vitals_hit_type(0);
         world_maybe_bleed(defender, damage); /* reduce_health: it may start bleeding */
         if (willDie && vitals_dead(id_of(defender)))
         {

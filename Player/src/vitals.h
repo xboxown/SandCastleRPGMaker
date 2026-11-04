@@ -9,6 +9,7 @@ int vitals_max_hp(int characterId);
 void vitals_set_hp(int characterId, int hp);
 void vitals_damage(int characterId, int amount, const char *cause);
 void vitals_damage_allowed(int characterId, int amount, const char *cause);   /* from what's allowed to: its weapon, its spell, an event */
+void vitals_hit_type(int type);                                                /* what kind of damage the next hits are (a slime may not split from it) */
 int vitals_wounds_it(int characterId, int weaponId, const char *spell);       /* this weapon or spell hurts it */
 int vitals_immortal(int characterId);
 void vitals_kill(int characterId, const char *cause);

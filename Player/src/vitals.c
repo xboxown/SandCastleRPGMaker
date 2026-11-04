@@ -339,6 +339,19 @@ void vitals_damage_allowed(int characterId, int amount, const char *cause)
     specialWound = 0;
 }
 
+/* Splitting when hit (Exult's Actor::reduce_health; GameTestWindow.Joining MaybeSplit): the new one comes on the next update. */
+static int hitType, pendingSplits[64], pendingSplitCount;
+void vitals_hit_type(int type) { hitType = type; }
+
+static void maybe_split(int characterId, int actor)
+{
+    cJSON *joining = get(character_json(characterId), "Joining"), *kind;
+    if (!joining || num(joining, "Growth", 0) == 0 || actor <= 0 || items_in_party(characterId)) return;
+    cJSON_ArrayForEach(kind, get(joining, "NoSplitFrom")) if (kind->valueint == hitType) return;
+    if (rnd(2) != 0) return;
+    if (pendingSplitCount < 64) pendingSplits[pendingSplitCount++] = actor;
+}
+
 void vitals_damage(int characterId, int amount, const char *cause)
 {
     int hp;
@@ -353,6 +366,7 @@ void vitals_damage(int characterId, int amount, const char *cause)
     hp -= amount;
     if (vitals_immortal(characterId) && hp < 0) hp = 0; /* knocked out at worst */
     vitals_set_hp(characterId, hp);
+    if (hp > 0) maybe_split(characterId, actor);
     if (hp < -(max / 3)) die(characterId, cause);
     else if (hp <= 0) knock_out(characterId);
 }
@@ -669,8 +683,8 @@ static void update_tile_effects(Vital *v, double ms)
 int magic_appear(cJSON *kind, int beside, int cx, int cy);
 
 typedef struct JoinWait { int a, b; double ms; } JoinWait;
-static JoinWait joinWaits[64];
-static int joinWaitCount;
+static JoinWait *joinWaits;
+static int joinWaitCount, joinWaitCap;
 static double joinCheckMs;
 
 static int same_kind_alive(int actor, int kindId, int floorThere)
@@ -692,16 +706,18 @@ static void joined_look(int actor, cJSON *look)
     double px, py;
     world_actor_cell(actor, &x, &y, &f);
     world_actor_pixel(actor, &px, &py);
+    /* how far apart neighbours stand: Exult's two tiles, or the next square on a map with bigger squares */
+    double reachX = world_tile_w() > 16 ? world_tile_w() : 16, reachY = world_tile_h() > 16 ? world_tile_h() : 16, slackX = reachX / 2, slackY = reachY / 2;
     for (int o = 1; o < world_actor_count(); o++)
     {
         if (o == actor || !same_kind_alive(o, kind, f)) continue;
         double ox, oy;
         world_actor_pixel(o, &ox, &oy);
         double dx = world_wrap_dx(ox - px), dy = world_wrap_dy(oy - py);
-        if (fabs(dx) < 8 && fabs(dy + 16) < 8) mask |= 2;
-        else if (fabs(dy) < 8 && fabs(dx - 16) < 8) mask |= 4;
-        else if (fabs(dx) < 8 && fabs(dy - 16) < 8) mask |= 8;
-        else if (fabs(dy) < 8 && fabs(dx + 16) < 8) mask |= 16;
+        if (fabs(dx) < slackX && fabs(dy + reachY) < slackY) mask |= 2;
+        else if (fabs(dy) < slackY && fabs(dx - reachX) < slackX) mask |= 4;
+        else if (fabs(dx) < slackX && fabs(dy - reachY) < slackY) mask |= 8;
+        else if (fabs(dy) < slackY && fabs(dx + reachX) < slackX) mask |= 16;
     }
     int wobble = world_walking(actor) ? rnd(2) : 0, frame = mask | wobble;
     int shown = sprite->frameCount >= 32 ? frame : sprite->frameCount >= 16 ? mask >> 1 : (wobble < sprite->frameCount ? wobble : sprite->frameCount - 1);
@@ -713,9 +729,12 @@ static void try_join(int actor, cJSON *rule)
     int id = world_actor_character(actor), kind = world_character_source(id), x, y, f;
     cJSON *result = character_of_kind(num(rule, "ResultCharacterId", -1));
     if (!result || items_in_party(id)) return;
+    if (!flag(rule, "Fuses") && num(get(character_json(id), "Joining"), "Growth", 0) == 1) return; /* Ultima 7's only grow by being hit */
     int partner = num(rule, "PartnerCharacterId", -1);
     if (partner < 0) partner = kind;
     double reach = (num(rule, "ReachTiles", 3) > 1 ? num(rule, "ReachTiles", 3) : 1) * 8.0, px, py;
+    if (reach < world_tile_w()) reach = world_tile_w(); /* the next square always counts */
+    if (reach < world_tile_h()) reach = world_tile_h();
     world_actor_cell(actor, &x, &y, &f);
     world_actor_pixel(actor, &px, &py);
     for (int o = 1; o < world_actor_count(); o++)
@@ -728,8 +747,15 @@ static void try_join(int actor, cJSON *rule)
         int waiting = 0;
         for (int w = 0; w < joinWaitCount; w++) if ((joinWaits[w].a == actor && joinWaits[w].b == o) || (joinWaits[w].a == o && joinWaits[w].b == actor)) waiting = 1;
         if (waiting) continue;
-        if (joinWaitCount < 64) joinWaits[joinWaitCount++] = (JoinWait){ actor, o, (num(rule, "CooldownSeconds", 10) > 1 ? num(rule, "CooldownSeconds", 10) : 1) * 1000.0 };
-        int most = num(rule, "MaxOnMap", 12);
+        if (joinWaitCount >= joinWaitCap)
+        {
+            int cap = joinWaitCap ? joinWaitCap * 2 : 64;
+            JoinWait *more = (JoinWait *)realloc(joinWaits, sizeof(JoinWait) * (size_t)cap);
+            if (!more) return; /* no memory: no new one either */
+            joinWaits = more; joinWaitCap = cap;
+        }
+        joinWaits[joinWaitCount++] = (JoinWait){ actor, o, (num(rule, "CooldownSeconds", 10) > 1 ? num(rule, "CooldownSeconds", 10) : 1) * 1000.0 };
+        int most = num(rule, "MaxOnMap", 0);
         if (most > 0)
         {
             int on = 0;
@@ -767,6 +793,14 @@ static void try_join(int actor, cJSON *rule)
 
 static void update_joining(double ms)
 {
+    for (int i = 0; i < pendingSplitCount; i++)
+    {
+        int actor = pendingSplits[i], id = actor < world_actor_count() ? world_actor_character(actor) : -1, x, y, f;
+        if (id < 0 || world_actor_gone(actor) || vitals_dead(id)) continue;
+        world_actor_cell(actor, &x, &y, &f);
+        magic_appear(character_of_kind(world_character_source(id)), actor, x, y);
+    }
+    pendingSplitCount = 0;
     for (int w = 0; w < joinWaitCount; w++) if ((joinWaits[w].ms -= ms) <= 0) joinWaits[w--] = joinWaits[--joinWaitCount];
     if ((joinCheckMs += ms) < 200) return;
     joinCheckMs = 0;

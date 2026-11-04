@@ -249,6 +249,8 @@ public class SpriteDatabase
     public const string WeaponInHandGroupName = "Weapon in hand";
     /// <summary>Monsters drawn joining up with their own kind: 32 frames by which sides touch (Exult's slimes). See JoiningGuideWindow.</summary>
     public const string JoinedMonstersGroupName = "Joined Monsters";
+    /// <summary>Puddles a monster leaves as it walks: as blood, frames are sizes, small to large, up to BloodSizes (Exult's blood shape, frames 4-7). Chosen in Character Editor > Health > Joining.</summary>
+    public const string TrailGroupName = "Slime Trail";
 
     /// <summary>The eight directions in the order a smooth weapon-in-hand sprite's frames go.</summary>
     public static readonly string[] WeaponDirectionNames = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
@@ -271,7 +273,7 @@ public class SpriteDatabase
         return names.ToArray();
     }
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || IsBundleGroup(name);
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || IsBundleGroup(name);
 
     /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
     public SpriteEntry? FindDialogFrame(string name)
@@ -303,11 +305,16 @@ public class SpriteDatabase
         GetOrCreateGroup(DialogFrameGroupName);
         GetOrCreateGroup(WeaponInHandGroupName);
         GetOrCreateGroup(JoinedMonstersGroupName);
+        GetOrCreateGroup(TrailGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>
     public SpriteEntry? FindBlood(string bloodName) =>
         string.IsNullOrEmpty(bloodName) ? null : Groups.FirstOrDefault(g => g.Name == BloodGroupName)?.Sprites.FirstOrDefault(s => s.Name == bloodName);
+
+    /// <summary>A trail (a sprite in the Slime Trail group) by name, or null.</summary>
+    public SpriteEntry? FindTrail(string trailName) =>
+        string.IsNullOrEmpty(trailName) ? null : Groups.FirstOrDefault(g => g.Name == TrailGroupName)?.Sprites.FirstOrDefault(s => s.Name == trailName);
 
     /// <summary>Every font in the Fonts group - the two game fonts plus any extra ones added for books.</summary>
     public List<string> FontNames() =>
