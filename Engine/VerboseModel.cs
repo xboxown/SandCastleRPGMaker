@@ -18,7 +18,9 @@ public enum VerboseKind
     WantsFood,
     FoodStolen,
     WaiterAsks,
-    WaiterServes
+    WaiterServes,
+    CantSit,
+    OutdoorsOnly
 }
 
 /// <summary>
@@ -51,6 +53,8 @@ public class VerboseLines
         VerboseKind.FoodStolen => new[] { "Hey! That was my food!", "Who took my supper?", "Thief! My food!" },
         VerboseKind.WaiterAsks => new[] { "What wouldst thou like?", "Hungry, art thou?", "May I bring thee something?", "What shall it be?", "Thou lookest hungry." },
         VerboseKind.WaiterServes => new[] { "Here thou art.", "Enjoy thy meal." },
+        VerboseKind.CantSit => new[] { "I cannot get there.", "Something is in the way." },
+        VerboseKind.OutdoorsOnly => new[] { "Not in here!", "I need open sky for that." },
         _ => Array.Empty<string>()
     };
 
@@ -74,6 +78,8 @@ public class VerboseLines
         VerboseKind.FoodStolen => "Its food was taken",
         VerboseKind.WaiterAsks => "Waiter: taking an order",
         VerboseKind.WaiterServes => "Waiter: serving",
+        VerboseKind.CantSit => "Can't reach a chair or bed",
+        VerboseKind.OutdoorsOnly => "Using an outdoors-only object indoors",
         _ => kind.ToString()
     };
 
@@ -95,6 +101,8 @@ public class VerboseLines
         VerboseKind.FoodStolen => "Not in Exult: the dish served to it, or its own food it was going to eat, was taken.",
         VerboseKind.WaiterAsks => "As a Waiter, at a customer's table, taking the order (Exult's waiter ask lines).",
         VerboseKind.WaiterServes => "As a Waiter, putting a dish down, two times in three (Exult's waiter serve lines).",
+        VerboseKind.CantSit => "It was told to sit or lie down, but there's no way to walk up to the chair or bed.",
+        VerboseKind.OutdoorsOnly => "It tried to use something that only works outdoors (a kite) under a roof.",
         _ => ""
     };
 }

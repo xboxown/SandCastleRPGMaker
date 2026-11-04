@@ -130,14 +130,54 @@ public partial class U8GameWindow
             TargetX = p.X,
             TargetY = p.Y - _tileHeight / 2.0
         };
-        if (Math.Abs(_playerX - seatCell.Item1) + Math.Abs(_playerY - seatCell.Item2) <= 1) { BeginLastSteps(); return; }
-        if (!WalkPlayerTo(seatCell, BeginLastSteps, besideOnly: true)) // a cell right beside it, walked round whatever is in the way
+        if (Math.Abs(_playerX - seatCell.Item1) + Math.Abs(_playerY - seatCell.Item2) <= 1 && NothingBetween(_playerPixelX, _playerPixelY, _pendingSit)) { BeginLastSteps(); return; }
+        if (NearestCellWithClearWayToSeat(seatCell, _pendingSit) is not { } beside || !WalkPlayerTo(beside, BeginLastSteps)) // walked round whatever is in the way (a table)
         {
             _pendingSit = null;
-            StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
+            CantReachSeat(obj);
             return;
         }
         StatusText.Text = bed ? $"Going to \"{obj.Name}\"..." : $"Going to sit on \"{obj.Name}\"...";
+    }
+
+    /// <summary>Told it can't be done: the words on the screen and the character's own line (Character Editor > Verbose).</summary>
+    private void CantReachSeat(WorldObject obj)
+    {
+        StatusText.Text = $"You can't get to \"{obj.Name}\" from here.";
+        if (_player is not null) Bark(_player, VerboseKind.CantSit);
+    }
+
+    /// <summary>The way from this point up to the seat crosses nothing solid but the seat's own furniture: no sitting down through a table.</summary>
+    private bool NothingBetween(double fromX, double fromY, PendingSit pending)
+    {
+        var world = WorldNow();
+        double dx = pending.TargetX - fromX, dy = pending.TargetY - fromY;
+        int steps = (int)Math.Ceiling(Math.Max(Math.Abs(dx), Math.Abs(dy)) / (SpriteSizing.BaseUnit / 2.0));
+        for (int i = 0; i <= steps; i++)
+        {
+            double t = steps == 0 ? 1 : i / (double)steps;
+            var foot = PlayerFootprintAt(fromX + dx * t, fromY + dy * t);
+            foreach (var solid in SolidsOverlapping(foot, null, world))
+                if (solid.Solid && !ReferenceEquals(solid.Entity, pending.Furniture) && solid.Z < _playerZ + _playerSize.Z && solid.TopLift > _playerZ + 1) return false;
+        }
+        return true;
+    }
+
+    /// <summary>The cell around the seat the player can walk to soonest and go on straight to the seat from. Null: there's no way.</summary>
+    private (int X, int Y)? NearestCellWithClearWayToSeat((int X, int Y) seatCell, PendingSit pending)
+    {
+        (int X, int Y)? best = null;
+        int bestSteps = int.MaxValue;
+        for (int dy = -1; dy <= 1; dy++)
+            for (int dx = -1; dx <= 1; dx++)
+            {
+                var cell = (X: seatCell.X + dx, Y: seatCell.Y + dy);
+                if ((dx == 0 && dy == 0) || !InsideMap(cell.X, cell.Y) || !PlayerCanStandAt(cell) || !NothingBetween(CellCenterX(cell.X), CellCenterY(cell.Y), pending)) continue;
+                if (FindPlayerPath(cell, false, null) is not { } path || path.Count >= bestSteps) continue;
+                bestSteps = path.Count;
+                best = cell;
+            }
+        return best;
     }
 
     /// <summary>Arrived a cell in front of it: walk on, straight up to the chair (until it's right there, or the chair stops us).</summary>
@@ -194,9 +234,9 @@ public partial class U8GameWindow
         _pendingSit = null;
         if (!_map.Objects.Contains(pending.Furniture)) return;
         // Not actually beside it (the way was blocked at the last): no jumping onto it from across a table.
-        if (Math.Abs(_playerPixelX - pending.TargetX) > _tileWidth * 1.5 || Math.Abs(_playerPixelY - pending.TargetY) > _tileHeight * 1.5)
+        if (Math.Abs(_playerPixelX - pending.TargetX) > _tileWidth * 1.5 || Math.Abs(_playerPixelY - pending.TargetY) > _tileHeight * 1.5 || !NothingBetween(_playerPixelX, _playerPixelY, pending))
         {
-            StatusText.Text = $"You can't reach \"{pending.Obj.Name}\" from here.";
+            CantReachSeat(pending.Obj);
             return;
         }
         TakeSeatAsPlayer(pending.Furniture, pending.Obj, pending.Bed);
