@@ -73,5 +73,7 @@ public class StatsDollDefinition
     public double CloseY { get; set; } = 4;
     public int OpenSoundResourceId { get; set; } = -1;
     public List<StatsDollElement> Elements { get; set; } = new();
+    /// <summary>This character's own controls and parts on its stats window (Yes / No buttons, text boxes, check boxes, lists, progress bars...): a paperdoll in the PaperDoll Editor, laid over the window, every part with all its properties and events. -1: none yet.</summary>
+    public int ControlsDesignId { get; set; } = -1;
     public int NextElementId() => Elements.Count == 0 ? 1 : Elements.Max(e => e.Id) + 1;
 }

@@ -190,6 +190,22 @@ public sealed class StatsDollEditorWindow : Window
         Redraw();
     }
 
+    /// <summary>This character's controls: its own paperdoll in the PaperDoll Editor, as big as the window (made the first time).</summary>
+    private void EditControls()
+    {
+        if (ProjectSession.ObjectsProvider?.Invoke() is not { } objects || ProjectSession.ResourcesProvider?.Invoke() is not { } resources
+            || ProjectSession.BooksProvider?.Invoke() is not { } books || ProjectSession.ContainersProvider?.Invoke() is not { } containers) return;
+        if (objects.DollDesigns.FirstOrDefault(d => d.Id == Doll.ControlsDesignId) is null)
+        {
+            var background = ObjectLooks.Find(_sprites, Doll.Background.SpriteGroup, Doll.Background.SpriteName)?.Frames.FirstOrDefault() is { } frame && File.Exists(frame.FilePath)
+                ? BitmapFrame.Create(new Uri(frame.FilePath), BitmapCreateOptions.DelayCreation, BitmapCacheOption.None) : null;
+            var design = new DollDesign { Id = objects.NextDollDesignId(), Name = $"Stats controls: {_character.Name}", Width = background?.PixelWidth ?? 160, Height = background?.PixelHeight ?? 120 };
+            objects.DollDesigns.Add(design);
+            Doll.ControlsDesignId = design.Id;
+        }
+        new PaperDollEditorWindow(objects, _sprites, resources, books, containers, ProjectSession.VariablesProvider?.Invoke(), _stats, Doll.ControlsDesignId) { Owner = this }.ShowDialog();
+    }
+
     private void BuildSettings()
     {
         _settings.Children.Clear();
@@ -212,12 +228,23 @@ public sealed class StatsDollEditorWindow : Window
                 if (copy.SelectedIndex < 0) return;
                 var json = System.Text.Json.JsonSerializer.Serialize(others[copy.SelectedIndex].Paperdoll.StatsDoll);
                 _character.Paperdoll.StatsDoll = System.Text.Json.JsonSerializer.Deserialize<StatsDollDefinition>(json) ?? new StatsDollDefinition();
+                if (ProjectSession.ObjectsProvider?.Invoke() is { } objects && objects.DollDesigns.FirstOrDefault(d => d.Id == Doll.ControlsDesignId) is { } theirs) // its own copy of the controls, to change for this character alone
+                {
+                    var mine = System.Text.Json.JsonSerializer.Deserialize<DollDesign>(System.Text.Json.JsonSerializer.Serialize(theirs))!;
+                    mine.Id = objects.NextDollDesignId();
+                    mine.Name = $"Stats controls: {_character.Name}";
+                    objects.DollDesigns.Add(mine);
+                    Doll.ControlsDesignId = mine.Id;
+                }
                 _picked = null; BuildSettings(); RefreshList(); ShowElement(); Redraw();
             }));
             _settings.Children.Add(row);
             _settings.Children.Add(MakeButton("Format Painter... (this layout onto others)", () =>
                 FormatPainterWindow.Paint(this, _character, ProjectSession.Characters.Characters, c => c.Name, "Stats paperdoll", only: new[] { "Paperdoll.StatsDoll" })));
         }
+        _settings.Children.Add(Heading("Controls and parts"));
+        _settings.Children.Add(Note("Yes / OK and No / Cancel buttons, text boxes, check boxes, radio buttons, drop-down lists, list boxes, progress bars, and every other part: this character's own, laid over the window. They open in the PaperDoll Editor, with all their properties and events."));
+        _settings.Children.Add(MakeButton("Controls... (PaperDoll Editor)", EditControls));
         _settings.Children.Add(Heading("Elements"));
         var adds = new WrapPanel();
         adds.Children.Add(MakeButton("+ Text", () => Add(new StatsDollElement { Kind = StatsElementKind.Text, Text = "Strength:" })));

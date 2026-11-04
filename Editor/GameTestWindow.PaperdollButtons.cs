@@ -146,6 +146,38 @@ public partial class GameTestWindow
         public required Border GumpBorder;
         public required Canvas Body;
         public Image? Close;
+        /// <summary>Its controls (Stats paperdoll > Controls), a paperdoll laid over the window: moves and closes with it.</summary>
+        public OpenDollGump? Controls;
+    }
+
+    /// <summary>The holder of a stats window's controls: one per character, so they keep how they were left.</summary>
+    private readonly Dictionary<CharacterDefinition, FormOwner> _statsControlOwners = new();
+
+    /// <summary>Lays the character's stats controls over the window, quietly: they aren't a window of their own (Escape closes the stats window, and they go with it).</summary>
+    private void OpenStatsControls(OpenStatsGump stats)
+    {
+        if (DesignById(stats.Character.Paperdoll.StatsDoll.ControlsDesignId) is not { } design) return;
+        if (!_statsControlOwners.TryGetValue(stats.Character, out var owner)) _statsControlOwners[stats.Character] = owner = new FormOwner();
+        string said = StatusText.Text;
+        OpenDoll(owner, new WorldObject { Name = design.Name }, design, title: true);
+        StatusText.Text = said;
+        if (_openDolls.LastOrDefault(g => ReferenceEquals(g.Owner, owner)) is not { } gump) return;
+        gump.Character = stats.Character;
+        gump.OpenedWith = stats;
+        gump.Fixed = true;
+        gump.StatsShown.Clear();
+        UntrackGumpFocus(gump);
+        stats.Controls = gump;
+        PlaceStatsControls(stats);
+        RefreshDollGump(gump);
+    }
+
+    private void PlaceStatsControls(OpenStatsGump stats)
+    {
+        if (stats.Controls is not { } controls) return;
+        Canvas.SetLeft(controls.GumpBorder, Canvas.GetLeft(stats.GumpBorder));
+        Canvas.SetTop(controls.GumpBorder, Canvas.GetTop(stats.GumpBorder));
+        Panel.SetZIndex(controls.GumpBorder, Panel.GetZIndex(stats.GumpBorder));
     }
 
     private readonly List<OpenStatsGump> _openStatsDolls = new();
@@ -186,12 +218,14 @@ public partial class GameTestWindow
             var p = e.GetPosition(PaperdollGumpsCanvas);
             Canvas.SetLeft(border, grabAt.X + (p.X - start.X));
             Canvas.SetTop(border, grabAt.Y + (p.Y - start.Y));
+            PlaceStatsControls(gump);
         };
         body.MouseLeftButtonUp += (_, e) => { grabMouse = null; body.ReleaseMouseCapture(); e.Handled = true; };
         PaperdollGumpsCanvas.Children.Add(border);
         _openStatsDolls.Add(gump);
         BringStatsDollToFront(gump);
         RefreshStatsDoll(gump);
+        OpenStatsControls(gump);
         if (_statsTimer is null)
         {
             _statsTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
@@ -246,12 +280,17 @@ public partial class GameTestWindow
     {
         _openStatsDolls.Remove(gump);
         _openStatsDolls.Add(gump);
-        for (int i = 0; i < _openStatsDolls.Count; i++) Panel.SetZIndex(_openStatsDolls[i].GumpBorder, 300 + i);
+        for (int i = 0; i < _openStatsDolls.Count; i++)
+        {
+            Panel.SetZIndex(_openStatsDolls[i].GumpBorder, 300 + i);
+            PlaceStatsControls(_openStatsDolls[i]);
+        }
         TrackGumpFocus(gump); // Escape closes it like any other gump
     }
 
     private void CloseStatsDoll(OpenStatsGump gump)
     {
+        if (gump.Controls is { } controls && _openDolls.Contains(controls)) CloseDollGump(controls);
         PaperdollGumpsCanvas.Children.Remove(gump.GumpBorder);
         _openStatsDolls.Remove(gump);
         UntrackGumpFocus(gump);
