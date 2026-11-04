@@ -142,6 +142,7 @@ public partial class GameTestWindow
             if (body.Entity is FloorSlab || (body.Entity is ObjectInstance tile && DefinitionOf(tile)?.Type == ObjectType.Tile)) { settled.Add(body); continue; } // a tile has no gravity: it stays at its height (a floor, a roof)
             if (HangsOnWall(body.Entity)) { settled.Add(body); continue; } // hung on the wall: stays where it was put
             if (StaysPut(body.Entity)) { settled.Add(body); continue; } // staying where it's put (a potion on a cabinet): at its height, like a hung thing
+            if (IsFlyingKite(body.Entity)) { settled.Add(body); continue; } // up in the air: nothing holds it there but the wind
             if (IsWallSetPiece(body.Entity)) { settled.Add(body); continue; } // a wall set's piece: at its designed height (the window on its half wall), and it holds up what's on it
             if (body.Entity is ObjectInstance { VehicleStateId: > 0 }) { settled.Add(body); continue; } // a vehicle's piece: held in its place by the vehicle (flying, too), and it holds up what's on it
             var rect = new UnitRect(body.Left, body.Top, body.Width, body.Depth);

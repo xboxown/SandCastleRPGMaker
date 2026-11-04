@@ -38,6 +38,7 @@ public partial class ObjectEditorWindow
             case ObjectType.Tool: BuildTool(obj); return true;
             case ObjectType.CraftingStation: BuildCrafting(obj); return true;
             case ObjectType.MusicalInstrument: BuildInstrument(obj); return true;
+            case ObjectType.Kite: BuildKite(obj); return true;
             case ObjectType.Explosive: BuildExplosive(obj); return true;
             case ObjectType.Bedroll: BuildBedroll(obj); return true;
             case ObjectType.Projectile: BuildProjectile(obj); return true;
@@ -72,7 +73,8 @@ public partial class ObjectEditorWindow
         ObjectType.Clock => "Double-click to see the time over it, \" 3:05pm\" (Exult's pocketwatch). A sundial tells the time only by daylight, outdoors.",
         ObjectType.Tool => "Double-click it, then click what to use it on: a plant that needs this tool to harvest, a crafting station whose recipe needs it, or anything whose By Tool Used event wants it (Ultima VII's hammer on an anvil, scythe on wheat).",
         ObjectType.CraftingStation => "An anvil, a millstone, a spinning wheel, an oven. Double-click it (or use a tool on it) and it makes the first recipe the party has the ingredients for: they're used up, the work plays out, and what it makes appears on the station (Exult's millstone).",
-        ObjectType.MusicalInstrument => "Double-click to play: one of its tunes plays and notes float up. Carried ones (a lute) can be played from the backpack.",
+        ObjectType.MusicalInstrument => "Double-click to play: one of its tunes plays and notes float up. Carried ones (a lute) can be played from the backpack. Or tick Music box: it opens and plays until it's closed.",
+        ObjectType.Kite => "Double-click it outdoors: it really goes up, floors above the ground and out of reach from there, stays up for its time and comes back down.",
         ObjectType.Projectile => "A fireball, a lightning bolt, a dart: shot by a trap, it flies across the map as a real object and hurts the first one it meets (it can explode). Too heavy to pick up.",
         ObjectType.Weapon => "A sword, a bow, a magic staff: wielded in its slot (or a hand) to fight, as Exult's weapons - hand to hand, thrown or ranged; firing ammo, using up charges, or thrown itself; with a damage type, powers (sleep, poison...) and the way its wielder strikes.",
         ObjectType.Armor => "A helm, a breastplate, a shield, a ring: worn in its slot, its armor points soften every blow, and it can make its wearer immune to a damage type (Exult's armor).",
@@ -679,6 +681,34 @@ public partial class ObjectEditorWindow
         var pose = new ComboBox { Width = 180, ItemsSource = poses, SelectedItem = poses.Contains(m.PlayingPose) ? m.PlayingPose : poses[0] };
         pose.SelectionChanged += (_, _) => m.PlayingPose = pose.SelectedIndex <= 0 ? string.Empty : (string)pose.SelectedItem;
         body.Children.Add(Labeled("Player's pose while playing (a Character Editor pose)", pose));
+        body.Children.Add(Check("Music box: double-click opens it and its tune plays round and round; double-click again closes it and the music stops", () => m.MusicBox, v => m.MusicBox = v));
+        body.Children.Add(SpritePicker("Open look (a music box; its own sprite above is the closed look)", () => (m.OpenSprite.SpriteGroup, m.OpenSprite.SpriteName), (g, n) => { m.OpenSprite.SpriteGroup = g; m.OpenSprite.SpriteName = n; }));
+    }
+
+    private void BuildKite(WorldObject obj)
+    {
+        var k = obj.Kite;
+        var body = Group("Kite");
+        body.Children.Add(new TextBlock { Text = "One sprite holds the whole flight (Sprite section above). Say which frames (counted from 0) go up, stay up and come down. The going up and the coming down take one frame time each frame, while it really climbs its floors.", TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7 });
+        var flight = new WrapPanel();
+        flight.Children.Add(NumberField("Floors up (5 lifts each)", () => k.FlyFloors, v => k.FlyFloors = (int)Math.Max(1, v)));
+        flight.Children.Add(NumberField("Stays up (seconds)", () => k.FlySeconds, v => k.FlySeconds = (int)Math.Max(0, v)));
+        flight.Children.Add(NumberField("Frame time (ms)", () => k.FrameMilliseconds, v => k.FrameMilliseconds = (int)Math.Max(20, v)));
+        body.Children.Add(flight);
+        foreach (var (label, get, set) in new (string, Func<(int, int)>, Action<int, int>)[]
+        {
+            ("Going up", () => (k.RiseFirstFrame, k.RiseLastFrame), (a, b) => { k.RiseFirstFrame = a; k.RiseLastFrame = b; }),
+            ("Staying up", () => (k.FlyFirstFrame, k.FlyLastFrame), (a, b) => { k.FlyFirstFrame = a; k.FlyLastFrame = b; }),
+            ("Coming down", () => (k.LandFirstFrame, k.LandLastFrame), (a, b) => { k.LandFirstFrame = a; k.LandLastFrame = b; }),
+        })
+        {
+            var row = new WrapPanel();
+            row.Children.Add(NumberField(label + ": first frame", () => get().Item1, v => set((int)Math.Max(0, v), get().Item2)));
+            row.Children.Add(NumberField("last frame", () => get().Item2, v => set(get().Item1, (int)Math.Max(0, v))));
+            body.Children.Add(row);
+        }
+        body.Children.Add(Check("Outdoors only (under a roof it refuses, and the character says its Outdoors only line, Character Editor > Verbose)", () => k.OutdoorsOnly, v => k.OutdoorsOnly = v));
+        body.Children.Add(SoundPicker("Sound as it takes off", () => k.SoundResourceId, v => k.SoundResourceId = v));
     }
 
     private void BuildExplosive(WorldObject obj)

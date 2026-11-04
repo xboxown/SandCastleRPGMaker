@@ -99,7 +99,8 @@ public partial class GameTestWindow
             case ObjectType.UseableObject: UseUseable(u); return true;
             case ObjectType.Clock: UseClock(u); return true;
             case ObjectType.Tool: UseTool(u); return true;
-            case ObjectType.MusicalInstrument: UseInstrument(u); return true;
+            case ObjectType.MusicalInstrument: if (u.Obj.Instrument.MusicBox && !FireUseEvent(u)) UseMusicBox(u); else if (!u.Obj.Instrument.MusicBox) UseInstrument(u); return true;
+            case ObjectType.Kite: UseKite(u); return true;
             case ObjectType.Bedroll: UseBedroll(u); return true;
             case ObjectType.LiquidContainer: UseLiquid(u); return true;
         }
@@ -274,6 +275,7 @@ public partial class GameTestWindow
         UpdateButtons(elapsedMs);
         UpdateCraftingWork(elapsedMs);
         UpdateRoofs();
+        UpdateKites(elapsedMs);
     }
 
     // ================= Invisibility (Exult's invisible flag) =================

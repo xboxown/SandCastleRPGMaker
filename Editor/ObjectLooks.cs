@@ -55,6 +55,8 @@ internal static class ObjectLooks
                 return obj.Plant.Stages.Count > 0 ? Find(sprites, obj.Plant.Stages[Math.Clamp(state.Stage, 0, obj.Plant.Stages.Count - 1)]) ?? own : own;
             case ObjectType.Lever:
                 return state.Open ? Find(sprites, obj.Lever.OnSprite) ?? own : own;
+            case ObjectType.MusicalInstrument:
+                return obj.Instrument.MusicBox && state.Lit ? Find(sprites, obj.Instrument.OpenSprite) ?? own : own;
             case ObjectType.Explosive:
                 return state.Lit ? Find(sprites, obj.Explosive.LitSprite) ?? own : own;
             case ObjectType.CraftingStation:

@@ -472,6 +472,28 @@ public class InstrumentSettings
     public List<int> SongSoundIds { get; set; } = new();
     /// <summary>The player's pose while playing (a Character Editor pose; empty = as they stand).</summary>
     public string PlayingPose { get; set; } = string.Empty;
+    /// <summary>A music box: double-clicked it opens and its tune plays round and round until it's double-clicked closed.</summary>
+    public bool MusicBox { get; set; }
+    /// <summary>A music box's look while open (its own sprite is the closed look).</summary>
+    public SpriteLink OpenSprite { get; set; } = new();
+}
+
+/// <summary>A kite. The object's own sprite holds its flight: frame ranges for going up, staying up and coming down.</summary>
+public class KiteSettings
+{
+    /// <summary>How many floors above where it started it really goes (5 lifts each).</summary>
+    public int FlyFloors { get; set; } = 2;
+    public int RiseFirstFrame { get; set; }
+    public int RiseLastFrame { get; set; }
+    public int FlyFirstFrame { get; set; }
+    public int FlyLastFrame { get; set; }
+    public int LandFirstFrame { get; set; }
+    public int LandLastFrame { get; set; }
+    public int FrameMilliseconds { get; set; } = 150;
+    public int FlySeconds { get; set; } = 20;
+    /// <summary>Refused under a roof: the character says its Outdoors only line (Character Editor > Verbose).</summary>
+    public bool OutdoorsOnly { get; set; } = true;
+    public int SoundResourceId { get; set; } = -1;
 }
 
 /// <summary>An explosive (Ultima VII's powder keg).</summary>

@@ -64,6 +64,7 @@ public partial class U8GameWindow
     /// <summary>Is this map thing within the player's reach?</summary>
     private bool IsReachable(object entity)
     {
+        if (entity is ObjectInstance flying && _kites.ContainsKey(flying) && Math.Abs(flying.Z - _playerZ) >= MapFloors.LiftsPerFloor) return false; // a kite up in the air: not from the ground
         var body = WorldBodies().FirstOrDefault(b => ReferenceEquals(b.Entity, entity));
         if (body.Entity is null) return true;
         var volume = VolumeOf(body);

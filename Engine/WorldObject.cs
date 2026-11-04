@@ -157,6 +157,7 @@ public class WorldObject
     public ToolSettings Tool { get; set; } = new();
     public CraftingSettings Crafting { get; set; } = new();
     public InstrumentSettings Instrument { get; set; } = new();
+    public KiteSettings Kite { get; set; } = new();
     public ExplosiveSettings Explosive { get; set; } = new();
     /// <summary>A projectile's flight (a fireball, a dart).</summary>
     public ProjectileSettings Projectile { get; set; } = new();

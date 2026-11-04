@@ -76,7 +76,7 @@ public partial class GameTestWindow
             var (width, height) = QuantizedSpriteSize(sprite);
             var image = new Image { Width = width, Height = height, IsHitTestVisible = true };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-            if (obj.FramesAreStates && sprite.Frames.Count > 0)
+            if ((obj.FramesAreStates || obj.Type == ObjectType.Kite) && sprite.Frames.Count > 0) // a kite's frames are its flight (GameTestWindow.Kite.cs)
                 image.Source = LoadStaticFrame(sprite.Frames[Math.Clamp(instance.FrameRuntime, 0, sprite.Frames.Count - 1)].FilePath);
             else
                 animators?.Add(new SpriteAnimator(sprite, image, _resources,

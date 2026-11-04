@@ -86,7 +86,9 @@ public enum ObjectType
     /// <summary>Wielded to fight (Exult's Weapon_info): hand to hand, thrown or ranged; ammo, charges (a magic staff) or itself thrown; damage, damage type and powers.</summary>
     Weapon,
     /// <summary>Worn in its slot (Exult's Armor_info): armor points that soften every blow, and damage types it makes its wearer immune to.</summary>
-    Armor
+    Armor,
+    /// <summary>A kite: double-clicked it really goes up, floors above the ground and out of reach, stays up a while and comes down.</summary>
+    Kite
 }
 
 public static class ObjectTypes
@@ -100,7 +102,7 @@ public static class ObjectTypes
         ObjectType.Potion, ObjectType.BreakableGlass, ObjectType.Spellbook, ObjectType.UseableObject, ObjectType.Lever,
         ObjectType.Stairs, ObjectType.Clock, ObjectType.Tool, ObjectType.CraftingStation,
         ObjectType.MusicalInstrument, ObjectType.Explosive, ObjectType.Bedroll, ObjectType.Reagent, ObjectType.Table,
-        ObjectType.LiquidContainer, ObjectType.Projectile, ObjectType.Weapon, ObjectType.Armor
+        ObjectType.LiquidContainer, ObjectType.Projectile, ObjectType.Weapon, ObjectType.Armor, ObjectType.Kite
     };
 
     public static string Name(ObjectType type) => type switch
