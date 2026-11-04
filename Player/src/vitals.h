@@ -8,6 +8,9 @@ int vitals_hp(int characterId, int *hp);           /* 0 if it has no Hits stat *
 int vitals_max_hp(int characterId);
 void vitals_set_hp(int characterId, int hp);
 void vitals_damage(int characterId, int amount, const char *cause);
+void vitals_damage_allowed(int characterId, int amount, const char *cause);   /* from what's allowed to: its weapon, its spell, an event */
+int vitals_wounds_it(int characterId, int weaponId, const char *spell);       /* this weapon or spell hurts it */
+int vitals_immortal(int characterId);
 void vitals_kill(int characterId, const char *cause);
 int vitals_dead(int characterId);
 int vitals_unconscious(int characterId);

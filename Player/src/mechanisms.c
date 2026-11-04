@@ -33,6 +33,7 @@
 #include "pictures.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -537,9 +538,106 @@ static void use_clock(const Used *u)
 
 static double poseBackMs;
 
+/* A music box (Object Editor > Musical Instrument): double-clicked it opens, its picture changes and its tune plays round and round; again: it closes, the music stops. */
+static void use_music_box(const Used *u)
+{
+    cJSON *songs = get(get(u->def, "Instrument"), "SongSoundIds");
+    int lit = 0, spent = 0;
+    double burn = 0;
+    if (u->uid) lit = world_thing_lit(u->uid); else if (u->item) items_light_state(u->item, &lit, &spent, &burn);
+    int open = !lit;
+    if (u->uid) world_thing_set_lit(u->uid, open); else if (u->item) items_set_light_state(u->item, open, spent, burn);
+    int owner = 1000 + (u->uid ? u->uid : (int)(((uintptr_t)u->item >> 3) & 0xFFFFFF) + 0x1000000);
+    int n = cJSON_GetArraySize(songs);
+    if (open && n) sound_play_ex(cJSON_GetArrayItem(songs, rnd(n))->valueint, -1, 1, owner, 1);
+    else if (!open) sound_stop_owner(owner);
+    char line[160];
+    snprintf(line, sizeof line, "\"%s\" %s.", str(u->def, "Name"), open ? "opens" : "closes");
+    say(line);
+}
+
+/* ---------------- A kite: it really goes up (GameTestWindow.Kite) ---------------- */
+
+typedef struct KiteFlight { int uid, phase, baseZ, topZ; double ms, frameMs; } KiteFlight;
+static KiteFlight kites[8];
+static int kiteCount;
+
+static KiteFlight *kite_flying(int uid)
+{
+    for (int i = 0; i < kiteCount; i++) if (kites[i].uid == uid) return &kites[i];
+    return NULL;
+}
+
+static void use_kite(const Used *u)
+{
+    char line[160];
+    if (u->uid && kite_flying(u->uid)) { snprintf(line, sizeof line, "\"%s\" is already up.", str(u->def, "Name")); say(line); return; }
+    if (fire_use(u)) return;
+    cJSON *k = get(u->def, "Kite");
+    if (!cJSON_IsFalse(get(k, "OutdoorsOnly")) && world_indoors())
+    {
+        snprintf(line, sizeof line, "\"%s\" can only be used outdoors.", str(u->def, "Name"));
+        say(line);
+        vitals_bark(world_actor_character(user_of(u)), 17 /* OutdoorsOnly */);
+        return;
+    }
+    int uid = u->uid;
+    if (!uid && u->item) /* out of the pack: it goes up from the feet of whoever holds it */
+    {
+        ItemPlace from;
+        if (!items_detach(u->item, &from)) return;
+        items_detach_done(&from, u->item);
+        int x, y, f;
+        world_actor_cell(0, &x, &y, &f);
+        uid = world_thing_put(items_category(u->item), items_item_id(u->item), 1, x, y, f);
+        if (uid < 0) { items_free(u->item); return; }
+        items_park(uid, u->item);
+    }
+    if (!uid || kiteCount >= 8) return;
+    int floors = num(k, "FlyFloors", 2);
+    int base = world_thing_z(uid), top = base + (floors > 0 ? floors : 1) * 5;
+    if (top > 8 * 5) top = 8 * 5;
+    kites[kiteCount++] = (KiteFlight){ uid, 0, base, top, 0, 0 };
+    world_thing_set_flying(uid, base);
+    world_thing_set_frame(uid, num(k, "RiseFirstFrame", 0));
+    sound_play(num(k, "SoundResourceId", -1));
+    snprintf(line, sizeof line, "\"%s\" takes to the air.", str(u->def, "Name"));
+    say(line);
+}
+
+static void kites_update(double ms)
+{
+    for (int i = 0; i < kiteCount; i++)
+    {
+        KiteFlight *f = &kites[i];
+        cJSON *def = world_thing_there(f->uid) ? object_def(world_thing_object_id(f->uid)) : NULL;
+        if (!def) { kites[i--] = kites[--kiteCount]; continue; }
+        cJSON *k = get(def, "Kite");
+        double frameMs = num(k, "FrameMilliseconds", 150);
+        if (frameMs < 20) frameMs = 20;
+        f->ms += ms; f->frameMs += ms;
+        int first = num(k, f->phase == 0 ? "RiseFirstFrame" : f->phase == 1 ? "FlyFirstFrame" : "LandFirstFrame", 0);
+        int last = num(k, f->phase == 0 ? "RiseLastFrame" : f->phase == 1 ? "FlyLastFrame" : "LandLastFrame", 0), count = last - first + 1 > 1 ? last - first + 1 : 1;
+        double phaseMs = f->phase == 1 ? (num(k, "FlySeconds", 20) > 0 ? num(k, "FlySeconds", 20) : 0) * 1000.0 : count * frameMs;
+        double t = phaseMs > 0 && f->ms < phaseMs ? f->ms / phaseMs : 1;
+        int z = f->phase == 0 ? f->baseZ + (int)((f->topZ - f->baseZ) * t + 0.5) : f->phase == 1 ? f->topZ : f->topZ - (int)((f->topZ - f->baseZ) * t + 0.5);
+        int step = f->phase == 1 ? ((int)(f->frameMs / frameMs)) % count : (int)(f->ms / frameMs);
+        if (step >= count) step = count - 1;
+        world_thing_set_frame(f->uid, first + step);
+        world_thing_set_flying(f->uid, z);
+        if (f->ms < phaseMs) continue;
+        f->ms = 0;
+        if (++f->phase < 3) continue;
+        world_thing_set_frame(f->uid, 0);
+        world_thing_set_flying(f->uid, -1); /* down: an ordinary thing on the ground again */
+        kites[i--] = kites[--kiteCount];
+    }
+}
+
 static void use_instrument(const Used *u)
 {
     if (fire_use(u)) return;
+    if (flag(get(u->def, "Instrument"), "MusicBox")) { use_music_box(u); return; }
     cJSON *ins = get(u->def, "Instrument"), *songs = get(ins, "SongSoundIds");
     char line[160];
     int n = cJSON_GetArraySize(songs);
@@ -1254,6 +1352,7 @@ static int use(Used u)
         case OT_MAP: use_map(&u); return 1;
         case OT_CLOCK: use_clock(&u); return 1;
         case OT_INSTRUMENT: use_instrument(&u); return 1;
+        case 37: use_kite(&u); return 1; /* ObjectType.Kite */
         case OT_TOOL: use_tool(&using); return 1;
         case OT_BEDROLL: use_bedroll(&using); return 1;
         case OT_LIQUID: use_liquid(&using); return 1;
@@ -1285,6 +1384,7 @@ int mechanisms_use_carried(Item *it)
 
 void mechanisms_update(double ms)
 {
+    kites_update(ms);
     for (int i = 0; i < buttonCount; i++)
     {
         if ((buttons[i].ms -= ms) > 0) continue;

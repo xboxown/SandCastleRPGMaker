@@ -107,7 +107,13 @@ void weather_update(double ms)
             weather_change(kind == W_CLEAR ? (mapKind == W_CLEAR ? W_RAIN : mapKind) : W_CLEAR, 20 + rnd(81), -1); /* clear, or the map's own weather */
     }
     double s = ms / 1000.0;
-    indoors = world_indoors();
+    /* Inside a Cave: no rain and no weather at all, not even heard. */
+    static int hushedByCave;
+    int inCave = events_player_in_cave();
+    if (inCave) sound_stop_owner(OWNER_WEATHER);
+    else if (hushedByCave && (kind == W_RAIN || kind == W_STORM) && rainSound >= 0) sound_play_ex(rainSound, -1, 1, OWNER_WEATHER, 1);
+    hushedByCave = inCave;
+    indoors = inCave || world_indoors();
     if (!indoors)
         for (int i = 0; i < particleCount; i++)
         {
@@ -135,7 +141,7 @@ void weather_update(double ms)
     {
         lightningMs = 4000 + rnd(9000) * (1.5 - intensity / 100.0);
         if (!indoors) flashMs = 0;
-        if (thunderSound >= 0) thunderMs = 300 + rnd(1500);
+        if (thunderSound >= 0 && !inCave) thunderMs = 300 + rnd(1500);
     }
     if (flashMs >= 0 && (flashMs += ms) > 520) flashMs = -1;
     if (thunderMs >= 0 && (thunderMs -= ms) <= 0) { thunderMs = -1; sound_play(thunderSound); }

@@ -14,6 +14,9 @@
 
 /* Reads the events from the game (world_json); call after world_load. */
 void events_load(void);
+/* Zones (Map Editor): a zone of this purpose covers that cell and floor. A Cave: no weather, complete darkness. Cold, Hot: suffer unless dressed. */
+int events_zone_here(const char *purpose, int x, int y, int onFloor);
+int events_player_in_cave(void);
 
 /* Each frame: ms passed; paused while a dialog box is up. */
 void events_update(double ms, int paused);

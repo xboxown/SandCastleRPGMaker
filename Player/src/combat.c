@@ -838,18 +838,19 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
     if (w) world_sound_from_actor(num(w, "HitSoundResourceId", -1), defender);
     int noDamage = (powers & P_NODAMAGE) != 0;
     int damage = noDamage || points == 0 ? 0 : weapon_damage(attacker, defender, points, type);
+    if (!vitals_wounds_it(id_of(defender), weapon ? num(weapon, "Id", -1) : -1, NULL)) damage = 0; /* it takes another weapon or a spell to hurt this one */
     char text[16];
     snprintf(text, sizeof text, "-%d", damage);
     show_hit(defender, text);
     if (damage <= 0 && !noDamage) return;
     if (damage > 0)
     {
-        int willDie = hp_of(defender, 99) - damage <= 0;
+        int willDie = !vitals_immortal(id_of(defender)) && hp_of(defender, 99) - damage <= 0;
         if (willDie) incident(faction_of(defender), faction_of(attacker), I_KILL);
         char cause[160];
         if (attacker == 0) snprintf(cause, sizeof cause, "slain by you");
         else snprintf(cause, sizeof cause, "slain by %s", name_of(attacker));
-        vitals_damage(id_of(defender), damage, cause);
+        vitals_damage_allowed(id_of(defender), damage, cause);
         world_maybe_bleed(defender, damage); /* reduce_health: it may start bleeding */
         if (willDie && vitals_dead(id_of(defender)))
         {

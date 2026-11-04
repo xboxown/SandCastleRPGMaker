@@ -52,6 +52,7 @@ void game_log(const char *line);
 enum { T_JUNK, T_TILE, T_WALL, T_DOOR, T_LIGHT, T_AMMO, T_MONEY, T_CHAIR, T_BED, T_TRAP, T_KEY, T_LOCKPICK, T_WINDOW, T_PLANT, T_KEYCHAIN,
        T_SEXTANT, T_MAP, T_FOOD, T_POTION, T_GLASS, T_SPELLBOOK, T_USEABLE, T_LEVER, T_STAIRS, T_ROOF, T_CLOCK, T_TOOL, T_STATION,
        T_INSTRUMENT, T_EXPLOSIVE, T_BEDROLL, T_REAGENT, T_TABLE, T_LIQUID };
+enum { T_KITE = 37 }; /* ObjectType.Kite */
 enum { DIR_N, DIR_NE, DIR_E, DIR_SE, DIR_S, DIR_SW, DIR_W, DIR_NW };
 static const char *DIR_NAMES[8] = { "North", "NorthEast", "East", "SouthEast", "South", "SouthWest", "West", "NorthWest" };
 
@@ -60,7 +61,7 @@ typedef struct Link { const Sprite *sprite; } Link;
 typedef struct ObjectDef
 {
     int id, type, sizeX, sizeY, sizeZ, solid, solidOffX, solidOffY, stackable, elevates, floorTile, portable;
-    const Sprite *own, *open, *lit, *spent;
+    const Sprite *own, *open, *lit, *spent, *musicOpen;
     const Sprite *facing[8], *turned[8], *back[8]; /* back: a chair's back per facing, drawn over its sitter (FurnitureFacing.BackSprite) */
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
@@ -87,6 +88,7 @@ typedef struct Thing
     int uid, category, itemId, quantity, instanceId; /* what it is (ReferencedItemCategory: Book 3, Object 4, Container 5) */
     int body, gone;                                  /* its solid box (-1: none); picked up / taken away */
     int locked;                                      /* a door: locked (IsLockedRuntime) */
+    int flying;                                      /* a kite up in the air: it stays at its height (mechanisms.c) */
     int fixedFrame;                                  /* a frame shown instead of the animation (frame + 1; 0 = animate) - a bed's cover */
     int spent; double burnLeft;                      /* a light burnt out; the game minutes it has left (-1: not started) */
     cJSON *placed;                                   /* its Map Editor entry (a container's own contents) */
@@ -210,6 +212,7 @@ static void read_objects(cJSON *project)
         d->portable = flag(o, "IsPortable"); /* Reach: something portable doesn't block an arm's line (IsMovable) */
         d->occludes = flag(o, "Occludes");
         d->own = sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName"));
+        if (flag(get(o, "Instrument"), "MusicBox")) d->musicOpen = link_of(get(get(o, "Instrument"), "OpenSprite")); /* a music box, open */
         cJSON *door = get(o, "Door"), *light = get(o, "Light"), *furniture = get(get(o, "Furniture"), "Facings"), *turn = get(o, "TurnLooks"), *f;
         d->open = link_of(get(door, "OpenSprite")); d->doorStartsOpen = flag(door, "StartsOpen");
         d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
@@ -260,6 +263,7 @@ static const Sprite *look_of(const Thing *t)
     {
         case T_DOOR: return t->open ? (d->open ? d->open : own) : t->locked && d->locked ? d->locked : own;
         case T_LIGHT: return t->spent ? (d->spent ? d->spent : own) : t->lit && d->lit ? d->lit : own;
+        case T_INSTRUMENT: return t->lit && d->musicOpen ? d->musicOpen : own; /* a music box, open */
         case T_AMMO: case T_MONEY: case T_LOCKPICK:
         {
             int q = t->quantity > 1 ? t->quantity : 1, level = q > 12 ? 7 : q > 6 ? 6 : q - 1;
@@ -1646,11 +1650,19 @@ void world_levitation_update(double ms)
     }
 }
 
+/* Exult's MOVE_ETHEREAL: walls and everything else are nothing to it, only the map's edge. */
+static int ghost_step(const Actor *a, int l, int t, int lift)
+{
+    if (wraps) return lift;
+    return l >= 0 && t >= 0 && l + a->sizeX <= mapW * unitsX && t + a->sizeY <= mapH * unitsY ? lift : -1;
+}
+
 /* A character's step onto a new footprint by how it moves: the lift it'd be at, or -1. */
 static int mover_step(const Actor *a, int fl, int ft, int l, int t, int lift)
 {
     if (a->movement == 1) return sea_step(a, l, t, lift);
     if (a->movement == 2) return air_step(a, fl, ft, l, t, lift);
+    if (a->movement == 4) return ghost_step(a, l, t, lift);
     return try_step(l, t, a->sizeX, a->sizeY, lift, a->sizeZ);
 }
 
@@ -1715,7 +1727,7 @@ static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
         *lift = best;
         return best >= 0;
     }
-    *lift = a->movement == 1 ? sea_step(a, l, t, fromLift) : try_step(l, t, a->sizeX, a->sizeY, fromLift, a->sizeZ);
+    *lift = a->movement == 1 ? sea_step(a, l, t, fromLift) : a->movement == 4 ? ghost_step(a, l, t, fromLift) : try_step(l, t, a->sizeX, a->sizeY, fromLift, a->sizeZ);
     return *lift >= 0;
 }
 
@@ -2513,6 +2525,30 @@ int world_arrive_furniture(int actor)
 typedef struct PendingSit { int uid, phase; double waitMs, targetX, targetY; } PendingSit;
 static PendingSit pendingSit; /* phase 0 = none, 4 = walking there, 3 = last steps, 1 = looking, 2 = turned */
 
+int vitals_bark(int characterId, int kind);
+
+/* Told it can't be done: the character's own line (Character Editor > Verbose). */
+static void cant_reach_seat(void)
+{
+    game_log("You can't get to it from here.");
+    vitals_bark(world_actor_character(0), 16 /* CantSit */);
+}
+
+/* The way from this point up to the seat crosses nothing solid but the seat's own furniture: no sitting down through a table. */
+static int nothing_between(double fromX, double fromY, int uid)
+{
+    double dx = pendingSit.targetX - fromX, dy = pendingSit.targetY - fromY, most = fmax(fabs(dx), fabs(dy));
+    int steps = (int)ceil(most / 4.0), mine[1] = { uid }, me[1] = { 0 };
+    for (int i = 0; i <= steps; i++)
+    {
+        double t = steps ? i / (double)steps : 1;
+        int l, tp;
+        player_foot(fromX + dx * t, fromY + dy * t, &l, &tp);
+        if (world_blocked(l, tp, player.sizeX, player.sizeY, player.lift + 1, player.lift + player.sizeZ, mine, 1, me, 1)) return 0;
+    }
+    return 1;
+}
+
 int world_player_sit(int uid)
 {
     seats_ready();
@@ -2524,9 +2560,23 @@ int world_player_sit(int uid)
     if (spot < 0 || !spot_position(t, spot, &x, &y, &lift)) return 0;
     int gx = (int)floor(x / tileW), gy = (int)floor((y - 1) / tileH), px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
     pendingSit = (PendingSit){ uid, 4, 0, x, y - tileH / 2.0 };
-    if (abs(px - gx) + abs(py - gy) <= 1) { pendingSit.phase = 3; return 1; }
-    if (!world_walk_to(0, gx, gy, 0, 1)) { pendingSit.phase = 0; return 0; }
-    return 1;
+    if (abs(px - gx) + abs(py - gy) <= 1 && nothing_between(player.px, player.py, uid)) { pendingSit.phase = 3; return 1; }
+    /* The cell round the seat nearest the player that goes straight on to the seat: walked round whatever is in the way (a table). */
+    int cellX[8], cellY[8], cellD[8], cells = 0;
+    for (int dy = -1; dy <= 1; dy++)
+        for (int dx = -1; dx <= 1; dx++)
+        {
+            if (!dx && !dy) continue;
+            int cx = gx + dx, cy = gy + dy;
+            if (cx < 0 || cy < 0 || cx >= mapW || cy >= mapH || !world_can_stand(0, cx, cy, floor_of(player.lift)) || !nothing_between(cell_cx(cx), cell_cy(cy), uid)) continue;
+            int d = abs(cx - px) + abs(cy - py), at = cells++;
+            while (at > 0 && cellD[at - 1] > d) { cellX[at] = cellX[at - 1]; cellY[at] = cellY[at - 1]; cellD[at] = cellD[at - 1]; at--; }
+            cellX[at] = cx; cellY[at] = cy; cellD[at] = d;
+        }
+    for (int i = 0; i < cells; i++) if (world_walk_to(0, cellX[i], cellY[i], 0, 0)) return 1;
+    pendingSit.phase = 0;
+    cant_reach_seat();
+    return 0;
 }
 
 int world_player_sitting_down(void) { return pendingSit.phase != 0; }
@@ -2575,7 +2625,7 @@ static void player_sit_update(double seconds)
     }
     pendingSit.phase = 0;
     /* not actually beside it (the way was blocked): no jumping onto it from across a table */
-    if (fabs(player.px - pendingSit.targetX) > tileW * 1.5 || fabs(player.py - pendingSit.targetY) > tileH * 1.5) { game_log("You can't reach it from here."); return; }
+    if (fabs(player.px - pendingSit.targetX) > tileW * 1.5 || fabs(player.py - pendingSit.targetY) > tileH * 1.5 || !nothing_between(player.px, player.py, pendingSit.uid)) { cant_reach_seat(); return; }
     int spot = nearest_free_spot(t, player.px, player.py + tileH / 2.0, 0);
     if (spot < 0) return;
     take_seat(0, t, spot);
@@ -2823,7 +2873,16 @@ static int sb_overlaps(const SettleBody *b, const SettleBody *f) { return b->lef
 /* BelowCeilingOf: a support starting below the next floor's slab of the floor at this lift. */
 static int below_ceiling(const SettleBody *support, int lift) { return support->z < base_lift(floor_of(lift < 0 ? 0 : lift)) + LIFTS_PER_FLOOR - 1; }
 
+static void settle_all_things(void);
+
+/* Gravity for all - but a kite up in the air stays there: nothing holds it but the wind. */
 static void settle_all(void)
+{
+    settle_all_things();
+    for (int i = 0; i < thingCount; i++) if (things[i].flying && !things[i].gone) things[i].z = things[i].flying - 1;
+}
+
+static void settle_all_things(void)
 {
     int n = 0, cap = thingCount + (slabEnd - slabStart) + 1;
     SettleBody *all = (SettleBody *)calloc((size_t)cap, sizeof(SettleBody)), *settled = (SettleBody *)calloc((size_t)cap, sizeof(SettleBody));
@@ -3623,10 +3682,21 @@ static int grabable(Vol target, int isSpot)
 }
 
 /* Is this thing on the map within the player's reach (its own box, solid or not)? */
+/* A kite in the air: the lift it's at (flying), or back to normal (-1). */
+void world_thing_set_flying(int uid, int lift)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return;
+    t->flying = lift >= 0 ? lift + 1 : 0;
+    if (lift >= 0) t->z = lift;
+    else settle_all();
+}
+
 int world_reachable_thing(int uid)
 {
     Thing *t = thing_by_uid(uid);
     if (!t) return 0;
+    if (t->flying && abs(t->z - player.lift) >= LIFTS_PER_FLOOR) return 0; /* a kite up in the air: not from the ground */
     Body b;
     thing_box(t, &b);
     Vol v = { b.left, b.top, b.z, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1, b.height > 0 ? b.height : 1 };

@@ -96,6 +96,7 @@ const Sprite *world_item_look(int category, int itemId, int lit, int spent, int 
 const Sprite *world_thing_sprite(int uid);
 void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor);
 int world_reachable(int x, int y, int z);
+void world_thing_set_flying(int uid, int lift);
 int world_reachable_thing(int uid);   /* Exult is_grabable for a thing on the map (its own box) */
 void world_thing_add_quantity(int uid, int n);
 int world_thing_quantity(int uid);

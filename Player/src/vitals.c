@@ -40,6 +40,7 @@ enum { K_STRENGTH = 1, K_HITS = 6 };
 
 typedef struct Vital
 {
+    int cold, heat; /* how cold and how hot it is, 0-63 (Exult's temperature) */
     int characterId, food, ailments, dead, unconscious;
     double poisonLeft, poisonNext, sleepLeft, paralyzeLeft, charmLeft, curseLeft, invisibleLeft, protectedLeft, mendCheck, damageCarry;
     int cellX, cellY, hasCell;
@@ -136,15 +137,27 @@ static const char *const DEFAULT_LINES[][9] = {
     { "Hey! That was my food!", "Who took my supper?", "Thief! My food!" },
     { "What wouldst thou like?", "Hungry, art thou?", "May I bring thee something?", "What shall it be?", "Thou lookest hungry." },
     { "Here thou art.", "Enjoy thy meal." },
+    { "I cannot get there.", "Something is in the way." },
+    { "Not in here!", "I need open sky for that." },
+    { "It is chilly here.", "Brrr!", "It is cold!" },
+    { "It is very cold!", "I am freezing!" },
+    { "I cannot feel my fingers!", "I have frostbite!", "This cold is killing me!" },
+    { "I am frozen!", "I... cannot... move..." },
+    { "I am warming up.", "That is better." },
+    { "It is warm here.", "Phew!", "It is hot!" },
+    { "It is very hot!", "I am sweating!" },
+    { "I feel faint!", "This heat is killing me!" },
+    { "I am burning up!", "I... cannot... breathe..." },
+    { "I am cooling down.", "That is better." },
 };
-static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy", "Munching", "WantsFood", "FoodStolen", "WaiterAsks", "WaiterServes" };
+static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy", "Munching", "WantsFood", "FoodStolen", "WaiterAsks", "WaiterServes", "CantSit", "OutdoorsOnly", "FeelingCold", "VeryCold", "Frostbite", "Frozen", "WarmingUp", "FeelingHot", "VeryHot", "Heatstroke", "Scorched", "CoolingDown" };
 
 /* Bark: one line of its own for the situation, over its head (only the human speak; never the dead or the knocked out). */
 int vitals_bark(int characterId, int kind)
 {
     cJSON *ch = character_json(characterId);
     Vital *v = vital_of(characterId);
-    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 15) return 0;
+    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 27) return 0;
     int actor = actor_of_character(characterId);
     if (actor < 0) return 0;
     cJSON *own = get(get(get(ch, "Verbose"), "Lines"), KIND_NAMES[kind]);
@@ -223,10 +236,13 @@ static void resume_acting(int characterId)
 }
 
 /* Actor::die: out of the world, a body holding all it carried where it fell; its By Death events. */
+static void knock_out(int characterId);
+
 static void die(int characterId, const char *cause)
 {
     Vital *v = vital_of(characterId);
     if (!v || v->dead) return;
+    if (flag(character_json(characterId), "Immortal")) { knock_out(characterId); return; }
     char key[32];
     snprintf(key, sizeof key, "killed:%d", world_character_source(characterId)); conditions_record(key); /* Character killed */
     conditions_record("killed:*");
@@ -253,6 +269,23 @@ static void die(int characterId, const char *cause)
     Item *belongings = items_death_drops(characterId, items_strip(characterId), rnd); /* not human: what may be found in it */
     int x, y, f;
     world_actor_cell(actor, &x, &y, &f);
+    if (flag(get(character_json(characterId), "Body"), "NoBody"))
+    {
+        /* Exult's has_no_body: what it carried falls on the ground, each on the nearest free spot within 5 tiles */
+        int radius = (5 * 8 + world_tile_w() / 2) / world_tile_w(), xs[256], ys[256], n = 0;
+        if (radius < 1) radius = 1;
+        for (int ring = 0; ring <= radius; ring++)
+        {
+            int first = n;
+            for (int dy = -ring; dy <= ring; dy++)
+                for (int dx = -ring; dx <= ring; dx++)
+                    if ((abs(dx) == ring || abs(dy) == ring) && n < 256 && world_can_stand(actor, x + dx, y + dy, f)) { xs[n] = x + dx; ys[n] = y + dy; n++; }
+            for (int i = n - 1; i > first; i--) { int j = first + rnd(i - first + 1), tx = xs[i], ty = ys[i]; xs[i] = xs[j]; ys[i] = ys[j]; xs[j] = tx; ys[j] = ty; }
+        }
+        if (belongings) items_spill_on(belongings, xs, ys, n, x, y, f);
+        world_actor_remove(actor);
+        return;
+    }
     int uid = world_put_body(actor, x, y, f);
     if (uid >= 0 && belongings) items_park(uid, belongings);
     else if (belongings) items_free(belongings);
@@ -275,10 +308,39 @@ static void knock_out(int characterId)
     events_knocked_out(characterId);
 }
 
+/* A weapon or spell it needs is doing this damage (or an event is). */
+static int specialWound;
+
+int vitals_immortal(int characterId) { return flag(character_json(characterId), "Immortal"); }
+
+/* Only a certain weapon or spell hurts it: nothing else does, not traps, fire or hunger. Immortal: these don't apply. */
+static int needs_special_wound(int characterId)
+{
+    cJSON *ch = character_json(characterId);
+    return !flag(ch, "Immortal") && (flag(ch, "RequiresWeapon") || flag(ch, "RequiresSpell"));
+}
+
+int vitals_wounds_it(int characterId, int weaponId, const char *spell)
+{
+    if (!needs_special_wound(characterId)) return 1;
+    cJSON *ch = character_json(characterId);
+    if (flag(ch, "RequiresWeapon") && weaponId >= 0 && weaponId == num(ch, "RequiredWeaponId", -1)) return 1;
+    const char *needed = cJSON_GetStringValue(get(ch, "RequiredSpellName"));
+    return flag(ch, "RequiresSpell") && spell && needed && strcmp(spell, needed) == 0;
+}
+
+void vitals_damage_allowed(int characterId, int amount, const char *cause)
+{
+    specialWound = 1;
+    vitals_damage(characterId, amount, cause);
+    specialWound = 0;
+}
+
 void vitals_damage(int characterId, int amount, const char *cause)
 {
     int hp;
     if (amount <= 0 || vitals_dead(characterId) || !vitals_hp(characterId, &hp)) return;
+    if (needs_special_wound(characterId) && !specialWound) return; /* only its weapon or spell hurts it (Character Editor > Health) */
     int actor = actor_of_character(characterId), max = vitals_max_hp(characterId);
     /* Exult's hit: badly hurt, the main character's screen flashes red; anyone else a red outline */
     if (actor == 0 && max > 0 && (amount >= max / 3 || hp < max / 4)) screen_flash(0xE00000, 0.15);
@@ -286,6 +348,7 @@ void vitals_damage(int characterId, int amount, const char *cause)
     int half = max / 2;
     if (hp >= half && hp - amount < half && hp - amount > 0 && rnd(2) == 0) vitals_bark(characterId, 3); /* "Ouch!" */
     hp -= amount;
+    if (vitals_immortal(characterId) && hp < 0) hp = 0; /* knocked out at worst */
     vitals_set_hp(characterId, hp);
     if (hp < -(max / 3)) die(characterId, cause);
     else if (hp <= 0) knock_out(characterId);
@@ -361,11 +424,18 @@ void vitals_heal_fully(int characterId)
 
 /* ---------------- Each frame ---------------- */
 
+/* mend_wounds: at 50 or more of cold or heat, wounds don't mend. */
+static int too_cold_or_hot_to_mend(const Vital *v)
+{
+    cJSON *s = survival(v->characterId);
+    return (v->cold >= 50 && !flag(s, "ColdImmune")) || (v->heat >= 50 && !flag(s, "HeatImmune"));
+}
+
 static void mend(Vital *v)
 {
     int hp, max = vitals_max_hp(v->characterId);
     int starving = can_get_hungry(v->characterId) && v->food <= survival_num(v->characterId, "HungryAtOrBelow", 9);
-    if ((v->ailments & POISONED) || !vitals_hp(v->characterId, &hp) || (starving && hp > 0)) return;
+    if ((v->ailments & POISONED) || !vitals_hp(v->characterId, &hp) || (starving && hp > 0) || too_cold_or_hot_to_mend(v)) return;
     if (max <= 0 || hp >= max) return;
     int actor = actor_of_character(v->characterId);
     int sleeping = actor > 0 && schedules_sleeping(actor);
@@ -387,12 +457,83 @@ static void use_food(Vital *v)
     else if (rnd(2) > 0) vitals_bark(v->characterId, 0);
 }
 
+/* System Settings > Combat: starving goes on hurting someone knocked out by it, until they die (off: Ultima 7's way). */
+static int starvation_kills(void) { return flag(get(get((cJSON *)world_json(), "Project"), "Settings"), "StarvationKills"); }
+
 static void hunger_minute(Vital *v)
 {
-    if (!can_get_hungry(v->characterId) || vitals_incapacitated(v->characterId)) return;
+    int starvesOn = starvation_kills() && v->unconscious && !v->dead; /* it goes on losing health where it lies */
+    if (!can_get_hungry(v->characterId) || (vitals_incapacitated(v->characterId) && !starvesOn)) return;
     if (v->food > survival_num(v->characterId, "HungryAtOrBelow", 9)) return;
     if (v->food <= 0 && rnd(100) < survival_num(v->characterId, "StarvingChancePercent", 40))
         vitals_damage(v->characterId, survival_num(v->characterId, "StarvingDamage", 1), "starvation");
+}
+
+/* ---------------- Cold and Hot zones (GameTestWindow.Temperature, Exult's check_temperature) ---------------- */
+
+static cJSON *object_json(int objectId)
+{
+    cJSON *o;
+    cJSON_ArrayForEach(o, get(get(get((cJSON *)world_json(), "Project"), "Objects"), "Objects"))
+        if (num(o, "Id", -2) == objectId) return o;
+    return NULL;
+}
+
+/* figure_warmth: -75, and what's worn on the head, back, feet, body, hands and legs, and in any custom slot. */
+static int worn_protection(int characterId, const char *field)
+{
+    static const int SLOTS[] = { 0 /* Head */, 6 /* Back */, 8 /* Feet */, 2 /* Body */, 4 /* Gloves */, 7 /* Legs */ };
+    int total = -75;
+    for (unsigned i = 0; i < sizeof SLOTS / sizeof SLOTS[0]; i++)
+    {
+        Item *it = items_in_slot(characterId, SLOTS[i]);
+        cJSON *obj = it && items_category(it) == CAT_OBJECT ? object_json(items_item_id(it)) : NULL;
+        if (obj) total += num(get(obj, "Armor"), field, 0);
+    }
+    cJSON *custom;
+    cJSON_ArrayForEach(custom, get(get(character_json(characterId), "Paperdoll"), "CustomSlots"))
+    {
+        Item *it = items_in_slot(characterId, 100 + num(custom, "Id", 0));
+        cJSON *obj = it && items_category(it) == CAT_OBJECT ? object_json(items_item_id(it)) : NULL;
+        if (obj) total += num(get(obj, "Armor"), field, 0);
+    }
+    return total;
+}
+
+/* check_temperature: one minute of it. The new temperature. Kinds: low, low + 1, low + 2 (frostbite), low + 3 (frozen), low + 4 (easing). */
+static int temperature_step(int characterId, int temperature, int inside, int protection, int low, const char *cause)
+{
+    int says = rnd(3) == 0;
+    if (!inside || protection >= 100)
+    {
+        if (temperature == 0) return 0;
+        int fall = inside ? 1 + (protection - 100) / 10 : 5;
+        temperature -= fall < temperature ? fall : temperature;
+        if (says) vitals_bark(characterId, low + 4);
+        return temperature;
+    }
+    temperature += 1 + (100 - protection) / 20;
+    if (temperature > 63) temperature = 63;
+    if (!says) return temperature;
+    switch (temperature / 10)
+    {
+        case 0: case 1: vitals_bark(characterId, low); break;
+        case 2: vitals_bark(characterId, low + 1); break;
+        case 3: case 4: vitals_bark(characterId, low + 2); break;
+        case 5: vitals_bark(characterId, low + 2); vitals_damage(characterId, 1, cause); break;
+        default: vitals_bark(characterId, low + 3); vitals_damage(characterId, 1 + rnd(3), cause); break;
+    }
+    return temperature;
+}
+
+static void temperature_minute(Vital *v, int actor)
+{
+    int x, y, f;
+    cJSON *s = survival(v->characterId);
+    world_actor_cell(actor, &x, &y, &f);
+    v->cold = temperature_step(v->characterId, v->cold, !flag(s, "ColdImmune") && events_zone_here("Cold", x, y, f), worn_protection(v->characterId, "Warmth"), 18, "the cold");
+    if (v->dead) return;
+    v->heat = temperature_step(v->characterId, v->heat, !flag(s, "HeatImmune") && events_zone_here("Hot", x, y, f), worn_protection(v->characterId, "Cooling"), 23, "the heat");
 }
 
 static void update_ailments(Vital *v, double ms)
@@ -541,6 +682,7 @@ void vitals_update(double ms)
         {
             int actor = actor_of_character(vitals[i].characterId);
             if (!vitals[i].dead && actor >= 0 && !world_actor_gone(actor)) hunger_minute(&vitals[i]);
+            if (!vitals[i].dead && actor >= 0 && !world_actor_gone(actor)) temperature_minute(&vitals[i], actor);
         }
     }
     for (int i = 0; i < vitalCount; i++)
@@ -566,7 +708,7 @@ void vitals_save(cJSON *runtime)
     {
         Vital *v = &vitals[i];
         cJSON *e = cJSON_CreateObject();
-        cJSON_AddNumberToObject(e, "CharacterId", v->characterId); cJSON_AddNumberToObject(e, "Food", v->food); cJSON_AddNumberToObject(e, "Ailments", v->ailments);
+        cJSON_AddNumberToObject(e, "CharacterId", v->characterId); cJSON_AddNumberToObject(e, "Food", v->food); cJSON_AddNumberToObject(e, "Cold", v->cold); cJSON_AddNumberToObject(e, "Heat", v->heat); cJSON_AddNumberToObject(e, "Ailments", v->ailments);
         cJSON_AddNumberToObject(e, "PoisonRemainingMs", v->poisonLeft); cJSON_AddNumberToObject(e, "SleepRemainingMs", v->sleepLeft);
         cJSON_AddNumberToObject(e, "ParalyzeRemainingMs", v->paralyzeLeft); cJSON_AddNumberToObject(e, "CharmRemainingMs", v->charmLeft);
         cJSON_AddNumberToObject(e, "CurseRemainingMs", v->curseLeft); cJSON_AddNumberToObject(e, "InvisibleRemainingMs", v->invisibleLeft);
@@ -586,6 +728,7 @@ void vitals_restore(cJSON *runtime)
         Vital *v = vital_of(num(e, "CharacterId", -2));
         if (!v) continue;
         v->food = num(e, "Food", v->food); v->ailments = num(e, "Ailments", 0);
+        v->cold = num(e, "Cold", 0); v->heat = num(e, "Heat", 0);
         v->poisonLeft = get(e, "PoisonRemainingMs") ? get(e, "PoisonRemainingMs")->valuedouble : 0; v->poisonNext = 5000;
         v->sleepLeft = get(e, "SleepRemainingMs") ? get(e, "SleepRemainingMs")->valuedouble : 0;
         v->paralyzeLeft = get(e, "ParalyzeRemainingMs") ? get(e, "ParalyzeRemainingMs")->valuedouble : 0;

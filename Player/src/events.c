@@ -139,22 +139,54 @@ static double dbl(cJSON *o, const char *k) { cJSON *v = get(o, k); return cJSON_
 static int flag(cJSON *o, const char *k) { return cJSON_IsTrue(get(o, k)); }
 static const char *str(cJSON *o, const char *k) { const char *s = cJSON_GetStringValue(get(o, k)); return s ? s : ""; }
 
-/* Zones.AmbientZoneAt: the zone the main character is in with a sound of its own, or a Cave - its ambient (-1 quiet); else the world's. */
+/* A zone's Purpose is this word (any case, spaces round it ignored). */
+static int zone_is(cJSON *zone, const char *word)
+{
+    const char *purpose = str(zone, "Purpose");
+    while (*purpose == ' ') purpose++;
+    size_t n = strlen(word);
+    for (size_t i = 0; i < n; i++) if ((purpose[i] | 32) != (word[i] | 32)) return 0;
+    while (purpose[n] == ' ') n++;
+    return !purpose[n];
+}
+
+static int zone_covers(cJSON *zone, int x, int y, int onFloor)
+{
+    int zx = num(zone, "X", 0), zy = num(zone, "Y", 0);
+    return num(zone, "Floor", 1) == onFloor && x >= zx && y >= zy && x < zx + num(zone, "Width", 1) && y < zy + num(zone, "Height", 1);
+}
+
+int events_zone_here(const char *purpose, int x, int y, int onFloor)
+{
+    cJSON *zone;
+    cJSON_ArrayForEach(zone, get(get(get((cJSON *)world_json(), "Project"), "Map"), "Zones"))
+        if (zone_covers(zone, x, y, onFloor) && zone_is(zone, purpose)) return 1;
+    return 0;
+}
+
+int events_player_in_cave(void)
+{
+    int px, py, pf;
+    world_actor_cell(0, &px, &py, &pf);
+    return events_zone_here("Cave", px, py, pf);
+}
+
+/* Zones.AmbientZoneAt: the zone the main character is in with a sound of its own, or a Cave - its ambient (-1 quiet); else the world's. Zones inside zones: the smallest, with a sound of its own before a silent one. */
 static int zone_ambient(int sound)
 {
     int px, py, pf;
     world_actor_cell(0, &px, &py, &pf);
-    cJSON *zone;
+    cJSON *zone, *best = NULL;
+    int bestSilent = 0, bestArea = 0;
     cJSON_ArrayForEach(zone, get(get(get((cJSON *)world_json(), "Project"), "Map"), "Zones"))
     {
-        int zx = num(zone, "X", 0), zy = num(zone, "Y", 0);
-        if (num(zone, "Floor", 1) != pf || px < zx || py < zy || px >= zx + num(zone, "Width", 1) || py >= zy + num(zone, "Height", 1)) continue;
-        const char *purpose = str(zone, "Purpose");
-        while (*purpose == ' ') purpose++;
-        int cave = (purpose[0] | 32) == 'c' && (purpose[1] | 32) == 'a' && (purpose[2] | 32) == 'v' && (purpose[3] | 32) == 'e' && (!purpose[4] || purpose[4] == ' ');
-        if (cave || num(zone, "AmbientSoundId", -1) >= 0) return num(zone, "AmbientSoundId", -1);
+        if (!zone_covers(zone, px, py, pf)) continue;
+        int own = num(zone, "AmbientSoundId", -1) >= 0;
+        if (!own && !zone_is(zone, "Cave")) continue;
+        int area = num(zone, "Width", 1) * num(zone, "Height", 1), silent = !own;
+        if (!best || silent < bestSilent || (silent == bestSilent && area < bestArea)) { best = zone; bestSilent = silent; bestArea = area; }
     }
-    return sound;
+    return best ? num(best, "AmbientSoundId", -1) : sound;
 }
 static const char *param(const Cmd *c, const char *k) { return str(c->params, k); }
 
@@ -1078,7 +1110,7 @@ static void set_stat_int(int characterId, cJSON *stat, int value, const char *ca
 {
     if (value < 0) value = 0;
     int old = stat_int(characterId, stat), kind = num(stat, "Kind", 0);
-    if (kind == 6 && value < old) { vitals_damage(characterId, old - value, cause); return; }
+    if (kind == 6 && value < old) { vitals_damage_allowed(characterId, old - value, cause); return; }
     char text[16];
     snprintf(text, sizeof text, "%d", value);
     set_stat_text(characterId, stat, text);
@@ -1697,7 +1729,7 @@ static int execute(Run *r, const Cmd *c)
             if (target < hp)
             {
                 if (strcmp(param(c, "CanKill"), "True") && target < -(max / 3)) target = -(max / 3); /* knocked out at worst */
-                vitals_damage(id, hp - target, "an event");
+                vitals_damage_allowed(id, hp - target, "an event");
             }
             else vitals_set_hp(id, target);
             return 1;
@@ -1709,7 +1741,7 @@ static int execute(Run *r, const Cmd *c)
             if (id < 0 || vitals_dead(id)) { lastResult = 0; return 1; }
             int max = vitals_max_hp(id);
             vitals_hp(id, &hp);
-            vitals_damage(id, hp + max / 3 + 1, "an event");
+            vitals_damage_allowed(id, hp + max / 3 + 1, "an event");
             if (!vitals_dead(id)) vitals_kill(id, "an event");
             return 1;
         }

@@ -949,6 +949,21 @@ void items_use_one(int characterId, Item *it)
 }
 
 /* extract_contents: everything in it put down where it stood (each keeping what it is); the empty shell freed. */
+/* What's in it onto these cells, in turn (more things than cells: they pile up; no cells: at x, y). */
+void items_spill_on(Item *box, const int *xs, const int *ys, int cells, int x, int y, int onFloor)
+{
+    if (!box) return;
+    for (int i = 0; i < box->count; i++)
+    {
+        Item *it = box->contents[i];
+        int uid = world_thing_put(it->category, it->itemId, it->quantity, cells ? xs[i % cells] : x, cells ? ys[i % cells] : y, onFloor);
+        if (uid >= 0) items_park(uid, it);
+        else items_free(it);
+    }
+    box->count = 0;
+    items_free(box);
+}
+
 void items_spill(Item *box, int x, int y, int onFloor)
 {
     if (!box) return;

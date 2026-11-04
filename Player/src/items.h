@@ -79,6 +79,7 @@ cJSON *items_use_ammo(int characterId, const char *family);
 int items_use_charge(int characterId, Item *weapon, int charges, int goneWhenEmpty);
 void items_use_one(int characterId, Item *it);
 void items_spill(Item *box, int x, int y, int onFloor);
+void items_spill_on(Item *box, const int *xs, const int *ys, int cells, int x, int y, int onFloor);
 
 /* ---- The inventory windows (gumps.c) ---- */
 Item *items_in_slot(int characterId, int slotKey);           /* built-in 0..14, custom 100 + its id */

@@ -248,7 +248,7 @@ void magic_apply_effects(cJSON *effects, int target, const char *cause, int by)
             case E_INVISIBILITY: vitals_inflict(id, A_INVISIBLE); break;
             case E_LIGHT: lighting_special(amount); break;
             case E_DAMAGE:
-                if (amount > 0) vitals_damage(id, amount, cause);
+                if (amount > 0 && vitals_wounds_it(id, -1, by >= 0 ? cause : NULL)) vitals_damage_allowed(id, amount, cause); /* cause: the spell's name */
                 if (by >= 0 && by != target && vitals_dead(id)) { int worth = stat_of(target, K_EXP, 0); if (worth > 0) combat_gain_experience(by, worth); } /* a spell's kill */
                 break;
             case E_CHARM: case E_FEAR: case E_DANCE: case E_REVEAL_INVISIBLE: case E_CLONE: character_spell(e, target, by); break;

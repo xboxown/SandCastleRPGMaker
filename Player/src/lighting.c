@@ -128,9 +128,11 @@ void lighting_update(double ms)
     checkMs = 250;
     double nightAmount;
     Sky sky = sky_now(&nightAmount);
+    int inCave = events_player_in_cave();
+    if (inCave) { sky.rgb = 0; sky.opacity = 1; nightAmount = 1; } /* a Cave: complete darkness, day or night - only a light source lifts it */
     /* Overcast: weather and clouds darken the day (and the night a little more). */
     double gloom = (weatherKind == 0 ? 0 : weatherIntensity / 100.0) + (weatherClouds ? weatherCover / 200.0 : 0);
-    gloom = clamp01(gloom) * overcastStrength;
+    gloom = inCave ? 0 : clamp01(gloom) * overcastStrength;
     if (gloom > 0.001)
     {
         Sky grey = { 0x20242C, gloom };
