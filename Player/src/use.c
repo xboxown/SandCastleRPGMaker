@@ -46,6 +46,14 @@ static int has_commands(cJSON *def)
 static void use_door(int uid, cJSON *def)
 {
     if (events_object_event(uid, TR_USE, -1)) return;
+    if (!world_door_by_hand(uid))
+    {
+        char line[160];
+        const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(def, "Name"));
+        snprintf(line, sizeof line, "\"%s\" doesn't open by hand.", name ? name : "");
+        game_log(line);
+        return;
+    }
     int open, locked;
     world_door_state(uid, &open, &locked);
     cJSON *door = cJSON_GetObjectItem(def, "Door");

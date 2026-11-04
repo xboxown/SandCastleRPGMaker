@@ -180,6 +180,7 @@ int world_thing_object_id(int uid);
 int world_thing_instance(int uid);
 void world_door_state(int uid, int *open, int *locked);
 void world_door_open(int uid);
+int world_door_by_hand(int uid);                  /* a double-click or someone walking through can open it */
 int world_door_close(int uid);                    /* 0: someone is in the doorway */
 void world_door_set_locked(int uid, int locked);
 int world_light_lit(int uid);

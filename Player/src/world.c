@@ -65,6 +65,9 @@ typedef struct ObjectDef
     const Sprite *facing[8], *turned[8], *back[8]; /* back: a chair's back per facing, drawn over its sitter (FurnitureFacing.BackSprite) */
     int doorStartsOpen, lightStartsLit, occludes;
     int doorStartsLocked, openOffX, openOffY;
+    /* How a door opens (DoorOpening: 0 swing, 1 animation, 2 slide, 3 fade), by itself, with its double, by hand or not. */
+    int doorOpening, slideX, slideY, slideHidden, motionMs, notByHand, withNeighbours, opensByItself, opensWithin, staysOpenMs, doorOpenSound, doorCloseSound;
+    const Sprite *openingSprite, *closingSprite;
     int brightness, gives;            /* a light: how bright, what it gives (Exult levels, the dusk look, daylight) */
     int burnMinutes, spentSound;      /* how long it burns (0: for ever), and the sound when it's spent */
     int spotCount[8]; double spotX[8][8], spotY[8][8]; /* a chair's seats / a bed's sleeping places, per facing (picture pixels) */
@@ -217,6 +220,12 @@ static void read_objects(cJSON *project)
         cJSON *door = get(o, "Door"), *light = get(o, "Light"), *furniture = get(get(o, "Furniture"), "Facings"), *turn = get(o, "TurnLooks"), *f;
         d->open = link_of(get(door, "OpenSprite")); d->doorStartsOpen = flag(door, "StartsOpen");
         d->doorStartsLocked = flag(door, "StartsLocked"); d->openOffX = num(door, "OpenOffsetX", 0); d->openOffY = num(door, "OpenOffsetY", 0);
+        d->doorOpening = num(door, "Opening", 0); d->slideX = num(door, "SlideX", 0); d->slideY = num(door, "SlideY", 0);
+        d->slideHidden = !cJSON_IsFalse(get(door, "SlideHidden")); d->motionMs = num(door, "MotionMs", 600); d->notByHand = flag(door, "NotByHand");
+        d->withNeighbours = flag(door, "OpensWithNeighbours"); d->opensByItself = flag(door, "OpensByItself");
+        d->opensWithin = num(door, "OpensWithinCells", 1); d->staysOpenMs = num(door, "StaysOpenMs", 1500);
+        d->doorOpenSound = num(door, "OpenSoundResourceId", -1); d->doorCloseSound = num(door, "CloseSoundResourceId", -1);
+        d->openingSprite = link_of(get(door, "OpeningSprite")); d->closingSprite = link_of(get(door, "ClosingSprite"));
         d->lit = link_of(get(light, "LitSprite")); d->lightStartsLit = flag(light, "StartsLit");
         d->brightness = num(light, "Brightness", 0); d->gives = num(light, "Gives", 0);
         d->spent = link_of(get(light, "SpentSprite")); d->burnMinutes = num(light, "BurnMinutes", 0); d->spentSound = num(light, "SpentSoundResourceId", -1);
@@ -262,7 +271,9 @@ static const Sprite *look_of(const Thing *t)
     const Sprite *own = d->turned[t->facing] ? d->turned[t->facing] : d->own;
     switch (d->type)
     {
-        case T_DOOR: return t->open ? (d->open ? d->open : own) : t->locked && d->locked ? d->locked : own;
+        case T_DOOR:
+            if (t->open && d->doorOpening == 2) return own; /* slid away: the door itself, moved */
+            return t->open ? (d->open ? d->open : own) : t->locked && d->locked ? d->locked : own;
         case T_LIGHT: return t->spent ? (d->spent ? d->spent : own) : t->lit && d->lit ? d->lit : own;
         case T_INSTRUMENT: return t->lit && d->musicOpen ? d->musicOpen : own; /* a music box, open */
         case T_AMMO: case T_MONEY: case T_LOCKPICK:
@@ -303,6 +314,8 @@ static void thing_box(const Thing *t, Body *b)
 
 static int nextUid = 1, thingCap, bodyCap, slabStart, slabEnd;
 static void settle_all(void);
+static void doors_update(double ms);
+static void door_set_open(Thing *t, int open);
 static void spawn_bed_covers(void);
 static cJSON *containersJson, *booksJson;
 
@@ -900,6 +913,7 @@ void world_update(int dx, int dy, double seconds)
     if (seconds > 0) keysHeld = dx || dy;
     if (dx || dy) { if (world_seated(0)) world_stand_up(0); world_cancel_player_sit(); } /* moving gets up again */
     player_sit_update(seconds);
+    if (seconds > 0) doors_update(seconds * 1000);
     if (dx || dy) world_walk_cancel(0); /* a direction key takes over from a walk an event began */
     if (world_walking(0)) { /* walked by the event (world_walks_update) */ }
     else if (dx == 0 && dy == 0) { player.walkingNow = 0; }
@@ -953,6 +967,7 @@ static Puddle puddles[128]; static int puddleCount;
 typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
 static Bleeding bleeding[32]; static int bleedingCount;
 static void draw_status_outlines(uint32_t *pixels);
+static int blitClip, blitClipL, blitClipT, blitClipR, blitClipB; /* the next blit shows only this box, in the game's pixels (a sliding door, into its wall) */
 static int blitOpacity = 255, blitMirror; /* the next blits: how see-through (invisible in the party), mirrored (blood) */
 
 /* The sky's light (lighting_shade), drawn into the world as it's drawn: each picture's darkened copy, made again only when
@@ -995,6 +1010,14 @@ static void blit_box(const Picture *p, int x, int y, int bw, int bh)
     /* clipped to the screen once: the columns and rows of it that show */
     int i0 = ox < 0 ? -ox : 0, i1 = ox + dw > FRAME_W ? FRAME_W - ox : dw;
     int j0 = oy < 0 ? -oy : 0, j1 = oy + dh > FRAME_H ? FRAME_H - oy : dh;
+    if (blitClip)
+    {
+        int cl = blitClipL * frame_scale - ox, cr = blitClipR * frame_scale - ox, ct = blitClipT * frame_scale - oy, cb = blitClipB * frame_scale - oy;
+        if (i0 < cl) i0 = cl;
+        if (i1 > cr) i1 = cr;
+        if (j0 < ct) j0 = ct;
+        if (j1 > cb) j1 = cb;
+    }
     if (i0 >= i1 || j0 >= j1) return;
     int same = dw == p->width && dh == p->height;
     const uint32_t *src = blitShading && shadeOn ? shaded_pixels(p) : p->pixels;
@@ -1043,6 +1066,7 @@ typedef struct Drawn
     double key; const Picture *picture; int x, y, w, h;
     int hasBox, wall, occludes, hangs, xl, xr, yf, yn, zb, zt, flat;
     int actor; /* the character drawn (world_actor_at), -1 for anything else */
+    int clip, cl, ct, cr, cb; /* shown only in this box (a sliding door hidden past where it stands) */
     int opacity, mirror; /* 0: opaque, else 1..254 (an invisible party member: a shimmer); a mirrored picture */
     int thing; /* the thing drawn (its uid), 0 for anything else */
     int band;  /* its floor's band (floor - 1) */
@@ -1313,6 +1337,78 @@ static void draw_weapon_in_hand(const Actor *a, const Sprite *body, uint32_t at,
     if (d) d->order = 1 << 30;
 }
 
+/* Doors moving (GameTestWindow.Doors): their look takes its time; whether they're open changes at once, as Exult's. */
+typedef struct DoorMove { int uid, opening, backwards; const Sprite *sprite; double durationMs, elapsedMs; } DoorMove;
+static DoorMove doorMoves[16];
+static int doorMoveCount;
+
+static const DoorMove *door_move_of(int uid)
+{
+    for (int i = 0; i < doorMoveCount; i++) if (doorMoves[i].uid == uid) return &doorMoves[i];
+    return NULL;
+}
+
+static void door_move_start(const Thing *t, int opening)
+{
+    const ObjectDef *d = t->def;
+    for (int i = 0; i < doorMoveCount; i++) if (doorMoves[i].uid == t->uid) doorMoves[i--] = doorMoves[--doorMoveCount];
+    if (d->doorOpening == 0 || doorMoveCount >= 16) return;
+    const Sprite *sprite = NULL;
+    int backwards = 0;
+    if (d->doorOpening == 1)
+    {
+        if (!opening && d->closingSprite && d->closingSprite->frameCount) sprite = d->closingSprite;
+        else if (d->openingSprite && d->openingSprite->frameCount) { sprite = d->openingSprite; backwards = !opening; }
+    }
+    else if (d->own && d->own->frameCount) sprite = d->own;
+    if (!sprite) return;
+    double ms = 0;
+    if (d->doorOpening == 1) for (int f = 0; f < sprite->frameCount; f++) ms += sprite->frames[f].ms;
+    else ms = d->motionMs > 50 ? d->motionMs : 50;
+    doorMoves[doorMoveCount++] = (DoorMove){ t->uid, opening, backwards, sprite, ms > 1 ? ms : 1, 0 };
+}
+
+static double selfOpeningCheckMs;
+static struct { int uid; double awayMs; } doorsAlone[64];
+static int doorsAloneCount;
+
+/* Each frame: moving doors a step on; those that open by themselves, four times a second. */
+static void doors_update(double ms)
+{
+    for (int i = 0; i < doorMoveCount; i++) if ((doorMoves[i].elapsedMs += ms) >= doorMoves[i].durationMs) doorMoves[i--] = doorMoves[--doorMoveCount];
+    if ((selfOpeningCheckMs += ms) < 250) return;
+    double step = selfOpeningCheckMs;
+    selfOpeningCheckMs = 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *t = &things[i];
+        if (t->gone || !t->def || t->def->type != T_DOOR || !t->def->opensByItself) continue;
+        int near = 0, floor = floor_of(t->z), reach = t->def->opensWithin > 0 ? t->def->opensWithin : 0;
+        for (int k = 0; k <= npcCount && !near; k++)
+        {
+            int ax, ay, af;
+            if (world_actor_gone(k) || vitals_dead(world_actor_character(k))) continue;
+            world_actor_cell(k, &ax, &ay, &af);
+            near = af == floor && abs(ax - t->x) <= reach && abs(ay - t->y) <= reach;
+        }
+        int slot = -1;
+        for (int k = 0; k < doorsAloneCount; k++) if (doorsAlone[k].uid == t->uid) slot = k;
+        if (near)
+        {
+            if (slot >= 0) doorsAlone[slot] = doorsAlone[--doorsAloneCount];
+            if (!t->open && !t->locked) { door_set_open(t, 1); world_sound_at_thing(t->def->doorOpenSound, t->uid); }
+            continue;
+        }
+        if (!t->open) continue;
+        if (slot < 0) { if (doorsAloneCount >= 64) continue; slot = doorsAloneCount++; doorsAlone[slot].uid = t->uid; doorsAlone[slot].awayMs = 0; }
+        if ((doorsAlone[slot].awayMs += step) >= t->def->staysOpenMs && world_door_close(t->uid))
+        {
+            world_sound_at_thing(t->def->doorCloseSound, t->uid);
+            doorsAlone[slot] = doorsAlone[--doorsAloneCount];
+        }
+    }
+}
+
 static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
@@ -1386,15 +1482,58 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         }
         const Sprite *ls = look_of(t);
         const Picture *pic = t->fixedFrame && ls && t->fixedFrame - 1 < ls->frameCount ? frame_picture(&ls->frames[t->fixedFrame - 1]) : sprite_picture_at(ls, ms);
+        /* How a door looks as it opens and closes (DoorMotion): an animation's frame, the closed door sliding or fading */
+        const DoorMove *doorMove = t->def && t->def->type == T_DOOR ? door_move_of(t->uid) : NULL;
+        double doorOpenAmount = t->def && t->def->type == T_DOOR && t->open ? 1 : 0;
+        const Picture *underFade = NULL;
+        if (doorMove)
+        {
+            double along = doorMove->durationMs > 0 ? doorMove->elapsedMs / doorMove->durationMs : 1;
+            along = along > 1 ? 1 : along;
+            double eased = along < 0.5 ? 2 * along * along : 1 - pow(-2 * along + 2, 2) / 2;
+            doorOpenAmount = doorMove->opening ? eased : 1 - eased;
+            if (t->def->doorOpening == 1)
+            {
+                int index = doorMove->sprite->frameCount - 1;
+                double sum = 0;
+                for (int f = 0; f < doorMove->sprite->frameCount; f++) { sum += doorMove->sprite->frames[f].ms; if (doorMove->elapsedMs < sum) { index = f; break; } }
+                pic = frame_picture(&doorMove->sprite->frames[doorMove->backwards ? doorMove->sprite->frameCount - 1 - index : index]);
+            }
+            else
+            {
+                if (t->def->doorOpening == 3 && doorMove->opening && t->def->open) underFade = sprite_picture_at(t->def->open, ms); /* opening onto its open sprite, which shows under it */
+                pic = doorMove->sprite->frameCount ? frame_picture(&doorMove->sprite->frames[0]) : pic;
+            }
+        }
+        if (t->def && t->def->type == T_DOOR && t->open && !doorMove && t->def->doorOpening == 3 && !t->def->open) continue; /* faded away, with nothing left */
         if (!pic) { if (!t->fixedFrame) frame_sound(t->uid, ls, ms, t->x * tileW + tileW / 2.0, t->y * tileH + tileH / 2.0); continue; }
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT;
         int top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
         if (!t->fixedFrame) frame_sound(t->uid, ls, ms, left + qw / 2.0, top + qh / 2.0); /* its frame sounds from its picture's middle */
-        if (t->def && t->def->type == T_DOOR && t->open) { left += t->def->openOffX; top += t->def->openOffY; } /* ShiftOpenDoor: hanging from its hinge */
+        int doorClipOn = 0, doorClipL = 0, doorClipT = 0, doorOpacity = 0;
+        if (t->def && t->def->type == T_DOOR)
+        {
+            int kind = t->def->doorOpening;
+            if (t->open && !doorMove && kind < 2) { left += t->def->openOffX; top += t->def->openOffY; } /* ShiftOpenDoor: hanging from its hinge */
+            if (kind == 2 && doorOpenAmount > 0)
+            {
+                /* slid by that much, still hidden past where the closed door stands when it slides into the wall */
+                doorClipOn = t->def->slideHidden; doorClipL = left - cx; doorClipT = top - cy;
+                left += (int)floor(t->def->slideX * doorOpenAmount + 0.5); top += (int)floor(t->def->slideY * doorOpenAmount + 0.5);
+            }
+            if (kind == 3 && doorMove)
+            {
+                doorOpacity = (int)((1 - doorOpenAmount) * 255);
+                if (doorOpacity < 1) doorOpacity = 1;
+                if (underFade) { Drawn *under = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - 0.01, underFade, left - cx, top - cy, qw, qh, &count); if (under) { under->thing = t->uid; under->wall = 1; } }
+            }
+        }
         int flat = t->def && (t->def->type == T_TRAP || (t->def->type == T_TILE && !t->def->solid));
         Drawn *d = add_drawn(floor_of(t->z) - 1, (t->x + t->y + 1) * 100.0 + t->z - (flat ? 1000 : 0), pic, left - cx, top - cy, qw, qh, &count);
         if (!d) continue;
+        if (doorClipOn) { d->clip = 1; d->cl = doorClipL; d->ct = doorClipT; d->cr = doorClipL + qw; d->cb = doorClipT + qh; }
+        if (doorOpacity) d->opacity = doorOpacity;
         Body b;
         thing_box(t, &b);
         set_box(d, b.left, b.top, b.width, b.depth, b.z, flat ? 0 : b.height);
@@ -1496,7 +1635,9 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < count; i++)
     {
         blitOpacity = drawn[i].opacity ? drawn[i].opacity : 255; blitMirror = drawn[i].mirror;
+        blitClip = drawn[i].clip; blitClipL = drawn[i].cl; blitClipT = drawn[i].ct; blitClipR = drawn[i].cr; blitClipB = drawn[i].cb;
         blit_box(drawn[i].picture, drawn[i].x, drawn[i].y, drawn[i].w, drawn[i].h);
+        blitClip = 0;
     }
     blitOpacity = 255; blitMirror = 0;
     blitShading = 0;
@@ -1775,6 +1916,8 @@ static int can_sweep(const Actor *a, double fx, double fy, double tx, double ty,
     return 1;
 }
 
+static int door_by_hand_early(const ObjectDef *d) { return d->doorOpening != 2 && !d->notByHand; }
+
 static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
 {
     int l, t;
@@ -1822,7 +1965,7 @@ static void doors_passable(const Actor *a, int passable)
     for (int i = 0; i < thingCount; i++)
     {
         Thing *t = &things[i];
-        if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->body < 0) continue;
+        if (t->gone || !t->def || t->def->type != T_DOOR || t->open || t->body < 0 || !door_by_hand_early(t->def)) continue;
         int breaks = a != &player && breaksDoor && breaksDoor(index_of_actor(a), t->uid, t->locked); /* it breaks it down on the way */
         if (!breaks && !a->human) continue; /* only the sentient open doors */
         if (!breaks && t->locked && !(holdsKey && a != &player && holdsKey(index_of_actor(a), t->uid))) continue;
@@ -2022,11 +2165,35 @@ static Thing *thing_by_uid(int uid);
 
 static void door_set_open(Thing *t, int open)
 {
+    static int movingPartners;
     t->open = open;
     t->solid = t->def->solid && !open;
-    if (t->body < 0) return;
-    if (open) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
-    else thing_box(t, &bodies[t->body]);
+    door_move_start(t, open); /* its look takes its time */
+    if (t->body >= 0)
+    {
+        if (open) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
+        else thing_box(t, &bodies[t->body]);
+    }
+    if (!t->def->withNeighbours || movingPartners) return;
+    /* a double door: the double doors right next to it (on its floor) follow */
+    movingPartners = 1;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *o = &things[i];
+        if (o == t || o->gone || !o->def || o->def->type != T_DOOR || !o->def->withNeighbours || floor_of(o->z) != floor_of(t->z) || abs(o->x - t->x) > 1 || abs(o->y - t->y) > 1) continue;
+        if (open && !o->open && !o->locked) door_set_open(o, 1);
+        else if (!open && o->open) world_door_close(o->uid);
+    }
+    movingPartners = 0;
+}
+
+/* Opened by hand (a double-click, someone walking through)? Never a sliding door, nor one set Not by hand (a laser door's button). */
+static int door_by_hand(const ObjectDef *d) { return d->doorOpening != 2 && !d->notByHand; }
+
+int world_door_by_hand(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    return !t || !t->def || t->def->type != T_DOOR || door_by_hand(t->def);
 }
 
 /* NpcOpensDoor: a human walking into a closed, unlocked door opens it (and will close it behind). */
@@ -2036,7 +2203,7 @@ static int open_door_in_way(Actor *a, Walk *w, int l, int t)
     for (int i = 0; i < thingCount; i++)
     {
         Thing *d = &things[i];
-        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0) continue;
+        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0 || !door_by_hand(d->def)) continue;
         if (!overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
         if (!d->locked && breaksDoor && breaksDoor(index_of_actor(a), d->uid, 0)) return 0; /* it'd rather break it down */
         if (d->locked)
@@ -2061,7 +2228,7 @@ static int bash_door_in_way(int actor, Actor *a, int l, int t, double seconds)
     for (int i = 0; i < thingCount; i++)
     {
         Thing *d = &things[i];
-        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0 || !overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
+        if (d->gone || !d->def || d->def->type != T_DOOR || d->open || d->body < 0 || !door_by_hand(d->def) || !overlaps(&bodies[d->body], l, t, a->sizeX, a->sizeY)) continue;
         if (!breaksDoor(actor, d->uid, d->locked)) return 0;
         a->walkingNow = 0;
         if ((a->bashMs -= seconds * 1000) > 0) return 1;
