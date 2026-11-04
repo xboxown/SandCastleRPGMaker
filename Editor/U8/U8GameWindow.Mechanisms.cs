@@ -98,10 +98,10 @@ public partial class U8GameWindow
                     break;
                 case ObjectType.LightSource:
                     if (target.IsSpentRuntime) break;
-                    bool lit = target.IsLitRuntime != true;
-                    target.IsLitRuntime = lit;
-                    if (lit && obj.Light.BurnMinutes > 0 && target.BurnLeftRuntime < 0) target.BurnLeftRuntime = obj.Light.BurnMinutes;
-                    PlaySoundAt(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId, target);
+                    if (target.IsLitRuntime == true) { PutOutLight(target, obj); break; }
+                    target.IsLitRuntime = true;
+                    if (obj.Light.BurnMinutes > 0 && target.BurnLeftRuntime < 0) target.BurnLeftRuntime = obj.Light.BurnMinutes;
+                    PlaySoundAt(obj.Light.LitSoundResourceId, target);
                     RefreshObjectLook(target);
                     break;
                 case ObjectType.Window when obj.Window.HasShutters && !target.IsSpentRuntime:

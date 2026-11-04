@@ -261,6 +261,8 @@ public static class ScriptCommands
             new[] { new("Category", "Object or item", ScriptFieldKind.Item), new("X", "At", ScriptFieldKind.Spot), F("Quantity", "How many (a stack)", def: "1") }, "{Category}"),
         new(EventCommandType.DeleteObject, "Delete Object", World, "Objects & Map", "Takes a thing off the map for good.",
             new ScriptField[] { new("Thing", "Thing", ScriptFieldKind.Thing) }, "{Thing}"),
+        new(EventCommandType.DeleteObjectSelf, "Delete Object Self", World, "Objects & Map", "Takes this object off the map for good: the very copy whose event this is, wherever it was placed. On an object's own page (a fire's By After Put Out). Nothing happens if the object is carried.",
+            Array.Empty<ScriptField>(), "", HasWindow: false),
         new(EventCommandType.MoveObject, "Move Object", World, "Objects & Map", "Moves a thing on the map to another spot (and floor).",
             new ScriptField[] { new("Thing", "Thing", ScriptFieldKind.Thing), new("ToX", "To", ScriptFieldKind.Spot) }, "{Thing}"),
         new(EventCommandType.ChangeObjectLook, "Change Object Look", World, "Objects & Map", "Shows a thing with another sprite (a torch lit, a lever pulled) - or back to its own.",

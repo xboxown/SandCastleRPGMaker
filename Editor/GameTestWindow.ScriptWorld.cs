@@ -65,6 +65,7 @@ public partial class GameTestWindow
 
         h[EventCommandType.CreateObject] = CreateObjectCommand;
         h[EventCommandType.DeleteObject] = DeleteObjectCommand;
+        h[EventCommandType.DeleteObjectSelf] = DeleteObjectSelfCommand;
         h[EventCommandType.MoveObject] = MoveObjectCommand;
         h[EventCommandType.ChangeObjectLook] = ChangeObjectLookCommand;
         h[EventCommandType.SetDoorState] = SetDoorStateCommand;
@@ -421,6 +422,16 @@ public partial class GameTestWindow
             default:
                 return false;
         }
+        SettleWorld();
+        RefreshAfterMove();
+        return true;
+    }
+
+    /// <summary>Delete Object Self: the placed copy whose event this is goes, wherever it is. False when the event isn't a placed object's.</summary>
+    private bool DeleteObjectSelfCommand(EventCommand command)
+    {
+        if (_firingOwner is not ObjectInstance self || !_map.Objects.Contains(self)) return false;
+        RemoveMapObject(self);
         SettleWorld();
         RefreshAfterMove();
         return true;

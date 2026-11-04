@@ -75,16 +75,25 @@ static void use_door(int uid, cJSON *def)
     events_object_event(uid, TR_AFTER_READ, -1);
 }
 
+/* A placed light goes out, whatever did it (a double-click, a bucket, a lever, a spell):
+   its sound, then its own By After Put Out page, which may even delete it. */
+void use_put_out_light(int uid, cJSON *def, int withSound)
+{
+    world_light_set(uid, 0);
+    if (withSound) sound_play(sound_of(cJSON_GetObjectItem(def, "Light"), "OffSoundResourceId"));
+    events_object_event(uid, TR_ENTER, -1);
+}
+
 static void use_light(int uid, cJSON *def)
 {
     if (events_object_event(uid, TR_USE, -1)) return;
     if (world_light_spent(uid)) return; /* burnt out: it can't be lit */
-    int lit = !world_light_lit(uid);
-    world_light_set(uid, lit);
-    if (lit) world_light_lit_now(uid);
+    if (world_light_lit(uid)) { use_put_out_light(uid, def, 1); return; }
+    world_light_set(uid, 1);
+    world_light_lit_now(uid);
     cJSON *light = cJSON_GetObjectItem(def, "Light");
-    sound_play(sound_of(light, lit ? "LitSoundResourceId" : "OffSoundResourceId"));
-    events_object_event(uid, lit ? TR_AFTER_READ : TR_ENTER, -1);
+    sound_play(sound_of(light, "LitSoundResourceId"));
+    events_object_event(uid, TR_AFTER_READ, -1);
 }
 
 void use_at(int sx, int sy)

@@ -2010,6 +2010,10 @@ static int execute(Run *r, const Cmd *c)
             return 1;
         }
         case C_DeleteObject: { int uid = thing_of(c); if (uid >= 0) { items_free(items_unpark(uid, -1, -1, 1)); world_thing_remove(uid); } else lastResult = 0; return 1; }
+        case C_DeleteObjectSelf: /* the placed copy whose event this is */
+            if (r->ownerUid > 0 && world_thing_there(r->ownerUid)) { items_free(items_unpark(r->ownerUid, -1, -1, 1)); world_thing_remove(r->ownerUid); }
+            else lastResult = 0;
+            return 1;
         case C_MoveObject:
         {
             int uid = thing_of(c);
@@ -3031,6 +3035,8 @@ static void start_run_as(const List *list, int activator, int byStepping, const 
 
 static void start_run(const List *list, int activator, int byStepping) { start_run_as(list, activator, byStepping, NULL); }
 
+static int fireCopy; /* the placed copy an object's pages fire for (0: not an object's) */
+
 static void start_run_as(const List *list, int activator, int byStepping, const char *owner)
 {
     if (!list->count) return;
@@ -3040,6 +3046,7 @@ static void start_run_as(const List *list, int activator, int byStepping, const 
             Run *r = &runs[i];
             memset(r, 0, sizeof *r);
             r->used = 1; r->list = list; r->activator = activator; r->byStepping = byStepping;
+            if (owner && !strncmp(owner, "obj:", 4)) r->ownerUid = fireCopy;
             if (owner) snprintf(r->owner, sizeof r->owner, "%s", owner);
             else if (activator > 0) snprintf(r->owner, sizeof r->owner, "char:%d", world_actor_character(activator));
             else snprintf(r->owner, sizeof r->owner, "global");
@@ -3063,7 +3070,6 @@ static int *count_for(int uid, int page)
     return &copyCounts[copyCountN++].count;
 }
 
-static int fireCopy; /* the placed copy an object's pages fire for (0: not an object's) */
 
 static int fire_pages_core(Owner *o, int just, int activator, int byStepping);
 #define T_COMBINE_ITEM 17

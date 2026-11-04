@@ -364,7 +364,7 @@ public partial class ObjectEditorWindow : Window
         fire.Children.Add(NumberField("to", () => l.BurnDamageMax, v => l.BurnDamageMax = (int)Math.Max(0, v)));
         fire.Children.Add(Check("Solid only while lit (walkable once put out)", () => l.SolidOnlyWhileLit, v => l.SolidOnlyWhileLit = v));
         body.Children.Add(fire);
-        body.Children.Add(Note("A fire: tick Burns - whoever walks into it while it's lit is burnt, and again every second they stay; put out, it's harmless. A bucket of a liquid that puts out fires (Food > Liquid > Puts out fires) used on it douses it. " +
+        body.Children.Add(Note("A fire: tick Burns - whoever walks into it while it's lit is burnt, and again every second they stay; put out, it's harmless. A bucket of a liquid that puts out fires (Food > Liquid > Puts out fires) used on it douses it. By After Put Out runs however it went out (a double-click, a bucket, a lever, a spell): Delete Object Self there makes it vanish. " +
                                "To keep players from putting it out by hand, give it a By Use event (\"It's far too hot to touch!\"): its event runs instead of the double-click. Solid only while lit needs Solid ticked too."));
         body.Children.Add(Note($"Double-click to light it or put it out. Once it has burnt for its minutes it's spent: it shows the spent sprite, is called \"{obj.DisplayName(spent: true)}\", and can't be lit again. " +
                                "At night, lit lights on screen and those the party carries brighten the darkness as Exult's do: each adds Brightness x (75 - 2 x tiles across - 3 x tiles down) from the main character."));

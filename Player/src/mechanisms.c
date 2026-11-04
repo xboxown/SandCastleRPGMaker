@@ -22,6 +22,7 @@
 #include "world.h"
 #include "items.h"
 #include "events.h"
+#include "use.h"
 #include "vitals.h"
 #include "combat.h"
 #include "gumps.h"
@@ -442,10 +443,10 @@ static void work_links(int lever, int depth)
             case OT_LIGHT:
             {
                 if (world_light_spent(target)) break;
-                int lit = !world_light_lit(target);
-                world_light_set(target, lit);
-                if (lit) world_light_lit_now(target);
-                sound_play(num(get(obj, "Light"), lit ? "LitSoundResourceId" : "OffSoundResourceId", -1));
+                if (world_light_lit(target)) { use_put_out_light(target, obj, 1); break; }
+                world_light_set(target, 1);
+                world_light_lit_now(target);
+                sound_play(num(get(obj, "Light"), "LitSoundResourceId", -1));
                 break;
             }
             case OT_WINDOW:
@@ -1206,11 +1207,10 @@ static void liquid_target(void *context, const GumpsPick *pick)
             /* useBucketOnDousable */
             if (empty) { avatar_say("The %s is empty.", name); return; }
             if (!flag(food, "PutsOutFires")) return;
-            world_light_set(pick->uid, 0);
-            sound_play(num(get(obj, "Light"), "OffSoundResourceId", -1));
             sound_play(num(settings, "PourSoundResourceId", -1));
             set_liquid(u, -1);
             snprintf(line, sizeof line, "You douse \"%s\".", str(obj, "Name"));
+            use_put_out_light(pick->uid, obj, 1);
             say(line);
             return;
         }

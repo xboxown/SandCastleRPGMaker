@@ -467,8 +467,9 @@ static void spot_effect(cJSON *effect, int caster, int cx, int cy, int radius, i
             for (int i = 0; i < n; i++)
                 if (world_thing_type(around[i]) == OT_LIGHT && !world_light_spent(around[i]) && world_light_lit(around[i]) != lit)
                 {
-                    world_light_set(around[i], lit);
-                    if (lit) world_light_lit_now(around[i]);
+                    if (!lit) { use_put_out_light(around[i], object_def(world_thing_object_id(around[i])), 0); continue; }
+                    world_light_set(around[i], 1);
+                    world_light_lit_now(around[i]);
                 }
             break;
         }

@@ -218,11 +218,9 @@ public partial class GameTestWindow
                 {
                     if (empty) { AvatarBark($"The {name} is empty."); return; }
                     if (!liquid!.Food.PutsOutFires) return;
-                    hit.Instance.IsLitRuntime = false;
-                    PlaySound(hit.Obj.Light.OffSoundResourceId);
                     PlaySound(u.Obj.Liquid.PourSoundResourceId);
-                    RefreshObjectLook(hit.Instance);
                     SetLiquid(u, -1);
+                    PutOutLight(hit.Instance, hit.Obj);
                     StatusText.Text = $"You douse \"{hit.Obj.Name}\".";
                     return;
                 }

@@ -273,8 +273,9 @@ public partial class U8GameWindow
                 foreach (var light in _map.Objects.Where(o => o.ContainerInstanceId < 0 && CellsApart((o.X, o.Y), (cell.X, cell.Y)) <= reach).ToList())
                 {
                     if (DefinitionOf(light) is not { Type: ObjectType.LightSource } lightObj || light.IsSpentRuntime || (light.IsLitRuntime == true) == lit) continue;
-                    light.IsLitRuntime = lit;
-                    if (lit && lightObj.Light.BurnMinutes > 0 && light.BurnLeftRuntime < 0) light.BurnLeftRuntime = lightObj.Light.BurnMinutes;
+                    if (!lit) { PutOutLight(light, lightObj, withSound: false); continue; }
+                    light.IsLitRuntime = true;
+                    if (lightObj.Light.BurnMinutes > 0 && light.BurnLeftRuntime < 0) light.BurnLeftRuntime = lightObj.Light.BurnMinutes;
                     RefreshObjectLook(light);
                 }
                 break;

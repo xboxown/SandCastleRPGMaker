@@ -122,7 +122,8 @@ public enum EventCommandType
     Earthquake,
     LearnLanguage,
     Shop,
-    U8AskKey, U8SetKey, U8GetKeyName, U8ResetKeys
+    U8AskKey, U8SetKey, U8GetKeyName, U8ResetKeys,
+    DeleteObjectSelf
 }
 
 /// <summary>

@@ -399,12 +399,31 @@ public partial class U8GameWindow
         if (FireObjectEvent(light, obj, BookTriggerConditionBased.ByUseItem)) return;
         if (light.IsSpentRuntime) { StatusText.Text = $"The {obj.DisplayName(spent: true).ToLowerInvariant()} can't be lit."; return; }
         bool lit = !(light.IsLitRuntime ?? false);
-        light.IsLitRuntime = lit;
-        if (lit && obj.Light.BurnMinutes > 0 && light.BurnLeftRuntime < 0) light.BurnLeftRuntime = obj.Light.BurnMinutes;
-        PlaySoundAt(lit ? obj.Light.LitSoundResourceId : obj.Light.OffSoundResourceId, light);
+        if (!lit)
+        {
+            StatusText.Text = $"You put out \"{obj.Name}\".";
+            PutOutLight(light, obj);
+            return;
+        }
+        light.IsLitRuntime = true;
+        if (obj.Light.BurnMinutes > 0 && light.BurnLeftRuntime < 0) light.BurnLeftRuntime = obj.Light.BurnMinutes;
+        PlaySoundAt(obj.Light.LitSoundResourceId, light);
         RefreshObjectLook(light);
-        StatusText.Text = lit ? $"You light \"{obj.Name}\"." : $"You put out \"{obj.Name}\".";
-        FireObjectEvent(light, obj, lit ? BookTriggerConditionBased.ByAfterReadItem : BookTriggerConditionBased.ByEnter);
+        StatusText.Text = $"You light \"{obj.Name}\".";
+        FireObjectEvent(light, obj, BookTriggerConditionBased.ByAfterReadItem);
+    }
+
+    /// <summary>
+    /// A placed light goes out, whatever did it (a double-click, a bucket, a
+    /// lever, a spell): its sound, its unlit look, then its own By After Put
+    /// Out page, which may even delete it.
+    /// </summary>
+    private void PutOutLight(ObjectInstance light, WorldObject obj, bool withSound = true)
+    {
+        light.IsLitRuntime = false;
+        if (withSound) PlaySoundAt(obj.Light.OffSoundResourceId, light);
+        RefreshObjectLook(light);
+        FireObjectEvent(light, obj, BookTriggerConditionBased.ByEnter);
     }
 
     private void UseCarriedLight(InventoryItemInstance item, WorldObject obj)

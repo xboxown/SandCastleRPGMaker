@@ -178,6 +178,11 @@ enum Command
     C_Earthquake = 171,
     C_LearnLanguage = 172,
     C_Shop = 173,
+    C_U8AskKey = 174,
+    C_U8SetKey = 175,
+    C_U8GetKeyName = 176,
+    C_U8ResetKeys = 177,
+    C_DeleteObjectSelf = 178,
     C_COUNT
 };
 
@@ -357,6 +362,11 @@ static const char *const COMMAND_NAMES[] =
     "Earthquake",
     "LearnLanguage",
     "Shop",
+    "U8 Ask Key",
+    "U8 Set Key",
+    "U8 Get Key Name",
+    "U8 Reset Keys",
+    "Delete Object Self",
 };
 
 #endif
