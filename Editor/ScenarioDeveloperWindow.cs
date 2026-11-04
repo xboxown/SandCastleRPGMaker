@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
@@ -27,6 +28,9 @@ public sealed class ScenarioDeveloperWindow : Window
     private readonly ComboBox _startBox = new() { Width = 210 };
     private readonly StackPanel _details = new() { Margin = new Thickness(12, 0, 0, 0) };
     private readonly StackPanel _characterDetails = new() { Margin = new Thickness(0, 8, 0, 0) };
+    private readonly StackPanel _carriers = new() { Margin = new Thickness(0, 0, 0, 6) };
+    private ComboBox? _whoBox;
+    private int _shownCharacterId = -1;
     private bool _showing;
 
     private Scenario? Picked => _list.SelectedItem is ListBoxItem { Tag: Scenario s } ? s : null;
@@ -53,11 +57,13 @@ public sealed class ScenarioDeveloperWindow : Window
         top.Children.Add(new TextBlock { Text = "F5 starts at:", FontWeight = FontWeights.Bold });
         _startBox.SelectionChanged += (_, _) =>
         {
-            if (!_showing) _settings.StartScenarioId = (_startBox.SelectedItem as ComboBoxItem)?.Tag is int id ? id : -1;
+            if (_showing) return;
+            _settings.StartScenarioId = (_startBox.SelectedItem as ComboBoxItem)?.Tag is int id ? id : -1;
+            ShowDetails(); // How it starts follows
         };
         top.Children.Add(_startBox);
         top.Children.Add(new TextBlock { Text = "Next Scenario key:", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 8, 0, 0) });
-        top.Children.Add(KeyButton(() => _settings.NextKey, v => _settings.NextKey = v));
+        top.Children.Add(KeyButton(() => _settings.NextKey, v => { _settings.NextKey = v; ShowDetails(); }));
         top.Children.Add(new TextBlock { Text = "Scenarios", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 2) });
         var buttons = new WrapPanel();
         buttons.Children.Add(Button("New", () =>
@@ -153,6 +159,7 @@ public sealed class ScenarioDeveloperWindow : Window
         on.Unchecked += (_, _) => { scenario.On = false; RefreshList(scenario); };
         _details.Children.Add(on);
         _details.Children.Add(Row("Its key:", KeyButton(() => scenario.Key, v => { scenario.Key = v; RefreshList(scenario); })));
+        _details.Children.Add(HowItStarts(scenario));
 
         _details.Children.Add(Heading("Where the game starts"));
         var world = new ComboBox { Width = 300, ItemsSource = _worlds, DisplayMemberPath = nameof(MapData.MapName), SelectedItem = _worlds.FirstOrDefault(w => w.Id == scenario.WorldId) ?? _worlds.FirstOrDefault() };
@@ -204,10 +211,65 @@ public sealed class ScenarioDeveloperWindow : Window
         _details.Children.Add(Heading("Characters"));
         _details.Children.Add(new TextBlock { Text = "Who joined, who died, what they carry, their stats. Pick a character to change it; those left alone start as in the game.", TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7 });
         var who = new ComboBox { Width = 300, ItemsSource = _characters.Characters, DisplayMemberPath = nameof(CharacterDefinition.Name) };
-        who.SelectionChanged += (_, _) => { if (who.SelectedItem is CharacterDefinition c) ShowCharacter(scenario, c); };
+        who.SelectionChanged += (_, _) =>
+        {
+            if (who.SelectedItem is not CharacterDefinition c) return;
+            _shownCharacterId = c.Id;
+            ShowCharacter(scenario, c);
+        };
+        _whoBox = who;
+        _details.Children.Add(Heading("Who carries what in this scenario"));
+        _details.Children.Add(_carriers);
+        ShowCarriers(scenario);
         _details.Children.Add(Row("Character:", who));
         _details.Children.Add(_characterDetails);
-        who.SelectedItem = _characters.Characters.FirstOrDefault(c => c.IsTestPlayer) ?? _characters.Characters.FirstOrDefault();
+        who.SelectedItem = _characters.Characters.FirstOrDefault(c => c.Id == _shownCharacterId) ?? _characters.Characters.FirstOrDefault(c => c.IsTestPlayer) ?? _characters.Characters.FirstOrDefault();
+    }
+
+    /// <summary>What sets this scenario off: said outright, because F5 plays the game without it unless "F5 starts at" names it.</summary>
+    private UIElement HowItStarts(Scenario scenario)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 4, 0, 4) };
+        if (!scenario.On)
+        {
+            panel.Children.Add(new TextBlock { Text = "This scenario is off: F5 and the keys skip it, so nothing in it happens.", TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.Bold, Foreground = Brushes.DarkOrange });
+            return panel;
+        }
+        var keys = new List<string>();
+        if (scenario.Key.Length > 0) keys.Add(U8Keys.Display(scenario.Key));
+        if (_settings.NextKey.Length > 0) keys.Add(U8Keys.Display(_settings.NextKey) + " (Next Scenario)");
+        string during = keys.Count > 0 ? $"During a Game Test, {string.Join(" or ", keys)} jumps to it." : "It has no key either.";
+        if (_settings.StartScenarioId == scenario.Id)
+        {
+            panel.Children.Add(new TextBlock { Text = $"F5 starts this scenario. {(keys.Count > 0 ? during : "")}".Trim(), TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.Bold, Foreground = Brushes.ForestGreen });
+            return panel;
+        }
+        panel.Children.Add(new TextBlock { Text = $"F5 does NOT start this scenario, so its items, variables and everything else are not used when you press F5. {during}", TextWrapping = TextWrapping.Wrap, FontWeight = FontWeights.Bold, Foreground = Brushes.DarkOrange });
+        panel.Children.Add(Button("Make F5 start this scenario", () =>
+        {
+            _settings.StartScenarioId = scenario.Id;
+            RefreshList(scenario);
+        }));
+        return panel;
+    }
+
+    /// <summary>Everyone this scenario gives things to, at a glance; a button picks that character below.</summary>
+    private void ShowCarriers(Scenario scenario)
+    {
+        _carriers.Children.Clear();
+        foreach (var character in _characters.Characters)
+        {
+            if (scenario.Characters.FirstOrDefault(c => c.CharacterId == character.Id) is not { } rule || (rule.Items.Count == 0 && !rule.OnlyTheseItems)) continue;
+            string things = rule.Items.Count == 0 ? "nothing" : string.Join(", ", rule.Items.Select(i => (i.Quantity > 1 ? $"{i.Quantity} " : "") + i.DisplayName));
+            var pick = Button(character.Name, () => { if (_whoBox is not null) _whoBox.SelectedItem = character; });
+            pick.Width = 110;
+            var row = new DockPanel { Margin = new Thickness(0, 0, 0, 2) };
+            row.Children.Add(pick);
+            row.Children.Add(new TextBlock { Text = (rule.OnlyTheseItems ? "only: " : "also: ") + things, TextWrapping = TextWrapping.Wrap, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(6, 0, 0, 0) });
+            _carriers.Children.Add(row);
+        }
+        if (_carriers.Children.Count == 0)
+            _carriers.Children.Add(new TextBlock { Text = "Nobody yet: everyone carries what they have in the game. Pick a character below and add an item.", TextWrapping = TextWrapping.Wrap, FontSize = 11, Opacity = 0.7 });
     }
 
     private void ShowCharacter(Scenario scenario, CharacterDefinition character)
@@ -227,10 +289,10 @@ public sealed class ScenarioDeveloperWindow : Window
             _characterDetails.Children.Add(dead);
         }
 
-        _characterDetails.Children.Add(Heading("What it carries"));
+        _characterDetails.Children.Add(Heading($"What {character.Name} carries"));
         var only = new CheckBox { Content = "Only these (unticked: these on top of what it has in the game)", IsChecked = rule.OnlyTheseItems };
-        only.Checked += (_, _) => rule.OnlyTheseItems = true;
-        only.Unchecked += (_, _) => rule.OnlyTheseItems = false;
+        only.Checked += (_, _) => { rule.OnlyTheseItems = true; ShowCarriers(scenario); };
+        only.Unchecked += (_, _) => { rule.OnlyTheseItems = false; ShowCarriers(scenario); };
         _characterDetails.Children.Add(only);
         var items = new StackPanel();
         void ShowItems()
@@ -241,20 +303,21 @@ public sealed class ScenarioDeveloperWindow : Window
                 var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
                 row.Children.Add(new TextBlock { Text = item.DisplayName, Width = 240, VerticalAlignment = VerticalAlignment.Center });
                 var quantity = new TextBox { Width = 50, Text = item.Quantity.ToString(), Margin = new Thickness(0, 0, 6, 0), ToolTip = "How many" };
-                quantity.LostFocus += (_, _) => { if (int.TryParse(quantity.Text, out int q)) item.Quantity = Math.Max(1, q); quantity.Text = item.Quantity.ToString(); };
+                quantity.LostFocus += (_, _) => { if (int.TryParse(quantity.Text, out int q)) item.Quantity = Math.Max(1, q); quantity.Text = item.Quantity.ToString(); ShowCarriers(scenario); };
                 row.Children.Add(quantity);
-                row.Children.Add(Button("Remove", () => { rule.Items.Remove(item); ShowItems(); }));
+                row.Children.Add(Button("Remove", () => { rule.Items.Remove(item); ShowItems(); ShowCarriers(scenario); }));
                 items.Children.Add(row);
             }
         }
         ShowItems();
         _characterDetails.Children.Add(items);
-        _characterDetails.Children.Add(Button("Add an item...", () =>
+        _characterDetails.Children.Add(Button($"Add an item for {character.Name}...", () =>
         {
             var picker = new SelectItemPickerWindow(_books, _objects, _containers, _sprites, null) { Owner = this };
             if (picker.ShowDialog() != true || picker.Result is not { ItemId: >= 0 } picked) return;
             rule.Items.Add(new ScenarioItem { Category = picked.Category, ItemId = picked.ItemId, DisplayName = picked.DisplayName, Quantity = 1 });
             ShowItems();
+            ShowCarriers(scenario);
         }));
 
         _characterDetails.Children.Add(Heading("Its stats (empty: as in the game)"));

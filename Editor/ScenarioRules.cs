@@ -35,8 +35,7 @@ internal static class ScenarioRules
                 character.EquippedSlots.Clear();
                 character.CustomEquippedSlots.Clear();
             }
-            foreach (var item in rule.Items.Where(i => i.ItemId >= 0))
-                character.Inventory.Add(new InventoryItemInstance { InstanceId = character.GetNextInventoryInstanceId(), Category = item.Category, ItemId = item.ItemId, Quantity = Math.Max(1, item.Quantity) });
+            // rule.Items are handed over by the game itself as it starts (ApplyScenarioVariables), made as Give Item makes them.
             if (character.IsTestPlayer) continue;
 
             if (rule.Dead)

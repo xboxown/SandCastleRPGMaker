@@ -23,6 +23,18 @@ public partial class GameTestWindow
         Activate(); // the window before it has just closed: the keys must come here, not to the Map Editor behind
         GameCanvas.Focus();
         foreach (var variable in scenario.Variables) SetScriptVariable(variable.Name, ScenarioRules.ValueOf(variable.Value));
+        // What each carries, made as Give Item makes it: a container with its starting contents, what doesn't stack one by one.
+        foreach (var rule in scenario.Characters)
+        {
+            if (_characters?.Characters.FirstOrDefault(c => c.Id == rule.CharacterId) is not { } character) continue;
+            foreach (var item in rule.Items.Where(i => i.ItemId >= 0))
+                foreach (var gift in MakeGifts(item.Category, item.ItemId, Math.Clamp(item.Quantity, 1, ObjectTypes.MaxQuantity)))
+                {
+                    gift.InstanceId = character.GetNextInventoryInstanceId();
+                    character.Inventory.Add(gift);
+                }
+            SoakLog($"scenario: {character.Name} carries " + string.Join(", ", character.Inventory.Select(i => $"{i.Quantity} of {i.Category} {i.ItemId} holding {i.Contents.Count}")));
+        }
     }
 
     private Scenario? _scenarioKeyScenario;
