@@ -183,6 +183,7 @@ public partial class U8GameWindow
             if (!TryStartDrag(session)) { _pointer = null; return; }
         }
         PositionGhost(session, screen);
+        UpdateEquipPreview(session, screen); // Ultima 8: see-through on the slot it would go to (U8GameWindow.U8Equip.cs)
         e.Handled = true;
     }
 
@@ -548,6 +549,7 @@ public partial class U8GameWindow
     /// <summary>Removes the ghost and shows the source visual again - run at the end of every drag, success or failure. On success the source visual is either the same map visual (now at its new spot) or a stale gump visual that's already been rebuilt away, so showing it is always correct.</summary>
     private void EndDragVisuals(PointerSession session)
     {
+        RemoveEquipPreview();
         foreach (var animator in session.GhostAnimators) animator.Stop();
         session.GhostAnimators.Clear();
         if (session.Ghost is not null) PaperdollGumpsCanvas.Children.Remove(session.Ghost);

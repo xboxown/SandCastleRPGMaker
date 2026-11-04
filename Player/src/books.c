@@ -108,7 +108,7 @@ void books_restore(cJSON *runtime)
 
 /* ---------------- Laying a frame's text out ---------------- */
 
-typedef struct Piece { char text[160]; int scale, bold, x; uint32_t colour; } Piece;   /* a run's words on one line */
+typedef struct Piece { char text[160]; int scale, bold, x; uint32_t colour; const Font *font; } Piece;   /* a run's words on one line */
 typedef struct Line { Piece pieces[12]; int count, height, gap, width, align; const Sprite *sprite; int spriteW, spriteH; } Line; /* gap: room after it (a paragraph's end) */
 typedef struct Laid { Line *lines; int count, cap; } Laid;
 
@@ -150,8 +150,11 @@ static void ascii_of(const char *in, char *out, size_t size)
 static int text_width(const Font *f, const char *t, int scale) { return font_text_width(f, t) * scale; }
 
 /* Each paragraph wrapped into the frame's width: words placed whole (a word wider than the frame broken where it runs out). */
-static void lay_out(const Font *f, cJSON *paragraphs, int width, double s, Laid *out)
+static int layRunFonts; /* the book has no font of its own: each run in the font it was written in (fonts.sdbx) */
+
+static void lay_out(const Font *bookFont, cJSON *paragraphs, int width, double s, Laid *out)
 {
+    const Font *f = bookFont;
     cJSON *para;
     int lineH = font_line_height(f);
     cJSON_ArrayForEach(para, paragraphs)
@@ -183,6 +186,8 @@ static void lay_out(const Font *f, cJSON *paragraphs, int width, double s, Laid 
             double size = dbl(run, "Size", 12);
             int scale = (int)(size / 12.0 + 0.5);
             if (scale < 1) scale = 1;
+            f = bookFont;
+            if (layRunFonts && str(run, "Font")[0]) { f = font_get(str(run, "Font")); scale = 1; } /* drawn at its own size */
             uint32_t colour = colour_of(str(run, "Color"));
             int bold = cJSON_IsTrue(get(run, "Bold"));
             for (const char *p = text; *p;)
@@ -208,16 +213,16 @@ static void lay_out(const Font *f, cJSON *paragraphs, int width, double s, Laid 
                 }
                 if (!*visible) continue;
                 Piece *last = line.count ? &line.pieces[line.count - 1] : NULL;
-                if (last && last->scale == scale && last->bold == bold && last->colour == colour && strlen(last->text) + strlen(visible) < sizeof last->text)
+                if (last && last->font == f && last->scale == scale && last->bold == bold && last->colour == colour && strlen(last->text) + strlen(visible) < sizeof last->text)
                     strcat(last->text, visible);
                 else if (line.count < 12)
                 {
                     Piece *pc = &line.pieces[line.count++];
                     snprintf(pc->text, sizeof pc->text, "%s", visible);
-                    pc->scale = scale; pc->bold = bold; pc->colour = colour; pc->x = line.width;
+                    pc->scale = scale; pc->bold = bold; pc->colour = colour; pc->x = line.width; pc->font = f;
                 }
                 line.width += w;
-                if (lineH * scale > line.height) line.height = lineH * scale;
+                if (font_line_height(f) * scale > line.height) line.height = font_line_height(f) * scale;
                 any = 1;
             }
         }
@@ -332,6 +337,7 @@ int books_read(int bookId)
     open_.on = 1; open_.id = bookId; open_.book = book; open_.pageCount = pages;
     const char *language = magic_language_font(num(book, "LanguageId", -1)); /* in a language not understood: its font */
     open_.font = font_get(language ? language : str(book, "TextFontSpriteName")[0] ? str(book, "TextFontSpriteName") : "InGameFont");
+    layRunFonts = !language && !str(book, "TextFontSpriteName")[0];
     open_.s = SCREEN_W / DESIGN_W < SCREEN_H / DESIGN_H ? SCREEN_W / DESIGN_W : SCREEN_H / DESIGN_H;
     open_.bw = (int)(DESIGN_W * open_.s); open_.bh = (int)(DESIGN_H * open_.s);
     open_.bx = (SCREEN_W - open_.bw) / 2; open_.by = (SCREEN_H - open_.bh) / 2;
@@ -398,9 +404,10 @@ void books_draw(uint32_t *pixels, uint32_t ms)
             for (int p = 0; p < line->count; p++)
             {
                 Piece *pc = &line->pieces[p];
-                int px = fr->x + offset + pc->x, py = y + line->height - font_line_height(open_.font) * pc->scale; /* their feet on one line (the tallest sets it) */
-                font_draw_into(open_.font, pixels, SCREEN_W, SCREEN_H, px, py, pc->text, pc->colour, pc->scale, 0);
-                if (pc->bold) font_draw_into(open_.font, pixels, SCREEN_W, SCREEN_H, px + 1, py, pc->text, pc->colour, pc->scale, 0);
+                const Font *drawIn = pc->font ? pc->font : open_.font;
+                int px = fr->x + offset + pc->x, py = y + line->height - font_line_height(drawIn) * pc->scale; /* their feet on one line (the tallest sets it) */
+                font_draw_into(drawIn, pixels, SCREEN_W, SCREEN_H, px, py, pc->text, pc->colour, pc->scale, 0);
+                if (pc->bold) font_draw_into(drawIn, pixels, SCREEN_W, SCREEN_H, px + 1, py, pc->text, pc->colour, pc->scale, 0);
             }
             y += line->height + line->gap;
         }

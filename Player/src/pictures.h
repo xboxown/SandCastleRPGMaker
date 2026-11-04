@@ -38,6 +38,9 @@ typedef struct Sprite
 /* Reads <folder>/sprites.json; 0 on failure. */
 int sprites_load(const char *folder);
 
+/* fonts.sdbx: a letter of a font drawn at Build (PlayerFontPack), N = the character - 32; NULL if it has none. Kept for good. */
+const Picture *font_file_glyph(const char *font, int n);
+
 /* A sprite by its group and name (else the first of that name in any group, as the engine finds them). */
 const Sprite *sprite_find(const char *group, const char *name);
 

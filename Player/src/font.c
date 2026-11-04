@@ -9,12 +9,13 @@ typedef struct Glyph { const Picture *picture; int left, width, advance; } Glyph
 
 struct Font
 {
-    char name[64];
+    char name[96];
     Glyph glyphs[95];
     int cellHeight, spaceWidth, builtIn;
 };
 
-static Font fonts[16]; /* the game's fonts, a language's ones too */
+#define MAX_FONTS 32
+static Font fonts[MAX_FONTS]; /* the game's fonts, a language's ones, those of fonts.sdbx */
 static int fontCount;
 
 /* The built-in font: 5 x 7 capitals, digits and signs (each row is a byte, the top bits used). */
@@ -98,15 +99,16 @@ static void make_built_in(Font *f)
 Font *font_get(const char *name)
 {
     for (int i = 0; i < fontCount; i++) if (strcmp(fonts[i].name, name) == 0) return &fonts[i];
-    if (fontCount >= 16) return &fonts[0];
+    if (fontCount >= MAX_FONTS) return &fonts[0];
     Font *f = &fonts[fontCount++];
     memset(f, 0, sizeof *f);
     strncpy(f->name, name, sizeof f->name - 1);
     const Sprite *sprite = sprite_find("Fonts", name);
     int inkTotal = 0, inkCount = 0, maxCell = 0, any = 0;
-    for (int i = 0; sprite && i < sprite->frameCount && i < 95; i++)
+    int drawn = sprite ? sprite->frameCount : 0; /* no sprite font drawn: fonts.sdbx may have it */
+    for (int i = 0; i < (drawn ? drawn : 95) && i < 95; i++)
     {
-        const Picture *p = frame_picture(&sprite->frames[i]);
+        const Picture *p = drawn ? frame_picture(&sprite->frames[i]) : font_file_glyph(name, i);
         if (!p) continue;
         any = 1;
         if (p->height > f->cellHeight) f->cellHeight = p->height;

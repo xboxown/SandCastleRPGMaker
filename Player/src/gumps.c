@@ -1126,6 +1126,8 @@ int gumps_mouse_down(int x, int y)
     return 1;
 }
 
+void gumps_pointer_at(int x, int y) { mouseX = x; mouseY = y; }
+
 void gumps_mouse_move(int x, int y)
 {
     mouseX = x; mouseY = y;

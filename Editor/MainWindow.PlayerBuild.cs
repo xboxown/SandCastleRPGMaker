@@ -54,7 +54,9 @@ public partial class MainWindow
         {
             Mouse.OverrideCursor = Cursors.Wait;
             if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            PlayerBookText.UsedFonts.Clear();
             PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
+            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase); // the fonts it uses, drawn into fonts.sdbx
             string machine = platform switch
             {
                 BuildPlatform.Linux => "Linux", BuildPlatform.MacModern => "Mac", BuildPlatform.MacPowerPC => "PowerPC Mac", BuildPlatform.MorphOS => "MorphOS",

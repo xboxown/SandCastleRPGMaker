@@ -127,6 +127,7 @@ public partial class U8GameWindow
                 var cell = (X: homeX + dx, Y: homeY + dy);
                 if (InsideMap(cell.X, cell.Y) && CanStandAt(mapCharacter, cell, lift, world, out int at) && MapFloors.FloorOfLift(at) == floor) spots.Add(cell);
             }
+        SoakLog($"no body: {character.Name} drops {belongings.Count} things, {spots.Count} spots");
         var order = spots.OrderBy(c => Math.Max(Math.Abs(c.X - homeX), Math.Abs(c.Y - homeY))).ThenBy(_ => _random.Next()).ToList();
         for (int i = 0; i < belongings.Count; i++)
         {

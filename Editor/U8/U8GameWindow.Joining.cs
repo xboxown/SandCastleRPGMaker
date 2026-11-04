@@ -138,6 +138,7 @@ public partial class U8GameWindow
         _map.Characters.Add(placement);
         BringOntoMap(copy, placement);
         HealFully(copy);
+        SoakLog($"joining: a new {kind.Name} at ({spot.Item1}, {spot.Item2}), {_mapCharacters.Count(mc => mc.Character.Id == kind.Id)} on the map");
         return copy;
     }
 }

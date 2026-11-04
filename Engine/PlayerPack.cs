@@ -118,7 +118,7 @@ public static class PlayerPack
     /// encrypted container starts after the index and how long it is - and,
     /// for sounds, the Sound list), then each file's container.
     /// </summary>
-    private static void WriteArchive(string path, Guid id, List<(string Name, byte[] Data)> files, object? sounds)
+    public static void WriteArchive(string path, Guid id, List<(string Name, byte[] Data)> files, object? sounds)
     {
         var blobs = files.Select(f => ProjectContainer.Encrypt(id, f.Data)).ToList();
         long offset = 0;

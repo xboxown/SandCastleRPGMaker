@@ -4,6 +4,7 @@
 #include <stdint.h>
 
 int gumps_mouse_down(int x, int y);
+void gumps_pointer_at(int x, int y);
 void gumps_mouse_move(int x, int y);
 void gumps_mouse_up(int x, int y);
 void gumps_update(double ms);

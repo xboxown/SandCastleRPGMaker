@@ -155,7 +155,7 @@ public partial class GameTestWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
-        if (character.Immortal) { KnockOut(character); return; }
+        if (character.Immortal) { SoakLog($"immortal: {character.Name} isn't killed, hp {GetHp(character)}"); KnockOut(character); return; }
         Record($"killed:{character.Id}"); // Character killed (GameTestWindow.Conditions.cs)
         Record("killed:*");
         StandUp(character);

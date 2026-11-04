@@ -228,6 +228,8 @@ static enum PlatformKey key_of(UWORD code)
     }
 }
 
+static int lastMoveX = -1, lastMoveY = -1;
+
 int platform_poll(PlatformEvent *event)
 {
     struct IntuiMessage *m;
@@ -276,7 +278,19 @@ int platform_poll(PlatformEvent *event)
                     int cx = mx < 0 ? 0 : mx >= w ? w - 1 : mx, cy = my < 0 ? 0 : my >= h ? h - 1 : my;
                     if (cx != mx || cy != my) { warp_mouse(cx, cy); mx = cx; my = cy; event->mouseX = mx / scale; event->mouseY = my / scale; }
                 }
+                lastMoveX = event->mouseX; lastMoveY = event->mouseY;
                 event->type = EV_MOUSE_MOVE; return 1;
+        }
+    }
+    /* Where the mouse is now, from the window itself: if a move's message never came (a heavy frame, MorphOS's window), the pointer still follows. */
+    if (window && windowActive)
+    {
+        int x = (window->MouseX - (screen ? offX : window->BorderLeft)) / scale, y = (window->MouseY - (screen ? offY : window->BorderTop)) / scale;
+        if (x != lastMoveX || y != lastMoveY)
+        {
+            lastMoveX = x; lastMoveY = y;
+            event->type = EV_MOUSE_MOVE; event->mouseX = x; event->mouseY = y;
+            return 1;
         }
     }
     return 0;

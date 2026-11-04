@@ -39,6 +39,29 @@ char *read_whole_file(const char *path, long *length)
 
 static Archive *pictureArchive;
 
+static Archive *fontArchive;
+
+const Picture *font_file_glyph(const char *font, int n)
+{
+    char name[128];
+    long size;
+    if (!fontArchive) return NULL;
+    snprintf(name, sizeof name, "%s/%d.png", font, n);
+    unsigned char *file = pack_archive_read(fontArchive, name, &size);
+    if (!file) return NULL;
+    int w, h, c;
+    unsigned char *rgba = stbi_load_from_memory(file, (int)size, &w, &h, &c, 4);
+    free(file);
+    if (!rgba) return NULL;
+    Picture *p = (Picture *)malloc(sizeof(Picture));
+    p->width = w; p->height = h;
+    p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
+    p->shaded = NULL; p->shadeGen = 0; p->opaque = 0;
+    for (int i = 0; i < w * h; i++) p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
+    stbi_image_free(rgba);
+    return p;
+}
+
 int sprites_load(const char *folder)
 {
     char path[1100];
@@ -49,6 +72,8 @@ int sprites_load(const char *folder)
     free(text);
     snprintf(path, sizeof path, "%s/pictures.sdbx", folder);
     pictureArchive = pack_archive_open(path);
+    snprintf(path, sizeof path, "%s/fonts.sdbx", folder);
+    fontArchive = pack_archive_open(path); /* a game from before fonts.sdbx has none */
     if (!root) return 0;
     cJSON *groups = cJSON_GetObjectItem(root, "Groups"), *group, *sprite, *frame;
     int total = 0;

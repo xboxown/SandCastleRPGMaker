@@ -449,7 +449,7 @@ int main(int argc, char **argv)
         while (platform_poll(&e))
         {
             if (e.type == EV_QUIT) running = 0;
-            else if (e.type == EV_MOUSE_MOVE) { if (slider_open_now()) { slider_mouse_move(e.mouseX, e.mouseY); continue; } dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
+            else if (e.type == EV_MOUSE_MOVE) { gumps_pointer_at(e.mouseX, e.mouseY); /* the pointer follows the mouse whatever is up: a box, a slider */ if (slider_open_now()) { slider_mouse_move(e.mouseX, e.mouseY); continue; } dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
                 if (video_input(1)) continue; /* a click skips a video */

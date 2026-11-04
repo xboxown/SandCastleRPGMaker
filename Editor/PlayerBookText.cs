@@ -16,6 +16,9 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 internal static class PlayerBookText
 {
+    /// <summary>The fonts the converted books use, with their sizes: PlayerFontPack draws them into fonts.sdbx.</summary>
+    public static readonly HashSet<(string Family, double Size)> UsedFonts = new();
+
     public static string Convert(string xaml, SpriteDatabase sprites)
     {
         if (string.IsNullOrEmpty(xaml)) return "[]";
@@ -55,8 +58,12 @@ internal static class PlayerBookText
                 case Run run:
                     if (run.Text.Length == 0) break;
                     var colour = (run.Foreground as SolidColorBrush)?.Color ?? Colors.Black;
+                    double size = run.FontSize > 0 ? run.FontSize : 12;
+                    string family = run.FontFamily.Source;
+                    UsedFonts.Add((family, size));
                     into.Add(new
                     {
+                        Font = PlayerFontPack.BookFontKey(family, size),
                         Text = run.Text.Replace("\r\n", "\n"),
                         Size = run.FontSize > 0 ? run.FontSize : 12,
                         Color = $"#{colour.R:X2}{colour.G:X2}{colour.B:X2}",

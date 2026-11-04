@@ -54,6 +54,7 @@ public partial class GameTestWindow
         if (kite is null) return;
         int top = Math.Min(kite.Z + Math.Max(1, k.FlyFloors) * MapFloors.LiftsPerFloor, MapFloors.BaseLift(MapFloors.MaxFloors));
         _kites[kite] = new KiteFlight { BaseZ = kite.Z, TopZ = top };
+        SoakLog($"kite: up from lift {kite.Z} to {top}");
         kite.FrameRuntime = k.RiseFirstFrame;
         PlaySound(k.SoundResourceId);
         RefreshObjectLook(kite);
@@ -92,6 +93,7 @@ public partial class GameTestWindow
             flight.Ms = 0;
             if (++flight.Phase < 3) continue;
             _kites.Remove(kite); // down: an ordinary thing on the ground again
+            SoakLog($"kite: down at lift {kite.Z}");
             kite.FrameRuntime = 0;
             RefreshObjectLook(kite);
             SettleWorld();
