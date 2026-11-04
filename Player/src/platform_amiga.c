@@ -48,7 +48,7 @@ int platform_ctrl_held(void) { return (heldQualifier & IEQUALIFIER_CONTROL) != 0
 /* How the 320 x 200 frame is shown: doubled (640 x 400, a window or a screen that size) or as it is (a 320 x 200 / 320 x 240
    full screen), at (offX, offY) - a 240-line screen has it in the middle. */
 static int scale = 2, offX, offY;
-#ifdef HIRES
+#ifdef FRAME_HIRES
 /* MorphOS: the picture itself is fine enough (frame_scale x 320 x 200), shown pixel for pixel. Chosen once, as the display first opens. */
 int frame_scale = 1;
 #define MOST_FRAME_SCALE 4
@@ -128,7 +128,7 @@ static int open_display(void)
 {
     scale = 2; offX = offY = 0;
     int sw = SCREEN_W * 2, sh = SCREEN_H * 2;
-#ifdef HIRES
+#ifdef FRAME_HIRES
     /* As fine as the display allows: the Workbench's own screen mode when full screen, the project's window size in a window. */
     scale = 1;
     int deskW = 1024, deskH = 768;

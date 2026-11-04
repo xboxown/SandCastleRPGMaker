@@ -15,7 +15,7 @@ static char error_text[256];
 
 const char *platform_error(void) { return error_text; }
 
-#ifdef HIRES
+#ifdef FRAME_HIRES
 int frame_scale = 1;
 #endif
 static int wantScale = 2;
@@ -29,7 +29,7 @@ int platform_open(const char *title, int fullscreen)
         return 0;
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
-#ifdef HIRES
+#ifdef FRAME_HIRES
     if (getenv("PLAYER_SCALE")) frame_scale = atoi(getenv("PLAYER_SCALE")); /* testing: the picture this fine */
     else frame_scale = wantScale;
     if (frame_scale < 1) frame_scale = 1; else if (frame_scale > 4) frame_scale = 4;

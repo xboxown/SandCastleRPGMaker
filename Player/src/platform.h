@@ -14,10 +14,10 @@
 #define SCREEN_W 320
 #define SCREEN_H 200
 
-/* The picture itself: the game still thinks in those 320 x 200, but on a machine built with HIRES (MorphOS) each of them is
+/* The picture itself: the game still thinks in those 320 x 200, but on a machine built with FRAME_HIRES (MorphOS) each of them is
    frame_scale pixels across, so art finer than 320 x 200 keeps all its pixels, as the Windows engine draws it. On the
    Amiga 68k it is simply 1, at compile time: the same code, not a cycle slower. */
-#ifdef HIRES
+#ifdef FRAME_HIRES
 extern int frame_scale;
 #else
 #define frame_scale 1
