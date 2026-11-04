@@ -9,6 +9,17 @@
 typedef struct DollState DollState;
 
 void dolls_load(void);
+void dolls_draw_hud(uint32_t *pixels, uint32_t ms);
+int dolls_pausing(void);
+void dolls_open_linked(int characterId, int designId, int x, int y);
+int dolls_linked_open(int characterId, int designId);
+void dolls_close_linked(int characterId, int designId);
+void dolls_attach_to_stats(int designId, int characterId, int x, int y);
+void dolls_place_attached(int designId, int x, int y);
+void dolls_close_attached(int designId);
+void dolls_disk_begin(void);
+void dolls_disk_report(double fraction);
+void dolls_disk_end(int failed);
 void dolls_reset(void);
 int dolls_design_exists(int id);
 void dolls_ask_to_quit(void);   /* Ctrl+Q: the Quit prompt (System Settings > Quit) */

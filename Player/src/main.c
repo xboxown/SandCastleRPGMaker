@@ -43,6 +43,14 @@ double sc_strtod(const char *text, char **end);
 
 static uint32_t *pixels; /* FRAME_W x FRAME_H, once the display is open */
 void main_take_screenshot(void) { save_take_screenshot(pixels); }
+/* A window over the last frame, shown now (the save / load progress, between its steps). */
+void main_show_now(void)
+{
+    uint32_t now = platform_ticks();
+    gumps_draw(pixels, now);
+    gumps_draw_pointer(pixels, now);
+    platform_present(pixels);
+}
 
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
 static void note(const char *step)

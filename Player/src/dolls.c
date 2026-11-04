@@ -76,6 +76,11 @@ typedef struct DollWin
     int pressPart; double pressMs; int pressAction; /* a button shown pressed; what happens after */
     int hasFill, errNumber; char errWords[200], errDetail[200];
     uint32_t *canvas; int cw, ch;
+    int character;                         /* the character it was opened for (an inventory's button, with the inventory, a stats window): its parts' "own character" stats are theirs; -1 none */
+    int hud, attached, linkedTo;           /* always on screen (a HUD); laid over a stats window; the inventory's character that brought it up (-1 none) */
+    double closeInMs;                      /* the save / load progress: closes after this long (0: stays) */
+    int lastValue[32], lostFrom[32];       /* what its stat-following parts last showed; icons just lost: what they had */
+    uint32_t lostUntil[32];
     struct SaveScreen *save;               /* the Save/Load screen's own (System Settings > Save / Load) */
 } DollWin;
 
@@ -449,6 +454,101 @@ static void cv_blit(const Picture *p, int x, int y, int w, int h, int cx0, int c
 
 static void cv_picture(const Picture *p, int x, int y, int fade) { if (p) cv_blit(p, x, y, p->width, p->height, 0, 0, cvw, cvh, fade); }
 
+static cJSON *character_of_id(int id)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, get(get(project(), "Characters"), "Characters")) if (num(c, "Id", -2) == id) return c;
+    return NULL;
+}
+
+/* The save / load progress, 0 to 1 (a part following it: DiskProgressStat). */
+static double diskProgress;
+
+/* A part following a stat (Progress bar, Display): its value and the top of its range now. 0: it follows none. */
+static int doll_stat(const DollWin *win, cJSON *part, double *value, double *max)
+{
+    int statId = num(part, "StatId", -1);
+    if (statId == -2) { *value = diskProgress * 100; *max = 100; return 1; }
+    if (statId < 0) return 0;
+    int who = num(part, "StatOwner", 0) == 1 && win->character >= 0 ? win->character : world_actor_character(0);
+    cJSON *values = get(character_of_id(who), "StatValues");
+    char key[16];
+    snprintf(key, sizeof key, "%d", statId);
+    const char *v = cJSON_GetStringValue(get(values, key));
+    *value = v && *v ? sc_strtod(v, NULL) : 0;
+    int maxStat = num(part, "MaxStatId", -1);
+    if (maxStat >= 0) { snprintf(key, sizeof key, "%d", maxStat); v = cJSON_GetStringValue(get(values, key)); *max = v && *v ? sc_strtod(v, NULL) : 0; }
+    else *max = num(part, "Max", 10);
+    return 1;
+}
+
+static uint32_t colour_of_hex(const char *hex, uint32_t fallback)
+{
+    if (!hex || hex[0] != '#') return fallback;
+    size_t n = strlen(hex);
+    if (n == 7) return 0xFF000000u | (uint32_t)strtoul(hex + 1, NULL, 16);
+    if (n == 9) return (uint32_t)strtoul(hex + 1, NULL, 16);
+    return fallback;
+}
+
+/* A skin fitted to a bar: as drawn, stretched to its size, or tiled across it. */
+static void skin_blit(const Picture *p, int fit, int x, int y, int w, int h, int cx0, int cy0, int cx1, int cy1, int fade)
+{
+    if (!p) return;
+    if (fit == 1) { cv_blit(p, x, y, w, h, cx0, cy0, cx1, cy1, fade); return; }
+    if (fit == 2)
+    {
+        for (int ty = y; ty < y + h; ty += p->height)
+            for (int tx = x; tx < x + w; tx += p->width)
+                cv_blit(p, tx, ty, p->width, p->height, cx0 > x ? cx0 : x, cy0 > y ? cy0 : y, cx1 < x + w ? cx1 : x + w, cy1 < y + h ? cy1 : y + h, fade);
+        return;
+    }
+    cv_blit(p, x, y, p->width, p->height, cx0, cy0, cx1, cy1, fade);
+}
+
+/* Icons (hearts): one per IconValue of the range, IconsPerRow to a row; its sprite's frames from full to empty. Beats: the last holding something pulses while low. Flashes: those just lost blink. */
+static void draw_icons(DollWin *win, cJSON *part, int index, int x, int y, int value, int range, const Sprite *icon, int fade)
+{
+    int per = num(part, "IconValue", 2), perRow = num(part, "IconsPerRow", 10), gap = num(part, "IconGap", 1);
+    per = per > 0 ? per : 1; perRow = perRow > 0 ? perRow : 1; gap = gap > 0 ? gap : 0;
+    int count = range <= 0 ? 0 : (range + per - 1) / per;
+    if (count > 200) count = 200;
+    const Picture *first = icon && icon->frameCount ? frame_picture(&icon->frames[0]) : NULL;
+    int iw = first ? first->width : 8, ih = first ? first->height : 8, frames = icon ? icon->frameCount : 0;
+    if (index < 32)
+    {
+        if (win->lastValue[index] > value && win->lastValue[index] != 0 && flag(part, "IconsFlashOnLoss")) { win->lostFrom[index] = win->lastValue[index]; win->lostUntil[index] = nowMs + 450; }
+        win->lastValue[index] = value;
+    }
+    int beatBelow = num(part, "IconsBeatBelow", 0), beating = beatBelow > 0 && range > 0 && value > 0 && value * 100.0 / range <= beatBelow;
+    int lastHolding = (value + per - 1) / per - 1;
+    uint32_t fillc = colour_of_hex(str(part, "FillColor"), 0xFFDC143Cu), backc = colour_of_hex(str(part, "EmptyColor"), 0xFF696969u);
+    for (int i = 0; i < count; i++)
+    {
+        double inIt = (value - i * per) / (double)per;
+        inIt = inIt < 0 ? 0 : inIt > 1 ? 1 : inIt;
+        int px = x + i % perRow * (iw + gap), py = y + i / perRow * (ih + gap), grow = 0;
+        if (beating && i == lastHolding) { int t = (int)(nowMs % 440); grow = (t < 220 ? t : 440 - t) * iw / 880; }
+        if (index < 32 && nowMs < win->lostUntil[index] && (win->lostUntil[index] - nowMs) / 150 % 2 == 0)
+        {
+            double before = (win->lostFrom[index] - i * per) / (double)per;
+            before = before < 0 ? 0 : before > 1 ? 1 : before;
+            if (before > inIt) inIt = before;
+        }
+        if (frames > 0)
+        {
+            if (frames == 1 && inIt <= 0) continue;
+            int frame = frames == 1 ? 0 : (int)floor((1 - inIt) * (frames - 1) + 0.5);
+            cv_blit(frame_picture(&icon->frames[frame]), px - grow, py - grow, iw + 2 * grow, ih + 2 * grow, 0, 0, cvw, cvh, fade);
+        }
+        else
+        {
+            cv_fill(px, py, iw, ih, backc);
+            if (inIt > 0) cv_fill(px, py, (int)(iw * inIt), ih, fillc);
+        }
+    }
+}
+
 static int cv_words(cJSON *part, const char *text, int x, int y, int wrap)
 {
     if (!text[0]) return 0;
@@ -557,14 +657,39 @@ static void draw_control(DollWin *win, cJSON *part, PartState *r, int x, int y, 
             int value = r->value, shows = num(part, "ShowsPartId", -1);
             if (shows >= 0) { int si = index_of_id(win->design, shows); if (si >= 0) value = win->state->parts[si].value; }
             int min = num(part, "Min", 0), max = num(part, "Max", 10);
+            double statValue, statMax;
+            if (doll_stat(win, part, &statValue, &statMax)) { value = (int)floor(statValue + 0.5); max = (int)floor(statMax + 0.5); }
             double t = (value - min) / (double)(max - min > 1 ? max - min : 1);
             t = t < 0 ? 0 : t > 1 ? 1 : t;
             const Sprite *empty = look_sprite(part, 0), *full = look_sprite(part, 1);
-            if (empty) cv_blit(now_picture(empty), x, y, w, h, 0, 0, cvw, cvh, fade); else cv_frame(x, y, w, h, PLAIN_BOX, PLAIN_EDGE);
-            int vertical = flag(part, "Vertical");
-            int cx0 = x, cy0 = vertical ? y + (int)(h * (1 - t)) : y, cx1 = vertical ? x + w : x + (int)(w * t), cy1 = y + h;
-            if (full) cv_blit(now_picture(full), x, y, w, h, cx0, cy0, cx1, cy1, fade);
-            else cv_fill(cx0, cy0, cx1 - cx0, cy1 - cy0, PLAIN_FILL);
+            int style = num(part, "BarStyle", 0), fit = num(part, "SkinFit", 0);
+            uint32_t fillc = colour_of_hex(str(part, "FillColor"), PLAIN_FILL), backc = colour_of_hex(str(part, "EmptyColor"), PLAIN_BOX);
+            if (style == 2) { draw_icons(win, part, index_of_id(win->design, num(part, "Id", -1)), x, y, value - min, max - min, empty, fade); break; }
+            if (style == 1)
+            {
+                /* a pie, filled clockwise from the top: the empty look, and the full one as far round as the value reaches */
+                const Picture *ep = empty ? now_picture(empty) : NULL, *fp = full ? now_picture(full) : NULL;
+                double rx = w / 2.0, ry = h / 2.0;
+                for (int j = 0; j < h; j++)
+                    for (int k = 0; k < w; k++)
+                    {
+                        double dx = (k + 0.5 - rx) / rx, dy = (j + 0.5 - ry) / ry;
+                        if (dx * dx + dy * dy > 1) continue;
+                        double angle = atan2(dx, -dy);
+                        if (angle < 0) angle += 2 * 3.14159265358979;
+                        const Picture *from = angle <= t * 2 * 3.14159265358979 ? fp : ep;
+                        uint32_t c = from ? from->pixels[(size_t)(j * from->height / h) * (size_t)from->width + (size_t)(k * from->width / w)] : (from == fp && angle <= t * 2 * 3.14159265358979 ? fillc : backc);
+                        if ((c >> 24) && x + k >= 0 && y + j >= 0 && x + k < cvw && y + j < cvh) cv[(y + j) * cvw + x + k] = c;
+                    }
+                break;
+            }
+            if (empty) skin_blit(now_picture(empty), fit, x, y, w, h, 0, 0, cvw, cvh, fade); else cv_frame(x, y, w, h, backc, PLAIN_EDGE);
+            /* only as much of the full bar as the value reaches: left to right (or right to left), or Upright bottom up (or top down) */
+            int vertical = flag(part, "Vertical"), reverse = flag(part, "ReverseFill");
+            int cx0 = !vertical && reverse ? x + (int)(w * (1 - t)) : x, cy0 = vertical && !reverse ? y + (int)(h * (1 - t)) : y;
+            int cx1 = !vertical && !reverse ? x + (int)(w * t) : x + w, cy1 = vertical && reverse ? y + (int)(h * t) : y + h;
+            if (full) skin_blit(now_picture(full), fit, x, y, w, h, cx0, cy0, cx1, cy1, fade);
+            else cv_fill(cx0, cy0, cx1 - cx0, cy1 - cy0, fillc);
             break;
         }
     }
@@ -684,6 +809,18 @@ static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, 
             }
             case K_DISPLAY:
             {
+                double statValue, statMax;
+                if (doll_stat(win, part, &statValue, &statMax))
+                {
+                    /* following a stat: its frames from empty (frame 1) to full (the last), by how full its range is */
+                    const Sprite *frames = look_sprite(part, 0);
+                    int count = frames && frames->frameCount > 0 ? frames->frameCount : 1, low = num(part, "Min", 0);
+                    double fraction = (statValue - low) / (statMax - low > 1 ? statMax - low : 1);
+                    fraction = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+                    if (frames && frames->frameCount) cv_picture(frame_picture(&frames->frames[(int)floor(fraction * (count - 1) + 0.5)]), x, y, fade);
+                    else { char t[16]; snprintf(t, sizeof t, "%d", (int)statValue); font_draw_into(font_get("InGameFont"), cv, cvw, cvh, x, y, t, 0xFFFFFFFFu, 1, 0); }
+                    break;
+                }
                 int shows = num(part, "ShowsPartId", -1), si = shows >= 0 ? index_of_id(d, shows) : -1;
                 int value = si >= 0 ? win->state->parts[si].value : r->value;
                 int min = si >= 0 ? num(part_at(d, si), "Min", 0) : num(part, "Min", 0);
@@ -720,6 +857,7 @@ static void draw_part(DollWin *win, cJSON *d, cJSON *part, PartState *r, int i, 
 /* A window's size on screen: as a container's (200 / 240); the Title Screen fills the view. */
 static double dolls_scale(const DollWin *w)
 {
+    if (w->attached) return 1; /* at the stats window's own scale: its parts land where they were put */
     if (!w->title) return 200.0 / BOX_H;
     double sx = SCREEN_W / (double)(num(w->design, "Width", 320) > 1 ? num(w->design, "Width", 320) : 1), sy = SCREEN_H / (double)(num(w->design, "Height", 240) > 1 ? num(w->design, "Height", 240) : 1);
     return sx < sy ? sx : sy;
@@ -738,12 +876,153 @@ void dolls_draw(uint32_t *pixels, uint32_t ms)
     for (int i = 0; i < winCount; i++)
     {
         DollWin *w = wins[i];
+        if (w->hud) continue; /* under every window: dolls_draw_hud */
         render(w);
         Picture p = { w->cw, w->ch, w->canvas };
         int sw, sh;
         dolls_window_size(i, &sw, &sh);
         world_blit(pixels, &p, w->x, w->y, sw, sh);
     }
+}
+
+static DollWin *open_window(DollState *state, cJSON *design, int modal, int title);
+static cJSON *save_settings(void);
+/* The always-on-screen paperdolls: under the windows, over the world. */
+void dolls_draw_hud(uint32_t *pixels, uint32_t ms)
+{
+    nowMs = ms;
+    for (int i = 0; i < winCount; i++)
+    {
+        DollWin *w = wins[i];
+        if (!w->hud) continue;
+        render(w);
+        Picture p = { w->cw, w->ch, w->canvas };
+        int sw, sh;
+        dolls_window_size(i, &sw, &sh);
+        world_blit(pixels, &p, w->x, w->y, sw, sh);
+    }
+}
+
+/* Windows that pause the game: not the HUD's, nor the controls of a stats window (the window itself does). */
+int dolls_pausing(void)
+{
+    for (int i = 0; i < winCount; i++) if (!wins[i]->hud && !wins[i]->attached) return 1;
+    return 0;
+}
+
+/* KeepHudDolls: opened when missing, kept to their corner, closed when no longer wanted. */
+static void keep_hud_dolls(void)
+{
+    int shown = !dolls_title_open() && !vitals_game_over();
+    cJSON *design;
+    cJSON_ArrayForEach(design, designs)
+    {
+        int id = num(design, "Id", -1), at = -1;
+        for (int i = 0; i < winCount; i++) if (wins[i]->hud && wins[i]->design == design) at = i;
+        if (!flag(design, "OnScreen") || !shown) { if (at >= 0) dolls_close_window(at); continue; }
+        if (at < 0)
+        {
+            if (winCount >= 16) continue;
+            DollWin *w = open_window(form_state(design, 0), design, 0, 1); /* quietly: no paperdoll-open sound */
+            if (!w) continue;
+            w->title = 0; w->hud = 1; w->character = world_actor_character(0);
+            for (int i = 0; i < winCount; i++) if (wins[i] == w) at = i;
+        }
+        (void)id;
+        DollWin *w = wins[at];
+        int sw, sh, corner = num(design, "ScreenCorner", 0);
+        double sx = (cJSON_IsNumber(get(design, "ScreenX")) ? get(design, "ScreenX")->valuedouble : 0) * 200.0 / BOX_H, sy = (cJSON_IsNumber(get(design, "ScreenY")) ? get(design, "ScreenY")->valuedouble : 0) * 200.0 / BOX_H;
+        dolls_window_size(at, &sw, &sh);
+        w->x = corner == 1 || corner == 3 ? SCREEN_W - sw - (int)sx : (int)sx;
+        w->y = corner == 2 || corner == 3 ? SCREEN_H - sh - (int)sy : (int)sy;
+    }
+}
+
+/* A paperdoll an inventory brings up (Other paperdolls): beside it, for its character. */
+void dolls_open_linked(int characterId, int designId, int x, int y)
+{
+    cJSON *design = dolls_design(designId);
+    if (!design) return;
+    for (int i = 0; i < winCount; i++) if (wins[i]->design == design && wins[i]->linkedTo == characterId) return;
+    DollWin *w = open_window(form_state(design, 0), design, 0, 1); /* quietly */
+    if (!w) return;
+    w->title = 0; w->character = characterId; w->linkedTo = characterId; w->x = x; w->y = y;
+}
+
+int dolls_linked_open(int characterId, int designId)
+{
+    cJSON *design = dolls_design(designId);
+    for (int i = 0; i < winCount; i++) if (design && wins[i]->design == design && wins[i]->linkedTo == characterId) return 1;
+    return 0;
+}
+
+void dolls_close_linked(int characterId, int designId)
+{
+    for (int i = winCount - 1; i >= 0; i--)
+        if (wins[i]->linkedTo == characterId && (designId < 0 || num(wins[i]->design, "Id", -2) == designId)) dolls_close_window(i);
+}
+
+/* A stats window's controls, laid over it (Stats paperdoll > Controls): they move and close with it. */
+void dolls_attach_to_stats(int designId, int characterId, int x, int y)
+{
+    cJSON *design = dolls_design(designId);
+    if (!design) return;
+    DollWin *w = open_window(form_state(design, 0), design, 0, 1); /* quietly */
+    if (!w) return;
+    w->title = 0; w->attached = 1; w->character = characterId; w->x = x; w->y = y;
+}
+
+void dolls_place_attached(int designId, int x, int y)
+{
+    for (int i = 0; i < winCount; i++) if (wins[i]->attached && num(wins[i]->design, "Id", -2) == designId) { wins[i]->x = x; wins[i]->y = y; }
+}
+
+void dolls_close_attached(int designId)
+{
+    for (int i = winCount - 1; i >= 0; i--) if (wins[i]->attached && num(wins[i]->design, "Id", -2) == designId) dolls_close_window(i);
+}
+
+/* ---------------- The save / load progress paperdoll (GameTestWindow.DiskProgress) ---------------- */
+
+void main_show_now(void);
+static uint32_t diskOpened;
+static DollWin *diskWin;
+
+static int disk_design_id(void) { return num(save_settings(), "ProgressDollDesignId", -1); }
+
+void dolls_disk_begin(void)
+{
+    diskProgress = 0;
+    diskWin = NULL;
+    cJSON *design = dolls_design(disk_design_id());
+    if (!design) return;
+    diskWin = open_window(form_state(design, 1), design, 1, 0);
+    diskOpened = platform_ticks();
+    dolls_disk_report(0);
+}
+
+/* How far it is (0 to 1): drawn now, before the next step. */
+void dolls_disk_report(double fraction)
+{
+    diskProgress = fraction < 0 ? 0 : fraction > 1 ? 1 : fraction;
+    if (diskWin) main_show_now();
+}
+
+/* Done: full, kept the rest of its time, then closed (a failed one: closed now). */
+void dolls_disk_end(int failed)
+{
+    if (!diskWin) return;
+    int at = -1;
+    for (int i = 0; i < winCount; i++) if (wins[i] == diskWin) at = i;
+    if (at >= 0 && !failed)
+    {
+        diskProgress = 1;
+        main_show_now();
+        double left = num(save_settings(), "ProgressShownAtLeastMs", 600) - (double)(platform_ticks() - diskOpened);
+        if (left > 0) { diskWin->closeInMs = left; diskWin = NULL; return; }
+    }
+    if (at >= 0) dolls_close_window(at);
+    diskWin = NULL;
 }
 
 /* ---------------- Opening and closing ---------------- */
@@ -774,6 +1053,7 @@ static DollWin *open_window(DollState *state, cJSON *design, int modal, int titl
     DollWin *w = (DollWin *)calloc(1, sizeof(DollWin));
     w->state = state; w->design = design; w->modal = modal; w->title = title;
     w->typing = w->openList = w->pressPart = -1;
+    w->character = -1; w->linkedTo = -1;
     int sw, sh;
     wins[winCount++] = w;
     dolls_window_size(winCount - 1, &sw, &sh);
@@ -798,11 +1078,13 @@ void dolls_close_window(int i)
 
 int dolls_close_top(void)
 {
-    if (!winCount) return 0;
-    DollWin *w = wins[winCount - 1];
+    int top = winCount - 1;
+    while (top >= 0 && (wins[top]->hud || wins[top]->attached)) top--; /* out of Escape's reach: a HUD; a stats window's controls go with the window */
+    if (top < 0) return 0;
+    DollWin *w = wins[top];
     if (w->title) return 0;
     if (w->typing >= 0) { dolls_stop_typing(); return 1; }
-    dolls_close_window(winCount - 1);
+    dolls_close_window(top);
     return 1;
 }
 
@@ -1184,6 +1466,10 @@ int dolls_key(int key, int ch)
 
 void dolls_update(double ms)
 {
+    static double hudCheckMs;
+    if ((hudCheckMs += ms) >= 250) { hudCheckMs = 0; keep_hud_dolls(); }
+    for (int wi = winCount - 1; wi >= 0; wi--)
+        if (wins[wi]->closeInMs > 0 && (wins[wi]->closeInMs -= ms) <= 0) dolls_close_window(wi);
     for (int wi = 0; wi < winCount; wi++) if (wins[wi]->save && wins[wi]->save->confirmMs > 0) wins[wi]->save->confirmMs -= ms;
     for (int wi = 0; wi < winCount; wi++)
     {
@@ -1748,7 +2034,10 @@ static void write_save(DollWin *w, int slot, const char *name, const char *over)
     const char *busy = events_save_blocker();
     if (busy) { save_error(102, busy); return; }
     char error[300], line[120];
-    if (!save_write(name, slot, over, error, sizeof error)) { save_error(106, error); return; }
+    dolls_disk_begin(); /* the saving progress paperdoll, if there is one */
+    dolls_disk_report(0.15);
+    if (!save_write(name, slot, over, error, sizeof error)) { dolls_disk_end(1); save_error(106, error); return; }
+    dolls_disk_end(0);
     snprintf(line, sizeof line, "Game saved: \"%s\".", name);
     int savedId = num(save_settings(), "SavedDollDesignId", -1);
     if (dolls_design(savedId)) { game_log(line); dolls_open_form(savedId, 1, 1, 0, 0); } /* the maker's own "Game saved" paperdoll */

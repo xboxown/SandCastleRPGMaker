@@ -54,7 +54,7 @@
 #define UNIT 8
 
 enum { G_DOLL = 1, G_PACK, G_BOX, G_STATS };
-enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT, T_DOLL_PART, T_DOLL_ITEM, T_DOLL_BODY, T_BUTTON };
+enum { T_NONE, T_THING, T_ACTOR, T_SLOT, T_ROW, T_BOX_ITEM, T_GUMP, T_EXIT, T_DOLL_PART, T_DOLL_ITEM, T_DOLL_BODY, T_BUTTON, T_LINK };
 enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_ENTER = 9 };
 
 static const char *SLOT_NAMES[15] = { "Head", "Neck", "Body", "Arms", "Gloves", "Belt", "Back", "Legs", "Feet", "RightHand", "LeftHand", "Ring1", "Ring2", "Backpack", "Pouch" };
@@ -213,6 +213,17 @@ static int add_gump(Gump g)
 }
 
 /* OpenPaperdoll: its own window, or the one already open brought to the front. */
+static double scale_of(const Gump *g);
+static cJSON *stats_doll(int characterId);
+static const Picture *link_picture(cJSON *link, int frame);
+
+/* A paperdoll the inventory brings up, beside it (its DollX / DollY, in the inventory's own pixels). */
+static void open_link(const Gump *g, cJSON *link)
+{
+    double s = scale_of(g);
+    dolls_open_linked(g->characterId, num(link, "DesignId", -1), g->x + (int)(dbl(link, "DollX", 330) * s), g->y + (int)(dbl(link, "DollY", 0) * s));
+}
+
 void gumps_open_paperdoll(int characterId)
 {
     cJSON *who = character_json(characterId);
@@ -223,6 +234,12 @@ void gumps_open_paperdoll(int characterId)
     int dolls = 0;
     for (int k = 0; k < gumpCount; k++) dolls += gumps[k].kind == G_DOLL;
     add_gump((Gump){ G_DOLL, 10 + dolls * 18, 0, characterId, 0, NULL, NULL });
+    /* its "opens with the inventory" paperdolls (DollLinks) */
+    i = find_gump(G_DOLL, characterId, NULL, 0);
+    cJSON *link;
+    if (i >= 0)
+        cJSON_ArrayForEach(link, get(paperdoll_of(characterId), "DollLinks"))
+            if (num(link, "Way", 0) == 1) open_link(&gumps[i], link);
 }
 
 static void open_pack(int characterId)
@@ -263,7 +280,8 @@ static void close_gump(int i)
         sound_play(num(g.data, "CloseSoundResourceId", -1));
         if (items_item_id(g.box) >= 0) events_fire_item(5, items_item_id(g.box), TR_ENTER); /* after it's closed */
     }
-    if (g.kind == G_DOLL) { int p = find_gump(G_PACK, g.characterId, NULL, 0); if (p >= 0) close_gump(p); }
+    if (g.kind == G_DOLL) { int p = find_gump(G_PACK, g.characterId, NULL, 0); if (p >= 0) close_gump(p); dolls_close_linked(g.characterId, -1); }
+    if (g.kind == G_STATS) dolls_close_attached(num(stats_doll(g.characterId), "ControlsDesignId", -1));
 }
 
 int gumps_open(void) { return gumpCount; }
@@ -368,6 +386,30 @@ static int worn_look(const Gump *g, const Item *it, int slotKey, const Picture *
     return 1;
 }
 
+static double gaugeValue, gaugeRange; /* what an Icons gauge counts */
+static void draw_gauge(uint32_t *pixels, int x, int y, cJSON *g, int kind, double fraction);
+static double stat_number(cJSON *c, int statId);
+static cJSON *character_of(int characterId);
+
+/* A label showing one of the character's stats: a number, or a gauge (bar, pie, sprite frames, icons). */
+static void draw_stat_label(uint32_t *pixels, const Gump *g, cJSON *label)
+{
+    cJSON *c = character_of(g->characterId);
+    int showAs = num(label, "ShowAs", 0), statId = num(label, "StatId", -1), maxId = num(label, "MaxStatId", -1);
+    if (showAs == 0)
+    {
+        char key[16], text[64];
+        snprintf(key, sizeof key, "%d", statId);
+        const char *v = cJSON_GetStringValue(get(get(c, "StatValues"), key));
+        snprintf(text, sizeof text, "%s", v && *v ? v : "0");
+        draw_readout(pixels, g, label, text);
+        return;
+    }
+    double s = scale_of(g), value = stat_number(c, statId), max = maxId >= 0 ? stat_number(c, maxId) : num(label, "Max", 30), min = num(label, "Min", 0);
+    gaugeValue = value - min; gaugeRange = max - min;
+    draw_gauge(pixels, g->x + (int)(dbl(label, "X", 0) * s), g->y + (int)(dbl(label, "Y", 0) * s), get(label, "Gauge"), showAs == 4 ? 3 : showAs == 3 ? 2 : showAs == 2 ? 1 : 0, max - min <= 0 ? 0 : (value - min) / (max - min));
+}
+
 static void draw_doll(uint32_t *pixels, const Gump *g)
 {
     cJSON *pd = paperdoll_of(g->characterId);
@@ -390,16 +432,37 @@ static void draw_doll(uint32_t *pixels, const Gump *g)
     char text[32];
     snprintf(text, sizeof text, "%.0f", carried); draw_readout(pixels, g, get(pd, "WeightCurrent"), text);
     snprintf(text, sizeof text, "%.0f", max); draw_readout(pixels, g, get(pd, "WeightMax"), text);
+    cJSON *weightGauge = get(pd, "WeightGauge");
+    if (flag(weightGauge, "Enabled"))
+    {
+        gaugeValue = carried; gaugeRange = max;
+        draw_gauge(pixels, g->x + (int)(dbl(weightGauge, "X", 0) * s), g->y + (int)(dbl(weightGauge, "Y", 0) * s), weightGauge, num(weightGauge, "Kind", 0), max <= 0 ? 0 : carried / max);
+    }
     cJSON *label;
     cJSON_ArrayForEach(label, get(pd, "Labels"))
     {
         if (num(label, "Kind", 0) == 0) { draw_readout(pixels, g, label, str(label, "Text")); continue; }
+        if (num(label, "Kind", 0) == 2) { draw_stat_label(pixels, g, label); continue; }
         cJSON *var;
         cJSON_ArrayForEach(var, get(get(project(), "Variables"), "Variables"))
             if (num(var, "Id", -2) == num(label, "VariableId", -1)) { snprintf(text, sizeof text, "%g", events_variable(str(var, "Name"))); draw_readout(pixels, g, label, text); }
     }
     const Picture *exit = sprite_now(sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName")));
-    if (exit) world_blit(pixels, exit, g->x + (int)((DOLL_W - 28) * s), g->y + (int)(4 * s), (int)(24 * s), (int)(24 * s));
+    /* where the Paperdoll layout puts it; at its own size, or in a 24 x 24 box */
+    if (exit)
+    {
+        int own = flag(pd, "ExitButtonOwnSize");
+        world_blit(pixels, exit, g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), (int)((own ? exit->width : 24) * s), (int)((own ? exit->height : 24) * s));
+    }
+    /* the buttons opening other paperdolls: frames closed, open */
+    cJSON *dollLink;
+    cJSON_ArrayForEach(dollLink, get(pd, "DollLinks"))
+    {
+        if (num(dollLink, "Way", 0) != 0) continue;
+        const Picture *pic = link_picture(get(dollLink, "Sprite"), dolls_linked_open(g->characterId, num(dollLink, "DesignId", -1)) ? 1 : 0);
+        if (!pic) pic = link_picture(get(dollLink, "Sprite"), 0);
+        if (pic) world_blit(pixels, pic, g->x + (int)(dbl(dollLink, "X", 0) * s), g->y + (int)(dbl(dollLink, "Y", 0) * s), (int)(pic->width * s), (int)(pic->height * s));
+    }
     for (int b = 0; b < 5; b++)
     {
         int bx, by, bw, bh;
@@ -526,6 +589,7 @@ static void draw_pack(uint32_t *pixels, const Gump *g)
 void gumps_draw(uint32_t *pixels, uint32_t ms)
 {
     nowMs = ms;
+    dolls_draw_hud(pixels, ms); /* always on screen: under every window */
     for (int i = 0; i < gumpCount; i++)
     {
         if (gumps[i].kind == G_DOLL) draw_doll(pixels, &gumps[i]);
@@ -534,6 +598,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         else draw_pack(pixels, &gumps[i]);
     }
     dolls_draw(pixels, ms); /* PaperDoll Editor paperdolls, over the inventory windows */
+    { int attachedId = -1; for (int i = 0; i < gumpCount; i++) if (gumps[i].kind == G_STATS && (attachedId = num(stats_doll(gumps[i].characterId), "ControlsDesignId", -1)) >= 0) dolls_place_attached(attachedId, gumps[i].x, gumps[i].y); }
     const Font *f = font_get("InGameFont");
     for (int i = 0; i < 8; i++) if (labels[i].until > ms && labels[i].text[0]) font_draw(f, pixels, labels[i].x, labels[i].y, labels[i].text, 0);
     if (dragging && ghost)
@@ -622,8 +687,24 @@ static Target hit(int x, int y)
             if (pic && solid_at(pic, bx, by, bw, bh, x, y)) { t.kind = T_BUTTON; t.slotKey = b; return t; }
         }
         cJSON *pd = paperdoll_of(g->characterId);
-        int ex = g->x + (int)((DOLL_W - 28) * s), ey = g->y + (int)(4 * s);
-        if (x >= ex && y >= ey && x < ex + (int)(24 * s) && y < ey + (int)(24 * s)) { t.kind = T_EXIT; return t; }
+        const Picture *exitPic = sprite_now(sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName")));
+        int ownExit = flag(pd, "ExitButtonOwnSize") && exitPic;
+        int ex = g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), ey = g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), exw = (int)((ownExit ? exitPic->width : 24) * s), exh = (int)((ownExit ? exitPic->height : 24) * s);
+        if (x >= ex && y >= ey && x < ex + exw && y < ey + exh) { t.kind = T_EXIT; return t; }
+        {
+            cJSON *dollLink;
+            int linkIndex = 0;
+            cJSON_ArrayForEach(dollLink, get(pd, "DollLinks"))
+            {
+                if (num(dollLink, "Way", 0) == 0)
+                {
+                    const Picture *pic = link_picture(get(dollLink, "Sprite"), 0);
+                    int lx = g->x + (int)(dbl(dollLink, "X", 0) * s), ly = g->y + (int)(dbl(dollLink, "Y", 0) * s);
+                    if (pic && x >= lx && y >= ly && x < lx + (int)(pic->width * s) && y < ly + (int)(pic->height * s)) { t.kind = T_LINK; t.slotKey = linkIndex; return t; }
+                }
+                linkIndex++;
+            }
+        }
         int keys[64], n = drawn_keys(g, keys);
         for (int i = n - 1; i >= 0; i--) /* the topmost drawn first */
         {
@@ -750,6 +831,16 @@ static void use_target(const Target *t)
 static void click_released(const Target *t)
 {
     if (t->kind == T_EXIT) { close_gump(t->gump); return; }
+    if (t->kind == T_LINK && t->gump >= 0 && t->gump < gumpCount)
+    {
+        /* a link's button: opens its paperdoll, or closes it if it's open */
+        const Gump *lg = &gumps[t->gump];
+        cJSON *link = cJSON_GetArrayItem(get(paperdoll_of(lg->characterId), "DollLinks"), t->slotKey);
+        sound_play(num(link, "ClickSoundResourceId", -1));
+        if (dolls_linked_open(lg->characterId, num(link, "DesignId", -1))) dolls_close_linked(lg->characterId, num(link, "DesignId", -1));
+        else open_link(lg, link);
+        return;
+    }
     if (t->kind == T_BUTTON)
     {
         Target now = hit(mouseX, mouseY);
@@ -1456,6 +1547,7 @@ static void open_stats(int characterId)
     int open = 0;
     for (int k = 0; k < gumpCount; k++) open += gumps[k].kind == G_STATS;
     add_gump((Gump){ G_STATS, 60 + open * 24, 40 + open * 20, characterId, 0, NULL, NULL });
+    dolls_attach_to_stats(num(doll, "ControlsDesignId", -1), characterId, 60 + open * 24, 40 + open * 20); /* its controls, laid over it */
 }
 
 static double stat_number(cJSON *c, int statId)
@@ -1480,6 +1572,34 @@ static void draw_gauge(uint32_t *pixels, int x, int y, cJSON *g, int kind, doubl
 {
     if (fraction < 0) fraction = 0;
     if (fraction > 1) fraction = 1;
+    if (kind == 3)
+    {
+        /* icons: one per IconValue of the range, IconsPerRow to a row; the sprite's frames from full to empty */
+        int per = num(g, "IconValue", 2), perRow = num(g, "IconsPerRow", 10), gap = num(g, "IconGap", 1);
+        per = per > 0 ? per : 1; perRow = perRow > 0 ? perRow : 1; gap = gap > 0 ? gap : 0;
+        int count = gaugeRange <= 0 ? 0 : (int)ceil(gaugeRange / per), frames = 0;
+        const Sprite *icon = sprite_find(str(get(g, "Sprite"), "SpriteGroup"), str(get(g, "Sprite"), "SpriteName"));
+        if (icon) frames = icon->frameCount;
+        const Picture *first = frames ? frame_picture(&icon->frames[0]) : NULL;
+        int iw = first ? first->width : 8, ih = first ? first->height : 8;
+        for (int i = 0; i < count && i < 200; i++)
+        {
+            double inIt = (gaugeValue - i * per) / per;
+            inIt = inIt < 0 ? 0 : inIt > 1 ? 1 : inIt;
+            int px = x + i % perRow * (iw + gap), py = y + i / perRow * (ih + gap);
+            if (frames > 0)
+            {
+                if (frames == 1 && inIt <= 0) continue;
+                world_blit(pixels, frame_picture(&icon->frames[frames == 1 ? 0 : (int)floor((1 - inIt) * (frames - 1) + 0.5)]), px, py, iw, ih);
+            }
+            else
+            {
+                fill(pixels, px, py, iw, ih, hex_colour(str(g, "BackColor"), 0xFF402818u));
+                if (inIt > 0) fill(pixels, px, py, (int)(iw * inIt), ih, hex_colour(str(g, "FillColor"), 0xFFC8A040u));
+            }
+        }
+        return;
+    }
     int w = (int)dbl(g, "Width", 80), h = (int)dbl(g, "Height", 10);
     uint32_t back = hex_colour(str(g, "BackColor"), 0xFF402818u), fillc = hex_colour(str(g, "FillColor"), 0xFFC8A040u);
     if (kind == 2)
@@ -1545,7 +1665,8 @@ static void draw_stats(uint32_t *pixels, const Gump *g)
                 const char *v = cJSON_GetStringValue(get(get(c, "StatValues"), key));
                 if (showAs == 0) { snprintf(text, sizeof text, "%s", v && *v ? v : "0"); draw_readout(pixels, &at, style, text); break; }
                 double value = stat_number(c, num(e, "StatId", -1)), max = num(e, "MaxStatId", -1) >= 0 ? stat_number(c, num(e, "MaxStatId", -1)) : num(e, "Max", 30), min = num(e, "Min", 0);
-                draw_gauge(pixels, ex, ey, gauge, showAs == 3 ? 2 : showAs == 2 ? 1 : 0, max - min <= 0 ? 0 : (value - min) / (max - min));
+                gaugeValue = value - min; gaugeRange = max - min;
+                draw_gauge(pixels, ex, ey, gauge, showAs == 4 ? 3 : showAs == 3 ? 2 : showAs == 2 ? 1 : 0, max - min <= 0 ? 0 : (value - min) / (max - min));
                 break;
             }
             case 3: if (vitals_has(g->characterId, num(e, "Ailment", 1))) draw_gauge(pixels, ex, ey, gauge, 2, 0); break;
@@ -1593,7 +1714,7 @@ void gumps_next_inventory(void)
 
 /* Exult's gump mode (gumps pause the game): an inventory, a container, a stats paperdoll, a paperdoll of the PaperDoll Editor,
    the spellbook, a map being looked at, a target being chosen - the world waits. (Dialog boxes, books, videos and the rest pause it on their own.) */
-int gumps_pausing(void) { return gumpCount > 0 || dolls_window_count() > 0 || choosing != NULL || magic_book_open() || mechanisms_map_open(); }
+int gumps_pausing(void) { return gumpCount > 0 || dolls_pausing() || choosing != NULL || magic_book_open() || mechanisms_map_open(); }
 
 /* ---------------- The engine's own mouse pointer (GameTestWindow.Pointer; Exult mouse.cc) ----------------
    The system's pointer is off; a sprite pointer is drawn over everything, its hot spot at the sprite's Origin.
