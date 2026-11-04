@@ -200,6 +200,8 @@ public partial class GameTestWindow : Window
         GameCanvas.Focus();
         GameCanvas.PreviewKeyDown += GameCanvas_PreviewKeyDown;
         GameCanvas.PreviewKeyUp += GameCanvas_PreviewKeyUp;
+        PreviewKeyUp += (_, e) => ScenarioKeyUp(e);
+        PreviewKeyDown += (_, e) => ScenarioKeyDown(e); // the Scenario Developer's keys, wherever the focus is; Game Test only (GameTestWindow.Scenarios.cs)
         GameCanvas.PreviewTextInput += DollTypingText; // a paperdoll's text box being typed in (first: it takes the letters)
         GameCanvas.PreviewTextInput += SaveScreenText; // a save's name typed on the Save/Load screen
         InitializeInteraction(); // the one and only place mouse interaction is wired up - see GameTestWindow.Interaction.cs
@@ -217,7 +219,7 @@ public partial class GameTestWindow : Window
 
         // The title is placed once the view has its new size and place (after layout) - placed at once it went by where the view was before (off-centre after maximize / restore).
         ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); Dispatcher.BeginInvoke(PlaceTitle, System.Windows.Threading.DispatcherPriority.Loaded); };
-        Loaded += (_, _) => { RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
+        Loaded += (_, _) => { ApplyScenarioVariables(); RecomputeViewportScale(); ShowTitleIfAny(); FadeInIfArriving(); }; // the Title Screen first, if there is one (GameTestWindow.Title.cs)
         UpdateCamera(); // genuine placement on load; always instant now anyway
         CompositionTarget.Rendering += GameLoop_Rendering;
         AnimationClock.FramesChanged += UpdateWeaponsInHand; // a character's frame changed: its weapon moves to that frame's hand at once

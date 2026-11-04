@@ -1492,21 +1492,22 @@ public partial class MainWindow : Window
     /// <summary>A fresh game from the project as it is (never a game already played): at its Title Screen or straight in; a built game's or Game Test's.</summary>
     private GameTestWindow NewGameWindow(bool atTitle, bool shipped) => NewGameWindow(_worlds.FirstOrDefault() ?? _map!, atTitle, shipped);
 
-    private GameTestWindow NewGameWindow(MapData start, bool atTitle, bool shipped) =>
+    private GameTestWindow NewGameWindow(MapData start, bool atTitle, bool shipped, CharacterDatabase? characters = null, List<MapData>? worlds = null) =>
         new(start, Sheet(start.Tileset.TilesetSpriteName)?.Bitmap ?? PrimarySheet()?.Bitmap ?? _tilesetBitmap!, start.Tileset.TileWidth, start.Tileset.TileHeight,
             Sheet(start.Tileset.TilesetSpriteName)?.Columns ?? PrimarySheet()?.Columns ?? _paletteColumns,
             start.Tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
+            characters ?? _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         {
             StartAtTitle = atTitle,
             IsShippedGame = shipped,
-            Worlds = _worlds,
+            Worlds = worlds ?? _worlds,
             Title = shipped ? (_currentProjectName is { Length: > 0 } name ? name : "Game") : "Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)",
             WindowStartupLocation = shipped ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner
         };
 
     /// <summary>What comes after a game window closes: a loaded save carrying on, a fresh game at the title (Return To Title) or straight in (New Game), or nothing.</summary>
     private GameTestWindow? NextGameWindow(GameTestWindow closed, bool shipped) =>
+        closed.ScenarioRequestedId is int scenarioId && _systemSettings.Scenarios.Find(scenarioId) is { } scenario ? ScenarioGameWindow(scenario) :
         closed.ReplacedBy ?? (closed.ReturnToTitleRequested ? NewGameWindow(atTitle: true, shipped) : closed.RestartRequested ? NewGameWindow(atTitle: false, shipped) : null);
 
     /// <summary>A built game's window: closing it ends the program - unless another game window carries on (a loaded save, Return To Title, New Game).</summary>
@@ -1550,7 +1551,8 @@ public partial class MainWindow : Window
 
         if (IsUltima8) { LaunchU8GameTest(atTitle); return; } // an Ultima 8 project: its own engine (MainWindow.U8.cs)
         // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs); Return To Title and New Game start a fresh one.
-        for (GameTestWindow? game = NewGameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextGameWindow(game, shipped: false))
+        var firstScenario = atTitle ? null : _systemSettings.Scenarios.StartScenario; // the Scenario Developer's choice for F5 (MainWindow.Scenarios.cs)
+        for (GameTestWindow? game = firstScenario is not null ? ScenarioGameWindow(firstScenario) : NewGameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextGameWindow(game, shipped: false))
         {
             game.Owner = this;
             game.ShowDialog();

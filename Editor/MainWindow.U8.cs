@@ -17,20 +17,21 @@ public partial class MainWindow
 
     private U8GameWindow NewU8GameWindow(bool atTitle, bool shipped) => NewU8GameWindow(_worlds.FirstOrDefault() ?? _map!, atTitle, shipped);
 
-    private U8GameWindow NewU8GameWindow(MapData start, bool atTitle, bool shipped) =>
+    private U8GameWindow NewU8GameWindow(MapData start, bool atTitle, bool shipped, CharacterDatabase? characters = null, List<MapData>? worlds = null) =>
         new(start, Sheet(start.Tileset.TilesetSpriteName)?.Bitmap ?? PrimarySheet()?.Bitmap ?? _tilesetBitmap!, start.Tileset.TileWidth, start.Tileset.TileHeight,
             Sheet(start.Tileset.TilesetSpriteName)?.Columns ?? PrimarySheet()?.Columns ?? _paletteColumns,
             start.Tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
-            _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
+            characters ?? _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
         {
             StartAtTitle = atTitle,
             IsShippedGame = shipped,
-            Worlds = _worlds,
+            Worlds = worlds ?? _worlds,
             Title = shipped ? (_currentProjectName is { Length: > 0 } name ? name : "Game") : "Sandcastle RPG Maker - Game Test (Ultima 8 Engine, Alpha)",
             WindowStartupLocation = shipped ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner
         };
 
     private U8GameWindow? NextU8GameWindow(U8GameWindow closed, bool shipped) =>
+        closed.ScenarioRequestedId is int scenarioId && _systemSettings.Scenarios.Find(scenarioId) is { } scenario ? ScenarioU8GameWindow(scenario) :
         closed.ReplacedBy ?? (closed.ReturnToTitleRequested ? NewU8GameWindow(atTitle: true, shipped) : closed.RestartRequested ? NewU8GameWindow(atTitle: false, shipped) : null);
 
     /// <summary>A built Ultima 8 game's window: closing it ends the program - unless another game window carries on.</summary>
@@ -62,7 +63,8 @@ public partial class MainWindow
     /// <summary>Game Test of an Ultima 8 project: its own engine.</summary>
     private void LaunchU8GameTest(bool atTitle)
     {
-        for (U8GameWindow? game = NewU8GameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextU8GameWindow(game, shipped: false))
+        var firstScenario = atTitle ? null : _systemSettings.Scenarios.StartScenario; // the Scenario Developer's choice for F5 (MainWindow.Scenarios.cs)
+        for (U8GameWindow? game = firstScenario is not null ? ScenarioU8GameWindow(firstScenario) : NewU8GameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextU8GameWindow(game, shipped: false))
         {
             game.Owner = this;
             game.ShowDialog();

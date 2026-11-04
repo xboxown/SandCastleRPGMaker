@@ -26,6 +26,7 @@
             </MenuItem>
             <MenuItem x:Name="GameMenu" Header="_Game" IsEnabled="False">
                 <MenuItem x:Name="TestEngineMenuItem" Header="Test the Engine" Click="TestEngineMenuItem_Click" InputGestureText="F5"/>
+                <MenuItem x:Name="ScenarioDeveloperMenuItem" Header="Scenario Developer..." Click="ScenarioDeveloperMenuItem_Click" ToolTip="Places and states to jump into while testing: where to start, variables, who joined or died, what they carry; keys to go from one to the next. Game Test only."/>
                 <MenuItem x:Name="TestTitleScreenMenuItem" Header="Test the Title Screen" Click="TestTitleScreenMenuItem_Click" ToolTip="Game Test starting at the Title Screen (System Settings > Title Screen), as a built game does"/>
                 <MenuItem x:Name="BuildGameMenuItem" Header="Build..." Click="BuildGameMenuItem_Click" ToolTip="Build a standalone game: choose the platform and where"/>
             </MenuItem>

@@ -166,6 +166,7 @@ public partial class U8GameWindow
         gump.Character = stats.Character;
         gump.OpenedWith = stats;
         gump.Fixed = true;
+        gump.Scale = ViewportScale.ScaleX; // at the stats window's own scale: its parts land where they were put
         gump.StatsShown.Clear();
         UntrackGumpFocus(gump);
         stats.Controls = gump;
