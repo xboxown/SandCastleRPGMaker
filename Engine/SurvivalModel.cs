@@ -108,4 +108,7 @@ public class SurvivalSettings
 
     /// <summary>Ailments this character can never catch.</summary>
     public Ailment Immunities { get; set; } = Ailment.None;
+    /// <summary>Exult's cold_immune: Cold zones do nothing to it.</summary>
+    public bool ColdImmune { get; set; }
+    public bool HeatImmune { get; set; }
 }

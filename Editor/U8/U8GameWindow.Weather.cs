@@ -165,6 +165,10 @@ public partial class U8GameWindow
     }
 
     /// <summary>Each frame: drops fall, clouds drift, lightning strikes - and, hour by hour, the weather may change.</summary>
+    private bool _weatherHushedByCave;
+
+    private bool PlayerInCave => Zones.IsInCave(_map.Zones, _playerX, _playerY, MapFloors.FloorOfLift(_playerZ));
+
     private void UpdateWeather(double elapsedMs)
     {
         if (_weather.Changes && _clock.Hour != _weatherHour)
@@ -178,7 +182,13 @@ public partial class U8GameWindow
             }
         }
         double seconds = elapsedMs / 1000.0;
-        bool indoors = RoofLiftOverPlayer() is not null;
+        // Inside a Cave: no rain and no weather at all, not even heard.
+        bool inCave = PlayerInCave;
+        if (inCave) SoundPlayback.StopFor(_weatherSoundOwner);
+        else if (_weatherHushedByCave && _weather.Kind is WeatherKind.Rain or WeatherKind.Storm && _weather.RainSoundResourceId >= 0)
+            SoundPlayback.TryPlayFor(_weatherSoundOwner, _resources, _weather.RainSoundResourceId, loop: true);
+        _weatherHushedByCave = inCave;
+        bool indoors = inCave || RoofLiftOverPlayer() is not null;
         WeatherLayer.Visibility = indoors ? Visibility.Hidden : Visibility.Visible;
         CloudLayer.Visibility = indoors ? Visibility.Hidden : Visibility.Visible;
         if (!indoors)
@@ -219,7 +229,7 @@ public partial class U8GameWindow
                 flash.KeyFrames.Add(new LinearDoubleKeyFrame(0, KeyTime.FromTimeSpan(TimeSpan.FromMilliseconds(520))));
                 FlashOverlay.BeginAnimation(UIElement.OpacityProperty, flash);
             }
-            if (_weather.ThunderSoundResourceId >= 0)
+            if (_weather.ThunderSoundResourceId >= 0 && !inCave)
             {
                 int thunder = _weather.ThunderSoundResourceId;
                 var delay = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300 + Rng.Next(1500)) };

@@ -238,6 +238,14 @@ public partial class CharacterEditorWindow
             box.Unchecked += (_, _) => s.Immunities &= ~ailment;
             immunities.Children.Add(box);
         }
+        var coldImmune = new CheckBox { Content = "Cold zones", IsChecked = s.ColdImmune, Margin = new Thickness(0, 0, 16, 4), ToolTip = "Never freezes in a Cold zone (Exult's cold immune)." };
+        coldImmune.Checked += (_, _) => s.ColdImmune = true;
+        coldImmune.Unchecked += (_, _) => s.ColdImmune = false;
+        immunities.Children.Add(coldImmune);
+        var heatImmune = new CheckBox { Content = "Hot zones", IsChecked = s.HeatImmune, Margin = new Thickness(0, 0, 16, 4), ToolTip = "Never suffers in a Hot zone." };
+        heatImmune.Checked += (_, _) => s.HeatImmune = true;
+        heatImmune.Unchecked += (_, _) => s.HeatImmune = false;
+        immunities.Children.Add(heatImmune);
         HealthPanel.Children.Add(immunities);
     }
 

@@ -74,9 +74,11 @@ public partial class GameTestWindow
         if ((_lightCheckMs -= elapsedMs) > 0) return;
         _lightCheckMs = 250;
         var (sky, nightAmount) = SkyNow();
+        bool inCave = PlayerInCave;
+        if (inCave) (sky, nightAmount) = ((Colors.Black, 1.0), 1.0); // a Cave: complete darkness, day or night - only a light source lifts it
 
         // Overcast: weather and clouds darken the day (and the night a little more).
-        double gloom = (_weather.Kind == WeatherKind.Clear ? 0 : _weather.Intensity / 100.0) + (_weather.Clouds ? _weather.CloudCover / 200.0 : 0);
+        double gloom = inCave ? 0 : (_weather.Kind == WeatherKind.Clear ? 0 : _weather.Intensity / 100.0) + (_weather.Clouds ? _weather.CloudCover / 200.0 : 0);
         gloom = Math.Clamp(gloom, 0, 1) * Math.Clamp(DayNight.OvercastStrength, 0, 1);
         if (gloom > 0.001)
         {

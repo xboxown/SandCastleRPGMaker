@@ -174,7 +174,7 @@ public partial class MainWindow
             WindowStartupLocation = WindowStartupLocation.CenterOwner, Owner = this, ShowInTaskbar = false
         };
         var rows = new StackPanel { Margin = new Thickness(12) };
-        TextBlock Label(string text) => new() { Text = text, FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 6, 0, 2) };
+        TextBlock Label(string text) => new() { Text = text, FontWeight = FontWeights.SemiBold, TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 6, 0, 2) };
         var name = new TextBox { Text = zone.Name };
         var purposes = Zones.CommonPurposes.Concat(_map.Zones.Select(z => z.Purpose)).Where(p => !string.IsNullOrWhiteSpace(p)).Distinct(StringComparer.OrdinalIgnoreCase).OrderBy(p => p).ToList();
         var purpose = new ComboBox { IsEditable = true, ItemsSource = purposes, Text = zone.Purpose };
@@ -192,7 +192,7 @@ public partial class MainWindow
         }
         rows.Children.Add(Label("Name (yours: \"The Blue Boar\", \"Iolo's house\")"));
         rows.Children.Add(name);
-        rows.Children.Add(Label("Purpose (what kind of place - schedules can go to \"the nearest Pub\")"));
+        rows.Children.Add(Label("Purpose (what kind of place - schedules can go to \"the nearest Pub\"). Cave: no rain or weather, complete darkness only a light source lifts. Cold / Hot: anyone inside suffers unless dressed for it (Object Editor > Armor). A zone can lie inside another."));
         rows.Children.Add(purpose);
         rows.Children.Add(Label("Colour in the Map Editor"));
         rows.Children.Add(color);

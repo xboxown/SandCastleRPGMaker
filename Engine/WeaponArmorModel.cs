@@ -76,6 +76,10 @@ public class ArmorSettings
     public string? CustomSlotName { get; set; }
     /// <summary>Exult's armor: every blow is reduced by 1..(all the armor worn) points (apply_damage).</summary>
     public int ArmorPoints { get; set; } = 2;
+    /// <summary>Exult's get_object_warmth, against a Cold zone: all that's worn adds up, from -75; 100 or more keeps the cold out.</summary>
+    public int Warmth { get; set; }
+    /// <summary>The same against a Hot zone.</summary>
+    public int Cooling { get; set; }
     /// <summary>Ultima 8 only: added to a kick's damage (ArmourInfo::_kickAttackBonus - boots).</summary>
     public int U8KickBonus { get; set; }
     /// <summary>Damage types that do nothing at all to whoever wears it (Exult's armor immunity: the blow just clangs).</summary>

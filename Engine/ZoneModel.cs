@@ -33,16 +33,27 @@ public class MapZone
 public static class Zones
 {
     /// <summary>Purposes offered in the editors (any other can be typed).</summary>
-    public static readonly string[] CommonPurposes = { "Home", "Pub", "Inn", "Hospital", "Shop", "Smithy", "Farm", "Temple", "Guard post", "Workplace", CavePurpose };
+    public static readonly string[] CommonPurposes = { "Home", "Pub", "Inn", "Hospital", "Shop", "Smithy", "Farm", "Temple", "Guard post", "Workplace", CavePurpose, ColdPurpose, HotPurpose };
 
-    /// <summary>A Cave: the world's ambient sounds stop inside it; its own (AmbientSoundId) loops instead.</summary>
+    /// <summary>A Cave: inside, no rain, no weather, complete darkness that only a light source lifts; the world's ambient sounds stop and its own (AmbientSoundId) loops instead.</summary>
     public const string CavePurpose = "Cave";
+    /// <summary>A Cold zone: anyone inside freezes unless it's wearing enough warmth (Serpent Isle). Can lie inside another zone.</summary>
+    public const string ColdPurpose = "Cold";
+    /// <summary>A Hot zone: the same with heat, and what's worn to cool it.</summary>
+    public const string HotPurpose = "Hot";
 
     public static bool IsCave(MapZone zone) => string.Equals(zone.Purpose.Trim(), CavePurpose, StringComparison.OrdinalIgnoreCase);
 
-    /// <summary>The zone on that cell and floor with a sound of its own or a Cave (its ambient instead of the map's), or null.</summary>
+    private static bool AnyAt(IEnumerable<MapZone> zones, string purpose, int x, int y, int floor) =>
+        zones.Any(z => z.Floor == floor && z.Contains(x, y) && string.Equals(z.Purpose.Trim(), purpose, StringComparison.OrdinalIgnoreCase));
+
+    public static bool IsInCave(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, CavePurpose, x, y, floor);
+    public static bool IsCold(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, ColdPurpose, x, y, floor);
+    public static bool IsHot(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, HotPurpose, x, y, floor);
+
+    /// <summary>The zone on that cell and floor with a sound of its own or a Cave (its ambient instead of the map's), or null. Zones inside zones: the smallest, with a sound of its own before a silent one.</summary>
     public static MapZone? AmbientZoneAt(IEnumerable<MapZone> zones, int x, int y, int floor) =>
-        zones.FirstOrDefault(z => z.Floor == floor && z.Contains(x, y) && (IsCave(z) || z.AmbientSoundId >= 0));
+        zones.Where(z => z.Floor == floor && z.Contains(x, y) && (IsCave(z) || z.AmbientSoundId >= 0)).OrderBy(z => z.AmbientSoundId >= 0 ? 0 : 1).ThenBy(z => z.Width * z.Height).FirstOrDefault();
 
     /// <summary>Zones of a purpose (any case).</summary>
     public static IEnumerable<MapZone> WithPurpose(IEnumerable<MapZone> zones, string purpose) =>

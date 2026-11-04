@@ -158,6 +158,10 @@ public partial class ObjectEditorWindow
         row.Children.Add(NumberField("Armor points", () => a.ArmorPoints, v => a.ArmorPoints = (int)Math.Clamp(v, 0, 127), "All the armor a character wears adds up; every blow is reduced by 1 to that total (Exult's apply_damage). Ultima 8: its armour class - every blow 3 x that percent less."));
         if (ProjectSession.IsUltima8) row.Children.Add(NumberField("Ultima 8: kick bonus", () => a.U8KickBonus, v => a.U8KickBonus = (int)Math.Clamp(v, 0, 50), "Ultima 8: added to a kick's damage (boots)."));
         body.Children.Add(row);
+        var climate = new WrapPanel();
+        climate.Children.Add(NumberField("Warmth (against a Cold zone)", () => a.Warmth, v => a.Warmth = (int)Math.Clamp(v, -500, 500), "All that's worn on the head, back, feet, body, hands and legs (and custom slots) adds up from -75: at 100 or more, the cold is kept out (Exult's warmth). So worn things must add up to 175."));
+        climate.Children.Add(NumberField("Cooling (against a Hot zone)", () => a.Cooling, v => a.Cooling = (int)Math.Clamp(v, -500, 500), "The same against a Hot zone: worn things must add up to 175."));
+        body.Children.Add(climate);
         var immune = new WrapPanel();
         immune.Children.Add(new TextBlock { Text = "Makes its wearer immune to:", Margin = new Thickness(0, 4, 8, 0) });
         foreach (var type in Enum.GetValues<DamageType>())

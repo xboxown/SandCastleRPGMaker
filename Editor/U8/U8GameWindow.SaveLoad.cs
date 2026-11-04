@@ -577,7 +577,7 @@ public partial class U8GameWindow
         foreach (var (character, vitals) in _vitals)
             save.Vitals.Add(new SavedVitals
             {
-                CharacterId = character.Id, CharacterIndex = SavedIndexOf(character), Food = vitals.Food, Ailments = (int)vitals.Ailments,
+                CharacterId = character.Id, CharacterIndex = SavedIndexOf(character), Food = vitals.Food, Cold = vitals.Cold, Heat = vitals.Heat, Ailments = (int)vitals.Ailments,
                 PoisonRemainingMs = vitals.PoisonRemainingMs, SleepRemainingMs = vitals.SleepRemainingMs, ParalyzeRemainingMs = vitals.ParalyzeRemainingMs,
                 CharmRemainingMs = vitals.CharmRemainingMs, CurseRemainingMs = vitals.CurseRemainingMs, InvisibleRemainingMs = vitals.InvisibleRemainingMs,
                 ProtectedRemainingMs = vitals.ProtectedRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
@@ -686,6 +686,8 @@ public partial class U8GameWindow
             if (character is null) continue;
             var vitals = VitalsOf(character);
             vitals.Food = saved.Food;
+            vitals.Cold = saved.Cold;
+            vitals.Heat = saved.Heat;
             vitals.Ailments = (Ailment)saved.Ailments;
             vitals.PoisonRemainingMs = saved.PoisonRemainingMs;
             vitals.SleepRemainingMs = saved.SleepRemainingMs;

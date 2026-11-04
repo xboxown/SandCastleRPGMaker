@@ -20,7 +20,17 @@ public enum VerboseKind
     WaiterAsks,
     WaiterServes,
     CantSit,
-    OutdoorsOnly
+    OutdoorsOnly,
+    FeelingCold,
+    VeryCold,
+    Frostbite,
+    Frozen,
+    WarmingUp,
+    FeelingHot,
+    VeryHot,
+    Heatstroke,
+    Scorched,
+    CoolingDown
 }
 
 /// <summary>
@@ -55,6 +65,16 @@ public class VerboseLines
         VerboseKind.WaiterServes => new[] { "Here thou art.", "Enjoy thy meal." },
         VerboseKind.CantSit => new[] { "I cannot get there.", "Something is in the way." },
         VerboseKind.OutdoorsOnly => new[] { "Not in here!", "I need open sky for that." },
+        VerboseKind.FeelingCold => new[] { "It is chilly here.", "Brrr!", "It is cold!" },
+        VerboseKind.VeryCold => new[] { "It is very cold!", "I am freezing!" },
+        VerboseKind.Frostbite => new[] { "I cannot feel my fingers!", "I have frostbite!", "This cold is killing me!" },
+        VerboseKind.Frozen => new[] { "I am frozen!", "I... cannot... move..." },
+        VerboseKind.WarmingUp => new[] { "I am warming up.", "That is better." },
+        VerboseKind.FeelingHot => new[] { "It is warm here.", "Phew!", "It is hot!" },
+        VerboseKind.VeryHot => new[] { "It is very hot!", "I am sweating!" },
+        VerboseKind.Heatstroke => new[] { "I feel faint!", "This heat is killing me!" },
+        VerboseKind.Scorched => new[] { "I am burning up!", "I... cannot... breathe..." },
+        VerboseKind.CoolingDown => new[] { "I am cooling down.", "That is better." },
         _ => Array.Empty<string>()
     };
 
@@ -80,6 +100,16 @@ public class VerboseLines
         VerboseKind.WaiterServes => "Waiter: serving",
         VerboseKind.CantSit => "Can't reach a chair or bed",
         VerboseKind.OutdoorsOnly => "Using an outdoors-only object indoors",
+        VerboseKind.FeelingCold => "Cold: starting to feel it",
+        VerboseKind.VeryCold => "Cold: very cold",
+        VerboseKind.Frostbite => "Cold: frostbite",
+        VerboseKind.Frozen => "Cold: frozen",
+        VerboseKind.WarmingUp => "Cold: warming up",
+        VerboseKind.FeelingHot => "Heat: starting to feel it",
+        VerboseKind.VeryHot => "Heat: very hot",
+        VerboseKind.Heatstroke => "Heat: heatstroke",
+        VerboseKind.Scorched => "Heat: burning up",
+        VerboseKind.CoolingDown => "Heat: cooling down",
         _ => kind.ToString()
     };
 
@@ -103,6 +133,16 @@ public class VerboseLines
         VerboseKind.WaiterServes => "As a Waiter, putting a dish down, two times in three (Exult's waiter serve lines).",
         VerboseKind.CantSit => "It was told to sit or lie down, but there's no way to walk up to the chair or bed.",
         VerboseKind.OutdoorsOnly => "It tried to use something that only works outdoors (a kite) under a roof.",
+        VerboseKind.FeelingCold => "In a Cold zone without enough warmth worn, its temperature under 20 - a third of the game minutes (Exult's chilly, cold).",
+        VerboseKind.VeryCold => "The same, 20 to 29 (Exult's colder).",
+        VerboseKind.Frostbite => "The same, 30 to 59: from 50 it's hurt as it says so (Exult's frostbite).",
+        VerboseKind.Frozen => "The same, 60 or more: hurt 1 to 3 as it says so (Exult's frozen).",
+        VerboseKind.WarmingUp => "Out of the cold, or wearing enough warmth, as it recovers - a third of the game minutes.",
+        VerboseKind.FeelingHot => "In a Hot zone without enough cooling worn, under 20.",
+        VerboseKind.VeryHot => "The same, 20 to 29.",
+        VerboseKind.Heatstroke => "The same, 30 to 59: from 50 it's hurt as it says so.",
+        VerboseKind.Scorched => "The same, 60 or more: hurt 1 to 3 as it says so.",
+        VerboseKind.CoolingDown => "Out of the heat, or wearing enough cooling, as it recovers.",
         _ => ""
     };
 }

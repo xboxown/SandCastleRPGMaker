@@ -28,6 +28,8 @@ public partial class U8GameWindow
     private sealed class Vitals
     {
         public int Food;
+        /// <summary>How cold and how hot it is, 0-63 (their .Temperature.cs).</summary>
+        public int Cold, Heat;
         public Ailment Ailments;
         public double PoisonRemainingMs, PoisonNextTickMs, SleepRemainingMs, ParalyzeRemainingMs, CharmRemainingMs, CurseRemainingMs, InvisibleRemainingMs, ProtectedRemainingMs;
         public bool Dead;
@@ -208,6 +210,7 @@ public partial class U8GameWindow
         {
             _lastClockMinute = minute;
             foreach (var character in AllLivingCharacters().ToList()) HungerMinute(character);
+            foreach (var character in AllLivingCharacters().ToList()) TemperatureMinute(character); // Cold and Hot zones
             ExpireStatChanges(minute); // temporary Change Stats wearing off
         }
 
@@ -223,7 +226,7 @@ public partial class U8GameWindow
     {
         var vitals = VitalsOf(character);
         bool starving = character.Survival.CanGetHungry && vitals.Food <= character.Survival.HungryAtOrBelow;
-        if (vitals.Ailments.HasFlag(Ailment.Poisoned) || GetHp(character) is not int hp || (starving && hp > 0)) return;
+        if (vitals.Ailments.HasFlag(Ailment.Poisoned) || GetHp(character) is not int hp || (starving && hp > 0) || TooColdOrHotToMend(character)) return;
         int max = MaxHp(character);
         if (max <= 0 || hp >= max) return;
         bool sleepingSchedule = _mapCharacters.FirstOrDefault(mc => mc.Character == character)?.Npc.Activity == ScheduleType.Sleep;

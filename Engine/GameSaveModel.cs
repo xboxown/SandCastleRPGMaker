@@ -71,6 +71,9 @@ public class SavedBookSetting
 /// <summary>A character's hunger, ailments and the time left on them.</summary>
 public class SavedVitals
 {
+    /// <summary>How cold and how hot it is, 0-63 (Exult's temperature).</summary>
+    public int Cold { get; set; }
+    public int Heat { get; set; }
     public int CharacterId { get; set; }
     /// <summary>Which of the save's characters (a copy of a character placed more than once has its own); -1 = the first with CharacterId.</summary>
     public int CharacterIndex { get; set; } = -1;
