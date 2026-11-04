@@ -16,8 +16,8 @@ namespace SandcastleRpgMaker.Editor;
 internal static class PlayerFontPack
 {
     /// <summary>Glyphs are drawn this much smaller than the book's own size: its 700 x 400 canvas on a 320 x 200 screen, kept readable.</summary>
-    private const double BookSizeToPixels = 0.7;
-    private const double SmallestPixels = 8;
+    private const double BookSizeToPixels = 0.8;
+    private const double SmallestPixels = 10;
     /// <summary>The game's own fonts drawn from a system font, for a project with no sprite font for them: as Windows falls back.</summary>
     private const string FallbackFamily = "Segoe UI";
     private const double FallbackPixels = 10;
