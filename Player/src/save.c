@@ -61,7 +61,9 @@ static void path_in(char *out, size_t size, const char *folder, const char *file
 void save_take_screenshot(const uint32_t *pixels)
 {
     if (!shot) shot = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
-    if (shot) memcpy(shot, pixels, sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    if (!shot) return;
+    for (int y = 0; y < SCREEN_H; y++)  /* a save's picture stays 320 x 200, whatever the screen */
+        for (int x = 0; x < SCREEN_W; x++) shot[y * SCREEN_W + x] = pixels[y * frame_scale * FRAME_W + x * frame_scale];
 }
 
 static uint32_t crc_table[256];

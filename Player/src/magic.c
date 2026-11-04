@@ -796,7 +796,7 @@ static void book_box(int *x, int *y, int *w, int *h)
 
 static void fill(uint32_t *p, int x, int y, int w, int h, uint32_t c)
 {
-    for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++) for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++) p[j * SCREEN_W + i] = c;
+    frame_fill(p, x, y, w, h, c);
 }
 
 static void cell_rect(int side, int i, int *cx, int *cy, int *cw, int *ch)

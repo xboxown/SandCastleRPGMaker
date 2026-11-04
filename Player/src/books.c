@@ -406,8 +406,8 @@ void books_draw(uint32_t *pixels, uint32_t ms)
                 Piece *pc = &line->pieces[p];
                 const Font *drawIn = pc->font ? pc->font : open_.font;
                 int px = fr->x + offset + pc->x, py = y + line->height - font_line_height(drawIn) * pc->scale; /* their feet on one line (the tallest sets it) */
-                font_draw_into(drawIn, pixels, SCREEN_W, SCREEN_H, px, py, pc->text, pc->colour, pc->scale, 0);
-                if (pc->bold) font_draw_into(drawIn, pixels, SCREEN_W, SCREEN_H, px + 1, py, pc->text, pc->colour, pc->scale, 0);
+                font_draw_frame(drawIn, pixels, px, py, pc->text, pc->colour, pc->scale, 0);
+                if (pc->bold) font_draw_frame(drawIn, pixels, px + 1, py, pc->text, pc->colour, pc->scale, 0);
             }
             y += line->height + line->gap;
         }

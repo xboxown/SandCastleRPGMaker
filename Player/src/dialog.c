@@ -328,15 +328,16 @@ static uint32_t *screen;
 static void blit_part(const Picture *p, int sx, int sy, int sw, int sh, int dx, int dy, int dw, int dh)
 {
     if (!p || sw <= 0 || sh <= 0 || dw <= 0 || dh <= 0) return;
+    dx *= frame_scale; dy *= frame_scale; dw *= frame_scale; dh *= frame_scale;
     /* clipped once; the picture stepped through in 16.16 (no dividing a pixel) */
-    int i0 = dx < 0 ? -dx : 0, i1 = dx + dw > SCREEN_W ? SCREEN_W - dx : dw;
-    int j0 = dy < 0 ? -dy : 0, j1 = dy + dh > SCREEN_H ? SCREEN_H - dy : dh;
+    int i0 = dx < 0 ? -dx : 0, i1 = dx + dw > FRAME_W ? FRAME_W - dx : dw;
+    int j0 = dy < 0 ? -dy : 0, j1 = dy + dh > FRAME_H ? FRAME_H - dy : dh;
     if (i0 >= i1 || j0 >= j1) return;
     uint32_t stepX = ((uint32_t)sw << 16) / (uint32_t)dw, stepY = ((uint32_t)sh << 16) / (uint32_t)dh;
     for (int j = j0; j < j1; j++)
     {
         const uint32_t *row = p->pixels + (size_t)(sy + (int)(((uint32_t)j * stepY) >> 16)) * (size_t)p->width + sx;
-        uint32_t *d = &screen[(dy + j) * SCREEN_W + dx];
+        uint32_t *d = &screen[(dy + j) * FRAME_W + dx];
         uint32_t at = (uint32_t)i0 * stepX;
         for (int i = i0; i < i1; i++, at += stepX)
         {
@@ -349,10 +350,11 @@ static void blit_part(const Picture *p, int sx, int sy, int sw, int sh, int dx, 
 
 static void shade(int x, int y, int w, int h, uint32_t rgb, uint32_t a)
 {
-    for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++)
-        for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++)
+    FRAME_CLIP(x, y, w, h, x0, y0, x1, y1);
+    for (int j = y0; j < y1; j++)
+        for (int i = x0; i < x1; i++)
         {
-            uint32_t *d = &screen[j * SCREEN_W + i];
+            uint32_t *d = &screen[j * FRAME_W + i];
             *d = blend_px(*d, rgb, a);
         }
 }

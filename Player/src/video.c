@@ -122,14 +122,14 @@ void video_update(double ms)
 void video_draw(uint32_t *pixels)
 {
     if (!v.on) return;
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++) pixels[i] = 0xFF000000u;
+    for (int i = 0; i < FRAME_PIXELS; i++) pixels[i] = 0xFF000000u;
     if (!v.haveFrame) return;
-    double scale = (double)SCREEN_W / v.w < (double)SCREEN_H / v.h ? (double)SCREEN_W / v.w : (double)SCREEN_H / v.h;
-    int dw = (int)(v.w * scale), dh = (int)(v.h * scale), ox = (SCREEN_W - dw) / 2, oy = (SCREEN_H - dh) / 2;
+    double scale = (double)FRAME_W / v.w < (double)FRAME_H / v.h ? (double)FRAME_W / v.w : (double)FRAME_H / v.h;
+    int dw = (int)(v.w * scale), dh = (int)(v.h * scale), ox = (FRAME_W - dw) / 2, oy = (FRAME_H - dh) / 2;
     for (int y = 0; y < dh; y++)
     {
         const uint32_t *row = v.frame + (size_t)(y * v.h / dh) * v.w;
-        uint32_t *dst = pixels + (size_t)(oy + y) * SCREEN_W + ox;
+        uint32_t *dst = pixels + (size_t)(oy + y) * FRAME_W + ox;
         for (int x = 0; x < dw; x++) dst[x] = row[x * v.w / dw];
     }
 }

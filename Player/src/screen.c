@@ -99,7 +99,7 @@ static void cover(uint32_t *pixels, uint32_t rgb, double opacity)
     int a = (int)(opacity * 255 + 0.5);
     if (a <= 0) return;
     uint32_t k = (uint32_t)(255 - a), r = ((rgb >> 16) & 255) * (uint32_t)a, g = ((rgb >> 8) & 255) * (uint32_t)a, b = (rgb & 255) * (uint32_t)a;
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++)
+    for (int i = 0; i < FRAME_PIXELS; i++)
     {
         uint32_t c = pixels[i];
         pixels[i] = 0xFF000000u | (div255(((c >> 16) & 255) * k + r) << 16) | (div255(((c >> 8) & 255) * k + g) << 8) | div255((c & 255) * k + b);
@@ -126,8 +126,13 @@ void screen_draw(uint32_t *pixels, uint32_t now)
                 if (sx < 0 || sx >= SCREEN_W) continue;
                 uint32_t c = pic->pixels[y * pic->width + x], a = ((c >> 24) * (uint32_t)a0) / 255;
                 if (!a) continue;
-                uint32_t *d = &pixels[sy * SCREEN_W + sx], k = 255 - a;
-                *d = 0xFF000000u | (div255(((*d >> 16) & 255) * k + ((c >> 16) & 255) * a) << 16) | (div255(((*d >> 8) & 255) * k + ((c >> 8) & 255) * a) << 8) | div255((*d & 255) * k + (c & 255) * a);
+                uint32_t k = 255 - a;
+                for (int by = 0; by < frame_scale; by++)
+                    for (int bx = 0; bx < frame_scale; bx++)
+                    {
+                        uint32_t *d = &pixels[(sy * frame_scale + by) * FRAME_W + sx * frame_scale + bx];
+                        *d = 0xFF000000u | (div255(((*d >> 16) & 255) * k + ((c >> 16) & 255) * a) << 16) | (div255(((*d >> 8) & 255) * k + ((c >> 8) & 255) * a) << 8) | div255((*d & 255) * k + (c & 255) * a);
+                    }
             }
         }
     }
@@ -139,13 +144,16 @@ void screen_draw(uint32_t *pixels, uint32_t now)
 void screen_shake_apply(uint32_t *pixels)
 {
     if (!shakeX && !shakeY) return;
-    static uint32_t copy[SCREEN_W * SCREEN_H];
-    memcpy(copy, pixels, sizeof copy);
-    for (int y = 0; y < SCREEN_H; y++)
-        for (int x = 0; x < SCREEN_W; x++)
+    static uint32_t *copy;
+    if (!copy) copy = (uint32_t *)malloc(sizeof(uint32_t) * FRAME_PIXELS);
+    if (!copy) return;
+    memcpy(copy, pixels, sizeof(uint32_t) * FRAME_PIXELS);
+    const int moveX = shakeX * frame_scale, moveY = shakeY * frame_scale;
+    for (int y = 0; y < FRAME_H; y++)
+        for (int x = 0; x < FRAME_W; x++)
         {
-            int fx = x - shakeX, fy = y - shakeY;
-            pixels[y * SCREEN_W + x] = fx >= 0 && fy >= 0 && fx < SCREEN_W && fy < SCREEN_H ? copy[fy * SCREEN_W + fx] : 0xFF000000u;
+            int fx = x - moveX, fy = y - moveY;
+            pixels[y * FRAME_W + x] = fx >= 0 && fy >= 0 && fx < FRAME_W && fy < FRAME_H ? copy[fy * FRAME_W + fx] : 0xFF000000u;
         }
 }
 

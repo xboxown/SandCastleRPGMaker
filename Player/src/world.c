@@ -982,28 +982,34 @@ uint32_t world_shade_colour(uint32_t c) { return shadeOn ? shade_px(c) : c; }
 static void blit_box(const Picture *p, int x, int y, int bw, int bh)
 {
     if (!p || p->width <= 0 || p->height <= 0) return;
+    /* in the picture's own pixels from here: art finer than 320 x 200 keeps all of them on a HIRES machine */
+    x *= frame_scale; y *= frame_scale; bw *= frame_scale; bh *= frame_scale;
     double s = fmin((double)bw / p->width, (double)bh / p->height);
     int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5);
     int ox = x + (bw - dw) / 2, oy = y + (bh - dh) / 2;
     /* clipped to the screen once: the columns and rows of it that show */
-    int i0 = ox < 0 ? -ox : 0, i1 = ox + dw > SCREEN_W ? SCREEN_W - ox : dw;
-    int j0 = oy < 0 ? -oy : 0, j1 = oy + dh > SCREEN_H ? SCREEN_H - oy : dh;
+    int i0 = ox < 0 ? -ox : 0, i1 = ox + dw > FRAME_W ? FRAME_W - ox : dw;
+    int j0 = oy < 0 ? -oy : 0, j1 = oy + dh > FRAME_H ? FRAME_H - oy : dh;
     if (i0 >= i1 || j0 >= j1) return;
     int same = dw == p->width && dh == p->height;
     const uint32_t *src = blitShading && shadeOn ? shaded_pixels(p) : p->pixels;
     if (same && p->opaque && !blitMirror && blitOpacity >= 255)
     {
-        for (int j = j0; j < j1; j++) memcpy(&screen[(oy + j) * SCREEN_W + ox + i0], src + (size_t)j * (size_t)p->width + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); /* a whole tile: its rows as they are */
+        for (int j = j0; j < j1; j++) memcpy(&screen[(oy + j) * FRAME_W + ox + i0], src + (size_t)j * (size_t)p->width + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); /* a whole tile: its rows as they are */
         return;
     }
     uint32_t stepX = ((uint32_t)p->width << 16) / (uint32_t)dw, stepY = ((uint32_t)p->height << 16) / (uint32_t)dh;
     uint32_t op = (uint32_t)blitOpacity, op1 = op + (op >> 7);
+    const int wholeRows = p->opaque && op >= 255; /* nothing under it shows: a row repeated is the row before, copied */
+    int lastRow = -1;
     for (int j = j0; j < j1; j++)
     {
         int sj = same ? j : (int)(((uint32_t)j * stepY) >> 16);
         if (sj >= p->height) sj = p->height - 1;
         const uint32_t *row = src + (size_t)sj * (size_t)p->width;
-        uint32_t *d = &screen[(oy + j) * SCREEN_W + ox];
+        uint32_t *d = &screen[(oy + j) * FRAME_W + ox];
+        if (wholeRows && sj == lastRow) { memcpy(d + i0, d - FRAME_W + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); continue; }
+        lastRow = sj;
         for (int i = i0; i < i1; i++)
         {
             int ci = blitMirror ? dw - 1 - i : i;
@@ -1216,9 +1222,9 @@ void world_draw(uint32_t *pixels, uint32_t ms)
     if (wraps && h > SCREEN_H) { if (cy < 0) { ay1 = (int)-cy; shiftY = h; } else if (cy + SCREEN_H > h) { ay0 = (int)(h - cy); ay1 = SCREEN_H; shiftY = -h; } }
     if (ax1 <= ax0 && ay1 <= ay0) { draw_world_once(pixels, ms); return; }
     static uint32_t *across; /* the gaps, drawn first (the world's own drawing last: what's clicked and outlined is its) */
-    if (!across) across = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    if (!across) across = (uint32_t *)malloc(sizeof(uint32_t) * FRAME_PIXELS);
     static uint32_t *scratch;
-    if (!scratch) scratch = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    if (!scratch) scratch = (uint32_t *)malloc(sizeof(uint32_t) * FRAME_PIXELS);
     if (!across || !scratch) { draw_world_once(pixels, ms); return; }
     double keepX = cameraX, keepY = cameraY;
     struct { int x0, x1, y0, y1; double sx, sy; } gaps[3] = {
@@ -1230,13 +1236,13 @@ void world_draw(uint32_t *pixels, uint32_t ms)
         if (gaps[g].x1 <= gaps[g].x0 || gaps[g].y1 <= gaps[g].y0) continue;
         cameraX = keepX + gaps[g].sx; cameraY = keepY + gaps[g].sy;
         draw_world_once(scratch, ms);
-        for (int y = gaps[g].y0; y < gaps[g].y1; y++) memcpy(across + y * SCREEN_W + gaps[g].x0, scratch + y * SCREEN_W + gaps[g].x0, sizeof(uint32_t) * (size_t)(gaps[g].x1 - gaps[g].x0));
+        for (int y = gaps[g].y0 * frame_scale; y < gaps[g].y1 * frame_scale; y++) memcpy(across + y * FRAME_W + gaps[g].x0 * frame_scale, scratch + y * FRAME_W + gaps[g].x0 * frame_scale, sizeof(uint32_t) * (size_t)((gaps[g].x1 - gaps[g].x0) * frame_scale));
     }
     cameraX = keepX; cameraY = keepY;
     draw_world_once(pixels, ms);
     for (int g = 0; g < 3; g++)
-        for (int y = gaps[g].y0; y < gaps[g].y1; y++)
-            if (gaps[g].x1 > gaps[g].x0) memcpy(pixels + y * SCREEN_W + gaps[g].x0, across + y * SCREEN_W + gaps[g].x0, sizeof(uint32_t) * (size_t)(gaps[g].x1 - gaps[g].x0));
+        for (int y = gaps[g].y0 * frame_scale; y < gaps[g].y1 * frame_scale; y++)
+            if (gaps[g].x1 > gaps[g].x0) memcpy(pixels + y * FRAME_W + gaps[g].x0 * frame_scale, across + y * FRAME_W + gaps[g].x0 * frame_scale, sizeof(uint32_t) * (size_t)((gaps[g].x1 - gaps[g].x0) * frame_scale));
     screen = pixels;
 }
 
@@ -1244,7 +1250,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
     uint32_t black = world_shade_colour(0xFF000000u);
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++) pixels[i] = black;
+    for (int i = 0; i < FRAME_PIXELS; i++) pixels[i] = black;
     blitShading = 1;
     int cx = (int)floor(cameraX), cy = (int)floor(cameraY);
     int ceiling = ceiling_over_player();
@@ -3129,7 +3135,7 @@ static void draw_hit_outline(uint32_t *pixels)
             {
                 if (SOLID(x, y) || !(SOLID(x - 1, y) || SOLID(x + 1, y) || SOLID(x, y - 1) || SOLID(x, y + 1))) continue;
                 int sx = ox + x, sy = oy + y;
-                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = 0xFFE01010u;
+                frame_dot(pixels, sx, sy, 0xFFE01010u);
             }
 #undef SOLID
     }
@@ -4190,7 +4196,7 @@ static void draw_status_outlines(uint32_t *pixels)
             {
                 if (SOLID(x, y) || !(SOLID(x - 1, y) || SOLID(x + 1, y) || SOLID(x, y - 1) || SOLID(x, y + 1))) continue;
                 int sx = ox + x, sy = oy + y;
-                if (sx >= 0 && sy >= 0 && sx < SCREEN_W && sy < SCREEN_H) pixels[sy * SCREEN_W + sx] = world_shade_colour(colour); /* under the sky's light too */
+                frame_dot(pixels, sx, sy, world_shade_colour(colour)); /* under the sky's light too */
             }
 #undef SOLID
     }

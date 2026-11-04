@@ -25,14 +25,29 @@ internal static class PlayerFontPack
     /// <summary>A book run's key in the archive: what PlayerBookText writes into the run and books.c asks for.</summary>
     public static string BookFontKey(string family, double size) => $"{family}|{Math.Round(size, 1).ToString(CultureInfo.InvariantCulture)}";
 
-    public static void Write(string folder, Guid id, IEnumerable<(string Family, double Size)> bookFonts, SpriteDatabase sprites)
+    /// <summary>A book's 700 x 400 canvas on the game's 320 x 200: a font this much smaller, as the Windows engine fits a book to the view.</summary>
+    private const double BookCanvasToScreen = 320.0 / 700.0;
+    /// <summary>The picture's own fineness on a HIRES machine (Player/src/platform.h): a font is drawn for each, its pixels the picture's.</summary>
+    private static readonly int[] HiresDensities = { 2, 3, 4 };
+
+    /// <param name="hires">For MorphOS: drawn for its finer picture, true to the book's own sizes. Otherwise (the Amiga 68k): for 320 x 200, kept readable there.</param>
+    public static void Write(string folder, Guid id, IEnumerable<(string Family, double Size)> bookFonts, SpriteDatabase sprites, bool hires)
     {
         var files = new List<(string Name, byte[] Data)>();
-        foreach (var (family, size) in bookFonts.Distinct())
-            AddFont(files, BookFontKey(family, size), family, Math.Max(SmallestPixels, Math.Round(size * BookSizeToPixels)));
-        foreach (string name in new[] { SpriteDatabase.InGameFontName, SpriteDatabase.DialogFontName })
-            if (sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.FontsGroupName)?.Sprites.FirstOrDefault(s => s.Name == name) is not { Frames.Count: > 0 })
-                AddFont(files, name, FallbackFamily, FallbackPixels);
+        var fonts = bookFonts.Distinct().ToList();
+        var fallbacks = new[] { SpriteDatabase.InGameFontName, SpriteDatabase.DialogFontName }
+            .Where(name => sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.FontsGroupName)?.Sprites.FirstOrDefault(s => s.Name == name) is not { Frames.Count: > 0 }).ToList();
+        if (hires)
+            foreach (int density in HiresDensities)
+            {
+                foreach (var (family, size) in fonts) AddFont(files, $"{BookFontKey(family, size)}@{density}", family, Math.Max(density * 4, Math.Round(size * BookCanvasToScreen * density)));
+                foreach (string name in fallbacks) AddFont(files, $"{name}@{density}", FallbackFamily, FallbackPixels * density);
+            }
+        else
+        {
+            foreach (var (family, size) in fonts) AddFont(files, BookFontKey(family, size), family, Math.Max(SmallestPixels, Math.Round(size * BookSizeToPixels)));
+            foreach (string name in fallbacks) AddFont(files, name, FallbackFamily, FallbackPixels);
+        }
         string path = Path.Combine(folder, "fonts.sdbx");
         if (files.Count == 0) { File.Delete(path); return; }
         PlayerPack.WriteArchive(path, id, files, null);

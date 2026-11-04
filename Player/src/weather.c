@@ -182,10 +182,21 @@ void weather_draw_clouds(uint32_t *pixels)
         for (int y = y0; y < y1; y++)
         {
             const unsigned char *m = c->mask + y * w;
-            uint32_t *d = &pixels[(oy + y) * SCREEN_W + ox];
-            for (int x = x0; x < x1; x++) if (m[x]) d[x] = blend_px(d[x], shadow, m[x]);
+            for (int by = 0; by < frame_scale; by++)
+            {
+                uint32_t *d = &pixels[((oy + y) * frame_scale + by) * FRAME_W + ox * frame_scale];
+                for (int x = x0; x < x1; x++)
+                    if (m[x]) for (int bx = 0; bx < frame_scale; bx++) { uint32_t *q = &d[x * frame_scale + bx]; *q = blend_px(*q, shadow, m[x]); }
+            }
         }
     }
+}
+
+/* One of the game's pixels, blended: a block of the picture's. */
+static void blend_block(uint32_t *pixels, int x, int y, uint32_t colour, int a)
+{
+    for (int by = 0; by < frame_scale; by++)
+        for (int bx = 0; bx < frame_scale; bx++) blend(&pixels[(y * frame_scale + by) * FRAME_W + x * frame_scale + bx], colour, a);
 }
 
 /* Rain, snow, hail - and a lightning flash - over the world. */
@@ -203,7 +214,7 @@ void weather_draw(uint32_t *pixels)
                     for (int xx = 0; xx < 2; xx++)
                     {
                         int x = (int)p->x + xx, y = (int)p->y + yy;
-                        if (x >= 0 && y >= 0 && x < SCREEN_W && y < SCREEN_H) blend(&pixels[y * SCREEN_W + x], colour, a);
+                        if (x >= 0 && y >= 0 && x < SCREEN_W && y < SCREEN_H) blend_block(pixels, x, y, colour, a);
                     }
                 continue;
             }
@@ -213,7 +224,7 @@ void weather_draw(uint32_t *pixels)
             for (int k = 0; k <= steps; k++)
             {
                 int x = (int)(p->x + (x2 - p->x) * k / steps), y = (int)(p->y + (y2 - p->y) * k / steps);
-                if (x >= 0 && y >= 0 && x < SCREEN_W && y < SCREEN_H) blend(&pixels[y * SCREEN_W + x], 0xA8B8D8, 170);
+                if (x >= 0 && y >= 0 && x < SCREEN_W && y < SCREEN_H) blend_block(pixels, x, y, 0xA8B8D8, 170);
             }
         }
     if (flashMs >= 0)
@@ -221,7 +232,7 @@ void weather_draw(uint32_t *pixels)
         /* the flash: 0.85 at 40 ms, 0.2 at 120, 0.6 at 170, gone at 520 */
         double t = flashMs, o = t < 40 ? 0.85 * t / 40 : t < 120 ? 0.85 + (0.2 - 0.85) * (t - 40) / 80 : t < 170 ? 0.2 + 0.4 * (t - 120) / 50 : 0.6 * (1 - (t - 170) / 350);
         int a = (int)(o * 255);
-        if (a > 0) for (int i = 0; i < SCREEN_W * SCREEN_H; i++) blend(&pixels[i], 0xFFFFFF, a);
+        if (a > 0) for (int i = 0; i < FRAME_PIXELS; i++) blend(&pixels[i], 0xFFFFFF, a);
     }
 }
 

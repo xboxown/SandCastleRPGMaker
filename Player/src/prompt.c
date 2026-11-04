@@ -89,7 +89,7 @@ static void box(int *x, int *y, int *w, int *h)
 
 static void fill(uint32_t *px, int x, int y, int w, int h, uint32_t c)
 {
-    for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++) for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++) px[j * SCREEN_W + i] = c;
+    frame_fill(px, x, y, w, h, c);
 }
 
 int prompt_click(int mx, int my, uint32_t now)

@@ -26,6 +26,9 @@ int font_line_count(const Font *font, const char *text, int width);
 int font_block_width(const Font *font, const char *text, int width);
 int font_draw_block(const Font *font, uint32_t *pixels, int x, int y, const char *text, int width, uint32_t colour);
 
+/* Into the picture itself, at (x, y) in the game's pixels: each font pixel a scale x scale block, wrapped to a width (0: none). Its height. */
+int font_draw_frame(const Font *font, uint32_t *pixels, int x, int y, const char *text, uint32_t colour, int scale, int width);
+
 /* Word-wrapped into lines no wider than width ('\n' breaks a line); returns how many lines; their starts and lengths go into starts/lengths (up to max). */
 int font_wrap(const Font *font, const char *text, int width, int max, const char **starts, int *lengths);
 

@@ -283,10 +283,11 @@ void gumps_open_map_container(int uid)
 static void fill(uint32_t *pixels, int x, int y, int w, int h, uint32_t c)
 {
     uint32_t a = c >> 24;
-    for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++)
-        for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++)
+    FRAME_CLIP(x, y, w, h, x0, y0, x1, y1);
+    for (int j = y0; j < y1; j++)
+        for (int i = x0; i < x1; i++)
         {
-            uint32_t *d = &pixels[j * SCREEN_W + i];
+            uint32_t *d = &pixels[j * FRAME_W + i];
             uint32_t r = div255(((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)), gg = div255(((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)), b = div255((c & 255) * a + (*d & 255) * (255 - a));
             *d = 0xFF000000u | (r << 16) | (gg << 8) | b;
         }
@@ -305,7 +306,7 @@ static void draw_readout(uint32_t *pixels, const Gump *g, cJSON *r, const char *
     if (align == 1) x -= w / 2; else if (align == 2) x -= w;
     const char *tint = str(r, "Tint");
     uint32_t colour = tint[0] == '#' && strlen(tint) >= 7 ? 0xFF000000u | (uint32_t)strtoul(tint + (strlen(tint) >= 9 ? 3 : 1), NULL, 16) : 0;
-    font_draw_into(f, pixels, SCREEN_W, SCREEN_H, x, y, text, colour, scale, 0);
+    font_draw_frame(f, pixels, x, y, text, colour, scale, 0);
 }
 
 static int being_dragged(const Item *it) { return dragging && pressed.item == it; }
@@ -1489,9 +1490,8 @@ static void draw_gauge(uint32_t *pixels, int x, int y, cJSON *g, int kind, doubl
                 double angle = atan2(dx, -dy); /* clockwise from the top */
                 if (angle < 0) angle += 2 * 3.14159265358979;
                 int px = x + i, py = y + j;
-                if (px < 0 || py < 0 || px >= SCREEN_W || py >= SCREEN_H) continue;
                 uint32_t c = angle <= fraction * 2 * 3.14159265358979 ? fillc : back;
-                if (c >> 24) pixels[py * SCREEN_W + px] = c | 0xFF000000u;
+                if (c >> 24) frame_dot(pixels, px, py, c | 0xFF000000u);
             }
         return;
     }
@@ -1618,6 +1618,5 @@ void gumps_draw_pointer(uint32_t *pixels, uint32_t ms)
     const Sprite *s = pointer_sprite(kind);
     const Picture *pic = s ? sprite_picture_at(s, ms) : NULL;
     if (pic) { sprite_frame_sound(s, ms); world_blit(pixels, pic, mouseX - s->originX, mouseY - s->originY, w, h); return; }
-    for (int y = mouseY; y < mouseY + h && y < SCREEN_H; y++)
-        for (int x = mouseX; x < mouseX + w && x < SCREEN_W; x++) pixels[y * SCREEN_W + x] = 0xFF000000u;
+    frame_fill(pixels, mouseX, mouseY, w, h, 0xFF000000u);
 }

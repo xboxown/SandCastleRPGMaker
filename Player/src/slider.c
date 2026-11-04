@@ -56,11 +56,16 @@ static uint32_t *px;
 static void blend(int x, int y, uint32_t c)
 {
     if (x < 0 || y < 0 || x >= SCREEN_W || y >= SCREEN_H) return;
-    uint32_t a = c >> 24, *d = &px[y * SCREEN_W + x];
+    uint32_t a = c >> 24;
     if (!a) return;
-    if (a == 255) { *d = c; return; }
-    uint32_t r = (((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255, g = (((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255, b = ((c & 255) * a + (*d & 255) * (255 - a)) / 255;
-    *d = 0xFF000000u | (r << 16) | (g << 8) | b;
+    for (int by = 0; by < frame_scale; by++)
+        for (int bx = 0; bx < frame_scale; bx++)
+        {
+            uint32_t *d = &px[(y * frame_scale + by) * FRAME_W + x * frame_scale + bx];
+            if (a == 255) { *d = c; continue; }
+            uint32_t r = (((c >> 16) & 255) * a + ((*d >> 16) & 255) * (255 - a)) / 255, g = (((c >> 8) & 255) * a + ((*d >> 8) & 255) * (255 - a)) / 255, b = ((c & 255) * a + (*d & 255) * (255 - a)) / 255;
+            *d = 0xFF000000u | (r << 16) | (g << 8) | b;
+        }
 }
 
 static void picture(const Picture *p, int x, int y)

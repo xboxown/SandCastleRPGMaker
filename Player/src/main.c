@@ -41,7 +41,7 @@
 
 double sc_strtod(const char *text, char **end);
 
-static uint32_t pixels[SCREEN_W * SCREEN_H];
+static uint32_t *pixels; /* FRAME_W x FRAME_H, once the display is open */
 void main_take_screenshot(void) { save_take_screenshot(pixels); }
 
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
@@ -127,14 +127,14 @@ static void save_bmp(const char *path)
     FILE *f = fopen(path, "wb");
     if (!f) return;
     unsigned char h[54] = { 'B', 'M' };
-    int size = 54 + SCREEN_W * SCREEN_H * 3;
+    int size = 54 + FRAME_W * FRAME_H * 3;
     h[2] = size & 255; h[3] = (size >> 8) & 255; h[4] = (size >> 16) & 255; h[5] = (size >> 24) & 255;
-    h[10] = 54; h[14] = 40; h[18] = SCREEN_W & 255; h[19] = SCREEN_W >> 8; h[22] = SCREEN_H & 255; h[23] = SCREEN_H >> 8; h[26] = 1; h[28] = 24;
+    h[10] = 54; h[14] = 40; h[18] = FRAME_W & 255; h[19] = FRAME_W >> 8; h[22] = FRAME_H & 255; h[23] = FRAME_H >> 8; h[26] = 1; h[28] = 24;
     fwrite(h, 1, 54, f);
-    for (int y = SCREEN_H - 1; y >= 0; y--)
-        for (int x = 0; x < SCREEN_W; x++)
+    for (int y = FRAME_H - 1; y >= 0; y--)
+        for (int x = 0; x < FRAME_W; x++)
         {
-            uint32_t c = pixels[y * SCREEN_W + x];
+            uint32_t c = pixels[y * FRAME_W + x];
             unsigned char px[3] = { c & 255, (c >> 8) & 255, (c >> 16) & 255 };
             fwrite(px, 1, 3, f);
         }
@@ -407,6 +407,7 @@ int main(int argc, char **argv)
     cJSON *display = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Display");
     cJSON *mode = cJSON_GetObjectItem(display, "Mode");
     int fullScreen = cJSON_IsNumber(mode) && mode->valueint == 1 && !forceWindow;
+    { cJSON *windowScale = cJSON_GetObjectItem(display, "WindowScale"); platform_want_window_scale(cJSON_IsNumber(windowScale) ? windowScale->valueint : 2); }
     if (!platform_open(world_title()[0] ? world_title() : "Game", fullScreen))
     {
         char text[400];
@@ -416,6 +417,8 @@ int main(int argc, char **argv)
         platform_message("Game", text);
         return 1;
     }
+    pixels = (uint32_t *)calloc((size_t)FRAME_PIXELS, sizeof(uint32_t));
+    if (!pixels) { platform_message("Game", "There isn't enough memory for the picture."); return 1; }
     note("Window open. Starting.");
     save_init(folder); /* the saves: beside the game */
     snprintf(gameFolder, sizeof gameFolder, "%s", folder);
@@ -517,7 +520,7 @@ int main(int argc, char **argv)
         if (presses) scripted_presses(presses, (now - start) / 1000.0, &pressedTill);
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
         {
-            if (dolls_title_open()) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+            if (dolls_title_open()) memset(pixels, 0, sizeof(uint32_t) * FRAME_PIXELS);
             else
             {
                 world_draw(pixels, now);
@@ -615,7 +618,7 @@ int main(int argc, char **argv)
         if (gumps_save_screen_wanted() && !dolls_title_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); } /* the paperdoll's disk */
         if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
         timing(2);
-        if (title) memset(pixels, 0, sizeof(uint32_t) * SCREEN_W * SCREEN_H); /* the world isn't seen behind the title */
+        if (title) memset(pixels, 0, sizeof(uint32_t) * FRAME_PIXELS); /* the world isn't seen behind the title */
         else
         {
             world_draw(pixels, worldMs);

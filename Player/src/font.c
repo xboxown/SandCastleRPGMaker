@@ -12,7 +12,13 @@ struct Font
     char name[96];
     Glyph glyphs[95];
     int cellHeight, spaceWidth, builtIn;
+    /* Drawn at Build for a picture this many times finer than the game's 320 x 200 (fonts.sdbx on a HIRES machine): its sizes are
+       in those fine pixels, and one of its pixels is one of the picture's. A sprite font: 1, its pixels are the game's, in blocks. */
+    int density;
 };
+
+/* A height or a width in the font's pixels, in the game's. */
+#define LOGICAL(f, v) (((v) + (f)->density - 1) / (f)->density)
 
 #define MAX_FONTS 32
 static Font fonts[MAX_FONTS]; /* the game's fonts, a language's ones, those of fonts.sdbx */
@@ -67,6 +73,7 @@ static Picture builtInPictures[95];
 static void make_built_in(Font *f)
 {
     f->builtIn = 1;
+    f->density = 1;
     f->cellHeight = 10; /* DialogBoxBuilder.FallbackLineHeight */
     f->spaceWidth = 3;
     for (int i = 0; i < 95; i++)
@@ -103,12 +110,16 @@ Font *font_get(const char *name)
     Font *f = &fonts[fontCount++];
     memset(f, 0, sizeof *f);
     strncpy(f->name, name, sizeof f->name - 1);
+    f->density = 1;
     const Sprite *sprite = sprite_find("Fonts", name);
+    char fileName[128];
+    snprintf(fileName, sizeof fileName, "%s", name);
+    if (frame_scale > 1 && !(sprite && sprite->frameCount)) { snprintf(fileName, sizeof fileName, "%s@%d", name, frame_scale); f->density = frame_scale; } /* fonts.sdbx: drawn for this picture's own pixels */
     int inkTotal = 0, inkCount = 0, maxCell = 0, any = 0;
     int drawn = sprite ? sprite->frameCount : 0; /* no sprite font drawn: fonts.sdbx may have it */
     for (int i = 0; i < (drawn ? drawn : 95) && i < 95; i++)
     {
-        const Picture *p = drawn ? frame_picture(&sprite->frames[i]) : font_file_glyph(name, i);
+        const Picture *p = drawn ? frame_picture(&sprite->frames[i]) : font_file_glyph(fileName, i);
         if (!p) continue;
         any = 1;
         if (p->height > f->cellHeight) f->cellHeight = p->height;
@@ -127,7 +138,7 @@ Font *font_get(const char *name)
         f->glyphs[i] = (Glyph){ p, left, width, width + (transparent && width > 0 ? 1 : 0) };
         if (width > 0 && transparent && i != 0) { inkTotal += width; inkCount++; }
     }
-    if (!any || f->cellHeight == 0) { make_built_in(f); return f; }
+    if (!any || f->cellHeight == 0) { f->density = 1; make_built_in(f); return f; }
     f->spaceWidth = f->glyphs[0].width > 0 ? f->glyphs[0].advance
         : (int)((inkCount ? (double)inkTotal / inkCount : maxCell / 2.0) * 0.6 + 0.5) + 1;
     if (f->spaceWidth < 2) f->spaceWidth = 2;
@@ -152,42 +163,67 @@ static int advance_of(const Font *f, char c)
     return g ? g->advance : f->spaceWidth;
 }
 
-int font_line_height(const Font *f) { return f->cellHeight; }
+int font_line_height(const Font *f) { return LOGICAL(f, f->cellHeight); }
 
-int font_space_width(const Font *f) { return f->spaceWidth; }
+int font_space_width(const Font *f) { return LOGICAL(f, f->spaceWidth); }
 
 int font_text_width(const Font *f, const char *text)
 {
     int w = 0;
     for (; *text && *text != '\n'; text++) w += advance_of(f, *text);
-    return w;
+    return LOGICAL(f, w);
 }
 
-void font_draw(const Font *f, uint32_t *pixels, int x, int y, const char *text, uint32_t colour)
+/* Into the picture, at (x, y) in the game's pixels: each pixel of the font a block of "scale" of the game's (a font drawn for this picture: a pixel of it, times scale). */
+static void draw_line_in_frame(const Font *f, uint32_t *pixels, int x, int y, const char *text, int length, uint32_t colour, int scale)
 {
-    for (; *text && *text != '\n'; text++)
+    const int block = scale * frame_scale / f->density, fw = FRAME_W, fh = FRAME_H;
+    int cx = x * frame_scale;
+    const int cy = y * frame_scale;
+    for (int k = 0; k < length; k++)
     {
-        const Glyph *g = *text == ' ' || *text == '\t' ? NULL : glyph_of(f, *text);
+        char ch = text[k];
+        const Glyph *g = ch == ' ' || ch == '\t' ? NULL : glyph_of(f, ch);
         if (g && g->picture)
         {
             const Picture *p = g->picture;
             for (int j = 0; j < p->height; j++)
             {
-                int sy = y + j + (f->cellHeight - p->height);
-                if (sy < 0 || sy >= SCREEN_H) continue;
+                int sy = cy + (j + f->cellHeight - p->height) * block;
+                if (sy + block <= 0 || sy >= fh) continue;
                 for (int i = 0; i < g->width; i++)
                 {
-                    int sx = x + i;
-                    if (sx < 0 || sx >= SCREEN_W) continue;
                     uint32_t c = p->pixels[j * p->width + g->left + i];
-                    uint32_t a = c >> 24;
-                    if (a < 128) continue;
-                    pixels[sy * SCREEN_W + sx] = colour ? (colour | 0xFF000000u) : (c | 0xFF000000u);
+                    if ((c >> 24) < 128) continue;
+                    uint32_t out = colour ? (colour | 0xFF000000u) : (c | 0xFF000000u);
+                    int sx = cx + i * block;
+                    for (int dy = 0; dy < block; dy++)
+                    {
+                        int py = sy + dy;
+                        if (py < 0 || py >= fh) continue;
+                        for (int dx = 0; dx < block; dx++) { int px = sx + dx; if (px >= 0 && px < fw) pixels[py * fw + px] = out; }
+                    }
                 }
             }
         }
-        x += advance_of(f, *text);
+        cx += advance_of(f, ch) * block;
     }
+}
+
+void font_draw(const Font *f, uint32_t *pixels, int x, int y, const char *text, uint32_t colour)
+{
+    draw_line_in_frame(f, pixels, x, y, text, (int)strcspn(text, "\n"), colour, 1);
+}
+
+/* font_draw_into for the picture itself: at (x, y) in the game's pixels, wrapped to a width in them (0: none). Returns its height in them. */
+int font_draw_frame(const Font *f, uint32_t *pixels, int x, int y, const char *text, uint32_t colour, int scale, int width)
+{
+    if (scale < 1) scale = 1;
+    const char *s[64]; int l[64];
+    int n = width > 0 ? font_wrap(f, text, width / scale, 64, s, l) : 1;
+    if (width <= 0) { s[0] = text; l[0] = (int)strcspn(text, "\n"); }
+    for (int line = 0; line < n && line < 64; line++) draw_line_in_frame(f, pixels, x, y + line * LOGICAL(f, f->cellHeight) * scale, s[line], l[line], colour, scale);
+    return n * LOGICAL(f, f->cellHeight) * scale;
 }
 
 /* SpriteFont.Wrap: a word, or a run of spaces, is placed as one piece; spaces starting a wrapped line are dropped and
@@ -212,6 +248,7 @@ static void wrap_append(Wrapping *g, int k)
 
 int font_wrap(const Font *f, const char *text, int width, int max, const char **starts, int *lengths)
 {
+    width *= f->density; /* in the font's pixels */
     Wrapping g = { f, text, text, starts, lengths, 0, 0, 0, max };
     int i = 0;
     while (text[i])
@@ -252,7 +289,7 @@ int font_block_width(const Font *f, const char *text, int width)
         for (int k = 0; k < l[i]; k++) w += advance_of(f, s[i][k]);
         if (w > best) best = w;
     }
-    return best;
+    return LOGICAL(f, best);
 }
 
 /* Draws text wrapped to a width, line under line from (x, y); returns its height. */
@@ -264,9 +301,9 @@ int font_draw_block(const Font *f, uint32_t *pixels, int x, int y, const char *t
     {
         char line[512];
         snprintf(line, sizeof line, "%.*s", l[i], s[i]);
-        font_draw(f, pixels, x, y + i * f->cellHeight, line, colour);
+        font_draw(f, pixels, x, y + i * LOGICAL(f, f->cellHeight), line, colour);
     }
-    return n * f->cellHeight;
+    return n * LOGICAL(f, f->cellHeight);
 }
 
 /* Into any picture (a paperdoll drawn at its own size): text wrapped to a width (0: no wrapping), each glyph pixel a scale x scale block, tinted (0: its own colours). Returns its height. */
@@ -276,9 +313,10 @@ int font_draw_into(const Font *f, uint32_t *buf, int bw, int bh, int x, int y, c
     const char *s[64]; int l[64];
     int n = width > 0 ? font_wrap(f, text, width / scale, 64, s, l) : 1;
     if (width <= 0) { s[0] = text; l[0] = (int)strcspn(text, "\n"); }
+    const int step = f->density; /* a font drawn finer than this picture: every "density"th of its pixels */
     for (int line = 0; line < n && line < 64; line++)
     {
-        int cx = x, cy = y + line * f->cellHeight * scale;
+        int cx = x, cy = y + line * LOGICAL(f, f->cellHeight) * scale;
         for (int k = 0; k < l[line]; k++)
         {
             char ch = s[line][k];
@@ -286,22 +324,22 @@ int font_draw_into(const Font *f, uint32_t *buf, int bw, int bh, int x, int y, c
             if (g && g->picture)
             {
                 const Picture *p = g->picture;
-                for (int j = 0; j < p->height; j++)
-                    for (int i = 0; i < g->width; i++)
+                for (int j = 0; j < p->height; j += step)
+                    for (int i = 0; i < g->width; i += step)
                     {
                         uint32_t c = p->pixels[j * p->width + g->left + i];
                         if ((c >> 24) < 128) continue;
                         uint32_t out = colour ? (colour | 0xFF000000u) : (c | 0xFF000000u);
                         for (int dy = 0; dy < scale; dy++)
                         {
-                            int py = cy + (j + (f->cellHeight - p->height)) * scale + dy;
+                            int py = cy + (j + (f->cellHeight - p->height)) / step * scale + dy;
                             if (py < 0 || py >= bh) continue;
-                            for (int dx = 0; dx < scale; dx++) { int px = cx + i * scale + dx; if (px >= 0 && px < bw) buf[py * bw + px] = out; }
+                            for (int dx = 0; dx < scale; dx++) { int px = cx + i / step * scale + dx; if (px >= 0 && px < bw) buf[py * bw + px] = out; }
                         }
                     }
             }
-            cx += advance_of(f, ch) * scale;
+            cx += LOGICAL(f, advance_of(f, ch)) * scale;
         }
     }
-    return n * f->cellHeight * scale;
+    return n * LOGICAL(f, f->cellHeight) * scale;
 }

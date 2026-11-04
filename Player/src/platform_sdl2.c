@@ -5,6 +5,7 @@
  */
 #include "platform.h"
 #include <errno.h>
+#include <stdlib.h>
 #include <SDL.h>
 
 static SDL_Window *window;
@@ -14,6 +15,12 @@ static char error_text[256];
 
 const char *platform_error(void) { return error_text; }
 
+#ifdef HIRES
+int frame_scale = 1;
+#endif
+static int wantScale = 2;
+void platform_want_window_scale(int scale) { wantScale = scale; }
+
 int platform_open(const char *title, int fullscreen)
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_EVENTS | SDL_INIT_AUDIO) != 0)
@@ -22,15 +29,20 @@ int platform_open(const char *title, int fullscreen)
         return 0;
     }
     SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, "nearest");
+#ifdef HIRES
+    if (getenv("PLAYER_SCALE")) frame_scale = atoi(getenv("PLAYER_SCALE")); /* testing: the picture this fine */
+    else frame_scale = wantScale;
+    if (frame_scale < 1) frame_scale = 1; else if (frame_scale > 4) frame_scale = 4;
+#endif
     window = SDL_CreateWindow(title, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, SCREEN_W * 3, SCREEN_H * 3,
                               SDL_WINDOW_RESIZABLE | (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
     if (!window) { SDL_snprintf(error_text, sizeof error_text, "No window: %s", SDL_GetError()); return 0; }
     renderer = SDL_CreateRenderer(window, -1, SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) renderer = SDL_CreateRenderer(window, -1, 0);
     if (!renderer) { SDL_snprintf(error_text, sizeof error_text, "No renderer: %s", SDL_GetError()); return 0; }
-    SDL_RenderSetLogicalSize(renderer, SCREEN_W, SCREEN_H);
+    SDL_RenderSetLogicalSize(renderer, FRAME_W, FRAME_H);
     SDL_ShowCursor(SDL_DISABLE); /* the game draws its own pointer */
-    frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, SCREEN_W, SCREEN_H);
+    frame = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STREAMING, FRAME_W, FRAME_H);
     if (!frame) { SDL_snprintf(error_text, sizeof error_text, "No texture: %s", SDL_GetError()); return 0; }
     return 1;
 }
@@ -97,13 +109,13 @@ int platform_poll(PlatformEvent *event)
             case SDL_MOUSEBUTTONUP:
                 event->type = e.type == SDL_MOUSEBUTTONDOWN ? EV_MOUSE_DOWN : EV_MOUSE_UP;
                 event->button = e.button.button == SDL_BUTTON_RIGHT ? 2 : 1;
-                event->mouseX = e.button.x; event->mouseY = e.button.y; /* logical size: already in game pixels */
+                event->mouseX = e.button.x / frame_scale; event->mouseY = e.button.y / frame_scale; /* logical size: in the picture's pixels */
                 return 1;
             case SDL_TEXTINPUT:
                 if ((unsigned char)e.text.text[0] < 32 || (unsigned char)e.text.text[0] > 126) break; /* letters typed (a paperdoll's text box) */
                 event->type = EV_TEXT; event->ch = e.text.text[0]; return 1;
             case SDL_MOUSEMOTION:
-                event->type = EV_MOUSE_MOVE; event->mouseX = e.motion.x; event->mouseY = e.motion.y; return 1;
+                event->type = EV_MOUSE_MOVE; event->mouseX = e.motion.x / frame_scale; event->mouseY = e.motion.y / frame_scale; return 1;
             default: break;
         }
     }
@@ -112,7 +124,7 @@ int platform_poll(PlatformEvent *event)
 
 void platform_present(const uint32_t *pixels)
 {
-    SDL_UpdateTexture(frame, NULL, pixels, SCREEN_W * 4);
+    SDL_UpdateTexture(frame, NULL, pixels, FRAME_W * 4);
     SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
     SDL_RenderClear(renderer);
     SDL_RenderCopy(renderer, frame, NULL, NULL);

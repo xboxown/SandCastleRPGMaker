@@ -14,6 +14,32 @@
 #define SCREEN_W 320
 #define SCREEN_H 200
 
+/* The picture itself: the game still thinks in those 320 x 200, but on a machine built with HIRES (MorphOS) each of them is
+   frame_scale pixels across, so art finer than 320 x 200 keeps all its pixels, as the Windows engine draws it. On the
+   Amiga 68k it is simply 1, at compile time: the same code, not a cycle slower. */
+#ifdef HIRES
+extern int frame_scale;
+#else
+#define frame_scale 1
+#endif
+#define FRAME_W (SCREEN_W * frame_scale)
+#define FRAME_H (SCREEN_H * frame_scale)
+#define FRAME_PIXELS (FRAME_W * FRAME_H)
+
+/* A rectangle in the game's 320 x 200, clipped, as rows in the picture. */
+#define FRAME_CLIP(x, y, w, h, x0, y0, x1, y1) \
+    int x0 = (x) < 0 ? 0 : (x) * frame_scale, y0 = (y) < 0 ? 0 : (y) * frame_scale, \
+        x1 = (x) + (w) >= SCREEN_W ? FRAME_W : ((x) + (w)) * frame_scale, y1 = (y) + (h) >= SCREEN_H ? FRAME_H : ((y) + (h)) * frame_scale
+
+static inline void frame_fill(uint32_t *p, int x, int y, int w, int h, uint32_t c)
+{
+    FRAME_CLIP(x, y, w, h, x0, y0, x1, y1);
+    for (int j = y0; j < y1; j++) for (int i = x0; i < x1; i++) p[j * FRAME_W + i] = c;
+}
+
+/* One of the game's pixels: a block of the picture's. */
+static inline void frame_dot(uint32_t *p, int x, int y, uint32_t c) { if (x >= 0 && y >= 0 && x < SCREEN_W && y < SCREEN_H) frame_fill(p, x, y, 1, 1, c); }
+
 enum PlatformKey
 {
     KEY_NONE, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_ESCAPE, KEY_ENTER, KEY_SPACE, KEY_F11, KEY_TAB, KEY_PAGEUP, KEY_PAGEDOWN,
@@ -29,6 +55,9 @@ typedef struct PlatformEvent
     int ch;               /* EV_TEXT: the character typed (printable ASCII) */
 } PlatformEvent;
 
+/* The window's size the project asks for (System Settings > Game Window): 2 to 6 times 320 x 200. Before platform_open. */
+void platform_want_window_scale(int scale);
+
 /* Opens the game's window (or screen) titled so; 0 on failure (the reason in platform_error()). */
 int platform_open(const char *title, int fullscreen);
 void platform_close(void);
@@ -37,7 +66,7 @@ const char *platform_error(void);
 /* The next thing that happened (0 when there's nothing left this frame). */
 int platform_poll(PlatformEvent *event);
 
-/* Shows the 320 x 200 frame, scaled to the window. */
+/* Shows the frame (FRAME_W x FRAME_H), scaled to the window. */
 void platform_present(const uint32_t *pixels);
 
 /* Milliseconds since some fixed moment. */

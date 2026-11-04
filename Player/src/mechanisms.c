@@ -626,8 +626,8 @@ static void draw_map(uint32_t *pixels)
     for (int k = -2; k <= 2; k++)
     {
         int x = view.markX + k, y = view.markY + k;
-        if (x >= 0 && x < SCREEN_W && view.markY >= 0 && view.markY < SCREEN_H) pixels[view.markY * SCREEN_W + x] = 0xFFFF0000u;
-        if (y >= 0 && y < SCREEN_H && view.markX >= 0 && view.markX < SCREEN_W) pixels[y * SCREEN_W + view.markX] = 0xFFFF0000u;
+        frame_dot(pixels, x, view.markY, 0xFFFF0000u);
+        frame_dot(pixels, view.markX, y, 0xFFFF0000u);
     }
 }
 
@@ -951,7 +951,7 @@ int mechanisms_key(int key)
 
 static void fill_rect(uint32_t *p, int x, int y, int w, int h, uint32_t c)
 {
-    for (int j = y < 0 ? 0 : y; j < y + h && j < SCREEN_H; j++) for (int i = x < 0 ? 0 : x; i < x + w && i < SCREEN_W; i++) p[j * SCREEN_W + i] = c;
+    frame_fill(p, x, y, w, h, c);
 }
 
 
@@ -1220,7 +1220,7 @@ static void draw_sleep(uint32_t *p)
     double t = sleep.ms / 1200.0;
     int a = (int)((sleep.phase == 1 ? t : 1 - t) * 255);
     if (a <= 0) return;
-    for (int i = 0; i < SCREEN_W * SCREEN_H; i++)
+    for (int i = 0; i < FRAME_PIXELS; i++)
     {
         uint32_t c = p[i];
         uint32_t r = ((c >> 16) & 255) * (255 - (uint32_t)a) / 255, g = ((c >> 8) & 255) * (255 - (uint32_t)a) / 255, b = (c & 255) * (255 - (uint32_t)a) / 255;

@@ -48,6 +48,17 @@ int platform_ctrl_held(void) { return (heldQualifier & IEQUALIFIER_CONTROL) != 0
 /* How the 320 x 200 frame is shown: doubled (640 x 400, a window or a screen that size) or as it is (a 320 x 200 / 320 x 240
    full screen), at (offX, offY) - a 240-line screen has it in the middle. */
 static int scale = 2, offX, offY;
+#ifdef HIRES
+/* MorphOS: the picture itself is fine enough (frame_scale x 320 x 200), shown pixel for pixel. Chosen once, as the display first opens. */
+int frame_scale = 1;
+#define MOST_FRAME_SCALE 4
+#define BIGGEST_SHOW 1
+static int frameChosen;
+#else
+#define BIGGEST_SHOW 2
+#endif
+static int wantWindowScale = 2;
+void platform_want_window_scale(int s) { wantWindowScale = s; }
 /* The display's own pixel format: each frame is made in it (doubled as it goes) and handed over with no conversion left
    to do (RECTFMT_RAW). rawOk: 1 it works, 0 it doesn't (the frame given as ARGB, converted by the card's software), -1 not tried. */
 static ULONG pixFmt;
@@ -69,6 +80,7 @@ static struct timerequest *timerRequest;
 static struct MsgPort *timerPort;
 static struct EClockVal startClock;
 static ULONG eclockRate;
+static ULONG *row;              /* one row in the display's format */
 static ULONG *scaled;           /* the frame doubled: 640 x 400, 0xAARRGGBB */
 static int fullscreen;
 static char title[128];
@@ -116,6 +128,33 @@ static int open_display(void)
 {
     scale = 2; offX = offY = 0;
     int sw = SCREEN_W * 2, sh = SCREEN_H * 2;
+#ifdef HIRES
+    /* As fine as the display allows: the Workbench's own screen mode when full screen, the project's window size in a window. */
+    scale = 1;
+    int deskW = 1024, deskH = 768;
+    struct Screen *desk = LockPubScreen(NULL);
+    if (desk) { deskW = desk->Width; deskH = desk->Height; UnlockPubScreen(NULL, desk); }
+    if (!frameChosen)
+    {
+        int fit = deskW / SCREEN_W < deskH / SCREEN_H ? deskW / SCREEN_W : deskH / SCREEN_H;
+        int inWindow = (deskH - 40) / SCREEN_H < deskW / SCREEN_W ? (deskH - 40) / SCREEN_H : deskW / SCREEN_W; /* room for its title bar */
+        frame_scale = fullscreen ? fit : (wantWindowScale < inWindow ? wantWindowScale : inWindow);
+        if (frame_scale > MOST_FRAME_SCALE) frame_scale = MOST_FRAME_SCALE;
+        if (frame_scale < 1) frame_scale = 1;
+        frameChosen = 1;
+    }
+    sw = FRAME_W; sh = FRAME_H;
+    if (fullscreen && deskW >= FRAME_W && deskH >= FRAME_H)
+    {
+        ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, deskW, CYBRBIDTG_NominalHeight, deskH, CYBRBIDTG_Depth, 32, TAG_DONE);
+        if (mode == INVALID_ID) mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, deskW, CYBRBIDTG_NominalHeight, deskH, CYBRBIDTG_Depth, 16, TAG_DONE);
+        if (mode != INVALID_ID && IsCyberModeID(mode))
+            screen = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, deskW, SA_Height, deskH, SA_Depth, GetCyberIDAttr(CYBRIDATTR_DEPTH, mode),
+                                    SA_Title, (ULONG)title, SA_ShowTitle, FALSE, SA_Quiet, TRUE, SA_Type, CUSTOMSCREEN, TAG_DONE);
+        if (screen) { sw = deskW; sh = deskH; offX = (deskW - FRAME_W) / 2; offY = (deskH - FRAME_H) / 2; }
+    }
+    if (!screen) fullscreen = 0;
+#else
     if (fullscreen)
     {
         /* a 320 x 200 or 320 x 240 RTG mode: the frame needs no doubling (a quarter of the pixels to hand over); else 640 x 400 / 480 */
@@ -131,12 +170,13 @@ static int open_display(void)
         }
         if (!screen) fullscreen = 0; /* no RTG mode that size: a window on the Workbench instead */
     }
+#endif
     if (screen)
         window = OpenWindowTags(NULL, WA_CustomScreen, (ULONG)screen, WA_Left, 0, WA_Top, 0, WA_Width, sw, WA_Height, sh,
                                 WA_Borderless, TRUE, WA_Backdrop, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE,
                                 WA_IDCMP, IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
     else
-        window = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_InnerWidth, SCREEN_W * 2, WA_InnerHeight, SCREEN_H * 2,
+        window = OpenWindowTags(NULL, WA_Title, (ULONG)title, WA_InnerWidth, sw, WA_InnerHeight, sh,
                                 WA_DragBar, TRUE, WA_DepthGadget, TRUE, WA_CloseGadget, TRUE, WA_Activate, TRUE, WA_RMBTrap, TRUE, WA_ReportMouse, TRUE,
                                 WA_IDCMP, IDCMP_CLOSEWINDOW | IDCMP_RAWKEY | IDCMP_MOUSEBUTTONS | IDCMP_MOUSEMOVE | IDCMP_ACTIVEWINDOW | IDCMP_INACTIVEWINDOW, TAG_DONE);
     if (!window) { snprintf(error_text, sizeof error_text, "The game's window couldn't open (an RTG Workbench in 15, 16, 24 or 32 bits is needed)."); return 0; }
@@ -145,7 +185,7 @@ static int open_display(void)
     pixFmt = GetCyberMapAttr(window->RPort->BitMap, CYBRMATTR_PIXFMT);
     rawOk = -1;
     if (screen) { ScreenToFront(screen); ActivateWindow(window); FillPixelArray(window->RPort, 0, 0, window->Width, window->Height, 0x000000); } /* in front, and black round the frame (a 240-line screen) */
-    { char line[120]; snprintf(line, sizeof line, "Display: %s, %d x %d, pixel format %lu.", screen ? "full screen" : "a window", SCREEN_W * scale, SCREEN_H * scale, (unsigned long)pixFmt); game_log(line); }
+    { char line[120]; snprintf(line, sizeof line, "Display: %s, %d x %d, pixel format %lu.", screen ? "full screen" : "a window", FRAME_W * scale, FRAME_H * scale, (unsigned long)pixFmt); game_log(line); }
     windowActive = 1;
     return 1;
 }
@@ -170,19 +210,23 @@ int platform_open(const char *gameTitle, int wantFullscreen)
     if (!timerRequest || OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_ECLOCK, (struct IORequest *)timerRequest, 0) != 0) { snprintf(error_text, sizeof error_text, "timer.device couldn't open."); return 0; }
     TimerBase = (void *)timerRequest->tr_node.io_Device;
     eclockRate = ReadEClock(&startClock);
-    scaled = (ULONG *)AllocVec(SCREEN_W * 2 * SCREEN_H * 2 * 4, MEMF_ANY);
-    if (!scaled) { snprintf(error_text, sizeof error_text, "Not enough memory for the picture."); return 0; }
     fullscreen = wantFullscreen;
     inputPort = CreateMsgPort();
     inputRequest = inputPort ? (struct IOStdReq *)CreateIORequest(inputPort, sizeof(struct IOStdReq)) : NULL;
     inputOpen = inputRequest && OpenDevice((CONST_STRPTR)"input.device", 0, (struct IORequest *)inputRequest, 0) == 0;
-    return open_display();
+    if (!open_display()) return 0;
+    scaled = (ULONG *)AllocVec(FRAME_W * BIGGEST_SHOW * FRAME_H * BIGGEST_SHOW * 4, MEMF_ANY);
+    row = (ULONG *)AllocVec(FRAME_W * BIGGEST_SHOW * 4, MEMF_ANY);
+    if (!scaled || !row) { snprintf(error_text, sizeof error_text, "Not enough memory for the picture."); return 0; }
+    return 1;
 }
 
 void platform_close(void)
 {
     close_display();
     if (scaled) FreeVec(scaled);
+    if (row) FreeVec(row);
+    scaled = row = NULL;
     if (blankPointer) { FreeMem(blankPointer, BLANK_POINTER_BYTES); blankPointer = NULL; }
     if (inputOpen) CloseDevice((struct IORequest *)inputRequest);
     if (inputRequest) DeleteIORequest((struct IORequest *)inputRequest);
@@ -252,8 +296,8 @@ int platform_poll(PlatformEvent *event)
         int mx = m->MouseX - (screen ? offX : window->BorderLeft), my = m->MouseY - (screen ? offY : window->BorderTop);
         ReplyMsg((struct Message *)m);
         event->type = EV_NONE;
-        event->mouseX = mx / scale;
-        event->mouseY = my / scale;
+        event->mouseX = mx / (scale * frame_scale);
+        event->mouseY = my / (scale * frame_scale);
         switch (cls)
         {
             case IDCMP_CLOSEWINDOW: event->type = EV_QUIT; return 1;
@@ -274,9 +318,9 @@ int platform_poll(PlatformEvent *event)
             case IDCMP_MOUSEMOVE:
                 if (mouseLocked && windowActive)
                 {
-                    int w = SCREEN_W * scale, h = SCREEN_H * scale;
+                    int w = FRAME_W * scale, h = FRAME_H * scale;
                     int cx = mx < 0 ? 0 : mx >= w ? w - 1 : mx, cy = my < 0 ? 0 : my >= h ? h - 1 : my;
-                    if (cx != mx || cy != my) { warp_mouse(cx, cy); mx = cx; my = cy; event->mouseX = mx / scale; event->mouseY = my / scale; }
+                    if (cx != mx || cy != my) { warp_mouse(cx, cy); mx = cx; my = cy; event->mouseX = mx / (scale * frame_scale); event->mouseY = my / (scale * frame_scale); }
                 }
                 lastMoveX = event->mouseX; lastMoveY = event->mouseY;
                 event->type = EV_MOUSE_MOVE; return 1;
@@ -285,7 +329,7 @@ int platform_poll(PlatformEvent *event)
     /* Where the mouse is now, from the window itself: if a move's message never came (a heavy frame, MorphOS's window), the pointer still follows. */
     if (window && windowActive)
     {
-        int x = (window->MouseX - (screen ? offX : window->BorderLeft)) / scale, y = (window->MouseY - (screen ? offY : window->BorderTop)) / scale;
+        int x = (window->MouseX - (screen ? offX : window->BorderLeft)) / (scale * frame_scale), y = (window->MouseY - (screen ? offY : window->BorderTop)) / (scale * frame_scale);
         if (x != lastMoveX || y != lastMoveY)
         {
             lastMoveX = x; lastMoveY = y;
@@ -333,44 +377,44 @@ static void native_row(const uint32_t *src, void *out, int bytes)
         {
             ULONG *a = (ULONG *)out;
             if (fmt == PIXFMT_RGB16) /* Vampire SAGA, many cards: big-endian 5-6-5 */
-                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (v << 16) | v; }
+                for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (v << 16) | v; }
             else if (fmt == PIXFMT_RGB16PC) /* most Picasso96 cards: little-endian 5-6-5 */
-                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); v = ((v >> 8) | (v << 8)) & 0xFFFF; a[x] = (v << 16) | v; }
+                for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); v = ((v >> 8) | (v << 8)) & 0xFFFF; a[x] = (v << 16) | v; }
             else
-                for (int x = 0; x < SCREEN_W; x++) { ULONG v = native_px(src[x], fmt); a[x] = (v << 16) | v; }
+                for (int x = 0; x < FRAME_W; x++) { ULONG v = native_px(src[x], fmt); a[x] = (v << 16) | v; }
         }
         else
         {
             UWORD *a = (UWORD *)out;
             if (fmt == PIXFMT_RGB16)
-                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[x] = (UWORD)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F)); }
+                for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x]; a[x] = (UWORD)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F)); }
             else if (fmt == PIXFMT_RGB16PC)
-                for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (UWORD)((v >> 8) | (v << 8)); }
+                for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x], v = ((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F); a[x] = (UWORD)((v >> 8) | (v << 8)); }
             else
-                for (int x = 0; x < SCREEN_W; x++) a[x] = (UWORD)native_px(src[x], fmt);
+                for (int x = 0; x < FRAME_W; x++) a[x] = (UWORD)native_px(src[x], fmt);
         }
         return;
     }
     ULONG *a = (ULONG *)out;
     if (scale == 2)
     {
-        if (fmt == PIXFMT_ARGB32) for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
-        else if (fmt == PIXFMT_BGRA32) for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; c = ((c & 0xFF) << 24) | ((c & 0xFF00) << 8) | ((c >> 8) & 0xFF00) | 0xFF; a[2 * x] = a[2 * x + 1] = c; }
-        else for (int x = 0; x < SCREEN_W; x++) { ULONG c = native_px(src[x], fmt); a[2 * x] = a[2 * x + 1] = c; }
+        if (fmt == PIXFMT_ARGB32) for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
+        else if (fmt == PIXFMT_BGRA32) for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x]; c = ((c & 0xFF) << 24) | ((c & 0xFF00) << 8) | ((c >> 8) & 0xFF00) | 0xFF; a[2 * x] = a[2 * x + 1] = c; }
+        else for (int x = 0; x < FRAME_W; x++) { ULONG c = native_px(src[x], fmt); a[2 * x] = a[2 * x + 1] = c; }
     }
-    else if (fmt == PIXFMT_ARGB32) memcpy(a, src, SCREEN_W * 4);
-    else for (int x = 0; x < SCREEN_W; x++) a[x] = native_px(src[x], fmt);
+    else if (fmt == PIXFMT_ARGB32) memcpy(a, src, FRAME_W * 4);
+    else for (int x = 0; x < FRAME_W; x++) a[x] = native_px(src[x], fmt);
 }
 
 /* The frame made in the display's format (doubled when scale is 2) into "scaled"; its bytes a row. */
 static int make_native(const uint32_t *pixels, int bytes)
 {
-    const int rowBytes = SCREEN_W * scale * bytes;
+    const int rowBytes = FRAME_W * scale * bytes;
     UBYTE *out = (UBYTE *)scaled;
-    for (int y = 0; y < SCREEN_H; y++)
+    for (int y = 0; y < FRAME_H; y++)
     {
         UBYTE *a = out + (size_t)(y * scale) * rowBytes;
-        native_row(pixels + y * SCREEN_W, a, bytes);
+        native_row(pixels + y * FRAME_W, a, bytes);
         if (scale == 2) memcpy(a + rowBytes, a, rowBytes);
     }
     return rowBytes;
@@ -393,7 +437,7 @@ static int write_direct(const uint32_t *pixels, int bytes)
 #define CR_OBSCURED(c) ((c)->obscured != 0) /* the 3.x NDK's name for it */
 #endif
         int whole = cr && !cr->Next && !CR_OBSCURED(cr) && cr->bounds.MinX <= x0 && cr->bounds.MinY <= y0
-                    && cr->bounds.MaxX >= x0 + SCREEN_W * scale - 1 && cr->bounds.MaxY >= y0 + SCREEN_H * scale - 1;
+                    && cr->bounds.MaxX >= x0 + FRAME_W * scale - 1 && cr->bounds.MaxY >= y0 + FRAME_H * scale - 1;
         if (!whole) { UnlockLayer(layer); return 0; }
     }
     else { x0 = offX; y0 = offY; }
@@ -405,12 +449,11 @@ static int write_direct(const uint32_t *pixels, int bytes)
         if (!screen) UnlockLayer(layer);
         return 0;
     }
-    static ULONG row[SCREEN_W * 2];
-    const int rowBytes = SCREEN_W * scale * bytes;
+    const int rowBytes = FRAME_W * scale * bytes;
     UBYTE *to = (UBYTE *)base + (size_t)y0 * perRow + (size_t)x0 * bytes;
-    for (int y = 0; y < SCREEN_H; y++)
+    for (int y = 0; y < FRAME_H; y++)
     {
-        native_row(pixels + y * SCREEN_W, row, bytes);
+        native_row(pixels + y * FRAME_W, row, bytes);
         memcpy(to, row, rowBytes); to += perRow;
         if (scale == 2) { memcpy(to, row, rowBytes); to += perRow; }
     }
@@ -439,7 +482,7 @@ static int raw_works(int bytes)
 void platform_present(const uint32_t *pixels)
 {
     if (!window) return;
-    const int w = SCREEN_W * scale, h = SCREEN_H * scale;
+    const int w = FRAME_W * scale, h = FRAME_H * scale;
     int x0 = screen ? offX : window->BorderLeft, y0 = screen ? offY : window->BorderTop;
     int bytes = fmt_bytes(pixFmt);
     if (bytes && write_direct(pixels, bytes)) { static int said; if (!said) { said = 1; game_log("Display: frames written straight into its memory."); } return; }
@@ -451,12 +494,12 @@ void platform_present(const uint32_t *pixels)
         return;
     }
     /* any other display: the frame as ARGB (doubled when it must be), converted by the card's software */
-    if (scale == 1) { WritePixelArray((APTR)pixels, 0, 0, SCREEN_W * 4, window->RPort, x0, y0, w, h, RECTFMT_ARGB); return; }
-    for (int y = 0; y < SCREEN_H; y++)
+    if (scale == 1) { WritePixelArray((APTR)pixels, 0, 0, FRAME_W * 4, window->RPort, x0, y0, w, h, RECTFMT_ARGB); return; }
+    for (int y = 0; y < FRAME_H; y++)
     {
         ULONG *a = scaled + (y * 2) * w, *b = a + w;
-        const uint32_t *src = pixels + y * SCREEN_W;
-        for (int x = 0; x < SCREEN_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
+        const uint32_t *src = pixels + y * FRAME_W;
+        for (int x = 0; x < FRAME_W; x++) { ULONG c = src[x]; a[2 * x] = a[2 * x + 1] = c; }
         memcpy(b, a, w * 4);
     }
     WritePixelArray(scaled, 0, 0, w * 4, window->RPort, x0, y0, w, h, RECTFMT_ARGB);
