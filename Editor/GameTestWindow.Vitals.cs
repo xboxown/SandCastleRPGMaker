@@ -451,6 +451,7 @@ public partial class GameTestWindow
         WhoChoice.Player => _player,
         WhoChoice.Activator => _activator?.Character ?? _player,
         _ => _mapCharacters.FirstOrDefault(mc => mc.Character.Id.ToString() == who)?.Character
+             ?? (_player is { } p && p.Id.ToString() == who ? p : null) // the main character named by itself, not as Main Player
     };
 
     private bool ChangeFoodCommand(string who, string operation, int amount)
