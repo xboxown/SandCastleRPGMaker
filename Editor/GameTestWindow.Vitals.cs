@@ -194,6 +194,9 @@ public partial class GameTestWindow
         mapCharacter.Npc.WalkingToSchedule = false;
         mapCharacter.Npc.Activity = null;
         mapCharacter.Npc.InCombat = false;
+        var (burstX, burstY) = PixelOf(character);
+        int burstLift = LiftOf(character);
+        BurstOnDeath(character, burstX, burstY, burstLift); // its pieces fly (their .Burst.cs); the body stays
         LeaveBody(mapCharacter); // Exult: out of the world, a body (its Body pose) holding all it carried where it fell
         MaybeGetBackUp(character); // some rise again (their .Toughness.cs)
         StatusText.Text = $"{character.Name} has died ({cause}).";
@@ -203,6 +206,7 @@ public partial class GameTestWindow
 
     private void UpdateVitals(double elapsedMs, int hourChanges)
     {
+        UpdateHurled(elapsedMs); // what flies and bounces (their .Burst.cs)
         UpdateAmbient(); // the sound of the time of day (GameTestWindow.Ambient.cs)
         if (_gameOver) return;
         UpdateRising(elapsedMs); // the dead who get back up (their .Toughness.cs)

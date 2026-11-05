@@ -177,6 +177,47 @@ public partial class CharacterEditorWindow
         }
         getsUpBox.Children.Add(staysDead);
         HealthPanel.Children.Add(getsUpBox);
+        // ---------- Bursting on death ----------
+        HealthPanel.Children.Add(Heading("Bursting on death"));
+        HealthPanel.Children.Add(new TextBlock { Text = "When it dies its body stays as always (opened, looted, carried if it isn't too heavy). These Junk objects also fly out round it and bounce, and lie where they stop.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) });
+        var pieceList = new StackPanel();
+        var junk = (ProjectSession.ObjectsProvider?.Invoke()?.Objects ?? new List<WorldObject>()).Where(o => o.Type == ObjectType.Junk).OrderBy(o => o.Name).ToList();
+        void ShowPieces()
+        {
+            pieceList.Children.Clear();
+            foreach (var piece in character.DeathPieces.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+                var which = new ComboBox { Width = 180, ItemsSource = junk, DisplayMemberPath = "Name", SelectedItem = junk.FirstOrDefault(o => o.Id == piece.ObjectId) };
+                which.SelectionChanged += (_, _) => { if (which.SelectedItem is WorldObject o) piece.ObjectId = o.Id; };
+                row.Children.Add(which);
+                var count = new TextBox { Width = 40, Margin = new Thickness(6, 0, 0, 0), TextAlignment = TextAlignment.Right, Text = piece.Count.ToString() };
+                count.LostFocus += (_, _) => { if (int.TryParse(count.Text.Trim(), out int n)) piece.Count = Math.Clamp(n, 1, 50); count.Text = piece.Count.ToString(); };
+                row.Children.Add(count);
+                row.Children.Add(new TextBlock { Text = " of it", VerticalAlignment = VerticalAlignment.Center });
+                var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(6, 0, 0, 0) };
+                remove.Click += (_, _) => { character.DeathPieces.Remove(piece); ShowPieces(); };
+                row.Children.Add(remove);
+                pieceList.Children.Add(row);
+            }
+        }
+        ShowPieces();
+        HealthPanel.Children.Add(pieceList);
+        var addPiece = new Button { Content = junk.Count == 0 ? "Add a piece (make a Junk object first)" : "Add a piece", IsEnabled = junk.Count > 0, HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 2, 0, 4) };
+        addPiece.Click += (_, _) => { character.DeathPieces.Add(new DeathPiece { ObjectId = junk[0].Id, Count = 1 }); ShowPieces(); };
+        HealthPanel.Children.Add(addPiece);
+        if (ProjectSession.IsUltima8)
+        {
+            HealthPanel.Children.Add(Heading("Shield and surrender (Ultima 8)"));
+            HealthPanel.Children.Add(NumberRow("Energy shield:", () => character.U8ShieldPercent, v => character.U8ShieldPercent = Math.Clamp(v, 0, 100), "% of a blow taken from Mana (0: none)"));
+            HealthPanel.Children.Add(NumberRow("Surrenders below:", () => character.U8SurrenderPercent, v => character.U8SurrenderPercent = Math.Clamp(v, 0, 100), "% of its health (0: never)"));
+            var surrenderRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 3) };
+            surrenderRow.Children.Add(new TextBlock { Text = "Says when it does:", Width = 150, VerticalAlignment = VerticalAlignment.Center });
+            var surrenderWords = new TextBox { Width = 220, Text = character.U8SurrenderWords };
+            surrenderWords.LostFocus += (_, _) => character.U8SurrenderWords = surrenderWords.Text;
+            surrenderRow.Children.Add(surrenderWords);
+            HealthPanel.Children.Add(surrenderRow);
+        }
         var fooled = new CheckBox { Content = "Fooled by Feign Death (it leaves alone anyone feigning; Ultima 8: undead and demons)", IsChecked = character.FooledByFeignDeath, Margin = new Thickness(0, 4, 0, 0) };
         fooled.Checked += (_, _) => character.FooledByFeignDeath = true;
         fooled.Unchecked += (_, _) => character.FooledByFeignDeath = false;

@@ -494,9 +494,25 @@ public partial class U8GameWindow
     private void StrikeObject(ObjectInstance instance, WorldObject obj, int damage, MapCharacter? attacker = null, bool byPlayer = true)
     {
         var visual = VisualOf(instance);
+        FireObjectEvent(instance, obj, BookTriggerConditionBased.ByGotHit); // By Got Hit
         if (obj.Type == ObjectType.Explosive && obj.Explosive.ExplodesWhenStruck) { Explode(instance, obj, attacker is null && byPlayer); return; } // a struck powder keg goes off
         if (obj.Type == ObjectType.Window && instance.IsSpentRuntime) { ShowFloatingTextOver(visual, "no effect"); return; } // already broken
-        if (!IsBreakable(obj)) { ShowFloatingTextOver(visual, "no effect"); return; }
+        if (!IsBreakable(obj))
+        {
+            // Item::receiveHitU8: nothing special about it, so it's knocked flying - if it can be moved at all.
+            if (IsMovable(instance) && obj.Weight > 0 && MakeGifts(ReferencedItemCategory.Object, instance.ObjectId, Math.Max(1, instance.Quantity)).FirstOrDefault() is { } flown)
+            {
+                double fromX = attacker?.PixelX ?? _playerPixelX, fromY = attacker?.PixelY ?? _playerPixelY;
+                double atX = instance.X * _tileWidth + _tileWidth / 2.0, atY = instance.Y * _tileHeight + _tileHeight / 2.0, awayX = atX - fromX, awayY = atY - fromY, apart = Math.Max(1, Math.Sqrt(awayX * awayX + awayY * awayY));
+                int atLift = instance.Z;
+                RemoveMapObject(instance);
+                SettleWorld();
+                HurlThing(flown, atX, atY, atLift, awayX / apart * 90, awayY / apart * 90, 130);
+                return;
+            }
+            ShowFloatingTextOver(visual, "no effect");
+            return;
+        }
         if (obj.Defense > 0) damage -= 1 + Rng.Next(obj.Defense);
         if (damage <= 0) { ShowFloatingTextOver(visual, "no damage"); return; }
         if (instance.HitPointsRuntime < 0) instance.HitPointsRuntime = obj.HitPoints;

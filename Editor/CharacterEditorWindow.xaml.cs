@@ -791,6 +791,7 @@ public partial class CharacterEditorWindow : Window
             caps.Children.Add(NumberRow("Most Strength:", () => character.U8MaxStrength, v => character.U8MaxStrength = Math.Max(0, v), ""));
             caps.Children.Add(NumberRow("Most Dexterity:", () => character.U8MaxDexterity, v => character.U8MaxDexterity = Math.Max(0, v), ""));
             caps.Children.Add(NumberRow("Most Intelligence:", () => character.U8MaxIntelligence, v => character.U8MaxIntelligence = Math.Max(0, v), ""));
+            caps.Children.Add(NumberRow("Most Level:", () => character.LevelLock, v => { character.LevelLock = Math.Clamp(v, 0, LevelSettings.MaxMaxLevel); LevelLockBox.Text = character.LevelLock.ToString(); }, "0: no limit"));
             _levelTab.Content = caps;
             return;
         }

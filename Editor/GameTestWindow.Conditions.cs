@@ -146,6 +146,8 @@ public partial class GameTestWindow
             case GameConditionKind.ObjectsInArea:
             case GameConditionKind.ItemCharges:
                 return TestWorldCondition(c, who); // their .Toughness.cs
+            case GameConditionKind.WeightOnObject:
+                return _map.Objects.Where(o => o.ContainerInstanceId < 0 && c.Item is { ItemId: >= 0 } wanted && o.ObjectId == wanted.ItemId).Any(o => GameConditions.Compare(WeightOn(o), c.Comparison, c.Number));
             case GameConditionKind.Equipped:
                 return who is not null && EquippedItems(who).Any(i => IsItem(i, c.Item));
             case GameConditionKind.Unequipped:

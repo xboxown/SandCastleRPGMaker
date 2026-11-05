@@ -19,6 +19,7 @@ public partial class U8GameWindow
     private bool _objectOverlayTakesClicks;
     /// <summary>Keys for what's up (the slider's Left / Right / Enter / Escape); null: Escape, Enter or Space close it.</summary>
     private Func<System.Windows.Input.Key, bool>? _overlayKeys;
+    private Func<System.Windows.Input.Key, bool>? _overlayRawKeys;
 
     /// <summary>
     /// Ultima VII's number slider (System Settings > Slider; Exult's
@@ -69,6 +70,7 @@ public partial class U8GameWindow
         _objectOverlay = null;
         _objectOverlayOpen = false;
         _overlayKeys = null;
+        _overlayRawKeys = null;
         GameCanvas.Focus();
     }
 }

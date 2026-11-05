@@ -236,6 +236,7 @@ internal static class GameConditionFields
                 panel.Children.Add(lit);
                 break;
             }
+            case GameConditionKind.WeightOnObject: Item("The object (any placed copy of it)"); Compare("Weight on it"); break;
             case GameConditionKind.ItemCharges: Who("Who carries it"); Item("Item"); Compare("Charges"); break;
             case GameConditionKind.DoorOpen: Item("Door (a placed copy of it), or container (its window open)"); OnOff("Open", "Closed"); break;
         }

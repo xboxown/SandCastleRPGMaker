@@ -179,9 +179,13 @@ public partial class BookEventConditionsControl : UserControl
             [BookTriggerConditionBased.ByAilmentEffect] = "By Ailment Effect",
             [BookTriggerConditionBased.ByDeath] = "By Death"
         };
+        var triggers = CharacterTriggers.All.ToList();
+        if (ProjectSession.IsUltima8)
+            foreach (var (trigger, word) in new[] { (BookTriggerConditionBased.ByCast, "By Cast"), (BookTriggerConditionBased.ByEnterView, "By Coming Into View"), (BookTriggerConditionBased.ByLeaveView, "By Leaving View"), (BookTriggerConditionBased.ByStolen, "By Stolen From") })
+            { labels[trigger] = word; triggers.Add(trigger); }
         // Always first: a page that doesn't wait for one trigger - it runs whenever any of them happens (and its other conditions hold), as Always does for every other event.
         TriggerConditionBasedCombo.ItemsSource = new[] { EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(BookTriggerConditionBased.Always, "Always") }
-            .Concat(CharacterTriggers.All.Select(v => EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, labels[v]))).ToList();
+            .Concat(triggers.Select(v => EnumChoice<BookTriggerConditionBased>.WithExplicitLabel(v, labels[v]))).ToList();
         if (current.HasValue)
         {
             foreach (EnumChoice<BookTriggerConditionBased> item in TriggerConditionBasedCombo.Items)

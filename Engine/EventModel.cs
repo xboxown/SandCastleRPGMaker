@@ -126,7 +126,8 @@ public enum EventCommandType
     DeleteObjectSelf,
     FeignDeath, WithstandDeath, Changeling,
     FindObjectsInArea, DeleteObjectsInArea, ItemsInside, ItemCharges, HurtInArea,
-    U8BuildUpStat
+    U8BuildUpStat,
+    U8MovePlatform, U8WeightOn, U8FlipScreen, U8Speak, U8ReadingScreen, U8Keypad, U8Computer, U8Recharge, U8Alarm
 }
 
 /// <summary>

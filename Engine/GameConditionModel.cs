@@ -58,7 +58,9 @@ public enum GameConditionKind
     /// <summary>How many of an item lie within Number2 cells of Who, on their floor. On false: lit ones only.</summary>
     ObjectsInArea,
     /// <summary>The charges of an item Who carries.</summary>
-    ItemCharges
+    ItemCharges,
+    /// <summary>The weight on any placed copy of an object (a pressure plate).</summary>
+    WeightOnObject
 }
 
 /// <summary>One test, with whichever of its settings its kind uses.</summary>
@@ -137,6 +139,7 @@ public static class GameConditions
         GameConditionKind.EnemyNear => "Enemy nearby",
         GameConditionKind.ObjectsInArea => "Objects in an area",
         GameConditionKind.ItemCharges => "Charges of a carried item",
+        GameConditionKind.WeightOnObject => "Weight on an object (a pressure plate)",
         _ => kind.ToString()
     };
 

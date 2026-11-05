@@ -226,6 +226,7 @@ public partial class U8GameWindow
     private void CastSpell(CharacterDefinition caster, SpellDefinition spell, CharacterDefinition? castOn = null)
     {
         if (WhyCannotCast(caster, spell) is { } why) { StatusText.Text = why; return; }
+        FireCharacterEvent(caster, BookTriggerConditionBased.ByCast); // By Cast
         SetStat(caster, BuiltInStatKind.Mana, Stat(caster, BuiltInStatKind.Mana, 0) - spell.EffectiveManaCost);
         var carried = CarriedItems(caster);
         foreach (var reagent in spell.AllReagents()) TakeFrom(carried, reagent.ObjectId, Math.Max(1, reagent.Quantity));

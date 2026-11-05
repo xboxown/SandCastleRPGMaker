@@ -21,7 +21,9 @@ public enum Ailment
     /// <summary>Feign Death (Mask of Death): those fooled by it leave them be for a time. Not an ailment one can be immune to.</summary>
     FeignDeath = 128,
     /// <summary>Withstand Death: the next blow that would kill restores full health instead, once. Not an ailment one can be immune to.</summary>
-    WithstandDeath = 256
+    WithstandDeath = 256,
+    /// <summary>Ultima 8: it has given up (SurrenderProcess): it fights no more. Not an ailment one can be immune to.</summary>
+    Surrendered = 512
 }
 
 public static class Ailments
@@ -39,6 +41,7 @@ public static class Ailments
         Ailment.Protected => "Protected",
         Ailment.FeignDeath => "Playing dead",
         Ailment.WithstandDeath => "Protected from death",
+        Ailment.Surrendered => "Surrendered",
         _ => ailment.ToString()
     };
 

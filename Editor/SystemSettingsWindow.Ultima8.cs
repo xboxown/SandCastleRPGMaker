@@ -43,8 +43,22 @@ public partial class SystemSettingsWindow
         eat.Unchecked += (_, _) => u8.EatingAsUltima8 = false;
         panel.Children.Add(eat);
         panel.Children.Add(new TextBlock { Text = "The main character and the party regain 1 HP and 1 mana each real minute; hunger slowly builds and eating gives back HP. Off: Ultima 7's food rules.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(18, 2, 0, 4) });
+        panel.Children.Add(new TextBlock { Text = "Difficulty", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        panel.Children.Add(Words("The variable holding the level (empty: none)", () => u8.DifficultyVariable, v => u8.DifficultyVariable = v.Trim()));
+        panel.Children.Add(Words("% of a blow the party takes, for level 1, 2, 3...", () => u8.DifficultyPartyTakes, v => u8.DifficultyPartyTakes = v));
+        panel.Children.Add(Words("% of a blow others take, for level 1, 2, 3...", () => u8.DifficultyOthersTake, v => u8.DifficultyOthersTake = v));
         panel.Children.Add(BuildU8KeysSection(u8));
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+
+        static FrameworkElement Words(string label, Func<string> get, Action<string> set)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 14, 2) };
+            row.Children.Add(new TextBlock { Text = label + ":", VerticalAlignment = VerticalAlignment.Center, Width = 280 });
+            var box = new TextBox { Text = get(), Width = 160 };
+            box.LostFocus += (_, _) => set(box.Text);
+            row.Children.Add(box);
+            return row;
+        }
 
         static FrameworkElement Number(string label, Func<int> get, Action<int> set)
         {

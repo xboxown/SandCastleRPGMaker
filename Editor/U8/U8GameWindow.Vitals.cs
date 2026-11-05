@@ -77,6 +77,7 @@ public partial class U8GameWindow
         InitializeEventCommands(); // Give Item, Change Stat, Train... (U8GameWindow.EventCommands.cs)
         InitializeScripts(); // formulas, arrays, loops, Common Events... (U8GameWindow.Script.cs)
         InitializeActionCommands(); // Walk To Location, Sit, Open Door... (U8GameWindow.Actions.cs)
+        InitU8Extras(); // U8GameWindow.U8Extras.cs
         _execContext.OnCinema = (run, on) => { if (on) BeginCinema(run); else EndCinema(run); }; // U8GameWindow.Cinema.cs
         _execContext.OnRunEnded = ReleaseHeldBy; // U8GameWindow.Actions.cs
         WatchSounds();
@@ -197,6 +198,9 @@ public partial class U8GameWindow
         mapCharacter.Npc.WalkingToSchedule = false;
         mapCharacter.Npc.Activity = null;
         mapCharacter.Npc.InCombat = false;
+        var (burstX, burstY) = PixelOf(character);
+        int burstLift = LiftOf(character);
+        BurstOnDeath(character, burstX, burstY, burstLift); // its pieces fly (their .Burst.cs); the body stays
         LeaveBody(mapCharacter); // Exult: out of the world, a body (its Body pose) holding all it carried where it fell
         MaybeGetBackUp(character); // some rise again (their .Toughness.cs)
         StatusText.Text = $"{character.Name} has died ({cause}).";
@@ -206,6 +210,8 @@ public partial class U8GameWindow
 
     private void UpdateVitals(double elapsedMs, int hourChanges)
     {
+        UpdateHurled(elapsedMs); // what flies and bounces (their .Burst.cs)
+        UpdateViewEvents(elapsedMs); // By Coming Into View, By Leaving View (U8GameWindow.U8Extras.cs)
         UpdateAmbient(); // the sound of the time of day (U8GameWindow.Ambient.cs)
         if (_gameOver) return;
         UpdateRising(elapsedMs); // the dead who get back up (their .Toughness.cs)
@@ -296,7 +302,7 @@ public partial class U8GameWindow
 
     private bool Inflict(CharacterDefinition character, Ailment ailment)
     {
-        if (IsDead(character) || (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath) && character.Survival.Immunities.HasFlag(ailment))) return false;
+        if (IsDead(character) || (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath or Ailment.Surrendered) && character.Survival.Immunities.HasFlag(ailment))) return false;
         var vitals = VitalsOf(character);
         vitals.Ailments |= ailment;
         var s = character.Survival;
@@ -329,7 +335,7 @@ public partial class U8GameWindow
         if (ailment is Ailment.Asleep or Ailment.Paralyzed) StopActing(character, ailment == Ailment.Asleep);
         if (character == _player) StatusText.Text = $"You are {Ailments.Describe(ailment).ToLowerInvariant()}.";
         if (ailment == Ailment.Invisible) { StopAttackingInvisible(character); ShowInvisibility(character); }
-        if (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath)) FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
+        if (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath or Ailment.Surrendered)) FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
         return true;
     }
 

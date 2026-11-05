@@ -37,6 +37,15 @@ public class Ultima8Settings
     /// <summary>Eating and healing as Ultima 8: 1 HP and 1 mana a real minute, hunger builds, eating gives back HP. Off: Ultima 7's food.</summary>
     public bool EatingAsUltima8 { get; set; }
 
+    // ---------- Difficulty (Crusader's Item::scaleReceivedDamageCru) ----------
+
+    /// <summary>The variable that holds the level (1, 2, 3...); empty: no difficulty.</summary>
+    public string DifficultyVariable { get; set; } = string.Empty;
+    /// <summary>For level 1, 2, 3...: the % of a blow the main character and the party take.</summary>
+    public string DifficultyPartyTakes { get; set; } = "20, 33, 100, 100";
+    /// <summary>For level 1, 2, 3...: the % of a blow everyone else takes.</summary>
+    public string DifficultyOthersTake { get; set; } = "500, 300, 100, 100";
+
     // ---------- The keyboard (Engine/U8Keys.cs) ----------
 
     /// <summary>The keys the maker changed: action id -> key. An action not here has Ultima 8's own.</summary>

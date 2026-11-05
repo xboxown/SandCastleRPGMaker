@@ -979,6 +979,7 @@ public partial class ObjectEditorWindow : Window
         labels[BookTriggerConditionBased.ByCombineItem] = "By Item Combined To It";
         // Every object: something put down on top of it (or, a tile, on it) stays there and its event runs - a page can wait for one item only (Select Item).
         labels[BookTriggerConditionBased.ByDropItem] = type == ObjectType.Tile ? "By Item Dropped On It" : "By Item Dropped On It (put on top)";
+        if (ProjectSession.IsUltima8) { labels[BookTriggerConditionBased.ByLook] = "By Look (a single click)"; labels[BookTriggerConditionBased.ByGotHit] = "By Got Hit"; }
         if (type is ObjectType.Ammo or ObjectType.Projectile) labels[BookTriggerConditionBased.ByHitTarget] = "By Hitting Target (a character or an object)";
         return labels;
     }

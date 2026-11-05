@@ -153,6 +153,13 @@ public class CharacterDefinition
     public int U8MaxStrength { get; set; } = 25;
     public int U8MaxDexterity { get; set; } = 25;
     public int U8MaxIntelligence { get; set; } = 25;
+    /// <summary>Bursting on death: Junk objects thrown out round its body, which stays as always (Pentagram: MonsterInfo's explode).</summary>
+    public List<DeathPiece> DeathPieces { get; set; } = new();
+    /// <summary>Ultima 8 only: hurt below this % of its health, it gives up (SurrenderProcess). 0: never.</summary>
+    public int U8SurrenderPercent { get; set; }
+    public string U8SurrenderWords { get; set; } = string.Empty;
+    /// <summary>Ultima 8 only: this % of a blow comes off its Mana while it has any (MainActor's shields). 0: none.</summary>
+    public int U8ShieldPercent { get; set; }
     /// <summary>Feign Death fools it: it leaves alone anyone feigning (Pentagram: undead and demons).</summary>
     public bool FooledByFeignDeath { get; set; }
 
@@ -243,6 +250,12 @@ public class CharacterDatabase
 }
 
 /// <summary>Something a creature (not human) may leave in its body: an object, how many, and the chance (0-100) it's there.</summary>
+public class DeathPiece
+{
+    public int ObjectId { get; set; } = -1;
+    public int Count { get; set; } = 1;
+}
+
 public class DeathDrop
 {
     public int ObjectId { get; set; } = -1;

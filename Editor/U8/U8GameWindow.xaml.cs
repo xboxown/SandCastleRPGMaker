@@ -1574,7 +1574,8 @@ public partial class U8GameWindow : Window
         if (_objectOverlayOpen)
         {
             // A slider: its own keys. A map or a spellbook: Cancel or Accept puts it away.
-            if (_overlayKeys is { } keys) keys(SliderKeyFor(pressed));
+            if (_overlayRawKeys is { } raw) raw(pressed); // a keypad: the keys as they are
+            else if (_overlayKeys is { } keys) keys(SliderKeyFor(pressed));
             else if (KeyIs(pressed, "Cancel") || KeyIs(pressed, "Accept") || KeyIs(pressed, "Accept2")) CloseObjectOverlay();
             e.Handled = true;
             return;

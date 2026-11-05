@@ -39,7 +39,21 @@ public enum BookTriggerConditionBased
 
     // ---- Ammo and projectiles ----
     /// <summary>It hit its target - a character or an object (BookEventConditions.HitTarget says which).</summary>
-    ByHitTarget
+    ByHitTarget,
+
+    // ---- Ultima 8 projects only (Pentagram's usecode events) ----
+    /// <summary>An object was looked at (a single click).</summary>
+    ByLook,
+    /// <summary>An object was struck.</summary>
+    ByGotHit,
+    /// <summary>This character cast a spell.</summary>
+    ByCast,
+    /// <summary>This character came onto the screen.</summary>
+    ByEnterView,
+    /// <summary>This character left the screen.</summary>
+    ByLeaveView,
+    /// <summary>Something of this character's was stolen.</summary>
+    ByStolen
 }
 
 /// <summary>What By Hitting Target waits for.</summary>

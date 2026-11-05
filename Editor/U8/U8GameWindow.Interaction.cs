@@ -361,6 +361,7 @@ public partial class U8GameWindow
     /// <summary>Single click. Re-validated at fire time, since up to half a second has passed and the target may have moved or its gump closed.</summary>
     private void IdentifyTarget(InteractionTarget target)
     {
+        if (ObjectTargeted(target) is { } looked) FireObjectEvent(looked.Instance, looked.Obj, BookTriggerConditionBased.ByLook); // By Look
         if (_isReadingBook) return;
         switch (target)
         {

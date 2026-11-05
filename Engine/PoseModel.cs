@@ -127,7 +127,7 @@ public class PoseDatabase
 
     public static readonly string[] Ultima8PoseNames =
     {
-        "Run", "Step", "Jump", "Jump Up", "Running Jump", "Airwalk Jump", "Stand Up", "Land", "Climb", "Climb Up", "Hang", "Keep Balance",
+        "Surrender", "Run", "Step", "Jump", "Jump Up", "Running Jump", "Airwalk Jump", "Stand Up", "Land", "Climb", "Climb Up", "Hang", "Keep Balance",
         "Fall Backwards", "Stumble Backwards", "Combat Stand", "Ready Weapon", "Unready Weapon", "Advance", "Retreat",
         "Kick", "Block", "Cast", "Kneel", "Look Left", "Look Right", "Shake Head", "Talk", "Work", "Drown", "Burn", "Die"
     };

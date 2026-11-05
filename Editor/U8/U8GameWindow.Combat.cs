@@ -98,6 +98,7 @@ public partial class U8GameWindow
         if (double.IsNaN(vx) || double.IsNaN(ox)) return false;
         if (!SameFloor(viewer, other)) return false; // upstairs and downstairs are apart
         if (Has(other, Ailment.Invisible) && !SameSide(viewer, other) && !(IsPartyOrPlayer(viewer) && IsPartyOrPlayer(other))) return false; // Exult: invisible to those who can't see invisible
+        if (Has(viewer, Ailment.Surrendered)) return false; // given up: it fights no more (U8GameWindow.U8Extras.cs)
         if (viewer.FooledByFeignDeath && Has(other, Ailment.FeignDeath)) return false; // Feign Death (their .Toughness.cs)
         (ox, oy) = NearestImage(vx, vy, ox, oy); // over the seam of a map that wraps around, if nearer
         if (Math.Abs(vx - ox) > ViewportWidth / 2 || Math.Abs(vy - oy) > ViewportHeight / 2) return false;
@@ -576,6 +577,7 @@ public partial class U8GameWindow
     /// <summary>Game_window::theft.</summary>
     private void Theft(CharacterDefinition? owner, int factionId)
     {
+        if (owner is not null) FireCharacterEvent(owner, BookTriggerConditionBased.ByStolen); // By Stolen From
         if (_player is null) return;
         var chunk = ((int)(_playerPixelX / 128), (int)(_playerPixelY / 128)); // Exult chunks: 16 tiles
         if (chunk != _theftChunk) { _theftChunk = chunk; _theftWarnings = 0; }
