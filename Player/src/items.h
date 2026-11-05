@@ -99,7 +99,7 @@ int items_carrier_of(const Item *it);
 typedef struct ItemPlace { int characterId, slotKey, index; Item *holder; } ItemPlace;
 int items_detach(Item *it, ItemPlace *from);
 void items_restore(const ItemPlace *from, Item *it);
-void items_detach_done(const ItemPlace *from, Item *it);
+void items_detach_done(const ItemPlace *from, int category, int itemId);
 /* Where it is now (as items_detach would note it), without taking it out; 0: nowhere carried. */
 int items_place_of(const Item *it, ItemPlace *place);
 /* drag.cc's split-off copy of a stack: so many of it, everything else the same (no contents, its paperdoll fresh). */

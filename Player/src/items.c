@@ -1127,10 +1127,10 @@ void items_restore(const ItemPlace *from, Item *it)
 }
 
 /* The move went through: what leaving its place means (RemoveFromCharacter: By UnEquip; no longer having it). */
-void items_detach_done(const ItemPlace *from, Item *it)
+void items_detach_done(const ItemPlace *from, int category, int itemId)
 {
     if (from->holder || from->characterId < 0) return;
-    if (from->slotKey >= 0) { conditions_record_person_item("unequip", from->characterId, it->category, it->itemId); events_fire_character(from->characterId, TR_UNEQUIP); }
+    if (from->slotKey >= 0) { conditions_record_person_item("unequip", from->characterId, category, itemId); events_fire_character(from->characterId, TR_UNEQUIP); }
     events_fire_map(TR_NOT_HAVING);
 }
 
@@ -1271,7 +1271,7 @@ void items_use_up_one(Item *it)
 {
     if (it->quantity > 1) { it->quantity--; return; }
     ItemPlace from;
-    if (items_detach(it, &from)) { items_detach_done(&from, it); items_free(it); }
+    if (items_detach(it, &from)) { items_detach_done(&from, items_category(it), items_item_id(it)); items_free(it); }
 }
 
 /* The item whose paperdoll this is (carried or parked on the map), and its map uid (0 when carried). */

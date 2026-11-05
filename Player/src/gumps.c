@@ -946,10 +946,15 @@ static void landed(Item *it, const ItemPlace *from)
 {
     if (drag.dollState) { dolls_item_taken(drag.dollState, drag.dollPart, drag.item); return; } /* taken out of a paperdoll's slot: By Taken Out */
     if (drag.fromMap) world_thing_remove(drag.uid);
-    else items_detach_done(from, it);
+    else items_detach_done(from, drag.category, drag.itemId); /* what was dragged: the item itself may already be joined to another stack */
 }
 
-static void refused(const char *why) { if (why && why[0]) game_log(why); }
+/* CanContainerAccept and the rest: a refusal shows its pointer - too heavy, inside itself (Red X), otherwise Won't Fit (a full container, no volume left). */
+static void refused(const char *why)
+{
+    if (!why || !why[0]) return;
+    gumps_refuse(strncmp(why, "Too heavy", 9) == 0 ? P_TOO_HEAVY : strstr(why, "inside itself") ? P_RED_X : P_WONT_FIT, why);
+}
 
 static int navigate_sound(int characterId) { sound_play(num(paperdoll_of(characterId), "NavigateSoundResourceId", -1)); return 1; }
 
@@ -1299,10 +1304,15 @@ static void drop_count(int count)
     else items_put_back_copy(&from, copy);
 }
 
+static int askedX, askedY; /* where the stack was let go: the "how many?" box's own click must not move the drop (FinishDrop keeps its point) */
+
 static void quantity_chosen(int ok, int count, void *context)
 {
     (void)context;
+    int nowX = mouseX, nowY = mouseY;
+    mouseX = askedX; mouseY = askedY;
     if (ok && count > 0) drop_count(count);
+    mouseX = nowX; mouseY = nowY;
     ghost = NULL;
     memset(&drag, 0, sizeof drag);
 }
@@ -1315,6 +1325,7 @@ static void drop_asking(void)
     if (!drag.partDragged && drag.quantity > 1 && !same_window(&under) && !platform_ctrl_held())
     {
         ghost = NULL;
+        askedX = mouseX; askedY = mouseY;
         slider_open(str(get(get(project(), "Settings"), "Slider"), "QuantityQuestion"), 0, drag.quantity, 1, drag.quantity, quantity_chosen, NULL);
         return;
     }

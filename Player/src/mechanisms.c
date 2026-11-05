@@ -337,7 +337,7 @@ static void add_party_keys(const Used *u)
             if (!items_detach(all[i], &from)) continue;
             items_add_key(ring, items_item_id(all[i]));
             added += items_quantity(all[i]) > 1 ? items_quantity(all[i]) : 1;
-            items_detach_done(&from, all[i]);
+            items_detach_done(&from, items_category(all[i]), items_item_id(all[i]));
             items_free(all[i]);
         }
     }
@@ -371,7 +371,7 @@ static void keychain_target(void *context, const GumpsPick *pick)
             items_free(items_unpark(pick->uid, c, i, q));
             world_thing_remove(pick->uid);
         }
-        else { ItemPlace from; if (items_detach(pick->item, &from)) { items_detach_done(&from, pick->item); items_free(pick->item); } }
+        else { ItemPlace from; if (items_detach(pick->item, &from)) { items_detach_done(&from, items_category(pick->item), items_item_id(pick->item)); items_free(pick->item); } }
         items_add_key(ring, keyId);
         sound_play(num(get(u->def, "Keychain"), "AddKeySoundResourceId", -1));
         show_ring(u, ring);
@@ -587,7 +587,7 @@ static void use_kite(const Used *u)
     {
         ItemPlace from;
         if (!items_detach(u->item, &from)) return;
-        items_detach_done(&from, u->item);
+        items_detach_done(&from, items_category(u->item), items_item_id(u->item));
         int x, y, f;
         world_actor_cell(0, &x, &y, &f);
         uid = world_thing_put(items_category(u->item), items_item_id(u->item), 1, x, y, f);

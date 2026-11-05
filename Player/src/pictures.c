@@ -179,6 +179,7 @@ const Picture *sprite_picture_at(const Sprite *sprite, uint32_t ms)
 {
     if (!sprite || sprite->frameCount == 0) return NULL;
     if (sprite->frameCount == 1 || sprite->totalMs <= 0) return frame_picture(&sprite->frames[0]);
+    if (!sprite->loop && ms >= (uint32_t)sprite->totalMs) return frame_picture(&sprite->frames[sprite->frameCount - 1]); /* Loop off: it stops on its last frame */
     uint32_t t = ms % (uint32_t)sprite->totalMs;
     for (int i = 0; i < sprite->frameCount; i++)
     {

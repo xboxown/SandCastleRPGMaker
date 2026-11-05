@@ -770,8 +770,9 @@ int world_build(cJSON *root)
         cJSON *full = get(o, "LiquidIdRuntime");
         if (!cJSON_IsNumber(full)) full = get(o, "StartsFullOfId");
         t->liquid = d->type != T_LIQUID ? -1 : cJSON_IsNumber(full) ? full->valueint : d->liquidStart;
-        if (d->type == T_KEYCHAIN || d->type == T_PLANT) t->fixedFrame = 0;
-        if (d->type == T_KEYCHAIN && cJSON_IsNumber(get(o, "FrameRuntime")) && num(o, "FrameRuntime", 0) > 0) t->fixedFrame = num(o, "FrameRuntime", 0) + 1;
+        if (d->type == T_PLANT) t->fixedFrame = 0;
+        if (d->type == T_KEYCHAIN) t->fixedFrame = 1; /* its frames are its states: the first until it holds keys */
+        if (d->type == T_KEYCHAIN && cJSON_IsNumber(get(o, "FrameRuntime"))) t->fixedFrame = num(o, "FrameRuntime", 0) + 1;
         if (d->design)
         {
             /* StairDesign.Resolve: its own pose for the way it faces, else the first with steps */
@@ -2162,6 +2163,192 @@ static int find_path_core(Actor *a, int gx, int gy, int goalFloor, int allowPart
     return length;
 }
 
+/* ---------------- The main character's walk (GameTestWindow.PlayerWalk.cs FindPlayerPath) ----------------
+   A* in 8px steps from where the player really stands, so it threads a gap as narrow as the player wherever it lies in a cell (a hole in
+   an upper floor, a passage in the top half of a row), which cell middle to cell middle never reaches. A turn costs a little more than a
+   step: straight lines, no zigzag. In the goal cell the last point is its middle when there's room. The path is kept as its corners. */
+typedef struct PlayerNode { double x, y; int lift, cost, from; signed char floor, dir, open; } PlayerNode;
+typedef struct PlayerHeapEntry { int score, node; } PlayerHeapEntry;
+
+static void player_heap_push(PlayerHeapEntry *heap, int *size, int score, int node)
+{
+    int i = (*size)++;
+    while (i > 0)
+    {
+        int up = (i - 1) / 2;
+        if (heap[up].score <= score) break;
+        heap[i] = heap[up];
+        i = up;
+    }
+    heap[i].score = score; heap[i].node = node;
+}
+
+static PlayerHeapEntry player_heap_pop(PlayerHeapEntry *heap, int *size)
+{
+    PlayerHeapEntry top = heap[0], last = heap[--*size];
+    int i = 0;
+    for (;;)
+    {
+        int child = i * 2 + 1;
+        if (child >= *size) break;
+        if (child + 1 < *size && heap[child + 1].score < heap[child].score) child++;
+        if (heap[child].score >= last.score) break;
+        heap[i] = heap[child];
+        i = child;
+    }
+    heap[i] = last;
+    return top;
+}
+
+#ifdef __mc68000__
+#define PLAYER_PATH_NODES 12000 /* a 68k's memory and time */
+#else
+#define PLAYER_PATH_NODES 60000
+#endif
+#define PLAYER_HASH_SIZE (1 << 17)
+
+static unsigned player_hash(long x4, long y4, int floorKey, int dir)
+{
+    unsigned long h = (unsigned long)x4 * 73856093ul ^ (unsigned long)y4 * 19349663ul ^ (unsigned long)(floorKey * 8 + dir + 1) * 83492791ul;
+    return (unsigned)(h & (PLAYER_HASH_SIZE - 1));
+}
+
+static int find_player_path_core(Actor *a, int gx, int gy, int goalFloor, int besideOnly, int *pathX, int *pathY, signed char *offX, signed char *offY, int max)
+{
+    enum { StepCost = 2, TurnCost = 1 };
+    static const int DX[4] = { 1, -1, 0, 0 }, DY[4] = { 0, 0, 1, -1 };
+    int own = lift_own_body(a), goalLift, goalFree;
+    double goalX = cell_cx(gx), goalY = cell_cy(gy);
+    if (besideOnly) goalFree = 0;
+    else if (goalFloor) goalFree = can_stand_at(a, gx, gy, base_lift(goalFloor), &goalLift) && floor_of(goalLift) == goalFloor;
+    else
+    {
+        int l, t;
+        foot_at(a, goalX, goalY, &l, &t);
+        goalFree = try_step(l, t, a->sizeX, a->sizeY, a->lift, a->sizeZ) >= 0;
+    }
+    int cap = 4096, count = 0, heapSize = 0, heapCap = 8192, length = -1;
+    PlayerNode *nodes = (PlayerNode *)malloc(sizeof(PlayerNode) * (size_t)cap);
+    PlayerHeapEntry *heap = (PlayerHeapEntry *)malloc(sizeof(PlayerHeapEntry) * (size_t)heapCap);
+    int *table = (int *)malloc(sizeof(int) * PLAYER_HASH_SIZE);
+    if (!nodes || !heap || !table) { free(nodes); free(heap); free(table); put_own_body(a, own); return -1; }
+    for (int i = 0; i < PLAYER_HASH_SIZE; i++) table[i] = -1;
+#define FLOOR_KEY(lift) (goalFloor ? floor_of(lift) : 0)
+#define PLAYER_H(x, y, f) (StepCost * ((int)floor((fabs(world_wrap_dx(goalX - (x))) + fabs(world_wrap_dy(goalY - (y)))) / UNIT + 0.5) + (goalFloor ? abs((f) - goalFloor) * LIFTS_PER_FLOOR : 0)))
+    int startFloor = FLOOR_KEY(a->lift);
+    nodes[0] = (PlayerNode){ a->px, a->py, a->lift, 0, -1, (signed char)startFloor, -1, 1 };
+    table[player_hash((long)floor(a->px * 4 + 0.5), (long)floor(a->py * 4 + 0.5), startFloor, -1)] = 0;
+    count = 1;
+    player_heap_push(heap, &heapSize, PLAYER_H(a->px, a->py, startFloor), 0);
+    int found = -1, expansions = 0;
+    while (heapSize > 0 && expansions++ < PLAYER_PATH_NODES)
+    {
+        PlayerHeapEntry entry = player_heap_pop(heap, &heapSize);
+        PlayerNode here = nodes[entry.node];
+        if (entry.score != here.cost + PLAYER_H(here.x, here.y, here.floor)) continue; /* a better way here was found since */
+        int cx = (int)floor(here.x / tileW), cy = (int)floor(here.y / tileH);
+        int apart = heuristic(cx, cy, gx, gy);
+        if (here.floor == goalFloor && (besideOnly ? apart == 1 : (apart == 0 || (!goalFree && apart == 1)))) { found = entry.node; break; }
+        for (int d = 0; d < 4; d++)
+        {
+            double x = here.x + DX[d] * UNIT, y = here.y + DY[d] * UNIT;
+            int lift;
+            if (!can_sweep(a, here.x, here.y, x, y, here.lift, &lift)) continue; /* the step itself: stairs are climbed a lift at a time */
+            if (wraps)
+            {
+                double w = mapW * (double)tileW, h = mapH * (double)tileH;
+                if (x < 0) x += w; else if (x >= w) x -= w;
+                if (y < 0) y += h; else if (y >= h) y -= h;
+            }
+            int nx = (int)floor(x / tileW), ny = (int)floor(y / tileH);
+            if (nx < 0 || ny < 0 || nx >= mapW || ny >= mapH) continue;
+            int floorThere = FLOOR_KEY(lift), cost = here.cost + StepCost + (here.dir >= 0 && here.dir != d ? TurnCost : 0);
+            long x4 = (long)floor(x * 4 + 0.5), y4 = (long)floor(y * 4 + 0.5);
+            unsigned slot = player_hash(x4, y4, floorThere, d);
+            int at = -1;
+            while (table[slot] >= 0)
+            {
+                PlayerNode *n = &nodes[table[slot]];
+                if ((long)floor(n->x * 4 + 0.5) == x4 && (long)floor(n->y * 4 + 0.5) == y4 && n->floor == floorThere && n->dir == d) { at = table[slot]; break; }
+                slot = (slot + 1) & (PLAYER_HASH_SIZE - 1);
+            }
+            if (at >= 0 && nodes[at].cost <= cost) continue;
+            if (at < 0)
+            {
+                if (count >= PLAYER_PATH_NODES) continue;
+                if (count == cap)
+                {
+                    PlayerNode *grown = (PlayerNode *)realloc(nodes, sizeof(PlayerNode) * (size_t)cap * 2);
+                    if (!grown) continue;
+                    nodes = grown; cap *= 2;
+                }
+                at = count++;
+                table[slot] = at;
+            }
+            nodes[at] = (PlayerNode){ x, y, lift, cost, entry.node, (signed char)floorThere, (signed char)d, 1 };
+            if (heapSize == heapCap)
+            {
+                PlayerHeapEntry *grown = (PlayerHeapEntry *)realloc(heap, sizeof(PlayerHeapEntry) * (size_t)heapCap * 2);
+                if (!grown) continue;
+                heap = grown; heapCap *= 2;
+            }
+            player_heap_push(heap, &heapSize, cost + PLAYER_H(x, y, floorThere), at);
+        }
+    }
+    if (found >= 0)
+    {
+        /* corners only, last first: a point stays when the step after it goes another way */
+        int kept = 0, nextDir = -2;
+        double lastX = nodes[found].x, lastY = nodes[found].y;
+        int cell = (int)floor(lastX / tileW), row = (int)floor(lastY / tileH), middleLift;
+        double middleX = cell_cx(cell), middleY = cell_cy(row);
+        int addMiddle = (fabs(middleX - lastX) > 0.01 || fabs(middleY - lastY) > 0.01)
+            && can_sweep(a, lastX, lastY, middleX, middleY, nodes[found].lift, &middleLift) && FLOOR_KEY(middleLift) == nodes[found].floor;
+        for (int n = found; n > 0; n = nodes[n].from)
+        {
+            if (nodes[n].dir != nextDir) kept++;
+            nextDir = nodes[n].dir;
+        }
+        length = kept + (addMiddle ? 1 : 0);
+        if (length > max) { kept -= length - max; length = max; } /* too long for one walk: as far as it goes, then planned again */
+        int i = kept;
+        int skip = 0;
+        nextDir = -2;
+        int total = 0;
+        for (int n = found; n > 0; n = nodes[n].from) { if (nodes[n].dir != nextDir) total++; nextDir = nodes[n].dir; }
+        skip = total - kept;
+        nextDir = -2;
+        for (int n = found; n > 0; n = nodes[n].from)
+        {
+            if (nodes[n].dir != nextDir)
+            {
+                if (skip > 0) skip--;
+                else if (i > 0)
+                {
+                    i--;
+                    pathX[i] = (int)floor(nodes[n].x / tileW); pathY[i] = (int)floor(nodes[n].y / tileH);
+                    offX[i] = (signed char)(nodes[n].x - cell_cx(pathX[i])); offY[i] = (signed char)(nodes[n].y - cell_cy(pathY[i]));
+                }
+            }
+            nextDir = nodes[n].dir;
+        }
+        if (addMiddle && length == kept + 1) { pathX[kept] = cell; pathY[kept] = row; offX[kept] = 0; offY[kept] = 0; }
+    }
+#undef FLOOR_KEY
+#undef PLAYER_H
+    free(nodes); free(heap); free(table);
+    put_own_body(a, own);
+    return length;
+}
+
+static int find_player_path(Actor *a, int gx, int gy, int goalFloor, int besideOnly, int *pathX, int *pathY, signed char *offX, signed char *offY, int max)
+{
+    doors_passable(a, 1); /* closed unlocked doors are opened on the way */
+    int length = find_player_path_core(a, gx, gy, goalFloor, besideOnly, pathX, pathY, offX, offY, max);
+    doors_passable(a, 0);
+    return length;
+}
+
 #define MAX_PATH 512
 typedef struct Walk { int active, count, at; int x[MAX_PATH], y[MAX_PATH]; signed char ox[MAX_PATH], oy[MAX_PATH]; int doorToClose, blocked, lockBehind; } Walk; /* ox, oy: its spot off the cell's middle */
 static Walk *walks; /* one per actor */
@@ -2182,7 +2369,8 @@ int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
     if (!a || !w) return 0;
     if (a->movement == 3) return 0; /* Stationary: it never moves (Character Editor > Moves on) */
     a->flyPrefer = goalFloor ? base_lift(goalFloor) : a->levitateMs > 0 ? a->levitateLift : FLY_LIFT; /* levitating: at its own height */
-    int n = find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1);
+    int n = actor == 0 && !a->movement ? find_player_path(a, x, y, goalFloor, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1) /* in 8px steps, as Windows */
+        : find_path(a, x, y, goalFloor, actor != 0, beside, w->x + 1, w->y + 1, w->ox + 1, w->oy + 1, MAX_PATH - 1);
     if (n < 0) return 0;
     w->x[0] = (int)floor(a->px / tileW); w->y[0] = (int)floor(a->py / tileH);
     w->ox[0] = (signed char)(a->px - cell_cx(w->x[0])); w->oy[0] = (signed char)(a->py - cell_cy(w->y[0])); /* from where it stands */
@@ -2192,6 +2380,7 @@ int world_walk_to(int actor, int x, int y, int goalFloor, int beside)
 }
 
 int world_walking(int actor) { Walk *w = walk_of(actor); return w && w->active; }
+int world_actor_walking_now(int actor) { Actor *a = actor_of(actor); return a && a->walkingNow; }
 
 void world_walk_cancel(int actor) { Walk *w = walk_of(actor); Actor *a = actor_of(actor); if (w) w->active = 0; if (a) a->walkingNow = 0; }
 
