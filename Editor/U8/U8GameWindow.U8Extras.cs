@@ -73,6 +73,7 @@ public partial class U8GameWindow
         var people = new List<CharacterDefinition>();
         var on = ThingsOn(thing, people);
         var body = BodyOf(thing as PlacedItemInstance, thing as ObjectInstance);
+        if (body.Z + dir < 0) return; // the ground: it sinks no further
         SetZ(thing, body.Z + dir);
         foreach (var other in on)
             SetZ(other, BodyOf(other as PlacedItemInstance, other as ObjectInstance).Z + dir);
@@ -91,7 +92,7 @@ public partial class U8GameWindow
             }
         }
         RefreshStackingVisuals();
-        SoakLog($"platform: lift {body.Z + dir}, {on.Count} things and {people.Count} people on it");
+        SoakLog($"platform: lift {body.Z + dir}, {on.Count} things, {people.Count} people on it, player lift {_playerZ}");
     }
 
     // ---------- Flip Screen ----------
