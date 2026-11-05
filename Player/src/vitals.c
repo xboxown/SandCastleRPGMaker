@@ -290,7 +290,13 @@ static void die(int characterId, const char *cause)
         return;
     }
     int uid = world_put_body(actor, x, y, f);
-    if (uid >= 0 && belongings) items_park(uid, belongings);
+    if (uid >= 0 && belongings)
+    {
+        Item **inside;
+        int held = items_contents(belongings, &inside);
+        for (int i = 0; i < held; i++) items_set_spot(inside[i], -100000, -100000, 0); /* LeaveBody: PlaceWithinFrame(item, data, null) - laid out inside the frame */
+        items_park(uid, belongings);
+    }
     else if (belongings) items_free(belongings);
     world_actor_remove(actor);
     char line[128];

@@ -1416,6 +1416,13 @@ static int pick_target(int x, int y)
     memset(&p, 0, sizeof p);
     p.actor = -1;
     world_screen_cell(x, y, &p.cellX, &p.cellY, &p.floor);
+    if (t.kind == T_NONE) /* no solid pixel there: what's under the pointer all the same (a fire's flames have gaps) */
+    {
+        int boxActor, boxUid;
+        world_hit_box(x, y, &boxActor, &boxUid);
+        if (boxActor >= 0) { t.kind = T_ACTOR; t.actor = boxActor; }
+        else if (boxUid) { t.kind = T_THING; t.uid = boxUid; }
+    }
     if (t.kind == T_ACTOR) p.actor = t.actor;
     else if (t.kind == T_THING) p.uid = t.uid;
     else if ((t.kind == T_SLOT || t.kind == T_ROW) && t.gump >= 0 && t.gump < gumpCount)

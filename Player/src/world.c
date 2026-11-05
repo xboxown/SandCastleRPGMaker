@@ -1609,7 +1609,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         int invisible = vitals_has(a->characterId, 32), shimmer = invisible && (i < 0 || items_in_party(a->characterId));
         if (invisible && !shimmer) continue; /* ShowInvisibility: unseen */
         const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
-        uint32_t at = a->walkingNow ? ms : 0;
+        uint32_t at = ms; /* standing plays its Idle frames too, as Windows */
         if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
         const Picture *pic = sprite_picture_at(s, at);
         if (a->joinedSprite && a->joinedFrame < a->joinedSprite->frameCount) pic = frame_picture(&a->joinedSprite->frames[a->joinedFrame]);
@@ -1760,6 +1760,28 @@ int world_set_pose(int actor, const char *pose, int facing)
 }
 
 /* Teleport: to a cell (its middle), standing on the floor it was on. */
+static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift);
+/* A free cell at or round (x, y), up to 3 cells out, on the actor's floor: the spot itself when nobody can be found free. */
+void world_free_spot_near(int actor, int *x, int *y)
+{
+    Actor *a = actor_of(actor);
+    if (!a) return;
+    int onFloor = floor_of(a->lift < 0 ? 0 : a->lift), own = a->gone;
+    a->gone = 1; /* not counting itself */
+    for (int ring = 0; ring <= 3; ring++)
+        for (int dy = -ring; dy <= ring; dy++)
+            for (int dx = -ring; dx <= ring; dx++)
+            {
+                if ((abs(dx) > abs(dy) ? abs(dx) : abs(dy)) != ring) continue;
+                int cx = *x + dx, cy = *y + dy;
+                if (cx < 0 || cy < 0 || cx >= mapW || cy >= mapH || spawn_cell_taken(NULL, cx, cy, onFloor) || !can_stand_at(a, cx, cy, a->lift, &(int){ 0 })) continue;
+                a->gone = own;
+                *x = cx; *y = cy;
+                return;
+            }
+    a->gone = own;
+}
+
 int world_teleport(int actor, int x, int y)
 {
     Actor *a = actor_of(actor);
@@ -3189,6 +3211,20 @@ void world_hit(int sx, int sy, int *actor, int *uid)
         if (d->actor >= 0) { *actor = d->actor; return; }
         if (d->thing) { *uid = d->thing; return; }
         return; /* the ground or a floor: nothing to use */
+    }
+}
+
+/* Choosing a target: the topmost someone or something whose picture's box the point is in, see-through pixels too (a fire's flames flicker, with gaps
+   between them, and change from frame to frame); the ground and floors don't count. */
+void world_hit_box(int sx, int sy, int *actor, int *uid)
+{
+    *actor = -1; *uid = 0;
+    for (int i = drawnCount - 1; i >= 0; i--)
+    {
+        const Drawn *d = &drawn[i];
+        if (sx < d->x || sy < d->y || sx >= d->x + d->w || sy >= d->y + d->h) continue;
+        if (d->actor >= 0) { *actor = d->actor; return; }
+        if (d->thing) { *uid = d->thing; return; }
     }
 }
 

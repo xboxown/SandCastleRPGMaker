@@ -383,7 +383,9 @@ static int keep_dormant(Npc *n)
     n->dormant = 1;
     if (n->walkingToSchedule && n->entry)
     {
-        world_teleport(n->actor, n->destX, n->destY);
+        int spotX = n->destX, spotY = n->destY;
+        world_free_spot_near(n->actor, &spotX, &spotY);
+        world_teleport(n->actor, spotX, spotY);
         begin_activity(n);
         stop_walking(n);
     }
