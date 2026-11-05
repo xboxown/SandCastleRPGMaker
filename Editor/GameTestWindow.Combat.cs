@@ -97,6 +97,7 @@ public partial class GameTestWindow
         if (double.IsNaN(vx) || double.IsNaN(ox)) return false;
         if (!SameFloor(viewer, other)) return false; // upstairs and downstairs are apart
         if (Has(other, Ailment.Invisible) && !SameSide(viewer, other) && !(IsPartyOrPlayer(viewer) && IsPartyOrPlayer(other))) return false; // Exult: invisible to those who can't see invisible
+        if (viewer.FooledByFeignDeath && Has(other, Ailment.FeignDeath)) return false; // Feign Death (their .Toughness.cs)
         (ox, oy) = NearestImage(vx, vy, ox, oy); // over the seam of a map that wraps around, if nearer
         if (Math.Abs(vx - ox) > ViewportWidth / 2 || Math.Abs(vy - oy) > ViewportHeight / 2) return false;
         return HasLineOfSight(vx, vy, LiftOf(viewer), ox, oy);

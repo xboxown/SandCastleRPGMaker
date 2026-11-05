@@ -578,7 +578,7 @@ public partial class GameTestWindow
                 CharacterId = character.Id, CharacterIndex = SavedIndexOf(character), Food = vitals.Food, Cold = vitals.Cold, Heat = vitals.Heat, Ailments = (int)vitals.Ailments,
                 PoisonRemainingMs = vitals.PoisonRemainingMs, SleepRemainingMs = vitals.SleepRemainingMs, ParalyzeRemainingMs = vitals.ParalyzeRemainingMs,
                 CharmRemainingMs = vitals.CharmRemainingMs, CurseRemainingMs = vitals.CurseRemainingMs, InvisibleRemainingMs = vitals.InvisibleRemainingMs,
-                ProtectedRemainingMs = vitals.ProtectedRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
+                ProtectedRemainingMs = vitals.ProtectedRemainingMs, FeignRemainingMs = vitals.FeignRemainingMs, FeignSoundId = vitals.FeignSoundId, RiseRemainingMs = vitals.RiseRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
             });
         foreach (var (owner, counts) in _firedCounts)
         {
@@ -676,6 +676,7 @@ public partial class GameTestWindow
 
         _execContext.LoadState(data);
         foreach (int book in data.ReadBooks) _hasBeenReadBooks.Add(book);
+        _rising.Clear();
         foreach (var saved in data.Vitals)
         {
             var character = saved.CharacterIndex >= 0 && _characters is { } list && saved.CharacterIndex < list.Characters.Count && list.Characters[saved.CharacterIndex].Id == saved.CharacterId
@@ -696,6 +697,10 @@ public partial class GameTestWindow
             vitals.ProtectedRemainingMs = saved.ProtectedRemainingMs;
             vitals.Dead = saved.Dead;
             vitals.Unconscious = saved.Unconscious;
+            vitals.FeignRemainingMs = saved.FeignRemainingMs;
+            vitals.FeignSoundId = saved.FeignSoundId;
+            vitals.RiseRemainingMs = saved.RiseRemainingMs;
+            if (saved.Dead && saved.RiseRemainingMs > 0) _rising.Add(character);
         }
         foreach (var fired in data.FiredPages)
         {

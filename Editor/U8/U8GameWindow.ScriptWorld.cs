@@ -43,6 +43,14 @@ public partial class U8GameWindow
             return true;
         };
         h[EventCommandType.ChangeLook] = ChangeLookCommand;
+        h[EventCommandType.FeignDeath] = FeignDeathCommand; // their .Toughness.cs
+        h[EventCommandType.WithstandDeath] = WithstandDeathCommand;
+        h[EventCommandType.Changeling] = ChangelingCommand;
+        h[EventCommandType.FindObjectsInArea] = FindObjectsCommand;
+        h[EventCommandType.DeleteObjectsInArea] = DeleteObjectsInAreaCommand;
+        h[EventCommandType.ItemsInside] = ItemsInsideCommand;
+        h[EventCommandType.ItemCharges] = ItemChargesCommand;
+        h[EventCommandType.HurtInArea] = HurtInAreaCommand;
         h[EventCommandType.SetAttackMode] = c =>
         {
             if (CharacterDefinitionFor(c.Get("Who")) is not { } who || !Enum.TryParse<AttackMode>(c.Get("Mode"), out var mode)) return false;

@@ -141,6 +141,16 @@ public class CharacterDefinition
     public string RequiredSpellName { get; set; } = string.Empty;
 
     public JoiningSettings Joining { get; set; } = new();
+    /// <summary>Its own rules for damage types (Health): immune, half, or adjusted by a number. Any type not listed: as usual.</summary>
+    public List<DamageResponse> DamageResponses { get; set; } = new();
+    /// <summary>It rises some time after dying (Pentagram: Actor::dieU8, ResurrectionProcess, 5 to 30 seconds), with what is left in its body.</summary>
+    public bool GetsBackUp { get; set; }
+    public int BackUpMinSeconds { get; set; } = 5;
+    public int BackUpMaxSeconds { get; set; } = 30;
+    /// <summary>Killed by one of these, it stays dead (Pentagram: fire).</summary>
+    public List<DamageType> BackUpNotFrom { get; set; } = new() { DamageType.Fire };
+    /// <summary>Feign Death fools it: it leaves alone anyone feigning (Pentagram: undead and demons).</summary>
+    public bool FooledByFeignDeath { get; set; }
 
     /// <summary>Its blood type: a sprite in the Sprite Editor's Blood group, or empty for none (it never bleeds - Exult's cant_bleed).</summary>
     public string BloodSpriteName { get; set; } = string.Empty;

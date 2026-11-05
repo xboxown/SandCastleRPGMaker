@@ -123,7 +123,9 @@ public enum EventCommandType
     LearnLanguage,
     Shop,
     U8AskKey, U8SetKey, U8GetKeyName, U8ResetKeys,
-    DeleteObjectSelf
+    DeleteObjectSelf,
+    FeignDeath, WithstandDeath, Changeling,
+    FindObjectsInArea, DeleteObjectsInArea, ItemsInside, ItemCharges, HurtInArea
 }
 
 /// <summary>

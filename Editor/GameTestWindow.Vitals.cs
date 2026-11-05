@@ -32,6 +32,8 @@ public partial class GameTestWindow
         public Ailment Ailments;
         public double PoisonRemainingMs, PoisonNextTickMs, SleepRemainingMs, ParalyzeRemainingMs, CharmRemainingMs, CurseRemainingMs, InvisibleRemainingMs, ProtectedRemainingMs;
         public bool Dead;
+        public double FeignRemainingMs, RiseRemainingMs;
+        public int FeignSoundId = -1;
         /// <summary>Knocked out: health at 0 or below, not yet dead (GameTestWindow.Unconscious.cs).</summary>
         public bool Unconscious;
         public double MendCheckMs;
@@ -141,6 +143,7 @@ public partial class GameTestWindow
     {
         if (amount <= 0 || IsDead(character) || GetHp(character) is not int hp) return;
         if (NeedsSpecialWound(character) && !_specialWound) return; // only its weapon or spell hurts it (Character Editor > Health)
+        if (WithstoodDeath(character, hp - amount)) return; // Withstand Death (their .Toughness.cs)
         FlashHit(character, amount, hp); // Exult's red outline (or, badly hurt, the red screen)
         int half = MaxHp(character) / 2;
         if (hp >= half && hp - amount < half && hp - amount > 0 && Rng.Next(2) == 0) Bark(character, VerboseKind.Hurt); // reduce_health: "A little oomph." 
@@ -192,6 +195,7 @@ public partial class GameTestWindow
         mapCharacter.Npc.Activity = null;
         mapCharacter.Npc.InCombat = false;
         LeaveBody(mapCharacter); // Exult: out of the world, a body (its Body pose) holding all it carried where it fell
+        MaybeGetBackUp(character); // some rise again (their .Toughness.cs)
         StatusText.Text = $"{character.Name} has died ({cause}).";
     }
 
@@ -201,6 +205,7 @@ public partial class GameTestWindow
     {
         UpdateAmbient(); // the sound of the time of day (GameTestWindow.Ambient.cs)
         if (_gameOver) return;
+        UpdateRising(elapsedMs); // the dead who get back up (their .Toughness.cs)
         UpdateCombatMusic(elapsedMs); // danger, battle, near death (GameTestWindow.CombatMusic.cs)
         if (hourChanges > 0)
             foreach (var character in AllLivingCharacters().ToList()) { MendWounds(character); UseFood(character); }
@@ -282,11 +287,12 @@ public partial class GameTestWindow
         if (vitals.Ailments.HasFlag(Ailment.Cursed) && (vitals.CurseRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Cursed);
         if (vitals.Ailments.HasFlag(Ailment.Invisible) && (vitals.InvisibleRemainingMs -= elapsedMs) <= 0) { Cure(character, Ailment.Invisible); ShowInvisibility(character); }
         if (vitals.Ailments.HasFlag(Ailment.Protected) && (vitals.ProtectedRemainingMs -= elapsedMs) <= 0) Cure(character, Ailment.Protected);
+        UpdateFeignDeath(character, vitals, elapsedMs); // their .Toughness.cs
     }
 
     private bool Inflict(CharacterDefinition character, Ailment ailment)
     {
-        if (IsDead(character) || (ailment is not (Ailment.Invisible or Ailment.Protected) && character.Survival.Immunities.HasFlag(ailment))) return false;
+        if (IsDead(character) || (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath) && character.Survival.Immunities.HasFlag(ailment))) return false;
         var vitals = VitalsOf(character);
         vitals.Ailments |= ailment;
         var s = character.Survival;
@@ -319,7 +325,7 @@ public partial class GameTestWindow
         if (ailment is Ailment.Asleep or Ailment.Paralyzed) StopActing(character, ailment == Ailment.Asleep);
         if (character == _player) StatusText.Text = $"You are {Ailments.Describe(ailment).ToLowerInvariant()}.";
         if (ailment == Ailment.Invisible) { StopAttackingInvisible(character); ShowInvisibility(character); }
-        if (ailment is not (Ailment.Invisible or Ailment.Protected)) FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
+        if (ailment is not (Ailment.Invisible or Ailment.Protected or Ailment.FeignDeath or Ailment.WithstandDeath)) FireCharacterEvent(character, BookTriggerConditionBased.ByAilmentEffect);
         return true;
     }
 

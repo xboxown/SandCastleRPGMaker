@@ -134,6 +134,54 @@ public partial class CharacterEditorWindow
         noBody.Unchecked += (_, _) => body.NoBody = false;
         HealthPanel.Children.Add(noBody);
 
+        // ---------- Damage types ----------
+        HealthPanel.Children.Add(Heading("Damage types"));
+        HealthPanel.Children.Add(new TextBlock { Text = "What each damage type (Object Editor > Weapon) does to this character. Adjust by adds its number to the damage: below 0 takes off.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(0, 0, 0, 4) });
+        foreach (var type in Enum.GetValues<DamageType>())
+        {
+            var rule = character.DamageResponses.FirstOrDefault(r => r.Type == type);
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 2) };
+            row.Children.Add(new TextBlock { Text = type.ToString(), Width = 90, VerticalAlignment = VerticalAlignment.Center });
+            var response = new ComboBox { Width = 120, ItemsSource = new[] { "Normal", "Immune", "Half damage", "Adjust by" }, SelectedIndex = (int)(rule?.Response ?? DamageResponseKind.Normal) };
+            var amount = new TextBox { Width = 50, Margin = new Thickness(6, 0, 0, 0), TextAlignment = TextAlignment.Right, Text = (rule?.Amount ?? 0).ToString(), IsEnabled = rule?.Response == DamageResponseKind.Adjust };
+            void StoreRule()
+            {
+                character.DamageResponses.RemoveAll(r => r.Type == type);
+                amount.IsEnabled = response.SelectedIndex == (int)DamageResponseKind.Adjust;
+                if (response.SelectedIndex > 0) character.DamageResponses.Add(new DamageResponse { Type = type, Response = (DamageResponseKind)response.SelectedIndex, Amount = int.TryParse(amount.Text.Trim(), out int n) ? n : 0 });
+            }
+            response.SelectionChanged += (_, _) => StoreRule();
+            amount.LostFocus += (_, _) => StoreRule();
+            row.Children.Add(response);
+            row.Children.Add(amount);
+            HealthPanel.Children.Add(row);
+        }
+
+        // ---------- Getting back up ----------
+        HealthPanel.Children.Add(Heading("Getting back up"));
+        var getsUp = new CheckBox { Content = "Rises again some time after dying (with what is left in its body)", IsChecked = character.GetsBackUp };
+        HealthPanel.Children.Add(getsUp);
+        var getsUpBox = new StackPanel { Margin = new Thickness(12, 2, 0, 4), IsEnabled = character.GetsBackUp };
+        getsUp.Checked += (_, _) => { character.GetsBackUp = true; getsUpBox.IsEnabled = true; };
+        getsUp.Unchecked += (_, _) => { character.GetsBackUp = false; getsUpBox.IsEnabled = false; };
+        getsUpBox.Children.Add(NumberRow("After at least:", () => character.BackUpMinSeconds, v => character.BackUpMinSeconds = Math.Max(0, v), "seconds (Ultima 8: 5)"));
+        getsUpBox.Children.Add(NumberRow("and at most:", () => character.BackUpMaxSeconds, v => character.BackUpMaxSeconds = Math.Max(0, v), "seconds (Ultima 8: 30)"));
+        getsUpBox.Children.Add(new TextBlock { Text = "Stays dead if one of these killed it (Ultima 8: Fire):", Margin = new Thickness(0, 2, 0, 0) });
+        var staysDead = new WrapPanel { Margin = new Thickness(0, 2, 0, 0) };
+        foreach (var kind in Enum.GetValues<DamageType>())
+        {
+            var box = new CheckBox { Content = kind.ToString(), IsChecked = character.BackUpNotFrom.Contains(kind), Margin = new Thickness(0, 0, 12, 2) };
+            box.Checked += (_, _) => { if (!character.BackUpNotFrom.Contains(kind)) character.BackUpNotFrom.Add(kind); };
+            box.Unchecked += (_, _) => character.BackUpNotFrom.Remove(kind);
+            staysDead.Children.Add(box);
+        }
+        getsUpBox.Children.Add(staysDead);
+        HealthPanel.Children.Add(getsUpBox);
+        var fooled = new CheckBox { Content = "Fooled by Feign Death (it leaves alone anyone feigning; Ultima 8: undead and demons)", IsChecked = character.FooledByFeignDeath, Margin = new Thickness(0, 4, 0, 0) };
+        fooled.Checked += (_, _) => character.FooledByFeignDeath = true;
+        fooled.Unchecked += (_, _) => character.FooledByFeignDeath = false;
+        HealthPanel.Children.Add(fooled);
+
         // ---------- What it takes to hurt it ----------
         HealthPanel.Children.Add(Heading("What it takes to hurt it"));
         var immortal = new CheckBox { Content = "Immortal (it loses health and can go unconscious, but can't be killed)", IsChecked = character.Immortal };

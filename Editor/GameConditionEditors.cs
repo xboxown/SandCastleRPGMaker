@@ -203,6 +203,40 @@ internal static class GameConditionFields
             case GameConditionKind.EventExecuted: EventName(); Happened("Run"); break;
             case GameConditionKind.EventPageExecuted: Number("This event's page number", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v)); Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever"); break;
             case GameConditionKind.EventNamePageExecuted: EventName(); Number("Its page number", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v)); Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever"); break;
+            case GameConditionKind.InParty:
+                Who("Who (Anyone: at least this many have joined)", anyone: true);
+                Number("How many joined (for Anyone)", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v));
+                panel.Children.Add(Note("The main character always counts as in the party; Anyone counts those who joined."));
+                break;
+            case GameConditionKind.CharacterState:
+            {
+                Who("Who");
+                string[] states = { "Poisoned", "Asleep", "Paralyzed", "Charmed", "Cursed", "Invisible", "Protected", "FeignDeath", "WithstandDeath", "Unconscious", "In combat", "Dead" };
+                if (Array.IndexOf(states, c.Value) < 0) c.Value = states[0];
+                var state = new ComboBox { Width = 200, ItemsSource = states, SelectedItem = c.Value, HorizontalAlignment = HorizontalAlignment.Left };
+                state.SelectionChanged += (_, _) => { if (state.SelectedItem is string s) c.Value = s; };
+                panel.Children.Add(Label("Is"));
+                panel.Children.Add(state);
+                break;
+            }
+            case GameConditionKind.EnemyNear:
+                Who("Who");
+                Number("Within (map cells)", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v));
+                panel.Children.Add(Note("Someone who would attack them, or they it, on the same floor."));
+                break;
+            case GameConditionKind.ObjectsInArea:
+            {
+                Who("Around whom");
+                Item("Object or item (none: anything)");
+                Number("Within (map cells; 0: their cell)", () => c.Number2, v => c.Number2 = Math.Max(0, v));
+                Compare("How many");
+                var lit = new CheckBox { Content = "Lit ones only", IsChecked = !c.On, Margin = new Thickness(0, 6, 0, 0) };
+                lit.Checked += (_, _) => c.On = false;
+                lit.Unchecked += (_, _) => c.On = true;
+                panel.Children.Add(lit);
+                break;
+            }
+            case GameConditionKind.ItemCharges: Who("Who carries it"); Item("Item"); Compare("Charges"); break;
             case GameConditionKind.DoorOpen: Item("Door (a placed copy of it), or container (its window open)"); OnOff("Open", "Closed"); break;
         }
         var not = new CheckBox { Content = "NOT - true when this isn't so", IsChecked = c.Not, Margin = new Thickness(0, 10, 0, 0) };

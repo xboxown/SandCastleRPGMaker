@@ -88,7 +88,12 @@ public enum MagicEffectKind
     /// <summary>Whoever it's cast on rises up to 3 floors (under a ceiling: till their head touches it) and walks in the air for Seconds, then falls onto whatever is under them. Party members it isn't cast on stay on the ground.</summary>
     Levitate,
     /// <summary>For Seconds every language (System Settings > Languages) reads plainly, as if the party knew it (Translate).</summary>
-    Translate
+    Translate,
+    // ---- build 511: appended ----
+    /// <summary>Falls and gets up; for Seconds those fooled by it leave them be (Ultima 8's Mask of Death).</summary>
+    FeignDeath,
+    /// <summary>The next blow that would kill them restores full health instead, once (Ultima 8's Withstand Death).</summary>
+    WithstandDeath
 }
 
 /// <summary>Who a spell with a reach touches.</summary>
@@ -110,7 +115,7 @@ public class MagicEffect
 
     public static bool NeedsCharacter(MagicEffectKind kind) => kind == MagicEffectKind.Summon;
     public static bool NeedsObject(MagicEffectKind kind) => kind is MagicEffectKind.CreateItem or MagicEffectKind.CreateField;
-    public static bool HasSeconds(MagicEffectKind kind) => kind is MagicEffectKind.Summon or MagicEffectKind.CreateField or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.TimeStop or MagicEffectKind.Clone or MagicEffectKind.Levitate or MagicEffectKind.Translate;
+    public static bool HasSeconds(MagicEffectKind kind) => kind is MagicEffectKind.FeignDeath or MagicEffectKind.Summon or MagicEffectKind.CreateField or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.TimeStop or MagicEffectKind.Clone or MagicEffectKind.Levitate or MagicEffectKind.Translate;
 
     /// <summary>Levitate: how high it lifts (3 floors).</summary>
     public const int LevitateLifts = 3 * MapFloors.LiftsPerFloor;
@@ -119,6 +124,8 @@ public class MagicEffect
     public static string KindName(MagicEffectKind kind) => kind switch
     {
         MagicEffectKind.RestoreMana => "Restore Mana",
+        MagicEffectKind.FeignDeath => "Feign Death",
+        MagicEffectKind.WithstandDeath => "Withstand Death",
         MagicEffectKind.CurePoison => "Cure Poison",
         MagicEffectKind.CureParalysis => "Cure Paralysis",
         MagicEffectKind.RemoveCurse => "Remove Curse",
@@ -178,6 +185,8 @@ public class MagicEffect
         MagicEffectKind.CommonEvent => "Its Common Event runs on them",
         MagicEffectKind.Levitate => $"Up to 3 floors, walking in the air, {e.Seconds} s",
         MagicEffectKind.Translate => $"Every language reads plainly for {e.Seconds} s",
+        MagicEffectKind.FeignDeath => $"Plays dead, ignored by those it fools, {e.Seconds} s",
+        MagicEffectKind.WithstandDeath => "The next killing blow restores full health",
         _ => KindName(e.Kind)
     };
 

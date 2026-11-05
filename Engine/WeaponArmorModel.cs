@@ -1,7 +1,19 @@
 namespace SandcastleRpgMaker.Engine;
 
 /// <summary>Exult's damage types (Weapon_data: normal, fire, magic, lightning, ethereal, sonic, freezing). Armor can make its wearer immune to any of them.</summary>
-public enum DamageType { Normal, Fire, Magic, Lightning, Ethereal, Sonic, Freezing }
+public enum DamageType { Normal, Fire, Magic, Lightning, Ethereal, Sonic, Freezing, Blade, Blunt, Undead, Slayer, Pierce, Falling }
+
+/// <summary>What a damage type does to a character (Character Editor > Health).</summary>
+public enum DamageResponseKind { Normal, Immune, Half, Adjust }
+
+/// <summary>One character's rule for one damage type; a type with no rule does its damage as usual.</summary>
+public class DamageResponse
+{
+    public DamageType Type { get; set; }
+    public DamageResponseKind Response { get; set; }
+    /// <summary>Adjust: added to the damage (below 0 takes off, never under 0).</summary>
+    public int Amount { get; set; }
+}
 
 /// <summary>Exult's weapon powers (Weapon_data: sleep, charm, curse, poison, paralyze, magebane, no_damage): what a blow that lands does besides hurting.</summary>
 [Flags]

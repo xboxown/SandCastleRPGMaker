@@ -17,7 +17,11 @@ public enum Ailment
     /// <summary>Exult's invisibility flag (a potion or spell; 60-80 s): enemies that can't see invisible leave them be. Not an ailment one can be immune to.</summary>
     Invisible = 32,
     /// <summary>Exult's protection flag (60-80 s): +3 to defence. Not an ailment one can be immune to.</summary>
-    Protected = 64
+    Protected = 64,
+    /// <summary>Feign Death (Mask of Death): those fooled by it leave them be for a time. Not an ailment one can be immune to.</summary>
+    FeignDeath = 128,
+    /// <summary>Withstand Death: the next blow that would kill restores full health instead, once. Not an ailment one can be immune to.</summary>
+    WithstandDeath = 256
 }
 
 public static class Ailments
@@ -33,6 +37,8 @@ public static class Ailments
         Ailment.Cursed => "Cursed",
         Ailment.Invisible => "Invisible",
         Ailment.Protected => "Protected",
+        Ailment.FeignDeath => "Playing dead",
+        Ailment.WithstandDeath => "Protected from death",
         _ => ailment.ToString()
     };
 

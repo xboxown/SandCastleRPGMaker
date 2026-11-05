@@ -62,7 +62,7 @@ public partial class GameTestWindow
                     _lightCheckMs = 0;
                     break;
                 case MagicEffectKind.Damage:
-                    if (amount > 0 && WoundsIt(target, null, by is not null ? cause : null)) DamageAllowed(target, amount, cause, DamageType.Magic); // cause: the spell's name
+                    if (amount > 0 && WoundsIt(target, null, by is not null ? cause : null)) DamageAllowed(target, AfterDamageResponse(target, amount, DamageType.Magic), cause, DamageType.Magic); // cause: the spell's name
                     if (by is not null && by != target && IsDead(target)) AwardKill(by, target); // a spell's kill (GameTestWindow.Levels.cs)
                     break;
                 case MagicEffectKind.Charm or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.RevealInvisible or MagicEffectKind.Clone:
@@ -74,6 +74,8 @@ public partial class GameTestWindow
                 case MagicEffectKind.Translate:
                     _translateMs = Math.Max(_translateMs, effect.Seconds * 1000);
                     break;
+                case MagicEffectKind.FeignDeath: StartFeignDeath(target, effect.Seconds, -1); break;
+                case MagicEffectKind.WithstandDeath: Inflict(target, Ailment.WithstandDeath); break;
                 case MagicEffectKind.Levitate:
                     Levitate(target, effect.Seconds);
                     break;

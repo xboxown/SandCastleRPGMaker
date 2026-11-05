@@ -303,7 +303,11 @@ public static class ScriptRuntime
             }
 
             case EventCommandType.DebugLog:
-                data.AddLog(ScriptValues.Text(E("Value")));
+                {
+                    string line = ScriptValues.Text(E("Value"));
+                    data.AddLog(line);
+                    if (Environment.GetEnvironmentVariable("SANDCASTLE_PERF_LOG") is { } testLog) try { File.AppendAllText(testLog, line + Environment.NewLine); } catch (IOException) { } // test runs only
+                }
                 break;
             case EventCommandType.Comment:
                 break;

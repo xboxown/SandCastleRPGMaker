@@ -47,7 +47,18 @@ public enum GameConditionKind
     LightLit,
     // ---- Commands ----
     /// <summary>Whether the last command that can fail (Walk To Location, Pickup Item, Give Item, Train...) worked.</summary>
-    LastCommandSucceeded
+    LastCommandSucceeded,
+    // ---- Characters and areas (build 511) ----
+    /// <summary>Who has joined the party (the main character always has); Anyone: at least Number have joined.</summary>
+    InParty,
+    /// <summary>Who is (Value): an ailment's name, Unconscious, In combat or Dead.</summary>
+    CharacterState,
+    /// <summary>An enemy of Who is within Number map cells, on their floor.</summary>
+    EnemyNear,
+    /// <summary>How many of an item lie within Number2 cells of Who, on their floor. On false: lit ones only.</summary>
+    ObjectsInArea,
+    /// <summary>The charges of an item Who carries.</summary>
+    ItemCharges
 }
 
 /// <summary>One test, with whichever of its settings its kind uses.</summary>
@@ -121,6 +132,11 @@ public static class GameConditions
         GameConditionKind.LightPutOut => "Light put out",
         GameConditionKind.LightLit => "Light lit",
         GameConditionKind.LastCommandSucceeded => "Last command succeeded (walked there, picked it up...)",
+        GameConditionKind.InParty => "In the party (joined)",
+        GameConditionKind.CharacterState => "Character is (poisoned, playing dead, in combat...)",
+        GameConditionKind.EnemyNear => "Enemy nearby",
+        GameConditionKind.ObjectsInArea => "Objects in an area",
+        GameConditionKind.ItemCharges => "Charges of a carried item",
         _ => kind.ToString()
     };
 

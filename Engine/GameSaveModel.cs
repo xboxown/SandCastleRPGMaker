@@ -86,6 +86,10 @@ public class SavedVitals
     public double CurseRemainingMs { get; set; }
     public double InvisibleRemainingMs { get; set; }
     public double ProtectedRemainingMs { get; set; }
+    public double FeignRemainingMs { get; set; }
+    public int FeignSoundId { get; set; } = -1;
+    /// <summary>Dead, and rising after this long (Getting back up).</summary>
+    public double RiseRemainingMs { get; set; }
     public bool Dead { get; set; }
     public bool Unconscious { get; set; }
 }

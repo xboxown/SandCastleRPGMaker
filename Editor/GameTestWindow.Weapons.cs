@@ -111,12 +111,13 @@ public partial class GameTestWindow
         PlaySoundFrom(weapon?.Weapon.HitSoundResourceId ?? -1, defender);
         bool noDamage = powers.HasFlag(WeaponPowers.NoDamage);
         int damage = noDamage || points == 0 ? 0 : WeaponDamage(attacker, defender, points, type);
+        damage = AfterDamageResponse(defender, damage, type); // its own rule for this type (Character Editor > Health)
         if (!WoundsIt(defender, weapon, null)) damage = 0; // it takes another weapon or a spell to hurt this one (Character Editor > Health)
         if (ShowHitNumbers) ShowFloatingText(defender, $"-{damage}"); // Exult's show_hits
         if (damage <= 0 && !noDamage) return; // no damage, no powers
         if (damage > 0)
         {
-            bool willDie = !defender.Immortal && (GetHp(defender) ?? 99) - damage <= 0;
+            bool willDie = !defender.Immortal && !Has(defender, Ailment.WithstandDeath) && (GetHp(defender) ?? 99) - damage <= 0;
             if (willDie) ReportFactionIncident(defender, attacker, FactionIncident.Kill);
             MaybeStartBleeding(defender, damage);
             DamageAllowed(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}", type);

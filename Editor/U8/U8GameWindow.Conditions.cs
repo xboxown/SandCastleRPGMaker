@@ -114,7 +114,8 @@ public partial class U8GameWindow
     }
 
     private CharacterDefinition? ConditionCharacter(GameCondition c) =>
-        c.CharacterId == GameCondition.MainPlayer ? _player : AllLivingCharacters(includeDead: true).FirstOrDefault(ch => ch.Id == c.CharacterId);
+        c.CharacterId == GameCondition.MainPlayer ? _player : AllLivingCharacters(includeDead: true).FirstOrDefault(ch => ch.Id == c.CharacterId)
+            ?? _bodies.Keys.FirstOrDefault(ch => ch.Id == c.CharacterId);
 
     private static IEnumerable<InventoryItemInstance> AllWithin(IEnumerable<InventoryItemInstance> items) =>
         items.SelectMany(i => new[] { i }.Concat(AllWithin(i.Contents)));
@@ -140,6 +141,12 @@ public partial class U8GameWindow
                 double target = text.Equals("true", StringComparison.OrdinalIgnoreCase) ? 1 : text.Equals("false", StringComparison.OrdinalIgnoreCase) ? 0 : double.TryParse(text, out double n) ? n : 0;
                 return GameConditions.Compare(value, c.Comparison, target);
             }
+            case GameConditionKind.InParty:
+            case GameConditionKind.CharacterState:
+            case GameConditionKind.EnemyNear:
+            case GameConditionKind.ObjectsInArea:
+            case GameConditionKind.ItemCharges:
+                return TestWorldCondition(c, who); // their .Toughness.cs
             case GameConditionKind.Equipped:
                 return who is not null && EquippedItems(who).Any(i => IsItem(i, c.Item));
             case GameConditionKind.Unequipped:
