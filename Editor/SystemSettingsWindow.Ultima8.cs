@@ -43,6 +43,17 @@ public partial class SystemSettingsWindow
         eat.Unchecked += (_, _) => u8.EatingAsUltima8 = false;
         panel.Children.Add(eat);
         panel.Children.Add(new TextBlock { Text = "The main character and the party regain 1 HP and 1 mana each real minute; hunger slowly builds and eating gives back HP. Off: Ultima 7's food rules.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(18, 2, 0, 4) });
+        panel.Children.Add(new TextBlock { Text = "Water and lava (Tile Properties: real water, lava)", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        panel.Children.Add(U8SpriteRow("Splash (empty: drops of water)", u8.SplashSprite));
+        panel.Children.Add(SoundSettingRow("Splash sound:", () => u8.SplashSoundId, v => u8.SplashSoundId = v, out _));
+        panel.Children.Add(SoundSettingRow("Big splash sound:", () => u8.BigSplashSoundId, v => u8.BigSplashSoundId = v, out _));
+        panel.Children.Add(U8SpriteRow("Lava's flare (empty: drops of fire)", u8.LavaSprite));
+        panel.Children.Add(SoundSettingRow("Lava sound:", () => u8.LavaSoundId, v => u8.LavaSoundId = v, out _));
+        var lavaRow = new WrapPanel();
+        lavaRow.Children.Add(Number("Lava burns", () => u8.LavaDamage, v => u8.LavaDamage = Math.Max(0, v)));
+        lavaRow.Children.Add(Number("every (tenths of a second)", () => (int)Math.Round(u8.LavaEverySeconds * 10), v => u8.LavaEverySeconds = Math.Max(1, v) / 10.0));
+        panel.Children.Add(lavaRow);
+        panel.Children.Add(new TextBlock { Text = "At the ground, anyone over real water drowns and is gone for good; things that come down in it splash and are lost - bigger things, bigger splashes. Lava burns with Fire damage (a character's rule for Fire counts). Up on a platform, a bridge or a boat, everyone is safe.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(0, 2, 0, 4) });
         panel.Children.Add(new TextBlock { Text = "Difficulty", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
         panel.Children.Add(Words("The variable holding the level (empty: none)", () => u8.DifficultyVariable, v => u8.DifficultyVariable = v.Trim()));
         panel.Children.Add(Words("% of a blow the party takes, for level 1, 2, 3...", () => u8.DifficultyPartyTakes, v => u8.DifficultyPartyTakes = v));
@@ -69,6 +80,24 @@ public partial class SystemSettingsWindow
             row.Children.Add(box);
             return row;
         }
+    }
+
+    /// <summary>A sprite for an Ultima 8 setting: any sprite, or none.</summary>
+    private FrameworkElement U8SpriteRow(string label, SpriteLink link)
+    {
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
+        row.Children.Add(new TextBlock { Text = label + ":", Width = 220, VerticalAlignment = VerticalAlignment.Center });
+        var names = new List<string> { "(none)" };
+        names.AddRange(_sprites.Groups.SelectMany(g => g.Sprites.Select(s => $"{g.Name}/{s.Name}")));
+        string current = link.IsSet ? $"{link.SpriteGroup}/{link.SpriteName}" : "(none)";
+        var combo = new ComboBox { Width = 240, ItemsSource = names, SelectedItem = names.Contains(current) ? current : "(none)" };
+        combo.SelectionChanged += (_, _) =>
+        {
+            if (combo.SelectedItem is string s && s.Split('/', 2) is [var group, var name]) { link.SpriteGroup = group; link.SpriteName = name; }
+            else { link.SpriteGroup = ""; link.SpriteName = ""; }
+        };
+        row.Children.Add(combo);
+        return row;
     }
 
     /// <summary>The keys the game starts with, the paperdoll the player changes them on and the words shown while it waits (Engine/U8Keys.cs).</summary>

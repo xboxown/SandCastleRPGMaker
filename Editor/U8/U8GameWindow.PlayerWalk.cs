@@ -24,7 +24,10 @@ public partial class U8GameWindow
     /// <param name="goalFloor">The goal is on this floor (up or down the stairs to it); null: whatever floor it's reached at.</param>
     private bool WalkPlayerTo((int X, int Y) goal, Action arrived, bool besideOnly = false, int? goalFloor = null)
     {
-        var path = FindPlayerPath(goal, besideOnly, goalFloor);
+        _planningPlayerWalk = true; // water and lava are never on a planned way (U8GameWindow.U8Liquids.cs)
+        List<(double X, double Y)>? path;
+        try { path = FindPlayerPath(goal, besideOnly, goalFloor); }
+        finally { _planningPlayerWalk = false; }
         if (path is null) return false;
         _playerWalkPath = path;
         _playerWalkIndex = 0;

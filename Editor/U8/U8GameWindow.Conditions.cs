@@ -115,7 +115,8 @@ public partial class U8GameWindow
 
     private CharacterDefinition? ConditionCharacter(GameCondition c) =>
         c.CharacterId == GameCondition.MainPlayer ? _player : AllLivingCharacters(includeDead: true).FirstOrDefault(ch => ch.Id == c.CharacterId)
-            ?? _bodies.Keys.FirstOrDefault(ch => ch.Id == c.CharacterId);
+            ?? _bodies.Keys.FirstOrDefault(ch => ch.Id == c.CharacterId)
+            ?? _characters?.Characters.FirstOrDefault(ch => ch.Id == c.CharacterId && IsDead(ch)); // drowned: gone, with no body
 
     private static IEnumerable<InventoryItemInstance> AllWithin(IEnumerable<InventoryItemInstance> items) =>
         items.SelectMany(i => new[] { i }.Concat(AllWithin(i.Contents)));

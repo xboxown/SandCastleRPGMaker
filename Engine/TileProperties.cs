@@ -57,6 +57,10 @@ public class TileTypeProperties
     /// <summary>Water: sea creatures (Character Editor > Moves on: Sea) swim here - and only here. Land walkers go by Walkable (deep water: not walkable).</summary>
     public bool IsWater { get; set; }
 
+    /// <summary>Ultima 8 projects only: what this ground does to anyone in it at lift 0 - real water drowns (gone for good), lava burns.
+    /// Things that come down in it are lost. The Ultima 7 engine never reads it.</summary>
+    public U8Liquid U8Liquid { get; set; }
+
     /// <summary>On the ground: a tile of the same sheet drawn first, under it, showing through its see-through pixels (grass under a half-tile floor); -1 none.</summary>
     public int UnderTileIndex { get; set; } = -1;
 
@@ -96,6 +100,9 @@ public class TileTypeProperties
 /// designer has actually customized need an entry - anything missing is
 /// treated as walkable with no effects and no animation.
 /// </summary>
+/// <summary>Ultima 8's ground that is more than ground (Tile Properties).</summary>
+public enum U8Liquid { None, Water, Lava }
+
 public class TilePropertiesDatabase
 {
     public Dictionary<string, TileTypeProperties> ByTileKey { get; set; } = new();

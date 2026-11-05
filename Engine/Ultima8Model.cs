@@ -37,6 +37,20 @@ public class Ultima8Settings
     /// <summary>Eating and healing as Ultima 8: 1 HP and 1 mana a real minute, hunger builds, eating gives back HP. Off: Ultima 7's food.</summary>
     public bool EatingAsUltima8 { get; set; }
 
+    // ---------- Water and lava (Tile Properties > Ultima 8) ----------
+
+    /// <summary>The splash's animation (scaled to the size of what went in); empty: drops of water.</summary>
+    public SpriteLink SplashSprite { get; set; } = new();
+    public int SplashSoundId { get; set; } = -1;
+    /// <summary>For something big (a character, a chest): empty, the ordinary splash.</summary>
+    public int BigSplashSoundId { get; set; } = -1;
+    /// <summary>Lava's flare as something goes in; empty: drops of fire.</summary>
+    public SpriteLink LavaSprite { get; set; } = new();
+    public int LavaSoundId { get; set; } = -1;
+    /// <summary>Lava burns this much (Fire damage) every LavaEverySeconds.</summary>
+    public int LavaDamage { get; set; } = 10;
+    public double LavaEverySeconds { get; set; } = 0.5;
+
     // ---------- Difficulty (Crusader's Item::scaleReceivedDamageCru) ----------
 
     /// <summary>The variable that holds the level (1, 2, 3...); empty: no difficulty.</summary>

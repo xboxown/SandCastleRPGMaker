@@ -198,6 +198,7 @@ public partial class U8GameWindow
         mapCharacter.Npc.WalkingToSchedule = false;
         mapCharacter.Npc.Activity = null;
         mapCharacter.Npc.InCombat = false;
+        if (VanishedInstead(mapCharacter)) return; // drowned: gone for good, no body (U8GameWindow.U8Liquids.cs)
         var (burstX, burstY) = PixelOf(character);
         int burstLift = LiftOf(character);
         BurstOnDeath(character, burstX, burstY, burstLift); // its pieces fly (their .Burst.cs); the body stays
@@ -211,6 +212,7 @@ public partial class U8GameWindow
     private void UpdateVitals(double elapsedMs, int hourChanges)
     {
         UpdateHurled(elapsedMs); // what flies and bounces (their .Burst.cs)
+        UpdateLiquids(elapsedMs); // water and lava (U8GameWindow.U8Liquids.cs)
         UpdateViewEvents(elapsedMs); // By Coming Into View, By Leaving View (U8GameWindow.U8Extras.cs)
         UpdateAmbient(); // the sound of the time of day (U8GameWindow.Ambient.cs)
         if (_gameOver) return;

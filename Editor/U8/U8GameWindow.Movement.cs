@@ -96,8 +96,10 @@ public partial class U8GameWindow
             else if (MapCharacterOf(who) is { } mc)
             {
                 StopWalking(mc);
+                int from = mc.Lift;
                 mc.Lift = GroundBelow(mc);
                 PositionCharacterVisual(mc);
+                if (from - mc.Lift > ActorMaxDrop) CharacterFell(mc, from, mc.Lift); // a real fall (U8GameWindow.U8Liquids.cs)
             }
         }
     }
@@ -165,8 +167,10 @@ public partial class U8GameWindow
         int ground = GroundBelow(mapCharacter);
         if (mapCharacter.Lift <= ground) return;
         StopWalking(mapCharacter);
+        int from = mapCharacter.Lift;
         mapCharacter.Lift = ground;
         PositionCharacterVisual(mapCharacter);
+        CharacterFell(mapCharacter, from, ground); // a real fall (U8GameWindow.U8Liquids.cs)
     }
 
     /// <summary>Climbs or drops a lift at a time (inside its own cell) toward the lift its path wants. True while still on the way.</summary>

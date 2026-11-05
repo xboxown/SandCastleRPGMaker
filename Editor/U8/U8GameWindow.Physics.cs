@@ -217,6 +217,7 @@ public partial class U8GameWindow
         WorldChanged(); // kept bodies are made again (U8GameWindow.Perf.cs)
         SettleAll();
         ApplyGravityToPlayer();
+        ApplyGravityToCharacters(); // a real fall for everyone else (U8GameWindow.U8Liquids.cs)
         ShatterFallenGlass();
     }
 
@@ -363,7 +364,12 @@ public partial class U8GameWindow
         {
             if (!AllWaterUnder(to)) { blockReason = "Blocked: a sea creature stays in the water."; return false; }
         }
-        else if (newLift == 0 && !TerrainWalkableUnder(to))
+        else if (newLift == 0 && !LiquidStepAllowed(to, mover, out bool liquidThere))
+        {
+            blockReason = "Blocked: deep water or lava.";
+            return false;
+        }
+        else if (newLift == 0 && LiquidUnder(to) == U8Liquid.None && !TerrainWalkableUnder(to))
         {
             blockReason = "Blocked: the ground there isn't walkable.";
             return false;
@@ -533,6 +539,7 @@ public partial class U8GameWindow
         var foot = PlayerFootprint();
         int floor = FloorBelow(WorldNow().Overlapping(foot).Where(b => b.Solid), _playerZ);
         if (floor >= _playerZ) return;
+        if (_playerZ - floor > ActorMaxDrop) { StartFallU8(_playerZ); _playerZ = floor; return; } // a real fall: drawn falling, hurt on landing (U8GameWindow.U8Movement.cs)
         _playerZ = floor;
         _playerVisualLiftZ = _playerZ;
         SnapPlayerPosition();

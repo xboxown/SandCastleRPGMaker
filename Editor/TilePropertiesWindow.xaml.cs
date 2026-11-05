@@ -35,6 +35,13 @@ public partial class TilePropertiesWindow : Window
         TerrainLabelBox.Text = target.TerrainLabel;
         WalkableCheck.IsChecked = target.Walkable;
         WaterCheck.IsChecked = target.IsWater;
+        if (ProjectSession.IsUltima8 && WaterCheck.Parent is System.Windows.Controls.Panel panel)
+        {
+            // Ultima 8: real water and lava, for everyone (U8GameWindow.U8Liquids.cs)
+            _u8Liquid = new System.Windows.Controls.ComboBox { Margin = new Thickness(0, 0, 0, 10), ItemsSource = new[] { "Ordinary ground", "Real water: anyone in it drowns, things sink and are lost", "Lava: anyone in it burns, things burn away" }, SelectedIndex = (int)target.U8Liquid };
+            panel.Children.Insert(panel.Children.IndexOf(WaterCheck) + 1, new System.Windows.Controls.TextBlock { Text = "Ultima 8: at the ground (lift 0)", FontWeight = FontWeights.Bold });
+            panel.Children.Insert(panel.Children.IndexOf(WaterCheck) + 2, _u8Liquid);
+        }
 
         RequiredObjectsListBox.ItemsSource = _availableObjects;
         foreach (var obj in _availableObjects.Where(o => target.RequiredObjectIds.Contains(o.Id)))
@@ -171,6 +178,7 @@ public partial class TilePropertiesWindow : Window
         _target.TerrainLabel = TerrainLabelBox.Text;
         _target.Walkable = WalkableCheck.IsChecked == true;
         _target.IsWater = WaterCheck.IsChecked == true;
+        if (_u8Liquid is not null) _target.U8Liquid = (U8Liquid)Math.Max(0, _u8Liquid.SelectedIndex);
         _target.RequiredObjectIds = RequiredObjectsListBox.SelectedItems.Cast<WorldObject>().Select(o => o.Id).ToList();
         _target.CustomEffects = _workingEffects;
         DialogResult = true;
