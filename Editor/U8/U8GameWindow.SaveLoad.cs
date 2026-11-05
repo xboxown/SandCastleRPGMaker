@@ -545,7 +545,8 @@ public partial class U8GameWindow
         System.Text.Json.JsonSerializer.Deserialize<T>(System.Text.Json.JsonSerializer.Serialize(source))
         ?? throw new InvalidOperationException($"Couldn't copy the game's {typeof(T).Name}.");
 
-    private GameSaveData CaptureSave()
+    /// <summary>The save as the game is now (CaptureSave, U8GameWindow.U8Crusader.cs, writes it with the main character controlled).</summary>
+    private GameSaveData CaptureSaveAsIs()
     {
         var map = JsonCopy(_map);
         map.StartX = _playerX;
@@ -713,5 +714,6 @@ public partial class U8GameWindow
         }
         if (data.Weather is not null) _weather = data.Weather;
         _worldStates = data.WorldStates.ToDictionary(kv => kv.Key, kv => kv.Value);
+        RestoreControl(data); // who the player controlled (U8GameWindow.U8Crusader.cs)
     }
 }

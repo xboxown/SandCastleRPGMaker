@@ -255,6 +255,8 @@ public class SpriteDatabase
     public const string WaterSplashGroupName = "Water Splash";
     /// <summary>Ultima 8 projects only: lava's flare when something or someone goes in.</summary>
     public const string LavaFlareGroupName = "Lava Flare";
+    /// <summary>Ultima 8 projects only: Crusader's crosshair on the target in combat mode.</summary>
+    public const string CrosshairGroupName = "Crosshair";
 
     /// <summary>The eight directions in the order a smooth weapon-in-hand sprite's frames go.</summary>
     public static readonly string[] WeaponDirectionNames = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
@@ -277,7 +279,7 @@ public class SpriteDatabase
         return names.ToArray();
     }
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || name == WaterSplashGroupName || name == LavaFlareGroupName || IsBundleGroup(name);
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || name == WaterSplashGroupName || name == LavaFlareGroupName || name == CrosshairGroupName || IsBundleGroup(name);
 
     /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
     public SpriteEntry? FindDialogFrame(string name)
@@ -317,6 +319,7 @@ public class SpriteDatabase
     {
         GetOrCreateGroup(WaterSplashGroupName);
         GetOrCreateGroup(LavaFlareGroupName);
+        GetOrCreateGroup(CrosshairGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

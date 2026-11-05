@@ -34,6 +34,7 @@ public partial class U8GameWindow
     private bool U8Hits(CharacterDefinition attacker, CharacterDefinition defender)
     {
         if (IsMotionless(defender)) return true; // stunned (lying still): every blow lands
+        if (defender == _player && PlayerDodging) return false; // rolling (U8GameWindow.U8Crusader.cs)
         int attackDex = Math.Max(0, Stat(attacker, BuiltInStatKind.Dexterity, 10) + U8DexBonus(attacker).Attack);
         int defendDex = Math.Max(1, Stat(defender, BuiltInStatKind.Dexterity, 10) + U8DexBonus(defender).Defend);
         return U8Random(attackDex + 2) > U8Random(defendDex - 1);
@@ -104,7 +105,7 @@ public partial class U8GameWindow
     /// <summary>A swing (or a kick) toward the pointer: whoever is in reach that way is struck; nobody - the air.</summary>
     private double _u8LastSwingMs = double.NegativeInfinity;
 
-    private void U8Swing(bool kick)
+    private void U8Swing(bool kick, bool fromKeys = false)
     {
         if (_player is null) return;
         // U8AvatarMoverProcess: not again till 25 - Dexterity frames (30 a second) after the last one.
@@ -112,9 +113,13 @@ public partial class U8GameWindow
         if (now - _u8LastSwingMs < wait) return;
         _u8LastSwingMs = now;
         BuildUpFromSwing(_player); // attacking gives Strength and Dexterity (U8GameWindow.U8Reactions.cs)
-        var (screen, _) = PointerFromAvatar();
-        var (dx, dy) = WorldFromScreen(screen.X, screen.Y);
+        var aim = CrosshairWanted ? _crosshairTarget : null; // Crusader's crosshair: at it (U8GameWindow.U8Crusader.cs)
+        int dx, dy;
+        if (aim is not null) { var (ax, ay) = PixelOf(aim); (dx, dy) = VectorOf(FacingTowards(_playerPixelX, _playerPixelY, ax, ay)); }
+        else if (fromKeys) (dx, dy) = VectorOf(_playerFacing); // the Attack key: the way they face
+        else { var (screen, _) = PointerFromAvatar(); (dx, dy) = WorldFromScreen(screen.X, screen.Y); }
         _playerFacing = FacingOf(dx, dy);
+        SoakLog($"swing: {(aim is null ? "the pointer's way" : "at the crosshair's " + aim.Name)}{(fromKeys ? ", from the Attack key" : "")}");
         var weapon = WieldedWeapon(_player);
         // A bow or a thrown weapon: shot at the nearest foe that way, in range.
         double facingAngle = Math.Atan2(dy, dx);
@@ -125,6 +130,7 @@ public partial class U8GameWindow
             return d <= Math.PI * 3 / 8;
         }
         var candidates = AllLivingCharacters().Where(c => c != _player && !c.IsInParty && SameFloor(_player, c) && InFront(c)).OrderBy(c => TilesBetween(_player, c)).ToList();
+        if (aim is not null && CrosshairCanTake(aim)) { candidates.Remove(aim); candidates.Insert(0, aim); } // the crosshair's first
         if (!kick && weapon is { } held && candidates.FirstOrDefault(c => Shoots(held.Def, InReach(_player, c), TilesBetween(_player, c))) is { } shotAt)
         {
             if (Shoot(_player, shotAt, held.Item, held.Def)) ApplyPoseSprite(PoseByName(StrikePose(_player, held.Def, true, _playerFacing)) ?? _idlePose);

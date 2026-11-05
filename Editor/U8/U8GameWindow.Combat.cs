@@ -400,7 +400,7 @@ public partial class U8GameWindow
     /// <summary>In combat mode, the player builds up Dexterity points every standard delay and strikes the target whenever it's in reach.</summary>
     private void UpdatePlayerAttack(double elapsedMs)
     {
-        if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0 && !_u8Blocking) ApplyPoseSprite(_idlePose);
+        if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0 && !_u8Blocking) ApplyPoseSprite(PlayerBackToPose()); // kneeling stays kneeling (U8GameWindow.U8Crusader.cs)
         // Ultima 8: the Avatar fights only when told - a swing, a kick, a block (U8GameWindow.U8Combat.cs) - except a foe an event has set it on (Attack).
         if (_playerTarget is null && _playerTargetThing is null) return;
         // Not Manual (the paperdoll's combat behavior): in combat mode the player picks a foe by its mode, as Exult's Avatar does (find_foe).

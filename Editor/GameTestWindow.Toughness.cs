@@ -327,6 +327,7 @@ public partial class GameTestWindow
                     "Unconscious" => IsUnconscious(who),
                     "In combat" => who == _player ? _combatMode : MapCharacterOf(who)?.Npc.InCombat == true,
                     "Dead" => IsDead(who),
+                    "Controlled by the player" => who == _player,
                     _ => Enum.TryParse<Ailment>(c.Value, out var ailment) && Has(who, ailment)
                 };
             case GameConditionKind.EnemyNear:

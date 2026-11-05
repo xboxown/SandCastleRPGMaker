@@ -44,6 +44,7 @@ public partial class U8GameWindow
 
     private void Travel(MapData world, (int X, int Y, int Floor)? spot)
     {
+        ControlBackForTravel(); // the main character goes (U8GameWindow.U8Crusader.cs)
         var data = CaptureSave();
         var leaving = data.Map;
         // The party goes with the main character: out of this world's placements, into the new one's.

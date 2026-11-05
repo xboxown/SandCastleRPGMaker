@@ -237,6 +237,7 @@ public partial class U8GameWindow
         foreach (var who in AllLivingCharacters())
         {
             if (ReferenceEquals(who, flying.Shooter)) continue;
+            if (who == _player && PlayerDodgesShot(flying)) continue; // rolling, or kneeling (U8GameWindow.U8Crusader.cs)
             int lift = LiftOf(who);
             if (flying.Lift < lift - 1 || flying.Lift > lift + 5 || !pieces.Any(FootOf(who).Overlaps)) continue;
             EndFlight(flying, who);

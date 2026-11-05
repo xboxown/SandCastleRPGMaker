@@ -38,6 +38,7 @@ public partial class U8GameWindow
         a[EventCommandType.U8Computer] = ComputerCommand;
         a[EventCommandType.U8Recharge] = RechargeCommand;
         h[EventCommandType.U8Alarm] = AlarmCommand;
+        InitU8Crusader(); // Control Character, Return Control (U8GameWindow.U8Crusader.cs)
     }
 
     // ---------- Move Platform ----------

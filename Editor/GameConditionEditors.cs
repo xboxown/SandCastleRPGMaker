@@ -211,7 +211,7 @@ internal static class GameConditionFields
             case GameConditionKind.CharacterState:
             {
                 Who("Who");
-                string[] states = { "Poisoned", "Asleep", "Paralyzed", "Charmed", "Cursed", "Invisible", "Protected", "FeignDeath", "WithstandDeath", "Unconscious", "In combat", "Dead" };
+                string[] states = { "Poisoned", "Asleep", "Paralyzed", "Charmed", "Cursed", "Invisible", "Protected", "FeignDeath", "WithstandDeath", "Unconscious", "In combat", "Dead", "Controlled by the player" };
                 if (Array.IndexOf(states, c.Value) < 0) c.Value = states[0];
                 var state = new ComboBox { Width = 200, ItemsSource = states, SelectedItem = c.Value, HorizontalAlignment = HorizontalAlignment.Left };
                 state.SelectionChanged += (_, _) => { if (state.SelectedItem is string s) c.Value = s; };

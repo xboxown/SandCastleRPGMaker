@@ -299,7 +299,7 @@ public partial class U8GameWindow
     {
         foreach (var mapCharacter in _mapCharacters.ToList())
         {
-            if (IsDead(mapCharacter.Character) || IsFlier(mapCharacter) || _seats.ContainsKey(mapCharacter.Character)) continue;
+            if (IsDead(mapCharacter.Character) || IsFlier(mapCharacter) || _seats.ContainsKey(mapCharacter.Character) || _leaping.ContainsKey(mapCharacter)) continue; // climbing after the player: in the air on purpose
             int ground = GroundBelow(mapCharacter);
             if (ground >= mapCharacter.Lift) continue;
             int from = mapCharacter.Lift;

@@ -95,6 +95,7 @@ public partial class U8GameWindow
         var character = mapCharacter.Character;
         bool join = command.Get("Value") != "Leave the party";
         if (character.IsInParty == join) return true;
+        if (join && !PartyHasRoomFor(character)) return false; // System Settings > Ultima 8 > The party (U8GameWindow.U8Party.cs)
         character.IsInParty = join;
         _followers.Remove(mapCharacter);
         StopWalking(mapCharacter);
@@ -233,6 +234,7 @@ public partial class U8GameWindow
             if (!_mapCharacters.Contains(follower) || IsDead(follower.Character) || IsDead(leader)) { _followers.Remove(follower); continue; }
             if (IsIncapacitated(follower.Character) || follower.Npc.InCombat || IsScripted(follower.Character)) continue; // carrying out an event's command (walking to a pumpkin...): it isn't pulled back
             if (leader == _player && SitsWithPlayer(follower)) continue; // sitting with them, or on the way to a chair
+            if (leader == _player && FollowByLeap(follower)) continue; // up or down where the player climbed (U8GameWindow.U8Party.cs)
             var target = CellOf(leader);
             var at = follower.Placement;
             if (CellsApart(target, (at.X, at.Y)) <= 2) continue; // the short way round a map that wraps around: they follow over the seam

@@ -84,7 +84,7 @@ public partial class SpriteEditorWindow : Window
     /// <summary>The folders the engine and editors rely on by name: never renamed, deleted or given an identity.</summary>
     private static bool IsProtected(string name) =>
         name is SpriteDatabase.TilesetGroupName or SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.DialogFrameGroupName
-            or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName or SpriteDatabase.TrailGroupName or SpriteDatabase.WaterSplashGroupName or SpriteDatabase.LavaFlareGroupName
+            or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName or SpriteDatabase.TrailGroupName or SpriteDatabase.WaterSplashGroupName or SpriteDatabase.LavaFlareGroupName or SpriteDatabase.CrosshairGroupName
         || SpriteDatabase.IsBundleGroup(name);
 
     /// <summary>Right-click a folder: what it's for (its identity), rename, paste, delete.</summary>
@@ -340,6 +340,7 @@ public partial class SpriteEditorWindow : Window
         if (_currentGroup.Name == SpriteDatabase.DialogFrameGroupName) new DialogFrameGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName) new JoiningGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name is SpriteDatabase.WaterSplashGroupName or SpriteDatabase.LavaFlareGroupName) new SplashGuideWindow(_currentGroup.Name == SpriteDatabase.LavaFlareGroupName) { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.CrosshairGroupName) new CrosshairGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.TrailGroupName)
             MessageBox.Show(this, "A sprite here is one kind of puddle a monster leaves as it walks, as in Ultima 7.\n\nGive it up to 4 frames, small to large: they are sizes, not an animation. New puddles start at frame 1 or 2 and grow if it drips on the same spot.\n\nThen Character Editor > the monster > Health > Joining > Trail: pick this sprite, and tick whether its puddles hurt.", "Slime Trail", MessageBoxButton.OK, MessageBoxImage.Information);
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)

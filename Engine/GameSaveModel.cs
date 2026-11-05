@@ -34,6 +34,9 @@ public class GameSaveData
     public int PlayerLift { get; set; }
     public SpriteDirection PlayerFacing { get; set; } = SpriteDirection.South;
     public bool CombatMode { get; set; }
+    /// <summary>Ultima 8: the character the player controls (its place in the game's character list), -1: the main character. The save itself is written as if the main character were controlled.</summary>
+    public int ControlledCharacterIndex { get; set; } = -1;
+    public bool ControlLocked { get; set; }
 
     /// <summary>Variables and switches, as the running game holds them (by name).</summary>
     public Dictionary<string, double> Variables { get; set; } = new();

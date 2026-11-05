@@ -166,6 +166,7 @@ public partial class U8GameWindow
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
         if (character.Immortal) { SoakLog($"immortal: {character.Name} isn't killed, hp {GetHp(character)}"); KnockOut(character); return; }
+        ControlBackOnDeath(character); // Crusader: the one controlled, or the main character, died - the main character is controlled again (U8GameWindow.U8Crusader.cs)
         Record($"killed:{character.Id}"); // Character killed (U8GameWindow.Conditions.cs)
         Record("killed:*");
         StandUp(character);
@@ -459,6 +460,7 @@ public partial class U8GameWindow
         WhoChoice.Player => _player,
         WhoChoice.Activator => _activator?.Character ?? _player,
         _ => _mapCharacters.FirstOrDefault(mc => mc.Character.Id.ToString() == who)?.Character
+             ?? (_player is { } p && p.Id.ToString() == who ? p : null) // the one the player controls, named by itself (U8GameWindow.U8Crusader.cs)
     };
 
     private bool ChangeFoodCommand(string who, string operation, int amount)

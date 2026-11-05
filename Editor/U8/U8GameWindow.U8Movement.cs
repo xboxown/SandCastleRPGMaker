@@ -37,6 +37,8 @@ public partial class U8GameWindow
         public double FromX, FromY, ToX, ToY, T, Duration;
         public int FromLift, ToLift;
         public double Arc;
+        /// <summary>A roll: no blow or shot lands (U8GameWindow.U8Crusader.cs). Quiet: a roll or a side-step - no landing pose, no leap kept.</summary>
+        public bool Dodge, Quiet;
     }
     private U8Jump? _jump;
 
@@ -278,6 +280,7 @@ public partial class U8GameWindow
         double x = _playerPixelX + dx / len * _tileWidth, y = _playerPixelY + dy / len * _tileHeight;
         var foot = PlayerFootprintAt(x, y);
         int top = StandingLiftAt(foot, _player), rise = top - _playerZ;
+        SoakLog($"jump up: facing {_playerFacing}, from lift {_playerZ}, the top in front {top}, rise {rise}");
         if (rise >= 2 && rise <= 9 && TryFlyStep(foot, top, _playerSize.Z, null, null, out _, out _))
         {
             BuildUpFromClimb(rise); // climbing gives Strength and Dexterity (U8GameWindow.U8Reactions.cs)
@@ -307,7 +310,8 @@ public partial class U8GameWindow
         _playerZ = j.ToLift;
         _playerVisualLiftZ = _playerZ;
         DrawPlayerU8();
-        if (fellFrom > _playerZ) LandU8(fellFrom); else ApplyPoseSprite(PoseByName("Land") ?? _idlePose);
+        if (!j.Quiet) NoteLeap(j.FromX, j.FromY, j.FromLift, j.ToX, j.ToY, j.ToLift); // the party climbs after (U8GameWindow.U8Party.cs)
+        if (fellFrom > _playerZ + (j.Quiet ? 1 : 0)) LandU8(fellFrom); else ApplyPoseSprite(j.Quiet ? U8RestPose() : PoseByName("Land") ?? _idlePose);
         return true;
     }
 
@@ -389,6 +393,7 @@ public partial class U8GameWindow
     {
         if (_u8FallFrom is not { } from || _playerVisualLiftZ > _playerZ) return;
         _u8FallFrom = null;
+        NoteDropLanded(); // the party climbs down after (U8GameWindow.U8Party.cs)
         LandU8(from);
     }
 

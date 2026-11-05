@@ -1605,6 +1605,7 @@ public partial class U8GameWindow : Window
             return;
         }
 
+        if (U8CrusaderKey(pressed, e.IsRepeat)) { e.Handled = true; return; } // Crusader: switching who is controlled, rolls, kneeling, the crosshair (U8GameWindow.U8Crusader.cs)
         if (IsGamePaused) return; // movement stays blocked while any gump is open (Exult: start_actor refuses in gump mode - paperdolls, containers and books alike), matching real Exult's "gumps pause games"
 
         if (KeyIs(pressed, "Jump")) { if (!e.IsRepeat) TryStartU8Jump(fromMouse: false); e.Handled = true; return; } // Ultima 8: jump (both mouse buttons too)
@@ -1835,6 +1836,11 @@ public partial class U8GameWindow : Window
         UpdateFallU8(); // walked off a ledge and landed: hurt by the height (U8GameWindow.U8Movement.cs)
         if (UpdateU8Jump(deltaSeconds)) _wasMovingLastFrame = false; // in the air (U8GameWindow.U8Movement.cs)
         else if (DriveFrame(deltaSeconds)) _wasMovingLastFrame = false; // at a vehicle's controls: the keys drive it (U8GameWindow.Vehicles.cs)
+        else if (_u8Kneeling && !IsIncapacitated(_player!)) // kneeling: a way pressed stands up first (U8GameWindow.U8Crusader.cs)
+        {
+            if (TryGetU8Direction(out _, out _)) Kneel(false);
+            _wasMovingLastFrame = false;
+        }
         else if (_u8Step is not null && !IsIncapacitated(_player!)) // a step under way finishes, the button held or not (U8GameWindow.U8Movement.cs)
         {
             ContinueU8Step(deltaSeconds);
@@ -1865,7 +1871,8 @@ public partial class U8GameWindow : Window
             _wasMovingLastFrame = false;
         }
         _u8Running = _wasMovingLastFrame && _u8SpeedFactor >= U8RunFactor;
-        UpdateU8Idle(deltaSeconds, idle: !_wasMovingLastFrame && _playerWalkPath is null && _pendingSit is null && !IsShowingMessage); // looking about, standing still (U8GameWindow.U8Movement.cs)
+        UpdateU8Idle(deltaSeconds, idle: !_wasMovingLastFrame && _playerWalkPath is null && _pendingSit is null && !IsShowingMessage && !_u8Kneeling); // looking about, standing still (U8GameWindow.U8Movement.cs)
+        UpdateU8Crusader(deltaSeconds); // the crosshair, the party climbing after the player (U8GameWindow.U8Crusader.cs, .U8Party.cs)
     }
 
     /// <summary>The most recently pressed still-held direction wins if more than one is held - a simple, predictable rule rather than diagonal combination, matching the existing cardinal-only movement model.</summary>

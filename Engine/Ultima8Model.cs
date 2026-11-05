@@ -60,6 +60,20 @@ public class Ultima8Settings
     /// <summary>For level 1, 2, 3...: the % of a blow everyone else takes.</summary>
     public string DifficultyOthersTake { get; set; } = "500, 300, 100, 100";
 
+    // ---------- The party (Ultima 8 engine) ----------
+
+    /// <summary>The most who can join the party, the main character not counted; 0: no limit. One more asking says its Party is full words.</summary>
+    public int MaxPartyMembers { get; set; }
+
+    // ---------- Crusader's crosshair (its reticle) ----------
+
+    /// <summary>In combat mode a crosshair sits on the target: swings and shots go to it; the Next Target key moves it.</summary>
+    public bool CrosshairOn { get; set; }
+    /// <summary>The crosshair's picture (Sprite Editor > Crosshair); empty: the first there, or a drawn one.</summary>
+    public SpriteLink CrosshairSprite { get; set; } = new();
+    /// <summary>How far it looks for a target (map cells).</summary>
+    public int CrosshairCells { get; set; } = 12;
+
     // ---------- The keyboard (Engine/U8Keys.cs) ----------
 
     /// <summary>The keys the maker changed: action id -> key. An action not here has Ultima 8's own.</summary>

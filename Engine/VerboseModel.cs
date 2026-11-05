@@ -30,7 +30,8 @@ public enum VerboseKind
     VeryHot,
     Heatstroke,
     Scorched,
-    CoolingDown
+    CoolingDown,
+    PartyFull
 }
 
 /// <summary>
@@ -75,6 +76,7 @@ public class VerboseLines
         VerboseKind.Heatstroke => new[] { "I feel faint!", "This heat is killing me!" },
         VerboseKind.Scorched => new[] { "I am burning up!", "I... cannot... breathe..." },
         VerboseKind.CoolingDown => new[] { "I am cooling down.", "That is better." },
+        VerboseKind.PartyFull => new[] { "Thy party is full. I cannot join thee.", "There is no room for me with thee.", "Perhaps another time - thou hast enough companions." },
         _ => Array.Empty<string>()
     };
 
@@ -110,6 +112,7 @@ public class VerboseLines
         VerboseKind.Heatstroke => "Heat: heatstroke",
         VerboseKind.Scorched => "Heat: burning up",
         VerboseKind.CoolingDown => "Heat: cooling down",
+        VerboseKind.PartyFull => "Party is full (Ultima 8)",
         _ => kind.ToString()
     };
 
@@ -143,6 +146,7 @@ public class VerboseLines
         VerboseKind.Heatstroke => "The same, 30 to 59: from 50 it's hurt as it says so.",
         VerboseKind.Scorched => "The same, 60 or more: hurt 1 to 3 as it says so.",
         VerboseKind.CoolingDown => "Out of the heat, or wearing enough cooling, as it recovers.",
+        VerboseKind.PartyFull => "Ultima 8 projects: Join Party when the party already has System Settings > Ultima 8 > The party's most members. It doesn't join.",
         _ => ""
     };
 }

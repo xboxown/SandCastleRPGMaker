@@ -383,6 +383,9 @@ public static class ScriptCommands
             new[] { F("Value", "Words", ScriptFieldKind.Words), F("MsPerLetter", "Milliseconds a letter", def: "30") }, "{Value}"),
         new(EventCommandType.U8Recharge, "Recharge", CrusaderTab, "Crusader", "Health or Mana fills up over time, until full or the seconds run out: a charger, a healing station. The event waits; the character stands there.",
             new[] { Who(), Choice("Stat", "What", "Mana", "Health"), F("PerSecond", "A second", def: "5"), F("Seconds", "At most (seconds)", def: "20") }, "{Who}: {Stat}"),
+        new(EventCommandType.U8ControlCharacter, "Control Character", CrusaderTab, "Crusader", "The player controls another character - any, a party member or not (a robot, a guard taken over): the keys and the mouse move it, it fights, it opens its inventory. The main character stays where they stood. Return Control gives the main character back.",
+            new[] { Who("Who the player controls"), Check("Lock", "The player can't switch away with the keys (only Return Control)", true) }, "{Who}"),
+        new(EventCommandType.U8ReturnControl, "Return Control", CrusaderTab, "Crusader", "The player controls the main character again; the one controlled stays where it is and goes back to its own day (or follows, if in the party).", Array.Empty<ScriptField>(), "", HasWindow: false),
         new(EventCommandType.U8Alarm, "Alarm", CrusaderTab, "Crusader", "Everyone of a faction within reach goes for someone. Those who surrendered don't.",
             new[] { new("Faction", "Faction", ScriptFieldKind.Faction), Who("Goes for"), F("Cells", "Within (map cells)", def: "30") }, "{Faction} go for {Who}"),
 
