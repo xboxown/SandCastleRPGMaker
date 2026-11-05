@@ -139,16 +139,23 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     public Action<object>? OnRunEnded { get; set; }
     public void RunEnded(object run) => OnRunEnded?.Invoke(run);
 
+    /// <summary>The game remembers now who set the event off, and the action it returns runs as them, however much later.</summary>
+    public Func<Action, Action>? OnKeepWhoSetItOff { get; set; }
+
     public bool TryBegin(EventCommand command, Action<bool> done)
     {
         if (!GameActions.TryGetValue(command.Type, out var start)) return false;
         bool once = false;
+        bool result = false;
+        Action goOn = () => done(result);
+        goOn = OnKeepWhoSetItOff?.Invoke(goOn) ?? goOn;
         void Finish(bool ok)
         {
             if (once) return;
             once = true;
             LastResult = ok;
-            done(ok);
+            result = ok;
+            goOn();
         }
         if (!start(command, Finish)) Finish(false);
         return true;

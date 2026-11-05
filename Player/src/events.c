@@ -3092,12 +3092,15 @@ static int fire_pages_core(Owner *o, int just, int activator, int byStepping)
         Page *p = &o->pages[i];
         int *fired = fireCopy ? count_for(fireCopy, i) : &p->fired;
         cJSON *c = p->cond;
-        /* By Enter / Stay / Exit "stepped on by": the player is the one stepping here. */
+        /* By Enter / Stay / Exit "stepped on by": only they set it off. */
         const char *by = str(c, "SteppedOnBy");
         int trigger = num(c, "TriggerConditionBased", 0);
         if (by[0] && o->isMapEvent && (just == T_ENTER || just == T_STAY || just == T_EXIT) && trigger == just)
         {
-            if (strcmp(by, "Player") != 0 && strcmp(by, "Party") != 0 && atoi(by) != world_actor_character(0)) continue;
+            int stepper = byStepping && activator > 0 ? activator : 0;
+            int stepperId = world_actor_character(stepper);
+            int allowed = !strcmp(by, "Player") ? stepper == 0 : !strcmp(by, "Party") ? (stepper == 0 || items_in_party(stepperId)) : atoi(by) == stepperId;
+            if (!allowed) continue;
         }
         if (combining && just == trigger && (just == T_COMBINE_ITEM || just == 3))
         {
@@ -3150,9 +3153,40 @@ void events_player_moved(void)
     if (eventUnder) fire_pages(eventUnder, T_ENTER, -1, 0);
 }
 
+/* What each character stands on, and the cell it was last seen in. A jump (Teleport) sets nothing off, as in the game on Windows. */
+enum { STEP_ACTORS = 256 };
+static Owner *actorUnder[STEP_ACTORS];
+static short actorX[STEP_ACTORS], actorY[STEP_ACTORS];
+static char actorSeen[STEP_ACTORS];
+
+static int actor_can_step(int a) { return !world_actor_gone(a) && !vitals_dead(world_actor_character(a)); }
+
+/* A character walked onto a new cell: leaving and entering events fire for it (Self = it). */
+static void actors_stepping(void)
+{
+    int count = world_actor_count();
+    for (int a = 1; a < count && a < STEP_ACTORS; a++)
+    {
+        if (!actor_can_step(a)) continue;
+        int x, y, floor;
+        world_actor_cell(a, &x, &y, &floor);
+        if (!actorSeen[a]) { actorSeen[a] = 1; actorX[a] = (short)x; actorY[a] = (short)y; continue; } /* standing there from the start doesn't set it off */
+        if (x == actorX[a] && y == actorY[a]) continue;
+        int walked = abs(x - actorX[a]) <= 2 && abs(y - actorY[a]) <= 2;
+        actorX[a] = (short)x; actorY[a] = (short)y;
+        if (!walked) continue;
+        Owner *leaving = actorUnder[a];
+        Owner *now = event_at(x, y, floor);
+        actorUnder[a] = now;
+        if (leaving && leaving != now) fire_pages(leaving, T_EXIT, a, 1);
+        if (now && now != leaving) fire_pages(now, T_ENTER, a, 1);
+    }
+}
+
 void events_update(double ms, int paused)
 {
     expire_stat_changes();
+    if (!paused) actors_stepping();
     if (arrival.on && (arrival.ms -= ms) <= 0) { arrival.on = 0; arrive_at(arrival.x, arrival.y, arrival.floor); screen_fade(0, 0, 0.4); }
     if (worldTrip.on == 1 && (worldTrip.ms -= ms) <= 0) worldTrip.on = 2; /* main takes the party there now */
     /* By Stay: each second while the player stands on it (a timer of its own - it runs while a box is up too). */
@@ -3160,6 +3194,8 @@ void events_update(double ms, int paused)
     {
         stayMs += 1000;
         if (eventUnder) fire_pages(eventUnder, T_STAY, -1, 0);
+        for (int a = 1; a < world_actor_count() && a < STEP_ACTORS; a++)
+            if (actorUnder[a] && actor_can_step(a)) fire_pages(actorUnder[a], T_STAY, a, 1);
     }
     /* Every frame, paused or not: long loops go on, Wait Untils are checked, fades and camera moves go on. */
     screenNow += (uint32_t)ms;
@@ -3536,6 +3572,7 @@ void events_reset(void)
     functionRun = NULL;
     copyCountN = 0; fireCopy = 0;
     eventUnder = NULL; lastX = lastY = -1; started = 0; stayMs = 1000; alwaysMs = 0;
+    memset(actorUnder, 0, sizeof actorUnder); memset(actorSeen, 0, sizeof actorSeen);
     customCount = 0; dollCountN = 0; dollPagesN = 0;
     clockDay = 0; clockHour = 6; clockMinute = 0; clockTicks = 0; timeRate = 1; clockMs = 0;
     ambientPlaying = -2; burnedTo = -1;

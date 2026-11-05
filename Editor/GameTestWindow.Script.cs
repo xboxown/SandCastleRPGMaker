@@ -35,6 +35,7 @@ public partial class GameTestWindow
 
     private void InitializeScripts()
     {
+        _execContext.OnKeepWhoSetItOff = KeepingWhoSetItOff;
         _execContext.OnDefer = goOn => _deferredScripts.Add(KeepingWhoSetItOff(goOn));
         _execContext.OnWaitUntil = (condition, timeout, goOn) => _conditionWaits.Add(new ConditionWait { Condition = KeepingWhoSetItOff(condition), GoOn = KeepingWhoSetItOff(goOn), TimeoutMs = timeout * 1000 });
         _execContext.CommonEvents = _systemSettings.CommonEvents;

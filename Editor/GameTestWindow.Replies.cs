@@ -54,14 +54,13 @@ public partial class GameTestWindow
             return false;
         }
         // Whoever is running these commands now runs the reply's branch too.
-        var (activator, byStepping, selfBookId) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
+        int picked = -1;
+        var runReply = KeepingWhoSetItOff(() => chosen(picked));
         void Picked(int replyId)
         {
             _replyCounts[(showText, replyId)] = _replyCounts.TryGetValue((showText, replyId), out int n) ? n + 1 : 1;
-            var (previous, previousStep, previousSelf) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
-            (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (activator, byStepping, selfBookId);
-            try { chosen(replyId); }
-            finally { (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (previous, previousStep, previousSelf); }
+            picked = replyId;
+            runReply();
         }
         if (BuildMessage(showText, offered, Picked) is not { } message) return false; // the speaker isn't in sight: no conversation
         _messages.Enqueue(message);
@@ -73,15 +72,7 @@ public partial class GameTestWindow
     private bool WaitUntilRead(Action goOn)
     {
         if (!IsShowingMessage) return false;
-        var (activator, byStepping, selfBookId) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
-        void GoOn()
-        {
-            var (previous, previousStep, previousSelf) = (_activator, _activatedByCharacterStep, _execContext.SelfBookId);
-            (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (activator, byStepping, selfBookId);
-            try { goOn(); }
-            finally { (_activator, _activatedByCharacterStep, _execContext.SelfBookId) = (previous, previousStep, previousSelf); }
-        }
-        _messages.Enqueue(new GameMessage("", null, "", false) { AfterRead = GoOn });
+        _messages.Enqueue(new GameMessage("", null, "", false) { AfterRead = KeepingWhoSetItOff(goOn) });
         return true;
     }
 
