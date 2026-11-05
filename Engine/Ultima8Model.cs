@@ -29,7 +29,7 @@ public class Ultima8Settings
 
     // ---------- Growing and healing (Pentagram's MainActor, HealProcess); off: as Ultima 7 ----------
 
-    /// <summary>Stats grow by use, as Ultima 8: no experience, levels or training points; each character's caps on its Level tab.</summary>
+    /// <summary>Stats grow by use, as Ultima 8: no training points; experience still raises Level. Each character's caps on its Level tab.</summary>
     public bool StatsGrowByUse { get; set; }
     /// <summary>The points that make a gain certain (MainActor: 650); fewer, a chance each time.</summary>
     public int PointsForStatGain { get; set; } = 650;

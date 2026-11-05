@@ -131,6 +131,7 @@ public partial class U8GameWindow
 
     private void SetStat(CharacterDefinition character, BuiltInStatKind kind, int value)
     {
+        if (kind == BuiltInStatKind.Level && U8Rules.StatsGrowByUse && character.LevelLock > 0) value = Math.Min(value, character.LevelLock); // never past its Most Level
         if (_stats.Stats.FirstOrDefault(s => s.Kind == kind) is { } stat) character.StatValues[stat.Id] = value.ToString();
     }
 }

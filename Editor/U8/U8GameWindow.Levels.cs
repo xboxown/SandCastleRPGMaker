@@ -19,7 +19,7 @@ public partial class U8GameWindow
     /// <summary>A killing blow: the killer gets the dead one's experience.</summary>
     private void AwardKill(CharacterDefinition killer, CharacterDefinition victim)
     {
-        if (ReferenceEquals(killer, victim) || U8Rules.StatsGrowByUse) return; // stats grow by use: no experience
+        if (ReferenceEquals(killer, victim)) return;
         int worth = Stat(victim, BuiltInStatKind.Exp, 0);
         if (worth > 0) GainExperience(killer, worth);
     }
@@ -35,7 +35,6 @@ public partial class U8GameWindow
     /// <summary>Its level from its experience: up only (a level set by hand above it stays), each new level's training points added; Next Exp kept up to date.</summary>
     private void CheckLevel(CharacterDefinition character)
     {
-        if (U8Rules.StatsGrowByUse) return; // stats grow by use (U8GameWindow.U8Reactions.cs): no levels by experience
         var levels = character.Levels ?? Levels; // its own curve (Character Editor > Level), else the old shared one
         levels.Normalize();
         int cap = character.LevelLock > 0 ? Math.Min(character.LevelLock, levels.MaxLevel) : levels.MaxLevel;
@@ -43,7 +42,7 @@ public partial class U8GameWindow
         int level = Math.Max(old, levels.LevelFor(Stat(character, BuiltInStatKind.Exp, 0), cap));
         if (level > old)
         {
-            int points = levels.Steps.Where(s => s.Level > old && s.Level <= level).Sum(s => s.TrainingPoints);
+            int points = U8Rules.StatsGrowByUse ? 0 : levels.Steps.Where(s => s.Level > old && s.Level <= level).Sum(s => s.TrainingPoints); // stats grow by use: no training points
             SetStat(character, BuiltInStatKind.Level, level);
             SetStat(character, BuiltInStatKind.TrainingPoints, Stat(character, BuiltInStatKind.TrainingPoints, 0) + points);
             if (character == _player || character.IsInParty)

@@ -19,7 +19,7 @@ public class LevelStep
 /// </summary>
 public class LevelSettings
 {
-    public const int MaxMaxLevel = 99;
+    public const int MaxMaxLevel = 100;
 
     public int MaxLevel { get; set; } = 8;
     /// <summary>Levels 2..MaxLevel (level 1 is where everyone starts: 0 experience).</summary>

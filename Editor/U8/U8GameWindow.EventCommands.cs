@@ -217,6 +217,7 @@ public partial class U8GameWindow
             if (!int.TryParse(command.Get("Value"), out int amount)) return false;
             int old = IntStat(who, stat);
             int wanted = command.Get("Operation") switch { "Set" => amount, "Subtract" => old - amount, _ => old + amount };
+            if (stat.Kind == BuiltInStatKind.Level && U8Rules.StatsGrowByUse && who.LevelLock > 0) wanted = Math.Min(wanted, who.LevelLock); // never past its Most Level
             SetIntStat(who, stat, wanted, "a change of stats");
             int delta = IntStat(who, stat) - old; // what it really moved (0 is the floor)
             if (delta != 0) _statChanges.Add(new StatChange { Who = who, Stat = stat, Delta = delta, UntilMinute = until });
