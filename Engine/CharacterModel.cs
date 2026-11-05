@@ -149,6 +149,10 @@ public class CharacterDefinition
     public int BackUpMaxSeconds { get; set; } = 30;
     /// <summary>Killed by one of these, it stays dead (Pentagram: fire).</summary>
     public List<DamageType> BackUpNotFrom { get; set; } = new() { DamageType.Fire };
+    /// <summary>Ultima 8 only, with Stats grow by use: where each stat stops (MainActor: 25). 0: no limit.</summary>
+    public int U8MaxStrength { get; set; } = 25;
+    public int U8MaxDexterity { get; set; } = 25;
+    public int U8MaxIntelligence { get; set; } = 25;
     /// <summary>Feign Death fools it: it leaves alone anyone feigning (Pentagram: undead and demons).</summary>
     public bool FooledByFeignDeath { get; set; }
 

@@ -63,7 +63,7 @@ public partial class U8GameWindow
                     _lightCheckMs = 0;
                     break;
                 case MagicEffectKind.Damage:
-                    if (amount > 0 && WoundsIt(target, null, by is not null ? cause : null)) DamageAllowed(target, AfterDamageResponse(target, amount, DamageType.Magic), cause, DamageType.Magic); // cause: the spell's name
+                    if (amount > 0 && WoundsIt(target, null, by is not null ? cause : null)) DamageAllowed(target, AfterDamageResponse(target, amount, DamageType.Magic), cause, DamageType.Magic); if (amount > 0) StumbleFromHit(target); // cause: the spell's name
                     if (by is not null && by != target && IsDead(target)) AwardKill(by, target); // a spell's kill (U8GameWindow.Levels.cs)
                     break;
                 case MagicEffectKind.Charm or MagicEffectKind.Fear or MagicEffectKind.Dance or MagicEffectKind.RevealInvisible or MagicEffectKind.Clone:
@@ -86,6 +86,7 @@ public partial class U8GameWindow
                     break;
                 case MagicEffectKind.Nourish:
                 {
+                    if (U8Rules.EatingAsUltima8) { U8Feed(target, amount); break; }
                     var vitals = VitalsOf(target);
                     vitals.Food = Math.Clamp(vitals.Food + amount, 0, SurvivalSettings.MaxFood);
                     break;

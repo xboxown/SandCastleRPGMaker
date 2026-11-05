@@ -351,6 +351,9 @@ public static class ScriptCommands
         new(EventCommandType.U8ResetKeys, "Reset Keys", Ultima8Tab, "Keyboard", "Forgets what the player changed: an action, or every key, is back to the keys in System Settings > Ultima 8.",
             new[] { Choice("Action", "Which", new[] { "Every key" }.Concat(U8Keys.ActionNames).ToArray()) }, "{Action}"),
 
+        new(EventCommandType.U8BuildUpStat, "Build Up Stat", Ultima8Tab, "Stats", "Adds points toward a stat, when System Settings > Ultima 8 has Stats grow by use on: each time a chance of a gain, certain at the points set there. In Ultima 8 Intelligence grows only this way: reading, a teacher, a spell learned.",
+            new[] { Who(), Choice("Stat", "Stat", "Intelligence", "Strength", "Dexterity"), F("Points", "Points (formula)", def: "5") }, "{Who}: {Points} toward {Stat}"),
+
         // ---- Vehicles (Map Editor > Vehicles tab) ----
         new(EventCommandType.DriveVehicle, "Drive Vehicle", World, "Vehicles", "Puts the main player at the controls of a vehicle (the copy of it nearest them): the direction keys drive it, as if they had taken the controls themselves - no deed asked. A flying one takes off.",
             new[] { new ScriptField("Vehicle", "Vehicle", ScriptFieldKind.Vehicle) }, "{VehicleName}"),

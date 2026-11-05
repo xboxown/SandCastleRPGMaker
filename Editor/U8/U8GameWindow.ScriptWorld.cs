@@ -43,6 +43,7 @@ public partial class U8GameWindow
             return true;
         };
         h[EventCommandType.ChangeLook] = ChangeLookCommand;
+        h[EventCommandType.U8BuildUpStat] = BuildUpStatCommand; // U8GameWindow.U8Reactions.cs
         h[EventCommandType.FeignDeath] = FeignDeathCommand; // their .Toughness.cs
         h[EventCommandType.WithstandDeath] = WithstandDeathCommand;
         h[EventCommandType.Changeling] = ChangelingCommand;

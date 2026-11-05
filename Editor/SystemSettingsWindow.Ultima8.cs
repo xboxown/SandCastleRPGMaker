@@ -29,6 +29,20 @@ public partial class SystemSettingsWindow
         talk.Children.Add(Number("At least (ms)", () => u8.BarkMinMs, v => u8.BarkMinMs = Math.Max(200, v)));
         panel.Children.Add(talk);
         panel.Children.Add(new TextBlock { Text = "A page with no answers goes on by itself after its time (or a click). Pentagram's BarkGump is 194 wide, its AskGump rows 160. Narration (nobody on the map speaking) keeps its box.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(new TextBlock { Text = "Growing and healing", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        var grow = new CheckBox { Content = "Stats grow by use, as Ultima 8 (no experience, levels or training points)", IsChecked = u8.StatsGrowByUse, Margin = new Thickness(0, 4, 0, 0) };
+        grow.Checked += (_, _) => u8.StatsGrowByUse = true;
+        grow.Unchecked += (_, _) => u8.StatsGrowByUse = false;
+        panel.Children.Add(grow);
+        var growRow = new WrapPanel { Margin = new Thickness(18, 2, 0, 0) };
+        growRow.Children.Add(Number("Points for a certain gain", () => u8.PointsForStatGain, v => u8.PointsForStatGain = Math.Max(1, v)));
+        panel.Children.Add(growRow);
+        panel.Children.Add(new TextBlock { Text = "Fighting and climbing build up points for Strength and Dexterity; each time a chance of a gain, certain at this number (Ultima 8: 650). Intelligence grows by the Build Up Stat command. Where each stat stops is on the character's Level tab. Off: experience, levels and training points, as Ultima 7.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(18, 2, 0, 4) });
+        var eat = new CheckBox { Content = "Eating and healing as Ultima 8", IsChecked = u8.EatingAsUltima8, Margin = new Thickness(0, 4, 0, 0) };
+        eat.Checked += (_, _) => u8.EatingAsUltima8 = true;
+        eat.Unchecked += (_, _) => u8.EatingAsUltima8 = false;
+        panel.Children.Add(eat);
+        panel.Children.Add(new TextBlock { Text = "The main character and the party regain 1 HP and 1 mana each real minute; hunger slowly builds and eating gives back HP. Off: Ultima 7's food rules.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(18, 2, 0, 4) });
         panel.Children.Add(BuildU8KeysSection(u8));
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
 

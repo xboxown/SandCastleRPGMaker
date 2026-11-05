@@ -580,7 +580,7 @@ public partial class U8GameWindow
                 CharacterId = character.Id, CharacterIndex = SavedIndexOf(character), Food = vitals.Food, Cold = vitals.Cold, Heat = vitals.Heat, Ailments = (int)vitals.Ailments,
                 PoisonRemainingMs = vitals.PoisonRemainingMs, SleepRemainingMs = vitals.SleepRemainingMs, ParalyzeRemainingMs = vitals.ParalyzeRemainingMs,
                 CharmRemainingMs = vitals.CharmRemainingMs, CurseRemainingMs = vitals.CurseRemainingMs, InvisibleRemainingMs = vitals.InvisibleRemainingMs,
-                ProtectedRemainingMs = vitals.ProtectedRemainingMs, FeignRemainingMs = vitals.FeignRemainingMs, FeignSoundId = vitals.FeignSoundId, RiseRemainingMs = vitals.RiseRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
+                ProtectedRemainingMs = vitals.ProtectedRemainingMs, FeignRemainingMs = vitals.FeignRemainingMs, BuiltStrength = vitals.BuiltStrength, BuiltDexterity = vitals.BuiltDexterity, BuiltIntelligence = vitals.BuiltIntelligence, U8Hunger = vitals.U8Hunger, HealClockMs = vitals.HealClockMs, FeignSoundId = vitals.FeignSoundId, RiseRemainingMs = vitals.RiseRemainingMs, Dead = vitals.Dead, Unconscious = vitals.Unconscious
             });
         foreach (var (owner, counts) in _firedCounts)
         {
@@ -700,6 +700,7 @@ public partial class U8GameWindow
             vitals.Dead = saved.Dead;
             vitals.Unconscious = saved.Unconscious;
             vitals.FeignRemainingMs = saved.FeignRemainingMs;
+            (vitals.BuiltStrength, vitals.BuiltDexterity, vitals.BuiltIntelligence, vitals.U8Hunger, vitals.HealClockMs) = (saved.BuiltStrength, saved.BuiltDexterity, saved.BuiltIntelligence, saved.U8Hunger, saved.HealClockMs);
             vitals.FeignSoundId = saved.FeignSoundId;
             vitals.RiseRemainingMs = saved.RiseRemainingMs;
             if (saved.Dead && saved.RiseRemainingMs > 0) _rising.Add(character);

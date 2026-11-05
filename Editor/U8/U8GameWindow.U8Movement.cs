@@ -87,6 +87,7 @@ public partial class U8GameWindow
     private bool TryGetU8Direction(out int dx, out int dy)
     {
         dx = dy = 0;
+        if (U8Stunned || _u8Hanging) return false; // knocked down, or holding a ledge (U8GameWindow.U8Reactions.cs)
         if (_pointer is { IsDragging: true }) return false; // holding something on the mouse: no walking until it's put down
         if (IsShowingMessage || InCinema) return false; // talking (the world goes on; the Avatar waits for the answer), or a cutscene
         int sx = 0, sy = 0;
@@ -185,6 +186,7 @@ public partial class U8GameWindow
             _u8Step = new U8StepMove { Dx = dx, Dy = dy, TurnOnly = true, DurationMs = U8TurnMs };
             return;
         }
+        if (BalancingAtEdge(dx, dy)) return; // the step ends off the land (U8GameWindow.U8Reactions.cs)
         var pose = U8StepPoseWithArt();
         var sprite = ResolveFacingSprite(pose, out _);
         double duration = sprite is { Frames.Count: > 0 } ? sprite.Frames.Count * 1000.0 / Math.Max(1, sprite.Fps) : 600; // the step animation once through
@@ -228,7 +230,13 @@ public partial class U8GameWindow
     /// <summary>J, or both mouse buttons: a jump - toward the pointer (with the mouse), the way pressed, or the way they face.</summary>
     private void TryStartU8Jump(bool fromMouse)
     {
-        if (_player is null || _jump is not null || _gamePaused || PlayerSeated || IsIncapacitated(_player) || PlayerLevitating) return;
+        if (_player is null || _jump is not null || _gamePaused || PlayerSeated || IsIncapacitated(_player) || U8Stunned) return;
+        if (_u8Hanging) { ClimbFromHang(); return; }
+        if (PlayerLevitating) // walking in the air: its own jump, on the spot (U8AvatarMoverProcess's airwalkJump)
+        {
+            if (HasArtFor(_player, "Airwalk Jump")) { ApplyPoseSprite(PoseByName("Airwalk Jump")); _playerPoseResetMs = PoseLengthMs(_player, "Airwalk Jump"); }
+            return;
+        }
         int dx, dy;
         bool up;
         if (fromMouse)
@@ -272,6 +280,7 @@ public partial class U8GameWindow
         int top = StandingLiftAt(foot, _player), rise = top - _playerZ;
         if (rise >= 2 && rise <= 9 && TryFlyStep(foot, top, _playerSize.Z, null, null, out _, out _))
         {
+            BuildUpFromClimb(rise); // climbing gives Strength and Dexterity (U8GameWindow.U8Reactions.cs)
             _jump = new U8Jump { FromX = _playerPixelX, FromY = _playerPixelY, ToX = x, ToY = y, Duration = 0.5 + rise * 0.05, FromLift = _playerZ, ToLift = top, Arc = 1 };
             ApplyPoseSprite(PoseByName("Climb") ?? PoseByName("Climb Up") ?? PoseByName("Jump Up") ?? _walkingPose);
             return;
@@ -283,6 +292,7 @@ public partial class U8GameWindow
     /// <summary>A jump in the air this frame; true while it lasts (nothing else moves the Avatar).</summary>
     private bool UpdateU8Jump(double deltaSeconds)
     {
+        TickU8Stun(deltaSeconds);
         if (_jump is not { } j) return false;
         j.T = Math.Min(j.Duration, j.T + deltaSeconds);
         double s = j.T / j.Duration;
@@ -389,8 +399,9 @@ public partial class U8GameWindow
         int height = (fromLift - _playerZ) * U8UnitsPerLift;
         if (height >= 80)
         {
-            int damage = height < 104 ? (height - 72) / 4 : 100000;
-            Damage(_player, Math.Max(1, damage), "a fall");
+            int damage = AfterDamageResponse(_player, Math.Max(1, height < 104 ? (height - 72) / 4 : 100000), DamageType.Falling); // its own rule for falling (Character Editor > Health)
+            Damage(_player, damage, "a fall");
+            if (KnockedDownByFall(damage)) return; // down, stunned (U8GameWindow.U8Reactions.cs)
         }
         if (!IsIncapacitated(_player)) ApplyPoseSprite(PoseByName("Land") ?? _idlePose);
     }

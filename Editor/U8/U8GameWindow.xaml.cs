@@ -2236,6 +2236,7 @@ public partial class U8GameWindow : Window
     /// </summary>
     private void UpdatePlayerFallAnimation(double deltaSeconds)
     {
+        if (HoldingALedge()) return; // hanging: the fall waits (U8GameWindow.U8Reactions.cs)
         if (_playerVisualLiftZ <= _playerZ) { _playerVisualLiftZ = _playerZ; _playerFallVelocity = 0; return; }
 
         _playerFallVelocity = Math.Min(FallTerminalVelocity, _playerFallVelocity + FallAcceleration * deltaSeconds);

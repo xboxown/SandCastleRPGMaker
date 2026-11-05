@@ -125,7 +125,8 @@ public enum EventCommandType
     U8AskKey, U8SetKey, U8GetKeyName, U8ResetKeys,
     DeleteObjectSelf,
     FeignDeath, WithstandDeath, Changeling,
-    FindObjectsInArea, DeleteObjectsInArea, ItemsInside, ItemCharges, HurtInArea
+    FindObjectsInArea, DeleteObjectsInArea, ItemsInside, ItemCharges, HurtInArea,
+    U8BuildUpStat
 }
 
 /// <summary>

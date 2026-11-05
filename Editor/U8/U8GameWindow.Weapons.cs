@@ -123,6 +123,8 @@ public partial class U8GameWindow
             MaybeStartBleeding(defender, damage);
             DamageAllowed(defender, damage, attacker == _player ? "slain by you" : $"slain by {attacker.Name}", type);
             if (willDie && attacker == _player) StatusText.Text = $"You have slain {defender.Name}.";
+            BuildUpFromBlow(attacker, defender, damage, _u8Kicking); // U8GameWindow.U8Reactions.cs
+            StumbleFromHit(defender);
             if (willDie && IsDead(defender)) AwardKill(attacker, defender); // Exult: the killing blow's experience (U8GameWindow.Levels.cs)
         }
         if (IsDead(defender)) return;

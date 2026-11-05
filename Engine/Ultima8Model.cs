@@ -27,6 +27,16 @@ public class Ultima8Settings
     public int BarkMsPerChar { get; set; } = 60;
     public int BarkMinMs { get; set; } = 1500;
 
+    // ---------- Growing and healing (Pentagram's MainActor, HealProcess); off: as Ultima 7 ----------
+
+    /// <summary>Stats grow by use, as Ultima 8: no experience, levels or training points; each character's caps on its Level tab.</summary>
+    public bool StatsGrowByUse { get; set; }
+    /// <summary>The points that make a gain certain (MainActor: 650); fewer, a chance each time.</summary>
+    public int PointsForStatGain { get; set; } = 650;
+    public int StatGainSoundId { get; set; } = -1;
+    /// <summary>Eating and healing as Ultima 8: 1 HP and 1 mana a real minute, hunger builds, eating gives back HP. Off: Ultima 7's food.</summary>
+    public bool EatingAsUltima8 { get; set; }
+
     // ---------- The keyboard (Engine/U8Keys.cs) ----------
 
     /// <summary>The keys the maker changed: action id -> key. An action not here has Ultima 8's own.</summary>

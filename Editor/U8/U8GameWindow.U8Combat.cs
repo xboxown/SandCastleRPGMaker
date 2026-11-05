@@ -76,7 +76,7 @@ public partial class U8GameWindow
     /// <summary>A mouse press in combat mode on the map: Ultima 8's swing, kick, block. False: not combat's (a window, or not in combat).</summary>
     private bool U8CombatMouseDown(MouseButtonEventArgs e)
     {
-        if (!_combatMode || _player is null || IsIncapacitated(_player) || _gamePaused) return false;
+        if (!_combatMode || _player is null || IsIncapacitated(_player) || _gamePaused || U8Stunned) return false;
         var onScreen = e.GetPosition(PaperdollGumpsCanvas);
         if (HitTestGumpLayer(onScreen, out _, out _)) return false; // a window takes its own clicks
         if (e.ChangedButton == MouseButton.Right && e.ClickCount == 2)
@@ -111,6 +111,7 @@ public partial class U8GameWindow
         double now = AnimationClock.NowMs, wait = Math.Max(0, 25 - Stat(_player, BuiltInStatKind.Dexterity, 10)) * 1000.0 / 30;
         if (now - _u8LastSwingMs < wait) return;
         _u8LastSwingMs = now;
+        BuildUpFromSwing(_player); // attacking gives Strength and Dexterity (U8GameWindow.U8Reactions.cs)
         var (screen, _) = PointerFromAvatar();
         var (dx, dy) = WorldFromScreen(screen.X, screen.Y);
         _playerFacing = FacingOf(dx, dy);

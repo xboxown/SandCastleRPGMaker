@@ -35,6 +35,8 @@ public partial class U8GameWindow
         public bool Dead;
         public double FeignRemainingMs, RiseRemainingMs;
         public int FeignSoundId = -1;
+        public int BuiltStrength, BuiltDexterity, BuiltIntelligence, U8Hunger;
+        public double HealClockMs;
         /// <summary>Knocked out: health at 0 or below, not yet dead (U8GameWindow.Unconscious.cs).</summary>
         public bool Unconscious;
         public double MendCheckMs;
@@ -208,14 +210,15 @@ public partial class U8GameWindow
         if (_gameOver) return;
         UpdateRising(elapsedMs); // the dead who get back up (their .Toughness.cs)
         UpdateCombatMusic(elapsedMs); // danger, battle, near death (U8GameWindow.CombatMusic.cs)
-        if (hourChanges > 0)
+        if (U8Rules.EatingAsUltima8) UpdateU8Healing(elapsedMs); // U8GameWindow.U8Reactions.cs
+        else if (hourChanges > 0)
             foreach (var character in AllLivingCharacters().ToList()) { MendWounds(character); UseFood(character); }
 
         long minute = TotalMinutes();
         if (minute != _lastClockMinute)
         {
             _lastClockMinute = minute;
-            foreach (var character in AllLivingCharacters().ToList()) HungerMinute(character);
+            if (!U8Rules.EatingAsUltima8) foreach (var character in AllLivingCharacters().ToList()) HungerMinute(character);
             foreach (var character in AllLivingCharacters().ToList()) TemperatureMinute(character); // Cold and Hot zones
             ExpireStatChanges(minute); // temporary Change Stats wearing off
         }

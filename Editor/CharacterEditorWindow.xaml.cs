@@ -783,6 +783,17 @@ public partial class CharacterEditorWindow : Window
         if (_levelTab is null) { _levelTab = new TabItem { Header = "Level" }; DetailsTabs.Items.Add(_levelTab); }
         Color color;
         try { color = (Color)ColorConverter.ConvertFromString(character.LevelGraphColor); } catch { color = Color.FromRgb(90, 160, 230); }
+        if (ProjectSession.IsUltima8 && ProjectSession.SettingsProvider?.Invoke()?.Ultima8.StatsGrowByUse == true)
+        {
+            // Stats grow by use (System Settings > Ultima 8): no graph and no training points; where each stat stops.
+            var caps = new StackPanel { Margin = new Thickness(6) };
+            caps.Children.Add(new TextBlock { Text = "System Settings > Ultima 8 has Stats grow by use on, so this character has no experience graph or training points. Where each stat stops (0: no limit; Ultima 8: 25):", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+            caps.Children.Add(NumberRow("Most Strength:", () => character.U8MaxStrength, v => character.U8MaxStrength = Math.Max(0, v), ""));
+            caps.Children.Add(NumberRow("Most Dexterity:", () => character.U8MaxDexterity, v => character.U8MaxDexterity = Math.Max(0, v), ""));
+            caps.Children.Add(NumberRow("Most Intelligence:", () => character.U8MaxIntelligence, v => character.U8MaxIntelligence = Math.Max(0, v), ""));
+            _levelTab.Content = caps;
+            return;
+        }
         var panel = new DockPanel { Margin = new Thickness(6) };
         var top = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 6) };
         top.Children.Add(new TextBlock { Text = "Graph colour (the editor only):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });

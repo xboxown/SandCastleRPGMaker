@@ -48,6 +48,17 @@ public partial class U8GameWindow
     {
         if (!IsPartyOrPlayer(npc) || IsDead(npc) || Has(npc, Ailment.Asleep) || Has(npc, Ailment.Paralyzed)) return;
         if (u.Obj.Food.IsLiquid && u.Obj.Food.Undrinkable) { if (npc.IsHuman) ShowFloatingText(npc, "No, thank thee.", 2500); return; }
+        if (U8Rules.EatingAsUltima8)
+        {
+            if (u.Placed is not null && ObjectOwner(u.Obj, u.Placed) is { } taken) Theft(taken.Owner, taken.FactionId);
+            PlaySound(u.Obj.Food.EatSoundResourceId);
+            UseUpOne(u.Source);
+            U8Feed(npc, u.Obj.Food.Nutrition); // HealProcess::feedAvatar (U8GameWindow.U8Reactions.cs)
+            ApplyEffects(u.Obj.Food.Effects, npc, $"\"{u.Obj.Name}\"");
+            if (npc == _player && string.IsNullOrEmpty(StatusText.Text)) StatusText.Text = $"You eat \"{u.Obj.Name}\".";
+            ShowClock();
+            return;
+        }
         var vitals = VitalsOf(npc);
         int foodLevel = vitals.Food;
         int nutrition = u.Obj.Food.Nutrition;
