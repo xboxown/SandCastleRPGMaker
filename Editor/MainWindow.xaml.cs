@@ -870,6 +870,7 @@ public partial class MainWindow : Window
         // alongside everything else instead of surviving only in memory.
         _spriteDatabase = new SpriteDatabase();
         _spriteDatabase.EnsureBuiltInGroups();
+        if (ProjectSession.IsUltima8) _spriteDatabase.EnsureUltima8Groups(); // Water Splash, Lava Flare
         RefreshTilesetCombo();
         _bookDatabase = new BookDatabase();
         _containerDatabase = new ContainerDatabase();
@@ -921,6 +922,7 @@ public partial class MainWindow : Window
 
             _spriteDatabase = sprites;
             _spriteDatabase.EnsureBuiltInGroups(); // older projects, saved before today, won't have this group in their file yet
+            if (ProjectSession.IsUltima8) _spriteDatabase.EnsureUltima8Groups(); // Water Splash, Lava Flare
             RefreshTilesetCombo();
             _bookDatabase = books;
             _resourceDatabase = resources;

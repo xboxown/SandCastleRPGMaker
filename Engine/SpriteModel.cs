@@ -251,6 +251,10 @@ public class SpriteDatabase
     public const string JoinedMonstersGroupName = "Joined Monsters";
     /// <summary>Puddles a monster leaves as it walks: as blood, frames are sizes, small to large, up to BloodSizes (Exult's blood shape, frames 4-7). Chosen in Character Editor > Health > Joining.</summary>
     public const string TrailGroupName = "Slime Trail";
+    /// <summary>Ultima 8 projects only: the splash when something comes down in real water (an animation played once, scaled to what went in).</summary>
+    public const string WaterSplashGroupName = "Water Splash";
+    /// <summary>Ultima 8 projects only: lava's flare when something or someone goes in.</summary>
+    public const string LavaFlareGroupName = "Lava Flare";
 
     /// <summary>The eight directions in the order a smooth weapon-in-hand sprite's frames go.</summary>
     public static readonly string[] WeaponDirectionNames = { "north", "north-east", "east", "south-east", "south", "south-west", "west", "north-west" };
@@ -273,7 +277,7 @@ public class SpriteDatabase
         return names.ToArray();
     }
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || IsBundleGroup(name);
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || name == WaterSplashGroupName || name == LavaFlareGroupName || IsBundleGroup(name);
 
     /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
     public SpriteEntry? FindDialogFrame(string name)
@@ -306,6 +310,13 @@ public class SpriteDatabase
         GetOrCreateGroup(WeaponInHandGroupName);
         GetOrCreateGroup(JoinedMonstersGroupName);
         GetOrCreateGroup(TrailGroupName);
+    }
+
+    /// <summary>Ultima 8 projects: their own locked groups as well (never made in an Ultima 7 project).</summary>
+    public void EnsureUltima8Groups()
+    {
+        GetOrCreateGroup(WaterSplashGroupName);
+        GetOrCreateGroup(LavaFlareGroupName);
     }
 
     /// <summary>A blood type (a sprite in the Blood group) by name, or null.</summary>

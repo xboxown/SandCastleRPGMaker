@@ -72,6 +72,12 @@ public static class ScriptCommands
     private const string Data = "Data", Loops = "Loops", Dolls = "Paperdolls", World = "World", Game = "Screen & Game";
     /// <summary>The tab of the commands only an Ultima 8 project has: the picker shows it in no other.</summary>
     public const string Ultima8Tab = "Ultima 8";
+    /// <summary>Ultima 8 projects only too: what came from its engine's other games (Crusader).</summary>
+    public const string CrusaderTab = "Crusader";
+    /// <summary>Areas and rituals: their own tab, so World doesn't grow too long.</summary>
+    public const string AreasTab = "Areas";
+    /// <summary>Tabs an Ultima 7 project never shows.</summary>
+    public static bool IsUltima8Only(string tab) => tab is Ultima8Tab or CrusaderTab;
 
     private static ScriptField F(string key, string label, ScriptFieldKind kind = ScriptFieldKind.Formula, string def = "", string help = "", params string[] options) =>
         new(key, label, kind, def, options.Length > 0 ? options : null, help);
@@ -330,15 +336,15 @@ public static class ScriptCommands
             new[] { Who(), Choice("Value", "Do", "Give it", "Take it away") }, "{Who}: {Value}"),
         new(EventCommandType.Changeling, "Changeling", World, "Characters", "They look like another character (a tree: a character whose poses show a tree) and stand waiting, after the event has gone on. When an enemy comes within reach, or they are hurt, they look like themselves again. Ultima 8's changelings. Not the main character.",
             new[] { Who(), new("Other", "Looks like", ScriptFieldKind.Who), F("Cells", "An enemy within (map cells)", def: "5"), Check("Attacks", "Then attacks it", true) }, "{Who} looks like {Other}, within {Cells}"),
-        new(EventCommandType.FindObjectsInArea, "Find Objects In Area", World, "Areas & Rituals", "How many of an object lie around someone, a spot or this object, on that floor - into a variable. A ritual: are the reagents in their circles, are the candles lit?",
+        new(EventCommandType.FindObjectsInArea, "Find Objects In Area", AreasTab, "Areas & Rituals", "How many of an object lie around someone, a spot or this object, on that floor - into a variable. A ritual: are the reagents in their circles, are the candles lit?",
             new[] { Choice("Around", "Around", "Who (below)", "A spot (below)", "This object"), Who(), new("X", "Spot", ScriptFieldKind.Spot), F("Cells", "Within (map cells; 0: that cell)", def: "0"), new("Category", "Object or item (optional: anything)", ScriptFieldKind.Item), Check("OnlyLit", "Lit ones only"), Var() }, "{Variable} = {Category} around {Around}, {Cells} cells"),
-        new(EventCommandType.DeleteObjectsInArea, "Delete Objects In Area", World, "Areas & Rituals", "Takes things off the map for good, around someone, a spot or this object, on that floor: the reagents a ritual uses up, the wreck of a blast.",
+        new(EventCommandType.DeleteObjectsInArea, "Delete Objects In Area", AreasTab, "Areas & Rituals", "Takes things off the map for good, around someone, a spot or this object, on that floor: the reagents a ritual uses up, the wreck of a blast.",
             new[] { Choice("Around", "Around", "Who (below)", "A spot (below)", "This object"), Who(), new("X", "Spot", ScriptFieldKind.Spot), F("Cells", "Within (map cells; 0: that cell)", def: "0"), new("Category", "Object or item (optional: anything)", ScriptFieldKind.Item), Check("OnlyLit", "Lit ones only"), F("Most", "At most (0: all)", def: "0") }, "{Category} around {Around}, {Cells} cells"),
-        new(EventCommandType.ItemsInside, "Items Inside", World, "Areas & Rituals", "How many of an item are in a bag someone carries - into a variable, and taken away if asked. A ritual: the right reagents in the bag, used up as the focus is made.",
+        new(EventCommandType.ItemsInside, "Items Inside", AreasTab, "Areas & Rituals", "How many of an item are in a bag someone carries - into a variable, and taken away if asked. A ritual: the right reagents in the bag, used up as the focus is made.",
             new[] { Who("Who carries it"), F("BagName", "The bag (its name in its editor)", ScriptFieldKind.Text), new("Category", "Item (optional: anything)", ScriptFieldKind.Item), Var(), Check("Remove", "Take them away") }, "{Variable} = {Category} in {BagName} of {Who}"),
-        new(EventCommandType.ItemCharges, "Item Charges", World, "Areas & Rituals", "Reads or changes the charges of an item someone carries: a focus, a wand, a charged book.",
+        new(EventCommandType.ItemCharges, "Item Charges", AreasTab, "Areas & Rituals", "Reads or changes the charges of an item someone carries: a focus, a wand, a charged book.",
             new[] { Who("Who carries it"), new("Category", "Item", ScriptFieldKind.Item), Choice("Operation", "Do", "Read", "Set", "Add"), F("Amount", "Amount (formula)", def: "1"), Var("Variable", "Into the variable (optional)") }, "{Operation} {Category} of {Who}"),
-        new(EventCommandType.HurtInArea, "Hurt In Area", World, "Areas & Rituals", "Everyone chosen around someone, a spot or this object takes this damage, of this type, by their own rules for it (Character Editor > Health). Grant Peace: Undead, only those with a rule for it. Who is the one doing it: never hurt, and gets the experience for a kill.",
+        new(EventCommandType.HurtInArea, "Hurt In Area", AreasTab, "Areas & Rituals", "Everyone chosen around someone, a spot or this object takes this damage, of this type, by their own rules for it (Character Editor > Health). Grant Peace: Undead, only those with a rule for it. Who is the one doing it: never hurt, and gets the experience for a kill.",
             new[] { Choice("Around", "Around", "Who (below)", "A spot (below)", "This object"), Who("Who does it"), new("X", "Spot", ScriptFieldKind.Spot), F("Cells", "Within (map cells)", def: "5"), F("Amount", "Damage (formula)", def: "10"), Choice("DamageType", "Damage type", Enum.GetNames<DamageType>()), Choice("Affects", "Who it strikes", "Everyone else", "Enemies of Who", "Only those with a rule for this type") }, "{Amount} {DamageType} within {Cells}"),
 
         // ---- Ultima 8 projects only: the keyboard (Engine/U8Keys.cs) ----
@@ -364,13 +370,13 @@ public static class ScriptCommands
             new[] { Who(), F("Value", "Words", ScriptFieldKind.Words), new("SoundId", "Voice (a sound)", ScriptFieldKind.Sound), F("Seconds", "Stays (seconds)", def: "3"), Check("Wait", "The event waits") }, "{Who}: {Value}"),
         new(EventCommandType.U8ReadingScreen, "Reading Screen", Ultima8Tab, "Screen", "A picture with words on it in the middle of the screen: a scroll, a plaque, a gravestone. A click or a key closes it; the event waits, the world goes on.",
             new[] { new("SpriteGroup", "Picture", ScriptFieldKind.Sprite), F("Value", "Words", ScriptFieldKind.Words) }, "{Value}"),
-        new(EventCommandType.U8Keypad, "Keypad", Ultima8Tab, "Crusader", "A keypad: the player presses digits and OK. The code matched: Last command succeeded is true. The event waits.",
+        new(EventCommandType.U8Keypad, "Keypad", CrusaderTab, "Crusader", "A keypad: the player presses digits and OK. The code matched: Last command succeeded is true. The event waits.",
             new[] { F("Code", "The code (formula)", def: "1234"), F("Prompt", "Words above it", ScriptFieldKind.Text), Var("Variable", "What was typed, into (optional)") }, "code {Code}"),
-        new(EventCommandType.U8Computer, "Computer", Ultima8Tab, "Crusader", "Words typed out on a computer screen, a letter at a time. A click shows them all, the next goes on. The event waits.",
+        new(EventCommandType.U8Computer, "Computer", CrusaderTab, "Crusader", "Words typed out on a computer screen, a letter at a time. A click shows them all, the next goes on. The event waits.",
             new[] { F("Value", "Words", ScriptFieldKind.Words), F("MsPerLetter", "Milliseconds a letter", def: "30") }, "{Value}"),
-        new(EventCommandType.U8Recharge, "Recharge", Ultima8Tab, "Crusader", "Health or Mana fills up over time, until full or the seconds run out: a charger, a healing station. The event waits; the character stands there.",
+        new(EventCommandType.U8Recharge, "Recharge", CrusaderTab, "Crusader", "Health or Mana fills up over time, until full or the seconds run out: a charger, a healing station. The event waits; the character stands there.",
             new[] { Who(), Choice("Stat", "What", "Mana", "Health"), F("PerSecond", "A second", def: "5"), F("Seconds", "At most (seconds)", def: "20") }, "{Who}: {Stat}"),
-        new(EventCommandType.U8Alarm, "Alarm", Ultima8Tab, "Crusader", "Everyone of a faction within reach goes for someone. Those who surrendered don't.",
+        new(EventCommandType.U8Alarm, "Alarm", CrusaderTab, "Crusader", "Everyone of a faction within reach goes for someone. Those who surrendered don't.",
             new[] { new("Faction", "Faction", ScriptFieldKind.Faction), Who("Goes for"), F("Cells", "Within (map cells)", def: "30") }, "{Faction} go for {Who}"),
 
         // ---- Vehicles (Map Editor > Vehicles tab) ----

@@ -44,10 +44,10 @@ public partial class SystemSettingsWindow
         panel.Children.Add(eat);
         panel.Children.Add(new TextBlock { Text = "The main character and the party regain 1 HP and 1 mana each real minute; hunger slowly builds and eating gives back HP. Off: Ultima 7's food rules.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(18, 2, 0, 4) });
         panel.Children.Add(new TextBlock { Text = "Water and lava (Tile Properties: real water, lava)", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
-        panel.Children.Add(U8SpriteRow("Splash (empty: drops of water)", u8.SplashSprite));
+        panel.Children.Add(U8SpriteRow("Splash (empty: the first in Water Splash)", u8.SplashSprite, SpriteDatabase.WaterSplashGroupName));
         panel.Children.Add(SoundSettingRow("Splash sound:", () => u8.SplashSoundId, v => u8.SplashSoundId = v, out _));
         panel.Children.Add(SoundSettingRow("Big splash sound:", () => u8.BigSplashSoundId, v => u8.BigSplashSoundId = v, out _));
-        panel.Children.Add(U8SpriteRow("Lava's flare (empty: drops of fire)", u8.LavaSprite));
+        panel.Children.Add(U8SpriteRow("Lava's flare (empty: the first in Lava Flare)", u8.LavaSprite, SpriteDatabase.LavaFlareGroupName));
         panel.Children.Add(SoundSettingRow("Lava sound:", () => u8.LavaSoundId, v => u8.LavaSoundId = v, out _));
         var lavaRow = new WrapPanel();
         lavaRow.Children.Add(Number("Lava burns", () => u8.LavaDamage, v => u8.LavaDamage = Math.Max(0, v)));
@@ -83,12 +83,12 @@ public partial class SystemSettingsWindow
     }
 
     /// <summary>A sprite for an Ultima 8 setting: any sprite, or none.</summary>
-    private FrameworkElement U8SpriteRow(string label, SpriteLink link)
+    private FrameworkElement U8SpriteRow(string label, SpriteLink link, string group)
     {
         var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 0, 2) };
         row.Children.Add(new TextBlock { Text = label + ":", Width = 220, VerticalAlignment = VerticalAlignment.Center });
         var names = new List<string> { "(none)" };
-        names.AddRange(_sprites.Groups.SelectMany(g => g.Sprites.Select(s => $"{g.Name}/{s.Name}")));
+        names.AddRange(_sprites.Groups.Where(g => g.Name == group).SelectMany(g => g.Sprites.Select(s => $"{g.Name}/{s.Name}")));
         string current = link.IsSet ? $"{link.SpriteGroup}/{link.SpriteName}" : "(none)";
         var combo = new ComboBox { Width = 240, ItemsSource = names, SelectedItem = names.Contains(current) ? current : "(none)" };
         combo.SelectionChanged += (_, _) =>

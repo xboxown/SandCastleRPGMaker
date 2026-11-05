@@ -71,6 +71,7 @@ public partial class MainWindow
         // Its data.
         _spriteDatabase = new SpriteDatabase();
         _spriteDatabase.EnsureBuiltInGroups();
+        if (ProjectSession.IsUltima8) _spriteDatabase.EnsureUltima8Groups(); // Water Splash, Lava Flare
         _bookDatabase = new BookDatabase();
         _containerDatabase = new ContainerDatabase();
         _systemSettings = new SystemSettings();

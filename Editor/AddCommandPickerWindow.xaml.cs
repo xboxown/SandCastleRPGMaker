@@ -16,7 +16,7 @@ public partial class AddCommandPickerWindow : Window
     /// <summary>The script commands' tabs (Engine/ScriptCommands.cs): each tab's groups in two columns, a button per command.</summary>
     private void AddScriptTabs()
     {
-        foreach (var tab in ScriptCommands.All.Where(s => s.Tab.Length > 0 && (s.Tab != ScriptCommands.Ultima8Tab || ProjectSession.IsUltima8)).GroupBy(s => s.Tab))
+        foreach (var tab in ScriptCommands.All.Where(s => s.Tab.Length > 0 && (!ScriptCommands.IsUltima8Only(s.Tab) || ProjectSession.IsUltima8)).GroupBy(s => s.Tab))
         {
             var grid = new System.Windows.Controls.Grid { Margin = new Thickness(0, 10, 8, 0) };
             grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());

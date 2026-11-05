@@ -224,7 +224,9 @@ public partial class U8GameWindow
         int sound = lava ? U8Rules.LavaSoundId : size >= 2 && U8Rules.BigSplashSoundId >= 0 ? U8Rules.BigSplashSoundId : U8Rules.SplashSoundId;
         if (sound >= 0) PlaySound(sound);
         var link = lava ? U8Rules.LavaSprite : U8Rules.SplashSprite;
-        if (link.IsSet && ObjectLooks.Find(_sprites, link.SpriteGroup, link.SpriteName) is { Frames.Count: > 0 } sprite)
+        var chosen = link.IsSet ? ObjectLooks.Find(_sprites, link.SpriteGroup, link.SpriteName)
+            : _sprites.Groups.FirstOrDefault(g => g.Name == (lava ? SpriteDatabase.LavaFlareGroupName : SpriteDatabase.WaterSplashGroupName))?.Sprites.FirstOrDefault(s => s.Frames.Count > 0); // the locked group's first
+        if (chosen is { Frames.Count: > 0 } sprite)
         {
             var (width, height) = QuantizedSpriteSize(sprite);
             var image = new Image { Width = width * size, Height = height * size, IsHitTestVisible = false, Stretch = Stretch.Fill };
