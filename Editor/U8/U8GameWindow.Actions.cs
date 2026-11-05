@@ -76,6 +76,9 @@ public partial class U8GameWindow
     {
         var a = _execContext.GameActions;
         a[EventCommandType.WalkToLocation] = WalkToLocationCommand;
+        a[EventCommandType.CallCharacter] = CallCharacterCommand; // pets (their .Pets.cs)
+        a[EventCommandType.OrderOnTarget] = OrderOnTargetCommand;
+        a[EventCommandType.SniffAndLead] = SniffAndLeadCommand;
         a[EventCommandType.WalkToFloorLocation] = WalkToFloorLocationCommand;
         a[EventCommandType.PlayVideo] = PlayVideoCommand;
         a[EventCommandType.OpenPaperdoll] = OpenPaperdollCommand;
