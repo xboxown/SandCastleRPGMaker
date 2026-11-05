@@ -28,6 +28,14 @@ public partial class SystemSettingsWindow
         talk.Children.Add(Number("Time per letter (ms)", () => u8.BarkMsPerChar, v => u8.BarkMsPerChar = Math.Max(0, v)));
         talk.Children.Add(Number("At least (ms)", () => u8.BarkMinMs, v => u8.BarkMinMs = Math.Max(200, v)));
         panel.Children.Add(talk);
+        var portraitRow = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 2) };
+        portraitRow.Children.Add(new TextBlock { Text = "Portrait while talking:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var portraitModes = new[] { Ultima8Settings.PortraitNone, Ultima8Settings.PortraitBeside, Ultima8Settings.PortraitCorner };
+        var portrait = new ComboBox { Width = 220, ItemsSource = portraitModes, SelectedItem = portraitModes.Contains(u8.TalkPortrait) ? u8.TalkPortrait : Ultima8Settings.PortraitNone };
+        portrait.SelectionChanged += (_, _) => { if (portrait.SelectedItem is string s) u8.TalkPortrait = s; };
+        portraitRow.Children.Add(portrait);
+        panel.Children.Add(portraitRow);
+        panel.Children.Add(new TextBlock { Text = "None: as Ultima 8, only the words. Beside the words: the speaker's Face (Character Editor) next to its words over its head. In a corner: the speaker's Face at the bottom left, the main character's while an answer is picked. Either way it's still a bark and the game never pauses; a Face with several frames plays them - a talking head. Each character's words' colour and font: Character Editor > Talk.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         panel.Children.Add(new TextBlock { Text = "A page with no answers goes on by itself after its time (or a click). Pentagram's BarkGump is 194 wide, its AskGump rows 160. Narration (nobody on the map speaking) keeps its box.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         panel.Children.Add(new TextBlock { Text = "Growing and healing", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
         var grow = new CheckBox { Content = "Stats grow by use, as Ultima 8 (no training points; experience still raises Level)", IsChecked = u8.StatsGrowByUse, Margin = new Thickness(0, 4, 0, 0) };

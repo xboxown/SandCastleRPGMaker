@@ -26,6 +26,9 @@ public class Ultima8Settings
     /// <summary>A page with no answers stays this long per letter (at least BarkMinMs), then goes on by itself.</summary>
     public int BarkMsPerChar { get; set; } = 60;
     public int BarkMinMs { get; set; } = 1500;
+    /// <summary>The speaker's portrait (its Face, Character Editor) while it talks: None (Ultima 8 had none), Beside the words, In a corner. Talking never pauses either way.</summary>
+    public string TalkPortrait { get; set; } = PortraitNone;
+    public const string PortraitNone = "None", PortraitBeside = "Beside the words", PortraitCorner = "In a corner of the screen";
 
     // ---------- Growing and healing (Pentagram's MainActor, HealProcess); off: as Ultima 7 ----------
 

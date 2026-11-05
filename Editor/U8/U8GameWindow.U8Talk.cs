@@ -4,6 +4,7 @@ using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Shapes;
 using System.Windows.Threading;
+using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
 
@@ -24,6 +25,7 @@ public partial class U8GameWindow
     /// <summary>Each frame: the words over their speaker's head, wherever it has gone.</summary>
     private void FollowU8Bark()
     {
+        if (_currentMessage is null && (_talkPoser is not null || _portraitAnimators.Count > 0)) { EndTalkPose(); StopPortraits(); } // the talk is over
         if (_barkWords is null || _barkOwner is null) return;
         if (_currentMessage is null || !MessageLayer.Children.Contains(_barkWords)) { _barkWords = _barkOwner = null; return; }
         var head = _barkOwner.TranslatePoint(new Point(_barkOwner.ActualWidth / 2, 0), MessageLayer);
@@ -35,29 +37,50 @@ public partial class U8GameWindow
     private bool TryDrawU8Message(GameMessage message)
     {
         _barkTimer?.Stop();
+        EndTalkPose();
+        StopPortraits();
         var speakerVisual = message.Speaker is { } speaker ? (speaker == _player ? _playerImage : MapCharacterOf(speaker)?.Visual) : null;
         if (speakerVisual is null || !speakerVisual.IsVisible) return false;
         var u8 = _systemSettings.Ultima8;
         var drawing = new DialogBoxDrawing();
 
-        // The words, over the speaker's head.
+        // The words, over the speaker's head - in its own colour and font (Character Editor > Verbose).
         var words = new StackPanel();
-        foreach (var line in WrapGameText(message.Text, u8.BarkWidth))
+        foreach (var line in WrapGameText(message.Text, u8.BarkWidth, message.Speaker))
         {
-            var label = GameTextLabel(line);
+            var label = BarkLabel(line, message.Speaker);
             label.HorizontalAlignment = HorizontalAlignment.Center;
             words.Children.Add(label);
         }
-        words.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+        FrameworkElement bark = words;
+        if (u8.TalkPortrait == Ultima8Settings.PortraitBeside && PortraitOf(message.Speaker) is { } beside)
+        {
+            // Its portrait beside the words, moving with them.
+            words.VerticalAlignment = VerticalAlignment.Bottom;
+            beside.VerticalAlignment = VerticalAlignment.Bottom;
+            beside.Margin = new Thickness(0, 0, 4, 0);
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(beside);
+            row.Children.Add(words);
+            bark = row;
+        }
+        bark.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
         var head = speakerVisual.TranslatePoint(new Point(speakerVisual.ActualWidth / 2, 0), MessageLayer);
-        PlaceInLayer(words, head.X - words.DesiredSize.Width / 2, head.Y - words.DesiredSize.Height - 2);
-        (_barkWords, _barkOwner) = (words, speakerVisual);
+        PlaceInLayer(bark, head.X - bark.DesiredSize.Width / 2, head.Y - bark.DesiredSize.Height - 2);
+        (_barkWords, _barkOwner) = (bark, speakerVisual);
+        StartTalkPose(message.Speaker); // its Talk pose while it speaks, if it has art for it
+        if (u8.TalkPortrait == Ultima8Settings.PortraitCorner && PortraitOf(message.Replies is { Count: > 0 } ? _player : message.Speaker) is { } corner)
+        {
+            // In the corner: the speaker's portrait - the main character's while the player picks an answer.
+            corner.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
+            PlaceInLayer(corner, 6, MessageLayer.Height - corner.DesiredSize.Height - 6);
+        }
 
         if (message.Replies is { Count: > 0 } replies)
         {
             // The answers, over the Avatar (AskGump): rows of at most AskWidth, 4 apart.
             var avatarHead = _playerImage.TranslatePoint(new Point(_playerImage.ActualWidth / 2, 0), MessageLayer);
-            var labels = replies.Select(r => { var l = GameTextLabel(r.Text); l.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); return l; }).ToList();
+            var labels = replies.Select(r => { var l = BarkLabel(r.Text, _player); l.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity)); return l; }).ToList();
             var rows = new List<List<FrameworkElement>> { new() };
             double rowWidth = 0;
             foreach (var l in labels)
@@ -106,6 +129,63 @@ public partial class U8GameWindow
         return true;
     }
 
+    // ---------- Its colour, its font, its portrait, its Talk pose ----------
+
+    /// <summary>Words in the speaker's own bark font and colour (Character Editor > Verbose); none set: the game's font as it is.</summary>
+    private FrameworkElement BarkLabel(string text, CharacterDefinition? who)
+    {
+        Brush? tint = null;
+        if (who is { BarkColor.Length: > 0 } && ColorConverter.ConvertFromString(who.BarkColor) is Color c) tint = new SolidColorBrush(c);
+        var font = who is { BarkFont.Length: > 0 } ? SpriteFont.For(_sprites, who.BarkFont) ?? InGameFont : InGameFont;
+        if (font?.RenderText(text, 1, tint) is { } bitmap)
+        {
+            var image = new Image { Source = bitmap, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Stretch = Stretch.None, IsHitTestVisible = false, SnapsToDevicePixels = true };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            return image;
+        }
+        var label = GameTextLabel(text);
+        if (tint is not null && label is TextBlock block) block.Foreground = tint;
+        return label;
+    }
+
+    private readonly List<SpriteAnimator> _portraitAnimators = new();
+    private CharacterDefinition? _talkPoser;
+
+    /// <summary>Its Face (Character Editor), its frames playing - a talking head - at most 64 pixels tall. Null: it has none.</summary>
+    private FrameworkElement? PortraitOf(CharacterDefinition? who)
+    {
+        if (who is null || who.FaceSpriteName.Length == 0 || FindSprite(who.FaceSpriteGroup, who.FaceSpriteName) is not { Frames.Count: > 0 } sprite) return null;
+        var (width, height) = QuantizedSpriteSize(sprite);
+        double scale = Math.Min(1.0, 64.0 / Math.Max(1, height));
+        var image = new Image { Width = width * scale, Height = height * scale, Stretch = Stretch.Fill, IsHitTestVisible = false };
+        RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+        _portraitAnimators.Add(new SpriteAnimator(sprite, image, _resources, 0));
+        return image;
+    }
+
+    private void StopPortraits()
+    {
+        foreach (var animator in _portraitAnimators) animator.Stop();
+        _portraitAnimators.Clear();
+    }
+
+    private void StartTalkPose(CharacterDefinition? who)
+    {
+        if (who is null || !HasArtFor(who, "Talk")) return;
+        if (who == _player) ApplyPoseSprite(PoseByName("Talk"));
+        else if (MapCharacterOf(who) is { } mc) SetCharacterPose(mc, "Talk", mc.Facing);
+        else return;
+        _talkPoser = who;
+    }
+
+    private void EndTalkPose()
+    {
+        if (_talkPoser is not { } who) return;
+        _talkPoser = null;
+        if (who == _player) { if (_currentAppliedPose?.Name == "Talk") ApplyPoseSprite(U8RestPose()); }
+        else if (MapCharacterOf(who) is { PoseName: "Talk" } mc) SetCharacterPose(mc, "Idle", mc.Facing);
+    }
+
     private void PlaceInLayer(FrameworkElement element, double x, double y)
     {
         element.IsHitTestVisible = false;
@@ -115,7 +195,7 @@ public partial class U8GameWindow
     }
 
     /// <summary>Words broken into lines no wider than this in the game's font (a '*' or a new line starts a new one).</summary>
-    private List<string> WrapGameText(string text, double width)
+    private List<string> WrapGameText(string text, double width, CharacterDefinition? speaker = null)
     {
         var lines = new List<string>();
         foreach (var paragraph in text.Replace("*", "\n").Split('\n'))
@@ -124,7 +204,7 @@ public partial class U8GameWindow
             foreach (var word in paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries))
             {
                 string candidate = line.Length == 0 ? word : line + " " + word;
-                var probe = GameTextLabel(candidate);
+                var probe = BarkLabel(candidate, speaker);
                 probe.Measure(new Size(double.PositiveInfinity, double.PositiveInfinity));
                 if (probe.DesiredSize.Width > width && line.Length > 0) { lines.Add(line); line = word; }
                 else line = candidate;

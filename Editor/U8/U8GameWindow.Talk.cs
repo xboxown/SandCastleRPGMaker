@@ -301,8 +301,8 @@ public partial class U8GameWindow
 
     /// <summary>In sight: on the visible screen itself.</summary>
     private bool IsInSight(MapCharacter mapCharacter) =>
-        WrapShifts().Any(s => mapCharacter.PixelX + s.DX >= _cameraX && mapCharacter.PixelX + s.DX <= _cameraX + ViewportWidth
-            && mapCharacter.PixelY + s.DY >= _cameraY && mapCharacter.PixelY + s.DY <= _cameraY + ViewportHeight); // over the seam of a map that wraps around too
+        WrapShifts().Any(s => GameCanvas.ToScreen(mapCharacter.PixelX + s.DX, mapCharacter.PixelY + s.DY) is var at // the Ultima 8 view: the camera is on the screen, not the map
+            && at.X >= _cameraX && at.X <= _cameraX + ViewportWidth && at.Y >= _cameraY && at.Y <= _cameraY + ViewportHeight); // over the seam of a map that wraps around too
 
     private void AdvanceMessage()
     {

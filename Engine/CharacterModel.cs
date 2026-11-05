@@ -75,6 +75,11 @@ public class CharacterDefinition
     public string FaceSpriteGroup { get; set; } = string.Empty;
     public string FaceSpriteName { get; set; } = string.Empty;
 
+    /// <summary>Ultima 8 projects: the colour of its words over its head ("#RRGGBB"); empty: the font's own.</summary>
+    public string BarkColor { get; set; } = string.Empty;
+    /// <summary>Ultima 8 projects: the font of its words over its head (a font in Sprite Editor > Fonts); empty: InGameFont.</summary>
+    public string BarkFont { get; set; } = string.Empty;
+
     /// <summary>Keyed by StatDefinition.Id, not name - a stat can be renamed without orphaning every character's value for it. Stored as a string regardless of the stat's own Integer/String type, matching how EventCommand.Parameters already stores everything as text.</summary>
     public Dictionary<int, string> StatValues { get; set; } = new();
 

@@ -22,7 +22,7 @@ public partial class CharacterEditorWindow
     {
         SchedulePanel.Children.Clear();
         ScheduleTab.IsEnabled = !character.IsTestPlayer;
-        TalkTab.IsEnabled = !character.IsTestPlayer;
+        TalkTab.IsEnabled = !character.IsTestPlayer || ProjectSession.IsUltima8; // Ultima 8: the main character's words have their colour and font too
         MainPlayerNote.Visibility = character.IsTestPlayer ? Visibility.Visible : Visibility.Collapsed;
         if (character.IsTestPlayer) return;
 
@@ -157,7 +157,8 @@ public partial class CharacterEditorWindow
     /// <summary>The Talk tab: the shared event command editor on this character's talk commands.</summary>
     private void BuildTalkEditor(CharacterDefinition character)
     {
-        TalkTab.IsEnabled = !character.IsTestPlayer;
+        TalkBarkHost.Content = ProjectSession.IsUltima8 ? BuildBarkLooks(character) : null;
+        TalkTab.IsEnabled = !character.IsTestPlayer || ProjectSession.IsUltima8; // Ultima 8: the main character's words have their colour and font too
         var page = new EventCommandPage { Label = "1", Commands = character.TalkCommands };
         var editor = new EventEditorControl
         {
@@ -172,7 +173,50 @@ public partial class CharacterEditorWindow
         editor.SelfCharacter = character;
         editor.Pages = new System.Collections.ObjectModel.ObservableCollection<EventCommandPage> { page };
         editor.ContentChanged += () => character.TalkCommands = page.Commands; // the command list may be replaced wholesale (typed in and compiled)
+        editor.IsEnabled = !character.IsTestPlayer; // the main character has no talk of its own
         TalkEditorHost.Content = editor;
+    }
+
+    /// <summary>Ultima 8 projects: the colour and font of its words over its head (its talk, its barks, the main character's answers).</summary>
+    private FrameworkElement BuildBarkLooks(CharacterDefinition character)
+    {
+        var panel = new StackPanel { Margin = new Thickness(0, 0, 0, 8) };
+        panel.Children.Add(new TextBlock { Text = "Its words over its head (Ultima 8)", FontWeight = FontWeights.Bold });
+        var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 2) };
+        row.Children.Add(new TextBlock { Text = "Colour:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var swatch = new Button { Width = 70, Height = 22, Margin = new Thickness(0, 0, 4, 0) };
+        var plain = new Button { Content = "The font's own", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(0, 0, 16, 0) };
+        Color? Current() { try { return character.BarkColor.Length > 0 ? (Color)ColorConverter.ConvertFromString(character.BarkColor) : null; } catch { return null; } }
+        void ShowColour()
+        {
+            var c = Current();
+            swatch.Background = c is { } set ? new SolidColorBrush(set) : Brushes.Transparent;
+            swatch.Content = c is null ? "(none)" : "";
+        }
+        swatch.Click += (_, _) =>
+        {
+            var picker = new ColorPickerWindow(Current() ?? Colors.White) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            character.BarkColor = $"#{picker.Result.R:X2}{picker.Result.G:X2}{picker.Result.B:X2}";
+            ShowColour();
+        };
+        plain.Click += (_, _) => { character.BarkColor = string.Empty; ShowColour(); };
+        ShowColour();
+        row.Children.Add(swatch);
+        row.Children.Add(plain);
+        row.Children.Add(new TextBlock { Text = "Font:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+        var fonts = new List<string> { "(the game's InGameFont)" };
+        fonts.AddRange(_sprites.Groups.Where(g => g.Name == SpriteDatabase.FontsGroupName).SelectMany(g => g.Sprites.Select(s => s.Name)).Where(n => n != SpriteDatabase.InGameFontName).OrderBy(n => n));
+        var font = new ComboBox { Width = 200, ItemsSource = fonts, SelectedItem = fonts.Contains(character.BarkFont) ? character.BarkFont : fonts[0] };
+        font.SelectionChanged += (_, _) => character.BarkFont = font.SelectedIndex <= 0 ? string.Empty : (string)font.SelectedItem;
+        row.Children.Add(font);
+        panel.Children.Add(row);
+        panel.Children.Add(new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11,
+            Text = "What it says floats over its head in this colour and font: its talk here, its barks (Verbose tab), Show Bark - and for the main character, the answers the player picks. Fonts: Sprite Editor > Fonts (draw a new font sprite there to give someone a voice of their own). The portrait while talking: System Settings > Ultima 8 > Conversations (off unless you turn it on)."
+        });
+        return panel;
     }
 
     /// <summary>
