@@ -367,6 +367,9 @@ public static class ScriptCommands
         new(EventCommandType.U6ResetKeys, "Reset Keys", Ultima6Tab, "Keyboard", "Forgets what the player changed: an action, or every key, is back to the keys in System Settings > Ultima 6.",
             new[] { Choice("Action", "Which", new[] { "Every key" }.Concat(U6Keys.ActionNames).ToArray()) }, "{Action}"),
 
+        new(EventCommandType.U6ChangeHudFrame, "Change HUD Frame", Ultima6Tab, "Screen", "The HUD's frame (HUD Editor) is this sprite from now on - a dungeon's frame, a ship's. The pieces stay where they are. Kept in saves. None: the HUD Editor's own frame again.",
+            new[] { new ScriptField("Sprite", "The frame", ScriptFieldKind.Sprite) }, "{SpriteName}"),
+
         // ---- Ultima 8 projects only: the keyboard (Engine/U8Keys.cs) ----
         new(EventCommandType.U8AskKey, "Ask For Key", Ultima8Tab, "Keyboard", "The event waits for the player to press a key, and that key does this action from now on - kept for good, through new games and loads. %key... on a paperdoll shows the waiting words meanwhile. A key can be held with Ctrl, Shift or Alt. The Cancel key: no change (\"last command succeeded\" is false).",
             new[] { Choice("Action", "The action", U8Keys.ActionNames), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}"),

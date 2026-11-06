@@ -1812,6 +1812,7 @@ public partial class U6GameWindow : Window
         using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (U6GameWindow.Perf.cs)
         using (Measure("UpdateScripts")) UpdateScripts(deltaSeconds * 1000); // long loops go on, Wait Until checks - paused or not (U6GameWindow.Script.cs)
         if (_isReadingBook || _gamePaused) return; // paused: nothing in the world moves, the avatar included
+        if (TurnFrozenFrame(deltaSeconds * 1000)) return; // Ultima 6 combat: the world waits for the avatar's turn (U6GameWindow.U6Combat.cs)
 
         using (Measure("UpdateClockAndCharacters")) UpdateClockAndCharacters(deltaSeconds * 1000); // the game clock, schedules, and every AI character's walking
         UpdateVehicleTravel(deltaSeconds); // vehicles on autopilot, flying ones climbing or landing (U6GameWindow.VehicleTravel.cs)

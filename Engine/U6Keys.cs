@@ -161,6 +161,16 @@ public static class U6Words
         ("Bye", "bye", "Talking: what nothing typed (or Escape) asks"),
         ("NoHelp", "\"I cannot help thee with that.\"", "Talking: a word with no answer ({0} the word)"),
         ("CombatBegin", "Begin combat!", "Combat mode on"),
+        ("TurnOf", "{1}:", "Turn by turn: whose turn ({1} the member)"),
+        ("Pass", "Pass", "Turn by turn: the turn passed"),
+        ("Attacks", "{1} attacks {0}.", "A blow: {1} the attacker, {0} the one attacked"),
+        ("Missed", "Missed!", "A blow that missed"),
+        ("Barely", "{0} barely wounded.", "Hurt, more than 3/4 of its hit points left"),
+        ("Lightly", "{0} lightly wounded.", "Hurt, half to 3/4 left"),
+        ("Heavily", "{0} heavily wounded.", "Hurt, a quarter to half left"),
+        ("Critical", "{0} critically wounded!", "Hurt, less than a quarter left"),
+        ("KnockedOut", "{0} is knocked out!", "Hurt to 0"),
+        ("Killed", "{0} killed!", "Killed"),
         ("CombatBreakOff", "Break off combat!", "Combat mode off"),
     };
 

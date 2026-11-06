@@ -399,6 +399,7 @@ public partial class U6GameWindow
     private void UpdatePlayerAttack(double elapsedMs)
     {
         if (_playerPoseResetMs >= 0 && (_playerPoseResetMs -= elapsedMs) < 0) ApplyPoseSprite(_idlePose);
+        if (TurnByTurn && !_turnIsAttack) return; // Ultima 6, turn by turn: the avatar strikes only on its Attack turn (U6GameWindow.U6Combat.cs)
         // Not Manual (the paperdoll's combat behavior): in combat mode the player picks a foe by its mode, as Exult's Avatar does (find_foe).
         if (_combatMode && _player is not null && _playerTarget is null && _playerTargetThing is null && _player.AttackMode != AttackMode.Manual
             && FindFoeFor(_player) is { } autoFoe && !IsUnconscious(autoFoe)) _playerTarget = autoFoe;
@@ -469,6 +470,7 @@ public partial class U6GameWindow
         int defval = Stat(defender, BuiltInStatKind.Combat, 10) + (Has(defender, Ailment.Protected) ? 3 : 0); // actors.cc: protection adds 3
         bool hit = weapon?.Weapon.AutoHit == true || IsMotionless(defender) || RollToWin(attval, defval); // lying still, it can't ward off a blow
         FightBack(defender, attacker);
+        TellAttack(attacker, defender, hit); // Ultima 6: told in the text area (U6GameWindow.U6Combat.cs)
         if (!hit)
         {
             if (ShowHitNumbers) ShowFloatingText(defender, "miss");

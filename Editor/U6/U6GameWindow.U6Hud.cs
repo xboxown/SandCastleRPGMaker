@@ -38,6 +38,8 @@ public partial class U6GameWindow
     /// <summary>The text area: lines already said (wrapped to its width), and the line being typed (a verb's prompt: "Move-").</summary>
     private readonly List<string> _hudLines = new();
     private string _hudPrompt = string.Empty;
+    /// <summary>Change HUD Frame: the frame in play in place of the HUD Editor's (null: its own).</summary>
+    private SpriteLink? _hudFrameOverride;
     /// <summary>The verb picked (a command button or its key) waiting for its target; null: none.</summary>
     private HudVerb? _hudVerb;
 
@@ -82,7 +84,7 @@ public partial class U6GameWindow
         HudBackLayer.Height = HudLayer.Height = _screenH;
         var hud = Hud;
         if (hud.First(HudPieceKind.GameView) is null) return;
-        if (SpriteOfLink(hud.Frame) is { } frameSprite) HudBackLayer.Children.Add(HudImage(frameSprite, 0, 0, _screenW, _screenH, _hudAnimators));
+        if (SpriteOfLink(_hudFrameOverride ?? hud.Frame) is { } frameSprite) HudBackLayer.Children.Add(HudImage(frameSprite, 0, 0, _screenW, _screenH, _hudAnimators));
 
         foreach (var piece in hud.Pieces)
         {

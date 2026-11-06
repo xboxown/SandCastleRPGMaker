@@ -568,6 +568,7 @@ public partial class U6GameWindow
             Day = _clock.Day, Hour = _clock.Hour, Minute = _clock.Minute, Ticks = _clock.Ticks,
             PlayerPixelX = _playerPixelX, PlayerPixelY = _playerPixelY, PlayerLift = _playerZ, PlayerFacing = _playerFacing,
             CombatMode = _combatMode,
+            U6HudFrame = _hudFrameOverride, // Change HUD Frame (U6GameWindow.U6Hud.cs)
             ReadBooks = _hasBeenReadBooks.ToList(),
             Weather = JsonCopy(_weather),
             WorldStates = _worldStates.ToDictionary(kv => kv.Key, kv => JsonCopy(kv.Value)) // the other worlds as they were left
@@ -661,6 +662,8 @@ public partial class U6GameWindow
     /// <summary>A save's own state on top of the freshly built game: the clock, the main character's exact spot, variables, hunger and ailments, fired events, weather.</summary>
     private void ApplySave(GameSaveData data)
     {
+        _hudFrameOverride = data.U6HudFrame; // Ultima 6: the frame as it was (U6GameWindow.U6Hud.cs)
+        BuildHud();
         _clock.Restore(data.Day, data.Hour, data.Minute, data.Ticks);
         _lastClockMinute = TotalMinutes(); // hunger and the rest go on from the saved time, not from the new game's
         _playerPixelX = data.PlayerPixelX;

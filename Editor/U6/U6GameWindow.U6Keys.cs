@@ -36,6 +36,13 @@ public partial class U6GameWindow
             SetScriptVariable(c.Get("Variable"), U8Keys.Display(_keyNames[action.Id]));
             return true;
         };
+        h[EventCommandType.U6ChangeHudFrame] = c =>
+        {
+            // The frame swapped in play (one HUD per project; its frame can change) - kept in saves (GameSave.U6HudFrame).
+            _hudFrameOverride = c.Get("SpriteName").Length == 0 ? null : new SpriteLink { SpriteGroup = c.Get("SpriteGroup"), SpriteName = c.Get("SpriteName") };
+            BuildHud();
+            return true;
+        };
         h[EventCommandType.U6ResetKeys] = c =>
         {
             var maker = U6Keys.MakerKeys(_systemSettings.Ultima6);

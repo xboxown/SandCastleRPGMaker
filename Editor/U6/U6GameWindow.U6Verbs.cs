@@ -44,7 +44,7 @@ public partial class U6GameWindow
         DependencyPropertyDescriptor.FromProperty(TextBlock.TextProperty, typeof(TextBlock)).AddValueChanged(StatusText, (_, _) =>
         {
             string said = StatusText.Text?.Trim() ?? string.Empty;
-            if (said.Length == 0 || said == _lastStatusSaid || said.StartsWith("Frame rate") || said.Contains("\" fired (")) return; // Game Test's own notes stay out
+            if (said.Length == 0 || said == _lastStatusSaid || said.StartsWith("Frame rate") || said.Contains("\" fired (") || (said.StartsWith('(') && said.Contains(" lift "))) return; // Game Test's own notes stay out
             _lastStatusSaid = said;
             if (_hudHeard is not null) _hudHeard.Add(said);
             else U6Say(said);
@@ -91,10 +91,12 @@ public partial class U6GameWindow
         if (KeyIs(key, "Quit")) { AskToQuit(); return true; }
         if (KeyIs(key, "TestNextPeriod") && !IsShippedGame) { SkipToNextPeriod(); return true; }
         if (KeyIs(key, "TestScriptState") && !IsShippedGame) { ShowScriptState(); return true; }
+        if (arrows.Length == 0 && _hudVerb is null && KeyIs(key, "Accept2") && TurnPass()) return true; // Space in turn-by-turn combat: pass
         if (arrows.Length > 0)
         {
             if (IsGamePaused) return true;
             if (e.IsRepeat) return true;
+            if (TurnStep(arrows)) return true; // turn-by-turn combat: one cell, one round
             foreach (var arrow in arrows) _heldDirectionKeys.Add(arrow);
             _lastDirectionKeyPressed = arrows[^1];
             return true;
@@ -106,6 +108,7 @@ public partial class U6GameWindow
     {
         var released = WalkArrowsReleased(U8KeyCapture.RealKey(e));
         if (released.Length == 0) return false;
+        if (_turnStepFrom is not null) return true; // turn by turn: the step goes on to the next cell, the key let go or not
         foreach (var arrow in released) _heldDirectionKeys.Remove(arrow);
         return true;
     }
@@ -179,6 +182,7 @@ public partial class U6GameWindow
         EndHudVerb();
         SetHudFocus(HudFocus.Map);
         RefreshHudPanel();
+        PassTurnIfFighting(); // turn-by-turn combat: the verb took the turn
     }
 
     /// <summary>The engine acts; its words are kept and told after the verb's line, or the verb's own words when it said nothing.</summary>
@@ -296,9 +300,11 @@ public partial class U6GameWindow
             case HudVerb.Attack:
                 if (thing is PlacedCharacter foe && _mapCharacters.FirstOrDefault(mc => mc.Placement == foe) is { } target && !target.Character.IsInParty)
                 {
-                    FinishHudVerb(name);
                     if (!_combatMode) U6ToggleCombat();
                     SetPlayerTarget(target.Character);
+                    _turnRunMs = 0;
+                    FinishHudVerb(name); // the turn: long enough for a blow
+                    if (TurnByTurn) { _turnRunMs = 0; PassTurnIfFighting(attack: true); }
                 }
                 else if (thing is ObjectInstance or PlacedItemInstance) HudAct(name, () => TryAttackInCombatMode(thing), "");
                 else FinishHudVerb(name, W("NotPossible"));
@@ -577,8 +583,13 @@ public partial class U6GameWindow
     private void U6ToggleCombat()
     {
         if (_combatForbidden) { U6Say(W("NotPossible")); return; }
-        ToggleCombatMode();
+        _hudHeard = new List<string>(); // the Ultima 7 engine's own combat words stay out: Ultima 6's are told
+        try { ToggleCombatMode(); } finally { _hudHeard = null; }
         U6Say(_combatMode ? W("CombatBegin") : W("CombatBreakOff"));
+        _turnRunMs = 0; // turn by turn from now: the world waits for the avatar (U6GameWindow.U6Combat.cs)
+        _heldDirectionKeys.Clear();
+        if (_combatMode) AskTurn();
+        else { _hudPrompt = string.Empty; RefreshHudText(); }
     }
 
     /// <summary>Ultima 6's save and restore keys: the first slot, told in the text area.</summary>
