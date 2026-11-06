@@ -43,6 +43,10 @@
                         letting them stack by declaration order (LightingOverlay on top, since it's
                         declared second) without changing anything else about how either behaves.
                     -->
+                    <Grid x:Name="ScreenGrid">
+                    <!-- Ultima 6: the HUD's frame behind, the world in its Game View, the HUD's pieces over it (U6GameWindow.U6Hud.cs). -->
+                    <Canvas x:Name="HudBackLayer" HorizontalAlignment="Left" VerticalAlignment="Top" IsHitTestVisible="False" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    <Border x:Name="WorldView" HorizontalAlignment="Left" VerticalAlignment="Top" Width="320" Height="200" ClipToBounds="True">
                     <Grid>
                         <Canvas x:Name="GameCanvas" Background="Black" Focusable="True" RenderOptions.BitmapScalingMode="NearestNeighbor">
                             <Canvas.RenderTransform>
@@ -74,6 +78,9 @@
                         <Rectangle x:Name="FlashOverlay" Width="320" Height="200" IsHitTestVisible="False" Opacity="0" Fill="White" Panel.ZIndex="26"/>
                         <!-- Show Text dialog boxes (speaker face + DialogFont text), in the same 320x200 space as the world. -->
                         <Canvas x:Name="MessageLayer" Width="320" Height="200" Panel.ZIndex="40" Visibility="Collapsed" Background="Transparent" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
+                    </Grid>
+                    </Border>
+                    <Canvas x:Name="HudLayer" HorizontalAlignment="Left" VerticalAlignment="Top" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Grid>
                 </Border>
             </Grid>

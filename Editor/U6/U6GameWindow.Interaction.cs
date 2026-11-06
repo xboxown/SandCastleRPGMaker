@@ -285,7 +285,7 @@ public partial class U6GameWindow
     private InteractionTarget? FindMapTarget(Point screen)
     {
         // Only the visible 320x200 camera window is the map - the letterbox around it is not.
-        var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, ViewportBorder);
+        var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, WorldView); // Ultima 6: the world's window in the HUD
         if (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight) return null;
 
         var world = PaperdollGumpsCanvas.TranslatePoint(screen, GameCanvas);
@@ -823,7 +823,7 @@ public partial class U6GameWindow
     private bool DropOnMap(DragOrigin origin, PointerSession session, Point screen)
     {
         // Exult drop_on_map: "Attempting to drop off screen?" -> refused.
-        var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, ViewportBorder);
+        var inViewport = PaperdollGumpsCanvas.TranslatePoint(screen, WorldView); // Ultima 6: the world's window in the HUD
         if (inViewport.X < 0 || inViewport.Y < 0 || inViewport.X >= ViewportWidth || inViewport.Y >= ViewportHeight)
         {
             Refuse(MousePointerKind.RedX, "You can't drop that there."); // drop_on_map: off screen -> red X

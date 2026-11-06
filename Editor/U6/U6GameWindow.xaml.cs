@@ -122,11 +122,10 @@ public partial class U6GameWindow : Window
     // change. World/tile/sprite sizes are never touched by any of this -
     // the camera only decides which 320x200 slice of the already-real-
     // sized world is currently visible.
-    private const double ViewportWidth = 320;
-    private const double ViewportHeight = 200;
+    // Ultima 6: ViewportWidth / ViewportHeight are the HUD's Game View, ScreenWidth / ScreenHeight the whole screen (U6GameWindow.U6Hud.cs).
     /// <summary>Half-width/height of the centered dead-zone the player can move within before the camera starts following - a comfortable "safe area," not a hard lock to center.</summary>
-    private const double DeadZoneHalfWidth = 60;
-    private const double DeadZoneHalfHeight = 40;
+    private const double DeadZoneHalfWidth = 0; // Ultima 6: the avatar always in the middle of the view (Nuvie's MapWindow centres on the player)
+    private const double DeadZoneHalfHeight = 0;
     /// <summary>World-pixel coordinates of the camera's own top-left corner - i.e. which 320x200 slice of GameCanvas is currently on screen.</summary>
     private double _cameraX;
     private double _cameraY;
@@ -209,14 +208,15 @@ public partial class U6GameWindow : Window
         InitializePointer(systemSettings); // the engine's own Exult-style mouse pointer - see U6GameWindow.Pointer.cs
 
         // Task 4 - the constants are the single source of truth for viewport size, not the XAML defaults (which exist only so the designer shows something sensible) - setting these here means changing ViewportWidth/Height alone is enough to resize the whole pipeline later.
-        ViewportBorder.Width = ViewportWidth;
-        ViewportBorder.Height = ViewportHeight;
+        InitU6Hud(); // the HUD Editor's screen: the world in its Game View (U6GameWindow.U6Hud.cs)
+        ViewportBorder.Width = ScreenWidth;
+        ViewportBorder.Height = ScreenHeight;
 
         // Issue 1 - the old 900x700 default (leftover from before the 320x200 pipeline existed) did not divide evenly into whole viewport multiples, wasting a lot of space as black letterbox. A clean integer multiple removes nearly all of that on first open; StatusBarAllowance is a rough, non-critical estimate since RecomputeViewportScale (on Loaded and every resize) always finds the true best-fit scale for whatever size the window actually ends up at - this default is just a good starting point, not a guarantee.
         const int DefaultScale = 3;
         const double StatusBarAllowance = 30;
-        Width = ViewportWidth * DefaultScale;
-        Height = ViewportHeight * DefaultScale + StatusBarAllowance;
+        Width = ScreenWidth * DefaultScale;
+        Height = ScreenHeight * DefaultScale + StatusBarAllowance;
 
         // The title is placed once the view has its new size and place (after layout) - placed at once it went by where the view was before (off-centre after maximize / restore).
         ViewportHost.SizeChanged += (_, _) => { RecomputeViewportScale(); Dispatcher.BeginInvoke(PlaceTitle, System.Windows.Threading.DispatcherPriority.Loaded); };
@@ -1691,8 +1691,8 @@ public partial class U6GameWindow : Window
     private void RecomputeViewportScale()
     {
         if (ViewportHost.ActualWidth <= 0 || ViewportHost.ActualHeight <= 0) return;
-        int scaleX = (int)Math.Floor(ViewportHost.ActualWidth / ViewportWidth);
-        int scaleY = (int)Math.Floor(ViewportHost.ActualHeight / ViewportHeight);
+        int scaleX = (int)Math.Floor(ViewportHost.ActualWidth / ScreenWidth);
+        int scaleY = (int)Math.Floor(ViewportHost.ActualHeight / ScreenHeight);
         int scale = Math.Max(1, Math.Min(scaleX, scaleY));
         if (scale == ViewportScale.ScaleX) return; // genuinely unchanged - skip the gump rebuild below entirely
         ViewportScale.ScaleX = scale;

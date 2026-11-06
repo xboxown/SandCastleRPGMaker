@@ -138,7 +138,12 @@ public partial class U6GameWindow
     }
 
     /// <summary>The clock, and the player's own health and food, in the status bar.</summary>
-    private void ShowClock() => ClockText.Text = (_player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}") + (_combatMode ? "   |   COMBAT" : "");
+    private void ShowClock() => ShowClockAndHud();
+    private void ShowClockAndHud()
+    {
+        RefreshHudClock(); // the HUD's date, compass, sun and moons (U6GameWindow.U6Hud.cs)
+        ClockText.Text = (_player is null ? _clock.ToString() : $"{_clock}   |   {DescribeVitals(_player)}") + (_combatMode ? "   |   COMBAT" : "");
+    }
 
     private (int X, int Y) SpotOf(MapCharacter mapCharacter, ScheduleEntry entry) =>
         ZoneSpotOf(mapCharacter, entry) ?? // a zone, or the nearest of a purpose (U6GameWindow.Zones.cs)

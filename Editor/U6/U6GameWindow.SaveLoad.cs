@@ -124,7 +124,7 @@ public partial class U6GameWindow
             if (ViewportBorder.ActualWidth <= 0 || ViewportBorder.ActualHeight <= 0) return null;
             var drawing = new DrawingVisual();
             using (var dc = drawing.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(ViewportBorder) { Stretch = Stretch.Fill }, null, new Rect(0, 0, ViewportWidth, ViewportHeight));
+                dc.DrawRectangle(new VisualBrush(ViewportBorder) { Stretch = Stretch.Fill }, null, new Rect(0, 0, ScreenWidth, ScreenHeight));
             var bitmap = new RenderTargetBitmap((int)ViewportWidth, (int)ViewportHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(drawing);
             var encoder = new PngBitmapEncoder();
