@@ -955,6 +955,9 @@ public partial class MainWindow : Window
             if (IsUltima8) _poseDatabase.EnsureUltima8Poses(); // an Ultima 8 project: its poses (an earlier one may be missing some)
             SetActiveProject(msrpPath, manifest.ProjectId, manifest.ProjectName, manifest.Platform, manifest.CreatedAtUtc);
             CompactAfterLoad();
+            // Ultima 6's tiles are 16 x 16: the map's grid is its tileset's frame size (Sprite Editor > Tileset).
+            if (IsUltima6 && _tileset is { } u6Tiles && (u6Tiles.TileWidth != 16 || u6Tiles.TileHeight != 16))
+                StatusText.Text = $"Ultima 6 note: this map's tiles are {u6Tiles.TileWidth} x {u6Tiles.TileHeight} (its tileset's frame size). Ultima 6's are 16 x 16 - the HUD's 160 x 160 view then shows 10 x 10 tiles. Draw the tileset's frames at 16 x 16 (Sprite Editor > Tileset).";
             return true;
         }
         catch (Exception ex) when (IsGameHost)

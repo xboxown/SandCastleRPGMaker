@@ -602,7 +602,15 @@ public partial class SpriteFrameEditorWindow : Window
 
     private void DrawNewFrame()
     {
-        var sizeInput = SimpleInputWindow.Show(this, "Canvas size (width x height, e.g. 32x32):", "New Drawn Frame", "32x32");
+        // Its other frames' size (a tileset's tiles must all match); none yet: Ultima 6's 16 x 16, else 32 x 32.
+        string suggested = ProjectSession.IsUltima6 ? "16x16" : "32x32";
+        if (_sprite.Frames.FirstOrDefault() is { } first && System.IO.File.Exists(first.FilePath))
+        {
+            try { var b = new BitmapImage(new Uri(first.FilePath)); suggested = $"{b.PixelWidth}x{b.PixelHeight}"; } catch { }
+        }
+        var sizeInput = SimpleInputWindow.Show(this, ProjectSession.IsUltima6
+            ? "Canvas size (width x height). Ultima 6: a tile, a character or an item is 16x16; something big 32x32. A tileset's frames are its tiles - all one size, which is the map's grid:"
+            : "Canvas size (width x height, e.g. 32x32). A tileset's frames are its tiles - all one size, which is the map's grid:", "New Drawn Frame", suggested);
         if (string.IsNullOrWhiteSpace(sizeInput)) return;
 
         var parts = sizeInput.Split('x', 'X');
