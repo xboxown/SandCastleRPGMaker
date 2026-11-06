@@ -69,6 +69,13 @@ public partial class CharacterEditorWindow : Window
     public CharacterEditorWindow(CharacterDatabase database, StatDatabase stats, PoseDatabase poses, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources)
     {
         InitializeComponent();
+        if (ProjectSession.IsUltima6)
+        {
+            // Ultima 6: no paperdoll - the HUD shows what is worn and carried. What the character starts with stays.
+            PaperdollSide.Visibility = Visibility.Collapsed;
+            PaperdollColumn.Width = new GridLength(0);
+            InventoryTab.Header = "Starting Inventory";
+        }
         LevelLockBox.LostFocus += LevelLockBox_LostFocus; // made in code: the first stats column (BuildStatColumns)
         Title += $" [{BuildInfo.CurrentBuild}]";
         _database = database;

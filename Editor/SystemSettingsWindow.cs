@@ -67,6 +67,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
         tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs
         if (ProjectSession.IsUltima8) tabs.Items.Add(new TabItem { Header = "Ultima 8", Content = BuildUltima8Tab() }); // only an Ultima 8 project (SystemSettingsWindow.Ultima8.cs)
+        if (ProjectSession.IsUltima6) tabs.Items.Add(new TabItem { Header = "Ultima 6", Content = BuildUltima6Tab() }); // only an Ultima 6 project (SystemSettingsWindow.Ultima6.cs)
 
         if (startTab is not null) tabs.SelectedItem = tabs.Items.OfType<TabItem>().FirstOrDefault(t => (t.Header as string) == startTab);
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };

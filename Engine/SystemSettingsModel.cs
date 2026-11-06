@@ -300,6 +300,8 @@ public class SystemSettings
     public WeaponInHandSettings WeaponInHand { get; set; } = new();
     /// <summary>Only an Ultima 8 project's engine reads these (Engine/Ultima8Model.cs).</summary>
     public Ultima8Settings Ultima8 { get; set; } = new();
+    /// <summary>Only an Ultima 6 project's engine reads these, its HUD among them (Engine/Ultima6Model.cs).</summary>
+    public Ultima6Settings Ultima6 { get; set; } = new();
     public MousePointerSettings MousePointers { get; set; } = new();
     public SoundSettings Sounds { get; set; } = new();
     public GameClockSettings Clock { get; set; } = new();

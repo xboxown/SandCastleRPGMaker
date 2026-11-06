@@ -1165,6 +1165,7 @@ public partial class MainWindow : Window
         MainContentGrid.IsEnabled = true;
 
         Title = $"Sandcastle RPG Maker - Map Editor - {System.IO.Path.GetFileNameWithoutExtension(projectFilePath)}{StyleTitleSuffix}";
+        ApplyStyleToTools(); // Ultima 6: the HUD Editor in the PaperDoll Editor's place (MainWindow.U6.cs)
     }
 
     private void ExitMenuItem_Click(object sender, RoutedEventArgs e) => Close();
@@ -2727,6 +2728,7 @@ public partial class MainWindow : Window
 
     private void PaperDollEditorMenuItem_Click(object sender, RoutedEventArgs e)
     {
+        if (IsUltima6) { OpenHudEditor(); return; } // an Ultima 6 project: the HUD Editor in its place (MainWindow.U6.cs)
         // Paperdolls are saved with the project's objects; an object opens one (Object Editor > Opens paperdoll).
         new PaperDollEditorWindow(_objectDatabase, _spriteDatabase, _resourceDatabase, _bookDatabase, _containerDatabase, _variableDatabase, _statDatabase) { Owner = this }.ShowDialog();
     }

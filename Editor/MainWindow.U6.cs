@@ -12,6 +12,28 @@ public partial class MainWindow
 {
     private bool IsUltima6 => _projectStyle == GameStyle.Ultima6;
 
+    /// <summary>The toolbar's PaperDoll Editor button (MainWindow.Toolbar.cs) - the HUD Editor's in an Ultima 6 project.</summary>
+    private System.Windows.Controls.Button? _paperDollToolButton;
+
+    /// <summary>Ultima 6 projects: the HUD Editor takes the PaperDoll Editor's place, in the Tools menu and on the toolbar.</summary>
+    private void ApplyStyleToTools()
+    {
+        PaperDollMenuItem.Header = IsUltima6 ? "HUD Editor..." : "PaperDoll Editor...";
+        if (_paperDollToolButton is null) return;
+        var tip = new System.Windows.Controls.StackPanel { MaxWidth = 280 };
+        tip.Children.Add(new System.Windows.Controls.TextBlock { Text = IsUltima6 ? "HUD Editor" : "PaperDoll Editor", FontWeight = FontWeights.Bold });
+        tip.Children.Add(new System.Windows.Controls.TextBlock
+        {
+            Text = IsUltima6 ? "The game's screen, as Ultima 6: its frame, where the world shows, the text area, the inventory and portrait panel, the command buttons."
+                : "Paperdolls and every window of the game: inventories, the save screen, the title, prompts.",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 2, 0, 0)
+        });
+        _paperDollToolButton.ToolTip = tip;
+    }
+
+    private void OpenHudEditor() =>
+        new HudEditorWindow(_systemSettings.Ultima6.Hud, _spriteDatabase, _statDatabase, _resourceDatabase, _bookDatabase, _objectDatabase, _containerDatabase, _variableDatabase) { Owner = this }.ShowDialog();
+
     private U6GameWindow NewU6GameWindow(bool atTitle, bool shipped) => NewU6GameWindow(_worlds.FirstOrDefault() ?? _map!, atTitle, shipped);
 
     private U6GameWindow NewU6GameWindow(MapData start, bool atTitle, bool shipped, CharacterDatabase? characters = null, List<MapData>? worlds = null) =>

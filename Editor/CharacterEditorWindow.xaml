@@ -94,14 +94,14 @@
                 </ScrollViewer>
             </TabItem>
 
-            <TabItem Header="Inventory / Paperdoll">
+            <TabItem x:Name="InventoryTab" Header="Inventory / Paperdoll">
                 <Grid Margin="10,10,0,0">
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="360"/>
+                        <ColumnDefinition x:Name="PaperdollColumn" Width="360"/>
                         <ColumnDefinition Width="*"/>
                     </Grid.ColumnDefinitions>
 
-                    <StackPanel Grid.Column="0" Margin="0,0,16,0">
+                    <StackPanel x:Name="PaperdollSide" Grid.Column="0" Margin="0,0,16,0">
                         <TextBlock Text="Paperdoll Body Sprite" FontWeight="Bold"/>
                         <DockPanel Margin="0,2,0,4">
                             <Button x:Name="PaperdollFilterCheck" DockPanel.Dock="Right" Content="Expand..." Padding="6,0" VerticalAlignment="Center" Margin="8,0,0,0"
