@@ -171,6 +171,7 @@
                                         <ComboBox x:Name="OpenSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
                                         <TextBlock Text="Close Sound" FontWeight="Bold" Margin="0,0,0,2"/>
                                         <ComboBox x:Name="CloseSoundCombo" SelectionChanged="Field_Changed" DisplayMemberPath="Name" HorizontalAlignment="Left" Width="220" Margin="0,0,0,8"/>
+                                        <ContentControl x:Name="CloseButtonHost"/>
 
                                         <TextBlock Text="Item Frame - the boundary where items may appear inside the open view. Rectangle/Ellipse: drag corner to corner. Pencil: draw freehand - it closes automatically once your line comes back around to meet its own starting point. Drag the shape's body to move it once drawn, or its bottom-right handle to resize it." Opacity="0.7" FontSize="11" TextWrapping="Wrap" Margin="0,4,0,4"/>
                                         <StackPanel Orientation="Horizontal" Margin="0,0,0,4">

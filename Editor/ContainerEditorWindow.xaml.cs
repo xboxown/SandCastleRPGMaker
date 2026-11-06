@@ -249,6 +249,7 @@ public partial class ContainerEditorWindow : Window
             combo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == id) ?? NoneSound;
         }
 
+        CloseButtonHost.Content = BuildCloseButtonEditor(container); // the optional close button (ContainerEditorWindow.CloseButton.cs)
         BuildFramePreview(container);
         RefreshContentsList(container);
         PopulateContentsCategoryChoices();
@@ -532,6 +533,7 @@ public partial class ContainerEditorWindow : Window
         Panel.SetZIndex(resizeHandle, 10);
         resizeHandle.MouseLeftButtonDown += (_, e) => ShapeMoveOrResize_MouseLeftButtonDown(container, resizing: true, e);
         FramePreviewCanvas.Children.Add(resizeHandle);
+        DrawCloseButtonPreview(container); // the optional close button where it will be (ContainerEditorWindow.CloseButton.cs)
 
         FramePreviewCanvas.MouseLeftButtonDown -= FramePreviewCanvas_MouseLeftButtonDown;
         FramePreviewCanvas.MouseLeftButtonDown += FramePreviewCanvas_MouseLeftButtonDown;

@@ -297,10 +297,18 @@ public partial class GameTestWindow
     }
 
     /// <summary>Measuring (SANDCASTLE_PERF_LOG): nobody is there to read the boxes - each goes on after half a second - and every 20 seconds the clock skips to the next period, so schedule changes are measured too.</summary>
+    private double _soakOpenMs;
+
     private void SoakTest(double elapsedMs)
     {
         if (!Profiling) return;
         SoakHide();
+        // Measuring only (SANDCASTLE_TEST_OPEN): the first container on the map opens after 3 seconds, so a test can click its close button.
+        if (_soakOpenMs >= 0 && Environment.GetEnvironmentVariable("SANDCASTLE_TEST_OPEN") is not null && (_soakOpenMs += elapsedMs) > 3000)
+        {
+            _soakOpenMs = -1;
+            if (_map.Items.FirstOrDefault(i => i.Category == ReferencedItemCategory.Container) is { } box && ContainerDef(box.ItemId) is { } boxData) OpenContainer(box, boxData);
+        }
         if (_currentMessage is not null && (_soakMessageMs += elapsedMs) > 500) { _soakMessageMs = 0; MessageKey(System.Windows.Input.Key.Enter); }
         if (Environment.GetEnvironmentVariable("SANDCASTLE_PERF_SKIP") is not null && (_soakPeriodMs += elapsedMs) > 20000) { _soakPeriodMs = 0; using (Measure("SkipToNextPeriod")) SkipToNextPeriod(); }
         if (!_soakWatching)

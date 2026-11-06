@@ -628,7 +628,8 @@ public partial class GameTestWindow : Window
     /// <summary>Builds the one real exit-button Image used on both a paperdoll and its linked backpack gump - frame 1 while idle, frame 2 while actually held down, back to frame 1 on release, THEN the gump closes, per spec.</summary>
     private Image BuildExitButton(CharacterDefinition character, Action onClosed)
     {
-        var image = new AlphaHitImage { Width = 24, Height = 24, Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Source = LoadExitButtonFrame(character, pressed: false) };
+        // Tagged as a button: a press on it is its own, never the empty slot under it (it was taken as the slot's, so the close button did nothing there).
+        var image = new AlphaHitImage { Width = 24, Height = 24, Stretch = Stretch.Uniform, Cursor = Cursors.Hand, Source = LoadExitButtonFrame(character, pressed: false), Tag = new CloseButtonTag() };
         bool held = false;
         image.MouseLeftButtonDown += (_, e) => { image.Source = LoadExitButtonFrame(character, pressed: true); held = true; image.CaptureMouse(); e.Handled = true; };
         image.MouseLeftButtonUp += (_, e) =>
@@ -713,6 +714,7 @@ public partial class GameTestWindow : Window
 
     private void ClosePaperdollGump(OpenPaperdollGump gump)
     {
+        SoakLog($"paperdoll closed: {gump.Character.Name}");
         // Real, confirmed fix - same real reason as CloseContainerGump's own version.
         foreach (var animator in gump.ItemAnimators) animator.Stop();
         gump.ItemAnimators.Clear();
@@ -920,6 +922,8 @@ public partial class GameTestWindow : Window
         Canvas.SetTop(exitButton, character.Paperdoll.ExitButtonY);
         Panel.SetZIndex(exitButton, 20);
         gump.BodyCanvas.Children.Add(exitButton);
+        if (_perfLogPath is not null) // measuring only: where the close button is, so a test can click it
+            Dispatcher.BeginInvoke(() => { if (exitButton.IsVisible) { var c = exitButton.PointToScreen(new Point(exitButton.ActualWidth / 2, exitButton.ActualHeight / 2)); SoakLog($"exit button at {c.X:0},{c.Y:0}"); } }, System.Windows.Threading.DispatcherPriority.Loaded);
 
         if (gump.BackpackGump is not null) RefreshBackpackGump(gump.BackpackGump);
     }
@@ -1233,8 +1237,52 @@ public partial class GameTestWindow : Window
         TrackGumpFocus(gump);
     }
 
+    /// <summary>
+    /// The Container Editor's optional close button on the open view (the user's request): frame 1 up, frame 2 while held, and
+    /// the container closes when it's let go over it - as the inventory's close button. None set: Escape alone closes it.
+    /// </summary>
+    private void AddContainerCloseButton(OpenContainerGump gump, double counterScale)
+    {
+        var data = gump.Data;
+        if (!data.HasCloseButton) return;
+        var sprite = _sprites.Groups.FirstOrDefault(g => g.Name == data.CloseButtonSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == data.CloseButtonSpriteName)
+            ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == data.CloseButtonSpriteName);
+        BitmapImage? Frame(bool pressed) => sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[pressed && sprite.Frames.Count > 1 ? 1 : 0].FilePath) : null;
+        FrameworkElement button;
+        Image? image = null;
+        if (Frame(false) is { } up)
+        {
+            image = new AlphaHitImage { Source = up, Stretch = data.CloseButtonOwnSize ? Stretch.Fill : Stretch.Uniform,
+                Width = data.CloseButtonOwnSize ? up.PixelWidth * counterScale : 24, Height = data.CloseButtonOwnSize ? up.PixelHeight * counterScale : 24 };
+            RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
+            button = image;
+        }
+        else button = new Border { Width = 24, Height = 24, Background = Brushes.Black, BorderBrush = Brushes.Gray, BorderThickness = new Thickness(1),
+            Child = new TextBlock { Text = "X", Foreground = Brushes.White, FontWeight = FontWeights.Bold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, IsHitTestVisible = false } };
+        button.Cursor = Cursors.Hand;
+        button.Tag = new CloseButtonTag(); // its click is its own (never the window's drag, nor what lies under it)
+        bool held = false;
+        button.MouseLeftButtonDown += (_, e) => { if (image is not null && Frame(true) is { } down) image.Source = down; held = true; button.CaptureMouse(); e.Handled = true; };
+        button.MouseLeftButtonUp += (_, e) =>
+        {
+            e.Handled = true;
+            if (!held) return; // a press that began elsewhere doesn't click it
+            held = false;
+            button.ReleaseMouseCapture();
+            if (image is not null && Frame(false) is { } again) image.Source = again;
+            if (ReleasedOver(button, e)) CloseContainerGump(gump);
+        };
+        Canvas.SetLeft(button, data.CloseButtonX);
+        Canvas.SetTop(button, data.CloseButtonY);
+        Panel.SetZIndex(button, 5000);
+        gump.ItemsCanvas.Children.Add(button);
+        if (_perfLogPath is not null) // measuring only: where it is, so a test can click it
+            Dispatcher.BeginInvoke(() => { if (button.IsVisible) { var c = button.PointToScreen(new Point(button.ActualWidth / 2, button.ActualHeight / 2)); SoakLog($"close button at {c.X:0},{c.Y:0}"); } }, System.Windows.Threading.DispatcherPriority.Loaded);
+    }
+
     private void CloseContainerGump(OpenContainerGump gump)
     {
+        SoakLog($"container closed: {gump.Data.Name}");
         if (gump.Data.CloseSoundResourceId >= 0) SoundPlayback.TryPlay(_resources, gump.Data.CloseSoundResourceId);
         // Real, confirmed fix, per spec - a container's own real event pages should get the same say on "after close" that they already get on "after open" (see OpenContainer's own event-first check), not just play a sound and vanish.
         TryFireEventPages(gump.Data, gump.Data.EventPages, BookTriggerConditionBased.ByEnter, gump.Data.Id, $"You close \"{gump.Data.Name}\" - real event fired.");
@@ -1359,6 +1407,7 @@ public partial class GameTestWindow : Window
             HideIfBeingDragged(visual);
             gump.ItemsCanvas.Children.Add(visual);
         }
+        AddContainerCloseButton(gump, containerItemCounterScale); // the Container Editor's optional close button
 
         // Real, confirmed removal, per spec ("GET RID OF... THE CHECK MARK ON THE TOP RIGHT CORNER... If I need to close it, press ESC to close it") - no exit button drawn here anymore; Escape (via the unified gump focus tracker above) is now the only close control, and dragging the body itself (itemsCanvas) still moves the gump exactly as before.
     }

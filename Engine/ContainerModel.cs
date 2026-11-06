@@ -49,6 +49,16 @@ public class ContainerData : PlaceableItemBase
 
 
     public int OpenSoundResourceId { get; set; } = -1;
+    /// <summary>Its open view has a close button (Container Editor, an option; off: Escape closes it, as before).</summary>
+    public bool HasCloseButton { get; set; }
+    /// <summary>The close button's sprite: frame 1 up, frame 2 while pressed (none: a plain X box).</summary>
+    public string CloseButtonSpriteGroup { get; set; } = string.Empty;
+    public string CloseButtonSpriteName { get; set; } = string.Empty;
+    /// <summary>Where it is on the 320 x 240 open view (the top-right corner by default).</summary>
+    public double CloseButtonX { get; set; } = 292;
+    public double CloseButtonY { get; set; } = 4;
+    /// <summary>At its own size, else in a 24 x 24 box.</summary>
+    public bool CloseButtonOwnSize { get; set; }
     public int CloseSoundResourceId { get; set; } = -1;
     /// <summary>Real, per spec - plays once the player releases an item onto a real spot inside this container's own open view, not when the container itself opens/closes.</summary>
     public int NavigateSoundResourceId { get; set; } = -1;

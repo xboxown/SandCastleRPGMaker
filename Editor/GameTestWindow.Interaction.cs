@@ -54,6 +54,8 @@ public partial class GameTestWindow
 
     /// <summary>The one tagged description of whatever a press landed on. Gump visuals carry these in their Tag; map entities are found via HitTestStack. Records compare by value, so "the same target clicked twice" is a plain Equals.</summary>
     private abstract record InteractionTarget;
+    /// <summary>A gump's close button (a paperdoll's, a backpack's, a container's): its click is its own.</summary>
+    private sealed record CloseButtonTag;
     /// <summary>Entity is a PlacedItemInstance or an ObjectInstance.</summary>
     private sealed record MapEntityTarget(object Entity) : InteractionTarget;
     private sealed record PlayerTarget : InteractionTarget;
@@ -248,7 +250,7 @@ public partial class GameTestWindow
         bool onButton = false;
         while (current is not null && !ReferenceEquals(current, PaperdollGumpsCanvas))
         {
-            if (current is FrameworkElement { Tag: PaperdollButtonTag }) onButton = true; // a paperdoll button: its own click, never the slot under it
+            if (current is FrameworkElement { Tag: PaperdollButtonTag or CloseButtonTag }) onButton = true; // a paperdoll button or a close button: its own click, never the slot under it
             if (target is null && current is FrameworkElement { Tag: InteractionTarget tagged }) target = tagged;
             if (row is null && current is ListBoxItem listBoxItem) row = listBoxItem;
             if (target is null && current is ListBox { Tag: OpenPaperdollGump owner } && row?.DataContext is PaperdollBackpackRow backpackRow)
