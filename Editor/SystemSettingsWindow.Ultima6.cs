@@ -60,6 +60,7 @@ public partial class SystemSettingsWindow
         panel.Children.Add(BuildU6TitleSection(u6));
         panel.Children.Add(BuildU6LevelsSection(u6));
         panel.Children.Add(BuildU6WordsSection(u6));
+        panel.Children.Add(BuildU6NotesSection(u6));
         panel.Children.Add(BuildU6KeysSection(u6));
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
@@ -192,6 +193,53 @@ public partial class SystemSettingsWindow
         Show();
         section.Children.Add(state);
         section.Children.Add(toggle);
+        return section;
+    }
+
+    /// <summary>Text area notes: the engine's other messages changed or removed by rules (Engine/Ultima6Model.cs U6Notes).</summary>
+    private UIElement BuildU6NotesSection(Ultima6Settings u6)
+    {
+        var section = new StackPanel();
+        section.Children.Add(new TextBlock { Text = "Text area notes (everything else the game says)", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        section.Children.Add(new TextBlock
+        {
+            Text = "Besides the Words above, the engine has its own notes - a spell's \"Light on Andrew.\", \"\"Chest\" is locked.\", \"That's too heavy to lift.\" and many more. "
+                + "Copy a note as the text area shows it into \"When the game says\" and write what to say instead; leave it empty to say nothing. "
+                + "* stands for any words, and {1}, {2}... put back the words each * stood for: \"* on *.\" with \"{2} glows.\" makes \"Light on Andrew.\" say \"Andrew glows.\". The first rule that fits is used.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 4)
+        });
+        var show = new CheckBox { Content = "Notes no rule fits are said as the engine words them (untick: they are not said at all)", IsChecked = u6.ShowOtherNotes, Margin = new Thickness(0, 2, 0, 4) };
+        show.Checked += (_, _) => u6.ShowOtherNotes = true;
+        show.Unchecked += (_, _) => u6.ShowOtherNotes = false;
+        section.Children.Add(show);
+        var rows = new StackPanel();
+        void Draw()
+        {
+            rows.Children.Clear();
+            var head = new StackPanel { Orientation = Orientation.Horizontal };
+            head.Children.Add(new TextBlock { Text = "When the game says", Width = 250, FontWeight = FontWeights.SemiBold });
+            head.Children.Add(new TextBlock { Text = "Say instead (empty: nothing)", Width = 250, FontWeight = FontWeights.SemiBold });
+            rows.Children.Add(head);
+            foreach (var rule in u6.NoteRules.ToList())
+            {
+                var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+                var when = new TextBox { Width = 245, Margin = new Thickness(0, 0, 5, 0), Text = rule.When };
+                var say = new TextBox { Width = 245, Margin = new Thickness(0, 0, 5, 0), Text = rule.Say };
+                when.TextChanged += (_, _) => rule.When = when.Text;
+                say.TextChanged += (_, _) => rule.Say = say.Text;
+                var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0) };
+                remove.Click += (_, _) => { u6.NoteRules.Remove(rule); Draw(); };
+                row.Children.Add(when);
+                row.Children.Add(say);
+                row.Children.Add(remove);
+                rows.Children.Add(row);
+            }
+            var add = new Button { Content = "+ Add a rule", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 4, 0, 0) };
+            add.Click += (_, _) => { u6.NoteRules.Add(new U6NoteRule()); Draw(); };
+            rows.Children.Add(add);
+        }
+        Draw();
+        section.Children.Add(rows);
         return section;
     }
 

@@ -37,11 +37,44 @@ public class Ultima6Settings
     public bool UseUltima7Leveling { get; set; }
     /// <summary>How a level earned is taken: meditating at a shrine (Ultima 6) or dreaming when the party rests (Savage Empire, Martian Dreams).</summary>
     public string LevelUpWay { get; set; } = LevelUpShrine;
+    /// <summary>
+    /// The engine's own notes (a spell's "Light on Andrew.", "\"Chest\" is locked.", "That's too heavy to lift." - everything that
+    /// isn't one of the Words) as they reach the text area: changed or removed by these rules, first match wins (U6Notes).
+    /// </summary>
+    public List<U6NoteRule> NoteRules { get; set; } = new();
+    /// <summary>A note no rule matches: said as the engine words it (on), or not at all (off).</summary>
+    public bool ShowOtherNotes { get; set; } = true;
     /// <summary>The title menu's picture, filling the screen (U6GameWindow.U6Title.cs); not set: black.</summary>
     public SpriteLink TitleSprite { get; set; } = new();
     /// <summary>What the title menu's Acknowledgments shows.</summary>
     public string Acknowledgments { get; set; } = "Made with Sandcastle RPG Maker.";
     public const string LevelUpShrine = "At a shrine (Ultima 6)", LevelUpDream = "In a dream when the party rests (Savage Empire, Martian Dreams)";
+}
+
+/// <summary>A text area note rule: when the engine says When (* stands for any words), the text area says Say instead ({1}, {2}... the words each * stood for); Say empty: nothing is said.</summary>
+public class U6NoteRule
+{
+    public string When { get; set; } = string.Empty;
+    public string Say { get; set; } = string.Empty;
+}
+
+public static class U6Notes
+{
+    /// <summary>What the text area says for an engine note: a rule's words (null: nothing), or the note itself / nothing when no rule matches.</summary>
+    public static string? Rewrite(Ultima6Settings settings, string note)
+    {
+        foreach (var rule in settings.NoteRules)
+        {
+            if (rule.When.Trim().Length == 0) continue;
+            string pattern = "^" + System.Text.RegularExpressions.Regex.Escape(rule.When.Trim()).Replace("\\*", "(.*?)") + "$";
+            var match = System.Text.RegularExpressions.Regex.Match(note, pattern, System.Text.RegularExpressions.RegexOptions.IgnoreCase | System.Text.RegularExpressions.RegexOptions.Singleline);
+            if (!match.Success) continue;
+            string said = rule.Say;
+            for (int i = match.Groups.Count - 1; i >= 1; i--) said = said.Replace("{" + i + "}", match.Groups[i].Value);
+            return said.Trim().Length == 0 ? null : said;
+        }
+        return settings.ShowOtherNotes ? note : null;
+    }
 }
 
 /// <summary>

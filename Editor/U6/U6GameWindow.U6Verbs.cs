@@ -46,8 +46,9 @@ public partial class U6GameWindow
             string said = StatusText.Text?.Trim() ?? string.Empty;
             if (said.Length == 0 || said == _lastStatusSaid || said.StartsWith("Frame rate") || said.Contains("\" fired (") || (said.StartsWith('(') && said.Contains(" lift "))) return; // Game Test's own notes stay out
             _lastStatusSaid = said;
-            if (_hudHeard is not null) _hudHeard.Add(said);
-            else U6Say(said);
+            if (U6Notes.Rewrite(_systemSettings.Ultima6, said) is not { } note) return; // the maker's rules: changed, or not said (System Settings > Ultima 6 > Text area notes)
+            if (_hudHeard is not null) _hudHeard.Add(note);
+            else U6Say(note);
         });
     }
 
