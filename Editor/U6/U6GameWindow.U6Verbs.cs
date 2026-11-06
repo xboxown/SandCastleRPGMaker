@@ -60,6 +60,7 @@ public partial class U6GameWindow
     private bool U6KeyTook(KeyEventArgs e)
     {
         var key = U8KeyCapture.RealKey(e);
+        if (_casting is not null) { if (!e.IsRepeat || key is Key.Up or Key.Down or Key.Back) U6CastKey(key); return true; } // the book is open (U6GameWindow.U6Cast.cs)
         var arrows = WalkArrowsFor(key);
         if (_hudVerb is not null || _hudFocus == HudFocus.Panel)
         {
@@ -140,6 +141,7 @@ public partial class U6GameWindow
         if (_hudVerb is not null) CancelHudVerb();
         if (verb == HudVerb.Combat) { U6ToggleCombat(); return; }
         if (verb == HudVerb.Rest) { U6Rest(); return; } // no target: the party camps (U6GameWindow.U6Levels.cs)
+        if (verb == HudVerb.Cast) { U6StartCast(); return; } // the book in the panel (U6GameWindow.U6Cast.cs)
         _hudPickedItem = null;
         _hudPickedThing = null;
         StartHudVerb(verb);
@@ -165,6 +167,7 @@ public partial class U6GameWindow
     private void CancelHudVerb()
     {
         if (_hudVerb is not null) U6Say(_hudPrompt + W("Nothing"));
+        if (_casting is not null || _castAiming is not null) { _casting = null; _castAiming = null; RefreshHudPanel(); }
         _hudPickedItem = null;
         _hudPickedThing = null;
         EndHudVerb();
@@ -214,8 +217,10 @@ public partial class U6GameWindow
 
     private void U6Verbs_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_u6Title is not null) { if (!IsPlayingVideo) U6TitleClick(e.GetPosition(HudLayer)); e.Handled = true; return; } // the title menu (U6GameWindow.U6Title.cs)
         if (Hud.First(HudPieceKind.GameView) is null) return;
         var onScreen = e.GetPosition(HudLayer);
+        if (_hudVerb is null && CombatModeClicked(onScreen)) { e.Handled = true; return; } // a member's combat mode, round the list (U6GameWindow.U6CombatModes.cs)
         // The panel: a click on a slot or a carried thing, or on a member's name in the party view.
         if (Hud.First(HudPieceKind.Panel) is { } panel && new Rect(panel.X, panel.Y, panel.Width, panel.Height).Contains(onScreen))
         {
@@ -274,6 +279,9 @@ public partial class U6GameWindow
         {
             case HudVerb.Look:
                 FinishHudVerb(name, W("YouSee", thing is null ? W("Nothing") : name));
+                break;
+            case HudVerb.Cast:
+                CastOnCell(cx, cy, thing); // a spell's target (U6GameWindow.U6Cast.cs)
                 break;
             case HudVerb.Get:
                 if (thing is not (PlacedItemInstance or ObjectInstance)) { FinishHudVerb(name, W("NotPossible")); break; }
@@ -576,17 +584,23 @@ public partial class U6GameWindow
     {
         var party = GetPartyList();
         if (index >= party.Count) return;
+        var member = party[index];
+        if (IsDead(member) || IsIncapacitated(member) || (member != _player && member != Avatar && MapCharacterOf(member) is null)) { U6Say(W("NotPossible")); return; }
+        if (!SoloSwapTo(member)) { U6Say(W("NotPossible")); return; } // the member is the one moved now (U6GameWindow.U6Solo.cs)
         _soloMode = true;
         _followers.Clear(); // the party stays where it is (Ultima 6's solo mode)
-        _hudMember = party[index];
+        _hudMember = member;
         RefreshHudPanel();
-        U6Say(W("Solo", "", party[index].Name));
+        U6Say(W("Solo", "", member.Name));
     }
 
     private void EndSolo()
     {
+        SoloBackToAvatar(); // the avatar is moved again
         _soloMode = false;
-        foreach (var member in _mapCharacters.Where(mc => mc.Character.IsInParty)) _followers[member] = _player!;
+        _hudMember = null;
+        foreach (var member in _mapCharacters.Where(mc => mc.Character.IsInParty && !IsDead(mc.Character))) _followers[member] = _player!;
+        RefreshHudPanel();
         U6Say(W("PartyMode"));
     }
 
@@ -595,6 +609,7 @@ public partial class U6GameWindow
         if (_combatForbidden) { U6Say(W("NotPossible")); return; }
         _hudHeard = new List<string>(); // the Ultima 7 engine's own combat words stay out: Ultima 6's are told
         try { ToggleCombatMode(); } finally { _hudHeard = null; }
+        if (!_combatMode) CombatOverTakeAvatar(); // a Command member was being moved on its turn: the avatar again
         U6Say(_combatMode ? W("CombatBegin") : W("CombatBreakOff"));
         _turnRunMs = 0; // turn by turn from now: the world waits for the avatar (U6GameWindow.U6Combat.cs)
         _heldDirectionKeys.Clear();
@@ -605,6 +620,7 @@ public partial class U6GameWindow
     /// <summary>Ultima 6's save and restore keys: the first slot, told in the text area.</summary>
     private void QuickSaveOrLoad(bool save)
     {
+        if (save && (_soloMode || ControllingMember)) EndSolo(); // saved in party mode, the avatar moved (U6GameWindow.U6Solo.cs)
         var command = new EventCommand { Type = save ? EventCommandType.SaveGame : EventCommandType.LoadGame };
         command.Parameters["Slot"] = "1";
         command.Parameters["Name"] = "\"" + (_player?.Name ?? "Game") + "\"";

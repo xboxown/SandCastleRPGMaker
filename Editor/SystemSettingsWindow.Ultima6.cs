@@ -57,6 +57,7 @@ public partial class SystemSettingsWindow
         afterRow.Children.Add(after);
         panel.Children.Add(afterRow);
         panel.Children.Add(new TextBlock { Text = "As Nuvie: talking stops the map's music; when it ends the map's music starts again from the beginning, or a random song of the map's plays.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(BuildU6TitleSection(u6));
         panel.Children.Add(BuildU6LevelsSection(u6));
         panel.Children.Add(BuildU6WordsSection(u6));
         panel.Children.Add(BuildU6KeysSection(u6));
@@ -83,6 +84,38 @@ public partial class SystemSettingsWindow
             row.Children.Add(box);
             section.Children.Add(row);
         }
+        return section;
+    }
+
+    /// <summary>The title menu (Ultima 6's own, not a paperdoll): its picture and the acknowledgments' words.</summary>
+    private UIElement BuildU6TitleSection(Ultima6Settings u6)
+    {
+        var section = new StackPanel();
+        section.Children.Add(new TextBlock { Text = "Title menu", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        section.Children.Add(new TextBlock
+        {
+            Text = "As Ultima 6: the intro video (System Settings > Title Screen > Intro video, with its music), then Introduction, Create New Character, Acknowledgments and Journey Onward over this picture. "
+                + "There is no Save/Load screen: Ctrl+S saves the one game and Ctrl+R restores it (the keys below); Journey Onward continues it. The menu's words are in Words below.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11
+        });
+        var sprites = new List<string> { "(none - black)" };
+        sprites.AddRange(_sprites.Groups.SelectMany(g => g.Sprites.Select(s => g.Name + " / " + s.Name)));
+        string current = u6.TitleSprite.IsSet ? u6.TitleSprite.SpriteGroup + " / " + u6.TitleSprite.SpriteName : sprites[0];
+        var pick = new ComboBox { Width = 300, ItemsSource = sprites, SelectedItem = sprites.Contains(current) ? current : sprites[0] };
+        pick.SelectionChanged += (_, _) =>
+        {
+            if (pick.SelectedItem is not string s || s == sprites[0]) { u6.TitleSprite = new SpriteLink(); return; }
+            int cut = s.IndexOf(" / ", StringComparison.Ordinal);
+            u6.TitleSprite = new SpriteLink { SpriteGroup = s[..cut], SpriteName = s[(cut + 3)..] };
+        };
+        var row = new WrapPanel { Margin = new Thickness(0, 4, 0, 2) };
+        row.Children.Add(new TextBlock { Text = "Picture:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        row.Children.Add(pick);
+        section.Children.Add(row);
+        section.Children.Add(new TextBlock { Text = "Acknowledgments:", Margin = new Thickness(0, 4, 0, 2) });
+        var acks = new TextBox { Text = u6.Acknowledgments, AcceptsReturn = true, TextWrapping = TextWrapping.Wrap, Height = 70, Width = 470, HorizontalAlignment = HorizontalAlignment.Left, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        acks.TextChanged += (_, _) => u6.Acknowledgments = acks.Text;
+        section.Children.Add(acks);
         return section;
     }
 

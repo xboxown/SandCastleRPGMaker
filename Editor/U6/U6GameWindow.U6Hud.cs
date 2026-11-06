@@ -178,6 +178,12 @@ public partial class U6GameWindow
             HudLayer.Children.Add(partyList);
             return;
         }
+        if (HudCastPanel() is { } spellbook) // Cast: the book (U6GameWindow.U6Cast.cs)
+        {
+            _hudPanelVisuals.Add(spellbook);
+            HudLayer.Children.Add(spellbook);
+            return;
+        }
         foreach (var piece in Hud.Pieces)
         {
             var view = HudPiece.ViewOf(piece.Kind);
@@ -185,7 +191,7 @@ public partial class U6GameWindow
             FrameworkElement? visual = piece.Kind switch
             {
                 HudPieceKind.MemberName => HudWordsAt(piece, member.Name),
-                HudPieceKind.CombatMode => HudWordsAt(piece, "Command"),
+                HudPieceKind.CombatMode => HudWordsAt(piece, U6ModeWord(member)), // U6GameWindow.U6CombatModes.cs
                 HudPieceKind.Stats => HudWordsAt(piece, string.Join("\n", (piece.StatIds.Count > 0 ? _stats.Stats.Where(s => piece.StatIds.Contains(s.Id)) : _stats.Stats)
                     .Select(s => $"{s.Name} {StatText(member, s.Id)}"))),
                 HudPieceKind.Portrait => HudPortrait(piece, member),

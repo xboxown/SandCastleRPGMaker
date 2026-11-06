@@ -208,6 +208,8 @@ public class CharacterDefinition
 
     /// <summary>How it fights (Exult's attack mode - the combat behavior button on its paperdoll).</summary>
     public AttackMode AttackMode { get; set; } = AttackMode.Nearest;
+    /// <summary>Ultima 6 projects only: its combat mode in the party (Command, Front, Rear, Flank, Berserk, Retreat, Assault; empty: Front). The avatar is always Command.</summary>
+    public string U6CombatMode { get; set; } = string.Empty;
     /// <summary>Exult's combat_protected (the halo on its paperdoll): the party's Protect fighters go after whoever attacks it. One at a time.</summary>
     public bool CombatProtected { get; set; }
 

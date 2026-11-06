@@ -225,6 +225,7 @@ public partial class U6GameWindow
     {
         var me = mapCharacter.Character;
         var npc = mapCharacter.Npc;
+        if (WaitsForCommand(me)) { npc.WaitMs = StdDelay; return; } // Ultima 6: a Command member acts on its own turn, moved by the player (U6GameWindow.U6CombatModes.cs)
         if (mapCharacter.ShownSprite is not null && npc.Path is null) SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing); // back from a strike to the ready stance
 
         if (npc.Fleeing)

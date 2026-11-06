@@ -54,13 +54,14 @@ public partial class U6GameWindow
         _turnStepFrom = null;
         SoakLog($"turn: round over, the avatar at {_playerX},{_playerY}");
         if (_wasMovingLastFrame) { ApplyPoseSprite(_idlePose); _wasMovingLastFrame = false; }
+        NextCommander(); // the next Command member's turn (U6GameWindow.U6CombatModes.cs)
         AskTurn();
     }
 
     private void AskTurn()
     {
         if (!TurnByTurn || _hudVerb is not null) return;
-        _hudPrompt = W("TurnOf", "", (HudMember ?? _player)?.Name);
+        _hudPrompt = W("TurnOf", "", _player?.Name);
         RefreshHudText();
     }
 

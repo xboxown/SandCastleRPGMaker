@@ -86,6 +86,7 @@ public partial class U6GameWindow
 
     private void OpenSaveLoad()
     {
+        if (Hud.First(HudPieceKind.GameView) is not null) { if (_u6Title is null) OpenU6Title(inPlay: true); return; } // Ultima 6: no Save/Load screen - its menu (U6GameWindow.U6Title.cs)
         if (_saveScreen is not null) { BringDollToFront(_saveScreen.Gump); return; }
         if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.DollDesignId) is not { } design)
         {

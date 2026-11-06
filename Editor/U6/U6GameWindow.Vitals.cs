@@ -169,6 +169,7 @@ public partial class U6GameWindow
         StandUp(character);
         vitals.Dead = true;
         vitals.Ailments = Ailment.None;
+        if (character == _player && ControllingMember) EndSolo(); // solo mode: the avatar is taken back, the member dies where it stands
         if (character == _player)
         {
             // The main character: no built-in message - its own By Death events decide what happens (a Show Text, music, ...).

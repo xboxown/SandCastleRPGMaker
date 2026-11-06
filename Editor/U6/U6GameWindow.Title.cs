@@ -21,12 +21,13 @@ public partial class U6GameWindow
     public bool RestartRequested { get; private set; }
 
     private OpenDollGump? _titleGump;
-    private bool InTitle => _titleGump is not null;
+    private bool InTitle => _titleGump is not null || _u6Title is not null;
     private static readonly object TitleMusicOwner = new();
 
     /// <summary>On loading: the intro video, then the title - if the game has one.</summary>
     private void ShowTitleIfAny()
     {
+        if (StartAtTitle) { ShowU6Title(); return; } // Ultima 6's own menu, not a paperdoll (U6GameWindow.U6Title.cs)
         if (IsShippedGame) GameStatusBar.Visibility = Visibility.Collapsed; // a built game: no testing bar
         if (!StartAtTitle || _objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.Title.DollDesignId) is not { } design) return;
         ViewportBorder.Opacity = 0; // the world isn't seen behind the title

@@ -37,6 +37,10 @@ public class Ultima6Settings
     public bool UseUltima7Leveling { get; set; }
     /// <summary>How a level earned is taken: meditating at a shrine (Ultima 6) or dreaming when the party rests (Savage Empire, Martian Dreams).</summary>
     public string LevelUpWay { get; set; } = LevelUpShrine;
+    /// <summary>The title menu's picture, filling the screen (U6GameWindow.U6Title.cs); not set: black.</summary>
+    public SpriteLink TitleSprite { get; set; } = new();
+    /// <summary>What the title menu's Acknowledgments shows.</summary>
+    public string Acknowledgments { get; set; } = "Made with Sandcastle RPG Maker.";
     public const string LevelUpShrine = "At a shrine (Ultima 6)", LevelUpDream = "In a dream when the party rests (Savage Empire, Martian Dreams)";
 }
 

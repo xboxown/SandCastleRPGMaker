@@ -132,7 +132,8 @@ public enum EventCommandType
     U8ControlCharacter, U8ReturnControl,
     U6AskKey, U6SetKey, U6GetKeyName, U6ResetKeys,
     U6ChangeHudFrame,
-    U6Meditate
+    U6Meditate,
+    U6SetCombatMode
 }
 
 /// <summary>

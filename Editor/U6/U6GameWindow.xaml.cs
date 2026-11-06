@@ -211,6 +211,7 @@ public partial class U6GameWindow : Window
         // Task 4 - the constants are the single source of truth for viewport size, not the XAML defaults (which exist only so the designer shows something sensible) - setting these here means changing ViewportWidth/Height alone is enough to resize the whole pipeline later.
         InitU6Hud(); // the HUD Editor's screen: the world in its Game View (U6GameWindow.U6Hud.cs)
         InitU6Levels(); // Ultima 6's levels and Meditate At Shrine (U6GameWindow.U6Levels.cs)
+        InitU6CombatModes(); // each member's combat mode (U6GameWindow.U6CombatModes.cs)
         ViewportBorder.Width = ScreenWidth;
         ViewportBorder.Height = ScreenHeight;
 
@@ -540,9 +541,11 @@ public partial class U6GameWindow : Window
     /// <summary>The active party, per spec: the current test player is always included (matching Exult's own Avatar-always-in-party-slot-1 behavior) even if IsInParty wasn't separately checked, plus everyone else explicitly marked IsInParty.</summary>
     private List<CharacterDefinition> GetPartyList()
     {
+        // The avatar first, whoever is being moved (solo mode: U6GameWindow.U6Solo.cs), then the members in their order.
         var list = new List<CharacterDefinition>();
-        if (_player is not null) list.Add(_player);
-        if (_characters is not null) list.AddRange(_characters.Characters.Where(c => c.IsInParty && c != _player));
+        var avatar = Avatar;
+        if (avatar is not null) list.Add(avatar);
+        if (_characters is not null) list.AddRange(_characters.Characters.Where(c => c != avatar && (c.IsInParty || c == _player)));
         return list;
     }
 
@@ -1598,6 +1601,7 @@ public partial class U6GameWindow : Window
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (U6GameWindow.Video.cs)
         if (KeyAskTook(e)) return; // Ask For Key waiting: the key is its (U6GameWindow.U6Keys.cs)
         if (LetterAskTook(e)) return; // Rest's hours or guard, a dream's choice (U6GameWindow.U6Levels.cs)
+        if (U6TitleKey(e)) return; // the title menu (U6GameWindow.U6Title.cs)
         if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
         if (_currentMessage is not null)
         {
