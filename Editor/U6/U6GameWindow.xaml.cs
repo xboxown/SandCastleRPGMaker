@@ -210,6 +210,7 @@ public partial class U6GameWindow : Window
 
         // Task 4 - the constants are the single source of truth for viewport size, not the XAML defaults (which exist only so the designer shows something sensible) - setting these here means changing ViewportWidth/Height alone is enough to resize the whole pipeline later.
         InitU6Hud(); // the HUD Editor's screen: the world in its Game View (U6GameWindow.U6Hud.cs)
+        InitU6Levels(); // Ultima 6's levels and Meditate At Shrine (U6GameWindow.U6Levels.cs)
         ViewportBorder.Width = ScreenWidth;
         ViewportBorder.Height = ScreenHeight;
 
@@ -1596,6 +1597,7 @@ public partial class U6GameWindow : Window
     {
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (U6GameWindow.Video.cs)
         if (KeyAskTook(e)) return; // Ask For Key waiting: the key is its (U6GameWindow.U6Keys.cs)
+        if (LetterAskTook(e)) return; // Rest's hours or guard, a dream's choice (U6GameWindow.U6Levels.cs)
         if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
         if (_currentMessage is not null)
         {

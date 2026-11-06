@@ -28,6 +28,7 @@ public partial class U6GameWindow
     {
         if (_stats.Stats.FirstOrDefault(s => s.Kind == BuiltInStatKind.Exp) is null) return;
         SetStat(character, BuiltInStatKind.Exp, (int)Math.Min(int.MaxValue, (long)Stat(character, BuiltInStatKind.Exp, 0) + amount));
+        if (U6LevelsOn) { CheckLevel(character); return; } // Ultima 6: earned, not taken - a shrine or a dream raises it (U6GameWindow.U6Levels.cs)
         if (character == _player) StatusText.Text = $"{StatusText.Text} +{amount} experience.".Trim();
         CheckLevel(character);
     }
@@ -35,6 +36,7 @@ public partial class U6GameWindow
     /// <summary>Its level from its experience: up only (a level set by hand above it stays), each new level's training points added; Next Exp kept up to date.</summary>
     private void CheckLevel(CharacterDefinition character)
     {
+        if (U6LevelsOn) { SetStat(character, BuiltInStatKind.NextExp, U6Leveling.NextExp(Stat(character, BuiltInStatKind.Level, 1))); return; }
         var levels = character.Levels ?? Levels; // its own curve (Character Editor > Level), else the old shared one
         levels.Normalize();
         int cap = character.LevelLock > 0 ? Math.Min(character.LevelLock, levels.MaxLevel) : levels.MaxLevel;

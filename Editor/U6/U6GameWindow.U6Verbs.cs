@@ -139,6 +139,7 @@ public partial class U6GameWindow
     {
         if (_hudVerb is not null) CancelHudVerb();
         if (verb == HudVerb.Combat) { U6ToggleCombat(); return; }
+        if (verb == HudVerb.Rest) { U6Rest(); return; } // no target: the party camps (U6GameWindow.U6Levels.cs)
         _hudPickedItem = null;
         _hudPickedThing = null;
         StartHudVerb(verb);
@@ -264,10 +265,10 @@ public partial class U6GameWindow
 
     private CharacterDefinition Actor => HudMember ?? _player!;
 
-    private void PickMapCell(int cx, int cy)
+    private void PickMapCell(int cx, int cy, object? given = null)
     {
         if (_hudVerb is not { } verb || _player is null) return;
-        var thing = ThingOnCell(cx, cy);
+        var thing = given ?? ThingOnCell(cx, cy); // a double click names what was clicked
         string name = ThingName(thing);
         switch (verb)
         {
@@ -286,12 +287,20 @@ public partial class U6GameWindow
                 U6Say(_hudPrompt + name);
                 EndHudVerb();
                 SetHudFocus(HudFocus.Map);
+                if (thing is PlacedItemInstance { Category: ReferencedItemCategory.Container } box && ContainerDef(box.ItemId) is { } boxData) { U6Search(box, boxData); RefreshHudPanel(); PassTurnIfFighting(); break; } // searched: it spills out
                 UseTarget(new MapEntityTarget(thing));
                 RefreshHudPanel();
                 break;
             case HudVerb.Talk:
+                if (thing is CharacterDefinition) { FinishHudVerb(name, W("TalkSelf")); break; } // Events::perform_talk
                 if (thing is not PlacedCharacter talker) { FinishHudVerb(name, W("NotPossible")); break; }
                 if (_soloMode) { FinishHudVerb(name, W("NotInSolo")); break; }
+                if (_mapCharacters.FirstOrDefault(mc => mc.Placement == talker) is not { } listener) { FinishHudVerb(name, W("NotPossible")); break; }
+                if (IsDead(listener.Character) || IsIncapacitated(listener.Character)
+                    || (listener.Npc.Activity == ScheduleType.Sleep && listener.PoseName == "Sleeping" && !listener.Character.IsInParty)
+                    || (!listener.Character.IsInParty && (listener.Npc.InCombat || Attitude(listener.Character, _player) == FactionBehavior.Attack)))
+                { FinishHudVerb(name, W("NoResponse")); break; } // asleep, paralyzed, hostile: "No response"
+                if (listener.Character.TalkCommands.Count == 0) { FinishHudVerb(name, W("FunnyNoResponse")); break; }
                 U6Say(_hudPrompt + name);
                 EndHudVerb();
                 SetHudFocus(HudFocus.Map);
@@ -312,7 +321,7 @@ public partial class U6GameWindow
             case HudVerb.Drop:
             case HudVerb.Move when _hudPickedItem is not null:
                 if (_hudPickedItem is not { } picked) { SetHudFocus(HudFocus.Panel); break; }
-                if (!NextTo(_player, cx, cy, 2)) { FinishHudVerb(W("WhatPlace"), W("OutOfRange")); break; }
+                if (!NextTo(_player, cx, cy, 5)) { FinishHudVerb(W("WhatPlace"), W("OutOfRange")); break; } // MapWindow::can_drop_or_move_obj: within 5
                 {
                     string itemName = HudItemName(picked.Item);
                     HudAct(itemName, () => DropCarriedAt(picked.Owner, picked.Item, (cx, cy)), W("Drops", itemName, picked.Owner.Name));
@@ -329,7 +338,8 @@ public partial class U6GameWindow
             {
                 var moving = _hudPickedThing!;
                 string movedName = ThingName(moving);
-                if (!NextTo(_player, cx, cy, 2)) { FinishHudVerb(movedName, W("OutOfRange")); break; }
+                var (mx, my) = moving switch { PlacedItemInstance i => (i.X, i.Y), ObjectInstance o => (o.X, o.Y), _ => (_playerX, _playerY) };
+                if (Math.Max(Math.Abs(mx - cx), Math.Abs(my - cy)) > 1) { FinishHudVerb(movedName, W("OutOfRange")); break; } // Events::pushTo: one square on
                 HudAct(movedName, () => MoveThingTo(moving, (cx, cy)), "");
                 break;
             }

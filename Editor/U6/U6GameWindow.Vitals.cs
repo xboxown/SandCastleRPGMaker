@@ -115,7 +115,8 @@ public partial class U6GameWindow
     }
 
     private int MaxHp(CharacterDefinition character) =>
-        StrengthStat() is { } str && character.StatValues.TryGetValue(str.Id, out var text) && int.TryParse(text, out int max) ? max : 0;
+        U6LevelsOn ? U6Leveling.MaxHits(Stat(character, BuiltInStatKind.Level, 1)) // Ultima 6: 30 a level (U6Actor::get_maxhp)
+        : StrengthStat() is { } str && character.StatValues.TryGetValue(str.Id, out var text) && int.TryParse(text, out int max) ? max : 0;
 
     /// <summary>System Settings > Combat: starving goes on hurting someone knocked out by it, until they die.</summary>
     private bool StarvationKills => _systemSettings.StarvationKills ?? false;

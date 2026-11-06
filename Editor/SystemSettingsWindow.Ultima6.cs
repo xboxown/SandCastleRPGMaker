@@ -57,6 +57,7 @@ public partial class SystemSettingsWindow
         afterRow.Children.Add(after);
         panel.Children.Add(afterRow);
         panel.Children.Add(new TextBlock { Text = "As Nuvie: talking stops the map's music; when it ends the map's music starts again from the beginning, or a random song of the map's plays.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(BuildU6LevelsSection(u6));
         panel.Children.Add(BuildU6WordsSection(u6));
         panel.Children.Add(BuildU6KeysSection(u6));
         return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
@@ -82,6 +83,82 @@ public partial class SystemSettingsWindow
             row.Children.Add(box);
             section.Children.Add(row);
         }
+        return section;
+    }
+
+    /// <summary>
+    /// Levels: Ultima 6's (U6Leveling) - how a level earned is taken, a shrine or a dream. Ultima 7 leveling is off and stays off
+    /// unless the maker unlocks it on purpose: a warning, and its words typed in full.
+    /// </summary>
+    private UIElement BuildU6LevelsSection(Ultima6Settings u6)
+    {
+        const string Unlock = "USE ULTIMA 7 LEVELING";
+        var section = new StackPanel();
+        section.Children.Add(new TextBlock { Text = "Levels", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        var u6Part = new StackPanel();
+        u6Part.Children.Add(new TextBlock
+        {
+            Text = "As Ultima 6, Savage Empire and Martian Dreams (Nuvie): eight levels. A kill gives its experience, but a level isn't taken by itself - "
+                + "with more than 100, 200, 400, 800, 1600, 3200 or 6400 experience a level is earned, and taken the way below. The most hit points are 30 a level "
+                + "(level 8: 240); no stat goes past 30; no training points.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11
+        });
+        var wayRow = new WrapPanel { Margin = new Thickness(0, 4, 0, 2) };
+        wayRow.Children.Add(new TextBlock { Text = "A level earned is taken:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
+        var way = new ComboBox { Width = 380, ItemsSource = new[] { Ultima6Settings.LevelUpShrine, Ultima6Settings.LevelUpDream }, SelectedItem = u6.LevelUpWay == Ultima6Settings.LevelUpDream ? Ultima6Settings.LevelUpDream : Ultima6Settings.LevelUpShrine };
+        way.SelectionChanged += (_, _) => { if (way.SelectedItem is string s) u6.LevelUpWay = s; };
+        wayRow.Children.Add(way);
+        u6Part.Children.Add(wayRow);
+        u6Part.Children.Add(new TextBlock
+        {
+            Text = "At a shrine: put the Ultima 6 tab's \"Meditate At Shrine\" command on the shrine's event (after its mantra, if you ask for one). Every member who has earned a level rises, "
+                + "with the virtue's points: Honesty 3 intelligence, Compassion 3 dexterity, Valor 3 strength, Justice 1 intelligence and 1 dexterity, Sacrifice 1 strength and 1 dexterity, "
+                + "Honor 1 strength and 1 intelligence, Spirituality 1 of each, Humility none.\n"
+                + "In a dream: when the party rests (the Rest verb), each member who has earned a level dreams and the player picks S, D or I - 1 point - and they get 30 hit points back.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 2, 0, 6)
+        });
+        section.Children.Add(u6Part);
+
+        var state = new TextBlock { TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 4, 0, 4) };
+        var toggle = new Button { HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1) };
+        void Show()
+        {
+            u6Part.IsEnabled = !u6.UseUltima7Leveling;
+            state.Text = u6.UseUltima7Leveling
+                ? "Ultima 7 leveling is ON: levels rise by themselves with training points, by each character's curve (Character Editor > Level). Ultima 6's levels above are not used."
+                : "Ultima 7 leveling: OFF (Ultima 6's levels).";
+            state.Foreground = u6.UseUltima7Leveling ? Brushes.IndianRed : Brushes.Gray;
+            toggle.Content = u6.UseUltima7Leveling ? "Back to Ultima 6's levels" : "Unlock Ultima 7 leveling...";
+        }
+        toggle.Click += (_, _) =>
+        {
+            if (u6.UseUltima7Leveling) { u6.UseUltima7Leveling = false; Show(); return; }
+            // On purpose only: a warning, and the words typed in full.
+            var box = new TextBox { Margin = new Thickness(0, 6, 0, 6) };
+            var ok = new Button { Content = "Turn it on", IsDefault = true, IsEnabled = false, Padding = new Thickness(10, 2, 10, 2), Margin = new Thickness(0, 0, 6, 0) };
+            var cancel = new Button { Content = "Keep Ultima 6's levels", IsCancel = true, Padding = new Thickness(10, 2, 10, 2) };
+            var body = new StackPanel { Margin = new Thickness(12) };
+            body.Children.Add(new TextBlock
+            {
+                Text = "This is an Ultima 6 game. Ultima 7 leveling is NOT how Ultima 6, Savage Empire or Martian Dreams work: levels would rise by themselves, give training points, "
+                    + "and follow each character's own curve - shrines and dreams would raise nothing.\n\nTo turn it on anyway, type exactly:\n" + Unlock,
+                TextWrapping = TextWrapping.Wrap, Width = 420
+            });
+            body.Children.Add(box);
+            var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right };
+            buttons.Children.Add(ok);
+            buttons.Children.Add(cancel);
+            body.Children.Add(buttons);
+            var dialog = new Window { Title = "Unlock Ultima 7 leveling", Content = body, SizeToContent = SizeToContent.WidthAndHeight, ResizeMode = ResizeMode.NoResize, Owner = this, WindowStartupLocation = WindowStartupLocation.CenterOwner };
+            box.TextChanged += (_, _) => ok.IsEnabled = box.Text.Trim() == Unlock;
+            ok.Click += (_, _) => dialog.DialogResult = true;
+            box.Focus();
+            if (dialog.ShowDialog() == true && box.Text.Trim() == Unlock) u6.UseUltima7Leveling = true;
+            Show();
+        };
+        Show();
+        section.Children.Add(state);
+        section.Children.Add(toggle);
         return section;
     }
 

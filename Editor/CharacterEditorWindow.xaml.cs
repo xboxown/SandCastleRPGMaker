@@ -789,6 +789,7 @@ public partial class CharacterEditorWindow : Window
     {
         character.Levels ??= (ProjectSession.SettingsProvider?.Invoke()?.Levels ?? new LevelSettings()).Clone();
         if (_levelTab is null) { _levelTab = new TabItem { Header = "Level" }; DetailsTabs.Items.Add(_levelTab); }
+        if (ProjectSession.IsUltima6 && ProjectSession.SettingsProvider?.Invoke()?.Ultima6.UseUltima7Leveling != true) { ShowU6LevelTab(); return; }
         Color color;
         try { color = (Color)ColorConverter.ConvertFromString(character.LevelGraphColor); } catch { color = Color.FromRgb(90, 160, 230); }
         StackPanel? caps = null;
@@ -821,6 +822,44 @@ public partial class CharacterEditorWindow : Window
         panel.Children.Add(top);
         panel.Children.Add(new LevelCurveEditor(character.Levels, color));
         _levelTab.Content = panel;
+    }
+
+    /// <summary>Ultima 6 (System Settings > Ultima 6, Ultima 7 leveling off): every character's levels are Ultima 6's - shown, not changed.</summary>
+    private void ShowU6LevelTab()
+    {
+        var panel = new StackPanel { Margin = new Thickness(8) };
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Ultima 6's levels - the same for every character (System Settings > Ultima 6 > Levels). A kill gives the dead one's EXP; a level earned is taken at a shrine "
+                + "(Meditate At Shrine) or in a dream when resting, never by itself. No training points. Stats never past 30. Level Lock still stops a character's levels.",
+            TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
+        });
+        var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Left };
+        for (int c = 0; c < 3; c++) grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(150) });
+        void Cell(int row, int col, string text, bool bold = false)
+        {
+            while (grid.RowDefinitions.Count <= row) grid.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
+            var t = new TextBlock { Text = text, FontWeight = bold ? FontWeights.Bold : FontWeights.Normal, Margin = new Thickness(0, 1, 0, 1) };
+            Grid.SetRow(t, row);
+            Grid.SetColumn(t, col);
+            grid.Children.Add(t);
+        }
+        Cell(0, 0, "Level", true);
+        Cell(0, 1, "Earned with more than", true);
+        Cell(0, 2, "Most hit points", true);
+        for (int level = 1; level <= U6Leveling.MaxLevel; level++)
+        {
+            Cell(level, 0, level.ToString());
+            Cell(level, 1, level == 1 ? "(the start)" : $"{U6Leveling.Needs[level - 1]} experience");
+            Cell(level, 2, U6Leveling.MaxHits(level).ToString());
+        }
+        panel.Children.Add(grid);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "At the start of a game, someone with more Hits than their level allows is that much higher a level (as Ultima 6: level = (hits + 29) / 30) - a monster with 70 Hits is level 3.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 8, 0, 0)
+        });
+        _levelTab!.Content = new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
     }
 
     private void ShowSize(CharacterDefinition character)

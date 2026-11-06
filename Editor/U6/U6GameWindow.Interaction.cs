@@ -341,7 +341,8 @@ public partial class U6GameWindow
             // Exult: "Last click within .5 secs?" -> double_clicked(), and the pending identify is dropped.
             _lastClickTarget = null;
             CancelPendingIdentify();
-            UseTarget(target);
+            if (target is MapEntityTarget or PlayerTarget) U6MultiUse(target); // Ultima 6: talk, use or attack - from the next square (U6GameWindow.U6Levels.cs)
+            else UseTarget(target);
             return;
         }
         _lastClickTarget = target;
@@ -362,6 +363,7 @@ public partial class U6GameWindow
     private void IdentifyTarget(InteractionTarget target)
     {
         if (_isReadingBook) return;
+        if (target is MapEntityTarget or PlayerTarget) { U6ClickLook(target); return; } // Ultima 6: "Look-" in the text area, not a name over it
         switch (target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
@@ -456,12 +458,14 @@ public partial class U6GameWindow
         switch (session.Target)
         {
             case MapEntityTarget { Entity: PlacedItemInstance item } when _map.Items.Contains(item):
+                if (!U6CanDrag(item.X, item.Y)) return false; // Ultima 6: only from the next square
                 if (IsTooHeavyToLift(item)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to lift."); return false; } // a body marked Too Heavy
                 if (!IsReachable(item)) { Refuse(MousePointerKind.RedX, CantReachMessage); return false; } // Dragging_info::start: !is_grabable -> red X
                 origin = new MapItemOrigin(item);
                 source = _itemVisuals.GetValueOrDefault(item);
                 break;
             case MapEntityTarget { Entity: ObjectInstance obj } when _map.Objects.Contains(obj):
+                if (!U6CanDrag(obj.X, obj.Y)) return false; // Ultima 6: only from the next square
                 if (_flying.Any(f => ReferenceEquals(f.Instance, obj))) { Refuse(MousePointerKind.TooHeavy, "It's flying - you can't catch it."); return false; } // an arrow or a thrown weapon in flight
                 if (!IsMovable(obj)) { Refuse(MousePointerKind.TooHeavy, "That's too heavy to move."); return false; } // Dragging_info::start: "Don't want to move walls" - !is_dragable -> "too heavy"
                 // Not Exult (which lets you): a chair or bed someone is sitting or lying on is too heavy to move.

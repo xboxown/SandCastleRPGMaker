@@ -26,6 +26,44 @@ public class Ultima6Settings
     public Dictionary<string, string> Keys { get; set; } = new();
     /// <summary>The text area's words the maker changed (word id -> words); the rest are Ultima 6's (U6Words).</summary>
     public Dictionary<string, string> Words { get; set; } = new();
+
+    // ---------- Levels (U6Leveling) ----------
+
+    /// <summary>
+    /// Off (always, unless the maker deliberately unlocks it in System Settings > Ultima 6): Ultima 6's levels - eight, the
+    /// experience steps of Ultima 6, 30 hit points a level, stats raised by a shrine or a dream. On: the Ultima 7 engine's
+    /// levels instead (automatic, training points, each character's curve in the Character Editor).
+    /// </summary>
+    public bool UseUltima7Leveling { get; set; }
+    /// <summary>How a level earned is taken: meditating at a shrine (Ultima 6) or dreaming when the party rests (Savage Empire, Martian Dreams).</summary>
+    public string LevelUpWay { get; set; } = LevelUpShrine;
+    public const string LevelUpShrine = "At a shrine (Ultima 6)", LevelUpDream = "In a dream when the party rests (Savage Empire, Martian Dreams)";
+}
+
+/// <summary>
+/// Ultima 6's levels, as Nuvie has them (u6/actor.lua, md/usecode.lua rest_level_up_actor, U6Actor::get_maxhp): eight levels,
+/// the next one earned with MORE experience than 100, 200, 400 ... 6400; the most hit points 30 a level (never past 255);
+/// a stat never past 30. A level isn't taken by itself: at a shrine, chanting its mantra, every member who has earned one
+/// rises and gets the shrine's virtue's points (Honesty 3 intelligence, Compassion 3 dexterity, Valor 3 strength, Justice,
+/// Sacrifice and Honor 1 each of two, Spirituality 1 of each, Humility none) - or, Savage Empire and Martian Dreams, in a
+/// dream when the party rests: one stat, picked, 1 point, and 30 hit points back.
+/// </summary>
+public static class U6Leveling
+{
+    public const int MaxLevel = 8, StatCap = 30, HitsPerLevel = 30, MostHits = 255;
+    /// <summary>More than Needs[level] experience earns the next level (Nuvie's exp_level_tbl).</summary>
+    public static readonly int[] Needs = { 0, 100, 200, 400, 800, 1600, 3200, 6400 };
+
+    public static int MaxHits(int level) => Math.Min(MostHits, Math.Clamp(level, 1, MaxLevel) * HitsPerLevel);
+    public static bool HasEarned(int level, int experience) => level >= 1 && level < MaxLevel && experience > Needs[level];
+    /// <summary>The experience the next level needs (one more than its step); 0 at level 8.</summary>
+    public static int NextExp(int level) => level >= 1 && level < MaxLevel ? Needs[level] + 1 : level < 1 ? Needs[1] + 1 : 0;
+
+    public static readonly (string Virtue, string Mantra, int Str, int Dex, int Int)[] Shrines =
+    {
+        ("Honesty", "AHM", 0, 0, 3), ("Compassion", "MU", 0, 3, 0), ("Valor", "RA", 3, 0, 0), ("Justice", "BEH", 0, 1, 1),
+        ("Sacrifice", "CAH", 1, 1, 0), ("Honor", "SUMM", 1, 0, 1), ("Spirituality", "OM", 1, 1, 1), ("Humility", "LUM", 0, 0, 0),
+    };
 }
 
 /// <summary>The kinds of piece a HUD is built from (HUD Editor's toolbox).</summary>
