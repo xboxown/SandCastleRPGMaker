@@ -192,6 +192,7 @@ public partial class CharacterEditorWindow : Window
 
         _exitButtonFilterGroup = string.IsNullOrEmpty(character.Paperdoll.ExitButtonSpriteGroup) ? null : character.Paperdoll.ExitButtonSpriteGroup;
         PopulateExitButtonChoices(character.Paperdoll.ExitButtonSpriteGroup, character.Paperdoll.ExitButtonSpriteName);
+        ExitButtonOwnSizeCheck.IsChecked = character.Paperdoll.ExitButtonOwnSize; // right under the list, where it's found
 
         // Real Navigate Sound picker, per spec - same honest flat-list pattern every other sound picker in this project already uses (ResourceDatabase.Entries has no real group concept to filter by at all).
         var navigateSoundChoices = new List<ResourceEntry> { NoneSound };
@@ -906,6 +907,12 @@ public partial class CharacterEditorWindow : Window
         choices.Insert(0, NoExitButton); // (None): no close button - Escape closes the paperdoll
         ExitButtonCombo.ItemsSource = choices;
         ExitButtonCombo.SelectedItem = string.IsNullOrEmpty(selectedName) ? NoExitButton : choices.FirstOrDefault(s => s != NoExitButton && s.Name == selectedName);
+    }
+
+    private void ExitButtonOwnSize_Changed(object sender, RoutedEventArgs e)
+    {
+        if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        character.Paperdoll.ExitButtonOwnSize = ExitButtonOwnSizeCheck.IsChecked == true;
     }
 
     /// <summary>The Exit button list's "(None)": picked, the paperdoll has no close button (Escape closes it).</summary>

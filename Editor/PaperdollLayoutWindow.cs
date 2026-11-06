@@ -333,6 +333,13 @@ public sealed class PaperdollLayoutWindow : Window
         _settings.Children.Add(Note("Drag any slot, number or gauge to place it. Items show what this character starts with, at their size in the game, so you can see they sit right on the body."));
 
         var pd = _character.Paperdoll;
+        _settings.Children.Add(Heading("Close button"));
+        _settings.Children.Add(Note("Its sprite is the Character Editor's Exit button (frame 1 up, frame 2 while pressed; it closes when let go over it). None: Escape closes the paperdoll. Drag it on the picture, or type where."));
+        var exitRow = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
+        exitRow.Children.Add(PlaceRow(() => pd.ExitButtonX, v => pd.ExitButtonX = v, () => pd.ExitButtonY, v => pd.ExitButtonY = v));
+        exitRow.Children.Add(Check("At its own size (else in a 24 x 24 box)", () => pd.ExitButtonOwnSize, v => pd.ExitButtonOwnSize = v));
+        _settings.Children.Add(exitRow);
+
         _settings.Children.Add(Heading("Look"));
         _settings.Children.Add(Check("Worn on the body (Serpent Isle): what's worn is drawn on the body - each thing's worn look (Object Editor > Worn on the body) - not as icons in the slots",
             () => pd.WornOnBody, v => pd.WornOnBody = v));
@@ -425,13 +432,6 @@ public sealed class PaperdollLayoutWindow : Window
         linkRow.Children.Add(new Button { Content = "+ Opens with the inventory", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(0, 2, 6, 4) }.Also(b => b.Click += (_, _) => AddLink(DollLinkWay.WithInventory)));
         _settings.Children.Add(linkRow);
         for (int i = 0; i < pd.DollLinks.Count; i++) DollLinkSettings(pd.DollLinks[i], i + 1);
-
-        _settings.Children.Add(Heading("Close button"));
-        _settings.Children.Add(Note("Its sprite is the Character Editor's Exit button (frame 1 up, frame 2 while pressed; it closes when let go over it). None: Escape closes the paperdoll. Drag it on the picture, or type where."));
-        var exitRow = new WrapPanel { Margin = new Thickness(18, 0, 0, 4) };
-        exitRow.Children.Add(PlaceRow(() => pd.ExitButtonX, v => pd.ExitButtonX = v, () => pd.ExitButtonY, v => pd.ExitButtonY = v));
-        exitRow.Children.Add(Check("At its own size (else in a 24 x 24 box)", () => pd.ExitButtonOwnSize, v => pd.ExitButtonOwnSize = v));
-        _settings.Children.Add(exitRow);
 
         _settings.Children.Add(Heading("Buttons (Exult's paperdoll)"));
         _settings.Children.Add(Note("Each is a sprite whose frames are its states. Combat and the disk show on the player's paperdoll only, as in Exult."));

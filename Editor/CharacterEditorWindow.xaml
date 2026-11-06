@@ -114,6 +114,9 @@
                                       Click="ExitButtonFilterCheck_Checked" ToolTip="Opens the sprites of this kind's folders (Sprite Editor: right-click a folder > Identity) with their pictures and a search box, to pick one."/>
                             <ComboBox x:Name="ExitButtonCombo" SelectionChanged="ExitButtonSprite_Changed" DisplayMemberPath="Name"/>
                         </DockPanel>
+                        <CheckBox x:Name="ExitButtonOwnSizeCheck" Content="At its own size (else squeezed into a 24 x 24 box)" Margin="0,0,0,4"
+                                  Checked="ExitButtonOwnSize_Changed" Unchecked="ExitButtonOwnSize_Changed"
+                                  ToolTip="Ticked: the close button is drawn as big as its sprite, as the stats window's close button. Unticked: fitted into a small 24 x 24 box."/>
                         <ComboBox x:Name="PaperdollNavigateSoundCombo" SelectionChanged="PaperdollNavigateSound_Changed" DisplayMemberPath="Name" Visibility="Collapsed"/>
                         <TextBlock Text="Open Sound" FontWeight="Bold" Margin="0,8,0,0"/>
                         <TextBlock Text="Plays when this character's paperdoll is opened in the game." Opacity="0.6" FontSize="11" TextWrapping="Wrap" Margin="0,0,0,2"/>
