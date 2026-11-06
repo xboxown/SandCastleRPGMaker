@@ -19,6 +19,7 @@ public partial class MainWindow
     private void ApplyStyleToTools()
     {
         PaperDollMenuItem.Header = IsUltima6 ? "HUD Editor..." : "PaperDoll Editor...";
+        SortToolsMenu(); // its new name in its A-Z place
         if (_paperDollToolButton is null) return;
         var tip = new System.Windows.Controls.StackPanel { MaxWidth = 280 };
         tip.Children.Add(new System.Windows.Controls.TextBlock { Text = IsUltima6 ? "HUD Editor" : "PaperDoll Editor", FontWeight = FontWeights.Bold });

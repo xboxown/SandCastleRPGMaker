@@ -167,7 +167,7 @@ public sealed class StatsDollEditorWindow : Window
         StatsElementKind.Text => $"Text \"{e.Text}\"",
         StatsElementKind.Name => "Name",
         StatsElementKind.Stat => $"{StatName(e.StatId)} ({e.ShowAs})",
-        StatsElementKind.Ailment => $"While {Ailments.Describe(e.Ailment).ToLowerInvariant()}",
+        StatsElementKind.Ailment => $"While {StatsEffects.Describe(e, _stats).ToLowerInvariant()}",
         _ => e.OnlyWhenHungry ? "Hunger (while hungry)" : "Hunger (how full)"
     };
 
@@ -255,8 +255,8 @@ public sealed class StatsDollEditorWindow : Window
         adds.Children.Add(MakeButton("+ Text", () => Add(new StatsDollElement { Kind = StatsElementKind.Text, Text = "Strength:" })));
         adds.Children.Add(MakeButton("+ Name", () => Add(new StatsDollElement { Kind = StatsElementKind.Name })));
         adds.Children.Add(MakeButton("+ Stat", () => Add(new StatsDollElement { Kind = StatsElementKind.Stat, StatId = _stats.Stats.FirstOrDefault()?.Id ?? -1, Style = new PaperdollReadout { Enabled = true, Align = ReadoutAlign.Right } })));
-        adds.Children.Add(MakeButton("+ Ailment picture", () => Add(new StatsDollElement { Kind = StatsElementKind.Ailment })));
-        adds.Children.Add(MakeButton("+ Hunger", () => Add(new StatsDollElement { Kind = StatsElementKind.Hunger })));
+        // One general picture for any ailment, hunger, or a stat of your own (it replaces "+ Hunger" and "+ Ailment picture").
+        adds.Children.Add(MakeButton("+ Ailment effect", () => Add(new StatsDollElement { Kind = StatsElementKind.Ailment, Effect = Ailment.Poisoned.ToString() })));
         adds.Children.Add(MakeButton("+ Every stat", () =>
         {
             // The Ultima VII layout to start from: a label on the left and its value on the right, a line each.
@@ -299,8 +299,10 @@ public sealed class StatsDollEditorWindow : Window
         }
         if (e.Kind == StatsElementKind.Ailment)
         {
-            _elementProps.Children.Add(Combo("While they are", Ailments.All.Concat(new[] { Ailment.Invisible, Ailment.Protected }).ToList(), Ailments.Describe, () => e.Ailment, v => e.Ailment = v, 150));
+            var choices = StatsEffects.Choices(_stats);
+            _elementProps.Children.Add(Combo("Shown while", choices.Select(c => c.Key).ToList(), key => choices.FirstOrDefault(c => c.Key == key).Words ?? key, () => StatsEffects.KeyOf(e), v => e.Effect = v, 230));
             _elementProps.Children.Add(SpritePicker("Picture (shown while it lasts)", () => e.Gauge.Sprite, v => e.Gauge.Sprite = v));
+            _elementProps.Children.Add(Note("Every ailment, hunger, and every stat in the Stat Editor (shown while it's above 0 - make a stat \"Diseased\" and set it with Change Stat to have your own)."));
         }
         if (e.Kind == StatsElementKind.Hunger)
         {

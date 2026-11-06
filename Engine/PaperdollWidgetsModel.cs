@@ -56,6 +56,57 @@ public class StatsDollElement
     public Ailment Ailment { get; set; } = Ailment.Poisoned;
     /// <summary>Hunger: shown only while hungry (else always, as a gauge of how full they are).</summary>
     public bool OnlyWhenHungry { get; set; } = true;
+    /// <summary>
+    /// Ailment effect (the general one): what makes its picture show - an ailment's name ("Poisoned", "Asleep"...), "Hungry",
+    /// or "Stat:12" (a Stat Editor stat, while above 0 - a "Diseased" of your own). Empty: the Ailment above (made before it).
+    /// </summary>
+    public string Effect { get; set; } = string.Empty;
+}
+
+/// <summary>What an Ailment effect element can show for (StatsDollElement.Effect): every ailment, hunger, and every stat of the project.</summary>
+public static class StatsEffects
+{
+    public const string Hungry = "Hungry";
+    public const string StatPrefix = "Stat:";
+
+    /// <summary>Ailments that last a while on a character: the ones of Ultima 7 (and Surrendered, Ultima 8).</summary>
+    public static readonly Ailment[] AilmentChoices =
+        { Ailment.Poisoned, Ailment.Asleep, Ailment.Paralyzed, Ailment.Charmed, Ailment.Cursed, Ailment.Invisible, Ailment.Protected, Ailment.FeignDeath, Ailment.WithstandDeath, Ailment.Surrendered };
+
+    /// <summary>The list to pick from: (key, words).</summary>
+    public static List<(string Key, string Words)> Choices(StatDatabase stats)
+    {
+        var list = AilmentChoices.Select(a => (a.ToString(), Words(a))).ToList();
+        list.Insert(0, (Hungry, "Hungry"));
+        list.AddRange(stats.Stats.Select(s => (StatPrefix + s.Id, $"{s.Name} (a stat - while above 0)")));
+        return list;
+    }
+
+    private static string Words(Ailment a) => a switch
+    {
+        Ailment.FeignDeath => "Feigning death",
+        Ailment.WithstandDeath => "Withstanding death",
+        Ailment.Surrendered => "Surrendered (Ultima 8)",
+        _ => Ailments.Describe(a)
+    };
+
+    /// <summary>The element's key - its Effect, or its Ailment for one made before Effect.</summary>
+    public static string KeyOf(StatsDollElement e) => e.Effect.Length > 0 ? e.Effect : e.Ailment.ToString();
+
+    public static string Describe(StatsDollElement e, StatDatabase stats)
+    {
+        string key = KeyOf(e);
+        return Choices(stats).FirstOrDefault(c => c.Key == key).Words ?? key;
+    }
+
+    /// <summary>Whether the picture shows now: has the ailment, is hungry, or the stat is above 0.</summary>
+    public static bool Active(StatsDollElement e, Func<Ailment, bool> has, bool hungry, Func<int, double> statValue)
+    {
+        string key = KeyOf(e);
+        if (key == Hungry) return hungry;
+        if (key.StartsWith(StatPrefix) && int.TryParse(key[StatPrefix.Length..], out int statId)) return statValue(statId) > 0;
+        return Enum.TryParse<Ailment>(key, out var ailment) && has(ailment);
+    }
 }
 
 /// <summary>

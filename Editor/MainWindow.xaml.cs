@@ -110,6 +110,7 @@ public partial class MainWindow : Window
     {
         InitializeComponent();
         BuildToolIcons(); // the editors as icons after Zoom (MainWindow.Toolbar.cs)
+        SortToolsMenu(); // the Tools menu's editors from A to Z (MainWindow.Toolbar.cs)
         Title += $" [{BuildInfo.CurrentBuild}]";
         PreviewKeyDown += MainWindow_PreviewKeyDown;
         InitZoom();

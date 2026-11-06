@@ -329,7 +329,7 @@ public partial class GameTestWindow
         {
             double? fraction = element.Kind == StatsElementKind.Hunger ? food / (double)SurvivalSettings.MaxFood : null;
             var visual = StatsDollLook.Element(element, _sprites, character.Name, StatText(character, element.StatId), id => StatNumber(character, id),
-                fraction, element.Kind == StatsElementKind.Ailment && Has(character, element.Ailment), hungry);
+                fraction, element.Kind == StatsElementKind.Ailment && StatsEffects.Active(element, a => Has(character, a), hungry, id => StatNumber(character, id)), hungry); // any ailment, hunger or a stat above 0
             if (visual is null) continue;
             visual.IsHitTestVisible = false;
             gump.Body.Children.Add(visual);

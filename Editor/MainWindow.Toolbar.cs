@@ -7,6 +7,20 @@ namespace SandcastleRpgMaker.Editor;
 /// <summary>The toolbar's editor buttons (after Zoom): one icon per editor of the Tools menu, its name and what it's for on hover.</summary>
 public partial class MainWindow
 {
+    /// <summary>The Tools menu's editors in A-Z order (the user's wish) - again when a name changes (Ultima 6: HUD Editor). What's after the line (tile properties) stays where it is.</summary>
+    private void SortToolsMenu()
+    {
+        var editors = new List<MenuItem>();
+        foreach (var item in ToolsMenu.Items.Cast<object>().ToList())
+        {
+            if (item is Separator) break;
+            if (item is MenuItem menuItem) editors.Add(menuItem);
+        }
+        foreach (var item in editors) ToolsMenu.Items.Remove(item);
+        int at = 0;
+        foreach (var item in editors.OrderBy(i => (i.Header as string ?? "").Replace("_", ""), StringComparer.OrdinalIgnoreCase)) ToolsMenu.Items.Insert(at++, item);
+    }
+
     private void BuildToolIcons()
     {
         var tools = new (string Name, string Purpose, RoutedEventHandler Open)[]
