@@ -884,6 +884,7 @@ public partial class MainWindow : Window
         _statDatabase = StatDatabase.CreateDefault();
         _poseDatabase = PoseDatabase.CreateDefault();
         _tilePropertiesDatabase = new TilePropertiesDatabase();
+        LoadWorlds(null, null); // the Maps tab, empty: Add Map makes the first (it was missing when no project had been open before)
         LoadHouses(null);
 
         _projectStyle = dialog.Style; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
