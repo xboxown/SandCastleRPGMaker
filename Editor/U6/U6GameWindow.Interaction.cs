@@ -970,6 +970,16 @@ public partial class U6GameWindow
             if (IsSlotFree(character, ammoSlot, origin)) { EquipInSlot(origin, character, ammoSlot); return true; }
         }
 
+        // Ultima 6: things are carried loose - the HUD panel's carried cells, bags among them - limited by weight only (checked above),
+        // never needing a backpack or a free hand as in Ultima 7.
+        {
+            string looseName = PayloadName(origin);
+            var loose = DetachAsInventoryItem(origin, character.GetNextInventoryInstanceId);
+            character.Inventory.Add(loose);
+            FinishCharacterReceive(character, looseName);
+            return true;
+        }
+#pragma warning disable CS0162 // the Ultima 7 rules below are kept as they were copied, unreached
         if (category == ReferencedItemCategory.Container)
         {
             // A container only ever goes in its own Location slot (Container Editor), or a hand: Location first, then the right hand, then the left hand - otherwise it can't be picked up. It never goes into another slot, and never into a bag.
@@ -1027,6 +1037,7 @@ public partial class U6GameWindow
         }
         EquipInSlot(origin, character, hand.Value);
         return true;
+#pragma warning restore CS0162
     }
 
     /// <summary>Paperdoll_gump::add step 2 (add_readied at the spot under the drop point), with this project's own hand rules: the left hand is unavailable while the right holds a two-handed item, and a two-handed item goes in the right hand with the left hand empty.</summary>

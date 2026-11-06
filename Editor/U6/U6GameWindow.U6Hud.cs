@@ -66,6 +66,7 @@ public partial class U6GameWindow
             layer.Height = _viewH;
         }
         BuildHud();
+        InitializeU6Keys(); // Ultima 6's keys (U6GameWindow.U6Keys.cs)
     }
 
     private void BuildHud()
@@ -153,6 +154,12 @@ public partial class U6GameWindow
         foreach (var visual in _hudPanelVisuals) HudLayer.Children.Remove(visual);
         _hudPanelVisuals.Clear();
         if (Hud.First(HudPieceKind.GameView) is null || HudMember is not { } member) return;
+        if (HudPartyList() is { } partyList) // F10: the party instead (U6GameWindow.U6Verbs.cs)
+        {
+            _hudPanelVisuals.Add(partyList);
+            HudLayer.Children.Add(partyList);
+            return;
+        }
         foreach (var piece in Hud.Pieces)
         {
             var view = HudPiece.ViewOf(piece.Kind);
@@ -225,6 +232,7 @@ public partial class U6GameWindow
     /// <summary>Ultima 6: what happens is told in the text area ("You see a wall.", "Chicken attacks rat.").</summary>
     private void U6Say(string text)
     {
+        SoakLog("u6say: " + text);
         if (Hud.First(HudPieceKind.TextArea) is not { } area) return;
         foreach (var paragraph in text.Replace("\r", "").Split('\n')) _hudLines.AddRange(HudWrap(paragraph, area.Width, area.FontName));
         int keep = Math.Max(1, area.Height / Math.Max(1, HudLineHeight(area.FontName)) * 4); // a few screens of history

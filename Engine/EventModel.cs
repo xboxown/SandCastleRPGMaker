@@ -129,7 +129,8 @@ public enum EventCommandType
     U8BuildUpStat,
     U8MovePlatform, U8WeightOn, U8FlipScreen, U8Speak, U8ReadingScreen, U8Keypad, U8Computer, U8Recharge, U8Alarm,
     CallCharacter, OrderOnTarget, SniffAndLead,
-    U8ControlCharacter, U8ReturnControl
+    U8ControlCharacter, U8ReturnControl,
+    U6AskKey, U6SetKey, U6GetKeyName, U6ResetKeys
 }
 
 /// <summary>

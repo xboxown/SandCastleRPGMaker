@@ -204,6 +204,7 @@ public partial class U6GameWindow : Window
         PreviewKeyDown += (_, e) => ScenarioKeyDown(e); // the Scenario Developer's keys, wherever the focus is; Game Test only (U6GameWindow.Scenarios.cs)
         GameCanvas.PreviewTextInput += DollTypingText; // a paperdoll's text box being typed in (first: it takes the letters)
         GameCanvas.PreviewTextInput += SaveScreenText; // a save's name typed on the Save/Load screen
+        InitU6Verbs(); // Ultima 6: a click picking a verb's target comes first (U6GameWindow.U6Verbs.cs)
         InitializeInteraction(); // the one and only place mouse interaction is wired up - see U6GameWindow.Interaction.cs
         InitializePointer(systemSettings); // the engine's own Exult-style mouse pointer - see U6GameWindow.Pointer.cs
 
@@ -1541,6 +1542,7 @@ public partial class U6GameWindow : Window
     private void GameCanvas_PreviewKeyDown(object sender, KeyEventArgs e)
     {
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (U6GameWindow.Video.cs)
+        if (KeyAskTook(e)) return; // Ask For Key waiting: the key is its (U6GameWindow.U6Keys.cs)
         if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
         if (_currentMessage is not null)
         {
@@ -1552,6 +1554,8 @@ public partial class U6GameWindow : Window
         if (TopModalDoll is { } modal) { ModalDollKey(modal, e.Key); e.Handled = true; return; } // a modal paperdoll: only Escape (no) and Enter (yes)
         if (_saveScreen is not null && e.Key != Key.Escape) { if (SaveScreenKey(e.Key)) e.Handled = true; return; } // the Save/Load screen takes the keys - its name is typed (U6GameWindow.SaveLoad.cs)
         if (_keysForbidden && !IsArrowKey(e.Key)) { e.Handled = true; return; } // Allow / Forbid Controls > Keys: only walking
+        // Ultima 6's keys (U6GameWindow.U6Verbs.cs) - everything below is the Ultima 7 engine's, reached only for what they leave (Escape closing what's open).
+        if (_saveScreen is null && !_gameOver && !PlayerKnockedOut && !_objectOverlayOpen && !InCinema && !_restingNow && !IsChoosingTarget && !_isReadingBook && U6KeyTook(e)) { e.Handled = true; return; }
         if (e.Key == Key.S && !InCinema && !PlayerKnockedOut) { OpenSaveLoad(); e.Handled = true; return; } // Exult: S opens the Save/Load screen - even after dying, to load
         if (_gameOver) { e.Handled = true; return; } // the main character is dead: no keys do anything
         if (PlayerKnockedOut && e.Key != Key.F6) { e.Handled = true; return; } // unconscious: nothing until back on your feet
@@ -1608,6 +1612,8 @@ public partial class U6GameWindow : Window
 
     private void GameCanvas_PreviewKeyUp(object sender, KeyEventArgs e)
     {
+        if (KeyAskReleased(e)) return;
+        if (U6KeyUp(e)) { e.Handled = true; return; } // Ultima 6's walking keys
         var (dx, dy) = DirectionFor(e.Key);
         if (dx == 0 && dy == 0) return;
         e.Handled = true;

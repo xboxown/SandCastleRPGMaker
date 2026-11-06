@@ -21,6 +21,11 @@ public class Ultima6Settings
     /// <summary>After a conversation with its own music: the map's music starts again from the beginning, or a random one of the map's.</summary>
     public string AfterTalkMusic { get; set; } = AfterTalkRestart;
     public const string AfterTalkRestart = "Start the map's music again", AfterTalkRandom = "A random song of the map's";
+
+    /// <summary>The keys the maker changed from Ultima 6's (action id -> key name); the rest are Ultima 6's (Engine/U6Keys.cs).</summary>
+    public Dictionary<string, string> Keys { get; set; } = new();
+    /// <summary>The text area's words the maker changed (word id -> words); the rest are Ultima 6's (U6Words).</summary>
+    public Dictionary<string, string> Words { get; set; } = new();
 }
 
 /// <summary>The kinds of piece a HUD is built from (HUD Editor's toolbox).</summary>

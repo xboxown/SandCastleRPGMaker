@@ -78,6 +78,9 @@ public static class ScriptCommands
     public const string AreasTab = "Areas";
     /// <summary>Tabs an Ultima 7 project never shows.</summary>
     public static bool IsUltima8Only(string tab) => tab is Ultima8Tab or CrusaderTab;
+    /// <summary>The tab of the commands only an Ultima 6 project has.</summary>
+    public const string Ultima6Tab = "Ultima 6";
+    public static bool IsUltima6Only(string tab) => tab is Ultima6Tab;
 
     private static ScriptField F(string key, string label, ScriptFieldKind kind = ScriptFieldKind.Formula, string def = "", string help = "", params string[] options) =>
         new(key, label, kind, def, options.Length > 0 ? options : null, help);
@@ -353,6 +356,16 @@ public static class ScriptCommands
             new[] { Who("Who carries it"), new("Category", "Item", ScriptFieldKind.Item), Choice("Operation", "Do", "Read", "Set", "Add"), F("Amount", "Amount (formula)", def: "1"), Var("Variable", "Into the variable (optional)") }, "{Operation} {Category} of {Who}"),
         new(EventCommandType.HurtInArea, "Hurt In Area", AreasTab, "Areas & Rituals", "Everyone chosen around someone, a spot or this object takes this damage, of this type, by their own rules for it (Character Editor > Health). Grant Peace: Undead, only those with a rule for it. Who is the one doing it: never hurt, and gets the experience for a kill.",
             new[] { Choice("Around", "Around", "Who (below)", "A spot (below)", "This object"), Who("Who does it"), new("X", "Spot", ScriptFieldKind.Spot), F("Cells", "Within (map cells)", def: "5"), F("Amount", "Damage (formula)", def: "10"), Choice("DamageType", "Damage type", Enum.GetNames<DamageType>()), Choice("Affects", "Who it strikes", "Everyone else", "Enemies of Who", "Only those with a rule for this type") }, "{Amount} {DamageType} within {Cells}"),
+
+        // ---- Ultima 6 projects only: the keyboard (Engine/U6Keys.cs) ----
+        new(EventCommandType.U6AskKey, "Ask For Key", Ultima6Tab, "Keyboard", "The event waits for the player to press a key (the text area says so), and that key does this action from now on - kept for good, through new games and loads. A key can be held with Ctrl, Shift or Alt. The Cancel key: no change (\"last command succeeded\" is false).",
+            new[] { Choice("Action", "The action", U6Keys.ActionNames), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}"),
+        new(EventCommandType.U6SetKey, "Set Key", Ultima6Tab, "Keyboard", "This key does this action from now on - kept for good, through new games and loads.",
+            new[] { Choice("Action", "The action", U6Keys.ActionNames), Choice("Key", "The key", U8Keys.BindableWords), Choice("With", "Held with", new[] { "Nothing" }.Concat(U8Keys.HeldWith).ToArray()), Choice("IfUsed", "If another action has that key", "Swap", "Fail") }, "{Action}: {Key}"),
+        new(EventCommandType.U6GetKeyName, "Get Key Name", Ultima6Tab, "Keyboard", "The name of an action's key, as words, into a variable (for a Show Text: \"Press B to begin combat\").",
+            new[] { Choice("Action", "The action", U6Keys.ActionNames), Var() }, "{Action} into {Variable}"),
+        new(EventCommandType.U6ResetKeys, "Reset Keys", Ultima6Tab, "Keyboard", "Forgets what the player changed: an action, or every key, is back to the keys in System Settings > Ultima 6.",
+            new[] { Choice("Action", "Which", new[] { "Every key" }.Concat(U6Keys.ActionNames).ToArray()) }, "{Action}"),
 
         // ---- Ultima 8 projects only: the keyboard (Engine/U8Keys.cs) ----
         new(EventCommandType.U8AskKey, "Ask For Key", Ultima8Tab, "Keyboard", "The event waits for the player to press a key, and that key does this action from now on - kept for good, through new games and loads. %key... on a paperdoll shows the waiting words meanwhile. A key can be held with Ctrl, Shift or Alt. The Cancel key: no change (\"last command succeeded\" is false).",
