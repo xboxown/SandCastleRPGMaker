@@ -203,6 +203,16 @@ public partial class ConvertToFramesWindow : Window
         Result.Clear();
         string dir = Path.GetDirectoryName(_sourcePath) ?? Path.GetTempPath();
         string baseName = Path.GetFileNameWithoutExtension(_sourcePath);
+        // Never over another import's pictures (a second sprite cut from the same strip): a set of names none of which exist yet.
+        if (Enumerable.Range(1, _numberOfFrames).Any(i => File.Exists(Path.Combine(dir, $"{baseName}_frame{i:00}.png"))))
+        {
+            string original = baseName;
+            for (int set = 2; ; set++)
+            {
+                baseName = $"{original}_{set}";
+                if (!Enumerable.Range(1, _numberOfFrames).Any(i => File.Exists(Path.Combine(dir, $"{baseName}_frame{i:00}.png")))) break;
+            }
+        }
         var skippedDetails = new List<string>();
 
         for (int i = 0; i < _numberOfFrames; i++)

@@ -103,6 +103,7 @@ internal sealed class SpriteAnimator
 
     private void Advance()
     {
+        if (_sprite.Frames.Count == 0) { Halt(); return; } // every frame deleted while it played (the Sprite Editor): nothing left to show
         _tickCount++;
         _frameIndex++;
         if (_frameIndex >= _sprite.Frames.Count)
