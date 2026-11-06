@@ -902,9 +902,14 @@ public partial class CharacterEditorWindow : Window
         {
             choices = _sprites.SpritesFor(SpriteFolderIdentity.Paperdoll); // its kind's folders (Sprite Editor > Identity)
         }
+        choices = new List<SpriteEntry>(choices);
+        choices.Insert(0, NoExitButton); // (None): no close button - Escape closes the paperdoll
         ExitButtonCombo.ItemsSource = choices;
-        ExitButtonCombo.SelectedItem = choices.FirstOrDefault(s => s.Name == selectedName);
+        ExitButtonCombo.SelectedItem = string.IsNullOrEmpty(selectedName) ? NoExitButton : choices.FirstOrDefault(s => s != NoExitButton && s.Name == selectedName);
     }
+
+    /// <summary>The Exit button list's "(None)": picked, the paperdoll has no close button (Escape closes it).</summary>
+    private static readonly SpriteEntry NoExitButton = new() { Name = "(None)" };
 
     private void ExitButtonFilterCheck_Checked(object sender, RoutedEventArgs e)
     {
@@ -925,6 +930,11 @@ public partial class CharacterEditorWindow : Window
     private void ExitButtonSprite_Changed(object sender, SelectionChangedEventArgs e)
     {
         if (_suppress || CharacterListBox.SelectedItem is not CharacterDefinition character) return;
+        if (ReferenceEquals(ExitButtonCombo.SelectedItem, NoExitButton))
+        {
+            character.Paperdoll.ExitButtonSpriteName = character.Paperdoll.ExitButtonSpriteGroup = string.Empty; // changed my mind: no close button
+            return;
+        }
         if (ExitButtonCombo.SelectedItem is SpriteEntry exitSprite)
         {
             character.Paperdoll.ExitButtonSpriteName = exitSprite.Name;

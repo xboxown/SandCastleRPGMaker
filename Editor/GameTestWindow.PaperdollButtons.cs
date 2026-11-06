@@ -349,8 +349,9 @@ public partial class GameTestWindow
                 close.Source = up;
                 if (ReleasedOver(close, e)) CloseStatsDoll(gump);
             };
-            Canvas.SetLeft(close, doll.CloseX);
-            Canvas.SetTop(close, doll.CloseY);
+            var (closeX, closeY) = StatsDollLook.ClosePlace(doll.CloseX, doll.CloseY, up.PixelWidth, up.PixelHeight, gump.Body.Width, gump.Body.Height); // on the background, never cut off past its edge
+            Canvas.SetLeft(close, closeX);
+            Canvas.SetTop(close, closeY);
             Panel.SetZIndex(close, 10);
             gump.Body.Children.Add(close);
             gump.Close = close;

@@ -216,6 +216,11 @@ public sealed class StatsDollEditorWindow : Window
         _settings.Children.Add(SpritePicker("Background (its size is the window's size)", () => Doll.Background, v => Doll.Background = v));
         var close = new WrapPanel();
         close.Children.Add(SpritePicker("Close button (2 frames: up, pressed)", () => Doll.CloseButton, v => Doll.CloseButton = v));
+        // Where it is - typed here, or dragged on the picture (it's always kept on the background, where it can be seen and clicked).
+        if (Frame(Doll.CloseButton) is { } closeNow && Frame(Doll.Background) is { } backNow)
+            (Doll.CloseX, Doll.CloseY) = StatsDollLook.ClosePlace(Doll.CloseX, Doll.CloseY, closeNow.PixelWidth, closeNow.PixelHeight, backNow.PixelWidth, backNow.PixelHeight);
+        close.Children.Add(NumberBox("X", () => Doll.CloseX, v => Doll.CloseX = Math.Max(0, v)));
+        close.Children.Add(NumberBox("Y", () => Doll.CloseY, v => Doll.CloseY = Math.Max(0, v)));
         _settings.Children.Add(close);
         var others = ProjectSession.Characters.Characters.Where(c => c != _character).ToList();
         if (others.Count > 0)
@@ -383,10 +388,13 @@ public sealed class StatsDollEditorWindow : Window
         }
         if (Frame(Doll.CloseButton) is { } closeBitmap)
         {
+            // Off the background (it starts at 140, 4 - past a narrow background's edge, where it was cut off unseen): back on it.
+            (Doll.CloseX, Doll.CloseY) = StatsDollLook.ClosePlace(Doll.CloseX, Doll.CloseY, closeBitmap.PixelWidth, closeBitmap.PixelHeight, _canvas.Width, _canvas.Height);
             var close = new Image { Source = closeBitmap, Width = closeBitmap.PixelWidth, Height = closeBitmap.PixelHeight, IsHitTestVisible = false };
             RenderOptions.SetBitmapScalingMode(close, BitmapScalingMode.NearestNeighbor);
             Canvas.SetLeft(close, Doll.CloseX);
             Canvas.SetTop(close, Doll.CloseY);
+            Panel.SetZIndex(close, 40); // over the elements, under the handles
             _canvas.Children.Add(close);
             AddHandle("Close", Doll.CloseX, Doll.CloseY, closeBitmap.PixelWidth, closeBitmap.PixelHeight);
         }
@@ -443,6 +451,14 @@ public sealed class StatsDollEditorWindow : Window
 /// <summary>How a stats paperdoll element looks - one rule for the designer and the game (at the background's own pixels).</summary>
 internal static class StatsDollLook
 {
+    /// <summary>The close button's place kept on the background: a place past its right or bottom edge comes back inside (top-right if it's wider).</summary>
+    public static (double X, double Y) ClosePlace(double x, double y, double width, double height, double backgroundWidth, double backgroundHeight)
+    {
+        if (x + width > backgroundWidth) x = Math.Max(0, backgroundWidth - width - 2);
+        if (y + height > backgroundHeight) y = Math.Max(0, backgroundHeight - height - 2);
+        return (Math.Max(0, x), Math.Max(0, y));
+    }
+
     public static FrameworkElement? Element(StatsDollElement e, SpriteDatabase sprites, string name, string statText, Func<int, double> statValue, double? fraction, bool ailmentActive, bool hungry)
     {
         switch (e.Kind)
