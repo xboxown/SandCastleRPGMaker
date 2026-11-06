@@ -154,6 +154,22 @@ public partial class U6GameWindow
         foreach (var visual in _hudPanelVisuals) HudLayer.Children.Remove(visual);
         _hudPanelVisuals.Clear();
         if (Hud.First(HudPieceKind.GameView) is null || HudMember is not { } member) return;
+        if (_hudTalker is { } talker) // talking: the speaker's portrait and name (U6GameWindow.U6Talk.cs)
+        {
+            foreach (var piece in Hud.Pieces.Where(p => p.Kind is HudPieceKind.Portrait or HudPieceKind.MemberName))
+            {
+                var shown = piece.Kind == HudPieceKind.Portrait ? HudPortrait(piece, talker) : HudWordsAt(piece, talker.Name);
+                if (shown is null) continue;
+                _hudPanelVisuals.Add(shown);
+                HudLayer.Children.Add(shown);
+            }
+            if (Hud.First(HudPieceKind.Portrait) is null && Hud.First(HudPieceKind.Panel) is { } panelPiece && HudPortrait(panelPiece, talker) is { } face)
+            {
+                _hudPanelVisuals.Add(face);
+                HudLayer.Children.Add(face);
+            }
+            return;
+        }
         if (HudPartyList() is { } partyList) // F10: the party instead (U6GameWindow.U6Verbs.cs)
         {
             _hudPanelVisuals.Add(partyList);
@@ -370,6 +386,32 @@ public partial class U6GameWindow
     private FrameworkElement HudWords(string text, HudPiece? piece)
     {
         Brush? tint = piece is { TextColor.Length: > 0 } && ColorConverter.ConvertFromString(piece.TextColor) is Color c ? new SolidColorBrush(c) : null;
+        if (text.Contains('\u0001'))
+        {
+            // Keywords (U6GameWindow.U6Talk.cs) in the keyword colour, the rest as the piece's.
+            Brush keyTint = ColorConverter.ConvertFromString(_systemSettings.Ultima6.KeywordColor) is Color k ? new SolidColorBrush(k) : Brushes.Gold;
+            var row = new StackPanel { Orientation = Orientation.Horizontal, IsHitTestVisible = false };
+            bool inKeyword = false;
+            foreach (var part in System.Text.RegularExpressions.Regex.Split(text, "([\u0001\u0002])"))
+            {
+                if (part == "\u0001") { inKeyword = true; continue; }
+                if (part == "\u0002") { inKeyword = false; continue; }
+                if (part.Length == 0) continue;
+                // The font drops spaces at the ends of a piece of words: they're put back as gaps.
+                double space = Math.Max(2, HudTextWidth("a a", piece?.FontName ?? "") - HudTextWidth("aa", piece?.FontName ?? ""));
+                if (part.StartsWith(' ')) row.Children.Add(new Border { Width = space });
+                if (part.Trim().Length == 0) continue;
+                var segment = HudWords(part.Trim(), inKeyword ? new HudPiece { FontName = piece?.FontName ?? "", TextColor = "" } : piece);
+                if (inKeyword)
+                {
+                    if (segment is Image img && HudFont(piece?.FontName ?? "")?.RenderText(part.Trim(), 1, keyTint) is { } colored) { img.Source = colored; img.Width = colored.PixelWidth; img.Height = colored.PixelHeight; }
+                    else if (segment is TextBlock tb) tb.Foreground = keyTint;
+                }
+                row.Children.Add(segment);
+                if (part.EndsWith(' ')) row.Children.Add(new Border { Width = space });
+            }
+            return row;
+        }
         if (text.Length > 0 && HudFont(piece?.FontName ?? "")?.RenderText(text, 1, tint) is { } bitmap)
         {
             var image = new Image { Source = bitmap, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Stretch = Stretch.None, IsHitTestVisible = false };
@@ -398,6 +440,7 @@ public partial class U6GameWindow
 
     private double HudTextWidth(string text, string fontName)
     {
+        text = text.Replace("\u0001", "").Replace("\u0002", "");
         if (text.Length == 0) return 0;
         if (HudFont(fontName)?.RenderText(text, 1, null) is { } bitmap) return bitmap.PixelWidth;
         return text.Length * 4.2; // the plain 7-point stand-in

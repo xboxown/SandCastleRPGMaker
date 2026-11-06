@@ -321,6 +321,7 @@ public partial class U6GameWindow
         {
             _currentMessage = null;
             MessageLayer.Visibility = Visibility.Collapsed;
+            EndU6Talk(); // Ultima 6: the portrait and the talk's music go (U6GameWindow.U6Talk.cs)
             return;
         }
         if (message.AfterRead is { } goOn)
@@ -332,6 +333,7 @@ public partial class U6GameWindow
             if (_currentMessage is null) ShowNextMessage();
             return;
         }
+        if (U6Talking) { ShowU6Message(message!); return; } // Ultima 6: the portrait in the panel, the words in the text area, typed answers
         BitmapSource? face = null;
         if (message!.Speaker is { } speaker && FindSprite(speaker.FaceSpriteGroup, speaker.FaceSpriteName) is { } faceSprite) face = FirstFrameOf(faceSprite);
         if (!isPage)

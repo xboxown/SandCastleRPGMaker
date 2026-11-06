@@ -157,6 +157,9 @@ public static class U6Words
         ("PartyMode", "Party mode.", "The party follows again"),
         ("NotInSolo", "Not in solo mode.", "Talking etc. refused in solo mode"),
         ("PressAKey", "Press a key...", "Ask For Key waiting"),
+        ("YouSay", "you say: ", "Talking: the player's line, as typed"),
+        ("Bye", "bye", "Talking: what nothing typed (or Escape) asks"),
+        ("NoHelp", "\"I cannot help thee with that.\"", "Talking: a word with no answer ({0} the word)"),
         ("CombatBegin", "Begin combat!", "Combat mode on"),
         ("CombatBreakOff", "Break off combat!", "Combat mode off"),
     };

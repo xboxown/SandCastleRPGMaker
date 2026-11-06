@@ -136,6 +136,7 @@ public partial class U6GameWindow
     /// <summary>Keys while a box is up: with replies, 1-9 pick one and Up/Down + Enter/Space choose; without, Enter, Space or Escape go on.</summary>
     private void MessageKey(Key key)
     {
+        if (U6TalkKey(key)) return; // Ultima 6: typed answers (U6GameWindow.U6Talk.cs)
         if (_currentMessage is not { HasReplies: true } || _messageDrawing is not { ReplySlots.Count: > 0 } drawing)
         {
             if (key is Key.Enter or Key.Space or Key.Escape) AdvanceMessage();

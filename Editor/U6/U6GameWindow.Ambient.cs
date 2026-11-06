@@ -17,7 +17,7 @@ public partial class U6GameWindow
     private void UpdateAmbient()
     {
         if (InTitle) { SilenceAmbient(); return; } // the Title Screen isn't a map: only its own music - the map's ambient starts when the game does
-        if (AmbientSilencedByCombat()) { SilenceAmbient(); return; } // combat music, or a battle (U6GameWindow.CombatMusic.cs) - weather plays on
+        if (AmbientSilencedByCombat() || _talkMusicOn) { SilenceAmbient(); return; } // combat music, a battle, or talking with its own music (U6GameWindow.U6Talk.cs) - weather plays on
         var a = _map.Ambient;
         var d = DayNight;
         double hour = _clock.Hour + _clock.Minute / 60.0;
@@ -27,6 +27,13 @@ public partial class U6GameWindow
             : a.NightSoundId;
         // In a Cave (or a zone with a sound of its own): its ambient instead of the world's.
         if (Zones.AmbientZoneAt(_map.Zones, _playerX, _playerY, MapFloors.FloorOfLift(_playerZ)) is { } zone) sound = zone.AmbientSoundId;
+        // After a talk: a random song of the map's in place of this one, until the hour's own changes (Nuvie's random group).
+        if (_ambientHold is { } hold)
+        {
+            if (hold.Due < 0) _ambientHold = hold = (sound, hold.Random);
+            if (sound == hold.Due) sound = hold.Random;
+            else _ambientHold = null;
+        }
         if (sound == _ambientPlaying) return;
         _ambientPlaying = sound;
         SoundPlayback.StopFor(_ambientSoundOwner);
