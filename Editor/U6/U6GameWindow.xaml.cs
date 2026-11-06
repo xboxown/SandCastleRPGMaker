@@ -213,6 +213,7 @@ public partial class U6GameWindow : Window
         InitU6Levels(); // Ultima 6's levels and Meditate At Shrine (U6GameWindow.U6Levels.cs)
         InitU6CombatModes(); // each member's combat mode (U6GameWindow.U6CombatModes.cs)
         InitU6Scenes(); // cutscenes (U6GameWindow.U6Scene.cs)
+        InitU6Create(); // typing, picking a picture, points (U6GameWindow.U6Create.cs)
         ViewportBorder.Width = ScreenWidth;
         ViewportBorder.Height = ScreenHeight;
 

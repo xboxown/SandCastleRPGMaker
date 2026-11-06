@@ -400,7 +400,12 @@ public sealed class HudEditorWindow : Window
                 _props.Children.Add(StatsPicker(piece));
                 _props.Children.Add(FontRow(piece));
                 break;
-            case HudPieceKind.TextArea or HudPieceKind.MemberName or HudPieceKind.DateText or HudPieceKind.CombatMode:
+            case HudPieceKind.TextArea:
+                _props.Children.Add(FontRow(piece));
+                _props.Children.Add(SpritePicker("Cursor (frames: animated; one frame: blinks; none: _)", piece.Sprite, link => { piece.Sprite = link; Redraw(); }));
+                _props.Children.Add(Note("The cursor where the player types, and while words wait for a key to go on (a long speech, a book)."));
+                break;
+            case HudPieceKind.MemberName or HudPieceKind.DateText or HudPieceKind.CombatMode:
                 _props.Children.Add(FontRow(piece));
                 break;
             case HudPieceKind.GameView:

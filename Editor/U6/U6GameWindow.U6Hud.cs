@@ -263,7 +263,9 @@ public partial class U6GameWindow
         holder.Children.Clear();
         int lineH = HudLineHeight(area.FontName);
         var lines = _hudLines.ToList();
-        lines.AddRange(HudWrap(_hudPrompt + (_hudVerb is not null || _hudPrompt.Length > 0 ? "_" : ""), area.Width, area.FontName));
+        bool cursor = _hudVerb is not null || _hudPrompt.Length > 0 || _talkMore.Count > 0;
+        var cursorSprite = SpriteOfLink(area.Sprite);
+        if (cursor) lines.AddRange(HudWrap(_hudPrompt + (cursorSprite is null ? "_" : ""), area.Width, area.FontName));
         int fit = Math.Max(1, area.Height / Math.Max(1, lineH));
         double y = 0;
         foreach (var line in lines.Skip(Math.Max(0, lines.Count - fit)))
@@ -273,6 +275,29 @@ public partial class U6GameWindow
             holder.Children.Add(words);
             y += lineH;
         }
+        // The cursor sprite (HUD Editor > Text Area): after the last words; one frame blinks, frames play.
+        _cursorBlink?.Stop();
+        if (!cursor || cursorSprite is null || lines.Count == 0) return;
+        string last = lines[^1];
+        var image = HudImage(cursorSprite, HudTextWidth(last, area.FontName) + (last.Length > 0 ? 1 : 0), y - lineH, DollLook.Frame(cursorSprite)?.PixelWidth ?? 6, DollLook.Frame(cursorSprite)?.PixelHeight ?? lineH, null);
+        if (cursorSprite.Frames.Count > 1) _cursorAnimator = new SpriteAnimator(cursorSprite, image, _resources, 0);
+        else
+        {
+            _cursorBlink ??= new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(500) };
+            _cursorBlink.Tick -= CursorBlinkTick;
+            _cursorBlink.Tick += CursorBlinkTick;
+            _cursorImage = image;
+            _cursorBlink.Start();
+        }
+        holder.Children.Add(image);
+    }
+
+    private System.Windows.Threading.DispatcherTimer? _cursorBlink;
+    private Image? _cursorImage;
+    private SpriteAnimator? _cursorAnimator;
+    private void CursorBlinkTick(object? sender, EventArgs e)
+    {
+        if (_cursorImage is { } image) image.Visibility = image.Visibility == Visibility.Visible ? Visibility.Hidden : Visibility.Visible;
     }
 
     /// <summary>Each game minute: the date and wind words, the compass and the sun and moons.</summary>

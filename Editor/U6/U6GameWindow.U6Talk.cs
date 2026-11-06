@@ -40,8 +40,18 @@ public partial class U6GameWindow
             RefreshHudPanel();
         }
         var keywords = message.Replies?.Select(r => r.Text).Where(t => t.Length > 0).ToList() ?? new List<string>();
-        if (message.Text.Trim().Length > 0) U6Say(MarkKeywords(message.Text.Trim(), keywords));
-        _hudPrompt = message.HasReplies ? W("YouSay") : string.Empty;
+        _talkMore.Clear();
+        _hudPrompt = string.Empty;
+        if (message.Text.Trim().Length > 0 && Hud.First(HudPieceKind.TextArea) is { } area)
+        {
+            // Wrapped to the text area; more than it holds: a screenful, then the cursor waits for a key (as Ultima 6's scroll).
+            var lines = MarkKeywords(message.Text.Trim(), keywords).Replace("\r", "").Split('\n').SelectMany(p => HudWrap(p, area.Width, area.FontName)).ToList();
+            int fit = Math.Max(1, area.Height / Math.Max(1, HudLineHeight(area.FontName)) - 1);
+            foreach (var line in lines.Take(fit)) U6Say(line);
+            foreach (var line in lines.Skip(fit)) _talkMore.Enqueue(line);
+            _talkMoreFit = fit;
+        }
+        if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? W("YouSay") : string.Empty;
         RefreshHudText();
     }
 
@@ -58,9 +68,20 @@ public partial class U6GameWindow
     }
 
     /// <summary>A key while a message is up: Enter answers (or goes on), Backspace erases; the letters come by U6TalkText.</summary>
+    /// <summary>The rest of a long speech, waiting for a key (a screenful at a time).</summary>
+    private readonly Queue<string> _talkMore = new();
+    private int _talkMoreFit = 4;
+
     private bool U6TalkKey(Key key)
     {
         if (!U6Talking || _currentMessage is not { } message) return false;
+        if (_talkMore.Count > 0)
+        {
+            for (int i = 0; i < _talkMoreFit && _talkMore.Count > 0; i++) U6Say(_talkMore.Dequeue());
+            if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? W("YouSay") : string.Empty;
+            RefreshHudText();
+            return true;
+        }
         if (!message.HasReplies)
         {
             if (KeyIs(key, "Accept") || KeyIs(key, "Accept2") || KeyIs(key, "Cancel")) AdvanceMessage();

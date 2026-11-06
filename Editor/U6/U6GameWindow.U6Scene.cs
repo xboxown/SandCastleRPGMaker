@@ -176,6 +176,13 @@ public partial class U6GameWindow
     /// <summary>Keys while a scene waits: any key goes on; a choice takes its letter or number.</summary>
     private bool SceneKey(KeyEventArgs e)
     {
+        if (_sceneInput is { } input) // Scene Type Text, Pick Picture, Distribute Points (U6GameWindow.U6Create.cs) - with a scene up or not
+        {
+            e.Handled = true;
+            var pressed = U8KeyCapture.RealKey(e);
+            if (!e.IsRepeat || pressed is Key.Back or Key.Left or Key.Right or Key.Up or Key.Down) input(pressed);
+            return true;
+        }
         if (_scene is null) return false;
         e.Handled = true;
         if (e.IsRepeat) return true;
@@ -194,6 +201,8 @@ public partial class U6GameWindow
     private void SceneClick(Point onScreen)
     {
         if (_scene is null) return;
+        if (_sceneClick is { } click) { _sceneClick = null; click(); return; } // a picture picked (U6GameWindow.U6Create.cs)
+        if (_sceneInput is not null) return;
         if (_sceneChoice is { } ask)
         {
             var inScene = new Point(onScreen.X - Canvas.GetLeft(_scene), onScreen.Y - Canvas.GetTop(_scene));
