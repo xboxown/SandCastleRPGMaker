@@ -138,24 +138,9 @@ public partial class SystemSettingsWindow
         var u6Part = new StackPanel();
         u6Part.Children.Add(new TextBlock
         {
-            Text = "As Ultima 6, Savage Empire and Martian Dreams (Nuvie): eight levels. A kill gives its experience, but a level isn't taken by itself - "
-                + "with more than 100, 200, 400, 800, 1600, 3200 or 6400 experience a level is earned, and taken the way below. The most hit points are 30 a level "
-                + "(level 8: 240); no stat goes past 30; no training points.",
+            Text = "Your game's leveling is made in Tools > Leveling Editor: leveling systems of your own (the level table, and events made of event commands - when someone earns a level, "
+                + "after Rest, or called by a shrine's or a crystal's event). It starts with templates - Ultima 6's shrines, Savage Empire's and Martian Dreams' dreams - to learn from and delete. One system is used at a time.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11
-        });
-        var wayRow = new WrapPanel { Margin = new Thickness(0, 4, 0, 2) };
-        wayRow.Children.Add(new TextBlock { Text = "A level earned is taken:", Width = 170, VerticalAlignment = VerticalAlignment.Center });
-        var way = new ComboBox { Width = 380, ItemsSource = new[] { Ultima6Settings.LevelUpShrine, Ultima6Settings.LevelUpDream }, SelectedItem = u6.LevelUpWay == Ultima6Settings.LevelUpDream ? Ultima6Settings.LevelUpDream : Ultima6Settings.LevelUpShrine };
-        way.SelectionChanged += (_, _) => { if (way.SelectedItem is string s) u6.LevelUpWay = s; };
-        wayRow.Children.Add(way);
-        u6Part.Children.Add(wayRow);
-        u6Part.Children.Add(new TextBlock
-        {
-            Text = "At a shrine: put the Ultima 6 tab's \"Meditate At Shrine\" command on the shrine's event (after its mantra, if you ask for one). Every member who has earned a level rises, "
-                + "with the virtue's points: Honesty 3 intelligence, Compassion 3 dexterity, Valor 3 strength, Justice 1 intelligence and 1 dexterity, Sacrifice 1 strength and 1 dexterity, "
-                + "Honor 1 strength and 1 intelligence, Spirituality 1 of each, Humility none.\n"
-                + "In a dream: when the party rests (the Rest verb), each member who has earned a level dreams and the player picks S, D or I - 1 point - and they get 30 hit points back.",
-            TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 2, 0, 6)
         });
         section.Children.Add(u6Part);
 

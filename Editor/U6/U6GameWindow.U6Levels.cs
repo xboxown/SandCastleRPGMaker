@@ -25,6 +25,14 @@ public partial class U6GameWindow
     private void InitU6Levels()
     {
         _execContext.GameHandlers[EventCommandType.U6Meditate] = MeditateCommand;
+        _execContext.GameHandlers[EventCommandType.U6RiseLevel] = RiseLevelCommand;
+        _execContext.GameActions[EventCommandType.U6RunLevelEvent] = (c, done) =>
+        {
+            if (LevelSystem?.Events.FirstOrDefault(e => string.Equals(e.Name, c.Get("Name").Trim(), StringComparison.OrdinalIgnoreCase)) is not { } called) return false;
+            RunLevelCommands(called.Commands, _activator?.Character, () => done(true));
+            return true;
+        };
+        U6Leveling.Use(_systemSettings.Ultima6);
         if (!U6LevelsOn) return;
         var everyone = new List<CharacterDefinition>();
         if (_player is not null) everyone.Add(_player);
@@ -50,7 +58,7 @@ public partial class U6GameWindow
         foreach (var member in GetPartyList().Where(m => !IsDead(m)))
         {
             if (!U6Leveling.HasEarned(Stat(member, BuiltInStatKind.Level, 1), Stat(member, BuiltInStatKind.Exp, 0))) continue;
-            RiseLevel(member, str, dex, intel);
+            RiseLevel(member, str, dex, intel, U6Leveling.HitsPerLevel, tell: true);
             any = true;
         }
         if (!any) U6Say(W("NotReady", "", _player.Name));
@@ -58,8 +66,92 @@ public partial class U6GameWindow
         return any;
     }
 
-    /// <summary>One level up: the stats' points (never past 30), 30 more hit points (never past the new most), told in the text area.</summary>
-    private void RiseLevel(CharacterDefinition member, int str, int dex, int intel)
+    /// <summary>The Leveling Editor's system in use (none: levels are only what events set).</summary>
+    private U6LevelSystem? LevelSystem => U6LevelsOn ? _systemSettings.Ultima6.Active : null;
+
+    /// <summary>Experience gained: a level earned - taken at once (Rise by themselves) or not - and the system's When someone earns a level events run, once a level.</summary>
+    private void U6ExperienceGained(CharacterDefinition who)
+    {
+        int level = Math.Max(1, Stat(who, BuiltInStatKind.Level, 1));
+        int exp = Stat(who, BuiltInStatKind.Exp, 0);
+        int cap = who.LevelLock > 0 ? Math.Min(who.LevelLock, U6Leveling.MaxLevel) : U6Leveling.MaxLevel;
+        if (LevelSystem is { RiseByThemselves: true })
+        {
+            while (level < cap && U6Leveling.HasEarned(level, exp))
+            {
+                RiseLevel(who, 0, 0, 0, U6Leveling.HitsPerLevel, tell: true);
+                level++;
+                who.U6LevelNoticed = level;
+                LevelEvents(U6LevelEvent.WhenEarned, who, level, rose: true);
+            }
+        }
+        else if (level < cap && U6Leveling.HasEarned(level, exp) && who.U6LevelNoticed < level + 1)
+        {
+            who.U6LevelNoticed = level + 1;
+            LevelEvents(U6LevelEvent.WhenEarned, who, level + 1, rose: false);
+        }
+        SetStat(who, BuiltInStatKind.NextExp, U6Leveling.NextExp(level));
+    }
+
+    /// <summary>The variables a leveling event reads: LevelWho, LevelWhoId, LevelNow, LevelEarned, LevelRose.</summary>
+    private void SetLevelVariables(CharacterDefinition who, int earned, bool rose)
+    {
+        SetScriptVariable("LevelWho", who.Name);
+        SetScriptVariable("LevelWhoId", (double)who.Id);
+        SetScriptVariable("LevelNow", (double)Stat(who, BuiltInStatKind.Level, 1));
+        SetScriptVariable("LevelEarned", (double)earned);
+        SetScriptVariable("LevelRose", rose ? 1.0 : 0.0);
+    }
+
+    private void LevelEvents(string trigger, CharacterDefinition who, int earned, bool rose)
+    {
+        if (LevelSystem is not { } system) return;
+        foreach (var e in system.Events.Where(e => e.Trigger == trigger && e.Commands.Count > 0))
+        {
+            SetLevelVariables(who, earned, rose);
+            RunLevelCommands(e.Commands, who, null);
+        }
+    }
+
+    /// <summary>A leveling event's commands, with the one it is about as its Self (Activator) till they finish.</summary>
+    private void RunLevelCommands(List<EventCommand> commands, CharacterDefinition? who, Action? after)
+    {
+        var previous = (_activator, _activatedByCharacterStep);
+        _activator = who is null || who == _player ? null : MapCharacterOf(who);
+        _activatedByCharacterStep = false;
+        _execContext.SelfBookId = -1;
+        EventCommandInterpreter.Run(commands.ToList(), _execContext, new List<string>(), finished: () =>
+        {
+            (_activator, _activatedByCharacterStep) = previous;
+            RefreshHudPanel();
+            after?.Invoke();
+        });
+    }
+
+    /// <summary>Rise A Level: someone (or the party) up a level with these points - only if earned, if so asked.</summary>
+    private bool RiseLevelCommand(EventCommand c)
+    {
+        if (!U6LevelsOn) return false;
+        var targets = c.Get("Party") == "True" ? GetPartyList().Where(m => !IsDead(m)).ToList()
+            : CharacterDefinitionFor(c.Get("Who")) is { } one ? new List<CharacterDefinition> { one } : new List<CharacterDefinition>();
+        bool onlyIfEarned = c.Get("OnlyIfEarned") != "False", tell = c.Get("Tell") != "False";
+        int hits = c.Get("Hits").Trim().Length == 0 ? U6Leveling.HitsPerLevel : (int)FormulaNumber(c, "Hits");
+        bool any = false;
+        foreach (var member in targets)
+        {
+            int level = Stat(member, BuiltInStatKind.Level, 1);
+            int cap = member.LevelLock > 0 ? Math.Min(member.LevelLock, U6Leveling.MaxLevel) : U6Leveling.MaxLevel;
+            if (level >= cap || (onlyIfEarned && !U6Leveling.HasEarned(level, Stat(member, BuiltInStatKind.Exp, 0)))) continue;
+            RiseLevel(member, (int)FormulaNumber(c, "Str"), (int)FormulaNumber(c, "Dex"), (int)FormulaNumber(c, "Int"), hits, tell);
+            any = true;
+        }
+        if (!any && c.Get("NotReady").Trim().Length > 0) U6Say(SceneWords(c.Get("NotReady")));
+        RefreshHudPanel();
+        return any;
+    }
+
+    /// <summary>One level up: the stats' points (never past the system's limit), hit points back (never past the new most), told in the text area if asked.</summary>
+    private void RiseLevel(CharacterDefinition member, int str, int dex, int intel, int hitsBack, bool tell)
     {
         int level = Math.Clamp(Stat(member, BuiltInStatKind.Level, 1) + 1, 1, U6Leveling.MaxLevel);
         SetStat(member, BuiltInStatKind.Level, level);
@@ -75,7 +167,9 @@ public partial class U6GameWindow
         Raise(BuiltInStatKind.Strength, str, "Strength");
         Raise(BuiltInStatKind.Dexterity, dex, "Dexterity");
         Raise(BuiltInStatKind.Intelligence, intel, "Intelligence");
-        if (GetHp(member) is int hp) SetHp(member, Math.Min(U6Leveling.MaxHits(level), hp + U6Leveling.HitsPerLevel));
+        if (GetHp(member) is int hp) SetHp(member, Math.Min(U6Leveling.MaxHits(level), hp + Math.Max(0, hitsBack)));
+        member.U6LevelNoticed = Math.Max(member.U6LevelNoticed, level);
+        if (!tell) return;
         U6Say(W("NewLevel", level.ToString(), member.Name));
         if (gains.Count > 0) U6Say(W("Gains", string.Join(gains.Count == 2 ? " and " : ", ", gains), member.Name));
     }
@@ -174,20 +268,25 @@ public partial class U6GameWindow
             _restHealsAfter = now + 12 * 60;
         }
         RefreshHudPanel();
-        if (U6LevelsOn && _systemSettings.Ultima6.LevelUpWay == Ultima6Settings.LevelUpDream)
-            DreamLevels(party.Where(m => m != guard && U6Leveling.HasEarned(Stat(m, BuiltInStatKind.Level, 1), Stat(m, BuiltInStatKind.Exp, 0))).ToList(), 0);
+        // The leveling system's rest events (Leveling Editor): once, then once for each member who has earned a level - a dream, anything.
+        if (LevelSystem is { } system)
+        {
+            SetScriptVariable("RestHours", (double)hours);
+            SetScriptVariable("RestGuard", guard?.Name ?? "");
+            foreach (var e in system.Events.Where(e => e.Trigger == U6LevelEvent.WhenRested && e.Commands.Count > 0)) RunLevelCommands(e.Commands, null, null);
+            var each = system.Events.Where(e => e.Trigger == U6LevelEvent.WhenRestedEach).SelectMany(e => e.Commands).ToList();
+            if (each.Count > 0)
+                RestEach(each, party.Where(m => m != guard && U6Leveling.HasEarned(Stat(m, BuiltInStatKind.Level, 1), Stat(m, BuiltInStatKind.Exp, 0))).ToList(), 0);
+        }
     }
 
-    /// <summary>Savage Empire / Martian Dreams (rest_level_up_actor): each member who has earned a level dreams, picks a stat, and rises.</summary>
-    private void DreamLevels(List<CharacterDefinition> dreamers, int index)
+    /// <summary>The rest events for each member who has earned a level, one after the other.</summary>
+    private void RestEach(List<EventCommand> commands, List<CharacterDefinition> members, int index)
     {
-        if (index >= dreamers.Count) { RefreshHudPanel(); return; }
-        var member = dreamers[index];
-        AskLetter(W("Dream", "", member.Name) + " ", "SDI", pick =>
-        {
-            RiseLevel(member, pick == 'S' ? 1 : 0, pick == 'D' ? 1 : 0, pick == 'I' ? 1 : 0);
-            DreamLevels(dreamers, index + 1);
-        });
+        if (index >= members.Count) { RefreshHudPanel(); return; }
+        var member = members[index];
+        SetLevelVariables(member, Stat(member, BuiltInStatKind.Level, 1) + 1, rose: false);
+        RunLevelCommands(commands, member, () => RestEach(commands, members, index + 1));
     }
 
     private bool EatOneFood(CharacterDefinition member)

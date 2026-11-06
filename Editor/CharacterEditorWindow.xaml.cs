@@ -830,8 +830,8 @@ public partial class CharacterEditorWindow : Window
         var panel = new StackPanel { Margin = new Thickness(8) };
         panel.Children.Add(new TextBlock
         {
-            Text = "Ultima 6's levels - the same for every character (System Settings > Ultima 6 > Levels). A kill gives the dead one's EXP; a level earned is taken at a shrine "
-                + "(Meditate At Shrine) or in a dream when resting, never by itself. No training points. Stats never past 30. Level Lock still stops a character's levels.",
+            Text = "The project's levels - the same for every character (System Settings > Ultima 6 > Levels: the table, and the When someone earns a level event). A kill gives the dead one's EXP; "
+                + "what happens when a level is earned is yours to script (Rise A Level). No training points. Level Lock still stops a character's levels.",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8)
         });
         var grid = new Grid { HorizontalAlignment = HorizontalAlignment.Left };
@@ -847,10 +847,11 @@ public partial class CharacterEditorWindow : Window
         Cell(0, 0, "Level", true);
         Cell(0, 1, "Earned with more than", true);
         Cell(0, 2, "Most hit points", true);
+        if (ProjectSession.SettingsProvider?.Invoke()?.Ultima6 is { } u6Table) U6Leveling.Use(u6Table);
         for (int level = 1; level <= U6Leveling.MaxLevel; level++)
         {
             Cell(level, 0, level.ToString());
-            Cell(level, 1, level == 1 ? "(the start)" : $"{U6Leveling.Needs[level - 1]} experience");
+            Cell(level, 1, level == 1 ? "(the start)" : $"{U6Leveling.Needs(level - 1)} experience");
             Cell(level, 2, U6Leveling.MaxHits(level).ToString());
         }
         panel.Children.Add(grid);

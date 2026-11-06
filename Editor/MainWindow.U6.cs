@@ -16,9 +16,19 @@ public partial class MainWindow
     private System.Windows.Controls.Button? _paperDollToolButton;
 
     /// <summary>Ultima 6 projects: the HUD Editor takes the PaperDoll Editor's place, in the Tools menu and on the toolbar.</summary>
+    private System.Windows.Controls.MenuItem? _levelingMenuItem;
+
     private void ApplyStyleToTools()
     {
         PaperDollMenuItem.Header = IsUltima6 ? "HUD Editor..." : "PaperDoll Editor...";
+        // Ultima 6: the Leveling Editor - the project's own leveling, made of events (LevelingEditorWindow.cs).
+        if (_levelingMenuItem is null)
+        {
+            _levelingMenuItem = new System.Windows.Controls.MenuItem { Header = "Leveling Editor..." };
+            _levelingMenuItem.Click += (_, _) => new LevelingEditorWindow(_systemSettings.Ultima6, _spriteDatabase) { Owner = this }.ShowDialog();
+            ToolsMenu.Items.Insert(0, _levelingMenuItem);
+        }
+        _levelingMenuItem.Visibility = IsUltima6 ? Visibility.Visible : Visibility.Collapsed;
         // Ultima 6: no upper floors - one floor; going up or down is another map (Maps tab, Change Map).
         FloorCombo.Visibility = IsUltima6 ? Visibility.Collapsed : Visibility.Visible;
         if (MainToolBar.Items.IndexOf(FloorCombo) is int fi && fi > 0 && MainToolBar.Items[fi - 1] is UIElement floorLabel) floorLabel.Visibility = FloorCombo.Visibility;

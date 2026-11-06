@@ -28,7 +28,7 @@ public partial class U6GameWindow
     {
         if (_stats.Stats.FirstOrDefault(s => s.Kind == BuiltInStatKind.Exp) is null) return;
         SetStat(character, BuiltInStatKind.Exp, (int)Math.Min(int.MaxValue, (long)Stat(character, BuiltInStatKind.Exp, 0) + amount));
-        if (U6LevelsOn) { CheckLevel(character); return; } // Ultima 6: earned, not taken - a shrine or a dream raises it (U6GameWindow.U6Levels.cs)
+        if (U6LevelsOn) { U6ExperienceGained(character); return; } // Ultima 6: the Leveling Editor's system decides (U6GameWindow.U6Levels.cs)
         if (character == _player) StatusText.Text = $"{StatusText.Text} +{amount} experience.".Trim();
         CheckLevel(character);
     }

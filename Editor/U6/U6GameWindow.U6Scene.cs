@@ -133,9 +133,23 @@ public partial class U6GameWindow
     /// <summary>Scene Choice: its lines drawn, the player picks one (its first letter, its number, or a click); its number goes into the variable.</summary>
     private bool SceneChoice(EventCommand c, Action<bool> done)
     {
-        if (_scene is null) return false;
         var choices = SceneWords(c.Get("Choices")).Replace("\r", "").Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).ToList();
         if (choices.Count == 0) return false;
+        if (_scene is null)
+        {
+            // No scene up: asked in the text area - the answers numbered; their number or first letter answers.
+            if (SceneWords(c.Get("Question")) is { Length: > 0 } asked) U6Say(asked);
+            for (int i = 0; i < choices.Count; i++) U6Say($"{i + 1}. {choices[i]}");
+            string letters = string.Concat(choices.Select(s => char.ToUpperInvariant(s[0])));
+            string allowed = string.Concat(Enumerable.Range(1, Math.Min(9, choices.Count)).Select(i => (char)('0' + i))) + letters;
+            AskLetter("> ", allowed, key =>
+            {
+                int pick = char.IsDigit(key) ? key - '1' : letters.IndexOf(key);
+                SetScriptVariable(c.Get("Variable"), (double)(pick + 1));
+                done(true);
+            });
+            return true;
+        }
         double x = FormulaNumber(c, "X"), y = FormulaNumber(c, "Y");
         string question = SceneWords(c.Get("Question"));
         int lineH = HudLineHeight("") + 2;

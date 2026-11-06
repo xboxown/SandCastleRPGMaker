@@ -210,6 +210,8 @@ public class CharacterDefinition
     public AttackMode AttackMode { get; set; } = AttackMode.Nearest;
     /// <summary>Ultima 6 projects only: its combat mode in the party (Command, Front, Rear, Flank, Berserk, Retreat, Assault; empty: Front). The avatar is always Command.</summary>
     public string U6CombatMode { get; set; } = string.Empty;
+    /// <summary>Ultima 6 projects only: the highest level its When someone earns a level event has run for (so it runs once a level).</summary>
+    public int U6LevelNoticed { get; set; }
     /// <summary>Exult's combat_protected (the halo on its paperdoll): the party's Protect fighters go after whoever attacks it. One at a time.</summary>
     public bool CombatProtected { get; set; }
 

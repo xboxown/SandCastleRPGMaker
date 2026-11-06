@@ -35,6 +35,14 @@ public class Ultima6Settings
     /// levels instead (automatic, training points, each character's curve in the Character Editor).
     /// </summary>
     public bool UseUltima7Leveling { get; set; }
+    /// <summary>
+    /// The Leveling Editor's systems - the project's own leveling, each its table and its events (made of event commands).
+    /// Many can be kept, one is used (ActiveLevelSystem; none: levels are only what events set). A new project starts with
+    /// templates to learn from - Ultima 6's shrines, Savage Empire's and Martian Dreams' dreams - delete them, make your own.
+    /// </summary>
+    public List<U6LevelSystem> LevelSystems { get; set; } = U6LevelSystem.Templates();
+    public string ActiveLevelSystem { get; set; } = U6LevelSystem.U6TemplateName;
+    public U6LevelSystem? Active => LevelSystems.FirstOrDefault(s => s.Name == ActiveLevelSystem);
     /// <summary>How a level earned is taken: meditating at a shrine (Ultima 6) or dreaming when the party rests (Savage Empire, Martian Dreams).</summary>
     public string LevelUpWay { get; set; } = LevelUpShrine;
     /// <summary>
@@ -51,6 +59,91 @@ public class Ultima6Settings
     /// <summary>What the title menu's Acknowledgments shows.</summary>
     public string Acknowledgments { get; set; } = "Made with Sandcastle RPG Maker.";
     public const string LevelUpShrine = "At a shrine (Ultima 6)", LevelUpDream = "In a dream when the party rests (Savage Empire, Martian Dreams)";
+}
+
+/// <summary>One leveling system of the Leveling Editor: its level table and its events.</summary>
+public class U6LevelSystem
+{
+    public const string U6TemplateName = "Ultima 6 - shrines (template)", DreamTemplateName = "Savage Empire / Martian Dreams - dreams (template)";
+
+    public string Name { get; set; } = "New leveling system";
+    /// <summary>The experience each level needs: more than [0] for level 2, [1] for level 3... The levels: one more than these.</summary>
+    public List<int> LevelExperience { get; set; } = new() { 100, 200, 400, 800, 1600, 3200, 6400 };
+    /// <summary>The most hit points: this many a level...</summary>
+    public int HitsPerLevel { get; set; } = 30;
+    /// <summary>...never past this.</summary>
+    public int MostHits { get; set; } = 255;
+    /// <summary>No stat Rise A Level raises goes past this.</summary>
+    public int StatCap { get; set; } = 30;
+    /// <summary>On: a level earned is taken at once (its hit points); its events still run. Off: only Rise A Level raises it.</summary>
+    public bool RiseByThemselves { get; set; }
+    public List<U6LevelEvent> Events { get; set; } = new();
+
+    private static EventCommand C(EventCommandType type, params string[] kv)
+    {
+        var c = new EventCommand { Type = type };
+        for (int i = 0; i + 1 < kv.Length; i += 2) c.Parameters[kv[i]] = kv[i + 1];
+        return c;
+    }
+
+    private static EventCommand Rise(string who, string party, string str, string dex, string intel, string notReady) =>
+        C(EventCommandType.U6RiseLevel, "Who", who, "Party", party, "OnlyIfEarned", "True", "Str", str, "Dex", dex, "Int", intel, "Hits", "", "Tell", "True", "NotReady", notReady);
+
+    /// <summary>The templates a project starts with, to learn from (and delete).</summary>
+    public static List<U6LevelSystem> Templates() => new()
+    {
+        new U6LevelSystem
+        {
+            Name = U6TemplateName,
+            Events =
+            {
+                new U6LevelEvent { Name = "A level is earned", Trigger = U6LevelEvent.WhenEarned, Commands =
+                {
+                    C(EventCommandType.U6SceneText, "Text", "{LevelWho} could rise to level {LevelEarned}. Meditate at a shrine.", "Where", "In the text area"),
+                } },
+                new U6LevelEvent { Name = "Shrine of Valor", Trigger = U6LevelEvent.WhenCalled, Commands =
+                {
+                    C(EventCommandType.U6SceneText, "Text", "You chant the mantra: RA...", "Where", "In the text area"),
+                    Rise("Player", "True", "3", "0", "0", "Thou art not ready."),
+                } },
+                new U6LevelEvent { Name = "Shrine of Honesty", Trigger = U6LevelEvent.WhenCalled, Commands =
+                {
+                    C(EventCommandType.U6SceneText, "Text", "You chant the mantra: AHM...", "Where", "In the text area"),
+                    Rise("Player", "True", "0", "0", "3", "Thou art not ready."),
+                } },
+                new U6LevelEvent { Name = "Shrine of Justice", Trigger = U6LevelEvent.WhenCalled, Commands =
+                {
+                    C(EventCommandType.U6SceneText, "Text", "You chant the mantra: BEH...", "Where", "In the text area"),
+                    Rise("Player", "True", "0", "1", "1", "Thou art not ready."),
+                } },
+            }
+        },
+        new U6LevelSystem
+        {
+            Name = DreamTemplateName,
+            Events =
+            {
+                new U6LevelEvent { Name = "A dream after resting", Trigger = U6LevelEvent.WhenRestedEach, Commands =
+                {
+                    C(EventCommandType.U6SceneText, "Text", "{LevelWho} has a dream. Three stone obelisks...", "Where", "In the text area"),
+                    C(EventCommandType.U6SceneChoice, "Question", "Which does {LevelWho} touch?", "Choices", "Sword (strength)\nHeart (dexterity)\nBook (intelligence)", "X", "8", "Y", "8", "Variable", "dreamPick"),
+                    Rise("Activator", "False", "dreamPick = 1", "dreamPick = 2", "dreamPick = 3", ""),
+                } },
+            }
+        },
+    };
+}
+
+/// <summary>One event of a leveling system.</summary>
+public class U6LevelEvent
+{
+    public const string WhenEarned = "When someone earns a level", WhenRested = "When the party wakes from Rest",
+        WhenRestedEach = "When the party wakes from Rest - once for each member who has earned a level", WhenCalled = "When Run Leveling Event calls it";
+    public static readonly string[] Triggers = { WhenEarned, WhenRested, WhenRestedEach, WhenCalled };
+
+    public string Name { get; set; } = "New event";
+    public string Trigger { get; set; } = WhenCalled;
+    public List<EventCommand> Commands { get; set; } = new();
 }
 
 /// <summary>A text area note rule: when the engine says When (* stands for any words), the text area says Say instead ({1}, {2}... the words each * stood for); Say empty: nothing is said.</summary>
@@ -89,14 +182,19 @@ public static class U6Notes
 /// </summary>
 public static class U6Leveling
 {
-    public const int MaxLevel = 8, StatCap = 30, HitsPerLevel = 30, MostHits = 255;
-    /// <summary>More than Needs[level] experience earns the next level (Nuvie's exp_level_tbl).</summary>
-    public static readonly int[] Needs = { 0, 100, 200, 400, 800, 1600, 3200, 6400 };
+    /// <summary>The active leveling system's table (Leveling Editor) - the game and the editors set it.</summary>
+    public static U6LevelSystem Table { get; set; } = new();
+    public static void Use(Ultima6Settings settings) => Table = settings.Active ?? new U6LevelSystem();
 
-    public static int MaxHits(int level) => Math.Min(MostHits, Math.Clamp(level, 1, MaxLevel) * HitsPerLevel);
-    public static bool HasEarned(int level, int experience) => level >= 1 && level < MaxLevel && experience > Needs[level];
-    /// <summary>The experience the next level needs (one more than its step); 0 at level 8.</summary>
-    public static int NextExp(int level) => level >= 1 && level < MaxLevel ? Needs[level] + 1 : level < 1 ? Needs[1] + 1 : 0;
+    public static int MaxLevel => Table.LevelExperience.Count + 1;
+    public static int StatCap => Math.Max(1, Table.StatCap);
+    public static int HitsPerLevel => Math.Max(0, Table.HitsPerLevel);
+    /// <summary>More than Needs(level) experience earns the next level.</summary>
+    public static int Needs(int level) => level >= 1 && level < MaxLevel ? Table.LevelExperience[level - 1] : int.MaxValue;
+    public static int MaxHits(int level) => Math.Min(Math.Max(1, Table.MostHits), Math.Clamp(level, 1, MaxLevel) * Math.Max(1, Table.HitsPerLevel));
+    public static bool HasEarned(int level, int experience) => level >= 1 && level < MaxLevel && experience > Needs(level);
+    /// <summary>The experience the next level needs (one more than its step); 0 at the highest level.</summary>
+    public static int NextExp(int level) => Math.Max(1, level) < MaxLevel ? Needs(Math.Max(1, level)) + 1 : 0;
 
     public static readonly (string Virtue, string Mantra, int Str, int Dex, int Int)[] Shrines =
     {
