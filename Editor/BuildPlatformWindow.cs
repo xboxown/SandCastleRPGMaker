@@ -34,7 +34,8 @@ internal sealed class BuildPlatformWindow : Window
     };
 
     /// <param name="ultima8">An Ultima 8 project: its engine runs on Windows so far - the Sandcastle player gets it later (the Amiga / MorphOS work is done on Saturdays).</param>
-    public BuildPlatformWindow(bool ultima8 = false)
+    /// <param name="ultima6">An Ultima 6 project: Windows so far; Amiga 68k (pixel perfect, 22 frames a second or more) and MorphOS get the Ultima 6 engine later.</param>
+    public BuildPlatformWindow(bool ultima8 = false, bool ultima6 = false)
     {
         Title = "Build the Game";
         Width = 520;
@@ -47,9 +48,9 @@ internal sealed class BuildPlatformWindow : Window
         var list = new ListBox { Height = 300 };
         foreach (var c in Choices)
         {
-            bool ready = c.Ready && (!ultima8 || c.Platform == BuildPlatform.Windows);
+            bool ready = c.Ready && (!(ultima8 || ultima6) || c.Platform == BuildPlatform.Windows);
             var item = new StackPanel { Margin = new Thickness(2, 4, 2, 4), Opacity = ready ? 1 : 0.55 };
-            item.Children.Add(new TextBlock { Text = c.Name + (ready ? "" : ultima8 && c.Ready ? "   (the Ultima 8 engine comes to this player later)" : "   (its player is being written)"), FontWeight = FontWeights.SemiBold });
+            item.Children.Add(new TextBlock { Text = c.Name + (ready ? "" : ultima8 && c.Ready ? "   (the Ultima 8 engine comes to this player later)" : ultima6 && c.Ready ? "   (the Ultima 6 engine comes to this player later)" : "   (its player is being written)"), FontWeight = FontWeights.SemiBold });
             item.Children.Add(new TextBlock { Text = c.Needs, TextWrapping = TextWrapping.Wrap, FontSize = 11, Width = 450, Foreground = Brushes.DimGray });
             list.Items.Add(new ListBoxItem { Content = item, Tag = c, IsEnabled = ready });
         }

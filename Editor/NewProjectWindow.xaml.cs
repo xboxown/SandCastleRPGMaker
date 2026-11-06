@@ -21,7 +21,7 @@ public partial class NewProjectWindow : Window
     public string ProjectName { get; private set; } = string.Empty;
     public string Platform { get; private set; } = string.Empty;
     public DateTime CreatedAtUtc { get; private set; }
-    /// <summary>GameStyle.Ultima7 or GameStyle.Ultima8.</summary>
+    /// <summary>GameStyle.Ultima7, GameStyle.Ultima8 or GameStyle.Ultima6.</summary>
     public string Style { get; private set; } = GameStyle.Ultima7;
 
     public NewProjectWindow()

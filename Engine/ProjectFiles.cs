@@ -10,7 +10,7 @@ public class ProjectManifest
     public string ProjectName { get; set; } = string.Empty;
     public string Platform { get; set; } = string.Empty;
     public DateTime CreatedAtUtc { get; set; }
-    /// <summary>The game's style (File > New Project): GameStyle.Ultima7 (every project made before styles existed) or GameStyle.Ultima8 - its own engine.</summary>
+    /// <summary>The game's style (File > New Project): GameStyle.Ultima7 (every project made before styles existed), GameStyle.Ultima8 or GameStyle.Ultima6 - each its own engine.</summary>
     public string Style { get; set; } = GameStyle.Ultima7;
 }
 
@@ -19,6 +19,8 @@ public static class GameStyle
 {
     public const string Ultima7 = "Ultima7";
     public const string Ultima8 = "Ultima8";
+    /// <summary>Ultima 6 (and Savage Empire, Martian Dreams): its own engine, the HUD Editor in place of the PaperDoll Editor.</summary>
+    public const string Ultima6 = "Ultima6";
 }
 
 /// <summary>

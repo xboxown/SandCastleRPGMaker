@@ -1,0 +1,70 @@
+using System.Windows;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// An Ultima 6 project (File > New Project > Style: Ultima 6 - also Savage Empire and Martian Dreams): its games run in
+/// their own engine, U6GameWindow (Editor/U6: copied from the Ultima 7 engine at build 523 and changed there only).
+/// Ultima 7 and Ultima 8 are untouched by it. These are the Ultima 6 engine's doors: Game Test and a built game.
+/// </summary>
+public partial class MainWindow
+{
+    private bool IsUltima6 => _projectStyle == GameStyle.Ultima6;
+
+    private U6GameWindow NewU6GameWindow(bool atTitle, bool shipped) => NewU6GameWindow(_worlds.FirstOrDefault() ?? _map!, atTitle, shipped);
+
+    private U6GameWindow NewU6GameWindow(MapData start, bool atTitle, bool shipped, CharacterDatabase? characters = null, List<MapData>? worlds = null) =>
+        new(start, Sheet(start.Tileset.TilesetSpriteName)?.Bitmap ?? PrimarySheet()?.Bitmap ?? _tilesetBitmap!, start.Tileset.TileWidth, start.Tileset.TileHeight,
+            Sheet(start.Tileset.TilesetSpriteName)?.Columns ?? PrimarySheet()?.Columns ?? _paletteColumns,
+            start.Tileset.TilesetSpriteName, _resourceDatabase, _spriteDatabase, _bookDatabase, _objectDatabase,
+            characters ?? _characterDatabase, _poseDatabase, _tilePropertiesDatabase, _variableDatabase, _statDatabase, _containerDatabase, _systemSettings, _factionDatabase)
+        {
+            StartAtTitle = atTitle,
+            IsShippedGame = shipped,
+            Worlds = worlds ?? _worlds,
+            Title = shipped ? (_currentProjectName is { Length: > 0 } name ? name : "Game") : "Sandcastle RPG Maker - Game Test (Ultima 6 Engine, Alpha)",
+            WindowStartupLocation = shipped ? WindowStartupLocation.CenterScreen : WindowStartupLocation.CenterOwner
+        };
+
+    private U6GameWindow? NextU6GameWindow(U6GameWindow closed, bool shipped) =>
+        closed.ScenarioRequestedId is int scenarioId && _systemSettings.Scenarios.Find(scenarioId) is { } scenario ? ScenarioU6GameWindow(scenario) :
+        closed.ReplacedBy ?? (closed.ReturnToTitleRequested ? NewU6GameWindow(atTitle: true, shipped) : closed.RestartRequested ? NewU6GameWindow(atTitle: false, shipped) : null);
+
+    /// <summary>A built Ultima 6 game's window: closing it ends the program - unless another game window carries on.</summary>
+    private void RunStandaloneU6(U6GameWindow game)
+    {
+        var display = _systemSettings.Display;
+        if (display.Mode == GameScreenMode.FullScreen)
+        {
+            game.WindowStyle = WindowStyle.None;
+            game.ResizeMode = ResizeMode.NoResize;
+            game.WindowState = WindowState.Maximized;
+        }
+        else
+        {
+            int scale = Math.Clamp(display.WindowScale, 2, 6);
+            game.SizeToContent = SizeToContent.Manual;
+            game.Width = 320 * scale + 16;
+            game.Height = 200 * scale + 39;
+        }
+        game.Closed += (_, _) =>
+        {
+            if (NextU6GameWindow(game, shipped: true) is { } next) RunStandaloneU6(next);
+            else Application.Current.Shutdown();
+        };
+        Application.Current.MainWindow = game;
+        game.Show();
+    }
+
+    /// <summary>Game Test of an Ultima 6 project: its own engine.</summary>
+    private void LaunchU6GameTest(bool atTitle)
+    {
+        var firstScenario = atTitle ? null : _systemSettings.Scenarios.StartScenario; // the Scenario Developer's choice for F5 (MainWindow.Scenarios.cs)
+        for (U6GameWindow? game = firstScenario is not null ? ScenarioU6GameWindow(firstScenario) : NewU6GameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextU6GameWindow(game, shipped: false))
+        {
+            game.Owner = this;
+            game.ShowDialog();
+        }
+    }
+}

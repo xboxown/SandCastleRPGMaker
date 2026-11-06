@@ -27,6 +27,17 @@ public partial class App : Application
                 return;
             }
             if (u8 is not null) { GameDataException.ShowPlain(GameErrors.Unexpected, args.Exception.Message, null, u8.Title); args.Handled = true; Shutdown(); return; }
+            // An Ultima 6 game (its own engine): the same handling.
+            var u6 = Windows.OfType<U6GameWindow>().FirstOrDefault(w => w.IsActive) ?? Windows.OfType<U6GameWindow>().FirstOrDefault();
+            if (u6 is not null && u6.UnexpectedError(args.Exception)) { args.Handled = true; return; }
+            if (u6 is { IsShippedGame: false })
+            {
+                GameDataException.ShowPlain(GameErrors.Unexpected, args.Exception.Message, null, u6.Title);
+                args.Handled = true;
+                u6.Close();
+                return;
+            }
+            if (u6 is not null) { GameDataException.ShowPlain(GameErrors.Unexpected, args.Exception.Message, null, u6.Title); args.Handled = true; Shutdown(); return; }
             var game = Windows.OfType<GameTestWindow>().FirstOrDefault(w => w.IsActive) ?? Windows.OfType<GameTestWindow>().FirstOrDefault();
             if (game is not null && game.UnexpectedError(args.Exception)) { args.Handled = true; return; }
             if (game is { IsShippedGame: false })

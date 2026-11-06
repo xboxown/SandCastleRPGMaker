@@ -29,6 +29,8 @@ internal static class ProjectSession
     /// <summary>The project's style (GameStyle): an Ultima 8 project's editors show what Ultima 8 adds. MainWindow sets it.</summary>
     public static Func<string>? StyleProvider;
     public static bool IsUltima8 => StyleProvider?.Invoke() == GameStyle.Ultima8;
+    /// <summary>An Ultima 6 project (Savage Empire, Martian Dreams): its HUD Editor, its own engine (Editor/U6).</summary>
+    public static bool IsUltima6 => StyleProvider?.Invoke() == GameStyle.Ultima6;
 
     /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
     public static Func<ResourceDatabase>? ResourcesProvider;

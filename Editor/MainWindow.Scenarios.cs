@@ -25,6 +25,15 @@ public partial class MainWindow
         return game;
     }
 
+    private U6GameWindow ScenarioU6GameWindow(Scenario scenario)
+    {
+        var prepared = ScenarioRules.Prepare(scenario, _worlds, _characterDatabase);
+        var game = NewU6GameWindow(prepared.Start, atTitle: false, shipped: false, prepared.Characters, prepared.Worlds);
+        game.PlayingScenario = scenario;
+        game.Title += $" - {scenario.Name}";
+        return game;
+    }
+
     private U8GameWindow ScenarioU8GameWindow(Scenario scenario)
     {
         var prepared = ScenarioRules.Prepare(scenario, _worlds, _characterDatabase);

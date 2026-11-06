@@ -946,7 +946,7 @@ public partial class MainWindow : Window
                 try { _objectDatabase = ObjectDatabaseSerializer.Load(oldMap.ObjectDatabasePath); } catch { /* unreadable: start with none */ }
             }
             // Its style before its map is drawn: an Ultima 8 map shows in the diamond view (MainWindow.U8.cs).
-            _projectStyle = manifest.Style is GameStyle.Ultima8 ? GameStyle.Ultima8 : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
+            _projectStyle = manifest.Style is GameStyle.Ultima8 or GameStyle.Ultima6 ? manifest.Style : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
             LoadWorlds(payload.Map, payload.Worlds); // the starting world and the others (Maps tab)
             LoadHouses(payload.Houses); // the House Editor's houses (MainWindow.Houses.cs)
             _map = payload.Map;
@@ -1026,7 +1026,7 @@ public partial class MainWindow : Window
             var auto = _systemSettings.AutoSave;
             if (!auto.Enabled || _currentProjectFilePath is null) return;
             if ((DateTime.UtcNow - _lastSaved).TotalMinutes < Math.Max(1, auto.Minutes)) return;
-            if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible) || System.Windows.Application.Current.Windows.OfType<GameTestWindow>().Any() || System.Windows.Application.Current.Windows.OfType<U8GameWindow>().Any()) return; // Game Test or a window open over the editor: later
+            if (OwnedWindows.Cast<Window>().Any(w => w.IsVisible) || System.Windows.Application.Current.Windows.OfType<GameTestWindow>().Any() || System.Windows.Application.Current.Windows.OfType<U8GameWindow>().Any() || System.Windows.Application.Current.Windows.OfType<U6GameWindow>().Any()) return; // Game Test or a window open over the editor: later
             if (SaveProject()) StatusText.Text = $"Autosaved at {DateTime.Now:HH:mm}.";
             else _lastSaved = DateTime.UtcNow; // failed (already told): try again after the next interval
         };
@@ -1383,7 +1383,7 @@ public partial class MainWindow : Window
             MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var platform = new BuildPlatformWindow(ultima8: IsUltima8) { Owner = this }; // which platform (BuildPlatformWindow.cs); an Ultima 8 game: Windows so far
+        var platform = new BuildPlatformWindow(ultima8: IsUltima8, ultima6: IsUltima6) { Owner = this }; // which platform (BuildPlatformWindow.cs); an Ultima 8 game: Windows so far
         if (platform.ShowDialog() != true) return;
         if (platform.Picked != BuildPlatform.Windows) { BuildForPlayer(platform.Picked); return; } // the Sandcastle player's platforms (MainWindow.PlayerBuild.cs)
         if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
@@ -1487,6 +1487,7 @@ public partial class MainWindow : Window
             return false;
         }
         if (IsUltima8) RunStandaloneU8(NewU8GameWindow(atTitle: true, shipped: true)); // an Ultima 8 game: its own engine
+        else if (IsUltima6) RunStandaloneU6(NewU6GameWindow(atTitle: true, shipped: true)); // an Ultima 6 game: its own engine (MainWindow.U6.cs)
         else RunStandalone(NewGameWindow(atTitle: true, shipped: true));
         return true;
     }
@@ -1552,6 +1553,7 @@ public partial class MainWindow : Window
         }
 
         if (IsUltima8) { LaunchU8GameTest(atTitle); return; } // an Ultima 8 project: its own engine (MainWindow.U8.cs)
+        if (IsUltima6) { LaunchU6GameTest(atTitle); return; } // an Ultima 6 project: its own engine (MainWindow.U6.cs)
         // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs); Return To Title and New Game start a fresh one.
         var firstScenario = atTitle ? null : _systemSettings.Scenarios.StartScenario; // the Scenario Developer's choice for F5 (MainWindow.Scenarios.cs)
         for (GameTestWindow? game = firstScenario is not null ? ScenarioGameWindow(firstScenario) : NewGameWindow(atTitle || _systemSettings.Title.InGameTest, shipped: false); game is not null; game = NextGameWindow(game, shipped: false))
