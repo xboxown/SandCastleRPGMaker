@@ -243,7 +243,7 @@ public class PaperDollEditorWindow : Window
         {
             Id = _objects.NextDollDesignId(), Name = source.Name + " copy", Width = source.Width, Height = source.Height,
             OpenSoundResourceId = source.OpenSoundResourceId, CloseSoundResourceId = source.CloseSoundResourceId,
-            OnScreen = source.OnScreen, ScreenCorner = source.ScreenCorner, ScreenX = source.ScreenX, ScreenY = source.ScreenY
+            OnScreen = source.OnScreen, ScreenCorner = source.ScreenCorner, ScreenX = source.ScreenX, ScreenY = source.ScreenY, Modal = source.Modal
         };
         // Same part ids, so lids still cover the same parts and displays still follow the same sliders.
         foreach (var part in source.Parts) copy.Parts.Add(part.Clone(part.Id));
@@ -280,6 +280,13 @@ public class PaperDollEditorWindow : Window
             ? "No object opens it yet: Object Editor > an object > Opens paperdoll."
             : $"Opened by: {string.Join(", ", users)}. In play: double-click it."));
         _designProps.Children.Add(Note("320 x 240 is the size of a container's window in the game."));
+
+        // Modal or not: as whatever opens it says, always, or never.
+        var modes = new[] { DollDesign.ModalAsOpened, DollDesign.ModalAlways, DollDesign.ModalNever };
+        var modal = new ComboBox { Width = 330, ItemsSource = modes, SelectedItem = modes.Contains(design.Modal) ? design.Modal : DollDesign.ModalAsOpened };
+        modal.SelectionChanged += (_, _) => { if (modal.SelectedItem is string m) design.Modal = m; };
+        _designProps.Children.Add(Labeled("Modal", modal));
+        _designProps.Children.Add(Note("Modal: nothing else can be clicked and the game waits till it closes (a question, a prompt). As it is opened: an event's Open Paperdoll Modal box decides, and the game's own prompts (Quit, errors, Game saved) are modal. Always / Never: whoever opens it - an event, an inventory button, an object. The Title Screen stays as it is."));
 
         // A HUD: always on screen in play, kept to a corner of the view.
         _designProps.Children.Add(Check("Always on screen in the game (a HUD: health bars, a compass...)", () => design.OnScreen, v => { design.OnScreen = v; ShowDesignProps(); }));

@@ -152,6 +152,7 @@ public partial class GameTestWindow
         canvas.MouseLeftButtonUp += (_, _) => PaperdollTitleBar_MouseLeftButtonUp(canvas);
         PaperdollGumpsCanvas.Children.Add(border);
         _openDolls.Add(gump);
+        if (!title && !design.OnScreen && design.Modal == DollDesign.ModalAlways) MakeDollModal(gump, design); // Always modal, whoever opens it (PaperDoll Editor)
         ReadControlVariables(gump); // controls kept in variables show them (GameTestWindow.DollControls.cs)
         BringDollToFront(gump);
         RefreshDollGump(gump);

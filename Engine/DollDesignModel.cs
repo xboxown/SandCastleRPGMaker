@@ -342,6 +342,12 @@ public class DollDesign
     /// <summary>How far in from that corner, in the paperdoll's own pixels.</summary>
     public int ScreenX { get; set; } = 4;
     public int ScreenY { get; set; } = 4;
+    /// <summary>
+    /// Modal (nothing else can be clicked, the game waits, till it closes): as whatever opens it says (an Open Paperdoll's
+    /// Modal box, the engine's own prompts), or always, or never - whoever opens it. The Title Screen stays as it is.
+    /// </summary>
+    public string Modal { get; set; } = ModalAsOpened;
+    public const string ModalAsOpened = "As it is opened (Open Paperdoll's Modal box, the game's own prompts)", ModalAlways = "Always modal", ModalNever = "Never modal";
     public List<DollPart> Parts { get; set; } = new();
 
     public int NextPartId() => Parts.Count == 0 ? 1 : Parts.Max(p => p.Id) + 1;

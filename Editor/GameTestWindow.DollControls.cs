@@ -59,7 +59,15 @@ public partial class GameTestWindow
             gump.Answered = answered;
             before?.Invoke(false);
         }
-        if (modal && gump.ModalLayer == 0)
+        if (!title) modal = design.Modal switch { DollDesign.ModalAlways => true, DollDesign.ModalNever => false, _ => modal }; // the paperdoll's own Modal setting (PaperDoll Editor)
+        if (modal) MakeDollModal(gump, design);
+        return gump;
+    }
+
+    /// <summary>Modal: a block over everything under it, and it in the middle of the view as a question box.</summary>
+    private void MakeDollModal(OpenDollGump gump, DollDesign design)
+    {
+        if (gump.ModalLayer == 0)
         {
             gump.ModalLayer = 1000 + 2 * _openDolls.Count(g => g.ModalLayer > 0);
             // Everything under it - the game, other windows - is out of reach while it's open.
@@ -74,7 +82,6 @@ public partial class GameTestWindow
             Canvas.SetTop(gump.GumpBorder, Math.Max(0, (PaperdollGumpsCanvas.ActualHeight - height) / 2));
             BringDollToFront(gump);
         }
-        return gump;
     }
 
     /// <summary>Its Yes / OK or No / Cancel: it closes and whoever opened it hears the answer.</summary>
