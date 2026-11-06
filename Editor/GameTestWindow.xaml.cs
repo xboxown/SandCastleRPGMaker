@@ -1832,7 +1832,7 @@ public partial class GameTestWindow : Window
         var now = (e as RenderingEventArgs)?.RenderingTime ?? _lastRenderTime;
         if (now == _lastRenderTime) return; // WPF raises Rendering more than once for the same frame: the work once
         if (now != _lastDrawnTime) { _drawnFrames++; _lastDrawnTime = now; }
-        if (_lastRenderTime != TimeSpan.Zero && (now - _lastRenderTime).TotalMilliseconds < MinLogicMs) return; // about 30 times a second (GameTestWindow.Perf.cs)
+        if (_lastRenderTime != TimeSpan.Zero && (now - _lastRenderTime).TotalMilliseconds < MinLogicMs) { UpdateOutlines(); return; } // about 30 times a second - the outlines every screen refresh (GameTestWindow.Perf.cs)
         // Clamped so a stall (window drag, breakpoint, etc.) can't produce one giant catch-up jump - the real avatar never "teleports" to make up for lost time.
         double deltaSeconds = _lastRenderTime == TimeSpan.Zero ? 0 : Math.Min(0.05, (now - _lastRenderTime).TotalSeconds);
         _lastRenderTime = now;
@@ -1843,6 +1843,7 @@ public partial class GameTestWindow : Window
             GameFrame(deltaSeconds);
             UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
             UpdateDollStats(deltaSeconds * 1000); // paperdoll gauges following a stat: drawn again when it changes (Dolls.cs)
+            UpdateOutlines(); // after everyone has moved and changed frame this frame: never a frame behind
         }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }
@@ -1851,8 +1852,6 @@ public partial class GameTestWindow : Window
     private void GameFrame(double deltaSeconds)
     {
 
-        FollowHitOutlines(); // the red hit outline stays round its character as it moves
-        using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
         UpdateGamePause(); // Exult: the first gump to open pauses the game, the last to close resumes it
         SoakTest(deltaSeconds * 1000); // only when measuring (GameTestWindow.Perf.cs)
         using (Measure("StreamWorldVisuals")) StreamWorldVisuals(); // only what's near the view is drawn (GameTestWindow.Perf.cs)

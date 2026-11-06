@@ -28,7 +28,7 @@ public partial class U6GameWindow
     private bool ShowHitNumbers => _systemSettings.Combat.ShowHitNumbers;
 
     /// <summary>Outlines showing right now, each with the character picture it belongs to - moved with it every frame, so it never trails behind someone walking.</summary>
-    private readonly List<(Image Outline, Image Visual, double Scale)> _hitOutlines = new();
+    private readonly List<(Image Outline, Image Visual, BitmapSource Frame)> _hitOutlines = new();
 
     /// <summary>reduce_health's flash for <paramref name="amount"/> damage to a character that had <paramref name="oldHp"/>.</summary>
     private void FlashHit(CharacterDefinition character, int amount, int oldHp)
@@ -44,31 +44,74 @@ public partial class U6GameWindow
         var visual = character == _player ? _playerImage : MapCharacterOf(character)?.Visual as Image;
         if (visual?.Source is not BitmapSource frame || visual.Width <= 0 || frame.PixelWidth <= 0) return;
         var outline = OutlineOf(frame, HitColor);
-        double scale = visual.Width / frame.PixelWidth;
-        var image = new Image
-        {
-            Source = outline, Width = outline.PixelWidth * scale, Height = outline.PixelHeight * scale,
-            Stretch = Stretch.Fill, IsHitTestVisible = false
-        };
+        var image = new Image { Source = outline, Stretch = Stretch.Fill, IsHitTestVisible = false };
         RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
-        var entry = (image, visual, scale);
+        var entry = (image, visual, frame);
         _hitOutlines.Add(entry);
         GameCanvas.Children.Add(image);
         FollowHitOutlines();
         var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(HitOutlineMs) };
-        timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(image); _hitOutlines.Remove(entry); };
+        timer.Tick += (_, _) => { timer.Stop(); GameCanvas.Children.Remove(image); _hitOutlines.RemoveAll(h => ReferenceEquals(h.Outline, image)); };
         timer.Start();
+    }
+
+    /// <summary>
+    /// The red hit outline and the condition outlines (poisoned, cursed...) laid over their characters as they are now - called
+    /// after the frame's moves and on every screen refresh between them, so walking, running or striking they never trail
+    /// behind or keep an old frame's shape.
+    /// </summary>
+    private void UpdateOutlines()
+    {
+        FollowHitOutlines();
+        using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
     }
 
     /// <summary>Every frame: each outline sits exactly round its character, wherever it has walked to.</summary>
     private void FollowHitOutlines()
     {
-        foreach (var (outline, visual, scale) in _hitOutlines)
+        for (int i = 0; i < _hitOutlines.Count; i++)
         {
-            Canvas.SetLeft(outline, Canvas.GetLeft(visual) - scale);
-            Canvas.SetTop(outline, Canvas.GetTop(visual) - scale);
-            Panel.SetZIndex(outline, Panel.GetZIndex(visual) + 1);
+            var (outline, visual, frame) = _hitOutlines[i];
+            // Its frame changed (a swing, a step) during the red moment: the outline takes the new shape at once.
+            if (visual.Source is BitmapSource now && !ReferenceEquals(now, frame))
+            {
+                if (!_outlineCache.TryGetValue((now, HitColor), out var shape))
+                {
+                    if (_outlineCache.Count > 512) _outlineCache.Clear();
+                    _outlineCache[(now, HitColor)] = shape = OutlineOf(now, HitColor);
+                }
+                outline.Source = shape;
+                _hitOutlines[i] = (outline, visual, frame = now);
+            }
+            PlaceOutlineOver(outline, visual, frame);
         }
+    }
+
+    /// <summary>
+    /// An outline (the frame and 1 pixel all round) laid exactly over the picture as it's drawn: a character's picture sits in a
+    /// box rounded to the game's grid, the frame fitted into it (Uniform) and centred - so the outline takes the frame's own scale
+    /// and the gap round it, not the box's corner (it sat off the body, too big or too low, before).
+    /// </summary>
+    private static void PlaceOutlineOver(Image outline, Image visual, BitmapSource frame)
+    {
+        var (dx, dy, sx, sy) = DrawnFrame(visual, frame);
+        outline.Width = (frame.PixelWidth + 2) * sx;
+        outline.Height = (frame.PixelHeight + 2) * sy;
+        Canvas.SetLeft(outline, Canvas.GetLeft(visual) + dx - sx);
+        Canvas.SetTop(outline, Canvas.GetTop(visual) + dy - sy);
+        Panel.SetZIndex(outline, Panel.GetZIndex(visual) + 1);
+    }
+
+    /// <summary>Where a frame is drawn inside its picture's box: the gap from the box's corner and the scale on each side.</summary>
+    private static (double DX, double DY, double SX, double SY) DrawnFrame(Image visual, BitmapSource frame)
+    {
+        double w = double.IsNaN(visual.Width) ? visual.ActualWidth : visual.Width, h = double.IsNaN(visual.Height) ? visual.ActualHeight : visual.Height;
+        double pw = Math.Max(1, frame.PixelWidth), ph = Math.Max(1, frame.PixelHeight);
+        double sx = w / pw, sy = h / ph;
+        if (visual.Stretch == Stretch.Uniform) sx = sy = Math.Min(sx, sy);
+        else if (visual.Stretch == Stretch.UniformToFill) sx = sy = Math.Max(sx, sy);
+        else if (visual.Stretch == Stretch.None) sx = sy = 1;
+        return ((w - pw * sx) / 2, (h - ph * sy) / 2, sx, sy);
     }
 
     /// <summary>The 1-pixel outline of a frame's shape: every see-through pixel touching a solid one, in the hit colour, one pixel bigger all round.</summary>

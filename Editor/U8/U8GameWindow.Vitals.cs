@@ -165,6 +165,7 @@ public partial class U8GameWindow
     {
         var vitals = VitalsOf(character);
         if (vitals.Dead) return;
+        SoakLog($"died: {character.Name} ({cause})");
         if (character.Immortal) { SoakLog($"immortal: {character.Name} isn't killed, hp {GetHp(character)}"); KnockOut(character); return; }
         ControlBackOnDeath(character); // Crusader: the one controlled, or the main character, died - the main character is controlled again (U8GameWindow.U8Crusader.cs)
         Record($"killed:{character.Id}"); // Character killed (U8GameWindow.Conditions.cs)

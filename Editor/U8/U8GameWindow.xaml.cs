@@ -1850,7 +1850,7 @@ public partial class U8GameWindow : Window
         var now = (e as RenderingEventArgs)?.RenderingTime ?? _lastRenderTime;
         if (now == _lastRenderTime) return; // WPF raises Rendering more than once for the same frame: the work once
         if (now != _lastDrawnTime) { _drawnFrames++; _lastDrawnTime = now; }
-        if (_lastRenderTime != TimeSpan.Zero && (now - _lastRenderTime).TotalMilliseconds < MinLogicMs) return; // about 30 times a second (U8GameWindow.Perf.cs)
+        if (_lastRenderTime != TimeSpan.Zero && (now - _lastRenderTime).TotalMilliseconds < MinLogicMs) { UpdateOutlines(); return; } // about 30 times a second - the outlines every screen refresh (U8GameWindow.Perf.cs)
         // Clamped so a stall (window drag, breakpoint, etc.) can't produce one giant catch-up jump - the real avatar never "teleports" to make up for lost time.
         double deltaSeconds = _lastRenderTime == TimeSpan.Zero ? 0 : Math.Min(0.05, (now - _lastRenderTime).TotalSeconds);
         _lastRenderTime = now;
@@ -1861,6 +1861,7 @@ public partial class U8GameWindow : Window
             GameFrame(deltaSeconds);
             UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
             UpdateDollStats(deltaSeconds * 1000); // paperdoll gauges following a stat: drawn again when it changes (Dolls.cs)
+            UpdateOutlines(); // after everyone has moved and changed frame this frame: never a frame behind
             UpdateU8Pointer(); // Ultima 8's arrows: walking, stepping, running, combat - else the hand (U8GameWindow.Pointer.cs)
         }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
@@ -1870,8 +1871,6 @@ public partial class U8GameWindow : Window
     private void GameFrame(double deltaSeconds)
     {
 
-        FollowHitOutlines(); // the red hit outline stays round its character as it moves
-        using (Measure("UpdateStatusOutlines")) UpdateStatusOutlines(); // poisoned green, protected white, paralyzed purple... (Exult's Actor::paint)
         FollowU8Bark(); // Ultima 8: the words over the speaker's head follow it (U8GameWindow.U8Talk.cs)
         UpdateGamePause(); // Ultima 8: windows don't pause - only a message box, choosing a target, sleeping, a video... (U8GameWindow.Pause.cs)
         SoakTest(deltaSeconds * 1000); // only when measuring (U8GameWindow.Perf.cs)

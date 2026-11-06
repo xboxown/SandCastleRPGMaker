@@ -83,13 +83,7 @@ public partial class U6GameWindow
                 outline.Frame = frame;
                 outline.Color = color.Value;
             }
-            double scale = visual.Width / Math.Max(1, frame.PixelWidth);
-            var source = (BitmapSource)outline.Outline.Source;
-            outline.Outline.Width = source.PixelWidth * scale;
-            outline.Outline.Height = source.PixelHeight * scale;
-            Canvas.SetLeft(outline.Outline, Canvas.GetLeft(visual) - scale);
-            Canvas.SetTop(outline.Outline, Canvas.GetTop(visual) - scale);
-            Panel.SetZIndex(outline.Outline, Panel.GetZIndex(visual) + 1);
+            PlaceOutlineOver(outline.Outline, visual, frame); // exactly over the picture as drawn (HitFlash.cs)
             outline.Outline.Visibility = Visibility.Visible;
         }
         foreach (var gone in _statusOutlines.Keys.Where(c => !seen.Contains(c)).ToList())

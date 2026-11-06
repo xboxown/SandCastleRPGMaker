@@ -20,6 +20,7 @@ public partial class GameTestWindow
     {
         if (ReferenceEquals(killer, victim)) return;
         int worth = Stat(victim, BuiltInStatKind.Exp, 0);
+        SoakLog($"exp: {killer.Name} killed {victim.Name}, worth {worth}");
         if (worth > 0) GainExperience(killer, worth);
     }
 
