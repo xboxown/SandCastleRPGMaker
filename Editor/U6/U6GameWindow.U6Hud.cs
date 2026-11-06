@@ -243,13 +243,6 @@ public partial class U6GameWindow
         return holder;
     }
 
-    private static IEnumerable<InventoryItemInstance> HudCarriedItems(CharacterDefinition member)
-    {
-        var worn = member.EquippedSlots.Values.ToHashSet();
-        foreach (var item in member.Inventory.Where(i => !worn.Contains(i.InstanceId))) yield return item;
-        if (member.EquippedSlots.TryGetValue(EquipmentSlot.Backpack, out int pack) && member.Inventory.FirstOrDefault(i => i.InstanceId == pack) is { } bag)
-            foreach (var inside in bag.Contents) yield return inside;
-    }
 
     // ---------- The text area and the date ----------
 
@@ -319,7 +312,7 @@ public partial class U6GameWindow
 
     private void HudButtonClicked(HudPiece piece)
     {
-        if (piece.Kind == HudPieceKind.CommandButton) StartHudVerb(piece.Verb);
+        if (piece.Kind == HudPieceKind.CommandButton) StartU6Verb(piece.Verb); // as its key: Rest, Cast and Combat do their own thing (U6GameWindow.U6Verbs.cs)
         else RunHudCustomButton(piece);
     }
 

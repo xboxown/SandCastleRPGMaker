@@ -218,6 +218,7 @@ public partial class U6GameWindow
 
     private void U6Verbs_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
+        if (_scene is not null) { SceneClick(e.GetPosition(HudLayer)); e.Handled = true; return; } // a scene (U6GameWindow.U6Scene.cs)
         if (_u6Title is not null) { if (!IsPlayingVideo) U6TitleClick(e.GetPosition(HudLayer)); e.Handled = true; return; } // the title menu (U6GameWindow.U6Title.cs)
         if (Hud.First(HudPieceKind.GameView) is null) return;
         var onScreen = e.GetPosition(HudLayer);
@@ -291,6 +292,16 @@ public partial class U6GameWindow
                 break;
             case HudVerb.Use:
                 if (thing is null or CharacterDefinition) { FinishHudVerb(name, W("NotPossible")); break; }
+                if (thing is PlacedCharacter bodyPlaced && _mapCharacters.FirstOrDefault(m => m.Placement == bodyPlaced) is { } body && IsDead(body.Character))
+                {
+                    if (!NextTo(_player, cx, cy)) { FinishHudVerb(name, W("OutOfRange")); break; }
+                    U6Say(_hudPrompt + name);
+                    EndHudVerb();
+                    SetHudFocus(HudFocus.Map);
+                    U6SearchBody(body); // a body: searched (U6GameWindow.U6Things.cs)
+                    PassTurnIfFighting();
+                    break;
+                }
                 if (thing is PlacedCharacter) { FinishHudVerb(name, W("NotPossible")); break; }
                 if (!NextTo(_player, cx, cy)) { FinishHudVerb(name, W("OutOfRange")); break; }
                 U6Say(_hudPrompt + name);
@@ -373,6 +384,7 @@ public partial class U6GameWindow
                 HudAct(itemName, () => DropOnCharacter(origin, member), W("Gives", itemName, member.Name));
                 return;
             }
+            if (cell.Slot is null && _hudOpenBag is not null) { HudAct(itemName, () => PutInOpenBag(member, picked.Item), W("Gets", itemName, member.Name)); return; } // into the open bag
             if (cell.Slot is { } slot) HudAct(itemName, () => TryEquipInSlot(origin, member, slot), W("Readies", itemName, member.Name));
             else HudAct(itemName, () => DropOnCharacter(origin, member), W("Unreadies", itemName, member.Name));
             return;
@@ -383,6 +395,7 @@ public partial class U6GameWindow
                 FinishHudVerb(name, W("YouSee", item is null ? W("Nothing") : name));
                 break;
             case HudVerb.Use:
+                if (item is not null && U6UseBag(item, name)) break; // a bag opens in the panel (U6GameWindow.U6Things.cs)
                 if (item is null || OriginOf(member, item) is not { } source) { FinishHudVerb(name, W("NotPossible")); break; }
                 U6Say(_hudPrompt + name);
                 EndHudVerb();
@@ -551,6 +564,7 @@ public partial class U6GameWindow
         var party = GetPartyList();
         if (index >= party.Count) return;
         _hudMember = party[index];
+        _hudOpenBag = null;
         _hudPartyView = false;
         RefreshHudPanel();
         DrawHudCursors();

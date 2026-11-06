@@ -44,6 +44,8 @@ public class Ultima6Settings
     public List<U6NoteRule> NoteRules { get; set; } = new();
     /// <summary>A note no rule matches: said as the engine words it (on), or not at all (off).</summary>
     public bool ShowOtherNotes { get; set; } = true;
+    /// <summary>What the avatar can't see is black (walls, closed doors, Occludes stop sight) - Ultima 6's view (U6GameWindow.U6Sight.cs).</summary>
+    public bool LineOfSight { get; set; } = true;
     /// <summary>The title menu's picture, filling the screen (U6GameWindow.U6Title.cs); not set: black.</summary>
     public SpriteLink TitleSprite { get; set; } = new();
     /// <summary>What the title menu's Acknowledgments shows.</summary>
@@ -208,6 +210,10 @@ public class HudDesign
     public int Height { get; set; } = 200;
     public SpriteLink Frame { get; set; } = new();
     public List<HudPiece> Pieces { get; set; } = new();
+    /// <summary>The title menu's Introduction: its scene (Scene commands); none - the intro video.</summary>
+    public List<EventCommand> IntroCommands { get; set; } = new();
+    /// <summary>The title menu's Create New Character: its scene (questions, choices) before the game begins; none - straight in.</summary>
+    public List<EventCommand> CreateCommands { get; set; } = new();
 
     public HudPiece? Piece(int id) => Pieces.FirstOrDefault(p => p.Id == id);
     public HudPiece? First(HudPieceKind kind) => Pieces.FirstOrDefault(p => p.Kind == kind);

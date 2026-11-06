@@ -38,10 +38,14 @@ public partial class U6GameWindow
     private readonly List<(int SlabLift, UIElement Visual)> _floorTileVisuals = new();
 
     /// <summary>The upper floors' slabs, built once (the tiles never change in play).</summary>
+    /// <summary>Ultima 6 has no upper floors and no roofs: buildings are one floor, what can't be seen is black (U6GameWindow.U6Sight.cs).</summary>
+    private static bool NoUpperFloors => true;
+
     private void BuildFloorSlabs()
     {
         _floorSlabBodies = new List<Body>();
         WorldChanged();
+        if (NoUpperFloors) return; // Ultima 6: one floor
         foreach (var layer in _map.UpperFloorLayers)
         {
             int slabLift = MapFloors.SlabLift(layer.Floor);
@@ -65,6 +69,7 @@ public partial class U6GameWindow
     private void BuildUpperFloorVisuals()
     {
         _floorTileVisuals.Clear();
+        if (NoUpperFloors) return; // Ultima 6: one floor
         BuildLandingVisuals();
         if (_tilesetBitmap is null) return;
         foreach (var layer in _map.UpperFloorLayers)

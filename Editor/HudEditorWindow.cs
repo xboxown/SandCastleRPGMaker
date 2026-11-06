@@ -70,6 +70,10 @@ public sealed class HudEditorWindow : Window
         left.Children.Add(_hudProps);
         left.Children.Add(MakeButton("Ultima 6 starter layout", StarterLayout));
         left.Children.Add(Note("Puts the pieces where Ultima 6 has them (Nuvie): the world at 8,8 (160 x 160), the panel at 176,8, the messages at 176,112, the ten command buttons at 8,176 with the date over them. Pieces already there stay; move anything anywhere."));
+        left.Children.Add(new TextBlock { Text = "The title menu's scenes", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 0) });
+        left.Children.Add(MakeButton("Introduction scene...", () => OpenSceneEvent("Introduction", _hud.IntroCommands, c => _hud.IntroCommands = c)));
+        left.Children.Add(MakeButton("Create New Character scene...", () => OpenSceneEvent("Create New Character", _hud.CreateCommands, c => _hud.CreateCommands = c)));
+        left.Children.Add(Note("As Ultima 6: black, then pictures, words and choices (Ultima 6 tab > Scenes: Begin Scene, Scene Picture, Scene Text, Scene Wait For Key, Scene Choice, Scene Remove, End Scene). Introduction plays this (none: the intro video); Create New Character plays this before the game begins - its choices can set stats, give items, anything. The same commands make cutscenes in any event during play."));
         Grid.SetColumn(left, 0);
         root.Children.Add(new ScrollViewer { Content = left, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });
         Grid.SetColumn((UIElement)root.Children[^1], 0);
@@ -453,6 +457,29 @@ public sealed class HudEditorWindow : Window
         colour.Children.Add(plain);
         row.Children.Add(Labeled("Colour", colour));
         return row;
+    }
+
+    private void OpenSceneEvent(string name, List<EventCommand> commands, Action<List<EventCommand>> store)
+    {
+        var pages = new ObservableCollection<EventCommandPage> { new() { Label = "1", Commands = commands } };
+        var editor = new EventEditorControl
+        {
+            ResourceDatabase = _resources,
+            Variables = _variables,
+            CurrentBookLocalVariables = new List<VariableDefinition>(),
+            Books = _books,
+            Objects = _objects,
+            Containers = _containers,
+            Sprites = _sprites,
+            CurrentBook = null
+        };
+        editor.ContentChanged += () => { if (editor.Pages.Count > 0) store(editor.Pages[0].Commands); };
+        editor.Pages = pages;
+        new Window
+        {
+            Title = $"{name} scene (title menu) [{BuildInfo.CurrentBuild}]", Width = 960, Height = 720, Owner = this,
+            WindowStartupLocation = WindowStartupLocation.CenterOwner, Content = new Border { Padding = new Thickness(8), Child = editor }
+        }.ShowDialog();
     }
 
     private void OpenButtonEvent(HudPiece piece)

@@ -57,6 +57,12 @@ public partial class SystemSettingsWindow
         afterRow.Children.Add(after);
         panel.Children.Add(afterRow);
         panel.Children.Add(new TextBlock { Text = "As Nuvie: talking stops the map's music; when it ends the map's music starts again from the beginning, or a random song of the map's plays.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(new TextBlock { Text = "World view", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        var sight = new CheckBox { Content = "What the avatar can't see is black (walls, closed doors and Occludes objects stop sight) - as Ultima 6", IsChecked = u6.LineOfSight, Margin = new Thickness(0, 2, 0, 2) };
+        sight.Checked += (_, _) => u6.LineOfSight = true;
+        sight.Unchecked += (_, _) => u6.LineOfSight = false;
+        panel.Children.Add(sight);
+        panel.Children.Add(new TextBlock { Text = "Ultima 6 has no roofs and no upper floors: buildings are one floor, the inside of a house is hidden by this black until you walk in. Going up or down a ladder is another map (Maps tab, Change Map).", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         panel.Children.Add(BuildU6TitleSection(u6));
         panel.Children.Add(BuildU6LevelsSection(u6));
         panel.Children.Add(BuildU6WordsSection(u6));

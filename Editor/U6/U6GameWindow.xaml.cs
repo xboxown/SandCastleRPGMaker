@@ -212,6 +212,7 @@ public partial class U6GameWindow : Window
         InitU6Hud(); // the HUD Editor's screen: the world in its Game View (U6GameWindow.U6Hud.cs)
         InitU6Levels(); // Ultima 6's levels and Meditate At Shrine (U6GameWindow.U6Levels.cs)
         InitU6CombatModes(); // each member's combat mode (U6GameWindow.U6CombatModes.cs)
+        InitU6Scenes(); // cutscenes (U6GameWindow.U6Scene.cs)
         ViewportBorder.Width = ScreenWidth;
         ViewportBorder.Height = ScreenHeight;
 
@@ -1601,6 +1602,7 @@ public partial class U6GameWindow : Window
         if (VideoKey(e.Key)) { e.Handled = true; return; } // a video playing: only its skip keys (U6GameWindow.Video.cs)
         if (KeyAskTook(e)) return; // Ask For Key waiting: the key is its (U6GameWindow.U6Keys.cs)
         if (LetterAskTook(e)) return; // Rest's hours or guard, a dream's choice (U6GameWindow.U6Levels.cs)
+        if (SceneKey(e)) return; // a scene waiting for a key or a choice (U6GameWindow.U6Scene.cs)
         if (U6TitleKey(e)) return; // the title menu (U6GameWindow.U6Title.cs)
         if (e.Key == Key.Q && Keyboard.Modifiers == ModifierKeys.Control) { AskToQuit(); e.Handled = true; return; } // Ctrl+Q: the Quit prompt, any time
         if (_currentMessage is not null)
@@ -1851,12 +1853,14 @@ public partial class U6GameWindow : Window
         _lastRenderTime = now;
         _logicFrame++;
         _frameWork.Restart();
+        TickSceneWaits(deltaSeconds * 1000); // Wait in a scene, the world paused (U6GameWindow.U6Scene.cs)
         try
         {
             GameFrame(deltaSeconds);
             UpdateWeaponsInHand(); // after everyone has moved and changed pose this frame: the weapon is drawn where the hand is now, not a frame behind (Exult's Actor::paint_weapon)
             UpdateDollStats(deltaSeconds * 1000); // paperdoll gauges following a stat: drawn again when it changes (Dolls.cs)
             UpdateOutlines(); // after everyone has moved and changed frame this frame: never a frame behind
+            UpdateSight(); // Ultima 6: what can't be seen is black (U6GameWindow.U6Sight.cs)
         }
         finally { CountFrame(_frameWork.Elapsed.TotalMilliseconds); }
     }
@@ -2480,6 +2484,7 @@ public partial class U6GameWindow : Window
     /// </summary>
     private void ShowBookReadingView(BookData book)
     {
+        if (Hud.First(HudPieceKind.TextArea) is not null) { U6ReadBook(book); return; } // Ultima 6: read in the text area (U6GameWindow.U6Things.cs)
         if (book.Pages.Count == 0 || book.Frames.Count == 0)
         {
             StatusText.Text = $"\"{EffectiveBookName(book)}\" has no pages or text frames set up yet.";

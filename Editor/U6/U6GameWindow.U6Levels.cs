@@ -101,12 +101,13 @@ public partial class U6GameWindow
         char? c = key is >= Key.D0 and <= Key.D9 ? (char)('0' + (key - Key.D0))
             : key is >= Key.NumPad0 and <= Key.NumPad9 ? (char)('0' + (key - Key.NumPad0))
             : key is >= Key.A and <= Key.Z ? (char)('A' + (key - Key.A))
-            : key == Key.Escape && ask.Allowed.Contains('0') ? '0' : null;
+            : key == Key.Escape && ask.Allowed.Contains('0') ? '0'
+            : key is Key.Space or Key.Enter or Key.Return ? ' ' : null;
         if (c is not { } letter || !ask.Allowed.Contains(letter)) return true;
         _letterAsk = null;
         string question = _hudPrompt;
         _hudPrompt = string.Empty;
-        U6Say(question + letter);
+        if (letter != ' ') U6Say(question + letter);
         ask.Answer(letter);
         return true;
     }
@@ -237,6 +238,7 @@ public partial class U6GameWindow
     {
         if (_hudVerb is not null || _letterAsk is not null || _currentMessage is not null) return;
         object? thing = target switch { PlayerTarget => _player, MapEntityTarget m => m.Entity, _ => null };
+        if (thing is not null && SquareOfThing(thing) is { } at && !SquareSeen(at.X, at.Y)) thing = null; // black: nothing is seen there
         string name = ThingName(thing);
         U6Say(W("Look") + "-" + name);
         U6Say(W("YouSee", name));
@@ -246,8 +248,12 @@ public partial class U6GameWindow
     private void U6MultiUse(InteractionTarget target)
     {
         if (_hudVerb is not null || _letterAsk is not null || _currentMessage is not null || _player is null || PlayerKnockedOut) return;
+        if (target is MapEntityTarget { Entity: var e } && SquareOfThing(e) is { } at && !SquareSeen(at.X, at.Y)) return; // Events::multiuse: a black square - nothing
         switch (target)
         {
+            case MapEntityTarget { Entity: PlacedCharacter placed } when _mapCharacters.FirstOrDefault(m => m.Placement == placed) is { } body && IsDead(body.Character):
+                RunVerbOn(HudVerb.Use, body.Placement.X, body.Placement.Y, placed); // a body: searched (U6GameWindow.U6Things.cs)
+                break;
             case MapEntityTarget { Entity: PlacedCharacter placed } when _mapCharacters.FirstOrDefault(m => m.Placement == placed) is { } mc:
                 bool foe = _combatMode && !mc.Character.IsInParty && !IsDead(mc.Character);
                 RunVerbOn(foe ? HudVerb.Attack : HudVerb.Talk, mc.Placement.X, mc.Placement.Y, placed);
@@ -260,6 +266,14 @@ public partial class U6GameWindow
                 break;
         }
     }
+
+    private (int X, int Y)? SquareOfThing(object thing) => thing switch
+    {
+        PlacedItemInstance i => (i.X, i.Y),
+        ObjectInstance o => (o.X, o.Y),
+        PlacedCharacter p => _mapCharacters.FirstOrDefault(m => m.Placement == p) is { } mc ? (mc.Placement.X, mc.Placement.Y) : (p.X, p.Y),
+        _ => null
+    };
 
     private void RunVerbOn(HudVerb verb, int cx, int cy, object thing)
     {

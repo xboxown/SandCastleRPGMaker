@@ -26,6 +26,7 @@ public partial class U6GameWindow
 
     private bool HasSavedGame => ProjectSession.ProjectIdProvider?.Invoke() is { } projectId && GameSaveStore.List(projectId).Count > 0;
     private bool IntroVideo => _systemSettings.Title.IntroVideoId is int v && v >= 0 && ProjectSession.Videos.Videos.Any(x => x.Id == v);
+    private bool HasIntro => Hud.IntroCommands.Count > 0 || IntroVideo;
 
     /// <summary>The game's start: the intro video, then the menu.</summary>
     private void ShowU6Title()
@@ -72,7 +73,7 @@ public partial class U6GameWindow
         for (int i = 0; i < U6TitleChoices.Length; i++)
         {
             double y = top + i * (lineH + 2);
-            bool enabled = i switch { 0 => IntroVideo, 3 => HasSavedGame, _ => true };
+            bool enabled = i switch { 0 => HasIntro, 3 => HasSavedGame, _ => true };
             if (i == _u6TitlePick)
             {
                 var mark = new Rectangle { Width = width, Height = lineH + 2, Fill = new SolidColorBrush(Color.FromArgb(160, 0x60, 0x30, 0x10)), Stroke = Brushes.Gold, StrokeThickness = 1 };
@@ -132,13 +133,18 @@ public partial class U6GameWindow
     {
         switch (choice)
         {
+            case 0 when Hud.IntroCommands.Count > 0: // its scene (HUD Editor > Introduction scene)
+                SoundPlayback.StopFor(TitleMusicOwner);
+                RunTitleEvent(Hud.IntroCommands, () => { if (_u6Title is not null) OpenU6Title(_u6TitleInPlay); });
+                break;
             case 0 when IntroVideo:
                 SoundPlayback.StopFor(TitleMusicOwner);
                 _u6Title!.Visibility = Visibility.Collapsed;
                 PlayVideoCommand(new EventCommand { Parameters = { ["VideoId"] = _systemSettings.Title.IntroVideoId.ToString(), ["Skippable"] = "True" } }, _ => { if (_u6Title is { } t) { t.Visibility = Visibility.Visible; OpenU6Title(_u6TitleInPlay); } });
                 break;
-            case 1: // a new game: at the start, the game begins; in play, a fresh one
+            case 1: // a new game: at the start, the game begins (its Create New Character scene first); in play, a fresh one
                 if (_u6TitleInPlay) { RestartRequested = true; Close(); }
+                else if (Hud.CreateCommands.Count > 0) { SoundPlayback.StopFor(TitleMusicOwner); RunTitleEvent(Hud.CreateCommands, CloseU6Title); }
                 else CloseU6Title();
                 break;
             case 2:

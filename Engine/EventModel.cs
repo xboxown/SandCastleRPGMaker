@@ -133,7 +133,8 @@ public enum EventCommandType
     U6AskKey, U6SetKey, U6GetKeyName, U6ResetKeys,
     U6ChangeHudFrame,
     U6Meditate,
-    U6SetCombatMode
+    U6SetCombatMode,
+    U6SceneBegin, U6ScenePicture, U6SceneText, U6SceneWaitKey, U6SceneChoice, U6SceneRemove, U6SceneEnd
 }
 
 /// <summary>

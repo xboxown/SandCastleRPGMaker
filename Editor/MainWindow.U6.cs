@@ -19,6 +19,10 @@ public partial class MainWindow
     private void ApplyStyleToTools()
     {
         PaperDollMenuItem.Header = IsUltima6 ? "HUD Editor..." : "PaperDoll Editor...";
+        // Ultima 6: no upper floors - one floor; going up or down is another map (Maps tab, Change Map).
+        FloorCombo.Visibility = IsUltima6 ? Visibility.Collapsed : Visibility.Visible;
+        if (MainToolBar.Items.IndexOf(FloorCombo) is int fi && fi > 0 && MainToolBar.Items[fi - 1] is UIElement floorLabel) floorLabel.Visibility = FloorCombo.Visibility;
+        if (IsUltima6 && _currentFloor != 1) { _settingFloorCombo = true; FloorCombo.SelectedIndex = 0; _settingFloorCombo = false; _currentFloor = 1; if (_map is not null && _tileset is not null) BuildMapCanvas(); }
         SortToolsMenu(); // its new name in its A-Z place
         if (_paperDollToolButton is null) return;
         var tip = new System.Windows.Controls.StackPanel { MaxWidth = 280 };

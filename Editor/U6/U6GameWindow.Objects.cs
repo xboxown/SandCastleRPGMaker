@@ -122,6 +122,7 @@ public partial class U6GameWindow
     {
         foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0))
         {
+            if (NoUpperFloors && (DefinitionOf(instance)?.Type == ObjectType.Roof || instance.Z >= MapFloors.BaseLift(2))) continue; // Ultima 6: no roofs, no upper floors
             var animators = new List<SpriteAnimator>();
             var visual = BuildObjectVisual(instance, animators);
             foreach (var animator in animators) RegisterWorldAnimator(visual, animator);

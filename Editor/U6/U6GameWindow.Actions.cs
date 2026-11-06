@@ -565,7 +565,8 @@ public partial class U6GameWindow
         string unit = command.Get("Unit") is { Length: > 0 } u ? u : "Seconds";
         string text = command.Get("Duration") is { Length: > 0 } d ? d : command.Get("Seconds");
         double amount = double.TryParse(text, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) || double.TryParse(text, out v) ? Math.Max(0, v) : 1;
-        _scriptWaits.Add((Lasting(unit, amount, 0), done));
+        if (_scene is not null || _u6Title is not null) _sceneWaits.Add((Lasting(unit, amount, 0), done)); // a scene: it counts though the world waits (U6GameWindow.U6Scene.cs)
+        else _scriptWaits.Add((Lasting(unit, amount, 0), done));
         return true;
     }
 

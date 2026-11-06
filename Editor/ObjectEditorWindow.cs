@@ -208,7 +208,8 @@ public partial class ObjectEditorWindow : Window
         _props.Children.Add(new TextBlock { Text = "Choose this object's type", FontWeight = FontWeights.Bold, FontSize = 16, Margin = new Thickness(0, 0, 0, 6) });
         _props.Children.Add(Note("The type decides what the object is and what double-clicking it does, and which settings it has. Once chosen it can't be changed - to change it, delete the object and make a new one."));
         var combo = new ComboBox { Width = 220, HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 8, 0, 6) };
-        combo.ItemsSource = ObjectTypes.All.Select(ObjectTypes.Name).ToList();
+        // Ultima 6 has no roofs (what can't be seen is black): the Roof type can't be chosen there.
+        combo.ItemsSource = ObjectTypes.All.Select(t => new ComboBoxItem { Content = ObjectTypes.Name(t), IsEnabled = !(ProjectSession.IsUltima6 && t == ObjectType.Roof), ToolTip = ProjectSession.IsUltima6 && t == ObjectType.Roof ? "Not in Ultima 6: no roofs - what the avatar can't see is black." : null }).ToList();
         combo.SelectedIndex = 0;
         var description = Note(TypeDescription(ObjectTypes.All[0]));
         combo.SelectionChanged += (_, _) => description.Text = TypeDescription(ObjectTypes.All[Math.Max(0, combo.SelectedIndex)]);

@@ -1,0 +1,117 @@
+// Ultima 6 engine (U6GameWindow): what the avatar can't see is black - Ultima 6 projects only.
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Media;
+using System.Windows.Shapes;
+using SandcastleRpgMaker.Engine;
+
+namespace SandcastleRpgMaker.Editor;
+
+/// <summary>
+/// Ultima 6's blacking (Nuvie MapWindow::generateTmpMap / boundaryFill): from the avatar's square the view spreads to every
+/// square sight can pass through; those, and the walls bordering them, are drawn - everything else is black. Sight is stopped
+/// by walls, closed doors, anything marked Occludes in the Object Editor, and ground that can't be walked on and isn't water
+/// (a mountain, a cliff). Windows, open doors and water let it through. No roofs in Ultima 6: this is what hides the inside of
+/// a house from the street. Off in System Settings > Ultima 6 > World view.
+/// </summary>
+public partial class U6GameWindow
+{
+    private Path? _sightShade;
+    private (int X, int Y, long World, int Left, int Top, int Right, int Bottom)? _sightKey;
+    private HashSet<(int, int)>? _sightBlockers;
+    private long _sightBlockersVersion = -1;
+
+    /// <summary>The squares things stop sight on (walls, closed doors, Occludes), made again when the world changes.</summary>
+    private HashSet<(int, int)> SightBlockers()
+    {
+        if (_sightBlockers is not null && _sightBlockersVersion == _worldVersion) return _sightBlockers;
+        var cells = new HashSet<(int, int)>();
+        foreach (var obj in _map.Objects)
+        {
+            if (obj.ContainerInstanceId >= 0 || DefinitionOf(obj) is not { } def) continue;
+            bool blocks = def.Occludes || def.Type == ObjectType.Wall || (def.Type == ObjectType.Door && !IsDoorOpen(obj));
+            if (!blocks || def.Type == ObjectType.Window) continue;
+            if (obj.Z >= MapFloors.BaseLift(2)) continue;
+            var body = BodyOf(null, obj);
+            for (int ux = body.Left; ux < body.Left + Math.Max(1, body.Width); ux++)
+                for (int uy = body.Top; uy < body.Top + Math.Max(1, body.Depth); uy++)
+                    cells.Add(((int)Math.Floor(ux / (double)UnitsPerTileX), (int)Math.Floor(uy / (double)UnitsPerTileY)));
+        }
+        _sightBlockers = cells;
+        _sightBlockersVersion = _worldVersion;
+        return cells;
+    }
+
+    private bool BlocksSight(int x, int y, HashSet<(int, int)> blockers)
+    {
+        if (blockers.Contains((x, y))) return true;
+        if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return true;
+        int tile = _map.Layers[0].GetTile(x, y, _map.Width);
+        return tile >= 0 && TilePropertiesOf(tile) is { Walkable: false, IsWater: false };
+    }
+
+    /// <summary>Each frame: the black drawn again when the avatar's square, the world or the view moved.</summary>
+    private void UpdateSight()
+    {
+        bool on = _systemSettings.Ultima6.LineOfSight && Hud.First(HudPieceKind.GameView) is not null && _player is not null && !_gameOver;
+        if (!on) { if (_sightShade is not null) _sightShade.Visibility = Visibility.Collapsed; return; }
+        int left = (int)Math.Floor(_cameraX / _tileWidth) - 1, top = (int)Math.Floor(_cameraY / _tileHeight) - 1;
+        int right = (int)Math.Ceiling((_cameraX + ViewportWidth) / _tileWidth) + 1, bottom = (int)Math.Ceiling((_cameraY + ViewportHeight) / _tileHeight) + 1;
+        var key = (_playerX, _playerY, _worldVersion, left, top, right, bottom);
+        if (_sightKey == key && _sightShade is { Visibility: Visibility.Visible }) return;
+        _sightKey = key;
+
+        var blockers = SightBlockers();
+        var seen = new HashSet<(int, int)>();
+        var queue = new Queue<(int, int)>();
+        seen.Add((_playerX, _playerY));
+        queue.Enqueue((_playerX, _playerY));
+        while (queue.Count > 0)
+        {
+            var (x, y) = queue.Dequeue();
+            if ((x, y) != (_playerX, _playerY) && BlocksSight(x, y, blockers)) continue; // a wall is seen, not seen through
+            foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
+            {
+                int nx = x + dx, ny = y + dy;
+                if (nx < left || ny < top || nx > right || ny > bottom || !seen.Add((nx, ny))) continue;
+                queue.Enqueue((nx, ny));
+            }
+        }
+        // Walls at a corner of what is seen show too (a room's corners).
+        foreach (var (x, y) in seen.ToList())
+        {
+            if (BlocksSight(x, y, blockers) && (x, y) != (_playerX, _playerY)) continue;
+            foreach (var (dx, dy) in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1) })
+                if (BlocksSight(x + dx, y + dy, blockers)) seen.Add((x + dx, y + dy));
+        }
+
+        var black = new GeometryGroup { FillRule = FillRule.Nonzero };
+        for (int y = top; y <= bottom; y++)
+        {
+            int runStart = -1;
+            for (int x = left; x <= right + 1; x++)
+            {
+                bool hidden = x <= right && !seen.Contains((x, y));
+                if (hidden && runStart < 0) runStart = x;
+                if (!hidden && runStart >= 0)
+                {
+                    black.Children.Add(new RectangleGeometry(new Rect(runStart * _tileWidth, y * _tileHeight, (x - runStart) * _tileWidth, _tileHeight)));
+                    runStart = -1;
+                }
+            }
+        }
+        black.Freeze();
+        if (_sightShade is null)
+        {
+            _sightShade = new Path { Fill = Brushes.Black, IsHitTestVisible = false, SnapsToDevicePixels = true };
+            Panel.SetZIndex(_sightShade, AboveEverythingZIndex - 1000);
+            GameCanvas.Children.Add(_sightShade);
+        }
+        _sightShade.Data = black;
+        _sightShade.Visibility = Visibility.Visible;
+    }
+
+    /// <summary>Can the avatar see this square now (Look, a click: what's black is "nothing")?</summary>
+    private bool SquareSeen(int x, int y) => _sightShade is not { Visibility: Visibility.Visible } || _sightShade.Data is not GeometryGroup g
+        || !g.FillContains(new Point((x + 0.5) * _tileWidth, (y + 0.5) * _tileHeight));
+}
