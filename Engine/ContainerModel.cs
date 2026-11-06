@@ -59,6 +59,10 @@ public class ContainerData : PlaceableItemBase
     public double CloseButtonY { get; set; } = 4;
     /// <summary>At its own size, else in a 24 x 24 box.</summary>
     public bool CloseButtonOwnSize { get; set; }
+
+    /// <summary>How much the open view's background is blown up to fill the 320 x 240 view (Uniform): the close button at its own size grows as much, so it matches the art. 1 with no background.</summary>
+    public static double OpenViewScale(double backgroundWidth, double backgroundHeight) =>
+        backgroundWidth <= 0 || backgroundHeight <= 0 ? 1 : Math.Min(320 / backgroundWidth, 240 / backgroundHeight);
     public int CloseSoundResourceId { get; set; } = -1;
     /// <summary>Real, per spec - plays once the player releases an item onto a real spot inside this container's own open view, not when the container itself opens/closes.</summary>
     public int NavigateSoundResourceId { get; set; } = -1;

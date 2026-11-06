@@ -64,7 +64,7 @@ public partial class ContainerEditorWindow
         _closeXBox = Number("X:", () => container.CloseButtonX, v => container.CloseButtonX = v);
         _closeYBox = Number("Y:", () => container.CloseButtonY, v => container.CloseButtonY = v);
         details.Children.Add(placeRow);
-        var own = new CheckBox { Content = "At its own size (else in a 24 x 24 box)", IsChecked = container.CloseButtonOwnSize, Margin = new Thickness(0, 2, 0, 0) };
+        var own = new CheckBox { Content = "At its own size - growing as the container's picture does (else in a 24 x 24 box)", IsChecked = container.CloseButtonOwnSize, Margin = new Thickness(0, 2, 0, 0) };
         own.Checked += (_, _) => { container.CloseButtonOwnSize = true; BuildFramePreview(container); };
         own.Unchecked += (_, _) => { container.CloseButtonOwnSize = false; BuildFramePreview(container); };
         details.Children.Add(own);
@@ -82,10 +82,14 @@ public partial class ContainerEditorWindow
         var sprite = _sprites.Groups.FirstOrDefault(g => g.Name == container.CloseButtonSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == container.CloseButtonSpriteName)
             ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == container.CloseButtonSpriteName);
         FrameworkElement look;
+        // At its own size it grows as the container's picture is blown up to fill this 320 x 240 view - as in the game.
+        var background = _sprites.Groups.FirstOrDefault(g => g.Name == container.PaperDollSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == container.PaperDollSpriteName)
+            ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == container.PaperDollSpriteName);
+        double grow = DollLook.Frame(background) is { } bgPicture ? ContainerData.OpenViewScale(bgPicture.PixelWidth, bgPicture.PixelHeight) : 1.2;
         if (sprite is { Frames.Count: > 0 } && DollLook.Frame(sprite) is { } picture)
         {
             var image = new Image { Source = picture, Stretch = container.CloseButtonOwnSize ? Stretch.Fill : Stretch.Uniform,
-                Width = container.CloseButtonOwnSize ? picture.PixelWidth : 24, Height = container.CloseButtonOwnSize ? picture.PixelHeight : 24 };
+                Width = container.CloseButtonOwnSize ? picture.PixelWidth * grow : 24, Height = container.CloseButtonOwnSize ? picture.PixelHeight * grow : 24 };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
             look = new Border { Child = image, BorderBrush = Brushes.Violet, BorderThickness = new Thickness(1) };
         }

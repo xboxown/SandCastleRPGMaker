@@ -1252,10 +1252,14 @@ public partial class U6GameWindow : Window
         BitmapImage? Frame(bool pressed) => sprite is { Frames.Count: > 0 } ? LoadStaticFrame(sprite.Frames[pressed && sprite.Frames.Count > 1 ? 1 : 0].FilePath) : null;
         FrameworkElement button;
         Image? image = null;
+        // At its own size it grows as the container's picture does (fitted into the 320 x 240 view), so it matches the chest art.
+        var background = (_sprites.Groups.FirstOrDefault(g => g.Name == data.PaperDollSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == data.PaperDollSpriteName)
+            ?? _sprites.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == data.PaperDollSpriteName)) is { Frames.Count: > 0 } bg ? LoadStaticFrame(bg.Frames[0].FilePath) : null;
+        double grow = background is not null ? ContainerData.OpenViewScale(background.PixelWidth, background.PixelHeight) : counterScale;
         if (Frame(false) is { } up)
         {
             image = new AlphaHitImage { Source = up, Stretch = data.CloseButtonOwnSize ? Stretch.Fill : Stretch.Uniform,
-                Width = data.CloseButtonOwnSize ? up.PixelWidth * counterScale : 24, Height = data.CloseButtonOwnSize ? up.PixelHeight * counterScale : 24 };
+                Width = data.CloseButtonOwnSize ? up.PixelWidth * grow : 24, Height = data.CloseButtonOwnSize ? up.PixelHeight * grow : 24 };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);
             button = image;
         }
