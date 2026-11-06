@@ -84,10 +84,12 @@ public partial class U8GameWindow
 
     // ================= Opening =================
 
-    private void OpenSaveLoad()
+    /// <param name="designId">A paperdoll picked for it (the inventory's disk button); -1: System Settings > Save / Load's.</param>
+    private void OpenSaveLoad(int designId = -1)
     {
         if (_saveScreen is not null) { BringDollToFront(_saveScreen.Gump); return; }
-        if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.SaveLoad.DollDesignId) is not { } design)
+        if (designId < 0 || _objects.DollDesigns.All(d => d.Id != designId)) designId = _systemSettings.SaveLoad.DollDesignId;
+        if (_objects.DollDesigns.FirstOrDefault(d => d.Id == designId) is not { } design)
         {
             if (!GameError(GameErrors.NoSaveScreen)) StatusText.Text = "This game has no Save/Load screen yet (System Settings > Save / Load).";
             return;

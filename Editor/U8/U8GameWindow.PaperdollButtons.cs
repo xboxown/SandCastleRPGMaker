@@ -94,7 +94,7 @@ public partial class U8GameWindow
             StatusText.Text = $"{character.Name} now fights: {character.AttackMode}.";
         });
         Add(pd.StatsButton, () => 0, () => OpenStatsDoll(character));
-        if (isPlayer) Add(pd.DiskButton, () => 0, () => StatusText.Text = "Saving and loading a game come with the save system - not built yet.");
+        if (isPlayer) Add(pd.DiskButton, () => 0, () => OpenSaveLoad(pd.DiskDollDesignId)); // the paperdoll picked for it (Character Editor > paperdoll layout), else System Settings > Save / Load's
         Add(pd.HaloButton, () => character.CombatProtected ? 1 : 0, () =>
         {
             // Halo_button::activate: toggle; on, nobody else in the party is protected.

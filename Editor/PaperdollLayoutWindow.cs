@@ -439,6 +439,18 @@ public sealed class PaperdollLayoutWindow : Window
         ButtonSettings("Combat behavior - 10 frames: Nearest, Weakest, Strongest, Berserk, Protect, Defend, Flank, Flee, Random, Manual (the player's only)", pd.CombatModeButton);
         ButtonSettings("Heart - opens the stats paperdoll - frames: up, pressed", pd.StatsButton);
         ButtonSettings("Disk - save / load - frames: up, pressed", pd.DiskButton);
+        {
+            // Which paperdoll the disk opens: one of the PaperDoll Editor's, or the game's own Save / Load screen.
+            var choices = new List<(int Id, string Name)> { (-1, "(System Settings > Save / Load's screen)") };
+            choices.AddRange(_objects.DollDesigns.Select(d => (d.Id, d.Name)));
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(18, 0, 0, 6) };
+            row.Children.Add(new TextBlock { Text = "The disk opens:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
+            var pick = new ComboBox { Width = 260, ItemsSource = choices.Select(c => c.Name).ToList(), SelectedIndex = Math.Max(0, choices.FindIndex(c => c.Id == pd.DiskDollDesignId)),
+                ToolTip = "The paperdoll from the PaperDoll Editor that is this game's save / load screen (its Save, Load and slot parts work). The first: the one picked in System Settings > Save / Load." };
+            pick.SelectionChanged += (_, _) => { if (pick.SelectedIndex >= 0) pd.DiskDollDesignId = choices[pick.SelectedIndex].Id; };
+            row.Children.Add(pick);
+            _settings.Children.Add(row);
+        }
         ButtonSettings("Halo - the party protects this one - frames: off, on", pd.HaloButton);
         var stats = new Button { Content = "Stats paperdoll...", Padding = new Thickness(8, 3, 8, 3), HorizontalAlignment = HorizontalAlignment.Left, Margin = new Thickness(0, 10, 0, 0) };
         stats.Click += (_, _) => new StatsDollEditorWindow(_character) { Owner = this }.ShowDialog();

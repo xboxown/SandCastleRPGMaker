@@ -169,6 +169,8 @@ public class PaperdollDefinition
     public PaperdollButton CombatModeButton { get; set; } = new() { X = 60, Y = 360 };
     public PaperdollButton StatsButton { get; set; } = new() { X = 140, Y = 360 };
     public PaperdollButton DiskButton { get; set; } = new() { X = 260, Y = 360 };
+    /// <summary>The PaperDoll Editor paperdoll the disk opens as the save / load screen (-1: System Settings > Save / Load's).</summary>
+    public int DiskDollDesignId { get; set; } = -1;
     public PaperdollButton HaloButton { get; set; } = new() { X = 260, Y = 300 };
 
     /// <summary>The stats paperdoll (Z, or the heart).</summary>
