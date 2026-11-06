@@ -74,6 +74,8 @@ public class CharacterDefinition
     /// <summary>Which sprite group the Face sprite was picked from - empty means "search every group" (Filter unchecked).</summary>
     public string FaceSpriteGroup { get; set; } = string.Empty;
     public string FaceSpriteName { get; set; } = string.Empty;
+    /// <summary>Ultima 6's Change Portrait: its own Face (group/name) kept while another is shown, so Back to its own can return it. Empty: never changed.</summary>
+    public string U6OwnFace { get; set; } = string.Empty;
 
     /// <summary>Ultima 8 projects: the colour of its words over its head ("#RRGGBB"); empty: the font's own.</summary>
     public string BarkColor { get; set; } = string.Empty;

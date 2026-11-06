@@ -18,6 +18,27 @@ public partial class U6GameWindow
 
     private void InitU6CombatModes()
     {
+        _execContext.GameHandlers[EventCommandType.U6ChangePortrait] = c =>
+        {
+            if (CharacterDefinitionFor(c.Get("Who")) is not { } who) return false;
+            if (c.Get("Own") == "True")
+            {
+                if (who.U6OwnFace.Length == 0) return true; // never changed
+                var parts = who.U6OwnFace.Split('/', 2);
+                who.FaceSpriteGroup = parts[0];
+                who.FaceSpriteName = parts.Length > 1 ? parts[1] : string.Empty;
+                who.U6OwnFace = string.Empty;
+            }
+            else
+            {
+                if (c.Get("SpriteName").Length == 0) return false;
+                if (who.U6OwnFace.Length == 0) who.U6OwnFace = who.FaceSpriteGroup + "/" + who.FaceSpriteName;
+                who.FaceSpriteGroup = c.Get("SpriteGroup");
+                who.FaceSpriteName = c.Get("SpriteName");
+            }
+            RefreshHudPanel();
+            return true;
+        };
         _execContext.GameHandlers[EventCommandType.U6SetCombatMode] = c =>
         {
             if (CharacterDefinitionFor(c.Get("Who")) is not { } who || !U6CombatModes.Contains(c.Get("Mode"))) return false;
