@@ -391,6 +391,7 @@ public partial class MainWindow
     private void ApplyFreeDrawOrderNow()
     {
         if (_map is null) return;
+        if (!IsUltima8) { ApplyGameDrawOrderNow(); return; } // the Ultima 7 / Ultima 6 view: the game's own order, step for step (MainWindow.DrawOrder.cs)
         var bodies = MapThings().Where(OnCurrentFloor).Select(BodyOf).Where(b => VisualOfThing(b.Entity) is not null).OrderBy(b => b.Z).ToList();
         var order = new Dictionary<object, int>(ReferenceEqualityComparer.Instance);
         // Each thing is compared only with those whose footprints share a grid square (8 x 8 units) with its own -
