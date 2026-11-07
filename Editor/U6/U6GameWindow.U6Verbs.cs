@@ -22,6 +22,8 @@ public partial class U6GameWindow
     private (int X, int Y) _mapCursor;
     private int _panelCursor;
     private Rectangle? _mapCursorVisual;
+    private System.Windows.Controls.Image? _mapCursorCross;
+    private SpriteAnimator? _mapCursorAnimator;
     private Rectangle? _panelCursorVisual;
     /// <summary>Drop / Move: what was picked first, waiting for where it goes.</summary>
     private (CharacterDefinition Owner, InventoryItemInstance Item)? _hudPickedItem;
@@ -74,7 +76,7 @@ public partial class U6GameWindow
                 return true;
             }
             if (MemberKey(key) is int m) { ShowHudMember(m); return true; }
-            if (KeyIs(key, "TogglePortrait")) { ToggleHudView(); return true; }
+            if (KeyIs(key, "TogglePortrait") || IsStarKey(key)) { ToggleHudView(); return true; }
             if (arrows.Length > 0) { MoveHudCursor(arrows); return true; }
             if (KeyIs(key, "Accept") || KeyIs(key, "Accept2")) { PickUnderHudCursor(); return true; }
             if (_hudVerb is null && VerbKey(key) is { } next) { StartU6Verb(next); return true; } // browsing the inventory, a verb starts there
@@ -83,8 +85,9 @@ public partial class U6GameWindow
         if (e.IsRepeat && arrows.Length == 0) return true;
         if (VerbKey(key) is { } verb) { StartU6Verb(verb); return true; }
         if (KeyIs(key, "ToggleCursor")) { if (FirstFilledCell() is int f) _panelCursor = f; SetHudFocus(HudFocus.Panel); return true; }
-        if (KeyIs(key, "TogglePortrait")) { ToggleHudView(); return true; }
+        if (KeyIs(key, "TogglePortrait") || IsStarKey(key)) { ToggleHudView(); return true; }
         if (MemberKey(key) is int member) { ShowHudMember(member); return true; }
+        if (IsStarKey(key)) { ToggleHudView(); return true; }
         if (KeyIs(key, "PartyView")) { _hudPartyView = true; RefreshHudPanel(); return true; }
         if (SoloKey(key) is int solo) { StartSolo(solo); return true; }
         if (KeyIs(key, "PartyMode")) { EndSolo(); return true; }
@@ -114,6 +117,9 @@ public partial class U6GameWindow
         foreach (var arrow in released) _heldDirectionKeys.Remove(arrow);
         return true;
     }
+
+    /// <summary>"*" typed on the main keys (Shift+8) works as the numpad's * - Portrait / inventory.</summary>
+    private bool IsStarKey(Key key) => key == Key.D8 && Keyboard.Modifiers.HasFlag(ModifierKeys.Shift) && _keyNames.GetValueOrDefault("TogglePortrait") == "Multiply";
 
     private HudVerb? VerbKey(Key key)
     {
@@ -223,6 +229,8 @@ public partial class U6GameWindow
         if (Hud.First(HudPieceKind.GameView) is null) return;
         var onScreen = e.GetPosition(HudLayer);
         if (_hudVerb is null && CombatModeClicked(onScreen)) { e.Handled = true; return; } // a member's combat mode, round the list (U6GameWindow.U6CombatModes.cs)
+        if (_hudVerb is null && Hud.Pieces.Any(p => p.Kind is HudPieceKind.MemberName or HudPieceKind.Portrait && (HudPiece.ViewOf(p.Kind) == HudPanelView.Always || HudPiece.ViewOf(p.Kind) == _hudView) && new Rect(p.X, p.Y, p.Width, p.Height).Contains(onScreen)))
+        { ToggleHudView(); e.Handled = true; return; } // the member's name or portrait clicked: portrait / inventory
         // The panel: a click on a slot or a carried thing, or on a member's name in the party view.
         if (Hud.First(HudPieceKind.Panel) is { } panel && new Rect(panel.X, panel.Y, panel.Width, panel.Height).Contains(onScreen))
         {
@@ -531,7 +539,24 @@ public partial class U6GameWindow
         _mapCursorVisual.Height = _tileHeight;
         Canvas.SetLeft(_mapCursorVisual, _mapCursor.X * _tileWidth);
         Canvas.SetTop(_mapCursorVisual, _mapCursor.Y * _tileHeight);
-        _mapCursorVisual.Visibility = _hudVerb is not null && _hudFocus == HudFocus.Map ? Visibility.Visible : Visibility.Collapsed;
+        bool mapCursorShown = _hudVerb is not null && _hudFocus == HudFocus.Map;
+        var cross = MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.U8Arrows.GetValueOrDefault("U6.Crosshair"));
+        _mapCursorVisual.Visibility = mapCursorShown && cross is null ? Visibility.Visible : Visibility.Collapsed;
+        if (cross is not null)
+        {
+            // The crosshairs on the cell (its hot spot, its Origin, on the cell's middle) - the arrows move it, Enter picks.
+            if (_mapCursorCross is null)
+            {
+                _mapCursorCross = new System.Windows.Controls.Image { IsHitTestVisible = false, Stretch = Stretch.None };
+                RenderOptions.SetBitmapScalingMode(_mapCursorCross, BitmapScalingMode.NearestNeighbor);
+                Panel.SetZIndex(_mapCursorCross, AboveEverythingZIndex);
+                GameCanvas.Children.Add(_mapCursorCross);
+                _mapCursorAnimator = new SpriteAnimator(cross, _mapCursorCross, _resources);
+            }
+            Canvas.SetLeft(_mapCursorCross, (_mapCursor.X + 0.5) * _tileWidth - cross.OriginX);
+            Canvas.SetTop(_mapCursorCross, (_mapCursor.Y + 0.5) * _tileHeight - cross.OriginY);
+            _mapCursorCross.Visibility = mapCursorShown ? Visibility.Visible : Visibility.Collapsed;
+        }
 
         if (_panelCursorVisual is null)
         {
