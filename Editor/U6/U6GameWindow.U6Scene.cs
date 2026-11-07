@@ -137,6 +137,7 @@ public partial class U6GameWindow
         if (choices.Count == 0) return false;
         if (_scene is null)
         {
+            LineBeforeAskRead(); // the line before it counts as read (U6GameWindow.U6Create.cs)
             // No scene up: asked in the text area - the answers numbered; their number or first letter answers.
             if (SceneWords(c.Get("Question")) is { Length: > 0 } asked) U6Say(asked);
             for (int i = 0; i < choices.Count; i++) U6Say($"{i + 1}. {choices[i]}");

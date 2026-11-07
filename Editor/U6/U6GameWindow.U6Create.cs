@@ -53,8 +53,15 @@ public partial class U6GameWindow
         else SceneRemove(name);
     }
 
+    /// <summary>A line before an asking command (typing, a choice) counts as read: its words are already in the text area - the answer's line comes straight after, no extra Enter.</summary>
+    private void LineBeforeAskRead()
+    {
+        if (U6Talking && _talkMore.Count == 0 && _currentMessage is { HasReplies: false }) AdvanceMessage();
+    }
+
     private bool SceneTypeText(EventCommand c, Action<bool> done)
     {
+        LineBeforeAskRead();
         string prompt = SceneWords(c.Get("Prompt"));
         int longest = Math.Clamp((int)FormulaNumber(c, "Letters"), 1, 60);
         string typed = ScriptValues.Text(Formula(c, "Start"));
