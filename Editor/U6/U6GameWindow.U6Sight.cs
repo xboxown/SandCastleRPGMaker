@@ -111,6 +111,19 @@ public partial class U6GameWindow
         _sightShade.Visibility = Visibility.Visible;
     }
 
+    /// <summary>The ground's name on a square: the top tile with a name (Tile Properties > Name); null: none named.</summary>
+    private string? TileNameAt(int x, int y)
+    {
+        if (x < 0 || y < 0 || x >= _map.Width || y >= _map.Height) return null;
+        for (int layer = _map.Layers.Count - 1; layer >= 0; layer--)
+        {
+            if (_map.Layers[layer].Floor > 1) continue; // one floor in Ultima 6
+            int tile = _map.Layers[layer].GetTile(x, y, _map.Width);
+            if (tile >= 0 && TilePropertiesOf(tile).TerrainLabel is { Length: > 0 } name) return name;
+        }
+        return null;
+    }
+
     /// <summary>Can the avatar see this square now (Look, a click: what's black is "nothing")?</summary>
     private bool SquareSeen(int x, int y) => _sightShade is not { Visibility: Visibility.Visible } || _sightShade.Data is not GeometryGroup g
         || !g.FillContains(new Point((x + 0.5) * _tileWidth, (y + 0.5) * _tileHeight));

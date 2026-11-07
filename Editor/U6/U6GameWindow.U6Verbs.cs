@@ -237,7 +237,23 @@ public partial class U6GameWindow
             e.Handled = true;
             return;
         }
-        if (_hudVerb is null) return; // no verb waiting: the engine's own clicks (look, use, walk)
+        if (_hudVerb is null)
+        {
+            // A click on bare ground (nothing on it): Look names the tile, as Ultima 6 (the engine's own clicks see only things).
+            var inView = e.GetPosition(WorldView);
+            if (e.ClickCount == 1 && inView.X >= 0 && inView.Y >= 0 && inView.X < ViewportWidth && inView.Y < ViewportHeight && FindMapTarget(e.GetPosition(PaperdollGumpsCanvas)) is null)
+            {
+                var spot = e.GetPosition(GameCanvas);
+                int gx = (int)Math.Floor(spot.X / _tileWidth), gy = (int)Math.Floor(spot.Y / _tileHeight);
+                if (_letterAsk is null && _currentMessage is null)
+                {
+                    string ground = SquareSeen(gx, gy) && TileNameAt(gx, gy) is { } tile ? tile : W("Nothing");
+                    U6Say(W("Look") + "-" + ground);
+                    U6Say(W("YouSee", ground));
+                }
+            }
+            return; // the engine's own clicks (things: look, use; walking)
+        }
         var inWorld = e.GetPosition(WorldView);
         if (inWorld.X < 0 || inWorld.Y < 0 || inWorld.X >= ViewportWidth || inWorld.Y >= ViewportHeight) return;
         var world = e.GetPosition(GameCanvas);
@@ -280,7 +296,8 @@ public partial class U6GameWindow
         switch (verb)
         {
             case HudVerb.Look:
-                FinishHudVerb(name, W("YouSee", thing is null ? W("Nothing") : name));
+                if (thing is null && SquareSeen(cx, cy) && TileNameAt(cx, cy) is { } ground) name = ground; // the ground: its tile's name (Tile Properties)
+                FinishHudVerb(name, W("YouSee", name));
                 break;
             case HudVerb.Cast:
                 CastOnCell(cx, cy, thing); // a spell's target (U6GameWindow.U6Cast.cs)
