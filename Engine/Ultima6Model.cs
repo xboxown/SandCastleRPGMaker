@@ -8,6 +8,9 @@ public class Ultima6Settings
 {
     /// <summary>The most who can be in the party, the main character with them - as Ultima 6: fixed, not a setting.</summary>
     public const int MaxPartyMembers = 9;
+    /// <summary>The most in the party, the main character with them: 0-9 (never more than Ultima 6's 9). 0 or 1: nobody joins.</summary>
+    public int PartySize { get => Math.Clamp(_partySize, 0, MaxPartyMembers); set => _partySize = Math.Clamp(value, 0, MaxPartyMembers); }
+    private int _partySize = MaxPartyMembers;
 
     /// <summary>The game's screen: its frame and every piece on it (HUD Editor). One per project; Change HUD Frame swaps its frame in play.</summary>
     public HudDesign Hud { get; set; } = new();

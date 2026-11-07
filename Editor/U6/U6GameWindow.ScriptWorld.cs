@@ -94,6 +94,16 @@ public partial class U6GameWindow
         var character = mapCharacter.Character;
         bool join = command.Get("Value") != "Leave the party";
         if (character.IsInParty == join) return true;
+        if (join)
+        {
+            // Ultima 6: the party's most (System Settings > Ultima 6: 0-9, the main character with them).
+            int members = GetPartyList().Count(m => !IsDead(m));
+            if (members >= Math.Max(1, _systemSettings.Ultima6.PartySize))
+            {
+                if (!Bark(character, VerboseKind.PartyFull)) U6Say(W("PartyFull", "", character.Name));
+                return false;
+            }
+        }
         character.IsInParty = join;
         _followers.Remove(mapCharacter);
         StopWalking(mapCharacter);

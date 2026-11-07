@@ -31,6 +31,7 @@ public class MousePointerSettings
     /// "Combat.NorthWest"... - eight screen directions (North: up the screen) for walking, stepping, running and combat mode.
     /// </summary>
     public Dictionary<string, MousePointerSprite> U8Arrows { get; set; } = new();
+    // Ultima 6 projects keep theirs in U8Arrows too: "U6.Arrow", "U6.Crosshair", "U6.North" ... "U6.NorthWest" (U6GameWindow.Pointer.cs).
 }
 
 /// <summary>How conversations show.</summary>

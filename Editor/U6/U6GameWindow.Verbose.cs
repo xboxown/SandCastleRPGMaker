@@ -23,7 +23,8 @@ public partial class U6GameWindow
         string line = index is int i ? lines[Math.Clamp(i, 0, lines.Count - 1)]
             : kind == VerboseKind.Fleeing && lines.Count > 1 && Rng.Next(4) > 0 ? lines[0]
             : lines[Rng.Next(lines.Count)];
-        ShowFloatingText(who, line, 3000);
+        if (Hud.First(HudPieceKind.TextArea) is not null) { if (InView(who)) U6Say(W("SaysLine", line, who.Name)); } // Ultima 6: in the text area
+        else ShowFloatingText(who, line, 3000);
         return true;
     }
 

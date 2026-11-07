@@ -178,6 +178,8 @@ public static class U6Words
         ("CriticalBy", "{0} critically damaged by {1}!", "Hurt by something not a blow, under a quarter left"),
         ("KnockedOutBy", "{0} is knocked out by {1}!", "Knocked out by something not a blow"),
         ("KilledBy", "{0} killed by {1}!", "Killed by something not a blow"),
+        ("SaysLine", "{1}: \"{0}\"", "A character's own line (Character Editor > Verbose): {1} the one, {0} the words"),
+        ("PartyFull", "The party is full: {1} doesn't join.", "Join Party with the party full ({1} the one)"),
         ("ErrorLine", "Error {1}: {0}", "Any error (disk full, a damaged save...): {1} its number, {0} its words (System Settings > Errors)"),
         ("QuitAsk", "Quit the game? (Y/N) ", "Ctrl+Q / Quit: the question"),
         ("TalkSelf", "Talking to yourself?", "Talking to the avatar"),

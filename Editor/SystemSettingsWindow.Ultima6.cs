@@ -17,8 +17,10 @@ public partial class SystemSettingsWindow
         panel.Children.Add(new TextBlock { Text = "The party", FontWeight = FontWeights.Bold });
         var party = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 2) };
         party.Children.Add(new TextBlock { Text = "Most who can join (with the main character):", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0) });
-        party.Children.Add(new TextBox { Width = 40, Text = Ultima6Settings.MaxPartyMembers.ToString(), IsEnabled = false, ToolTip = "Locked: Ultima 6's party is at most 9." });
-        party.Children.Add(new TextBlock { Text = "  locked, as Ultima 6", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 });
+        var partyBox = new TextBox { Width = 40, Text = u6.PartySize.ToString(), ToolTip = "0 to 9 - never more than Ultima 6's 9" };
+        partyBox.LostFocus += (_, _) => { if (int.TryParse(partyBox.Text, out int n)) u6.PartySize = n; partyBox.Text = u6.PartySize.ToString(); };
+        party.Children.Add(partyBox);
+        party.Children.Add(new TextBlock { Text = "  0 to 9 (more: back to 9, as Ultima 6)", VerticalAlignment = VerticalAlignment.Center, Opacity = 0.7 });
         panel.Children.Add(party);
         panel.Children.Add(new TextBlock { Text = "One member shows in the HUD's panel at a time - the player picks them with 1 to 9. A character asked to join a full party says its Party is full words (Character Editor > Verbose).", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 0, 0, 10) });
 
@@ -69,8 +71,7 @@ public partial class SystemSettingsWindow
         food.Unchecked += (_, _) => u6.UseUltima7Food = false;
         panel.Children.Add(food);
         panel.Children.Add(new TextBlock { Text = "Unticked, as Ultima 6: nobody gets hungry or starves and nobody heals by the hour. Food is for camping: at Rest's mealtime each member eats one food (their own or anyone's in the party), and only those who ate heal when they wake. Ticked: the Ultima 7 engine's food, and the Character Editor's Health tab shows Hunger again.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
-        panel.Children.Add(BuildU6TitleSection(u6));
-        panel.Children.Add(BuildU6LevelsSection(u6));
+        panel.Children.Add(BuildU6LevelsSection(u6)); // (the title menu's picture and words: the Title Screen tab)
         panel.Children.Add(BuildU6WordsSection(u6));
         panel.Children.Add(BuildU6NotesSection(u6));
         panel.Children.Add(BuildU6KeysSection(u6));
@@ -98,6 +99,27 @@ public partial class SystemSettingsWindow
             section.Children.Add(row);
         }
         return section;
+    }
+
+    /// <summary>System Settings > Conversations, Ultima 6: the keywords' colour (the conversation is typed in the text area).</summary>
+    private UIElement BuildU6ConversationTab(StackPanel panel)
+    {
+        var u6 = _settings.Ultima6;
+        panel.Children.Add(new TextBlock { Text = "As Ultima 6: the character's portrait in the panel, their words in the text area, and the player types a word to ask about - the keywords in what they say, in this colour:", TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 8) });
+        var swatch = new Button { Width = 60, Height = 24, HorizontalAlignment = HorizontalAlignment.Left };
+        void ShowSwatch() => swatch.Background = ColorConverter.ConvertFromString(u6.KeywordColor) is Color c ? new SolidColorBrush(c) : Brushes.Gold;
+        swatch.Click += (_, _) =>
+        {
+            var start = ColorConverter.ConvertFromString(u6.KeywordColor) is Color c ? c : Colors.Gold;
+            var picker = new ColorPickerWindow(start) { Owner = this };
+            if (picker.ShowDialog() != true) return;
+            u6.KeywordColor = $"#{picker.Result.R:X2}{picker.Result.G:X2}{picker.Result.B:X2}";
+            ShowSwatch();
+        };
+        ShowSwatch();
+        panel.Children.Add(swatch);
+        panel.Children.Add(new TextBlock { Text = "Music while talking and the words (\"you say:\", \"bye\"...): System Settings > Ultima 6.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11, Margin = new Thickness(0, 8, 0, 0) });
+        return panel;
     }
 
     /// <summary>The title menu (Ultima 6's own, not a paperdoll): its picture and the acknowledgments' words.</summary>

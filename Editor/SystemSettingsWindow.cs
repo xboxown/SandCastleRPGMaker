@@ -53,19 +53,20 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Mouse Pointers", Content = BuildMousePointersTab() });
         tabs.Items.Add(new TabItem { Header = "Game Clock", Content = BuildClockTab() });
         tabs.Items.Add(new TabItem { Header = "Day & Night", Content = BuildDayNightTab() });
-        tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
-        tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
+        bool u6 = ProjectSession.IsUltima6; // Ultima 6: no body containers, paperdolls, sliders, weapons in hand or Ultima 7 combat settings
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Body Container", Content = BuildBodyContainerTab() });
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Combat", Content = BuildCombatTab() });
         tabs.Items.Add(new TabItem { Header = "Conversations", Content = BuildConversationTab() });
         tabs.Items.Add(new TabItem { Header = "Sounds", Content = BuildSoundsTab() });
-        tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Save / Load", Content = BuildSaveLoadTab() });
         tabs.Items.Add(new TabItem { Header = "Errors", Content = BuildErrorsTab() });
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
         tabs.Items.Add(new TabItem { Header = "Autosave", Content = BuildAutoSaveTab() });
         tabs.Items.Add(new TabItem { Header = "Languages", Content = BuildLanguagesTab() });
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
-        tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
-        tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs
         if (ProjectSession.IsUltima8) tabs.Items.Add(new TabItem { Header = "Ultima 8", Content = BuildUltima8Tab() }); // only an Ultima 8 project (SystemSettingsWindow.Ultima8.cs)
         if (ProjectSession.IsUltima6) tabs.Items.Add(new TabItem { Header = "Ultima 6", Content = BuildUltima6Tab() }); // only an Ultima 6 project (SystemSettingsWindow.Ultima6.cs)
 
@@ -205,7 +206,7 @@ public partial class SystemSettingsWindow : Window
         var doll = new ComboBox { Width = 280, ItemsSource = dolls };
         doll.SelectedItem = dolls.FirstOrDefault(d => d.Id == title.DollDesignId) ?? dolls[0];
         doll.SelectionChanged += (_, _) => title.DollDesignId = (doll.SelectedItem as DollChoice)?.Id ?? -1;
-        panel.Children.Add(LabeledRow("Title paperdoll:", doll));
+        if (!ProjectSession.IsUltima6) panel.Children.Add(LabeledRow("Title paperdoll:", doll)); // Ultima 6: no paperdoll - its own menu (below)
 
         var none = new ResourceEntry { Id = -1, Name = "(None)" };
         var tunes = new List<ResourceEntry> { none };
@@ -240,6 +241,17 @@ public partial class SystemSettingsWindow : Window
         inTest.Unchecked += (_, _) => title.InGameTest = false;
         panel.Children.Add(inTest);
 
+        if (ProjectSession.IsUltima6)
+        {
+            panel.Children.Add(BuildU6TitleSection(_settings.Ultima6)); // the menu's picture and acknowledgments (SystemSettingsWindow.Ultima6.cs)
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Ultima 6 has no paperdolls: the title is Ultima 6's menu - Introduction, Create New Character, Acknowledgments, Journey Onward - over the picture above, after the intro video. " +
+                       "Its scenes are made in the HUD Editor: Introduction scene (black, pictures, words, choices) and Create New Character scene (a name, a portrait, gender, points...). The menu's words: System Settings > Ultima 6 > Words.",
+                TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)
+            });
+            return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        }
         panel.Children.Add(new TextBlock
         {
             Text = "Make the Title Screen in the PaperDoll Editor like any paperdoll - its size is the game's view (320 x 200, or bigger and it's scaled to fit):\n" +
@@ -395,6 +407,7 @@ public partial class SystemSettingsWindow : Window
     {
         var conversation = _settings.Conversation;
         var panel = new StackPanel { Margin = new Thickness(10) };
+        if (ProjectSession.IsUltima6) return BuildU6ConversationTab(panel); // the keywords' colour (SystemSettingsWindow.Ultima6.cs)
         panel.Children.Add(new TextBlock { Text = "The replies the player picks from show:", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 0, 0, 6) });
         var speaker = new RadioButton { Content = "Under the speaker's words, in the same box", GroupName = "replies", IsChecked = !conversation.RepliesUnderMainCharacter };
         var main = new RadioButton { Content = "Under the main character, in a box of their own (as Exult)", GroupName = "replies", IsChecked = conversation.RepliesUnderMainCharacter, Margin = new Thickness(0, 6, 0, 0) };
@@ -438,8 +451,10 @@ public partial class SystemSettingsWindow : Window
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
         });
 
-        panel.Children.Add(SoundSettingRow("Drop in a window:", () => sounds.NavigateSoundId, v => sounds.NavigateSoundId = v, out _));
-        panel.Children.Add(new TextBlock
+        bool u6Sounds = ProjectSession.IsUltima6; // Ultima 6: no container windows or paperdolls - the panel (the HUD) holds things
+        if (u6Sounds) panel.Children.Add(new TextBlock { Text = "Ultima 6: a hit's sound is its spark's own (Sprite Editor > Hit Spark: a sound on a frame); a chest's when it's searched, its own Open sound (Container Editor); the text area's words have none.", TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 8, 0, 0) });
+        if (!u6Sounds) panel.Children.Add(SoundSettingRow("Drop in a window:", () => sounds.NavigateSoundId, v => sounds.NavigateSoundId = v, out _));
+        if (!u6Sounds) panel.Children.Add(new TextBlock
         {
             Text = "Plays whenever something is put into a container's window or onto a paperdoll - a character's inventory, a slot, a paperdoll's slot - for every container and paperdoll (it was each one's own Navigate Sound). Different from Drop on map.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75
@@ -450,9 +465,9 @@ public partial class SystemSettingsWindow : Window
         paperdollCombo.IsEnabled = sounds.PaperdollOpenSoundEnabled;
         useIt.Checked += (_, _) => { sounds.PaperdollOpenSoundEnabled = true; paperdollCombo.IsEnabled = true; };
         useIt.Unchecked += (_, _) => { sounds.PaperdollOpenSoundEnabled = false; paperdollCombo.IsEnabled = false; };
-        panel.Children.Add(useIt);
-        panel.Children.Add(paperdollRow);
-        panel.Children.Add(new TextBlock
+        if (!u6Sounds) panel.Children.Add(useIt);
+        if (!u6Sounds) panel.Children.Add(paperdollRow);
+        if (!u6Sounds) panel.Children.Add(new TextBlock
         {
             Text = "Ticked: every paperdoll plays this when it opens - a character's inventory, a book, a spellbook, a map, a container's window, and paperdolls made in the PaperDoll Editor - and their own Open Sound pickers are greyed out. " +
                    "Unticked (the default): each uses its own, so a book can flip its pages and a chest can creak.",
@@ -576,6 +591,11 @@ public partial class SystemSettingsWindow : Window
         _sizeCombo.SelectionChanged += (_, _) => PointerSizeChanged();
         panel.Children.Add(sizeRow);
 
+        if (ProjectSession.IsUltima6)
+        {
+            panel.Children.Add(BuildU6PointersSection()); // Ultima 6's own pointers only
+            return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        }
         foreach (var (kind, name, when) in MousePointerCatalog.All)
         {
             var combo = new ComboBox { Width = 260, DisplayMemberPath = nameof(PointerChoice.Display), VerticalAlignment = VerticalAlignment.Center };
@@ -666,6 +686,57 @@ public partial class SystemSettingsWindow : Window
             }
             section.Children.Add(grid);
         }
+        return section;
+    }
+
+    /// <summary>Ultima 6's pointers (Nuvie MapWindow::update_mouse_cursor): the arrow, the crosshairs, eight direction arrows.</summary>
+    private UIElement BuildU6PointersSection()
+    {
+        var section = new StackPanel();
+        section.Children.Add(new TextBlock { Text = "Ultima 6 pointers", FontWeight = FontWeights.Bold, FontSize = 14 });
+        section.Children.Add(new TextBlock
+        {
+            Text = "As Ultima 6, Savage Empire and Martian Dreams: over the map the pointer is an arrow pointing from the avatar toward it (eight directions - up is up the screen); " +
+                   "on the avatar, or while a verb asks for its target (Look, Get, Attack, Cast...), the crosshairs; over the HUD and the view's edge, the arrow. No other pointers - refusals are told in the text area.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 2, 0, 8)
+        });
+        UIElement Picker(string key, string label)
+        {
+            var combo = new ComboBox { Width = 150, DisplayMemberPath = nameof(PointerChoice.Display) };
+            var preview = new Image { Width = 28, Height = 28, Stretch = Stretch.Uniform };
+            RenderOptions.SetBitmapScalingMode(preview, BitmapScalingMode.NearestNeighbor);
+            var cell = new StackPanel { Margin = new Thickness(0, 0, 10, 6) };
+            cell.Children.Add(new TextBlock { Text = label, FontSize = 11 });
+            var line = new StackPanel { Orientation = Orientation.Horizontal };
+            line.Children.Add(combo);
+            line.Children.Add(new Border { Width = 32, Height = 32, Background = Brushes.Black, Child = preview, Margin = new Thickness(4, 0, 0, 0) });
+            cell.Children.Add(line);
+            combo.SelectionChanged += (_, _) => ArrowChanged(key);
+            _arrowRows[key] = (combo, preview);
+            return cell;
+        }
+        var top = new StackPanel { Orientation = Orientation.Horizontal };
+        top.Children.Add(Picker("U6.Arrow", "Arrow (the HUD, the view's edge)"));
+        top.Children.Add(Picker("U6.Crosshair", "Crosshairs (on the avatar, choosing a target)"));
+        section.Children.Add(top);
+        section.Children.Add(new TextBlock { Text = "Direction arrows (over the map)", FontWeight = FontWeights.SemiBold, Margin = new Thickness(0, 8, 0, 4) });
+        var place = new Dictionary<SpriteDirection, (int Row, int Column)>
+        {
+            [SpriteDirection.NorthWest] = (0, 0), [SpriteDirection.North] = (0, 1), [SpriteDirection.NorthEast] = (0, 2),
+            [SpriteDirection.West] = (1, 0), [SpriteDirection.East] = (1, 2),
+            [SpriteDirection.SouthWest] = (2, 0), [SpriteDirection.South] = (2, 1), [SpriteDirection.SouthEast] = (2, 2)
+        };
+        var grid = new Grid();
+        for (int i = 0; i < 3; i++) { grid.RowDefinitions.Add(new RowDefinition()); grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto }); }
+        foreach (var direction in MousePointerCatalog.ArrowDirections)
+        {
+            var cell = Picker(MousePointerCatalog.ArrowKey("U6", direction), MousePointerCatalog.ArrowLabel(direction));
+            var (row, column) = place[direction];
+            Grid.SetRow(cell, row);
+            Grid.SetColumn(cell, column);
+            grid.Children.Add(cell);
+        }
+        section.Children.Add(grid);
         return section;
     }
 

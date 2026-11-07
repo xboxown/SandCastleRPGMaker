@@ -27,7 +27,7 @@ public partial class CharacterEditorWindow
         VerbosePanel.Children.Add(kindRow);
         VerbosePanel.Children.Add(VerboseNote("Human (Exult's sentient, can speak): opens doors, sits on chairs, sleeps in beds, and says the lines below. " +
             "Not human: says nothing, never opens a door, sits or takes a bed (a rat doesn't scream \"Help!\" or open doors). A closed door stops it - unless its faction is hostile to the door's, when it breaks locked doors down. " +
-            "It has no paperdoll: in the party, its inventory doesn't open (a red X) and it can't be given things - its stats (Z) still show."));
+            (ProjectSession.IsUltima6 ? "In the party it can't be given things." : "It has no paperdoll: in the party, its inventory doesn't open (a red X) and it can't be given things - its stats (Z) still show.")));
         if (!character.IsHuman) VerbosePanel.Children.Add(BuildDeathDrops(character));
 
         var breaks = new CheckBox
@@ -46,8 +46,12 @@ public partial class CharacterEditorWindow
         VerbosePanel.Children.Add(VerboseHeading("What it says"));
         VerbosePanel.Children.Add(VerboseNote("One line per row; in play a line is picked from the list for the situation and floats over its head. An empty list: it says nothing then. " +
             "\"Ultima VII's lines\" puts back the original game's text. Only humans speak."));
+        bool u6 = ProjectSession.IsUltima6, u6Food = ProjectSession.SettingsProvider?.Invoke()?.Ultima6.UseUltima7Food == true;
+        if (u6) VerbosePanel.Children.Add(VerboseNote("Ultima 6: a line is written in the text area (\"Peter: Help!\" - System Settings > Ultima 6 > Words: A character's own line), when the one saying it is on the screen. " +
+            (u6Food ? "" : "The food lines (hungry, starving, a meal, a waiter) are hidden: Ultima 6's food is for camping (System Settings > Ultima 6 > Food).")));
+        var foodKinds = new[] { VerboseKind.Hungry, VerboseKind.VeryHungry, VerboseKind.Starving, VerboseKind.Munching, VerboseKind.WantsFood, VerboseKind.FoodStolen, VerboseKind.WaiterAsks, VerboseKind.WaiterServes };
         foreach (var kind in Enum.GetValues<VerboseKind>())
-            VerbosePanel.Children.Add(BuildVerboseLines(character, kind));
+            if (!u6 || u6Food || !foodKinds.Contains(kind)) VerbosePanel.Children.Add(BuildVerboseLines(character, kind));
     }
 
     /// <summary>Not human: the objects that may be in its body when it's killed, each with how many and the chance it's there.</summary>

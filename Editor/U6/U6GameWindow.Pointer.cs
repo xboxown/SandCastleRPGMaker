@@ -66,6 +66,7 @@ public partial class U6GameWindow
     /// <summary>Exult Mouse::flash_shape: show this pointer for 600 ms, then return to the hand.</summary>
     private void FlashPointer(MousePointerKind kind, bool playSound = true)
     {
+        if (U6Pointers) return; // Ultima 6: no refusal pointers - the text area tells it
         ShowPointer(kind);
         if (!playSound) { _pointerFlashTimer?.Stop(); _pointerFlashTimer?.Start(); return; } // something else makes the sound
         // Exult plays a sound together with the flash (drag.cc: flash_shape(Mouse::redx); play_sound_effect(76)) - here that sound is the pointer sprite's own, set per frame in the Sprite Editor: its first frame's sound plays the moment it flashes, the rest as the animation reaches them.
@@ -85,6 +86,7 @@ public partial class U6GameWindow
 
     private void ShowPointer(MousePointerKind kind)
     {
+        if (U6Pointers) { MovePointer(_lastPointerPosition); return; } // Ultima 6's own pointers, chosen by where the mouse is
         if (_shownPointer == kind) return;
         _shownPointer = kind;
         _pointerAnimator?.Stop();
@@ -115,9 +117,50 @@ public partial class U6GameWindow
         return pointers.Width > 0 && pointers.Height > 0 ? (pointers.Width, pointers.Height) : (16, 16);
     }
 
+    // ---------- Ultima 6's pointers (Nuvie MapWindow::update_mouse_cursor) ----------
+
+    private bool U6Pointers => Hud.First(HudPieceKind.GameView) is not null;
+    private string? _u6PointerShown;
+
+    /// <summary>The arrow over the HUD and the view's edge (and over the title or a scene); the crosshairs on the avatar or while a verb waits for its target; else an arrow from the avatar toward the mouse.</summary>
+    private string U6PointerKey(Point position)
+    {
+        if (_u6Title is not null || _scene is not null || _pointer is { IsDragging: true }) return "U6.Arrow";
+        var inView = PointerCanvas.TranslatePoint(position, WorldView);
+        if (inView.X < 1 || inView.Y < 1 || inView.X >= ViewportWidth - 1 || inView.Y >= ViewportHeight - 1) return "U6.Arrow";
+        if (_hudVerb is not null) return "U6.Crosshair";
+        var world = PointerCanvas.TranslatePoint(position, GameCanvas);
+        int dx = (int)Math.Floor(world.X / _tileWidth) - _playerX, dy = (int)Math.Floor(world.Y / _tileHeight) - _playerY;
+        if (dx == 0 && dy == 0) return "U6.Crosshair";
+        int sector = ((int)Math.Round(Math.Atan2(dx, -dy) / (Math.PI / 4)) % 8 + 8) % 8; // 0 north, clockwise - SpriteDirection's order
+        return MousePointerCatalog.ArrowKey("U6", (SpriteDirection)sector);
+    }
+
+    private void ShowU6Pointer(string key)
+    {
+        if (_u6PointerShown == key) return;
+        _u6PointerShown = key;
+        _pointerAnimator?.Stop();
+        _pointerAnimator = null;
+        _pointerImage.Source = null;
+        if (MousePointerCatalog.Resolve(_sprites, _systemSettings.MousePointers.U8Arrows.GetValueOrDefault(key)) is { } sprite)
+        {
+            _pointerHost.Background = null;
+            _pointerHotspot = new Point(sprite.OriginX, sprite.OriginY);
+            _pointerAnimator = new SpriteAnimator(sprite, _pointerImage, _resources);
+        }
+        else
+        {
+            _pointerHost.Background = Brushes.Black; // not drawn yet: a black square, never the Windows pointer
+            _pointerHotspot = new Point(0, 0);
+        }
+        _pointerScale = -1;
+    }
+
     private void MovePointer(Point position)
     {
         _lastPointerPosition = position;
+        if (U6Pointers) ShowU6Pointer(U6PointerKey(position));
         // Same scale as the game world (Exult scales its pointer with the whole screen) - kept in step if the window is resized.
         double scale = ViewportScale.ScaleX;
         if (scale != _pointerScale)
