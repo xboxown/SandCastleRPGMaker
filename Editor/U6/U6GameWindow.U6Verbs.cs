@@ -143,8 +143,20 @@ public partial class U6GameWindow
     // ---------- Verbs ----------
 
     /// <summary>A verb picked: its prompt ("Get-"), the cursor where Ultima 6 puts it - on the avatar, or in the inventory for Drop.</summary>
+    /// <summary>Someone looked at: their portrait in the panel (Ultima 6) till the next action.</summary>
+    private CharacterDefinition? _hudLooked;
+
+    private void ShowLooked(object? thing)
+    {
+        var who = thing switch { PlacedCharacter p => _mapCharacters.FirstOrDefault(m => m.Placement == p)?.Character, CharacterDefinition c => c, _ => null };
+        if (ReferenceEquals(_hudLooked, who)) return;
+        _hudLooked = who;
+        RefreshHudPanel();
+    }
+
     private void StartU6Verb(HudVerb verb)
     {
+        if (_hudLooked is not null) { _hudLooked = null; RefreshHudPanel(); } // the next action: the panel back
         if (_hudVerb is not null) CancelHudVerb();
         if (verb == HudVerb.Combat) { U6ToggleCombat(); return; }
         if (verb == HudVerb.Rest) { U6Rest(); return; } // no target: the party camps (U6GameWindow.U6Levels.cs)
@@ -306,6 +318,7 @@ public partial class U6GameWindow
             case HudVerb.Look:
                 if (thing is null && SquareSeen(cx, cy) && TileNameAt(cx, cy) is { } ground) name = ground; // the ground: its tile's name (Tile Properties)
                 FinishHudVerb(name, W("YouSee", name));
+                ShowLooked(thing); // a person: their portrait
                 break;
             case HudVerb.Cast:
                 CastOnCell(cx, cy, thing); // a spell's target (U6GameWindow.U6Cast.cs)
@@ -553,8 +566,10 @@ public partial class U6GameWindow
                 GameCanvas.Children.Add(_mapCursorCross);
                 _mapCursorAnimator = new SpriteAnimator(cross, _mapCursorCross, _resources);
             }
-            Canvas.SetLeft(_mapCursorCross, (_mapCursor.X + 0.5) * _tileWidth - cross.OriginX);
-            Canvas.SetTop(_mapCursorCross, (_mapCursor.Y + 0.5) * _tileHeight - cross.OriginY);
+            var crossFrame = DollLook.Frame(cross);
+            double cw = crossFrame?.PixelWidth ?? _tileWidth, ch = crossFrame?.PixelHeight ?? _tileHeight;
+            Canvas.SetLeft(_mapCursorCross, _mapCursor.X * _tileWidth + (_tileWidth - cw) / 2);
+            Canvas.SetTop(_mapCursorCross, _mapCursor.Y * _tileHeight + (_tileHeight - ch) / 2);
             _mapCursorCross.Visibility = mapCursorShown ? Visibility.Visible : Visibility.Collapsed;
         }
 
@@ -603,6 +618,7 @@ public partial class U6GameWindow
 
     private void ShowHudMember(int index)
     {
+        _hudLooked = null;
         var party = GetPartyList();
         if (index >= party.Count) return;
         _hudMember = party[index];

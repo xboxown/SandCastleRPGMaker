@@ -160,7 +160,22 @@ public partial class U6GameWindow
     private void MovePointer(Point position)
     {
         _lastPointerPosition = position;
-        if (U6Pointers) ShowU6Pointer(U6PointerKey(position));
+        if (U6Pointers)
+        {
+            string key = U6PointerKey(position);
+            // A verb waiting for its target: one cross - the map cursor follows the mouse (the arrows move it too), no second pointer over the map.
+            bool aiming = key == "U6.Crosshair" && _hudVerb is not null && _hudFocus == HudFocus.Map;
+            if (aiming)
+            {
+                var world = PointerCanvas.TranslatePoint(position, GameCanvas);
+                var cell = ((int)Math.Floor(world.X / _tileWidth), (int)Math.Floor(world.Y / _tileHeight));
+                if (cell != _mapCursor) { _mapCursor = cell; DrawHudCursors(); }
+            }
+            _pointerImage.Opacity = aiming ? 0 : 1;
+            _pointerHost.Background = aiming ? null : _pointerHost.Background;
+            ShowU6Pointer(key);
+            if (aiming) _pointerHost.Background = null;
+        }
         // Same scale as the game world (Exult scales its pointer with the whole screen) - kept in step if the window is resized.
         double scale = ViewportScale.ScaleX;
         if (scale != _pointerScale)

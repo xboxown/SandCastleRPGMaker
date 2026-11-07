@@ -341,6 +341,7 @@ public partial class U6GameWindow
         string name = ThingName(thing);
         U6Say(W("Look") + "-" + name);
         U6Say(W("YouSee", name));
+        ShowLooked(thing); // a person: their portrait in the panel
     }
 
     /// <summary>A double click on the map (Events::multiuse): someone - talk (in combat, attack a foe); a thing - use it (in combat, attack it); the avatar - nothing.</summary>

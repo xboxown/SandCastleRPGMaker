@@ -156,7 +156,7 @@ public partial class U6GameWindow
         foreach (var visual in _hudPanelVisuals) HudLayer.Children.Remove(visual);
         _hudPanelVisuals.Clear();
         if (Hud.First(HudPieceKind.GameView) is null || HudMember is not { } member) return;
-        if (_hudTalker is { } talker) // talking: the speaker's portrait and name (U6GameWindow.U6Talk.cs)
+        if ((_hudTalker ?? _hudLooked) is { } talker) // talking (U6GameWindow.U6Talk.cs), or someone looked at: the portrait and name
         {
             foreach (var piece in Hud.Pieces.Where(p => p.Kind is HudPieceKind.Portrait or HudPieceKind.MemberName))
             {
