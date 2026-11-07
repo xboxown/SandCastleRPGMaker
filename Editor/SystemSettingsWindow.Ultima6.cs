@@ -63,6 +63,12 @@ public partial class SystemSettingsWindow
         sight.Unchecked += (_, _) => u6.LineOfSight = false;
         panel.Children.Add(sight);
         panel.Children.Add(new TextBlock { Text = "Ultima 6 has no roofs and no upper floors: buildings are one floor, the inside of a house is hidden by this black until you walk in. Going up or down a ladder is another map (Maps tab, Change Map).", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
+        panel.Children.Add(new TextBlock { Text = "Food", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
+        var food = new CheckBox { Content = "Inherit Ultima 7's food system (hunger, starving, eating on the hour, healing by the hour)", IsChecked = u6.UseUltima7Food, Margin = new Thickness(0, 2, 0, 2) };
+        food.Checked += (_, _) => u6.UseUltima7Food = true;
+        food.Unchecked += (_, _) => u6.UseUltima7Food = false;
+        panel.Children.Add(food);
+        panel.Children.Add(new TextBlock { Text = "Unticked, as Ultima 6: nobody gets hungry or starves and nobody heals by the hour. Food is for camping: at Rest's mealtime each member eats one food (their own or anyone's in the party), and only those who ate heal when they wake. Ticked: the Ultima 7 engine's food, and the Character Editor's Health tab shows Hunger again.", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         panel.Children.Add(BuildU6TitleSection(u6));
         panel.Children.Add(BuildU6LevelsSection(u6));
         panel.Children.Add(BuildU6WordsSection(u6));

@@ -251,7 +251,7 @@ public partial class ObjectEditorWindow : Window
         var row = new WrapPanel();
         row.Children.Add(TextField("Name", 220, () => obj.Name, v => { obj.Name = v.Length > 0 ? v : obj.Name; RefreshListLabels(); }));
         row.Children.Add(NumberField(obj.Type == ObjectType.Money ? "Weight (per coin)" : obj.Type == ObjectType.Ammo ? "Weight (each)" : "Weight", () => obj.Weight, v => obj.Weight = Math.Max(0, v)));
-        row.Children.Add(NumberField(ObjectTypes.IsBundle(obj.Type) ? "Volume (each)" : "Volume", () => obj.Volume, v => obj.Volume = Math.Max(0, v)));
+        if (!ProjectSession.IsUltima6) row.Children.Add(NumberField(ObjectTypes.IsBundle(obj.Type) ? "Volume (each)" : "Volume", () => obj.Volume, v => obj.Volume = Math.Max(0, v))); // Ultima 6: no volume
         row.Children.Add(NumberField("Price", () => obj.Price, v => obj.Price = (int)Math.Max(0, v)));
         body.Children.Add(row);
         body.Children.Add(TextField("Description", 520, () => obj.Description, v => obj.Description = v));

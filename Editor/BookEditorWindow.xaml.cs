@@ -101,6 +101,7 @@ public partial class BookEditorWindow : Window
     public BookEditorWindow(BookDatabase? existing, SpriteDatabase sprites, FactionDatabase factions, ResourceDatabase resources, ObjectDatabase objects, VariableDatabase variables, StatDatabase stats, ContainerDatabase containers)
     {
         InitializeComponent();
+        if (ProjectSession.IsUltima6 && VolumeBox.Parent is FrameworkElement volumeHolder) volumeHolder.Visibility = Visibility.Collapsed; // Ultima 6: no volume
         SolidSize.SizeEdited += (_, _) =>
         {
             if (_current is null) return;

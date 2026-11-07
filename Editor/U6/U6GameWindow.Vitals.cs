@@ -234,8 +234,12 @@ public partial class U6GameWindow
     }
 
     /// <summary>Actor::mend_wounds.</summary>
+    /// <summary>Ultima 6's food (System Settings > Ultima 6 > Food): eaten at Rest only - no hunger, no healing by the hour.</summary>
+    private bool U6Food => !_systemSettings.Ultima6.UseUltima7Food;
+
     private void MendWounds(CharacterDefinition character)
     {
+        if (U6Food) return; // Ultima 6: healing is Rest's (fed) and magic's
         var vitals = VitalsOf(character);
         bool starving = character.Survival.CanGetHungry && vitals.Food <= character.Survival.HungryAtOrBelow;
         if (vitals.Ailments.HasFlag(Ailment.Poisoned) || GetHp(character) is not int hp || (starving && hp > 0) || TooColdOrHotToMend(character)) return;
@@ -250,7 +254,7 @@ public partial class U6GameWindow
     private void UseFood(CharacterDefinition character)
     {
         var s = character.Survival;
-        if (!s.CanGetHungry) return;
+        if (!s.CanGetHungry || U6Food) return; // Ultima 6: nobody gets hungry
         var vitals = VitalsOf(character);
         vitals.Food = Math.Clamp(vitals.Food - Rng.Next(Math.Max(0, s.FoodUsedPerHourMax) + 1), 0, SurvivalSettings.MaxFood);
         if (character == _player && vitals.Food <= s.HungryAtOrBelow)
@@ -263,6 +267,7 @@ public partial class U6GameWindow
     {
         var s = character.Survival;
         bool starvesOn = StarvationKills && IsUnconscious(character) && !IsDead(character); // it goes on losing health where it lies
+        if (U6Food) return; // Ultima 6: nobody starves
         if (!s.CanGetHungry || (IsIncapacitated(character) && !starvesOn)) return;
         var vitals = VitalsOf(character);
         if (vitals.Food > s.HungryAtOrBelow) return;

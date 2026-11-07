@@ -46,6 +46,9 @@ public partial class ContainerEditorWindow : Window
     public ContainerEditorWindow(ContainerDatabase containers, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources, VariableDatabase variables, StatDatabase stats, CharacterDatabase characters)
     {
         InitializeComponent();
+        if (ProjectSession.IsUltima6) // Ultima 6: no volume
+            foreach (var box in new FrameworkElement[] { VolumeBox, MaxVolumeBox, CurrentVolumeText })
+                if (box.Parent is FrameworkElement holder) holder.Visibility = Visibility.Collapsed;
         PreviewKeyDown += ContentsUndoKeys; // Ctrl+Z over the contents (ContainerEditorWindow.Undo.cs)
         SolidSize.SizeEdited += (_, _) =>
         {

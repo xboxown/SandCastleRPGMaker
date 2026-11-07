@@ -1183,7 +1183,7 @@ public partial class U6GameWindow
 
     /// <summary>The single volume/fit check - every container drop path goes through this, so there is exactly one rule for "does it fit".</summary>
     private bool ContainerHasRoomFor(ContainerData containerData, IHasContainerContents container, double newItemVolume, InventoryItemInstance? excluding = null) =>
-        UsedVolume(container, excluding) + newItemVolume <= containerData.MaxVolume;
+        true; // Ultima 6: no volume - weight is what counts
 
     /// <summary>
     /// Exult Gump::add: dropped into the open container window, an item goes

@@ -20,7 +20,8 @@ public partial class CharacterEditorWindow
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 0, 0, 10)
         });
 
-        // ---------- Hunger ----------
+        // ---------- Hunger ---------- (Ultima 6: only with Ultima 7's food inherited - System Settings > Ultima 6 > Food)
+        int hungerFrom = HealthPanel.Children.Count;
         HealthPanel.Children.Add(Heading("Hunger"));
         var canHunger = new RadioButton { Content = "Can get hungry", GroupName = "Hunger" + character.Id, IsChecked = s.CanGetHungry, Margin = new Thickness(0, 0, 16, 0) };
         var never = new RadioButton { Content = "Never gets hungry", GroupName = "Hunger" + character.Id, IsChecked = !s.CanGetHungry };
@@ -53,6 +54,8 @@ public partial class CharacterEditorWindow
         canHunger.Checked += (_, _) => HungerChanged();
         never.Checked += (_, _) => HungerChanged();
         hungerBox.IsEnabled = s.CanGetHungry;
+        if (ProjectSession.IsUltima6 && ProjectSession.SettingsProvider?.Invoke()?.Ultima6.UseUltima7Food != true)
+            while (HealthPanel.Children.Count > hungerFrom) HealthPanel.Children.RemoveAt(hungerFrom); // gone: poison and the rest move up
 
         // ---------- Poison ----------
         HealthPanel.Children.Add(Heading("Poison"));
