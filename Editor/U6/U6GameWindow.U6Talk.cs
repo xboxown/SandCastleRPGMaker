@@ -26,8 +26,28 @@ public partial class U6GameWindow
     private bool U6Talking => Hud.First(HudPieceKind.GameView) is not null && Hud.First(HudPieceKind.TextArea) is not null;
 
     /// <summary>Puts a message up the Ultima 6 way (ShowNextMessage's, when the HUD has a text area).</summary>
+    private System.Windows.Threading.DispatcherTimer? _talkEndTimer;
+
+    /// <summary>The talk ends when no words have come for a moment and nothing is being asked (a name typed, a choice) - so Show Text, Scene Type Text, Show Text stays one conversation.</summary>
+    private void ScheduleEndU6Talk()
+    {
+        if (_talkEndTimer is null)
+        {
+            _talkEndTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(300) };
+            _talkEndTimer.Tick += (_, _) =>
+            {
+                if (_currentMessage is not null || _sceneInput is not null || _letterAsk is not null || _sceneChoice is not null) return; // still talking or asking
+                _talkEndTimer.Stop();
+                EndU6Talk();
+            };
+        }
+        _talkEndTimer.Stop();
+        _talkEndTimer.Start();
+    }
+
     private void ShowU6Message(GameMessage message)
     {
+        _talkEndTimer?.Stop(); // more words: the same conversation
         _currentMessage = message;
         _replyCursor = -1;
         _replyPage = 0;
@@ -44,8 +64,8 @@ public partial class U6GameWindow
         _hudPrompt = string.Empty;
         if (message.Text.Trim().Length > 0 && Hud.First(HudPieceKind.TextArea) is { } area)
         {
-            // Wrapped to the text area; more than it holds: a screenful, then the cursor waits for a key (as Ultima 6's scroll).
-            var lines = MarkKeywords(message.Text.Trim(), keywords).Replace("\r", "").Split('\n').SelectMany(p => HudWrap(p, area.Width, area.FontName)).ToList();
+            // {Variable} in the words: its value (U6GameWindow.U6Scene.cs). Wrapped to the text area; more than it holds: a screenful, then the cursor waits for a key (as Ultima 6's scroll).
+            var lines = MarkKeywords(SceneWords(message.Text.Trim()), keywords).Replace("\r", "").Split('\n').SelectMany(p => HudWrap(p, area.Width, area.FontName)).ToList();
             int fit = Math.Max(1, area.Height / Math.Max(1, HudLineHeight(area.FontName)) - 1);
             foreach (var line in lines.Take(fit)) U6Say(line);
             foreach (var line in lines.Skip(fit)) _talkMore.Enqueue(line);

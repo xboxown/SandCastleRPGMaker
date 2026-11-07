@@ -321,7 +321,7 @@ public partial class U6GameWindow
         {
             _currentMessage = null;
             MessageLayer.Visibility = Visibility.Collapsed;
-            EndU6Talk(); // Ultima 6: the portrait and the talk's music go (U6GameWindow.U6Talk.cs)
+            ScheduleEndU6Talk(); // Ultima 6: the portrait and the talk's music go - once the event isn't asking or talking any more (U6GameWindow.U6Talk.cs)
             return;
         }
         if (message.AfterRead is { } goOn)
