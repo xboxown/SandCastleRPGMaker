@@ -736,7 +736,7 @@ public partial class U8GameWindow
         var part = int.TryParse(command.Get("PartId"), out int partId) ? design.Part(partId) : null;
         var runtime = part is null ? null : state.Of(part);
         string action = command.Get("Action");
-        bool needsPart = action is not ("UseUpCombined" or "PlaySound" or "StopSounds" or "Close" or "TurnInto");
+        bool needsPart = action is not ("UseUpCombined" or "PlaySound" or "StopSounds" or "Close" or "TurnInto" or "OpenOwn");
         if (needsPart && (part is null || runtime is null)) { StatusText.Text = $"Paperdoll command: \"{design.Name}\" has no part \"{command.Get("PartName")}\"."; return false; }
         int.TryParse(command.Get("Value"), out int value);
         switch (action)
@@ -794,6 +794,9 @@ public partial class U8GameWindow
                 return true;
             case "TurnInto":
                 return TurnDollOwnerInto(context, command);
+            case "OpenOwn": // a flashlight's By Light / Put Out: no batteries - its paperdoll opens instead
+                if (context.Owner is { } holder && context.Obj is { } holderObj) OpenDoll(holder, holderObj, design);
+                return true;
             default:
                 return false;
         }

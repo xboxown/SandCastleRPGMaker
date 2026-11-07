@@ -77,6 +77,7 @@ public partial class U6GameWindow
         h[EventCommandType.DeleteObjectSelf] = DeleteObjectSelfCommand;
         h[EventCommandType.MoveObject] = MoveObjectCommand;
         h[EventCommandType.ChangeObjectLook] = ChangeObjectLookCommand;
+        h[EventCommandType.LightSource] = LightSourceCommand; // (U6GameWindow.LightCommand.cs)
         h[EventCommandType.SetDoorState] = SetDoorStateCommand;
         h[EventCommandType.CountItems] = CountItemsCommand;
         h[EventCommandType.SetContainerContents] = SetContainerContentsCommand;

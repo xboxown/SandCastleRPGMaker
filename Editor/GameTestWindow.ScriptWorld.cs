@@ -76,6 +76,7 @@ public partial class GameTestWindow
         h[EventCommandType.DeleteObjectSelf] = DeleteObjectSelfCommand;
         h[EventCommandType.MoveObject] = MoveObjectCommand;
         h[EventCommandType.ChangeObjectLook] = ChangeObjectLookCommand;
+        h[EventCommandType.LightSource] = LightSourceCommand; // (GameTestWindow.LightCommand.cs)
         h[EventCommandType.SetDoorState] = SetDoorStateCommand;
         h[EventCommandType.CountItems] = CountItemsCommand;
         h[EventCommandType.SetContainerContents] = SetContainerContentsCommand;

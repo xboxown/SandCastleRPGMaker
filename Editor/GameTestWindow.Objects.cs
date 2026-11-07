@@ -462,10 +462,11 @@ public partial class GameTestWindow
             instance.IsSpentRuntime = true;
             PlaySoundAt(obj.Light.SpentSoundResourceId, instance);
             RefreshObjectLook(instance);
-            FireObjectEvent(instance, obj, BookTriggerConditionBased.ByStay);
+            FireWithOwnDoll(instance, obj, () => FireObjectEvent(instance, obj, BookTriggerConditionBased.ByStay)); // By Burnt Out - its paperdoll at hand
         }
         bool changed = false;
-        foreach (var item in AllCarriedItems())
+        var burntOut = new List<(InventoryItemInstance Item, WorldObject Obj)>();
+        foreach (var item in AllCarriedItems().ToList())
         {
             if (item.IsLitRuntime != true || item.BurnLeftRuntime < 0 || DefinitionOf(item) is not { Type: ObjectType.LightSource } obj) continue;
             item.BurnLeftRuntime -= gameMinutes;
@@ -474,10 +475,14 @@ public partial class GameTestWindow
             item.IsSpentRuntime = true;
             PlaySound(obj.Light.SpentSoundResourceId);
             changed = true;
+            burntOut.Add((item, obj));
             if (_player is not null && _player.Inventory.Any(i => ReferenceEquals(i, item) || ItemWeights.Holds(i.Contents, item)))
                 StatusText.Text = $"Your {obj.Name.ToLowerInvariant()} has burnt out.";
         }
         if (changed) RefreshAfterMove();
+        // Carried, its By Burnt Out page runs too (a flashlight in the hand: its batteries go dead) - with its paperdoll at hand.
+        foreach (var (item, obj) in burntOut)
+            FireWithOwnDoll(item, obj, () => TryFireEventPages(item, obj.EventPages, BookTriggerConditionBased.ByStay, -1, $"\"{obj.Name}\" burnt out."));
     }
 
     /// <summary>Every item every character carries, at any depth.</summary>

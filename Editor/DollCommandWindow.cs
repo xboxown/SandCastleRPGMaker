@@ -39,7 +39,8 @@ public class DollCommandWindow : FactionCommandWindowBase
         new("PlaySound", "Play a sound that keeps playing after closing", false),
         new("StopSounds", "Stop this paperdoll's sounds", false),
         new("Close", "Close the paperdoll", false),
-        new("TurnInto", "Turn the object into another object", false)
+        new("TurnInto", "Turn the object into another object", false),
+        new("OpenOwn", "Open this object's own paperdoll", false)
     };
 
     private static readonly (string Key, string Label)[] StateKinds =
@@ -161,6 +162,7 @@ public class DollCommandWindow : FactionCommandWindowBase
             "ToVariable" => "Then test the variable with Conditional Branch - e.g. copy how many items each hole holds, and turn the machine into its finished form when all are filled.",
             "PlaySound" => "Keeps playing after the paperdoll is closed. Stop it with \"Stop this paperdoll's sounds\" (a Stop button).",
             "TurnInto" => "The object (this placed or carried copy) becomes the other object, keeping its place. Its paperdoll closes; the new object starts with its own. Works in any object's own events too, paperdoll or not (cloth cut into a bandage, seeds sown into soil becoming a seedling).",
+            "OpenOwn" => "Opens the paperdoll of the object whose event runs (as a double-click on it would) - for an object whose By Use (By Light / Put Out) decides: a flashlight with dead batteries opens instead of lighting.",
             "PutItem" => "A new copy of the item appears inside (if there's room).",
             _ => "Acts on this paperdoll: the one whose part's event is running, or the paperdoll of the object whose own event is running."
         };
@@ -242,6 +244,7 @@ public class DollCommandWindow : FactionCommandWindowBase
             "StopSounds" => "stop its sounds",
             "Close" => "close it",
             "TurnInto" => $"turn the object into \"{command.Get("ObjectName")}\"",
+            "OpenOwn" => "open this object's own paperdoll",
             _ => command.Get("Action")
         };
     }
