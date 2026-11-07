@@ -614,6 +614,8 @@ public class PaperDollEditorWindow : Window
             offset.Children.Add(IntField("Offset X", () => f.OffsetX, v => f.OffsetX = v));
             offset.Children.Add(IntField("Offset Y", () => f.OffsetY, v => f.OffsetY = v));
             box.Children.Add(offset);
+            if (slot.ShowOnObject)
+                box.Children.Add(SpritePicker("Look on the object in the world (none = its own look)", f.ObjectSprite, link => { f.ObjectSprite = link; Redraw(); }));
             body.Children.Add(new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(0, 0, 0, 1), Child = box });
         }
         body.Children.Add(MakeButton("Add an item it takes...", () =>
@@ -626,7 +628,33 @@ public class PaperDollEditorWindow : Window
         }));
         body.Children.Add(StartsWithEditor(slot));
         body.Children.Add(Note("In play: drag an item onto the slot to put it in (only what it takes, while it has room); drag it out to take it back - it turns back into its own look."));
+        body.Children.Add(OnObjectEditor(slot));
         return new GroupBox { Header = "Slot", Padding = new Thickness(6), Margin = new Thickness(0, 6, 0, 0), Content = body };
+    }
+
+    /// <summary>A slot's item drawn on the object in the world too - a tube in its rack, a part in its machine.</summary>
+    private UIElement OnObjectEditor(DollPart slot)
+    {
+        var body = new StackPanel { Margin = new Thickness(0, 8, 0, 0) };
+        body.Children.Add(Check("Show it on the object in the world (its own thing there: a click names it, a double click uses it)", () => slot.ShowOnObject, v => { slot.ShowOnObject = v; ShowPartProps(); }));
+        if (!slot.ShowOnObject) return body;
+        var at = new WrapPanel();
+        at.Children.Add(IntField("On the object: X", () => slot.ObjectX, v => slot.ObjectX = v));
+        at.Children.Add(IntField("Y", () => slot.ObjectY, v => slot.ObjectY = v));
+        body.Children.Add(at);
+        if (slot.Capacity > 1)
+        {
+            var step = new WrapPanel();
+            step.Children.Add(IntField("Each next one: X step", () => slot.ObjectStepX, v => slot.ObjectStepX = v));
+            step.Children.Add(IntField("Y step", () => slot.ObjectStepY, v => slot.ObjectStepY = v));
+            body.Children.Add(step);
+        }
+        body.Children.Add(MakeButton("Place it on the object...", () =>
+        {
+            if (Design is { } design && ObjectSpotPickerWindow.Pick(this, design, slot, _objects, _sprites)) ShowPartProps();
+        }));
+        body.Children.Add(Note("X, Y: the item's top-left on the object's picture, in its pixels. Moving, picking up or carrying the object takes its slots with it. Each item it takes can have a look of its own on the object (above)."));
+        return body;
     }
 
     private UIElement AreaEditor(DollPart area)

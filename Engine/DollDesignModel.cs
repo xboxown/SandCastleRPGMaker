@@ -98,6 +98,8 @@ public class DollSlotFit
     public SpriteLink FittedSprite { get; set; } = new();
     public int OffsetX { get; set; }
     public int OffsetY { get; set; }
+    /// <summary>Its look on the object in the world while in this slot (Show on the object); not set: its own look.</summary>
+    public SpriteLink ObjectSprite { get; set; } = new();
 }
 
 /// <summary>One part of a paperdoll, drawn in list order (later parts on top).</summary>
@@ -151,6 +153,14 @@ public class DollPart
     public int Capacity { get; set; } = 1;
     /// <summary>What it holds at the start (each placed copy gets its own).</summary>
     public List<ItemReference> StartsWith { get; set; } = new();
+    /// <summary>Slot: what it holds is drawn on the object in the world too (a tube in its rack, a part in its machine) - clickable there on its own.</summary>
+    public bool ShowOnObject { get; set; }
+    /// <summary>Slot, Show on the object: where on the object's picture (its pixels, from its top-left) the item's top-left goes.</summary>
+    public int ObjectX { get; set; }
+    public int ObjectY { get; set; }
+    /// <summary>Slot, Show on the object, holding more than one: how far each next item is from the one before.</summary>
+    public int ObjectStepX { get; set; }
+    public int ObjectStepY { get; set; }
 
     // ---- Text ----
     public string Text { get; set; } = string.Empty;

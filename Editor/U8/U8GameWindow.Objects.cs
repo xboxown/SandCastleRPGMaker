@@ -83,7 +83,9 @@ public partial class U8GameWindow
             else
                 animators?.Add(new SpriteAnimator(sprite, image, _resources,
                     obj.Type is ObjectType.Chair or ObjectType.Bed ? (obj.Furniture.Muted ? 0 : obj.Furniture.Volume / 100.0) : null)); // a chair's or bed's own mute / volume
-            return image;
+            var withItems = WithSlotItems(image, sprite, instance, obj, animators); // its paperdoll's slots, on it (ObjectSlotPictures)
+            if (!ReferenceEquals(withItems, image)) SetU8Anchor(withItems, sprite);
+            return withItems;
         }
         if (obj is not null && !string.IsNullOrEmpty(obj.IconPath) && File.Exists(obj.IconPath) && LoadStaticFrame(obj.IconPath) is { } bitmap)
         {
@@ -208,6 +210,7 @@ public partial class U8GameWindow
         if (obj is not null && _clickedStairStep is { } clicked && ReferenceEquals(clicked.Stairs, instance)
             && StairLook.PoseOf(obj, _objects, instance.Facing) is { } stairPose && clicked.Step < stairPose.Steps.Count)
             name = StairDesign.StepName(stairPose.Steps[clicked.Step], clicked.Step, name); // a designed staircase: each step goes by its own name
+        if (SlotItemOnObjectClicked(instance, isUse)) return; // an item drawn on it - a tube in its rack (U8GameWindow.SlotsOnObjects.cs)
         if (!isUse)
         {
             ShowIdentifyLabel(name, instance.X, instance.Y, _objectVisuals.GetValueOrDefault(instance) as FrameworkElement);

@@ -298,6 +298,7 @@ public partial class U6GameWindow
     {
         null => W("Nothing"),
         PlacedItemInstance item => DollLook.ItemName(new ItemReference { Category = item.Category, ItemId = item.ItemId }, _objects, _books, _containers),
+        ObjectInstance on when SlotItemClicked(on) is { } piece => DollItemName(piece.Item), // an item drawn on it - a tube in its rack (U6GameWindow.SlotsOnObjects.cs)
         _ => NameOfEntity(thing)
     };
 

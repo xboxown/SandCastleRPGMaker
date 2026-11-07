@@ -203,6 +203,7 @@ public partial class U8GameWindow
 
     private void RefreshDollGump(OpenDollGump gump)
     {
+        SlotsOnObjectChanged(gump.State); // its object in the world shows what its slots hold (U8GameWindow.SlotsOnObjects.cs)
         // As a container's window: every animator stopped before the rebuild, or its timer would tick on forever.
         foreach (var animator in gump.Animators) animator.Stop();
         gump.Animators.Clear();

@@ -2194,7 +2194,7 @@ public partial class GameTestWindow : Window
             if (current is UIElement element)
             {
                 foreach (var kv in _itemVisuals) if (ReferenceEquals(kv.Value, element)) return (kv.Key, null);
-                foreach (var kv in _objectVisuals) if (ReferenceEquals(kv.Value, element)) { RememberStairStep(kv.Key, hit, element); return (null, kv.Key); }
+                foreach (var kv in _objectVisuals) if (ReferenceEquals(kv.Value, element)) { RememberStairStep(kv.Key, hit, element); RememberSlotItem(kv.Key, hit, element); return (null, kv.Key); }
             }
             current = VisualTreeHelper.GetParent(current);
         }
