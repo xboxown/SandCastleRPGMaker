@@ -69,6 +69,27 @@ public class Ultima6Settings
     public const string LevelUpShrine = "At a shrine (Ultima 6)", LevelUpDream = "In a dream when the party rests (Savage Empire, Martian Dreams)";
 }
 
+/// <summary>Conversation Style (Ultima 6 tab): how conversations look and work from now on - null in play: Ultima 6's.</summary>
+public class U6TalkStyle
+{
+    public const string Typed = "Typed keywords (Ultima 6)", List = "Picked from a list (arrows, 1-9, a click)", Both = "Typed or picked from the list";
+    public const string PortraitHud = "In the HUD's Portrait (Ultima 6)", PortraitBox = "Inside the words' box", PortraitNone = "None";
+    public const string WordsTextArea = "In the HUD's text area (Ultima 6)", WordsBox = "In a box of their own (below)";
+    public string Answers { get; set; } = Typed;
+    public bool MarkKeywords { get; set; } = true;
+    public string KeywordColor { get; set; } = string.Empty;
+    public string Portrait { get; set; } = PortraitHud;
+    public string Words { get; set; } = WordsTextArea;
+    public int BoxX { get; set; } = 8;
+    public int BoxY { get; set; } = 120;
+    public int BoxWidth { get; set; } = 304;
+    public int BoxHeight { get; set; } = 72;
+    public string BoxColor { get; set; } = string.Empty;
+    public SpriteLink BoxSprite { get; set; } = new();
+    public string Font { get; set; } = string.Empty;
+    public string TextColor { get; set; } = string.Empty;
+}
+
 /// <summary>One leveling system of the Leveling Editor: its level table and its events.</summary>
 public class U6LevelSystem
 {

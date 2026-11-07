@@ -59,10 +59,12 @@ public partial class U6GameWindow
             StartTalkMusic();
             RefreshHudPanel();
         }
-        var keywords = message.Replies?.Select(r => r.Text).Where(t => t.Length > 0).ToList() ?? new List<string>();
+        var keywords = _talkStyle is { MarkKeywords: false } ? new List<string>() : message.Replies?.Select(r => r.Text).Where(t => t.Length > 0).ToList() ?? new List<string>();
         _talkMore.Clear();
         _hudPrompt = string.Empty;
-        if (message.Text.Trim().Length > 0 && Hud.First(HudPieceKind.TextArea) is { } area)
+        _replyPick = 0;
+        if (_talkStyle is { Words: U6TalkStyle.WordsBox } && !_talkBoxOpen) { _talkBoxOpen = true; _boxLines.Clear(); } // Conversation Style: the words in a box of their own
+        if (message.Text.Trim().Length > 0 && (TalkBoxPiece ?? Hud.First(HudPieceKind.TextArea)) is { } area)
         {
             // {Variable} in the words: its value (U6GameWindow.U6Scene.cs). Wrapped to the text area; more than it holds: a screenful, then the cursor waits for a key (as Ultima 6's scroll).
             var lines = MarkKeywords(SceneWords(message.Text.Trim()), keywords).Replace("\r", "").Split('\n').SelectMany(p => HudWrap(p, area.Width, area.FontName)).ToList();
@@ -71,7 +73,7 @@ public partial class U6GameWindow
             foreach (var line in lines.Skip(fit)) _talkMore.Enqueue(line);
             _talkMoreFit = fit;
         }
-        if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? W("YouSay") : string.Empty;
+        if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? (TypingReplies ? W("YouSay") : W("PickReply")) : string.Empty;
         RefreshHudText();
     }
 
@@ -82,6 +84,7 @@ public partial class U6GameWindow
         _hudTalker = null;
         _talkTyped = string.Empty;
         _hudPrompt = string.Empty;
+        CloseTalkBox(); // Conversation Style's box (U6GameWindow.U6TalkStyle.cs)
         EndTalkMusic();
         RefreshHudPanel();
         RefreshHudText();
@@ -98,10 +101,12 @@ public partial class U6GameWindow
         if (_talkMore.Count > 0)
         {
             for (int i = 0; i < _talkMoreFit && _talkMore.Count > 0; i++) U6Say(_talkMore.Dequeue());
-            if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? W("YouSay") : string.Empty;
+            if (_talkMore.Count == 0) _hudPrompt = message.HasReplies ? (TypingReplies ? W("YouSay") : W("PickReply")) : string.Empty;
             RefreshHudText();
             return true;
         }
+        if (ReplyPickKey(key)) return true; // Conversation Style: picked from a list (U6GameWindow.U6TalkStyle.cs)
+        if (!TypingReplies && message.HasReplies) return true; // list only: no typing
         if (!message.HasReplies)
         {
             if (KeyIs(key, "Accept") || KeyIs(key, "Accept2") || KeyIs(key, "Cancel")) AdvanceMessage();

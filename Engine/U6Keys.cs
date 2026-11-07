@@ -211,6 +211,7 @@ public static class U6Words
         ("NoMagicPoints", "Not enough magic points.", "Cast: too few magic points"),
         ("NoReagents", "No Reagents.", "Cast: a reagent missing"),
         ("OnWhom", "On whom? ", "Cast: asking for the spell's target"),
+        ("PickReply", "Choose: ", "Conversation Style - picked from a list: the prompt"),
         ("NothingWritten", "There is nothing written.", "A book with no words"),
         ("More", "<more>", "A book: more to read (any key goes on, Escape stops)"),
         ("PointsLeft", "Points left:", "Scene Distribute Points: the points still to give"),

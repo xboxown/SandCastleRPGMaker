@@ -237,6 +237,7 @@ public partial class U6GameWindow
     private void U6Verbs_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
     {
         if (_scene is not null) { SceneClick(e.GetPosition(HudLayer)); e.Handled = true; return; } // a scene (U6GameWindow.U6Scene.cs)
+        if (_currentMessage is not null && ReplyClicked(e.GetPosition(HudLayer))) { e.Handled = true; return; } // a reply picked from the list (U6GameWindow.U6TalkStyle.cs)
         if (_u6Title is not null) { if (!IsPlayingVideo) U6TitleClick(e.GetPosition(HudLayer)); e.Handled = true; return; } // the title menu (U6GameWindow.U6Title.cs)
         if (Hud.First(HudPieceKind.GameView) is null) return;
         var onScreen = e.GetPosition(HudLayer);

@@ -214,6 +214,7 @@ public partial class U6GameWindow : Window
         InitU6CombatModes(); // each member's combat mode (U6GameWindow.U6CombatModes.cs)
         InitU6Scenes(); // cutscenes (U6GameWindow.U6Scene.cs)
         InitU6Create(); // typing, picking a picture, points (U6GameWindow.U6Create.cs)
+        InitU6TalkStyle(); // Conversation Style (U6GameWindow.U6TalkStyle.cs)
         ViewportBorder.Width = ScreenWidth;
         ViewportBorder.Height = ScreenHeight;
 

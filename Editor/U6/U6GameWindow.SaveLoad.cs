@@ -570,6 +570,7 @@ public partial class U6GameWindow
             PlayerPixelX = _playerPixelX, PlayerPixelY = _playerPixelY, PlayerLift = _playerZ, PlayerFacing = _playerFacing,
             CombatMode = _combatMode,
             U6HudFrame = _hudFrameOverride, // Change HUD Frame (U6GameWindow.U6Hud.cs)
+            U6TalkStyle = _talkStyle, // Conversation Style (U6GameWindow.U6TalkStyle.cs)
             ReadBooks = _hasBeenReadBooks.ToList(),
             Weather = JsonCopy(_weather),
             WorldStates = _worldStates.ToDictionary(kv => kv.Key, kv => JsonCopy(kv.Value)) // the other worlds as they were left
@@ -664,6 +665,7 @@ public partial class U6GameWindow
     private void ApplySave(GameSaveData data)
     {
         _hudFrameOverride = data.U6HudFrame; // Ultima 6: the frame as it was (U6GameWindow.U6Hud.cs)
+        _talkStyle = data.U6TalkStyle; // the conversations as they were (U6GameWindow.U6TalkStyle.cs)
         BuildHud();
         _clock.Restore(data.Day, data.Hour, data.Minute, data.Ticks);
         _lastClockMinute = TotalMinutes(); // hunger and the rest go on from the saved time, not from the new game's

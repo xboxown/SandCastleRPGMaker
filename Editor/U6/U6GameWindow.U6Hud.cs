@@ -156,7 +156,7 @@ public partial class U6GameWindow
         foreach (var visual in _hudPanelVisuals) HudLayer.Children.Remove(visual);
         _hudPanelVisuals.Clear();
         if (Hud.First(HudPieceKind.GameView) is null || HudMember is not { } member) return;
-        if ((_hudTalker ?? _hudLooked) is { } talker) // talking (U6GameWindow.U6Talk.cs), or someone looked at: the portrait and name
+        if ((_talkStyle is null or { Portrait: U6TalkStyle.PortraitHud } ? _hudTalker : null) is var talkerShown && (talkerShown ?? _hudLooked) is { } talker) // talking (U6GameWindow.U6Talk.cs; Conversation Style's portrait), or someone looked at: the portrait and name
         {
             foreach (var piece in Hud.Pieces.Where(p => p.Kind is HudPieceKind.Portrait or HudPieceKind.MemberName))
             {
@@ -250,10 +250,12 @@ public partial class U6GameWindow
     private void U6Say(string text)
     {
         SoakLog("u6say: " + text);
-        if (Hud.First(HudPieceKind.TextArea) is not { } area) return;
-        foreach (var paragraph in text.Replace("\r", "").Split('\n')) _hudLines.AddRange(HudWrap(paragraph, area.Width, area.FontName));
+        var box = TalkBoxPiece; // a conversation in a box of its own (Conversation Style)
+        if ((box ?? Hud.First(HudPieceKind.TextArea)) is not { } area) return;
+        var into = box is not null ? _boxLines : _hudLines;
+        foreach (var paragraph in text.Replace("\r", "").Split('\n')) into.AddRange(HudWrap(paragraph, area.Width, area.FontName));
         int keep = Math.Max(1, area.Height / Math.Max(1, HudLineHeight(area.FontName)) * 4); // a few screens of history
-        if (_hudLines.Count > keep) _hudLines.RemoveRange(0, _hudLines.Count - keep);
+        if (into.Count > keep) into.RemoveRange(0, into.Count - keep);
         RefreshHudText();
     }
 
@@ -263,7 +265,10 @@ public partial class U6GameWindow
         holder.Children.Clear();
         int lineH = HudLineHeight(area.FontName);
         var lines = _hudLines.ToList();
-        bool cursor = _hudVerb is not null || _hudPrompt.Length > 0 || _talkMore.Count > 0;
+        bool boxed = TalkBoxPiece is not null;
+        DrawTalkBox(); // the conversation's own box, if it has one (U6GameWindow.U6TalkStyle.cs)
+        if (!boxed) lines.AddRange(ReplyListLines()); // picking from a list: the replies
+        bool cursor = !boxed && (_hudVerb is not null || _hudPrompt.Length > 0 || _talkMore.Count > 0);
         var cursorSprite = SpriteOfLink(area.Sprite);
         if (cursor) lines.AddRange(HudWrap(_hudPrompt + (cursorSprite is null ? "_" : ""), area.Width, area.FontName));
         int fit = Math.Max(1, area.Height / Math.Max(1, lineH));
@@ -415,7 +420,7 @@ public partial class U6GameWindow
         if (text.Contains('\u0001'))
         {
             // Keywords (U6GameWindow.U6Talk.cs) in the keyword colour, the rest as the piece's.
-            Brush keyTint = ColorConverter.ConvertFromString(_systemSettings.Ultima6.KeywordColor) is Color k ? new SolidColorBrush(k) : Brushes.Gold;
+            Brush keyTint = ColorConverter.ConvertFromString(KeywordColour) is Color k ? new SolidColorBrush(k) : Brushes.Gold; // Conversation Style's, else System Settings'
             var row = new StackPanel { Orientation = Orientation.Horizontal, IsHitTestVisible = false };
             bool inKeyword = false;
             foreach (var part in System.Text.RegularExpressions.Regex.Split(text, "([\u0001\u0002])"))
