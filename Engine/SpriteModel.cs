@@ -253,6 +253,8 @@ public class SpriteDatabase
     public const string TrailGroupName = "Slime Trail";
     /// <summary>Ultima 8 projects only: the splash when something comes down in real water (an animation played once, scaled to what went in).</summary>
     public const string WaterSplashGroupName = "Water Splash";
+    /// <summary>Ultima 6 projects only: a hit's spark, played once on whoever is struck (the group's first sprite).</summary>
+    public const string HitSparkGroupName = "Hit Spark";
     /// <summary>Ultima 8 projects only: lava's flare when something or someone goes in.</summary>
     public const string LavaFlareGroupName = "Lava Flare";
     /// <summary>Ultima 8 projects only: Crusader's crosshair on the target in combat mode.</summary>
@@ -279,7 +281,7 @@ public class SpriteDatabase
         return names.ToArray();
     }
 
-    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || name == WaterSplashGroupName || name == LavaFlareGroupName || name == CrosshairGroupName || IsBundleGroup(name);
+    public static bool IsLockedGroup(string name) => name == TilesetGroupName || name == FontsGroupName || name == BloodGroupName || name == KeychainGroupName || name == DialogFrameGroupName || name == WeaponInHandGroupName || name == JoinedMonstersGroupName || name == TrailGroupName || name == WaterSplashGroupName || name == LavaFlareGroupName || name == CrosshairGroupName || name == HitSparkGroupName || IsBundleGroup(name);
 
     /// <summary>A dialog frame by name: "" = the first one in the DialogFrame group, "None" = none. Null when there's no frame to draw.</summary>
     public SpriteEntry? FindDialogFrame(string name)
@@ -315,6 +317,9 @@ public class SpriteDatabase
     }
 
     /// <summary>Ultima 8 projects: their own locked groups as well (never made in an Ultima 7 project).</summary>
+    /// <summary>Ultima 6 projects: the Hit Spark group.</summary>
+    public void EnsureUltima6Groups() => GetOrCreateGroup(HitSparkGroupName);
+
     public void EnsureUltima8Groups()
     {
         GetOrCreateGroup(WaterSplashGroupName);

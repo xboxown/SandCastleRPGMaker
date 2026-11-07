@@ -104,11 +104,19 @@ public partial class U6GameWindow
     private PoseDefinition? PoseById(int poseId) => _poseDatabase.Poses.FirstOrDefault(p => p.Id == poseId);
     private PoseDefinition? PoseByName(string name) => _poseDatabase.Poses.FirstOrDefault(p => p.Name == name);
 
+    /// <summary>Ultima 6 draws four directions: a diagonal shows the side it leans to (east or west).</summary>
+    private static SpriteDirection Cardinal(SpriteDirection d) => d switch
+    {
+        SpriteDirection.NorthEast or SpriteDirection.SouthEast => SpriteDirection.East,
+        SpriteDirection.NorthWest or SpriteDirection.SouthWest => SpriteDirection.West,
+        _ => d
+    };
+
     private SpriteEntry? ResolveCharacterSprite(CharacterDefinition character, PoseDefinition? pose, SpriteDirection facing, out double volume, out string? key)
     {
         volume = 0;
         key = null;
-        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(facing) is not { } link) return null;
+        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(Cardinal(facing)) is not { } link) return null; // four directions (Ultima 6)
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
         key = link.SpriteGroup + "/" + link.SpriteName;
         return _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);

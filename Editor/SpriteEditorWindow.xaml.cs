@@ -19,7 +19,7 @@ public partial class SpriteEditorWindow : Window
         Title += $" [{BuildInfo.CurrentBuild}]";
         if (existing is not null) Database = existing;
         _resources = resources ?? new ResourceDatabase();
-        Database.EnsureBuiltInGroups(); if (ProjectSession.IsUltima8) Database.EnsureUltima8Groups();
+        Database.EnsureBuiltInGroups(); if (ProjectSession.IsUltima8) Database.EnsureUltima8Groups(); if (ProjectSession.IsUltima6) Database.EnsureUltima6Groups();
         RefreshGroups();
         // Ctrl+X / C / V and Del on the sprite list, as its right-click menu.
         SpriteListView.KeyDown += (_, e) =>
@@ -341,6 +341,8 @@ public partial class SpriteEditorWindow : Window
         if (_currentGroup.Name == SpriteDatabase.JoinedMonstersGroupName) new JoiningGuideWindow { Owner = this }.ShowDialog();
         if (_currentGroup.Name is SpriteDatabase.WaterSplashGroupName or SpriteDatabase.LavaFlareGroupName) new SplashGuideWindow(_currentGroup.Name == SpriteDatabase.LavaFlareGroupName) { Owner = this }.ShowDialog();
         if (_currentGroup.Name == SpriteDatabase.CrosshairGroupName) new CrosshairGuideWindow { Owner = this }.ShowDialog();
+        if (_currentGroup.Name == SpriteDatabase.HitSparkGroupName)
+            MessageBox.Show(this, "Ultima 6: the first sprite here is the spark played once on whoever is struck - a monster, a member, you. Draw it 16x16 (frames: it plays through them once). No attack poses in Ultima 6: the blow is the spark and the words in the text area.", "Hit Spark", MessageBoxButton.OK, MessageBoxImage.Information);
         if (_currentGroup.Name == SpriteDatabase.TrailGroupName)
             MessageBox.Show(this, "A sprite here is one kind of puddle a monster leaves as it walks, as in Ultima 7.\n\nGive it up to 4 frames, small to large: they are sizes, not an animation. New puddles start at frame 1 or 2 and grow if it drips on the same spot.\n\nThen Character Editor > the monster > Health > Joining > Trail: pick this sprite, and tick whether its puddles hurt.", "Slime Trail", MessageBoxButton.OK, MessageBoxImage.Information);
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
@@ -437,7 +439,7 @@ public partial class SpriteEditorWindow : Window
         var dialog = new OpenFileDialog { Filter = "Sprite DB JSON (*.spritedb.json)|*.spritedb.json|All files (*.*)|*.*" };
         if (dialog.ShowDialog() != true) return;
         Database = SpriteDatabaseSerializer.Load(dialog.FileName);
-        Database.EnsureBuiltInGroups(); if (ProjectSession.IsUltima8) Database.EnsureUltima8Groups();
+        Database.EnsureBuiltInGroups(); if (ProjectSession.IsUltima8) Database.EnsureUltima8Groups(); if (ProjectSession.IsUltima6) Database.EnsureUltima6Groups();
         _currentGroup = null;
         RefreshGroups();
         RefreshSprites();

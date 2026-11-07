@@ -115,6 +115,12 @@ public partial class U6GameWindow
     /// <summary>Ctrl+Q or a Quit button: the Quit prompt (System Settings > Save / Load) asks first; Yes quits.</summary>
     private void AskToQuit()
     {
+        if (Hud.First(HudPieceKind.TextArea) is not null && _u6Title is null) // Ultima 6: asked in the text area, Y or N
+        {
+            if (_letterAsk is not null) return;
+            AskLetter(W("QuitAsk"), "YN0", key => { if (key == 'Y') QuitNow(); });
+            return;
+        }
         if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.Quit.DollDesignId) is { } prompt)
         {
             if (OpenForm(prompt, modal: true, answered: yes => { if (yes) QuitNow(); }, fresh: true) is { } gump && _titleGump is { } title && gump.ModalLayer <= title.ModalLayer)

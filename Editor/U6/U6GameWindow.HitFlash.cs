@@ -33,9 +33,15 @@ public partial class U6GameWindow
     /// <summary>reduce_health's flash for <paramref name="amount"/> damage to a character that had <paramref name="oldHp"/>.</summary>
     private void FlashHit(CharacterDefinition character, int amount, int oldHp)
     {
+        // Ultima 6: the hit's spark on whoever is struck (Sprite Editor > Hit Spark), and the words in the text area - no outline, no red screen.
+        if (_sprites.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.HitSparkGroupName)?.Sprites.FirstOrDefault(s => s.Frames.Count > 0) is { } spark)
+            PlaySpellAnimation(new SpriteLink { SpriteGroup = SpriteDatabase.HitSparkGroupName, SpriteName = spark.Name }, PixelOf(character), LiftOf(character));
+        return;
+#pragma warning disable CS0162
         int maxHp = MaxHp(character);
         if (character == _player && maxHp > 0 && (amount >= maxHp / 3 || oldHp < maxHp / 4)) FlashScreenRed();
         else ShowHitOutline(character);
+#pragma warning restore CS0162
     }
 
     /// <summary>A red outline drawn round the character's current frame for 200 ms.</summary>

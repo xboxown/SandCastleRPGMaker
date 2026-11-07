@@ -146,10 +146,13 @@ public partial class U6GameWindow
     /// <summary>The pose to strike or shoot with: the weapon's own, else the default - if the character has art for it, else "Attacking Melee".</summary>
     private string StrikePose(CharacterDefinition character, WorldObject? weapon, bool shooting, SpriteDirection facing)
     {
+        return "Idle"; // Ultima 6: no attack pose - the blow is the spark and the words
+#pragma warning disable CS0162
         string name = shooting
             ? (string.IsNullOrWhiteSpace(weapon?.Weapon.ShootPose) ? "Shooting" : weapon!.Weapon.ShootPose)
             : (string.IsNullOrWhiteSpace(weapon?.Weapon.AttackPose) ? "Attacking Melee" : weapon!.Weapon.AttackPose);
         return PoseByName(name) is { } pose && ResolveCharacterSprite(character, pose, facing, out _, out _) is not null ? name : "Attacking Melee";
+#pragma warning restore CS0162
     }
 
     // ================= Shooting and throwing =================

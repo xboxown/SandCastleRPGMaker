@@ -72,6 +72,7 @@ public partial class MainWindow
         _spriteDatabase = new SpriteDatabase();
         _spriteDatabase.EnsureBuiltInGroups();
         if (ProjectSession.IsUltima8) _spriteDatabase.EnsureUltima8Groups(); // Water Splash, Lava Flare
+        if (ProjectSession.IsUltima6) _spriteDatabase.EnsureUltima6Groups(); // Hit Spark
         _bookDatabase = new BookDatabase();
         _containerDatabase = new ContainerDatabase();
         _systemSettings = new SystemSettings();

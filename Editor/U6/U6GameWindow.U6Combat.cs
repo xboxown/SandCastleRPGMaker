@@ -110,11 +110,13 @@ public partial class U6GameWindow
     }
 
     /// <summary>How badly it was hurt, as Ultima 6 tells it - by what's left of its hit points.</summary>
-    private void TellWound(CharacterDefinition who, int hpLeft)
+    private void TellWound(CharacterDefinition who, int hpLeft, string cause = "")
     {
         if (Hud.First(HudPieceKind.TextArea) is null || !InView(who)) return;
         double left = hpLeft / (double)Math.Max(1, MaxHp(who));
         string id = IsDying(who, hpLeft) ? "Killed" : hpLeft <= 0 ? "KnockedOut" : left >= 0.75 ? "Barely" : left >= 0.5 ? "Lightly" : left >= 0.25 ? "Heavily" : "Critical";
-        U6Say(W(id, who.Name));
+        // A blow: "Rat lightly wounded." Anything else (poison, starvation, fire, a trap...): "Andrew lightly damaged by poison."
+        bool blow = cause.Length == 0 || cause.StartsWith("slain by");
+        U6Say(blow ? W(id, who.Name) : W(id + "By", who.Name, cause));
     }
 }

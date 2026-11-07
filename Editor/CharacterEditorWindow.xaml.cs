@@ -266,7 +266,9 @@ public partial class CharacterEditorWindow : Window
         AnimationPreviewButton.StopAll(); // a rebuild never leaves a preview playing behind it
         PosesPanel.Children.Clear();
 
-        foreach (var pose in _poses.Poses)
+        // Ultima 6: only Idle, Walking, Sleeping, Unconscious and Body (dead) - no attack poses; poses of your own stay.
+        var u6Poses = new[] { "Idle", "Walking", "Sleeping", "Unconscious", "Body" };
+        foreach (var pose in _poses.Poses.Where(p => !ProjectSession.IsUltima6 || !p.IsBuiltIn || u6Poses.Contains(p.Name)))
         {
             if (!character.PoseSprites.TryGetValue(pose.Id, out var assignment))
             {
@@ -438,6 +440,7 @@ public partial class CharacterEditorWindow : Window
 
         foreach (SpriteDirection direction in Enum.GetValues<SpriteDirection>())
         {
+            if (ProjectSession.IsUltima6 && direction is SpriteDirection.NorthEast or SpriteDirection.SouthEast or SpriteDirection.SouthWest or SpriteDirection.NorthWest) continue; // Ultima 6: four directions
             var (x, y) = PointFor(direction);
             bool hasSprite = assignment.Directions.ContainsKey(direction);
             bool isSelected = direction == selectedDirection;

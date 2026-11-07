@@ -20,6 +20,13 @@ public partial class U6GameWindow
     private bool GameError(int number, string detail = "", Action? closed = null)
     {
         string words = GameErrors.Describe(_systemSettings.Errors, number, detail);
+        if (Hud.First(HudPieceKind.TextArea) is not null)
+        {
+            // Ultima 6: every error in the text area, its words editable (Words: Any error; System Settings > Errors) - no window.
+            U6Say(W("ErrorLine", words, number.ToString()));
+            closed?.Invoke();
+            return true;
+        }
         StatusText.Text = $"Error {number}: {words}";
         if (_objects.DollDesigns.FirstOrDefault(d => d.Id == _systemSettings.Errors.DollDesignId) is not { } design)
         {

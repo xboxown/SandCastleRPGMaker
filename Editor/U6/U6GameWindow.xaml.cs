@@ -511,7 +511,7 @@ public partial class U6GameWindow : Window
         if (_player is null || pose is null) return null;
         if (!_player.PoseSprites.TryGetValue(pose.Id, out var assignment)) return null;
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
-        var link = assignment.Resolve(_playerFacing);
+        var link = assignment.Resolve(Cardinal(_playerFacing)); // four directions (Ultima 6)
         return link is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);
     }
 

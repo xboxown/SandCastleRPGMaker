@@ -101,7 +101,7 @@ public partial class SpriteFrameEditorWindow : Window
         if (_isTilesetGroup) SetUpStatesMode(FrameStatesGuideWindow.Tileset, 0); // a tile a frame: no animation, no sound
         if (isKeychainSprite) SetUpStatesMode(FrameStatesGuideWindow.Keychain, SpriteDatabase.KeychainFrames); // frame by how many keys
         if (isWeaponInHandSprite) SetUpWeaponInHandMode(); // a weapon held in the hand: its frames, each with a grip point (SpriteFrameEditorWindow.WeaponHand.cs)
-        else if (!isTilesetGroup && !isFontSprite && !isBloodSprite && !isKeychainSprite) SetUpHandPoints(); // a character's frames: where the weapon hand is
+        else if (!isTilesetGroup && !isFontSprite && !isBloodSprite && !isKeychainSprite && !ProjectSession.IsUltima6) SetUpHandPoints(); // a character's frames: where the weapon hand is (not in Ultima 6: no weapon drawn in the hand)
     }
 
     /// <summary>A blood type: puddle-size frames only - nothing that animates or makes sound - and the Blood Guide alongside.</summary>
