@@ -1,0 +1,168 @@
+With the "Stats grow by use" check mark on in a U8 project:
+- Stats: still grow by fighting and climbing, up to each stat's cap.
+- Experience and Level: kills give EXP and raise Level using the character's graph, as they do with the check mark off.
+- Training points: none are given.
+- Most Level: set per character on the Level tab. Nothing can pass it, not even a Change Stat command.
+- Level tab: the caps are at the top and the experience graph is back underneath. The graph's training points column is still there but is ignored.
+  Ran 1 shell command, wrote 1 memory
+
+Done (b516): experience now stays on when stats grow by use. Your editor is built to b516.
+
+With the "Stats grow by use" check mark on in a U8 project:
+- Stats: still grow by fighting and climbing, up to each stat's cap.
+- Experience and Level: kills give EXP and raise Level using the character's graph, as they do with the check mark off.
+- Training points: none are given.
+- Most Level: set per character on the Level tab. Nothing can pass it, not even a Change Stat command.
+- Level tab: the caps are at the top and the experience graph is back underneath. The graph's training points column is still there but is ignored.
+
+The highest level was 99, so I raised it to as an example. Note that a character alsostops at the graph's own Max Level, so to reach level 100 the graph needs to go that high too.
+
+I tested it in a running U8 game with Most Level set to 3:
+
+┌─────────────────────────────────────────┬─────────────────────┐
+│                  Check                  │       Result        │
+├─────────────────────────────────────────┼─────────────────────┤
+│ Kill a character worth 500 EXP          │
+├─────────────────────────────────────────┼─────────────────────┤
+│ Level (500 EXP is level 4 on the graph) │ Stops at 3          │
+├─────────────────────────────────────────┼─
+│ Training points                         │ Still 0             │
+├─────────────────────────────────────────┼─────────────────────┤
+│ Change Stat adds 10 levels              │
+
+MorphOS and Amiga 68k (b514)
+
+Both players are rebuilt. I tested on the Linux build of the same C player, not on real MorphOS or Amiga machines, so please try these on yours.
+
+┌──────────────────┬──────────────────────────────────────────────────────┬───────────────────────────────────────┐
+│       Bug        │                        Cause                         │                Result                 │
+├──────────────────┼──────────────────────────────────────────────────────┼───────────────────────────────────────┤
+│ Bucket on fire   │ C only counted a click on a solid pixel, so a click  │ Now logs "You douse Fire"             │
+│                  │ between the flames hit the floor and spilled         │                                       │
+├──────────────────┼──────────────────────────────────────────────────────┼───────────────────────────────────────┤
+│ Key in the body  │ Starter items are saved at spot (0,0), and a lone    │ The key now sits inside the frame     │
+│ window           │ item in a body stayed there, at the window's corner  │                                       │
+├──────────────────┼──────────────────────────────────────────────────────┼───────────────────────────────────────┤
+│ Deer head stuck  │ C only drew frame 0 of Idle                          │ Your two eating frames now play (code │
+│ down             │                                                      │  fix; I didn't watch them animate)    │
+├──────────────────┼──────────────────────────────────────────────────────┼───────────────────────────────────────┤
+│ Deer stacked and │ Off-screen characters were put back on the same      │ They spread out and wander            │
+│  not moving      │ spot, then blocked each other                        │                                       │
+└──────────────────┴──────────────────────────────────────────────────────┴───────────────────────────────────────┘
+
+Deer far off screen still rest, same as Windows.
+
+Body pieces (done your way)
+
+The main body works as it always has: you open it and loot it, and "too heavy" still applies. The pieces are separate Junk objects that fly out, bounce off the ground and walls, and stay where they land, and you should be able to pick them up like any object. You set them in Character Editor > Health > Bursting on death, on both U7 and U8. Pieces landing on both engines was tested; picking one up wasn't.
+
+Items 15-21 (U8 projects only)
+
+┌─────┬───────────────────────┬────────────────────────────────────────────────────────────────────────────────────┐
+│  #  │        Feature        │                                   How to use it                                    │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 15  │ Moving platforms      │ Move Platform carries things and people on it                                      │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 16  │ Weight plates         │ Weight On command, plus a new condition (works on U7 too)                          │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 17  │ Objects react to hits │ Loose objects get knocked flying                                                   │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 18  │ Invert Screen         │ Flip Screen: U8's "invert" really turns the world upside down                      │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 19  │ New triggers          │ By Look, By Got Hit, By Cast, By Coming Into View, By Leaving View, By Stolen From │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 20  │ Spoken lines          │ Speak: words with a voice sound                                                    │
+├─────┼───────────────────────┼────────────────────────────────────────────────────────────────────────────────────┤
+│ 21  │ Reading screens       │ Reading Screen: a scroll, plaque or gravestone picture with words                  │
+└─────┴───────────────────────┴────────────────────────────────────────────────────────────────────────────────────┘
+
+Crusader features (U8 projects only)
+
+- Commands: Keypad, Computer (words typed out on a screen), Recharge, Alarm.
+- Character Editor > Health: Energy shield and Surrenders below.
+- System Settings > Ultima 8: Difficulty, driven by a variable you choose.
+- Bomb runs and turrets: no new feature needed; existing commands and missile spawn points can already do these.
+- Left out for now: controlling another character, roll and side-step moves, and the targeting reticle. These are bigger jobs, so tell me if you want them.
+
+
+- Can spells be cast from events? Yes, with Cast Spell and Learn Spell.
+- Withstand Death: yes, it's a Necromancy spell in U8. Feign Death turned out to be its partner, Mask of Death.
+- Is there a party-joined condition? You didn't miss it: there wasn't one. The old "Joined Party" only checks distance. I added a real one.
+- Play Pose: it already exists, so item 14 needs no new command.
+- Rituals: yes, they can be done with commands. Guide 26 in CommandList.docx walks through one.
+- What are Crusader features? Crusader: No Remorse is a different game on the same engine, with guns, ammo and computers. None of that belongs in U8.
+- MIDI: left out, as you said.
+- Your settings check mark: it didn't exist, so I added it.
+
+What's built
+
+┌───────┬────────┬────────────────────────────────────────────────────────────────────────────────────────────────┐
+│ Build │ Where  │                                              What                                              │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ b511  │ U7 +   │ The new damage types, with immune, half or adjust-by per character                             │
+│       │ U8     │                                                                                                │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Getting back up                                                                                │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Feign Death and Withstand Death, as spells and commands                                        │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Changeling command                                                                             │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Commands: Find Objects In Area, Delete Objects In Area, Items Inside, Item Charges, Hurt In    │
+│       │        │ Area                                                                                           │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Conditions: In the party, Character is, Enemy nearby, Objects in an area, Charges of a carried │
+│       │        │  item                                                                                          │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│ b512  │ U8     │ System Settings check marks for stats growing by use (caps replace the level graph) and U8     │
+│       │ only   │ eating and healing                                                                             │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Stumble, knocked down by a fall, ledge hang, Keep Balance, Airwalk Jump                        │
+├───────┼────────┼────────────────────────────────────────────────────────────────────────────────────────────────┤
+│       │        │ Build Up Stat command                                                                          │
+└───────┴────────┴────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+- Older bug fixed: "Character killed: Peter" came back false once a character had left a body.
+- Where to find it: the character editor has no General tab, so getting back up and damage types are on the Health tab.
+
+- Older bug fixed: "Character killed: Peter" came back false once a character had left a body.
+- Where to find it: the character editor has no General tab, so getting back up and damage types are on the Health tab.
+- Amiga and MorphOS: b511 isn't in the C player yet; it's on the Saturday list.
+
+
+
+Tested in the running game: every b511 command and condition, except Changeling attacking an enemy that walks near; Feign Death on both engines; and stat caps, healing and Stumble on U8.
+
+Not tested:
+- Ledge hang, Keep Balance, knocked down and Airwalk Jump, which need high ledges and art for those poses
+- Getting HP back from eating
+- Stats rising from a real swing or climb
+- The new editor screens, used by hand
+- Saving and loading while a monster is waiting to rise
+
+MorphOS bugs (b513)
+
+These were tested on the Linux build of the same C player. The MorphOS and Amiga 68k players are rebuilt but haven't been run on real machines.
+
+┌─────┬────────────┬──────────────────────────────────────────────────────────────────────────────────────────────┐
+│  #  │    Bug     │                                            Result                                            │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 5   │ Andrew's   │ Fixed. He couldn't get past the floor holes; C now walks him in 8-pixel steps like Windows.  │
+│     │ walk       │                                                                                              │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│     │ Dragging   │ Fixed. The drop landed where you clicked OK on "how many?", not where you let go. Gold now   │
+│ 3   │ gold       │ goes to Peter and into his pouch. Aiming directly at the pouch's slot may have missed in my  │
+│     │            │ test, so please try it.                                                                      │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 4   │ Pointers   │ Fixed. A refused drop only wrote a message; now the Won't Fit, Too Heavy or Red X pointer    │
+│     │            │ flashes. Your Hand and Too Full pointers draw correctly.                                     │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ +   │ Crash      │ Fixed. Dropping a worn item on someone crashed my test build. On real machines it could      │
+│     │            │ instead fire By UnEquip for the wrong thing.                                                 │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 1   │ Key at top │ Not reproduced. It drew in the right place on Peter's paperdoll and in his body window.      │
+│     │  left      │                                                                                              │
+├─────┼────────────┼──────────────────────────────────────────────────────────────────────────────────────────────┤
+│ 2   │ Deer head  │ Not reproduced. The Trophy has only one frame, and the deer's walking state wasn't stuck.    │
+└─────┴────────────┴──────────────────────────────────────────────────────────────────────────────────────────────┘
+

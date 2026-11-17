@@ -1,0 +1,51 @@
+- [CURRENT BUILD b610](current-build-b610.md) — latest is b610 (commit 8c90808, 2026-11-17); b560-610 = PS2/PS3/Ubuntu/Vampire, U6+U8 in C, CRT; check BuildInfo.cs first
+- [Build number bump](build-number-bump.md) — increment DEBUG-BUILD each change; backup + git commit before/after changes
+- [Mimic Exult 100%](mimic-exult-100.md) — verify every mechanic in Exult source; NPCs talkable while gumps pause the game
+- [Edit scripts via Write](edit-scripts-via-write.md) — heredocs mangle backslashes; write .py scripts with Write; build to scratch buildout
+- [Master object mechanics](master-object-mechanics.md) — Character/Container/Object are masters; assets are prefabs, mechanics go on the master
+- [Roadmap after build 250](roadmap-after-build250.md) — testing pause, then house/paperdoll editors, spellbook rework, event editor push, map floors; parked liquid ideas
+- [PaperDoll Editor design](paperdoll-editor-design.md) — agreed toolbox/parts/events design; 3-editor request order (stairs done b288, paperdoll, house zones)
+- [issues.odt progress](issues-odt-2026-10-15.md) — what's done (b292 bugs) and the remaining ordered list from issues.odt
+- [issues.odt #2 progress](issues-odt-2026-10-27.md) — second issues.odt: b448-b453 done, remaining list, checkmarks + history blog at the end
+- [Long-term: Ultima family](long-term-ultima-family.md) — U8 done for now; U6/SE/MD started 2026-11-05 (b524); later Underworld, U5
+- [Test project location](test-project-location.md) — I:\test\test.msrp; how to decrypt read-only to inspect map data before blaming the engine
+- [Deferred merges + weapons](deferred-merges-and-weapons.md) — don't merge Container/Book editors until editor 100% done; b308 weapons/armor, weapon-in-hand drawing still open
+- [CommandList progress](commandlist-progress.md) — b315-317: all CommandList.docx commands done; how to add a command; more lists coming (40-50 total)
+- [Plain numbers](plain-ascii-numbers.md) — write 3.5 not 3½; the terminal shows ½ as "%"
+- [Title/Save/Video plan](title-save-video-plan.md) — 2026-10-17 design: video codecs, save/load as paperdoll parts, title editor, build order
+- [PaperDoll forms request](paperdoll-forms-request.md) — 2026-10-18 list: prompt paperdolls, VS-style controls, fixed sounds, lockpick group, object folders, ambient
+- [Combat music](combat-music.md) — b346 combat/danger/victory/death music, Exult loop rules, ambient off but weather on in battle
+- [Big batch 2026-10-18](big-batch-2026-10-18.md) — groups 1-12, Title editor, shipping/fullscreen/quit, sdbx beside exe, 25-30 fps; progress per build
+- [Worlds / Maps tab](worlds-maps-tab.md) — b358-359: one map = one world; Maps tab, Change Map to another world, world states in saves
+- [Game errors](game-errors.md) — b362: numbered errors, error paperdoll %errnum/%errdescrp, Show Error; route new player-facing failures through GameError
+- [Wall Designer](wall-designer.md) — b364: wall sets (window/door in a wall), one object in the editor, real pieces in play
+- [Levels & experience](levels-experience.md) — b369: killer gets victim's EXP, level curve in System Settings > Levels, Level Lock per character
+- [Fire & pouring](fire-and-pouring.md) — b371: Light Source fires burn while lit, bucket douses; pouring between containers (user-approved, not Exult)
+- [Work schedules](work-schedules.md) — b373-375: real Bake/Sew/Blacksmith/Lab/Farm/Miner, per-copy Belongs To, sowing; user testing 2026-10-20
+- [Spells & movement](spells-and-movement.md) — b376-379: Exult spellbook gump/paperdoll option/who reads, spell kinds, mages in combat, Land/Sea/Air
+- [Sound Mixer Compose](sound-mixer-compose.md) — b381: mixer as a station for sound; Compose makes an internal sound, clears the mixer, irreversible
+- [Map wrap-around](map-wrap-around.md) — b382-383: per-map wrap (user says "warp"); everyone, fights and missiles cross the seam
+- [Scenario harness](scenario-harness.md) — runtime-test the user's events on a copy of test.msrp, logged, engine untouched
+- [Peter cutscene findings](peter-cutscene-findings.md) — b384: event holds, paths through the player, stair step-aside (all verified in runtime scenarios)
+- [Candy request](candy-request-2026-10-20.md) — 2026-10-20 Request.docx: icons b386, splash b387, houses b388, vehicles b389-391 + guides done; platforms (Build dialog), PS2 next
+- [Platform ports](platform-ports.md) — 2026-10-20: Build dialog targets; Amiga 68k RTG/Vampire 060+ AHI+Paula, no AROS; Game + 64x64 Game.info; user's test machines
+- [Player still to do](player-still-to-do.md) — KEYWORD "still to do": C player port state (b441: no known gaps left), Vampire build + Amiga video next
+- [WinUAE test harness](winuae-test-harness.md) — run the 68k player in the user's AmiKit WinUAE myself; boot-drive trick, safety, b445 timings
+- [All platforms together](all-platforms-together.md) — from b446 every change goes into Windows AND the C player (Amiga 68k + MorphOS); a clone of Windows
+- [Unpack folder data loss](shared-unpack-folder-data-loss.md) — 2026-10-27 sprite pictures lost via shared temp folder; b463 fix; repaired file installed; testing rules
+- [U8 prefab rule](u8-prefab-rule.md) — Style U7/U8 in one editor; NEW U8 engine copied from U7 (Pentagram ref); U7 untouched; Amiga/MorphOS on Saturdays
+- [U8 keyboard](u8-keyboard.md) — b488-489: nothing hardcoded, every U8 key is an action (never read Key.X in Editor/U8); keys.json beside saves; what I could not drive
+- [U8-exclusive features](u8-exclusive-features.md) — b511-521 from Pentagram + Crusader; prefer commands over editor changes; what runs proved
+- [U8 is its own world](u8-is-its-own-world.md) — focus only on U8 now; real water, real falls, lava for ANY character; nothing new in U7
+- [U8 tiptoe mouse only](u8-tiptoe-mouse-only.md) — user's decision 2026-11-04: no keyboard key for tiptoe
+- [Saturday C port list](saturday-c-port-list.md) — Amiga/MorphOS catch-up: b481 stack joins in C, the whole U8 engine
+- [issues.odt #3](issues-odt-2026-11-03.md) — b490-498 done; C player's pixel-perfect frame NOT done (320x200 frame), Scenario Developer design, what's untested
+- [MorphOS hi-res](morphos-hires.md) — b500-503: FRAME_HIRES picture on MorphOS, 68k stays 320x200; test C via WSL SDL dummy --shot; never name a macro HIRES
+- [Slimes split when hit](slimes-split-when-hit.md) — b506: Growth choice, Slime Trail, no limit, all engines; what runs proved; C limits
+- [Who set it off over pauses](who-set-it-off-over-pauses.md) — b510: every event pause keeps the activator; C characters step on map events; test events with their real commands
+- [Vampire build decision](vampire-build-decision.md) — needs a 10 fps gain or it is cancelled; user brings Firebird Timing lines 2026-11-05
+- [U6 mode requirements](u6-mode-requirements.md) — the user's Ultima 6 spec: HUD Editor, keyword talk, turn combat on key, Amiga 22 fps + IFF; U6 only
+- [U6 demo focus](u6-demo-focus.md) — from 2026-11-06 the user builds a U6 demo and reports bugs; U7 project closed
+- [U6: commands first](u6-commands-first.md) — new U6 features = Ultima 6 tab event commands; editor UI only if impossible; nothing wired
+- [Commands only from now](commands-only-from-now.md) — from 2026-11-07 every new feature (all engines) is a command + CommandList.docx; editor UI only if impossible
+- [Plan from Nov 10](plan-from-nov-10.md) — ports only (all platforms incl. PS2-PS4, U6/U7/U8 engines) until 100%; then Ultima 5; Underworld last

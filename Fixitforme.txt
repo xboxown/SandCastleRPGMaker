@@ -1,0 +1,83 @@
+You can set up the bucket dousing the fire now. Two things are missing from the engine, though: a fire that both burns you and can be doused, and pouring a bottle into the bucket. Both are noted below.
+
+Part 1: The bucket douses the fire
+
+A bucket only puts out a lit Light Source object. It can't put out a Trap, so make your fire a Light Source.
+
+Step 1: make water able to put out fires
+1. Open the Object Editor and select your Water object (Food).
+2. Make sure Liquid is chosen. It already is.
+3. Tick Puts out fires (water). Yours is currently off, so the bucket would do nothing to the fire.
+
+Step 2: check the bucket
+Your Bucket already holds Water and has its full sprite. Optionally, set a Fill Sound and a Pour Sound in its Liquid Container settings.
+
+Step 3: make the fire
+1. In the Object Editor, click New and choose type Light Source. Name it something like "Wall of Fire".
+2. Sprite: use the burnt-out look, such as ashes or embers. This is how it looks once doused.
+3. Lit Sprite: use the burning flames.
+4. Tick Starts lit.
+5. Tick Solid (blocks walking) so nobody walks through it.
+6. Tick Too heavy (can't be picked up or moved) so nobody carries it away like a torch.
+7. Set the Off Sound to a hiss if you have one. It plays when the fire goes out.
+8. Stop the player putting it out by hand. Double-clicking a Light Source normally turns it on and off. Give the fire a By Use event page with one Show Text such as "It's far too hot to touch!". Your event runs instead of putting the fire out.
+
+Step 4: put it on the map
+Place your five fires across the path.
+
+In play: double-click the bucket of water, then click a fire. The flames are replaced by your burnt-out sprite and the bucket is empty again. Once it's out, the fire no longer blocks the way, but only if you untick Solid on the doused look. See the limit below.
+
+Two limits right now:
+- A Light Source fire doesn't burn whoever steps on it. Only a Trap does that, and a bucket can't douse a Trap.
+- The fire is Solid whether it's lit or not, so a doused fire still blocks the path.
+
+I can add a setting for Light Sources: "Burns whoever steps on it while lit (damage X)", which also makes it walkable once it's out. Then the fire hurts while burning and is safe once doused, as you described. Say yes and I'll build it.
+
+
+---------
+
+Both rules are in build 371: fires that burn while lit, and pouring water into the bucket. It built and is committed, but I haven't played it, so follow these steps and tell me if anything misbehaves.
+
+Step 1: Water puts out fires
+
+1. Open the Object Editor and select your Water object (Food → Liquid).
+2. Tick Puts out fires (water). Yours is currently off, so without this the bucket does nothing to the fire.
+
+Step 2: The bucket
+
+Your Bucket already lists Water with its full sprite. Optionally, give it a Fill sound and a Pour sound.
+
+Step 3: The fire
+
+1. In the Object Editor, click New, choose Light Source and name it something like "Wall of Fire".
+2. Sprite: the burnt-out look (ashes or embers). This is how it looks once doused.
+3. Lit sprite: the burning flames animation.
+4. Tick Starts lit.
+5. Tick Too heavy (can't be picked up or moved) so nobody carries it off like a torch.
+6. Put out sound: a hiss, if you have one.
+7. New in this build:
+   - Burns whoever steps into it while lit (a fire): tick it and set Burn damage from and to (for example 2 to 6). Anyone standing in the fire is burnt again every second, as in Exult's fire fields. Once it's out, it's harmless.
+   - Solid only while lit (walkable once put out), which you can use alongside Solid. Choose one of two styles:
+     - A fire you can walk through and get hurt: tick Burns, and leave Solid unticked.
+     - A wall of fire that blocks the way: tick Solid (blocks walking) and Solid only while lit. Once doused, the path opens.
+8. Stop the player putting it out by hand. Add a By Use event page with one Show Text, such as "It's far too hot to touch!". Your event runs instead of the double-click putting it out.
+
+Then place your five fires across the path.
+
+Step 4: The water bottles
+
+Your four bottles in the wardrobe can stay as the Water Food items. Nothing to change. In play, either way works:
+- Double-click the bucket, then click a bottle of water. The bottle can be in your backpack, in an open container or on the floor.
+- Or double-click the bottle, then click the empty bucket.
+
+The bucket fills, plays its fill sound and shows its full sprite, and that bottle is gone. If the bucket is already full, the Avatar says "The bucket is full." Clicking a person still means drinking, as before.
+
+Step 5: Dousing
+
+Double-click the full bucket and click a fire. The flames go out and show your burnt-out sprite, the fire stops hurting, and with "Solid only while lit" the way opens. The bucket is empty again, ready for the next bottle.
+
+Four bottles douse four of the five fires. The fifth one is yours to solve some other way.
+
+Bonus: pouring between containers
+
+This is also new. Use a full container on an empty one, or an empty one on a full one, and the liquid goes across, as long as the empty one lists that liquid. A Liquid Container also has a new tick box, Used up when poured into another container. With it ticked, a bottle is thrown away after pouring; without it, the bottle stays, empty.

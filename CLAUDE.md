@@ -7,12 +7,16 @@ Read this first, every session, on any PC.
   never work from an older build's assumptions.
 - `BUILD-HISTORY.md` has one line per build (newest first); older detail is in `git log`.
 
-## Every build (no exceptions)
-1. Bump `DEBUG-BUILD-N` in `Editor/BuildInfo.cs` by one.
+## Every change goes to GitHub at once (no exceptions)
+ANY change - a feature, a fix big or small, a doc, a note - is pushed to GitHub immediately, as soon as Windows and all the
+other platforms have it. GitHub (public, by the user's choice) is the user's only off-site backup.
+1. Bump `DEBUG-BUILD-N` in `Editor/BuildInfo.cs` by one (for code changes).
 2. Add a line at the top of `BUILD-HISTORY.md`: `- **bN** (date) - what changed, which engines/platforms`.
-3. Commit with the message `bN - <what changed>` and push to GitHub (`git push origin master`).
-   Never let builds pile up uncommitted - 50 builds (b560-b610) were nearly lost that way in November 2026.
-4. New commands are written up in `CommandList.docx`.
+3. If Claude's memory changed, copy it in: `cp "C:/Users/Fahed Al Daye/.claude/projects/H--SandcastleRpgMaker/memory/"*.md claude-memory/`
+   (`claude-memory/` is the GitHub copy of those notes; on a new PC copy it back the other way).
+4. `git add -A`, commit `bN - <what changed>`, `git push origin master`, and check the push went through.
+   Never let changes pile up unpushed - 50 builds (b560-b610) were nearly lost that way in November 2026.
+5. New commands are written up in `CommandList.docx`.
 
 ## Standing decisions
 - New features (all engines) are event commands only; change an editor only if a command truly can't do it, and say why first.
