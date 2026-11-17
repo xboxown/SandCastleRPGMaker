@@ -141,7 +141,7 @@ public partial class GameTestWindow
     {
         if (_fadeOverlay is null)
         {
-            _fadeOverlay = new Rectangle { Width = 320, Height = 200, IsHitTestVisible = false, Opacity = 0 };
+            _fadeOverlay = new Rectangle { IsHitTestVisible = false, Opacity = 0 }; // the whole view (wider with Fill the screen)
             Panel.SetZIndex(_fadeOverlay, 39); // over the world and its light, under the dialog boxes
             ViewportGrid.Children.Add(_fadeOverlay);
         }
@@ -160,7 +160,7 @@ public partial class GameTestWindow
 
     private bool FlashScreenCommand(EventCommand command)
     {
-        var flash = new Rectangle { Width = 320, Height = 200, IsHitTestVisible = false, Fill = BrushOf(command.Get("Color"), Colors.White), Opacity = 1 };
+        var flash = new Rectangle { IsHitTestVisible = false, Fill = BrushOf(command.Get("Color"), Colors.White), Opacity = 1 };
         Panel.SetZIndex(flash, 38);
         ViewportGrid.Children.Add(flash);
         double total = Math.Max(0.05, FormulaNumber(command, "Seconds")) * 1000, ms = 0;

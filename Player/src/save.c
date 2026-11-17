@@ -14,6 +14,8 @@
  */
 #include "save.h"
 #include "books.h"
+#include "u6.h"
+#include "u8.h"
 #include "world.h"
 #include "items.h"
 #include "events.h"
@@ -28,6 +30,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include <time.h>
 
 char *read_whole_file(const char *path, long *length);
@@ -42,6 +45,11 @@ static const char *str(cJSON *o, const char *k) { const char *s = cJSON_GetStrin
 /* Beside the game: <folder holding Game_Data>/Saves (Amiga paths too: "PROGDIR:Game_Data" -> "PROGDIR:Saves"). */
 void save_init(const char *gameFolder)
 {
+#ifdef PLATFORM_PS2
+    (void)gameFolder;
+    snprintf(savesFolder, sizeof savesFolder, "%s", ps2_saves_folder()); /* the memory card in slot 1 (platform_ps2.c) */
+    return;
+#endif
     char parent[1100];
     snprintf(parent, sizeof parent, "%s", gameFolder);
     size_t n = strlen(parent);
@@ -54,16 +62,20 @@ void save_init(const char *gameFolder)
     snprintf(savesFolder, sizeof savesFolder, "%sSaves", parent);
 }
 
+/* An installed game (Ubuntu's .deb, the Mac's .app): its folder can't be written - the saves go in the player's own folder
+   (platform_installed_paths). */
+void save_use_folder(const char *folder) { snprintf(savesFolder, sizeof savesFolder, "%s", folder); }
+
 static void path_in(char *out, size_t size, const char *folder, const char *file) { snprintf(out, size, "%s/%s", folder, file); }
 
 /* ---------------- The screenshot ---------------- */
 
 void save_take_screenshot(const uint32_t *pixels)
 {
-    if (!shot) shot = (uint32_t *)malloc(sizeof(uint32_t) * SCREEN_W * SCREEN_H);
+    if (!shot) shot = (uint32_t *)malloc(sizeof(uint32_t) * BASE_W * BASE_H);
     if (!shot) return;
-    for (int y = 0; y < SCREEN_H; y++)  /* a save's picture stays 320 x 200, whatever the screen */
-        for (int x = 0; x < SCREEN_W; x++) shot[y * SCREEN_W + x] = pixels[y * frame_scale * FRAME_W + x * frame_scale];
+    for (int y = 0; y < BASE_H; y++)  /* a save's picture stays 320 x 200, whatever the screen: its middle (Fill the screen) */
+        for (int x = 0; x < BASE_W; x++) shot[y * BASE_W + x] = pixels[(BASE_Y + y) * frame_scale * FRAME_W + (BASE_X + x) * frame_scale];
 }
 
 static uint32_t crc_table[256];
@@ -202,7 +214,12 @@ int save_list(SaveInfo *out, int max)
 /* The game as it is now: its own data, everything changed written back into it, and what's only in play. */
 static cJSON *worldStates;
 
-static cJSON *capture(void)
+static cJSON *capture_inner(void);
+static cJSON *capture_light_inner(void);
+/* Ultima 8, Crusader: written as if the main character were controlled, and saying who was (u8.c). */
+static cJSON *capture(void) { u8_save_begin(); cJSON *r = capture_inner(); u8_save(get(r, "Runtime")); u8_save_end(); return r; }
+static cJSON *capture_light(void) { u8_save_begin(); cJSON *r = capture_light_inner(); u8_save(get(r, "Runtime")); u8_save_end(); return r; }
+static cJSON *capture_inner(void)
 {
     cJSON *root = cJSON_Duplicate((cJSON *)world_json(), 1), *project = get(root, "Project");
     cJSON *runtime = cJSON_CreateObject();
@@ -216,12 +233,138 @@ static cJSON *capture(void)
     weather_save(runtime);
     conditions_save(runtime);
     books_save(runtime);
+    u6_save(runtime); /* Ultima 6: the HUD frame in play (Change HUD Frame) */
     if (worldStates) cJSON_AddItemToObject(runtime, "WorldStates", cJSON_Duplicate(worldStates, 1)); /* the other worlds as they were left */
     cJSON_AddItemToObject(root, "Runtime", runtime);
     return root;
 }
 
 cJSON *save_capture(void) { return capture(); }
+
+/* ---------------- Writing a save without copying the game (b576) ----------------
+   The save is the game's whole data with what changed in play. capture() copies all of it, and printing it made it once more
+   as one long text: on the PS2 (32 MB) that didn't fit - "not enough memory". Here only what the save changes is new (the
+   map's own entries, the characters); everything else is the game's own data, pointed at (references: never freed with the
+   save), and the text goes to the file a piece at a time. The file is the same as before, byte for byte. */
+static cJSON *shallow(cJSON *o)
+{
+    if (!o) return NULL;
+    cJSON *copy = cJSON_IsArray(o) ? cJSON_CreateArray() : cJSON_CreateObject(), *c;
+    cJSON_ArrayForEach(c, o)
+        if (cJSON_IsArray(copy)) cJSON_AddItemReferenceToArray(copy, c); else cJSON_AddItemReferenceToObject(copy, c->string, c);
+    return copy;
+}
+/* In a shallow copy: the entry k made its own (shallow) copy too, so changing what's in it never changes the game's. */
+static cJSON *own(cJSON *o, const char *k)
+{
+    cJSON *was = get(o, k);
+    if (!was || !(cJSON_IsObject(was) || cJSON_IsArray(was))) return was;
+    cJSON *copy = shallow(was);
+    cJSON_ReplaceItemInObject(o, k, copy);
+    return copy;
+}
+
+static cJSON *capture_light_inner(void)
+{
+    cJSON *root = shallow((cJSON *)world_json()), *project = own(root, "Project");
+    cJSON *map = own(project, "Map");
+    cJSON *layers = own(map, "Layers"), *l;
+    /* each layer its own (world_save puts its tiles in), and each character (items_save puts its belongings in) */
+    for (l = layers ? layers->child : NULL; l; l = l->next)
+    {
+        cJSON *copy = shallow(l);
+        cJSON_ReplaceItemViaPointer(layers, l, copy);
+        l = copy;
+    }
+    cJSON *characters = own(project, "Characters"), *list = own(characters, "Characters"), *c;
+    for (c = list ? list->child : NULL; c; c = c->next)
+    {
+        cJSON *copy = shallow(c);
+        cJSON_ReplaceItemViaPointer(list, c, copy);
+        c = copy;
+    }
+    cJSON *runtime = cJSON_CreateObject();
+    cJSON_AddNumberToObject(runtime, "Format", SAVE_FORMAT);
+    world_save(map, runtime, items_save_thing);
+    items_save(list);
+    events_save(runtime);
+    script_save(runtime);
+    vitals_save(runtime);
+    combat_save(runtime);
+    weather_save(runtime);
+    conditions_save(runtime);
+    books_save(runtime);
+    u6_save(runtime); /* Ultima 6: the HUD frame in play (Change HUD Frame) */
+    if (worldStates) cJSON_AddItemReferenceToObject(runtime, "WorldStates", worldStates);
+    if (get(root, "Runtime")) cJSON_DeleteItemFromObject(root, "Runtime");
+    cJSON_AddItemToObject(root, "Runtime", runtime);
+    return root;
+}
+
+/* The text as cJSON_PrintUnformatted makes it, a piece at a time: counted (w NULL), or encrypted into the file. */
+typedef struct Sink { PackWriter *w; FILE *plain; long count; char buf[4096]; int n; } Sink;
+static void sink_flush(Sink *s) { if (s->w && s->n) pack_writer_put(s->w, s->buf, s->n); if (s->plain && s->n) fwrite(s->buf, 1, (size_t)s->n, s->plain); s->count += s->n; s->n = 0; }
+static void sink_put(Sink *s, const char *p, size_t n)
+{
+    while (n)
+    {
+        size_t room = sizeof s->buf - (size_t)s->n, take = n < room ? n : room;
+        memcpy(s->buf + s->n, p, take); s->n += (int)take; p += take; n -= take;
+        if (s->n == (int)sizeof s->buf) sink_flush(s);
+    }
+}
+static void sink_str(Sink *s, const char *t) { sink_put(s, t, strlen(t)); }
+static void sink_quoted(Sink *s, const char *t)
+{
+    sink_put(s, "\"", 1);
+    if (t)
+        for (const unsigned char *p = (const unsigned char *)t; *p; p++)
+        {
+            const unsigned char *run = p;
+            while (*p > 31 && *p != '"' && *p != '\\') p++;
+            if (p > run) sink_put(s, (const char *)run, (size_t)(p - run));
+            if (!*p) break;
+            char e[8];
+            switch (*p)
+            {
+                case '\\': sink_str(s, "\\\\"); break;
+                case '"': sink_str(s, "\\\""); break;
+                case '\b': sink_str(s, "\\b"); break;
+                case '\f': sink_str(s, "\\f"); break;
+                case '\n': sink_str(s, "\\n"); break;
+                case '\r': sink_str(s, "\\r"); break;
+                case '\t': sink_str(s, "\\t"); break;
+                default: snprintf(e, sizeof e, "\\u%04x", *p); sink_str(s, e); break;
+            }
+        }
+    sink_put(s, "\"", 1);
+}
+static void sink_int(Sink *s, int v) { char t[16]; int n = snprintf(t, sizeof t, "%d", v); sink_put(s, t, (size_t)n); }
+static void emit(Sink *s, const cJSON *item)
+{
+    int type = item->type & 0xFF;
+    if (type == cJSON_Object || type == cJSON_Array)
+    {
+        int object = type == cJSON_Object;
+        sink_put(s, object ? "{" : "[", 1);
+        const int *packed; int count;
+        if (!object && (packed = cJSON_GetPackedInts(item, &count)) != NULL)
+            for (int i = 0; i < count; i++) { if (i) sink_put(s, ",", 1); sink_int(s, packed[i]); }
+        for (const cJSON *c = item->child; c; c = c->next)
+        {
+            if (object) { sink_quoted(s, c->string); sink_put(s, ":", 1); }
+            emit(s, c);
+            if (c->next) sink_put(s, ",", 1);
+        }
+        sink_put(s, object ? "}" : "]", 1);
+        return;
+    }
+    if (type == cJSON_Number && !isnan(item->valuedouble) && !isinf(item->valuedouble) && item->valuedouble == (double)item->valueint) { sink_int(s, item->valueint); return; }
+    if (type == cJSON_String) { sink_quoted(s, item->valuestring); return; }
+    /* anything else (numbers with fractions, true, false, null, raw): cJSON's own printing of it */
+    char *t = cJSON_PrintUnformatted(item);
+    if (t) { sink_str(s, t); free(t); }
+}
 
 /* The worlds visited and left (by world id): kept from a save, or from Change Map. Takes it. */
 void save_set_world_states(cJSON *states) { cJSON_Delete(worldStates); worldStates = states; }
@@ -251,26 +394,37 @@ int save_write(const char *name, int slot, const char *overwrite, char *error, s
         snprintf(folder, sizeof folder, "%s/%s", savesFolder, leaf);
     }
     if (!platform_make_dir(folder)) { snprintf(error, errorSize, "%s couldn't be made", folder); cJSON_Delete(index); return 0; }
-    cJSON *root = capture();
-    char *json = cJSON_PrintUnformatted(root);
-    cJSON_Delete(root);
-    if (!json) { snprintf(error, errorSize, "not enough memory"); cJSON_Delete(index); return 0; }
-    long size;
-    unsigned char *sealed = pack_encrypt((const unsigned char *)json, (long)strlen(json), &size);
-    free(json);
-    if (!sealed) { snprintf(error, errorSize, "the game's key couldn't be read"); cJSON_Delete(index); return 0; }
+    cJSON *root = capture_light();
+    /* the text counted first (the file's header says how long it is), then written - encrypted as it goes */
+    Sink *sink = (Sink *)calloc(1, sizeof(Sink));
+    if (!sink) { cJSON_Delete(root); snprintf(error, errorSize, "not enough memory"); cJSON_Delete(index); return 0; }
+    emit(sink, root); sink_flush(sink);
+    long plainLength = sink->count;
     /* written beside, then put in place: a failed write never spoils the save that was there */
     char path[1300], temp[1300];
     path_in(path, sizeof path, folder, "game.sav");
     path_in(temp, sizeof temp, folder, "game.sav.saving");
     FILE *f = fopen(temp, "wb");
-    int ok = f && fwrite(sealed, 1, (size_t)size, f) == (size_t)size;
+    PackWriter *w = f ? pack_writer_open(f, plainLength) : NULL;
+    if (f && !w)
+    {
+        fclose(f); remove(temp); free(sink); cJSON_Delete(root);
+        snprintf(error, errorSize, "the game's key couldn't be read"); cJSON_Delete(index); return 0;
+    }
+    int ok = 0;
+    if (w)
+    {
+        memset(sink, 0, sizeof *sink); sink->w = w;
+        emit(sink, root); sink_flush(sink);
+        ok = pack_writer_close(w) && sink->count == plainLength;
+    }
+    free(sink);
+    cJSON_Delete(root);
     if (f && fclose(f) != 0) ok = 0;
-    free(sealed);
     if (!ok) { remove(temp); snprintf(error, errorSize, "the disk is full or can't be written to"); cJSON_Delete(index); return 0; }
     remove(path);
     if (rename(temp, path) != 0) { snprintf(error, errorSize, "%s couldn't be written", path); cJSON_Delete(index); return 0; }
-    if (shot) { path_in(path, sizeof path, folder, "shot.png"); write_png(path, shot, SCREEN_W, SCREEN_H); }
+    if (shot) { path_in(path, sizeof path, folder, "shot.png"); write_png(path, shot, BASE_W, BASE_H); }
     /* its listing */
     cJSON *info = cJSON_CreateObject();
     char text[64];
@@ -300,6 +454,34 @@ int save_write(const char *name, int slot, const char *overwrite, char *error, s
     cJSON_Delete(index);
     return 1;
 }
+
+#ifdef SAVE_SELFTEST
+/* Testing only (the Linux build): the save's text both ways - the old (copy, print) and the light one - to two files. */
+void save_selftest(const char *oldPath, const char *newPath)
+{
+    cJSON *root = capture();
+    char *json = cJSON_PrintUnformatted(root);
+    cJSON_Delete(root);
+    FILE *f = fopen(oldPath, "wb"); if (f && json) fwrite(json, 1, strlen(json), f); if (f) fclose(f);
+    free(json);
+    root = capture_light();
+    Sink *s = (Sink *)calloc(1, sizeof(Sink));
+    s->plain = fopen(newPath, "wb");
+    emit(s, root); sink_flush(s);
+    if (s->plain) fclose(s->plain);
+    free(s);
+    cJSON_Delete(root);
+    /* and a real save, read back */
+    char error[300];
+    if (!save_write("selftest", 0, NULL, error, sizeof error)) { printf("SELFTEST save failed: %s\n", error); return; }
+    SaveInfo list[4];
+    if (save_list(list, 4) < 1) { printf("SELFTEST no save listed\n"); return; }
+    char *text = save_read(list[0].folder, error, sizeof error);
+    f = fopen("save_read.json", "wb"); if (f && text) fwrite(text, 1, strlen(text), f); if (f) fclose(f);
+    free(text);
+    printf("SELFTEST done (%s)\n", list[0].folder);
+}
+#endif
 
 int save_delete(const char *folder)
 {

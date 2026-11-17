@@ -19,6 +19,7 @@ typedef struct DialogBox
 {
     const char *title, *text;      /* copied when queued */
     const Sprite *face;            /* the speaker's face, or NULL */
+    int speakerPlus1;              /* the speaking character's id + 1 (0: none said) */
     int faceRight;
     int position;                  /* 0 top, 1 middle, 2 bottom */
     int dim;                       /* darken the game behind */
@@ -50,5 +51,12 @@ void dialog_click(int x, int y);
 void dialog_draw(uint32_t *pixels, uint32_t ms);
 
 void dialog_reset(void);
+
+/* Ultima 6's talk (u6.c): the box's replies, a reply picked by its index, going on past a page without replies. */
+void dialog_go_on(void);
+void dialog_pick_reply(int index);
+int dialog_reply_count(void);
+const char *dialog_reply_text(int index);
+int dialog_speaker(void);   /* the speaking character's id (-1: none) */
 
 #endif

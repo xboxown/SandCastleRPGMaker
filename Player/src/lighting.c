@@ -16,6 +16,7 @@
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -111,6 +112,9 @@ static void show(Sky sky)
 {
     if (shown.rgb == sky.rgb && fabs(shown.opacity - sky.opacity) < 0.005) return;
     shown = sky;
+#ifdef PS2_DIAG_SHOTS
+    printf("Game: Sky: #%06X at %d%% (hour %d:%02d)\n", (unsigned)sky.rgb, (int)(sky.opacity * 100 + 0.5), events_hour(), events_minute());
+#endif
     drawnColor = sky.rgb;
     fromOpacity = drawnOpacity; targetOpacity = clamp01(sky.opacity); fadeMs = 0; fadeLength = 400; /* a 0.4 s fade to it */
 }

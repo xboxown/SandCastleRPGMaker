@@ -6,6 +6,7 @@ int vehicles_use_part(int uid);                 /* a vehicle's controls or drive
 int vehicles_drive(int dx, int dy, double seconds); /* the direction keys while driving: 1 = they drive it (the player doesn't walk) */
 void vehicles_update(double ms);                /* autopilots, flying vehicles climbing */
 void vehicles_stop_driving(void);
+int vehicles_driving(void);
 void vehicles_reset(void);
 
 /* The event commands. */

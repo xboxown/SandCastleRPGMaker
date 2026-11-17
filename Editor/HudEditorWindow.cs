@@ -411,6 +411,11 @@ public sealed class HudEditorWindow : Window
             case HudPieceKind.GameView:
                 _props.Children.Add(Note($"{piece.Width / 16.0:0.#} x {piece.Height / 16.0:0.#} cells of 16 pixels."));
                 break;
+            case HudPieceKind.Picture:
+                _props.Children.Add(SpritePicker("Sprite (animated or not)", piece.Sprite, link => { piece.Sprite = link; Redraw(); }));
+                _props.Children.Add(Check("In front of the panel's pieces", () => piece.InFront, on => { piece.InFront = on; Redraw(); }));
+                _props.Children.Add(Note("Off: behind the body slots, what they wear and the carried items (a paperdoll picture under the weapons and armour). On: over them. Backward / Forward still order it among the frame's other pieces."));
+                break;
             default:
                 _props.Children.Add(SpritePicker(piece.Kind == HudPieceKind.Compass ? "Sprite (8 frames: N, NE, E, SE, S, SW, W, NW)" : piece.Kind == HudPieceKind.SunMoon ? "Sprite (frames through the day)" : "Sprite (animated or not)",
                     piece.Sprite, link => { piece.Sprite = link; Redraw(); }));
@@ -531,7 +536,8 @@ public sealed class HudEditorWindow : Window
         _canvas.Height = _hud.Height * z;
         if (DollLook.Frame(DollLook.SpriteOf(_hud.Frame, _sprites)) is { } frame) _canvas.Children.Add(Pixel(frame, frame.PixelWidth, frame.PixelHeight, z));
         else _canvas.Children.Add(Dashed(new Size(_hud.Width, _hud.Height), z, Brushes.DimGray, "frame: pick its sprite (left)"));
-        foreach (var piece in _hud.Pieces)
+        // As the game draws them: the HUD's pieces in list order, then the panel's contents over them, then pictures ticked In front.
+        foreach (var piece in _hud.Pieces.OrderBy(p => p.Kind == HudPieceKind.Picture && p.InFront ? 2 : HudPiece.IsPanelContent(p.Kind) ? 1 : 0))
         {
             var view = HudPiece.ViewOf(piece.Kind);
             if (view != HudPanelView.Always && view != ShownView) continue;

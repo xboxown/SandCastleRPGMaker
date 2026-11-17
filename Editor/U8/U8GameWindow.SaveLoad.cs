@@ -1,4 +1,4 @@
-// Ultima 8 engine (U8GameWindow) - copied from the Ultima 7 engine (GameTestWindow, tag u7-final-b471) and changed for Ultima 8 here only.
+﻿// Ultima 8 engine (U8GameWindow) - copied from the Ultima 7 engine (GameTestWindow, tag u7-final-b471) and changed for Ultima 8 here only.
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
@@ -125,9 +125,11 @@ public partial class U8GameWindow
         {
             if (ViewportBorder.ActualWidth <= 0 || ViewportBorder.ActualHeight <= 0) return null;
             var drawing = new DrawingVisual();
+            // The middle 320 x 200 (all of it unless Fill the screen widened the view): every save's picture the same size.
+            var middle = new Rect((ViewportWidth - BaseViewWidth) / 2 / ViewportWidth, (ViewportHeight - BaseViewHeight) / 2 / ViewportHeight, BaseViewWidth / ViewportWidth, BaseViewHeight / ViewportHeight);
             using (var dc = drawing.RenderOpen())
-                dc.DrawRectangle(new VisualBrush(ViewportBorder) { Stretch = Stretch.Fill }, null, new Rect(0, 0, ViewportWidth, ViewportHeight));
-            var bitmap = new RenderTargetBitmap((int)ViewportWidth, (int)ViewportHeight, 96, 96, PixelFormats.Pbgra32);
+                dc.DrawRectangle(new VisualBrush(ViewportBorder) { Stretch = Stretch.Fill, Viewbox = middle, ViewboxUnits = BrushMappingMode.RelativeToBoundingBox }, null, new Rect(0, 0, BaseViewWidth, BaseViewHeight));
+            var bitmap = new RenderTargetBitmap((int)BaseViewWidth, (int)BaseViewHeight, 96, 96, PixelFormats.Pbgra32);
             bitmap.Render(drawing);
             var encoder = new PngBitmapEncoder();
             encoder.Frames.Add(BitmapFrame.Create(bitmap));
@@ -558,6 +560,8 @@ public partial class U8GameWindow
             if (map.Characters.FirstOrDefault(c => c.Id == mapCharacter.Placement.Id) is { } placed)
             {
                 placed.Floor = MapFloors.FloorOfLift(Math.Max(0, mapCharacter.Lift));
+                placed.PixelXRuntime = mapCharacter.PixelX; placed.PixelYRuntime = mapCharacter.PixelY; placed.LiftRuntime = mapCharacter.Lift; // exactly where it stands, and how high - put back there when loaded
+                placed.X = (int)Math.Floor(mapCharacter.PixelX / _tileWidth); placed.Y = (int)Math.Floor(mapCharacter.PixelY / _tileHeight);
                 placed.SavedCharacterIndex = SavedIndexOf(mapCharacter.Character);
             }
         foreach (var (dead, lying) in _bodies) // the dead: which character lies in which body

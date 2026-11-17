@@ -85,6 +85,7 @@ public partial class SpriteEditorWindow : Window
     private static bool IsProtected(string name) =>
         name is SpriteDatabase.TilesetGroupName or SpriteDatabase.FontsGroupName or SpriteDatabase.BloodGroupName or SpriteDatabase.KeychainGroupName or SpriteDatabase.DialogFrameGroupName
             or SpriteDatabase.WeaponInHandGroupName or SpriteDatabase.JoinedMonstersGroupName or SpriteDatabase.TrailGroupName or SpriteDatabase.WaterSplashGroupName or SpriteDatabase.LavaFlareGroupName or SpriteDatabase.CrosshairGroupName
+            or SpriteDatabase.HitSparkGroupName // Ultima 6 projects only (EnsureUltima6Groups) - red and locked like the rest
         || SpriteDatabase.IsBundleGroup(name);
 
     /// <summary>Right-click a folder: what it's for (its identity), rename, paste, delete.</summary>

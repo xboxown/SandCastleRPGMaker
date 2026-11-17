@@ -66,14 +66,15 @@ public partial class GameTestWindow
             var mapCharacter = new MapCharacter
             {
                 Placement = placement, Character = character, Size = ActorSizing.Resolve(character, _poseDatabase, _sprites),
-                PixelX = placement.X * _tileWidth + _tileWidth / 2.0,
-                PixelY = placement.Y * _tileHeight + _tileHeight / 2.0,
+                PixelX = placement.PixelXRuntime ?? placement.X * _tileWidth + _tileWidth / 2.0, // a save: exactly where it stood
+                PixelY = placement.PixelYRuntime ?? placement.Y * _tileHeight + _tileHeight / 2.0,
                 Facing = placement.Facing
             };
             _mapCharacters.Add(mapCharacter);
             // Standing on top of whatever solid thing is under it, like the player at the Start Position.
             mapCharacter.Lift = StandingLiftOnFloor(CharacterFootprint(mapCharacter), placement.Floor, placement); // on its own floor, not counting its own body (it's already in the list)
             if (character.Movement == MovementKind.Air) mapCharacter.Lift = CruiseLift(mapCharacter); // a flier is up in the air
+            if (placement.LiftRuntime is { } savedLift && placement.PixelXRuntime is not null) mapCharacter.Lift = savedLift; // a save: as high as it stood (on top of what it stood on, on its floor) - not dropped onto whatever is under its cell's middle
             mapCharacter.Visual = BuildCharacterVisual(mapCharacter);
             GameCanvas.Children.Add(mapCharacter.Visual);
             PositionCharacterVisual(mapCharacter);

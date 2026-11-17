@@ -1,4 +1,4 @@
-// Ultima 8 engine (U8GameWindow) - copied from the Ultima 7 engine (GameTestWindow, tag u7-final-b471) and changed for Ultima 8 here only.
+﻿// Ultima 8 engine (U8GameWindow) - copied from the Ultima 7 engine (GameTestWindow, tag u7-final-b471) and changed for Ultima 8 here only.
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
@@ -38,7 +38,8 @@ public partial class U8GameWindow
     private double _lightningMs = -1;
     private int _weatherHour = -1;
     private readonly object _weatherSoundOwner = new();
-    private const double ViewWidth = 320, ViewHeight = 200;
+    private double ViewWidth => ViewportWidth; // the view (wider with Fill the screen)
+    private double ViewHeight => ViewportHeight;
 
     /// <summary>At the start of play: the map's own weather.</summary>
     private void StartWeather()

@@ -26,6 +26,7 @@
  *  - Combat music (System Settings > Combat), as Exult plays it.
  */
 #include "combat.h"
+#include "u6.h"
 #include "magic.h"
 #include "world.h"
 #include "vitals.h"
@@ -34,6 +35,7 @@
 #include "sound.h"
 #include "schedules.h"
 #include "platform.h"
+#include "u8.h"
 #include "pictures.h"
 #include "conditions.h"
 #include "../third_party/cJSON.h"
@@ -119,12 +121,16 @@ static int stat(int actor, int kind, int fallback)
     return fallback;
 }
 
+int combat_stat(int actor, int kind, int fallback) { return stat(actor, kind, fallback); } /* a built-in stat (BuiltInStatKind) */
+static void set_stat(int actor, int kind, int value);
+void combat_set_stat(int actor, int kind, int value) { set_stat(actor, kind, value); }
 static int has_stat(int kind) { cJSON *s; cJSON_ArrayForEach(s, statsJson) if (num(s, "Kind", 0) == kind) return 1; return 0; }
 
 static void set_stat(int actor, int kind, int value)
 {
     cJSON *s, *values = get(json_of(actor), "StatValues");
     if (!values) return;
+    if (kind == K_LEVEL && u8_stats_grow_by_use() && num(json_of(actor), "LevelLock", 0) > 0 && value > num(json_of(actor), "LevelLock", 0)) value = num(json_of(actor), "LevelLock", 0); /* Ultima 8: never past its Most Level */
     char text[16];
     snprintf(text, sizeof text, "%d", value);
     cJSON_ArrayForEach(s, statsJson)
@@ -256,6 +262,8 @@ static int can_see(int viewer, int other)
     if (dead(viewer) || dead(other)) return 0;
     if (!same_floor(viewer, other)) return 0; /* upstairs and downstairs are apart */
     if (vitals_has(id_of(other), 32) && !same_side(viewer, other) && !(in_party(viewer) && in_party(other))) return 0;
+    if (u8_on() && vitals_has(id_of(viewer), 512)) return 0; /* Ultima 8: surrendered - it fights no more (U8Extras) */
+    if (flag(json_of(viewer), "FooledByFeignDeath") && vitals_has(id_of(other), 128)) return 0; /* Feign Death (GameTestWindow.Toughness) */
     double vx, vy, ox, oy;
     world_actor_pixel(viewer, &vx, &vy);
     world_actor_pixel(other, &ox, &oy);
@@ -302,6 +310,7 @@ static int strike_ms(int swing) { return (swing == 0 ? 1 : swing == 3 ? 3 : 2) *
 /* The pose to strike or shoot with: the weapon's own, else the default - if it has art for it, else "Attacking Melee". */
 static void strike_pose(int actor, cJSON *weapon, int shooting, int facing)
 {
+    if (u6_on()) { world_set_pose(actor, "Idle", facing); return; } /* Ultima 6: no attack pose - the blow is the spark and the words */
     cJSON *w = weapon_settings(weapon);
     const char *own = w ? str(w, shooting ? "ShootPose" : "AttackPose") : "";
     const char *name = own[0] ? own : shooting ? "Shooting" : "Attacking Melee";
@@ -313,6 +322,8 @@ static void pose_back(int actor, double ms)
     if (actor == 0) fighters[0].poseBackMs = ms;
     else if (actor < 256) fighters[actor].poseBackMs = ms;
 }
+
+void combat_pose_back(int actor, double ms) { pose_back(actor, ms); } /* back to standing after this long */
 
 /* ---------------- Levels ---------------- */
 
@@ -335,6 +346,7 @@ static int experience_for(cJSON *levels, int level)
 
 static int points_for(cJSON *levels, int level)
 {
+    if (u8_stats_grow_by_use()) return 0; /* Ultima 8, stats growing by use: no training points */
     cJSON *s;
     cJSON_ArrayForEach(s, get(levels, "Steps")) if (num(s, "Level", 0) == level) return num(s, "TrainingPoints", 0);
     return level > 2 ? points_for(levels, level - 1) : 3;
@@ -375,6 +387,7 @@ void combat_gain_experience(int actor, int amount)
     if (!has_stat(K_EXP) || actor < 0) return;
     long long total = (long long)stat(actor, K_EXP, 0) + amount;
     set_stat(actor, K_EXP, total > 0x7FFFFFFF ? 0x7FFFFFFF : (int)total);
+    if (u6_experience_gained(id_of(actor))) return; /* Ultima 6: the Leveling Editor's system decides (U6GameWindow.U6Levels) */
     check_level(actor);
 }
 
@@ -425,6 +438,8 @@ static void play_cue(int which, cJSON *settings)
 static void stop_music(void) { sound_stop_owner(OWNER_COMBAT); cue = CUE_NONE; }
 
 /* Game_window::is_hostile_nearby: on screen, not dead, an enemy in combat. */
+static int hostile_nearby(void);
+int combat_hostile_nearby(void) { return hostile_nearby(); } /* Ultima 6's Rest: "Not while foes are near!" */
 static int hostile_nearby(void)
 {
     for (int a = 1; a < world_actor_count() && a < 256; a++)
@@ -490,6 +505,16 @@ static void enemy_killed_music(int victim, int killer)
 }
 
 void combat_stop_cue(void) { stop_music(); } /* Resurrect: the death music ends */
+
+/* StopAttackingInvisible: those who no longer see this one stop fighting it (invisible, feigning death). */
+int combat_would_attack(int viewer, int other) { return attitude(viewer, other) == F_ATTACK; }
+int combat_enemies(int a, int b) { return attitude(a, b) == F_ATTACK || attitude(b, a) == F_ATTACK; } /* either would attack the other */
+void combat_forget_unseen(int actor)
+{
+    if (actor < 0) return;
+    for (int a = 1; a < world_actor_count() && a < 256; a++) if (fighters[a].target == actor && !can_see(a, actor)) fighters[a].target = -1;
+    if (playerTarget == actor && actor != 0 && !in_party(actor)) playerTarget = -1;
+}
 void combat_death_music(void) { nearDeath = 0; stop_music(); play_cue(CUE_DEATH, NULL); }
 
 /* ---------------- NPC combat (Combat_schedule) ---------------- */
@@ -606,6 +631,7 @@ static int shoot(int attacker, int target, Item *weaponItem, cJSON *weapon);
 static void combat_now_what(int actor)
 {
     Fighter *f = &fighters[actor];
+    if (u6_waits_for_command(actor)) { f->waitMs = STD_DELAY; return; } /* Ultima 6: a Command member acts on its own turn, moved by the player (U6CombatModes) */
     if (f->fleeing)
     {
         if (f->fleeFrom < 0 || dead(f->fleeFrom) || !can_see(actor, f->fleeFrom) || f->fleeCount > 6) { f->fleeCount = 0; end_combat(actor); return; }
@@ -824,6 +850,9 @@ static int weapon_damage(int attacker, int defender, int points, int type)
 }
 
 /* A blow (or a shot) that has landed: damage, then its powers. */
+static int u8Kicking;
+static int u8_hits(int attacker, int defender);
+static int u8_damage(int attacker, int defender, cJSON *weapon, cJSON *ammo, int type);
 static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
 {
     party_hit_music(defender);
@@ -837,7 +866,9 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
     }
     if (w) world_sound_from_actor(num(w, "HitSoundResourceId", -1), defender);
     int noDamage = (powers & P_NODAMAGE) != 0;
-    int damage = noDamage || points == 0 ? 0 : weapon_damage(attacker, defender, points, type);
+    int damage = noDamage || (points == 0 && !(u8_on() && u8Kicking)) ? 0 : u8_on() ? u8_damage(attacker, defender, weapon, ammo, type) : weapon_damage(attacker, defender, points, type); /* Ultima 8's damage (U8Combat) */
+    damage = vitals_after_response(id_of(defender), damage, type); /* its own rule for this type (Character Editor > Health) */
+    if (u8_on()) damage = u8_after_energy_shield(id_of(defender), u8_after_difficulty(id_of(defender), damage)); /* U8Extras */
     if (!vitals_wounds_it(id_of(defender), weapon ? num(weapon, "Id", -1) : -1, NULL)) damage = 0; /* it takes another weapon or a spell to hurt this one */
     char text[16];
     snprintf(text, sizeof text, "-%d", damage);
@@ -845,7 +876,7 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
     if (damage <= 0 && !noDamage) return;
     if (damage > 0)
     {
-        int willDie = !vitals_immortal(id_of(defender)) && hp_of(defender, 99) - damage <= 0;
+        int willDie = !vitals_immortal(id_of(defender)) && !vitals_has(id_of(defender), 256) && hp_of(defender, 99) - damage <= 0; /* Withstand Death: not this blow */
         if (willDie) incident(faction_of(defender), faction_of(attacker), I_KILL);
         char cause[160];
         if (attacker == 0) snprintf(cause, sizeof cause, "slain by you");
@@ -854,6 +885,7 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
         vitals_damage_allowed(id_of(defender), damage, cause);
         vitals_hit_type(0);
         world_maybe_bleed(defender, damage); /* reduce_health: it may start bleeding */
+        if (u8_on()) { u8_build_up_from_blow(attacker, defender, damage, u8Kicking); u8_stumble_from_hit(defender); u8_maybe_surrender(defender); } /* U8Reactions, U8Extras */
         if (willDie && vitals_dead(id_of(defender)))
         {
             if (attacker == 0) { char line[160]; snprintf(line, sizeof line, "You have slain %s.", name_of(defender)); game_log(line); }
@@ -880,8 +912,9 @@ static void strike(int attacker, int defender)
     if (w) world_sound_from_actor(num(w, "AttackSoundResourceId", -1), attacker);
     int attval = stat(attacker, K_COMBAT, 10) + (w && flag(w, "Lucky") ? 3 : 0);
     int defval = stat(defender, K_COMBAT, 10) + (vitals_has(id_of(defender), 64) ? 3 : 0);
-    int hit = (w && flag(w, "AutoHit")) || motionless(defender) || roll_to_win(attval, defval);
+    int hit = (w && flag(w, "AutoHit")) || (u8_on() ? u8_hits(attacker, defender) : motionless(defender) || roll_to_win(attval, defval)); /* Ultima 8: Dexterity against Dexterity */
     fight_back(defender, attacker);
+    if (u6_on()) u6_tell_attack(attacker, defender, hit); /* Ultima 6: "Andrew attacks rat." / "Missed!" in the text area */
     if (!hit) { show_hit(defender, "miss"); return; }
     land_blow(attacker, defender, weapon, NULL);
 }
@@ -964,6 +997,7 @@ static void shot_arrives(Shot *s)
     {
         world_actor_pixel(victim, &vx, &vy);
         if (fabs(vx - s->x) > 12 || fabs(vy - s->y) > 12) victim = -1; /* it moved out of the way */
+        if (victim == 0 && u8_on() && u8_player_dodges_shot()) victim = -1; /* rolling, or kneeling (U8Crusader) */
     }
     else victim = -1;
     if (victim >= 0)
@@ -996,10 +1030,156 @@ static void update_shots(double ms)
     }
 }
 
+static void draw_crosshair(uint32_t *pixels, uint32_t ms);
+static void update_crosshair(void);
 void combat_draw(uint32_t *pixels, uint32_t ms)
 {
+    if (u8_on()) draw_crosshair(pixels, ms); /* Crusader's crosshair (Ultima 8) */
     for (int i = 0; i < 32; i++)
         if (shots[i].used && shots[i].sprite) world_draw_sprite(pixels, shots[i].sprite, shots[i].x, shots[i].y, (int)shots[i].lift, ms);
+}
+
+/* ---------------- Ultima 8's combat (U8GameWindow.U8Combat: Pentagram's Actor::calculateAttackDamage, MainActor::getDamageAmount) ----------------
+   To hit: random(0..attacking Dex + 2) beats random(0..defending Dex - 1). Damage: a weapon random(0..its modifier) + its base +
+   Strength / 5; bare hands random(0..Strength / 2) + 1; a kick random(0..Strength / 2) + the leg armour's kick bonus. Blocking
+   takes the blocker's Strength / 5 off; armour 3 x its armour class percent off (half against fire), at most all of it. */
+
+static int u8Blocking;
+static double u8LastSwingMs = -1e9;
+
+static int u8_random(int n) { return n <= 0 ? 0 : rnd(n + 1); } /* Ultima 8: random(n) is 0..n */
+
+static void u8_dex_bonus(int actor, int *attack, int *defend)
+{
+    cJSON *w = weapon_settings(wielded(actor, NULL));
+    *attack = w ? num(w, "U8DexAttackBonus", 0) : 0; *defend = w ? num(w, "U8DexDefendBonus", 0) : 0;
+}
+
+static int u8_hits(int attacker, int defender)
+{
+    if (motionless(defender)) return 1; /* stunned (lying still): every blow lands */
+    if (defender == 0 && u8_player_dodging()) return 0; /* rolling (U8Crusader) */
+    int aa, ad, da, dd;
+    u8_dex_bonus(attacker, &aa, &ad); u8_dex_bonus(defender, &da, &dd);
+    int attackDex = stat(attacker, K_DEXTERITY, 10) + aa, defendDex = stat(defender, K_DEXTERITY, 10) + dd;
+    if (attackDex < 0) attackDex = 0;
+    if (defendDex < 1) defendDex = 1;
+    return u8_random(attackDex + 2) > u8_random(defendDex - 1);
+}
+
+static int u8_damage(int attacker, int defender, cJSON *weapon, cJSON *ammo, int type)
+{
+    int str = stat(attacker, K_STRENGTH, 10), damage;
+    cJSON *armor[16];
+    if (u8Kicking)
+    {
+        int n = items_armor(id_of(attacker), armor, 16), kick = 0;
+        for (int i = 0; i < n; i++) kick += num(get(armor[i], "Armor"), "U8KickBonus", 0);
+        damage = u8_random(str / 2) + kick;
+    }
+    else if (weapon && num(weapon, "Type", -1) == TYPE_WEAPON)
+    {
+        cJSON *w = get(weapon, "Weapon");
+        damage = u8_random(num(w, "U8DamageModifier", 0)) + num(w, "Damage", 4) + (ammo ? num(get(ammo, "Ammo"), "DamageBonus", 0) : 0) + str / 5;
+    }
+    else damage = u8_random(str / 2) + 1;
+    int n = items_armor(id_of(defender), armor, 16), ac = 0;
+    for (int i = 0; i < n; i++)
+    {
+        cJSON *a = get(armor[i], "Armor"), *t;
+        cJSON_ArrayForEach(t, get(a, "Immunities"))
+            if (cJSON_IsNumber(t) && t->valueint == type) { world_sound_from_actor(num(a, "ImmuneSoundResourceId", -1), defender); return 0; }
+        int p = num(a, "ArmorPoints", 2);
+        ac += p > 0 ? p : 0;
+    }
+    if (defender == 0 && u8Blocking) damage -= stat(defender, K_STRENGTH, 10) / 5; /* blocking */
+    cJSON *dw = weapon_settings(wielded(defender, NULL));
+    ac += dw ? num(dw, "U8ArmourBonus", 0) : 0;
+    int acMod = 3 * ac;
+    if (type == D_FIRE) acMod /= 2;          /* armour doesn't protect from fire as well */
+    if (motionless(defender)) acMod /= 2;    /* stunned */
+    if (acMod > 100) acMod = 100;
+    damage = (100 - acMod) * damage / 100;
+    return damage > 0 ? damage : 0;
+}
+
+int combat_u8_blocking(void) { return u8Blocking; }
+
+/* U8CombatModeChanged: the combat stance is the Avatar's idle in it; the weapon drawn (Ready Weapon) or put away. */
+static void u8_combat_mode_changed(void)
+{
+    u8Blocking = 0;
+    if (!world_u8_was_moving())
+    {
+        const char *pose = combatMode ? "Ready Weapon" : "Unready Weapon";
+        if (!world_set_pose(0, pose, -1)) world_set_pose(0, combatMode && world_has_pose(0, "Combat Stand") ? "Combat Stand" : "Idle", -1);
+    }
+    pose_back(0, 2 * STD_DELAY);
+}
+
+/* U8Swing: a swing (or a kick) toward the pointer (dx, dy: the world's way; 0, 0 the way it faces) - a bow shoots the nearest foe that
+   way in range; else whoever is in reach that way is struck; nobody - the air. Not again till 25 - Dexterity frames (30 a second). */
+void combat_u8_swing(int kick, int dx, int dy)
+{
+    if (vitals_dead(id_of(0)) || incapacitated(0)) return;
+    double now = platform_ticks(), wait = (25 - stat(0, K_DEXTERITY, 10)) * 1000.0 / 30;
+    if (wait < 0) wait = 0;
+    if (now - u8LastSwingMs < wait) return;
+    u8LastSwingMs = now;
+    u8_build_up_from_swing(0); /* attacking gives Strength and Dexterity (U8Reactions) */
+    int aim = u8_crosshair_target();
+    double px, py;
+    world_actor_pixel(0, &px, &py);
+    if (aim >= 0) { double ax, ay; world_actor_pixel(aim, &ax, &ay); dx = (ax > px + 0.5) - (ax < px - 0.5); dy = (ay > py + 0.5) - (ay < py - 0.5); }
+    if (dx == 0 && dy == 0) world_u8_facing_vector(&dx, &dy);
+    int facing = dx == 0 && dy < 0 ? 0 : dx > 0 && dy < 0 ? 1 : dx > 0 && dy == 0 ? 2 : dx > 0 && dy > 0 ? 3 : dx == 0 && dy > 0 ? 4 : dx < 0 && dy > 0 ? 5 : dx < 0 && dy == 0 ? 6 : 7;
+    world_set_pose(0, "Idle", facing);
+    Item *held = NULL;
+    cJSON *weapon = wielded(0, &held);
+    double facingAngle = atan2((double)dy, (double)dx);
+    /* those in front (within 67.5 degrees of the way), on its floor, not of the party, nearest first */
+    int cand[256], n = 0;
+    for (int a = 1; a < world_actor_count() && n < 256; a++)
+    {
+        if (dead(a) || in_party(a) || !same_floor(0, a)) continue;
+        double x, y; world_actor_pixel(a, &x, &y);
+        double d = fabs(remainder(atan2(y - py, x - px) - facingAngle, 2 * 3.14159265358979));
+        if (d <= 3.14159265358979 * 3 / 8) cand[n++] = a;
+    }
+    for (int i = 1; i < n; i++) { int v = cand[i], j = i; while (j > 0 && tiles_between(0, cand[j - 1]) > tiles_between(0, v)) { cand[j] = cand[j - 1]; j--; } cand[j] = v; }
+    if (aim >= 0 && u8_crosshair_can_take(aim))
+    {
+        int k = 0; for (int i = 0; i < n; i++) if (cand[i] != aim) cand[k++] = cand[i];
+        for (int i = k; i > 0; i--) cand[i] = cand[i - 1];
+        cand[0] = aim; n = k + 1;
+    }
+    if (!kick && weapon)
+        for (int i = 0; i < n; i++)
+            if (shoots(weapon, in_reach(0, cand[i]), tiles_between(0, cand[i])))
+            {
+                if (shoot(0, cand[i], held, weapon)) strike_pose(0, weapon, 1, facing);
+                pose_back(0, strike_ms(num(weapon_settings(weapon), "ShootSwing", 0)));
+                return;
+            }
+    if (kick) { if (!world_set_pose(0, "Kick", facing)) world_set_pose(0, "Idle", facing); }
+    else strike_pose(0, weapon, 0, facing);
+    pose_back(0, !weapon || kick ? 2 * STD_DELAY : strike_ms(num(weapon_settings(weapon), "Swing", 2)));
+    int target = -1;
+    for (int i = 0; i < n && target < 0; i++) if (in_reach(0, cand[i])) target = cand[i];
+    if (target < 0) return; /* the air */
+    u8Kicking = kick;
+    strike(0, target);
+    u8Kicking = 0;
+}
+
+/* U8CombatMouseDown/Up's block: the left button held in combat mode. */
+void combat_u8_block(int on)
+{
+    if (on && (!combatMode || vitals_dead(id_of(0)) || incapacitated(0))) return;
+    if (on == u8Blocking) return;
+    u8Blocking = on;
+    if (on) { if (!world_set_pose(0, "Block", -1)) world_set_pose(0, "Idle", -1); }
+    else world_set_pose(0, combatMode && world_has_pose(0, "Combat Stand") ? "Combat Stand" : "Idle", -1);
 }
 
 /* ---------------- The player ---------------- */
@@ -1018,7 +1198,8 @@ void combat_toggle_mode(void)
             int foe = attitude(a, 0) == F_ATTACK || (fighters[a].inCombat && (fighters[a].target == 0 || in_party(fighters[a].target)));
             if (foe && tiles_between(0, a) < 18 && can_see(0, a)) { play_cue(CUE_RUNAWAY, NULL); break; }
         }
-    game_log(combatMode ? "Combat mode: double-click someone to attack them. C to stop." : "Combat mode off.");
+    if (u8_on()) u8_combat_mode_changed(); /* the combat stance, the weapon drawn (U8Combat) */
+    game_log(!combatMode ? "Combat mode off." : u8_on() ? "Combat mode: double-click to swing toward the pointer, double right-click to kick, hold the left button to block. C (or double right-click yourself) to stop." : "Combat mode: double-click someone to attack them. C to stop.");
 }
 
 void combat_player_target(int actor)
@@ -1044,7 +1225,10 @@ static void update_fuses(double ms);
 static void update_player(double ms)
 {
     Fighter *me = &fighters[0];
-    if (me->poseBackMs > 0 && (me->poseBackMs -= ms) <= 0 && !incapacitated(0) && !vitals_dead(id_of(0))) world_set_pose(0, "Idle", -1);
+    if (me->poseBackMs > 0 && (me->poseBackMs -= ms) <= 0 && !incapacitated(0) && !vitals_dead(id_of(0)) && !(u8_on() && u8Blocking))
+        world_set_pose(0, u8_on() ? u8_player_back_to_pose(combatMode) : "Idle", -1); /* Ultima 8: kneeling stays kneeling; in combat the stance */
+    if (u8_on() && playerTarget < 0 && playerThing < 0) return; /* Ultima 8: the Avatar fights only when told - a swing, a kick, a block - or at a foe an event set it on */
+    if (!u6_player_may_strike()) return; /* Ultima 6, turn by turn: the avatar strikes only on its Attack turn (U6GameWindow.U6Combat) */
     if (combatMode && playerTarget < 0 && attack_mode(0) != M_MANUAL)
     {
         int foe = find_foe(0);
@@ -1097,6 +1281,7 @@ int combat_busy(int actor) { return actor > 0 && actor < 256 && (fighters[actor]
 
 void combat_update(double ms)
 {
+    if (u8_on()) update_crosshair();
     nowMs += ms;
     update_shots(ms);
     update_fuses(ms);
@@ -1143,6 +1328,7 @@ int combat_attack(int attacker, int target)
 static int theftWarnings, theftChunkX = -1, theftChunkY = -1;
 void combat_theft(int ownerCharacterId, int factionId)
 {
+    if (u8_on() && ownerCharacterId >= 0) events_fire_character(ownerCharacterId, 25 /* By Stolen From (Ultima 8) */);
     double px, py;
     world_actor_pixel(0, &px, &py);
     int cx = (int)(px / 128), cy = (int)(py / 128);
@@ -1253,7 +1439,31 @@ static void explode(int uid, cJSON *def, int byPlayer);
 static void strike_object(int uid, cJSON *def, int damage, int striker, int byPlayer)
 {
     int type = num(def, "Type", 0);
+    if (u8_on()) events_object_event(uid, 21 /* By Got Hit (Ultima 8) */, striker > 0 ? striker : -1);
     if (type == TYPE_EXPLOSIVE && flag(get(def, "Explosive"), "ExplodesWhenStruck")) { explode(uid, def, striker <= 0 && byPlayer); return; }
+    if (u8_on() && !(type == TYPE_WINDOW && world_thing_spent(uid)) && !object_breakable(def))
+    {
+        /* Ultima 8 (Item::receiveHitU8): nothing special about it, so it's knocked flying - if it can be moved at all */
+        int c, id, q, tx, ty, inst;
+        world_thing_info(uid, &c, &id, &q, &tx, &ty, &inst);
+        Item *gifts[100];
+        cJSON *weight = get(def, "Weight");
+        int n = c == CAT_OBJECT && items_can_lift(CAT_OBJECT, id) && cJSON_IsNumber(weight) && weight->valuedouble > 0 ? items_make_gifts(CAT_OBJECT, id, q > 1 ? q : 1, gifts, 100) : 0;
+        if (n > 0)
+        {
+            for (int k = 1; k < n; k++) items_free(gifts[k]);
+            double fx, fy;
+            world_actor_pixel(striker > 0 ? striker : 0, &fx, &fy);
+            double atX = tx * world_tile_w() + world_tile_w() / 2.0, atY = ty * world_tile_h() + world_tile_h() / 2.0, ax = atX - fx, ay = atY - fy, apart = sqrt(ax * ax + ay * ay);
+            if (apart < 1) apart = 1;
+            int atLift = world_thing_z(uid);
+            world_thing_remove(uid);
+            world_hurl(gifts[0], atX, atY, atLift, ax / apart * 90, ay / apart * 90, 130);
+            return;
+        }
+        world_bark_thing(uid, "no effect", 1000);
+        return;
+    }
     if ((type == TYPE_WINDOW && world_thing_spent(uid)) || !object_breakable(def)) { world_bark_thing(uid, "no effect", 1000); return; }
     int defense = num(def, "Defense", 0);
     if (defense > 0) damage -= 1 + rnd(defense);
@@ -1521,6 +1731,7 @@ void combat_fight_back(int defender, int attacker) { fight_back(defender, attack
 void combat_start(int actor, int target) { start_combat(actor, target); }
 int combat_target_of(int actor) { return target_of(actor); }
 void combat_flee(int actor, int from) { if (actor <= 0 || actor >= 256) return; Fighter *f = &fighters[actor]; f->inCombat = 1; f->fleeing = 1; f->fleeFrom = from; f->waitMs = 0; }
+void combat_stop_fighting(int actor) { if (actor > 0 && actor < 256) { fighters[actor].inCombat = 0; fighters[actor].target = -1; } } /* gave up (Ultima 8: surrendered) */
 void combat_calm(int actor) { if (actor > 0 && actor < 256) { fighters[actor].fleeing = 0; fighters[actor].fleeFrom = -1; } }
 int combat_line_clear(int a, int b) { double ax, ay, bx, by; world_actor_pixel(a, &ax, &ay); world_actor_pixel(b, &bx, &by); return world_line_clear(ax, ay, world_actor_lift(a), bx, by); }
 double combat_tiles_between(int a, int b) { return tiles_between(a, b); }
@@ -1608,3 +1819,91 @@ static void bash_door(int actor, int uid)
 }
 
 void combat_doors_init(void) { world_set_door_breaker(would_break, bash_door); }
+
+/* ---------------- Crusader's crosshair in an Ultima 8 project (U8GameWindow.U8Crusader) ----------------
+   In combat mode (System Settings > Ultima 8 turns it on) it sits on the nearest foe - one in front first; the Next Target key moves
+   it on; swings and shots go to it. */
+
+static int crosshair = -1;
+
+static cJSON *u8_rules(void) { return get(get(project, "Settings"), "Ultima8"); }
+static int crosshair_wanted(void) { return u8_on() && flag(u8_rules(), "CrosshairOn") && combatMode && !vitals_game_over(); }
+
+static int crosshair_can_take(int c)
+{
+    if (c <= 0 || c >= world_actor_count() || world_actor_gone(c) || dead(c) || in_party(c) || id_of(c) == u8_main_character() || !same_floor(0, c)) return 0;
+    int cells = num(u8_rules(), "CrosshairCells", 1);
+    if (tiles_between(0, c) > (cells > 1 ? cells : 1)) return 0;
+    double x, y; world_actor_pixel(c, &x, &y);
+    return world_on_screen(x, y, 6 * 8);
+}
+
+static int foe_of_player(int c) { return attitude(c, 0) == F_ATTACK || attitude(0, c) == F_ATTACK || (c < 256 && fighters[c].target == 0); }
+
+static int in_front_of_player(int c)
+{
+    int fx, fy; world_u8_facing_vector(&fx, &fy);
+    double px, py, x, y; world_actor_pixel(0, &px, &py); world_actor_pixel(c, &x, &y);
+    double d = fabs(remainder(atan2(y - py, x - px) - atan2((double)fy, (double)fx), 2 * 3.14159265358979));
+    return d <= 3.14159265358979 * 3 / 8;
+}
+
+/* AutoCrosshairTarget: a foe in front, a foe, anyone in front - the nearest of those. */
+static int auto_crosshair(void)
+{
+    int best[3] = { -1, -1, -1 };
+    for (int c = 1; c < world_actor_count(); c++)
+    {
+        if (!crosshair_can_take(c)) continue;
+        int foe = foe_of_player(c), front = in_front_of_player(c);
+        int kinds[3] = { foe && front, foe, front };
+        for (int k = 0; k < 3; k++) if (kinds[k] && (best[k] < 0 || tiles_between(0, c) < tiles_between(0, best[k]))) best[k] = c;
+    }
+    return best[0] >= 0 ? best[0] : best[1] >= 0 ? best[1] : best[2];
+}
+
+void combat_u8_next_target(void)
+{
+    if (!crosshair_wanted()) return;
+    int all[256], n = 0;
+    for (int c = 1; c < world_actor_count() && n < 256; c++) if (crosshair_can_take(c)) all[n++] = c;
+    for (int i = 1; i < n; i++) { int v = all[i], j = i; while (j > 0 && tiles_between(0, all[j - 1]) > tiles_between(0, v)) { all[j] = all[j - 1]; j--; } all[j] = v; }
+    if (!n) { crosshair = -1; return; }
+    int at = -1;
+    for (int i = 0; i < n; i++) if (all[i] == crosshair) at = i;
+    crosshair = all[(at + 1) % n];
+}
+
+static void update_crosshair(void)
+{
+    if (!crosshair_wanted()) { crosshair = -1; return; }
+    if (crosshair < 0 || !crosshair_can_take(crosshair)) crosshair = auto_crosshair();
+}
+
+int u8_crosshair_target(void) { return crosshair_wanted() ? crosshair : -1; }
+int u8_crosshair_can_take(int actor) { return crosshair_can_take(actor); }
+
+/* The crosshair drawn on its target's middle (a straight rise on the screen is up-left on the map); no sprite: a red ring with four ticks. */
+static void draw_crosshair(uint32_t *pixels, uint32_t ms)
+{
+    if (crosshair < 0) return;
+    double x, y; world_actor_pixel(crosshair, &x, &y);
+    int bx, by, bw, bh;
+    double up = world_actor_drawn_rect(crosshair, &bx, &by, &bw, &bh) ? bh / 2.0 : world_tile_h() / 2.0, shift = world_actor_lift(crosshair) * 4;
+    cJSON *link = get(u8_rules(), "CrosshairSprite");
+    const Sprite *s = str(link, "SpriteName")[0] ? sprite_find(str(link, "SpriteGroup"), str(link, "SpriteName")) : sprite_first_in_group("Crosshair");
+    if (s && s->frameCount) { world_draw_center(pixels, sprite_picture_at(s, ms), x - shift, y - shift, up); return; }
+    double sx, sy;
+    world_map_to_screen(x - shift - up, y - shift - up, &sx, &sy);
+    uint32_t red = 0xFFFF2828u;
+    for (int k = 0; k < 40; k++) { double a = k * 6.2832 / 40; frame_dot(pixels, (int)(sx + cos(a) * 8), (int)(sy + sin(a) * 8), red); }
+    for (int i = 0; i < 7; i++) { frame_dot(pixels, (int)sx, (int)sy - 12 + i, red); frame_dot(pixels, (int)sx, (int)sy + 5 + i, red); frame_dot(pixels, (int)sx - 12 + i, (int)sy, red); frame_dot(pixels, (int)sx + 5 + i, (int)sy, red); }
+}
+
+/* Crusader's control: the player is someone else now - what both were fighting is forgotten. */
+void combat_u8_control_changed(int otherActor)
+{
+    playerTarget = -1; playerThing = -1; u8Blocking = 0; crosshair = -1;
+    memset(&fighters[0], 0, sizeof fighters[0]); fighters[0].target = fighters[0].fleeFrom = -1;
+    if (otherActor > 0 && otherActor < 256) { memset(&fighters[otherActor], 0, sizeof fighters[otherActor]); fighters[otherActor].target = fighters[otherActor].fleeFrom = -1; }
+}

@@ -14,6 +14,7 @@
  * Build: ppc-morphos-gcc -noixemul (build_morphos.sh).
  */
 #include "platform.h"
+#include "crt.h"
 #include <exec/exec.h>
 #include <intuition/intuition.h>
 #include <graphics/gfx.h>
@@ -39,6 +40,11 @@ static UWORD heldQualifier; /* the qualifier keys with the last input event */
 int platform_ctrl_held(void) { return (heldQualifier & IEQUALIFIER_CONTROL) != 0; }
 #include <string.h>
 #include <stdio.h>
+#include <stdlib.h>
+#ifdef VAMPIRE
+static int saga_start(void); /* SAGA's display taken over (below, with the frames) */
+static void saga_stop(void);
+#endif
 
 #define KICKSTART_31 40 /* Kickstart 3.1: version 40 of its libraries */
 #ifndef RECTFMT_RAW
@@ -59,6 +65,16 @@ static int frameChosen;
 #endif
 static int wantWindowScale = 2;
 void platform_want_window_scale(int s) { wantWindowScale = s; }
+/* System Settings > Game Window > CRT effect (crt.c): the lines darkened in place, on a copy of each frame. */
+static int crtOn;
+void platform_want_crt(int on) { crtOn = on; }
+/* System Settings > Game Window > Fill the screen: MorphOS full screen widens the game's screen in game pixels to the
+   Workbench's size (the Amigas: always 320 x 200). */
+static int wantFill;
+void platform_want_fill(int on) { wantFill = on; }
+#ifdef VIEW_FILL
+int screen_w = BASE_W, screen_h = BASE_H;
+#endif
 /* The display's own pixel format: each frame is made in it (doubled as it goes) and handed over with no conversion left
    to do (RECTFMT_RAW). rawOk: 1 it works, 0 it doesn't (the frame given as ARGB, converted by the card's software), -1 not tried. */
 static ULONG pixFmt;
@@ -136,15 +152,39 @@ static int open_display(void)
     if (desk) { deskW = desk->Width; deskH = desk->Height; UnlockPubScreen(NULL, desk); }
     if (!frameChosen)
     {
-        int fit = deskW / SCREEN_W < deskH / SCREEN_H ? deskW / SCREEN_W : deskH / SCREEN_H;
-        int inWindow = (deskH - 40) / SCREEN_H < deskW / SCREEN_W ? (deskH - 40) / SCREEN_H : deskW / SCREEN_W; /* room for its title bar */
+        int fit = deskW / BASE_W < deskH / BASE_H ? deskW / BASE_W : deskH / BASE_H;
+        int inWindow = (deskH - 40) / BASE_H < deskW / BASE_W ? (deskH - 40) / BASE_H : deskW / BASE_W; /* room for its title bar */
         frame_scale = fullscreen ? fit : (wantWindowScale < inWindow ? wantWindowScale : inWindow);
         if (frame_scale > MOST_FRAME_SCALE) frame_scale = MOST_FRAME_SCALE;
         if (frame_scale < 1) frame_scale = 1;
+#ifdef VIEW_FILL
+        if (wantFill && fullscreen) /* Fill the screen: the same whole scale, the game's screen the Workbench's size in game pixels */
+        {
+            screen_w = deskW / frame_scale > BASE_W ? deskW / frame_scale : BASE_W;
+            screen_h = deskH / frame_scale > BASE_H ? deskH / frame_scale : BASE_H;
+        }
+#endif
         frameChosen = 1;
     }
     sw = FRAME_W; sh = FRAME_H;
-    if (fullscreen && deskW >= FRAME_W && deskH >= FRAME_H)
+#ifdef VAMPIRE
+    /* The Vampire: always a screen of its own, SAGA's 16-bit 5-6-5, the game drawn at 640 x 400 (on 640 x 480: in the middle) */
+    frame_scale = 2; sw = FRAME_W; sh = FRAME_H;
+    {
+        static const int TRY[][2] = { { 640, 400 }, { 640, 480 } };
+        for (int t = 0; t < 2 && !screen; t++)
+        {
+            ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, TRY[t][0], CYBRBIDTG_NominalHeight, TRY[t][1], CYBRBIDTG_Depth, 16, TAG_DONE);
+            if (mode == INVALID_ID || !IsCyberModeID(mode)) continue;
+            if ((int)GetCyberIDAttr(CYBRIDATTR_WIDTH, mode) != TRY[t][0] || (int)GetCyberIDAttr(CYBRIDATTR_HEIGHT, mode) != TRY[t][1]) continue;
+            screen = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, TRY[t][0], SA_Height, TRY[t][1], SA_Depth, 16,
+                                    SA_Title, (ULONG)title, SA_ShowTitle, FALSE, SA_Quiet, TRUE, SA_Type, CUSTOMSCREEN, TAG_DONE);
+            if (screen) { sw = TRY[t][0]; sh = TRY[t][1]; offX = (sw - FRAME_W) / 2; offY = (sh - FRAME_H) / 2; fullscreen = 1; }
+        }
+    }
+    if (!screen) { snprintf(error_text, sizeof error_text, "No 640 x 400 or 640 x 480 16-bit screen: this build needs a Vampire with its SAGA driver (P96)."); return 0; }
+#endif
+    if (!screen && fullscreen && deskW >= FRAME_W && deskH >= FRAME_H)
     {
         ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, deskW, CYBRBIDTG_NominalHeight, deskH, CYBRBIDTG_Depth, 32, TAG_DONE);
         if (mode == INVALID_ID) mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, deskW, CYBRBIDTG_NominalHeight, deskH, CYBRBIDTG_Depth, 16, TAG_DONE);
@@ -187,11 +227,17 @@ static int open_display(void)
     if (screen) { ScreenToFront(screen); ActivateWindow(window); FillPixelArray(window->RPort, 0, 0, window->Width, window->Height, 0x000000); } /* in front, and black round the frame (a 240-line screen) */
     { char line[120]; snprintf(line, sizeof line, "Display: %s, %d x %d, pixel format %lu.", screen ? "full screen" : "a window", FRAME_W * scale, FRAME_H * scale, (unsigned long)pixFmt); game_log(line); }
     windowActive = 1;
+#ifdef VAMPIRE
+    saga_start(); /* SAGA's display taken over (else drawn through the system) */
+#endif
     return 1;
 }
 
 static void close_display(void)
 {
+#ifdef VAMPIRE
+    saga_stop();
+#endif
     if (window) { ClearPointer(window); CloseWindow(window); window = NULL; }
     if (screen) { CloseScreen(screen); screen = NULL; }
 }
@@ -204,6 +250,10 @@ int platform_open(const char *gameTitle, int wantFullscreen)
     CyberGfxBase = OpenLibrary((CONST_STRPTR)"cybergraphics.library", 41);
     KeymapBase = OpenLibrary((CONST_STRPTR)"keymap.library", 37); /* the letters typed, by the user's keymap */
     if (!IntuitionBase || !GfxBase) { snprintf(error_text, sizeof error_text, "Kickstart 3.1 or later is needed."); return 0; }
+#ifdef VAMPIRE
+    if (!(SysBase->AttnFlags & (1u << 10))) /* AFB_68080: this build is the Vampire's alone (its AMMX and SAGA) */
+    { snprintf(error_text, sizeof error_text, "This game is built for the Vampire (Apollo 68080) only. On any other Amiga use its \"Amiga 68k (RTG)\" build."); return 0; }
+#endif
     if (!CyberGfxBase) { snprintf(error_text, sizeof error_text, "cybergraphics.library 41 or later is needed: an RTG graphics card (Picasso96 or CyberGraphX) or a Vampire."); return 0; }
     timerPort = CreateMsgPort();
     timerRequest = timerPort ? (struct timerequest *)CreateIORequest(timerPort, sizeof(struct timerequest)) : NULL;
@@ -252,7 +302,9 @@ static enum PlatformKey key_of(UWORD code)
         case 0x45: return KEY_ESCAPE;
         case 0x44: case 0x43: return KEY_ENTER;
         case 0x40: return KEY_SPACE;
-        case 0x59: return KEY_F11; /* F10: window <-> full screen (Amiga keyboards have no F11) */
+        case 0x59: case 0x4B: return KEY_F11; /* F11 (a PC keyboard on MorphOS); F10 too - Amiga keyboards have no F11 */
+        case 0x48: return KEY_PAGEUP;   /* Page Up / Page Down (PC keyboards on MorphOS): a talk's Previous / More, as on Windows (b579) */
+        case 0x49: return KEY_PAGEDOWN;
         case 0x42: return KEY_TAB;
         case 0x33: return KEY_C;
         case 0x17: return KEY_I;
@@ -273,6 +325,40 @@ static enum PlatformKey key_of(UWORD code)
 }
 
 static int lastMoveX = -1, lastMoveY = -1;
+static int gameTakesFKeys;
+void platform_game_takes_function_keys(int on) { gameTakesFKeys = on; }
+
+/* A raw key's name as the editor's key lists have it (Engine/U8Keys.cs Bindable); "" for one none of them is. */
+static void key_name(UWORD code, char *out)
+{
+    static const char *ROW1 = "1234567890", *QROW = "QWERTYUIOP", *AROW = "ASDFGHJKL", *ZROW = "ZXCVBNM";
+    int c = code & 0x7F;
+    const char *n = "";
+    out[0] = 0;
+    if (c >= 0x01 && c <= 0x0A) { snprintf(out, 16, "D%c", ROW1[c - 0x01]); return; }
+    if (c >= 0x10 && c <= 0x19) { out[0] = QROW[c - 0x10]; out[1] = 0; return; }
+    if (c >= 0x20 && c <= 0x28) { out[0] = AROW[c - 0x20]; out[1] = 0; return; }
+    if (c >= 0x31 && c <= 0x37) { out[0] = ZROW[c - 0x31]; out[1] = 0; return; }
+    if (c >= 0x50 && c <= 0x59) { snprintf(out, 16, "F%d", c - 0x50 + 1); return; }
+    switch (c)
+    {
+        case 0x0F: n = "NumPad0"; break; case 0x1D: n = "NumPad1"; break; case 0x1E: n = "NumPad2"; break; case 0x1F: n = "NumPad3"; break;
+        case 0x2D: n = "NumPad4"; break; case 0x2E: n = "NumPad5"; break; case 0x2F: n = "NumPad6"; break; case 0x3D: n = "NumPad7"; break;
+        case 0x3E: n = "NumPad8"; break; case 0x3F: n = "NumPad9"; break; case 0x3C: n = "Decimal"; break; case 0x4A: n = "Subtract"; break;
+        case 0x5C: n = "Divide"; break; case 0x5D: n = "Multiply"; break; case 0x5E: n = "Add"; break;
+        case 0x00: n = "OemTilde"; break; case 0x0B: n = "OemMinus"; break; case 0x0C: n = "OemPlus"; break; case 0x0D: n = "OemPipe"; break;
+        case 0x1A: n = "OemOpenBrackets"; break; case 0x1B: n = "OemCloseBrackets"; break; case 0x29: n = "OemSemicolon"; break; case 0x2A: n = "OemQuotes"; break;
+        case 0x38: n = "OemComma"; break; case 0x39: n = "OemPeriod"; break; case 0x3A: n = "OemQuestion"; break;
+        case 0x40: n = "Space"; break; case 0x41: n = "Back"; break; case 0x42: n = "Tab"; break; case 0x43: case 0x44: n = "Enter"; break;
+        case 0x45: n = "Escape"; break; case 0x46: n = "Delete"; break; case 0x4C: n = "Up"; break; case 0x4D: n = "Down"; break;
+        case 0x4E: n = "Right"; break; case 0x4F: n = "Left"; break; case 0x60: n = "LeftShift"; break; case 0x61: n = "RightShift"; break;
+        case 0x62: n = "CapsLock"; break; case 0x63: n = "LeftCtrl"; break; case 0x64: n = "LeftAlt"; break; case 0x65: n = "RightAlt"; break;
+        case 0x4B: n = "F11"; break; case 0x6F: n = "F12"; break; case 0x47: n = "Insert"; break; case 0x48: n = "PageUp"; break;
+        case 0x49: n = "PageDown"; break; case 0x70: n = "Home"; break; case 0x71: n = "End"; break;
+        default: break;
+    }
+    snprintf(out, 16, "%s", n);
+}
 
 int platform_poll(PlatformEvent *event)
 {
@@ -305,10 +391,13 @@ int platform_poll(PlatformEvent *event)
             case IDCMP_INACTIVEWINDOW: windowActive = 0; break; /* Amiga-tabbed away: the mouse is free */
             case IDCMP_RAWKEY:
                 if ((code & 0x7F) >= 0x68) break; /* not a key */
-                if ((code & 0x7F) == 0x58) { if (!(code & IECODE_UP_PREFIX)) mouseLocked = !mouseLocked; break; } /* F9: the mouse let go / kept in */
-                if ((qualifier & IEQUALIFIER_REPEAT) && (code & 0x7F) >= 0x4C && (code & 0x7F) <= 0x4F) break; /* a held arrow's auto-repeat: walking ignores it (as the Windows engine) */
+                if ((code & 0x7F) == 0x58 && !gameTakesFKeys) { if (!(code & IECODE_UP_PREFIX)) mouseLocked = !mouseLocked; break; } /* F9: the mouse let go / kept in */
                 event->type = (code & IECODE_UP_PREFIX) ? EV_KEY_UP : EV_KEY_DOWN;
                 event->key = key_of(code);
+                if (gameTakesFKeys && (code & 0x7F) == 0x59) event->key = KEY_OTHER; /* F10: Ultima 6's party view, not full screen */
+                key_name(code, event->keyName);
+                event->keyMods = (qualifier & IEQUALIFIER_CONTROL ? KEYMOD_CTRL : 0) | (qualifier & (IEQUALIFIER_LSHIFT | IEQUALIFIER_RSHIFT) ? KEYMOD_SHIFT : 0) | (qualifier & (IEQUALIFIER_LALT | IEQUALIFIER_RALT) ? KEYMOD_ALT : 0);
+                event->keyRepeat = (qualifier & IEQUALIFIER_REPEAT) != 0; /* a held key's auto-repeat: walking ignores it (as the Windows engine) - main.c drops it but for Ultima 6's cursor */
                 if ((code & 0x7F) == 0x10 && (qualifier & IEQUALIFIER_CONTROL)) event->key = KEY_CTRL_Q; /* Ctrl+Q: the Quit prompt */
                 return 1;
             case IDCMP_MOUSEBUTTONS:
@@ -420,6 +509,97 @@ static int make_native(const uint32_t *pixels, int bytes)
     return rowBytes;
 }
 
+#ifdef VAMPIRE
+/* ---------------- The Vampire: SAGA's own display, the 68080's AMMX ----------------
+   The screen is opened through the Vampire's SAGA driver (its timing right for the monitor); then the game takes it over:
+   two frames of its own, made straight in SAGA's 5-6-5 by AMMX (four pixels an instruction), shown by writing SAGA's plane
+   pointer ($DFF1EC) at the vertical blank - no copying by the system, no tearing. The frames go in chip memory first (the V4's
+   extra chip memory - the display's own), else anywhere. The system's own picture pointer is put back when the game ends. */
+#define SAGA_PLANEPTR (*(volatile ULONG *)0xDFF1EC)
+void ammx_rgb565_row(const uint32_t *src, uint16_t *dst, unsigned long count); /* vampire_ammx.s */
+void ammx_copy_row(const void *src, void *dst, unsigned long bytes);
+static UBYTE *sagaMem[2], *sagaBuf[2];
+static ULONG sagaOrig, sagaPerRow, sagaRows;
+static int sagaOn, sagaBack, ammxOk = -1;
+
+static void c_rgb565_row(const uint32_t *src, uint16_t *dst, int n)
+{
+    for (int x = 0; x < n; x++) { ULONG c = src[x]; dst[x] = (UWORD)(((c >> 8) & 0xF800) | ((c >> 5) & 0x07E0) | ((c >> 3) & 0x001F)); }
+}
+
+/* Each AMMX routine against its C version on a test row: used only if they agree to the last pixel. */
+static void vampire_selftest(void)
+{
+    static uint32_t in[64];
+    static uint16_t a[64], b[64];
+    static UBYTE c1[64], c2[64];
+    for (int i = 0; i < 64; i++) in[i] = 0xFF000000u | ((ULONG)i * 0x9E3779B1u >> 8);
+    c_rgb565_row(in, a, 64);
+    ammx_rgb565_row(in, b, 64);
+    int same = memcmp(a, b, sizeof a) == 0;
+    for (int i = 0; i < 64; i++) c1[i] = (UBYTE)(i * 7 + 3);
+    ammx_copy_row(c1, c2, 64);
+    int copied = memcmp(c1, c2, 64) == 0;
+    ammxOk = same && copied;
+    char line[160];
+    if (ammxOk) snprintf(line, sizeof line, "Vampire: AMMX checked - the frames made by it (four pixels an instruction).");
+    else snprintf(line, sizeof line, "Vampire: AMMX gave other pixels (5-6-5 %s, copy %s; first %04X, should be %04X) - the C versions are used.",
+                  same ? "ok" : "wrong", copied ? "ok" : "wrong", (unsigned)b[1], (unsigned)a[1]);
+    game_log(line);
+}
+
+/* Our own two frames for the screen opened, the system's pointer kept to put back. 0: not taken over (the RTG path is used). */
+static int saga_start(void)
+{
+    if (!screen || pixFmt != PIXFMT_RGB16) { game_log("Vampire: the screen isn't SAGA's 16-bit 5-6-5 - drawn through the system instead."); return 0; }
+    ULONG base = 0, perRow = 0;
+    APTR h = LockBitMapTags(screen->RastPort.BitMap, LBMI_BASEADDRESS, (ULONG)&base, LBMI_BYTESPERROW, (ULONG)&perRow, TAG_DONE);
+    if (!h) return 0;
+    UnLockBitMap(h);
+    if (!base || !perRow) return 0;
+    sagaRows = screen->Height;
+    ULONG size = perRow * sagaRows;
+    const char *where = "chip";
+    for (int i = 0; i < 2; i++)
+    {
+        sagaMem[i] = (UBYTE *)AllocVec(size + 64, MEMF_CHIP | MEMF_CLEAR); /* the V4's extra chip memory */
+        if (!sagaMem[i]) { sagaMem[i] = (UBYTE *)AllocVec(size + 64, MEMF_ANY | MEMF_CLEAR); where = "fast"; }
+        if (!sagaMem[i]) { if (i) FreeVec(sagaMem[0]); sagaMem[0] = NULL; return 0; }
+        sagaBuf[i] = (UBYTE *)(((ULONG)sagaMem[i] + 63) & ~63UL); /* 64-byte aligned for the display's fetches */
+    }
+    sagaOrig = base; sagaPerRow = perRow; sagaBack = 0; sagaOn = 1;
+    if (ammxOk < 0) vampire_selftest();
+    char line[160];
+    snprintf(line, sizeof line, "Vampire: SAGA's display taken over - two frames of %lu bytes in %s memory, flipped at the vertical blank.", (unsigned long)size, where);
+    game_log(line);
+    return 1;
+}
+
+/* The frame made straight into the back buffer (5-6-5), then shown at the next vertical blank. */
+static void saga_present(const uint32_t *pixels)
+{
+    UBYTE *to = sagaBuf[sagaBack] + (size_t)offY * sagaPerRow + (size_t)offX * 2;
+    for (int y = 0; y < FRAME_H; y++, to += sagaPerRow)
+    {
+        if (ammxOk > 0 && (FRAME_W & 3) == 0) ammx_rgb565_row(pixels + (size_t)y * FRAME_W, (uint16_t *)to, FRAME_W);
+        else c_rgb565_row(pixels + (size_t)y * FRAME_W, (uint16_t *)to, FRAME_W);
+    }
+    WaitTOF();
+    SAGA_PLANEPTR = (ULONG)sagaBuf[sagaBack];
+    sagaBack ^= 1;
+}
+
+static void saga_stop(void)
+{
+    if (!sagaOn) return;
+    WaitTOF();
+    SAGA_PLANEPTR = sagaOrig; /* the system's own picture back before its screen closes */
+    WaitTOF();
+    for (int i = 0; i < 2; i++) { FreeVec(sagaMem[i]); sagaMem[i] = sagaBuf[i] = NULL; }
+    sagaOn = 0;
+}
+#endif
+
 /* Straight into the display's memory (LockBitMap), each row made in fast memory first and copied there (twice when doubled):
    on our own screen always; in a window only while nothing covers any of it (its layer one whole clip rectangle). 0: not now. */
 static int write_direct(const uint32_t *pixels, int bytes)
@@ -482,6 +662,15 @@ static int raw_works(int bytes)
 void platform_present(const uint32_t *pixels)
 {
     if (!window) return;
+    if (crtOn) /* the CRT effect on a copy (some screens draw over the last frame rather than afresh) */
+    {
+        static uint32_t *crt;
+        if (!crt) crt = (uint32_t *)malloc(sizeof(uint32_t) * FRAME_PIXELS);
+        if (crt) { memcpy(crt, pixels, sizeof(uint32_t) * FRAME_PIXELS); crt_in_place(crt, FRAME_W, FRAME_H, frame_scale); pixels = crt; }
+    }
+#ifdef VAMPIRE
+    if (sagaOn) { saga_present(pixels); return; } /* SAGA's own display (above) */
+#endif
     const int w = FRAME_W * scale, h = FRAME_H * scale;
     int x0 = screen ? offX : window->BorderLeft, y0 = screen ? offY : window->BorderTop;
     int bytes = fmt_bytes(pixFmt);

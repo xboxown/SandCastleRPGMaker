@@ -30,6 +30,17 @@ public class ContainerData : PlaceableItemBase
     /// <summary>Real Exult volume/capacity system, per spec - the total volume this container can hold, separate from its OWN Volume (inherited from PlaceableItemBase, which is how much space IT takes up when carried inside something else). An item can only be dropped in while CurrentVolume() + that item's own real Volume would not exceed this.</summary>
     public double MaxVolume { get; set; } = 20;
 
+    /// <summary>Ultima 6 projects only (in place of Max Volume): opened, it shows in the HUD's Carried Items place (its X and Y) as a grid of
+    /// cells this many across and down - the first cell the container itself (Use it again to close it), one thing in each of the rest.
+    /// 0: the HUD's Carried Items grid (older projects). The Ultima 7 and 8 engines never read these.</summary>
+    public int U6Columns { get; set; }
+    public int U6Rows { get; set; }
+    public int U6CellSize { get; set; }
+    /// <summary>Ultima 6: the look of an empty cell in its grid (none: the HUD's Carried Items one).</summary>
+    public SpriteLink U6EmptyCell { get; set; } = new();
+    /// <summary>Ultima 6: how many things it holds - its cells, less the first (the container itself); null: no limit set (U6Columns 0).</summary>
+    public int? U6Capacity => U6Columns > 0 && U6Rows > 0 ? Math.Max(0, U6Columns * U6Rows - 1) : null;
+
     /// <summary>The container's own open-view background artwork (static or animated, from Sprite Editor) - same real pattern as Book's own PaperDollSpriteGroup/Name, shown behind the items when the container is open.</summary>
     public string PaperDollSpriteGroup { get; set; } = string.Empty;
     public string PaperDollSpriteName { get; set; } = string.Empty;

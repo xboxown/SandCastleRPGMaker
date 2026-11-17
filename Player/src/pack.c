@@ -244,7 +244,7 @@ unsigned char *pack_read(const char *path, long *plainLength)
 
 /* ---------------- Archives ---------------- */
 
-struct Archive { char path[1100]; long dataStart; int count; char (*names)[64]; long *offsets, *lengths; cJSON *index; };
+struct Archive { char path[1100]; long dataStart; int count; char (*names)[64]; long *offsets, *lengths; cJSON *index; FILE *shared; /* PS2: kept open for the streams read from the disc */ };
 
 Archive *pack_archive_open(const char *path)
 {
@@ -303,12 +303,115 @@ unsigned char *pack_archive_read(Archive *a, const char *name, long *plainLength
 
 /* ---------------- Streams: decrypted as they're read ---------------- */
 
-struct PackStream { unsigned char *raw; const unsigned char *iv, *cipher; long plainLength; uint32_t dk[4 * (NR + 1)]; };
+struct PackStream
+{
+    unsigned char *raw; const unsigned char *iv, *cipher; long plainLength; uint32_t dk[4 * (NR + 1)];
+    Archive *archive; long cipherAt, cipherLength; unsigned char ivCopy[16]; /* read from the disc (PS2): where its blocks are */
+};
+
+#ifdef PLATFORM_PS2
+/* The PlayStation 2 has 32 MB: a sound or piece of music (megabytes each) isn't read whole into memory but from the disc as it
+   plays, through these few windows of it (the least recently used one reloaded). Read only with sound.c's reader lock
+   held (its reader task, or a sound starting) - never by the mixer, which can't wait on the disc. */
+#define WINDOW_BYTES (128 * 1024)
+#define WINDOWS 6
+static struct { const PackStream *owner; long start, length; unsigned last; unsigned char *data; } windows[WINDOWS];
+static unsigned windowClock;
+unsigned long ps2_discLoads, ps2_discMicros, ps2_discMaxMicros; /* measured (the diagnostic build prints them) */
+unsigned long ps2_micros(void);
+
+/* The stream's encrypted bytes [from, from + n) (n at most WINDOW_BYTES), loaded from the disc if no window holds them. */
+static const unsigned char *disc_cipher(const PackStream *s, long from, long n)
+{
+    int pick = 0;
+    for (int w = 0; w < WINDOWS; w++)
+    {
+        if (windows[w].owner == s && from >= windows[w].start && from + n <= windows[w].start + windows[w].length) { windows[w].last = ++windowClock; return windows[w].data + (from - windows[w].start); }
+        if (windows[w].last < windows[pick].last) pick = w;
+    }
+    if (!windows[pick].data && !(windows[pick].data = (unsigned char *)malloc(WINDOW_BYTES))) return NULL;
+    long start = from / 2048 * 2048; /* whole sectors from the disc */
+    if (from + n - start > WINDOW_BYTES) start = from;
+    long length = s->cipherLength - start < WINDOW_BYTES ? s->cipherLength - start : WINDOW_BYTES;
+    Archive *a = s->archive;
+    if (!a->shared) a->shared = fopen(a->path, "rb");
+    windows[pick].owner = NULL;
+    unsigned long t0 = ps2_micros();
+    if (!a->shared || fseek(a->shared, s->cipherAt + start, SEEK_SET) != 0) return NULL;
+    /* In 16 KB pieces: the I/O processor that reads the disc also feeds the sound chip - one long read kept it from the
+       sound for the whole of it (the sound chip ran dry: a hiccup). Between pieces the sound gets its turn. */
+    for (long got = 0; got < length; )
+    {
+        long piece = length - got < 16384 ? length - got : 16384;
+        if (fread(windows[pick].data + got, 1, (size_t)piece, a->shared) != (size_t)piece) return NULL;
+        got += piece;
+    }
+    unsigned long took = ps2_micros() - t0;
+    ps2_discLoads++; ps2_discMicros += took; if (took > ps2_discMaxMicros) ps2_discMaxMicros = took;
+    windows[pick].owner = s; windows[pick].start = start; windows[pick].length = length; windows[pick].last = ++windowClock;
+    return windows[pick].data + (from - start);
+}
+
+/* As pack_stream_read below, from the disc. */
+static long disc_stream_read(const PackStream *s, long offset, unsigned char *out, long n)
+{
+    long done = 0;
+    unsigned char block[16];
+    while (done < n)
+    {
+        long at = offset + done, b = at / 16, in = at % 16, from = b == 0 ? 0 : (b - 1) * 16;
+        long whole = in ? 0 : (n - done) / 16, most = (WINDOW_BYTES - (b * 16 - from)) / 16;
+        if (whole > most) whole = most;
+        long blocks = whole > 0 ? whole : 1;
+        const unsigned char *w = disc_cipher(s, from, b * 16 + blocks * 16 - from);
+        if (!w) return done; /* the disc couldn't be read: what came so far */
+        const unsigned char *iv = b == 0 ? s->iv : w, *cipher = w + (b * 16 - from);
+        if (whole > 0) { cbc_decrypt(s->dk, iv, cipher, out + done, whole); done += whole * 16; continue; }
+        cbc_decrypt(s->dk, iv, cipher, block, 1);
+        long take = 16 - in < n - done ? 16 - in : n - done;
+        memcpy(out + done, block + in, (size_t)take);
+        done += take;
+    }
+    return n;
+}
+#endif
 
 /* Read from the archive as it is (still encrypted); the key made once; the last block decrypted for its padding (the true length). */
 PackStream *pack_archive_stream(Archive *a, const char *name)
 {
     if (!a) return NULL;
+#ifdef PLATFORM_PS2
+    for (int i = 0; i < a->count; i++)
+    {
+        if (strcmp(a->names[i], name)) continue;
+        unsigned char head[48];
+        if (!a->shared) a->shared = fopen(a->path, "rb");
+        if (!a->shared || a->lengths[i] < 64 || fseek(a->shared, a->dataStart + a->offsets[i], SEEK_SET) != 0 || fread(head, 1, 48, a->shared) != 48) return NULL;
+        if (memcmp(head, "SRPG", 4) || le32(head + 4) != 1 || le32(head + 24) != 16) return NULL;
+        uint32_t cipherLength = le32(head + 44);
+        if (cipherLength == 0 || cipherLength % 16 || 48 + (long)cipherLength > a->lengths[i]) return NULL;
+        PackStream *s = (PackStream *)calloc(1, sizeof(PackStream));
+        if (!s) return NULL;
+        s->archive = a; s->cipherAt = a->dataStart + a->offsets[i] + 48; s->cipherLength = (long)cipherLength;
+        memcpy(s->ivCopy, head + 28, 16); s->iv = s->ivCopy;
+        char text[80];
+        strcpy(text, "SandcastleRpgMaker.ProjectKey.v1:");
+        guid_text(head + 8, text + strlen(text));
+        unsigned char key[32];
+        sha256((const unsigned char *)text, strlen(text), key);
+        aes_keys(key, s->dk);
+        long blocks = (long)cipherLength / 16;
+        unsigned char last[16];
+        const unsigned char *w = disc_cipher(s, blocks == 1 ? 0 : (blocks - 2) * 16, blocks == 1 ? 16 : 32);
+        if (!w) { free(s); return NULL; }
+        cbc_decrypt(s->dk, blocks == 1 ? s->iv : w, blocks == 1 ? w : w + 16, last, 1);
+        unsigned pad = last[15];
+        if (pad < 1 || pad > 16) { free(s); return NULL; } /* the wrong key, or damaged */
+        s->plainLength = (long)cipherLength - pad;
+        return s;
+    }
+    return NULL;
+#endif
     for (int i = 0; i < a->count; i++)
     {
         if (strcmp(a->names[i], name)) continue;
@@ -347,6 +450,9 @@ long pack_stream_read(const PackStream *s, long offset, void *dst, long n)
 {
     if (!s || offset < 0 || offset >= s->plainLength || n <= 0) return 0;
     if (offset + n > s->plainLength) n = s->plainLength - offset;
+#ifdef PLATFORM_PS2
+    if (!s->raw) return disc_stream_read(s, offset, (unsigned char *)dst, n);
+#endif
     unsigned char *out = (unsigned char *)dst, block[16];
     long done = 0;
     while (done < n)
@@ -367,9 +473,76 @@ long pack_stream_read(const PackStream *s, long offset, void *dst, long n)
     return n;
 }
 
-void pack_stream_close(PackStream *s) { if (s) { free(s->raw); free(s); } }
+void pack_stream_close(PackStream *s)
+{
+    if (!s) return;
+#ifdef PLATFORM_PS2
+    for (int w = 0; w < WINDOWS; w++) if (windows[w].owner == s) windows[w].owner = NULL; /* its windows free for others */
+#endif
+    free(s->raw); free(s);
+}
 
 /* ---------------- Writing: a save, encrypted as the game's own files are ---------------- */
+
+/* The same, written to a file as it comes (b576: a save never held whole in memory - on the PS2 the whole of it, and an
+   encrypted copy, didn't fit, and saving said "not enough memory"). The plain length must be known first (the header has it). */
+struct PackWriter { FILE *f; uint32_t rk[4 * (NR + 1)]; unsigned char before[16], block[16]; int have; long left; unsigned pad; int ok; };
+
+PackWriter *pack_writer_open(FILE *f, long plainLength)
+{
+    if (!haveProjectId || !f) return NULL;
+    PackWriter *w = (PackWriter *)calloc(1, sizeof *w);
+    if (!w) return NULL;
+    long blocks = plainLength / 16 + 1, cipherLength = blocks * 16;
+    unsigned char head[48];
+    memcpy(head, "SRPG", 4);
+    head[4] = 1; head[5] = head[6] = head[7] = 0;
+    memcpy(head + 8, projectId, 16);
+    head[24] = 16; head[25] = head[26] = head[27] = 0;
+    static uint32_t counter = 0x7F4A7C15u;
+    uint32_t mix = (uint32_t)time(NULL) ^ (uint32_t)clock() ^ (uint32_t)(uintptr_t)w ^ (counter += 0x6D2B79F5u);
+    for (int i = 0; i < 16; i++) { mix ^= mix << 13; mix ^= mix >> 17; mix ^= mix << 5; head[28 + i] = (unsigned char)(mix >> 24); }
+    head[44] = (unsigned char)cipherLength; head[45] = (unsigned char)(cipherLength >> 8); head[46] = (unsigned char)(cipherLength >> 16); head[47] = (unsigned char)(cipherLength >> 24);
+    char text[80];
+    strcpy(text, "SandcastleRpgMaker.ProjectKey.v1:");
+    guid_text(projectId, text + strlen(text));
+    unsigned char key[32];
+    sha256((const unsigned char *)text, strlen(text), key);
+    aes_round_keys(key, w->rk);
+    memcpy(w->before, head + 28, 16);
+    w->f = f; w->left = plainLength; w->pad = (unsigned)(cipherLength - plainLength); w->ok = fwrite(head, 1, 48, f) == 48;
+    return w;
+}
+
+static void writer_block(PackWriter *w)
+{
+    unsigned char in[16], out[16];
+    for (int i = 0; i < 16; i++) in[i] = w->block[i] ^ w->before[i];
+    aes_encrypt_block(w->rk, in, out);
+    memcpy(w->before, out, 16);
+    if (fwrite(out, 1, 16, w->f) != 16) w->ok = 0;
+    w->have = 0;
+}
+
+void pack_writer_put(PackWriter *w, const void *data, long n)
+{
+    if (!w) return;
+    const unsigned char *p = (const unsigned char *)data;
+    if (n > w->left) { w->ok = 0; n = w->left; } /* more than was said: never written past the header's length */
+    w->left -= n;
+    while (n-- > 0) { w->block[w->have++] = *p++; if (w->have == 16) writer_block(w); }
+}
+
+int pack_writer_close(PackWriter *w)
+{
+    if (!w) return 0;
+    int ok = w->ok && w->left == 0;
+    while (w->have < 16) w->block[w->have++] = (unsigned char)w->pad; /* PKCS7 */
+    writer_block(w);
+    ok = ok && w->ok;
+    free(w);
+    return ok;
+}
 
 /* ProjectContainer.Save: "SRPG", version 1, the game's id, a fresh IV, AES-256-CBC (PKCS7) with the game's key. malloc'd; NULL without the game's id. */
 unsigned char *pack_encrypt(const unsigned char *plain, long length, long *size)

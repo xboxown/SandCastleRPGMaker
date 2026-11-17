@@ -83,4 +83,9 @@ int dolls_script_command(const char *command, DollState *context, int designId, 
 int dolls_close_command(const char *which, DollState *context, int designId);
 int dolls_move_command(DollState *context, int designId, int move, double x, double y, int front);
 
+/* The on-screen keyboard (the PS2's): open; an event for it (type 0 pointer moved, 1 button down, 2 button up, 3 key down,
+   4 a letter) - 1 = taken; drawn over every window. */
+int dolls_vk_open(void);
+int dolls_vk_event(int type, int key, int ch, int button, int x, int y);
+void dolls_vk_draw(uint32_t *pixels);
 #endif

@@ -26,6 +26,11 @@ void gumps_reset(void);
 typedef struct GumpsPick { int actor, uid, cellX, cellY, floor, ground; Item *item; } GumpsPick;
 void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const GumpsPick *pick), void *context);
 int gumps_choosing(void);
+int gumps_dragging_now(void);
+int gumps_window_at(int x, int y);
+int gumps_throwing(void);                  /* Ultima 8: something thrown is in the air */
+void gumps_draw_thrown(uint32_t *pixels);
+int gumps_choosing_for(const void *context);
 void gumps_cancel_choosing(void);
 int gumps_turn_into(const void *state, int objectId);
 void gumps_close_container(const Item *box);
@@ -41,4 +46,13 @@ void gumps_refuse(int kind, const char *message);
 void gumps_draw_pointer(uint32_t *pixels, uint32_t ms);
 
 int gumps_dragged_map_thing(void);   /* the map thing being dragged (0: none) - not drawn where it was */
+
+/* Ultima 6's verbs (u6.c): a drag's own rules, without a drag. 1 done; 0 refused (u6_note told why). */
+#include <stddef.h>
+struct Item;
+int gumps_u6_get(int characterId, int uid);                       /* Get: a thing on the map into their hands */
+int gumps_u6_give(struct Item *it, int characterId);              /* Move to a member / into the carried things */
+int gumps_u6_ready(struct Item *it, int characterId, int slotKey); /* Move into a body slot */
+void gumps_u6_use_item(struct Item *it);                          /* Use on something carried */
+const char *gumps_thing_name(int uid, char *buf, size_t size);    /* a thing on the map's name */
 #endif

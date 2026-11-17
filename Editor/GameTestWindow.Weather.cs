@@ -37,7 +37,8 @@ public partial class GameTestWindow
     private double _lightningMs = -1;
     private int _weatherHour = -1;
     private readonly object _weatherSoundOwner = new();
-    private const double ViewWidth = 320, ViewHeight = 200;
+    private double ViewWidth => ViewportWidth; // the view (wider with Fill the screen)
+    private double ViewHeight => ViewportHeight;
 
     /// <summary>At the start of play: the map's own weather.</summary>
     private void StartWeather()

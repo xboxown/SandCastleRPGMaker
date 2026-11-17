@@ -20,6 +20,8 @@
  * container's window is (200 / 240), so its words scale with it.
  */
 #include "dolls.h"
+#include "u8.h"
+#include "u6.h"
 #include "gumps.h"
 #include "world.h"
 #include "items.h"
@@ -45,6 +47,7 @@ enum
     K_SAVELIST, K_SAVENAME, K_SAVESHOT, K_SAVEDETAILS, K_SAVEBUTTON, K_LOADBUTTON, K_DELETESAVE, K_CONFIRM, K_CANCEL,
     K_TEXTBOX, K_CHECKBOX, K_RADIO, K_DROPDOWN, K_LISTBOX, K_PROGRESS, K_NEWGAME, K_CONTINUE, K_LOADGAME, K_QUIT
 };
+static void vk_open(int textbox); /* the on-screen keyboard (below) */
 enum { TR_USE = 2, TR_DROP = 3, TR_PICKUP = 6, TR_COMBINE_ITEM = 17, TR_COMBINE_PART = 18 };
 #define BOX_H 240.0
 #define PRESS_MS 160
@@ -76,7 +79,8 @@ typedef struct DollWin
     int pressPart; double pressMs; int pressAction; /* a button shown pressed; what happens after */
     int hasFill, errNumber; char errWords[200], errDetail[200];
     uint32_t *canvas; int cw, ch;
-    int character;                         /* the character it was opened for (an inventory's button, with the inventory, a stats window): its parts' "own character" stats are theirs; -1 none */
+    uint32_t *small; int smallW, smallH; uint32_t smallSum; /* PS2: the canvas smoothly shrunk to its size on screen, made again only when the canvas changes */
+    int character;                        /* the character it was opened for (an inventory's button, with the inventory, a stats window): its parts' "own character" stats are theirs; -1 none */
     int hud, attached, linkedTo;           /* always on screen (a HUD); laid over a stats window; the inventory's character that brought it up (-1 none) */
     double closeInMs;                      /* the save / load progress: closes after this long (0: stays) */
     int lastValue[32], lostFrom[32];       /* what its stat-following parts last showed; icons just lost: what they had */
@@ -331,6 +335,8 @@ static int row_height(cJSON *part) { return font_line_height(font_of(part)) * sc
 static const char *text_of(const DollWin *w, cJSON *part, const PartState *r, char *buf, size_t size)
 {
     const char *t = r->caption && kind_of(part) != K_TEXTBOX ? r->caption : str(part, "Text");
+    static char keyed[1024];
+    if (u8_on() && kind_of(part) != K_TEXTBOX && strstr(t, "%")) { u8_fill_key_words(t, keyed, sizeof keyed); t = keyed; } /* Ultima 8: %keyjump... the keys (U8Keys) */
     if (!w->hasFill || !strchr(t, '%')) return t;
     /* the error box: %errnum, %errdescrp, %errdetail */
     size_t n = 0;
@@ -859,7 +865,8 @@ static double dolls_scale(const DollWin *w)
 {
     if (w->attached) return 1; /* at the stats window's own scale: its parts land where they were put */
     if (!w->title) return 200.0 / BOX_H;
-    double sx = SCREEN_W / (double)(num(w->design, "Width", 320) > 1 ? num(w->design, "Width", 320) : 1), sy = SCREEN_H / (double)(num(w->design, "Height", 240) > 1 ? num(w->design, "Height", 240) : 1);
+    /* (the title: fitted to Ultima VII's 320 x 200 and centred - Fill the screen's wider screen shows more world, not a bigger title) */
+    double sx = BASE_W / (double)(num(w->design, "Width", 320) > 1 ? num(w->design, "Width", 320) : 1), sy = BASE_H / (double)(num(w->design, "Height", 240) > 1 ? num(w->design, "Height", 240) : 1);
     return sx < sy ? sx : sy;
 }
 
@@ -870,6 +877,96 @@ void dolls_window_size(int i, int *w, int *h)
     *w = (int)(num(win->design, "Width", 320) * s + 0.5); *h = (int)(num(win->design, "Height", 240) * s + 0.5);
 }
 
+#if defined(PLATFORM_PS2) || defined(PLATFORM_PS3) || defined(SMOOTH_DOLLS_TEST)
+/* One axis of an area-averaging shrink: for each of the n pieces out, the source pixels it covers (from, count) and how much of
+   each (16.16; the first and last only partly). Out of m pixels into n: each piece out covers m/n of them. */
+static void shrink_axis(int m, int n, int *from, int *count, uint32_t (*part)[8])
+{
+    for (int o = 0; o < n; o++)
+    {
+        /* this piece spans [o*m/n, (o+1)*m/n) in source pixels: in 1/n units, [o*m, (o+1)*m) */
+        long a = (long)o * m, b = (long)(o + 1) * m;
+        int f = (int)(a / n), l = (int)((b - 1) / n), c = l - f + 1;
+        if (c > 8) c = 8;
+        from[o] = f; count[o] = c;
+        for (int k = 0; k < c; k++)
+        {
+            long s0 = (long)(f + k) * n, s1 = s0 + n; /* the source pixel, in 1/n units */
+            long lo = s0 > a ? s0 : a, hi = s1 < b ? s1 : b;
+            part[o][k] = (uint32_t)(((hi - lo) << 16) / m); /* its share of the piece: the weights add up to 1.0 */
+        }
+    }
+}
+
+/* A window's canvas smoothly shrunk to its size on screen (area averaging, alpha-weighted): every row and column of the art, the
+   text and the lines blended in, where nearest-pixel shrinking drops one row in six (5/6: 240 rows into 200). Made again only
+   when the canvas has changed (a checksum): a window standing still costs nothing more than drawing it 1:1. */
+static const uint32_t *smooth_small(DollWin *w, int sw, int sh)
+{
+    uint32_t sum = 2166136261u;
+    size_t n = (size_t)w->cw * (size_t)w->ch;
+    for (size_t i = 0; i < n; i++) sum = (sum ^ w->canvas[i]) * 16777619u;
+    if (w->small && w->smallW == sw && w->smallH == sh && w->smallSum == sum) return w->small;
+    if (!w->small || w->smallW != sw || w->smallH != sh)
+    {
+        free(w->small);
+        w->small = (uint32_t *)malloc(sizeof(uint32_t) * (size_t)sw * (size_t)sh);
+        if (!w->small) return NULL;
+        w->smallW = sw; w->smallH = sh;
+    }
+    w->smallSum = sum;
+    static int xf[1024], xc[1024], yf[1024], yc[1024]; static uint32_t xp[1024][8], yp[1024][8];
+    if (sw > 1024 || sh > 1024) return NULL;
+    shrink_axis(w->cw, sw, xf, xc, xp);
+    shrink_axis(w->ch, sh, yf, yc, yp);
+    for (int y = 0; y < sh; y++)
+        for (int x = 0; x < sw; x++)
+        {
+            uint32_t A = 0, R = 0, G = 0, B = 0; /* 16.16 weights x 0-255: alpha, and colour times alpha */
+            for (int j = 0; j < yc[y]; j++)
+            {
+                const uint32_t *row = w->canvas + (size_t)(yf[y] + j) * (size_t)w->cw;
+                for (int i = 0; i < xc[x]; i++)
+                {
+                    uint32_t c = row[xf[x] + i], a = c >> 24;
+                    if (!a) continue;
+                    uint32_t wt = (yp[y][j] * xp[x][i]) >> 16, wa = (wt * a) >> 8; /* weight x alpha, 16.16 / 256 */
+                    A += wt * a >> 8; R += wa * ((c >> 16) & 255) >> 8; G += wa * ((c >> 8) & 255) >> 8; B += wa * (c & 255) >> 8;
+                }
+            }
+            uint32_t out = 0;
+            if (A)
+            {
+                uint32_t r = R * 256 / A, g = G * 256 / A, b = B * 256 / A, a = (A + 128) >> 8; /* A is alpha x 256: colour = R x 256 / A */
+                if (r > 255) r = 255;
+                if (g > 255) g = 255;
+                if (b > 255) b = 255;
+                if (a > 255) a = 255;
+                out = a << 24 | r << 16 | g << 8 | b;
+            }
+            w->small[y * sw + x] = out;
+        }
+    return w->small;
+}
+#endif
+
+/* A window's canvas onto the screen at its size there (PS2: smoothly shrunk, then drawn 1:1). */
+static void draw_canvas(uint32_t *pixels, DollWin *w, int i)
+{
+    Picture p = { w->cw, w->ch, w->canvas };
+    p.fleeting = 1; /* redrawn each frame: world.c keeps nothing of it */
+    int sw, sh;
+    dolls_window_size(i, &sw, &sh);
+#if defined(PLATFORM_PS2) || defined(PLATFORM_PS3) || defined(SMOOTH_DOLLS_TEST)
+    if (frame_scale == 1 && sw > 0 && sh > 0 && (sw < w->cw || sh < w->ch))
+    {
+        const uint32_t *small = smooth_small(w, sw, sh);
+        if (small) { Picture q = { sw, sh, (uint32_t *)small }; q.fleeting = 1; world_blit(pixels, &q, w->x, w->y, sw, sh); return; }
+    }
+#endif
+    world_blit(pixels, &p, w->x, w->y, sw, sh);
+}
+
 void dolls_draw(uint32_t *pixels, uint32_t ms)
 {
     nowMs = ms;
@@ -878,10 +975,7 @@ void dolls_draw(uint32_t *pixels, uint32_t ms)
         DollWin *w = wins[i];
         if (w->hud) continue; /* under every window: dolls_draw_hud */
         render(w);
-        Picture p = { w->cw, w->ch, w->canvas };
-        int sw, sh;
-        dolls_window_size(i, &sw, &sh);
-        world_blit(pixels, &p, w->x, w->y, sw, sh);
+        draw_canvas(pixels, w, i);
     }
 }
 
@@ -896,10 +990,7 @@ void dolls_draw_hud(uint32_t *pixels, uint32_t ms)
         DollWin *w = wins[i];
         if (!w->hud) continue;
         render(w);
-        Picture p = { w->cw, w->ch, w->canvas };
-        int sw, sh;
-        dolls_window_size(i, &sw, &sh);
-        world_blit(pixels, &p, w->x, w->y, sw, sh);
+        draw_canvas(pixels, w, i);
     }
 }
 
@@ -1073,6 +1164,7 @@ void dolls_close_window(int i)
     if (w->answerToken > 0) events_doll_answered(w->answerToken, 0); /* an unanswered question is a no */
     if (w->save) { picture_free(w->save->shot); free(w->save); }
     free(w->canvas);
+    free(w->small);
     free(w);
 }
 
@@ -1158,6 +1250,7 @@ void dolls_ask_to_quit(void) { ask_to_quit(); }
 
 static void ask_to_quit(void)
 {
+    if (u6_ask_to_quit()) return; /* Ultima 6: asked in the text area, Y or N (U6GameWindow.Title AskToQuit) */
     int prompt = num(get(get(project(), "Settings"), "Quit"), "DollDesignId", -1);
     if (dolls_design(prompt) && dolls_open_form(prompt, 1, 1, 0, 0)) { wins[winCount - 1]->answerToken = ANSWER_QUIT; return; }
     events_request_quit();
@@ -1360,7 +1453,7 @@ int dolls_click(int wi, int i, int x, int y)
             if (now >= 0) dolls_close_window(now);
             return 1;
         }
-        case K_TEXTBOX: w->typing = i; return 1;
+        case K_TEXTBOX: w->typing = i; vk_open(1); return 1;
         case K_CHECKBOX: r->value = r->look = r->value ? 0 : 1; control_changed(w, i, r->value ? "ticked" : "unticked"); return 1;
         case K_RADIO:
         {
@@ -1791,7 +1884,7 @@ int dolls_script_command(const char *command, DollState *context, int designId, 
         }
         r->itemCount = 0;
     }
-    else if (!strcmp(command, "FocusTextBox")) { if (k != K_TEXTBOX) return 0; w->typing = i; return 1; }
+    else if (!strcmp(command, "FocusTextBox")) { if (k != K_TEXTBOX) return 0; w->typing = i; vk_open(1); return 1; }
     else return 0;
     write_variable(part, r);
     return 1;
@@ -1933,6 +2026,7 @@ int dolls_save_screen_open(void) { return save_window(NULL) != NULL; }
 /* The S key (Exult's File gump): the Save/Load screen opens - as designed, every time. */
 void dolls_open_save_screen(void)
 {
+    if (u6_open_save_screen()) return; /* Ultima 6: no Save/Load screen - its title menu (U6GameWindow.SaveLoad OpenSaveLoad) */
     int wi;
     if (save_window(&wi)) { dolls_to_front(wi); return; }
     cJSON *design = dolls_design(num(save_settings(), "DollDesignId", -1));
@@ -2033,6 +2127,9 @@ static void write_save(DollWin *w, int slot, const char *name, const char *over)
 {
     const char *busy = events_save_blocker();
     if (busy) { save_error(102, busy); return; }
+#ifdef PLATFORM_PS2
+    { int ps2_fmcb_on_card(void); if (ps2_fmcb_on_card()) { save_error(113, ""); return; } } /* never written to: Free McBoot's card */
+#endif
     char error[300], line[120];
     dolls_disk_begin(); /* the saving progress paperdoll, if there is one */
     dolls_disk_report(0.15);
@@ -2070,6 +2167,9 @@ static void save_pressed(DollWin *w)
     snprintf(name, sizeof name, "%s", a);
     size_t n = strlen(name);
     while (n && name[n - 1] == ' ') name[--n] = 0;
+#if defined(PLATFORM_PS2) || defined(PLATFORM_PS3)
+    if (!n) { vk_open(0); return; } /* no name yet: the on-screen keyboard to type one */
+#endif
     if (!n) { save_error(111, ""); return; }
     const char *busy = events_save_blocker();
     if (busy) { save_error(102, busy); return; }
@@ -2088,6 +2188,9 @@ static void delete_pressed(DollWin *w)
     SaveScreen *s = w->save;
     SaveInfo *save = picked_save(s);
     if (!save) { save_error(s->pickedSlot > 0 ? 105 : 104, ""); return; }
+#ifdef PLATFORM_PS2
+    { int ps2_fmcb_on_card(void); if (ps2_fmcb_on_card()) { save_error(113, ""); return; } } /* never written to: Free McBoot's card */
+#endif
     char question[160];
     snprintf(question, sizeof question, "Delete \"%s\"? Press Delete again.", save->name);
     snprintf(s->pendingFolder, sizeof s->pendingFolder, "%s", save->folder);
@@ -2126,6 +2229,9 @@ void dolls_save_answer(int token, int yes)
 /* A click on one of the screen's own parts. 1 = handled. */
 static int save_part_clicked(DollWin *w, int i, int dy, int ph)
 {
+#ifdef PS2_DIAG_SHOTS
+    printf("Game: Save screen part %d (kind %d) clicked\n", i, kind_of(part_at(w->design, i)));
+#endif
     cJSON *part = part_at(w->design, i);
     int k = kind_of(part);
     if (k < K_SAVELIST || k > K_DELETESAVE) return 0;
@@ -2139,12 +2245,14 @@ static int save_part_clicked(DollWin *w, int i, int dy, int ph)
             int row = s->scroll + dy / row_height(part);
             (void)ph;
             if (row >= 0 && row < s->count) pick_row(w, row);
+            else vk_open(0); /* the PS2: below the saves - a new one: its on-screen keyboard, to type the name */
             return 1;
         }
         case K_SAVENAME:
         {
             int slot = slot_number(w->design, i);
             if (s->pickedSlot != slot) pick_slot(s, slot);
+            vk_open(0); /* the PS2: its on-screen keyboard, to type the save's name */
             SaveInfo *save = in_slot(s, slot);
             char line[160];
             if (save) snprintf(line, sizeof line, "Slot %d: \"%s\" - Load it, or type a new name and Save over it.", slot, save->name);
@@ -2157,6 +2265,192 @@ static int save_part_clicked(DollWin *w, int i, int dy, int ph)
         case K_DELETESAVE: r->look = 1; w->pressPart = i; w->pressMs = PRESS_MS; w->pressAction = 0; fire(w->state, i, TR_USE, 0, 0, -1); delete_pressed(w); return 1;
     }
     return 1;
+}
+
+/* ---------------- The on-screen keyboard (the PS2's: no keyboard on a controller) ----------------
+   Opens when a save slot is picked or a text box is typed in. Drawn in the look of the game's own error window (System
+   Settings > Errors' paperdoll): its picture stretched to hold the keys, its button's pictures for the keys, its words'
+   font and colour. The D-pad (or the pointer) picks a key, Cross presses it, Circle deletes, Start cancels. Its letters go
+   where a real keyboard's would. */
+#define VK_ROWS 5
+#define VK_KEY_W 26
+#define VK_KEY_H 17
+#define VK_GAP 2
+#define VK_PAD 8
+static const char *VK_LETTERS[4] = { "1234567890", "QWERTYUIOP", "ASDFGHJKL-", "ZXCVBNM.,!" };
+static const char *VK_SPECIAL[5] = { "a/A", "Space", "Del", "OK", "Cancel" };
+static const int VK_SPECIAL_UNITS[5] = { 1, 3, 2, 2, 2 }; /* key widths, in letter keys */
+static int vkOpen, vkRow, vkCol, vkLower, vkTextbox;
+static char vkBefore[260]; /* what it said when the keyboard opened: Cancel puts it back */
+
+static int vk_box(int *x, int *y, int *w, int *h)
+{
+    *w = 10 * (VK_KEY_W + VK_GAP) - VK_GAP + 2 * VK_PAD;
+    *h = VK_PAD + 14 + VK_ROWS * (VK_KEY_H + VK_GAP) - VK_GAP + VK_PAD;
+    *x = (SCREEN_W - *w) / 2; *y = SCREEN_H - *h - 4;
+    return 1;
+}
+static int vk_keys_in(int row) { return row < 4 ? 10 : 5; }
+static void vk_key_rect(int row, int k, int *x, int *y, int *w, int *h)
+{
+    int bx, by, bw, bh;
+    vk_box(&bx, &by, &bw, &bh);
+    *y = by + VK_PAD + 14 + row * (VK_KEY_H + VK_GAP); *h = VK_KEY_H;
+    int units = 0, span = 1;
+    if (row < 4) units = k; else { for (int i = 0; i < k; i++) units += VK_SPECIAL_UNITS[i]; span = VK_SPECIAL_UNITS[k]; }
+    *x = bx + VK_PAD + units * (VK_KEY_W + VK_GAP); *w = span * (VK_KEY_W + VK_GAP) - VK_GAP;
+}
+
+/* The text it types into: the Save/Load screen's name, or the text box being typed in. */
+static char *vk_text(size_t *size)
+{
+    if (vkTextbox)
+    {
+        for (int wi = winCount - 1; wi >= 0; wi--)
+            if (wins[wi]->typing >= 0) { *size = sizeof wins[wi]->state->parts[0].text; return wins[wi]->state->parts[wins[wi]->typing].text; }
+        return NULL;
+    }
+    DollWin *w = save_window(NULL);
+    *size = sizeof w->save->name;
+    return w ? w->save->name : NULL;
+}
+
+static void vk_open(int textbox)
+{
+#if defined(PLATFORM_PS2) || defined(PLATFORM_PS3)
+    vkTextbox = textbox;
+    size_t size;
+    char *t = vk_text(&size);
+    snprintf(vkBefore, sizeof vkBefore, "%s", t ? t : "");
+    vkOpen = 1;
+    if (vkRow < 0 || vkRow >= VK_ROWS) vkRow = 1;
+#else
+    (void)textbox;
+#endif
+}
+int dolls_vk_open(void) { return vkOpen; }
+/* Testing: slot 1 of the Save/Load screen picked, and the keyboard opened for it. */
+void dolls_vk_test(void) { DollWin *w = save_window(NULL); if (w) { pick_slot(w->save, 1); vk_open(0); } }
+
+static void vk_close(int keep)
+{
+    if (!vkOpen) return;
+    size_t size;
+    char *t = vk_text(&size);
+    if (!keep && t) snprintf(t, size, "%s", vkBefore);
+    vkOpen = 0;
+    if (vkTextbox) dolls_stop_typing();
+}
+
+static void vk_press(int row, int k)
+{
+    if (row < 4) { char c = VK_LETTERS[row][k]; if (vkLower && c >= 'A' && c <= 'Z') c = (char)(c - 'A' + 'a'); dolls_key(0, c); return; }
+    switch (k)
+    {
+        case 0: vkLower = !vkLower; break;
+        case 1: dolls_key(0, ' '); break;
+        case 2: dolls_key(KEY_BACKSPACE, 0); break;
+        case 3: vk_close(1); break;
+        case 4: vk_close(0); break;
+    }
+}
+
+static int vk_key_at(int x, int y, int *row, int *k)
+{
+    for (int r = 0; r < VK_ROWS; r++)
+        for (int i = 0; i < vk_keys_in(r); i++)
+        {
+            int kx, ky, kw, kh;
+            vk_key_rect(r, i, &kx, &ky, &kw, &kh);
+            if (x >= kx && y >= ky && x < kx + kw && y < ky + kh) { *row = r; *k = i; return 1; }
+        }
+    return 0;
+}
+
+/* Everything the player does while it's up: 1 = taken (nothing else hears it). */
+int dolls_vk_event(int type, int key, int ch, int button, int x, int y)
+{
+    if (!vkOpen) return 0;
+    size_t size;
+    if (!vk_text(&size)) { vkOpen = 0; return 0; } /* its window went away */
+    int row, k;
+    switch (type)
+    {
+        case 0: /* the pointer moved: the key under it is the one picked */
+            if (vk_key_at(x, y, &row, &k)) { vkRow = row; vkCol = k; }
+            return 0;
+        case 1: /* a button pressed */
+            if (button == 2) { dolls_key(KEY_BACKSPACE, 0); return 1; } /* Circle: delete */
+            if (vk_key_at(x, y, &row, &k)) { vkRow = row; vkCol = k; }
+            vk_press(vkRow, vkCol);
+            return 1;
+        case 2: return 1; /* a button let go */
+        case 3: /* a key (the D-pad's arrows, Start...) */
+            switch (key)
+            {
+                case KEY_LEFT: vkCol = (vkCol + vk_keys_in(vkRow) - 1) % vk_keys_in(vkRow); return 1;
+                case KEY_RIGHT: vkCol = (vkCol + 1) % vk_keys_in(vkRow); return 1;
+                case KEY_UP: case KEY_DOWN:
+                {
+                    int was = vkRow;
+                    vkRow = (vkRow + (key == KEY_UP ? VK_ROWS - 1 : 1)) % VK_ROWS;
+                    if (vk_keys_in(was) != vk_keys_in(vkRow)) vkCol = vk_keys_in(vkRow) == 5 ? (vkCol < 1 ? 0 : vkCol < 4 ? 1 : vkCol < 6 ? 2 : vkCol < 8 ? 3 : 4) : (vkCol == 0 ? 0 : vkCol == 1 ? 2 : vkCol == 2 ? 4 : vkCol == 3 ? 6 : 8);
+                    return 1;
+                }
+                case KEY_ESCAPE: vk_close(0); return 1;      /* Start: cancel */
+                case KEY_ENTER: vk_close(1); return 1;
+                case KEY_BACKSPACE: dolls_key(KEY_BACKSPACE, 0); return 1;
+                default: return 1;
+            }
+        case 4: dolls_key(0, ch); return 1; /* a letter from a real (USB) keyboard */
+    }
+    return 1;
+}
+
+void dolls_vk_draw(uint32_t *pixels)
+{
+    if (!vkOpen) return;
+    size_t size;
+    char *text = vk_text(&size);
+    if (!text) return;
+    cJSON *errors = get(get(get((cJSON *)world_json(), "Project"), "Settings"), "Errors");
+    cJSON *design = dolls_design(num(errors, "DollDesignId", -1)), *p, *back = NULL, *words = NULL;
+    cJSON_ArrayForEach(p, parts_of(design))
+    {
+        int k = kind_of(p);
+        if (!back && k == K_PICTURE && look_sprite(p, 0)) back = p;
+        if (!words && (k == K_TEXT || k == K_DISPLAY)) words = p;
+    }
+    int bx, by, bw, bh;
+    vk_box(&bx, &by, &bw, &bh);
+    const Picture *bp = back ? now_picture(look_sprite(back, 0)) : NULL;
+    if (bp) world_blit(pixels, bp, bx, by, bw, bh);
+    else { frame_fill(pixels, bx, by, bw, bh, PLAIN_EDGE); frame_fill(pixels, bx + 1, by + 1, bw - 2, bh - 2, PLAIN_BOX); }
+    const Font *f = words ? font_of(words) : font_get("InGameFont");
+    /* The words' colour (the error window's, else white); the keys a little darker than the window's own colour (the middle
+       of its picture) - not its button's picture: that has its own word ("No") painted on. The picked key the other way round. */
+    uint32_t ink = words && tint_of(words) ? tint_of(words) : 0xFFFFFFFFu, face = PLAIN_FACE;
+    if (bp && bp->width > 0 && bp->height > 0)
+    {
+        uint32_t c = bp->pixels[(bp->height / 2) * bp->width + bp->width / 2];
+        face = 0xFF000000u | ((((c >> 16) & 255) * 3 / 4) << 16) | ((((c >> 8) & 255) * 3 / 4) << 8) | ((c & 255) * 3 / 4);
+    }
+    char line[300];
+    snprintf(line, sizeof line, "%s_", text);
+    font_draw(f, pixels, bx + VK_PAD, by + VK_PAD, line, ink);
+    for (int r = 0; r < VK_ROWS; r++)
+        for (int i = 0; i < vk_keys_in(r); i++)
+        {
+            int kx, ky, kw, kh, picked = r == vkRow && i == vkCol;
+            vk_key_rect(r, i, &kx, &ky, &kw, &kh);
+            frame_fill(pixels, kx, ky, kw, kh, ink);                                   /* its edge */
+            frame_fill(pixels, kx + 1, ky + 1, kw - 2, kh - 2, picked ? ink : face);
+            char label[8];
+            if (r < 4) { label[0] = VK_LETTERS[r][i]; if (vkLower && label[0] >= 'A' && label[0] <= 'Z') label[0] = (char)(label[0] - 'A' + 'a'); label[1] = 0; }
+            else snprintf(label, sizeof label, "%s", VK_SPECIAL[i]);
+            int lw = font_text_width(f, label), lh = font_line_height(f);
+            font_draw(f, pixels, kx + (kw - lw) / 2, ky + (kh - lh) / 2, label, picked ? face : ink);
+        }
 }
 
 /* Keys on the Save/Load screen: the name typed, Backspace, Enter saves, Up / Down pick. 1 = taken. */
@@ -2207,7 +2501,7 @@ void dolls_save_scroll(int step) { DollWin *w = save_window(NULL); if (w) w->sav
 /* A new game: every paperdoll window closed (no answers heard), forms as designed, the designs read again. */
 void dolls_reset(void)
 {
-    while (winCount) { DollWin *w = wins[--winCount]; if (w->save) { picture_free(w->save->shot); free(w->save); } free(w->canvas); free(w); }
+    while (winCount) { DollWin *w = wins[--winCount]; if (w->save) { picture_free(w->save->shot); free(w->save); } free(w->canvas); free(w->small); free(w); }
     for (int i = 0; i < formCount; i++) dolls_free_state(forms[i]);
     formCount = 0; slideCount = 0;
     designs = NULL;

@@ -32,12 +32,14 @@
 #include "sound.h"
 #include "font.h"
 #include "combat.h"
+#include "u8.h"
 #include "vitals.h"
 #include "dialog.h"
 #include "platform.h"
 #include "pictures.h"
 #include "dolls.h"
 #include "slider.h"
+#include "u6.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -138,6 +140,9 @@ static int solid_at(const Picture *p, int bx, int by, int bw, int bh, int x, int
 
 /* ---------------- The windows ---------------- */
 
+/* The inventory is laid out in 320 x 400 and shown at half that (scale_of); its buttons and pictures at their own size - twice
+   that half, as the Windows engine's paperdollItemCounterScale (400 / 200) - not shrunk with it (they were half size). */
+#define DOLL_COUNTER (DOLL_H / 200.0)
 static double scale_of(const Gump *g) { return g->kind == G_DOLL ? 200.0 / DOLL_H : g->kind == G_BOX ? 200.0 / BOX_H : 1; }
 static double atof_safe(const char *s) { double sc_strtod(const char *text, char **end); return sc_strtod(s, NULL); }
 
@@ -329,7 +334,8 @@ static void draw_readout(uint32_t *pixels, const Gump *g, cJSON *r, const char *
 
 static int being_dragged(const Item *it) { return dragging && pressed.item == it; }
 int gumps_dragging_item(const Item *it) { return being_dragged(it); }
-int gumps_dragged_map_thing(void) { return dragging && drag.fromMap ? drag.uid : 0; } /* hidden on the map while it is dragged (the source visual hidden) */
+static int thrownMapThing(void);
+int gumps_dragged_map_thing(void) { if (thrownMapThing()) return thrownMapThing(); return dragging && drag.fromMap ? drag.uid : 0; } /* hidden on the map while it is dragged (the source visual hidden) */
 int gumps_dragging_doll_part(const void *state, int part) { return dragging && drag.partDragged && drag.dollState == state && drag.dollPart == part; }
 const DollState *gumps_drag_doll_state(void) { return dragging && !drag.partDragged ? drag.dollState : NULL; }
 int gumps_drag_doll_part(void) { return dragging && drag.dollState && !drag.partDragged ? drag.dollPart : -1; }
@@ -447,12 +453,15 @@ static void draw_doll(uint32_t *pixels, const Gump *g)
         cJSON_ArrayForEach(var, get(get(project(), "Variables"), "Variables"))
             if (num(var, "Id", -2) == num(label, "VariableId", -1)) { snprintf(text, sizeof text, "%g", events_variable(str(var, "Name"))); draw_readout(pixels, g, label, text); }
     }
-    const Picture *exit = sprite_now(sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName")));
+    /* its frames: up, and pressed while it's held down (GameTestWindow.BuildExitButton) - not played as an animation */
+    const Sprite *exitSprite = sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName"));
+    int exitHeld = pressing && pressed.kind == T_EXIT && pressed.gump >= 0 && &gumps[pressed.gump] == g;
+    const Picture *exit = exitSprite && exitSprite->frameCount ? frame_picture(&exitSprite->frames[exitHeld && exitSprite->frameCount > 1 ? 1 : 0]) : NULL;
     /* where the Paperdoll layout puts it; at its own size, or in a 24 x 24 box */
     if (exit)
     {
         int own = flag(pd, "ExitButtonOwnSize");
-        world_blit(pixels, exit, g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), (int)((own ? exit->width : 24) * s), (int)((own ? exit->height : 24) * s));
+        world_blit(pixels, exit, g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), (int)((own ? exit->width * DOLL_COUNTER : 24) * s + 0.5), (int)((own ? exit->height * DOLL_COUNTER : 24) * s + 0.5));
     }
     /* the buttons opening other paperdolls: frames closed, open */
     cJSON *dollLink;
@@ -461,7 +470,7 @@ static void draw_doll(uint32_t *pixels, const Gump *g)
         if (num(dollLink, "Way", 0) != 0) continue;
         const Picture *pic = link_picture(get(dollLink, "Sprite"), dolls_linked_open(g->characterId, num(dollLink, "DesignId", -1)) ? 1 : 0);
         if (!pic) pic = link_picture(get(dollLink, "Sprite"), 0);
-        if (pic) world_blit(pixels, pic, g->x + (int)(dbl(dollLink, "X", 0) * s), g->y + (int)(dbl(dollLink, "Y", 0) * s), (int)(pic->width * s), (int)(pic->height * s));
+        if (pic) world_blit(pixels, pic, g->x + (int)(dbl(dollLink, "X", 0) * s), g->y + (int)(dbl(dollLink, "Y", 0) * s), (int)(pic->width * DOLL_COUNTER * s + 0.5), (int)(pic->height * DOLL_COUNTER * s + 0.5));
     }
     for (int b = 0; b < 5; b++)
     {
@@ -586,6 +595,36 @@ static void draw_pack(uint32_t *pixels, const Gump *g)
     }
 }
 
+/* Ultima 8 (U8GameWindow.U8Equip, Pentagram's PaperdollGump::DraggingItem): while something is dragged over a paperdoll, the slot it
+   would go to - the closest free one it fits - shows it see-through. */
+static void draw_equip_preview(uint32_t *pixels)
+{
+    for (int i = gumpCount - 1; i >= 0; i--)
+    {
+        Gump *g = &gumps[i];
+        if (g->kind != G_DOLL) continue;
+        double s = scale_of(g);
+        if (mouseX < g->x || mouseY < g->y || mouseX >= g->x + DOLL_W * s || mouseY >= g->y + DOLL_H * s) continue;
+        double px = (mouseX - g->x) / s, py = (mouseY - g->y) / s, best = SLOT_DROP_RADIUS * SLOT_DROP_RADIUS, bx = 0, by = 0;
+        int keys[64], n = slot_keys(g->characterId, keys), slot = -1;
+        for (int k = 0; k < n; k++)
+        {
+            double sx, sy;
+            Item *in = items_in_slot(g->characterId, keys[k]);
+            if ((in && in != drag.item) || !slot_spot(g->characterId, keys[k], &sx, &sy)) continue;
+            if (drag.item && !items_fits_slot(g->characterId, drag.item, keys[k])) continue;
+            double cx = keys[k] >= 100 ? sx + 30 : sx + 16, cy = keys[k] >= 100 ? sy + 11 : sy + 16, d = (px - cx) * (px - cx) + (py - cy) * (py - cy);
+            if (d < best) { best = d; slot = keys[k]; bx = sx; by = sy; }
+        }
+        if (slot >= 0)
+        {
+            const Picture *p = sprite_now(ghost);
+            if (p) world_blit_alpha(pixels, p, g->x + (int)(bx * s), g->y + (int)(by * s), (int)(p->width * s + 0.5), (int)(p->height * s + 0.5), 128);
+        }
+        return;
+    }
+}
+
 void gumps_draw(uint32_t *pixels, uint32_t ms)
 {
     nowMs = ms;
@@ -597,6 +636,7 @@ void gumps_draw(uint32_t *pixels, uint32_t ms)
         else if (gumps[i].kind == G_BOX) draw_box(pixels, &gumps[i]);
         else draw_pack(pixels, &gumps[i]);
     }
+    if (u8_on() && dragging && ghost) draw_equip_preview(pixels); /* Ultima 8: see-through on the slot it would go to */
     dolls_draw(pixels, ms); /* PaperDoll Editor paperdolls, over the inventory windows */
     { int attachedId = -1; for (int i = 0; i < gumpCount; i++) if (gumps[i].kind == G_STATS && (attachedId = num(stats_doll(gumps[i].characterId), "ControlsDesignId", -1)) >= 0) dolls_place_attached(attachedId, gumps[i].x, gumps[i].y); }
     const Font *f = font_get("InGameFont");
@@ -689,7 +729,7 @@ static Target hit(int x, int y)
         cJSON *pd = paperdoll_of(g->characterId);
         const Picture *exitPic = sprite_now(sprite_find(str(pd, "ExitButtonSpriteGroup"), str(pd, "ExitButtonSpriteName")));
         int ownExit = flag(pd, "ExitButtonOwnSize") && exitPic;
-        int ex = g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), ey = g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), exw = (int)((ownExit ? exitPic->width : 24) * s), exh = (int)((ownExit ? exitPic->height : 24) * s);
+        int ex = g->x + (int)(dbl(pd, "ExitButtonX", DOLL_W - 28) * s), ey = g->y + (int)(dbl(pd, "ExitButtonY", 4) * s), exw = (int)((ownExit ? exitPic->width * DOLL_COUNTER : 24) * s + 0.5), exh = (int)((ownExit ? exitPic->height * DOLL_COUNTER : 24) * s + 0.5);
         if (x >= ex && y >= ey && x < ex + exw && y < ey + exh) { t.kind = T_EXIT; return t; }
         {
             cJSON *dollLink;
@@ -700,7 +740,7 @@ static Target hit(int x, int y)
                 {
                     const Picture *pic = link_picture(get(dollLink, "Sprite"), 0);
                     int lx = g->x + (int)(dbl(dollLink, "X", 0) * s), ly = g->y + (int)(dbl(dollLink, "Y", 0) * s);
-                    if (pic && x >= lx && y >= ly && x < lx + (int)(pic->width * s) && y < ly + (int)(pic->height * s)) { t.kind = T_LINK; t.slotKey = linkIndex; return t; }
+                    if (pic && x >= lx && y >= ly && x < lx + (int)(pic->width * DOLL_COUNTER * s + 0.5) && y < ly + (int)(pic->height * DOLL_COUNTER * s + 0.5)) { t.kind = T_LINK; t.slotKey = linkIndex; return t; }
                 }
                 linkIndex++;
             }
@@ -759,9 +799,13 @@ static const char *thing_name(int uid, char *buf, size_t size)
 static void identify(const Target *t)
 {
     char name[96];
+    if (u6_hud() && (t->kind == T_THING || t->kind == T_ACTOR)) { if (t->kind == T_ACTOR || world_thing_there(t->uid)) u6_click_look(t->kind == T_ACTOR ? t->actor : -1, t->kind == T_THING ? t->uid : 0); return; } /* Ultima 6: "Look-" in the text area, not a name over it */
     switch (t->kind)
     {
-        case T_THING: if (world_thing_there(t->uid)) world_bark_thing(t->uid, thing_name(t->uid, name, sizeof name), 2000); break;
+        case T_THING:
+            if (world_thing_there(t->uid)) world_bark_thing(t->uid, thing_name(t->uid, name, sizeof name), 2000);
+            if (u8_on() && world_thing_there(t->uid) && world_thing_object_id(t->uid) >= 0) events_object_event(t->uid, 20 /* By Look (Ultima 8) */, -1);
+            break;
         case T_ACTOR:
         {
             const char *n = str(character_json(world_actor_character(t->actor)), "Name");
@@ -801,6 +845,7 @@ static void use_carried(Item *it)
 static void use_target(const Target *t)
 {
     if (vitals_incapacitated(world_actor_character(0))) { game_log("You are unconscious."); return; }
+    if (u6_hud() && (t->kind == T_THING || t->kind == T_ACTOR)) { u6_multi_use(t->kind == T_ACTOR ? t->actor : -1, t->kind == T_THING ? t->uid : 0); return; } /* Ultima 6: talk, use or attack - from the next square */
     switch (t->kind)
     {
         case T_ACTOR:
@@ -878,13 +923,15 @@ static void click_released(const Target *t)
 
 static int start_drag(const Target *t)
 {
+    if (u8_on() && gumps_throwing()) { gumps_refuse(P_BLOCKED, "Wait - something is still in the air."); return 0; } /* Ultima 8: one throw at a time */
     if (vitals_incapacitated(world_actor_character(0)) || vitals_game_over()) return 0;
     memset(&drag, 0, sizeof drag);
     if (t->kind == T_THING)
     {
         int x, y, instance;
         world_thing_info(t->uid, &drag.category, &drag.itemId, &drag.quantity, &x, &y, &instance);
-        if (!items_can_lift(drag.category, drag.itemId) || drag.itemId <= -1000) { gumps_refuse(P_TOO_HEAVY, "That's too heavy to move."); return 0; }
+        if (!u6_can_drag(x, y)) { memset(&drag, 0, sizeof drag); return 0; } /* Ultima 6: only from the next square */
+        if (!items_can_lift(drag.category, drag.itemId)) { gumps_refuse(P_TOO_HEAVY, "That's too heavy to move."); return 0; }
         if (world_thing_occupied(t->uid)) { gumps_refuse(P_TOO_HEAVY, "Someone is on it - it's too heavy to move."); return 0; }
         if (!world_reachable_thing(t->uid)) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
         drag.fromMap = 1; drag.uid = t->uid;
@@ -1074,19 +1121,113 @@ static int drop_on_doll(int gi, const Target *under)
     return drop_on_character(g->characterId);
 }
 
+static int drop_on_map(void);
+/* ---------------- Ultima 8: throwing (U8GameWindow.U8Reach TryThrowU8, Pentagram's Item::getThrowRange, MissileTracker) ----------------
+   Let go beyond reach: thrown, if within its throw range ((64 - weight + Strength)^2 / 2) with a clear path; it flies at 64 -
+   weight + Strength, off by up to 4 x (30 - Dexterity) (at least 20) of Ultima 8's units, and lands where it falls - the
+   ordinary drop there, without the reach. One at a time. */
+
+static int landingThrow;
+static struct { int on; Drag saved; int grabX, grabY; double landX, landY, fromX, fromY, toX, toY, durMs, elapsedMs, apex; const Sprite *look; char name[96]; } thrown;
+
+static double payload_weight(void)
+{
+    if (drag.item) return items_weight_of(drag.item);
+    if (drag.fromMap)
+    {
+        Item *parked = items_parked(drag.uid, drag.category, drag.itemId, drag.quantity);
+        if (parked) return items_weight_of(parked);
+    }
+    return items_own_weight(drag.category, drag.itemId) * (drag.quantity > 1 ? drag.quantity : 1);
+}
+
+static int try_throw(int cellX, int cellY)
+{
+    double weight = payload_weight();
+    int strength = combat_stat(0, 1, 10), dexterity = combat_stat(0, 2, 10);
+    int speed = (int)floor(64 - weight + strength + 0.5);
+    if (speed < 1) speed = 1;
+    int ok = world_u8_can_throw_to(cellX, cellY, speed * speed / 2);
+    if (ok == 0) { gumps_refuse(P_RED_X, "Too far to throw that."); return 0; }
+    if (ok < 0) { gumps_refuse(P_BLOCKED, "Something is in the way."); return 0; }
+    int inaccuracy = 4 * (30 - dexterity);
+    if (inaccuracy < 20) inaccuracy = 20;
+    double unitsToPx = world_tile_w() / 128.0, offX = (rand() % (2 * inaccuracy + 1) - inaccuracy) * unitsToPx, offY = (rand() % (2 * inaccuracy + 1) - inaccuracy) * unitsToPx;
+    double camX, camY;
+    world_camera_now(&camX, &camY);
+    /* where it's let go of, on the canvas (the screen plus the camera), off by the throw: the map's offset in the diamond view */
+    thrown.landX = mouseX + camX + offX - offY; thrown.landY = mouseY + camY + (offX + offY) / 2;
+    world_screen_to_map(thrown.landX - camX, thrown.landY - camY, &thrown.toX, &thrown.toY);
+    double px, py;
+    world_actor_pixel(0, &px, &py);
+    thrown.fromX = px; thrown.fromY = py - world_tile_h() / 2.0;
+    double distanceUnits = sqrt((thrown.toX - px) * (thrown.toX - px) + (thrown.toY - py) * (thrown.toY - py)) / unitsToPx;
+    double frames = distanceUnits / speed;
+    if (frames < 4) frames = 4;
+    thrown.durMs = frames * 1000 / 30; thrown.elapsedMs = 0;
+    thrown.apex = 4 * frames * frames / 8 * 0.5;
+    if (thrown.apex > 160) thrown.apex = 160;
+    thrown.saved = drag; thrown.grabX = grabX; thrown.grabY = grabY; thrown.look = ghost;
+    snprintf(thrown.name, sizeof thrown.name, "%s", items_name(drag.category, drag.itemId));
+    thrown.on = 1;
+    char line[140]; snprintf(line, sizeof line, "You throw \"%s\".", thrown.name);
+    game_log(line);
+    return 1;
+}
+
+/* UpdateThrownU8: it flies on; landed, it's put down where it came to (the drop, without the reach). */
+static void thrown_update(double ms)
+{
+    if (!thrown.on || (thrown.elapsedMs += ms) < thrown.durMs) return;
+    thrown.on = 0;
+    Drag keep = drag; int keepX = mouseX, keepY = mouseY, keepGX = grabX, keepGY = grabY;
+    double camX, camY;
+    world_camera_now(&camX, &camY);
+    drag = thrown.saved; grabX = thrown.grabX; grabY = thrown.grabY;
+    mouseX = (int)floor(thrown.landX - camX); mouseY = (int)floor(thrown.landY - camY);
+    landingThrow = 1; world_u8_landing(1);
+    int landed = (!drag.fromMap || world_thing_there(drag.uid)) && drop_on_map();
+    landingThrow = 0; world_u8_landing(0);
+    drag = keep; mouseX = keepX; mouseY = keepY; grabX = keepGX; grabY = keepGY;
+    if (!landed) { char line[140]; snprintf(line, sizeof line, "\"%s\" bounces back.", thrown.name); game_log(line); }
+}
+
+/* The thing in the air, drawn by its middle, up and down again (a lift's shift is a straight rise in the diamond view). */
+void gumps_draw_thrown(uint32_t *pixels)
+{
+    if (!thrown.on) return;
+    double t = thrown.durMs > 0 ? thrown.elapsedMs / thrown.durMs : 1;
+    if (t > 1) t = 1;
+    double x = thrown.fromX + (thrown.toX - thrown.fromX) * t, y = thrown.fromY + (thrown.toY - thrown.fromY) * t;
+    world_draw_center(pixels, sprite_now(thrown.look), x, y, thrown.apex * 4 * t * (1 - t));
+}
+
+int gumps_throwing(void) { return thrown.on; }
+static int thrownMapThing(void) { return thrown.on && thrown.saved.fromMap ? thrown.saved.uid : 0; } /* the thing waits out of sight where it was till it lands */
+
 static int drop_on_map(void)
 {
-    if (mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H) { gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
+    if (!landingThrow && (mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H)) { gumps_refuse(P_RED_X, "You can't drop that there."); return 0; } /* (a thrown thing lands wherever the view is now) */
     int actor, uid;
     world_hit(mouseX, mouseY, &actor, &uid);
     /* onto the avatar, or a party member standing there: theirs */
     if (actor == 0) return drop_on_character(world_actor_character(0));
-    if (actor > 0 && items_in_party(world_actor_character(actor)) && !vitals_dead(world_actor_character(actor))) return drop_on_character(world_actor_character(actor));
+    if (actor > 0 && items_in_party(world_actor_character(actor)) && !vitals_dead(world_actor_character(actor)))
+    {
+        if (u8_on() && !world_u8_reaches_actor(actor)) /* Ultima 8: handed over only within reach (U8Reach) */
+        {
+            char line[140]; snprintf(line, sizeof line, "%s is too far away to hand it to.", world_actor_name(actor));
+            gumps_refuse(P_BLOCKED, line);
+            return 0;
+        }
+        return drop_on_character(world_actor_character(actor));
+    }
     int x, y, fl;
     world_screen_cell(mouseX, mouseY, &x, &y, &fl); /* the ghost's middle */
     if (x < 0 || y < 0 || x >= world_map_w() || y >= world_map_h()) { gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
     int px, py, pf;
     world_actor_cell(0, &px, &py, &pf);
+    if (u8_on() && !landingThrow && !world_reachable(x, y, world_actor_lift(0))) return try_throw(x, y); /* Ultima 8 (GameMapGump::DropItem): beyond reach it's thrown, if it can be */
     if (!world_reachable(x, y, world_actor_lift(0))) { gumps_refuse(P_BLOCKED, "You can't reach that from here."); return 0; }
     if (drag.fromMap && !world_thing_there(drag.uid)) return 0;
     /* a stack of the same stackable thing grows: what's under the pointer first (drag.cc drop_on_map: found->drop), else one on the cell it lands on */
@@ -1117,7 +1258,7 @@ static int drop_on_map(void)
     int put = 0;
     if (drag.fromMap)
     {
-        world_thing_drop_at(drag.uid, mouseX - grabX, mouseY - grabY, fl);
+        if (!world_thing_drop_at(drag.uid, mouseX - grabX, mouseY - grabY, fl)) { gumps_refuse(P_RED_X, "You can't reach there from here."); return 0; }
         put = drag.uid;
     }
     else
@@ -1127,8 +1268,14 @@ static int drop_on_map(void)
         if (!it) return 0;
         int newUid = world_thing_put(items_category(it), items_item_id(it), items_quantity(it), x, y, fl);
         if (newUid < 0) { put_back(it, &from); gumps_refuse(P_RED_X, "You can't drop that there."); return 0; }
+        if (!world_thing_drop_at(newUid, mouseX - grabX, mouseY - grabY, fl)) /* exactly where it was shown - unless that's out of reach */
+        {
+            world_thing_remove(newUid);
+            put_back(it, &from);
+            gumps_refuse(P_RED_X, "You can't reach there from here.");
+            return 0;
+        }
         items_park(newUid, it);
-        world_thing_drop_at(newUid, mouseX - grabX, mouseY - grabY, fl); /* exactly where it was shown */
         landed(it, &from);
         put = newUid;
     }
@@ -1223,6 +1370,9 @@ static int pick_target(int x, int y);
 int gumps_mouse_down(int x, int y)
 {
     mouseX = x; mouseY = y;
+#ifdef PS2_DIAG_SHOTS
+    printf("Game: Down at %d,%d: cinema %d prompt %d books %d\n", x, y, events_cinema(), 0, 0);
+#endif
     if (events_cinema()) return 1;
     if (prompt_click(x, y, platform_ticks())) return 1; /* a question being answered */
     if (books_click()) return 1; /* a book being read: the next page */
@@ -1230,8 +1380,12 @@ int gumps_mouse_down(int x, int y)
     if (pick_target(x, y)) return 1; /* a target being chosen: this press picks it */
     if (magic_book_click(x, y, platform_ticks())) return 1; /* the open spellbook takes every click */
     pressed = hit(x, y);
+#ifdef PS2_DIAG_SHOTS
+    printf("Game: Press at %d,%d: target kind %d, window %d, part %d\n", x, y, (int)pressed.kind, pressed.doll, pressed.part);
+#endif
     pressing = 1; dragging = 0; pressX = x; pressY = y;
     if (pressed.kind == T_BUTTON) { pressedButtonGump = pressed.gump; pressedButton = pressed.slotKey; }
+    else pressedButton = -1; /* not a button: none shows pressed (the last one pressed - the heart - did, while the exit was held) */
     if (pressed.doll >= 0) { int top = dolls_to_front(pressed.doll); pressed.doll = top; }
     if (pressed.kind == T_DOLL_BODY) { movingDoll = pressed.doll; moveDX = x - dolls_window_x(movingDoll); moveDY = y - dolls_window_y(movingDoll); pressing = 0; return 1; }
     if (pressed.kind == T_GUMP) { movingGump = to_front(pressed.gump); moveDX = x - gumps[movingGump].x; moveDY = y - gumps[movingGump].y; pressing = 0; return 1; }
@@ -1240,6 +1394,8 @@ int gumps_mouse_down(int x, int y)
 }
 
 void gumps_pointer_at(int x, int y) { mouseX = x; mouseY = y; }
+/* Ultima 8's combat mouse: the point is on a window (it takes its own clicks). */
+int gumps_window_at(int x, int y) { Target t = hit(x, y); return t.gump >= 0 || t.doll >= 0; }
 
 void gumps_mouse_move(int x, int y)
 {
@@ -1322,7 +1478,7 @@ static void quantity_chosen(int ok, int count, void *context)
 static void drop_asking(void)
 {
     Target under = hit(mouseX, mouseY);
-    if (!drag.partDragged && drag.quantity > 1 && !same_window(&under) && !platform_ctrl_held())
+    if (!drag.partDragged && drag.quantity > 1 && !same_window(&under) && !(u8_on() ? u8_held("WholeStack") : platform_ctrl_held())) /* (Ultima 8: its Whole Stack key) */
     {
         ghost = NULL;
         askedX = mouseX; askedY = mouseY;
@@ -1348,6 +1504,7 @@ void gumps_mouse_up(int x, int y)
 /* The rest of a frame: identify after the double-click window; windows whose thing is gone close. */
 void gumps_update(double ms)
 {
+    thrown_update(ms); /* Ultima 8: something thrown flies on */
     sinceClick += ms;
     dolls_update(ms);
     if (identifyIn >= 0 && (identifyIn -= ms) < 0) { identifyIn = -1; identify(&pendingIdentify); }
@@ -1403,6 +1560,8 @@ void gumps_choose_target(const char *prompt, void (*chosen)(void *context, const
 }
 
 int gumps_choosing(void) { return choosing != NULL; }
+int gumps_dragging_now(void) { return dragging; } /* something on the mouse (Ultima 8: no walking till it's put down) */
+int gumps_choosing_for(const void *context) { return choosing && choosingContext == context; } /* still asking for this one */
 void gumps_cancel_choosing(void) { choosing = NULL; }
 
 /* The next press while choosing picks: someone, something (on the map or carried), or the spot. */
@@ -1472,7 +1631,7 @@ static const Picture *button_look(const Gump *g, int b, int *x, int *y, int *w, 
     if (!p) return NULL;
     double s = scale_of(g);
     *x = g->x + (int)(dbl(button, "X", 0) * s); *y = g->y + (int)(dbl(button, "Y", 0) * s);
-    *w = (int)(p->width * s + 0.5); *h = (int)(p->height * s + 0.5);
+    *w = (int)(p->width * DOLL_COUNTER * s + 0.5); *h = (int)(p->height * DOLL_COUNTER * s + 0.5);
     return p;
 }
 
@@ -1758,19 +1917,95 @@ void gumps_flash_pointer(int kind)
     if (s && s->frameCount > 0 && s->frames[0].sound >= 0) sound_play(s->frames[0].sound);
 }
 
-/* A refusal the player should see and feel: the message, and the matching Exult pointer flashed. */
-void gumps_refuse(int kind, const char *message) { game_log(message); gumps_flash_pointer(kind); }
+/* A refusal the player should see and feel: the message, and the matching Exult pointer flashed. Ultima 6: no refusal
+   pointers - the text area tells it (U6GameWindow.Pointer FlashPointer). */
+void gumps_refuse(int kind, const char *message)
+{
+    game_log(message);
+    if (u6_on()) { u6_note(message); return; }
+    gumps_flash_pointer(kind);
+}
+
+/* ---------------- Ultima 6's verbs (u6.c): a drag's own rules, without a drag ---------------- */
+
+static void u6_drag_done(void) { memset(&drag, 0, sizeof drag); ghost = NULL; }
+
+/* Get: U6GameWindow.Actions PickUp - a thing on the map into whoever's hands (too heavy to move or lift, someone on it, weight). */
+int gumps_u6_get(int characterId, int uid)
+{
+    if (!world_thing_there(uid)) { u6_note("It isn't there any more."); return 0; }
+    memset(&drag, 0, sizeof drag);
+    int x, y, instance;
+    world_thing_info(uid, &drag.category, &drag.itemId, &drag.quantity, &x, &y, &instance);
+    if (!items_can_lift(drag.category, drag.itemId)) { u6_note("That's too heavy to lift."); u6_drag_done(); return 0; }
+    if (world_thing_occupied(uid)) { u6_note("Someone is on it."); u6_drag_done(); return 0; }
+    drag.fromMap = 1; drag.uid = uid;
+    int category = drag.category, itemId = drag.itemId;
+    int ok = drop_on_character(characterId);
+    u6_drag_done();
+    if (ok) events_fire_item(category, itemId, TR_PICKUP); /* By Pickup Item */
+    return ok;
+}
+
+/* Move to another member (DropOnCharacter), or back into the carried things. */
+int gumps_u6_give(Item *it, int characterId)
+{
+    memset(&drag, 0, sizeof drag);
+    drag.item = it; drag.category = items_category(it); drag.itemId = items_item_id(it); drag.quantity = items_quantity(it);
+    int ok = drop_on_character(characterId);
+    u6_drag_done();
+    return ok;
+}
+
+/* Move into a body slot (TryEquipInSlot): readied if it fits there and the slot is free. */
+int gumps_u6_ready(Item *it, int characterId, int slotKey)
+{
+    if (!items_fits_slot(characterId, it, slotKey) || !items_slot_free(characterId, slotKey)) { u6_note("It doesn't go there."); return 0; }
+    ItemPlace from;
+    int category = items_category(it), itemId = items_item_id(it);
+    if (!items_detach(it, &from)) return 0;
+    if (!items_equip_at(characterId, it, slotKey)) { items_restore(&from, it); return 0; }
+    items_detach_done(&from, category, itemId);
+    return 1;
+}
+
+/* Use on something carried: as a double click on it in an inventory. */
+void gumps_u6_use_item(Item *it) { use_carried(it); }
+
+/* A thing on the map's name, as a click names it ("Body of Iolo"). */
+const char *gumps_thing_name(int uid, char *buf, size_t size) { return thing_name(uid, buf, size); }
 
 void gumps_draw_pointer(uint32_t *pixels, uint32_t ms)
 {
     pointerNow = ms;
     if (video_playing() || mouseX < 0 || mouseY < 0 || mouseX >= SCREEN_W || mouseY >= SCREEN_H) return;
+    if (!choosing && u6_pointer(pixels, mouseX, mouseY, ms)) return; /* Ultima 6's own pointers, by where the mouse is (u6.c) */
     int kind = flashKind >= 0 && ms < flashUntil ? flashKind : choosing ? P_GREEN_SELECT : combat_mode() ? P_ATTACK : P_HAND;
     if (ms >= flashUntil) flashKind = -1;
     cJSON *settings = get(get(project(), "Settings"), "MousePointers");
     int w = num(settings, "Width", 0), h = num(settings, "Height", 0);
     if (w <= 0 || h <= 0) { w = 16; h = 16; }
     const Sprite *s = pointer_sprite(kind);
+    if (u8_on())
+    {
+        /* Ultima 8: a refusal without a sprite of its own shows the X (Mouse::flashCrossCursor); walking with the right button or in
+           combat, the arrows (UpdateU8Pointer); each pointer at its own sprite's size */
+        int flashing = flashKind >= 0 && ms < flashUntil;
+        if (!s && flashing && (kind == P_TOO_HEAVY || kind == P_OUT_OF_RANGE || kind == P_OUT_OF_AMMO || kind == P_WONT_FIT || kind == P_BLOCKED)) s = pointer_sprite(P_RED_X);
+        const char *set; int dir;
+        if (!flashing && !choosing && !dragging && !vitals_game_over() && u8_pointer_arrow(&set, &dir))
+        {
+            static const char *DIRS[8] = { "North", "NorthEast", "East", "SouthEast", "South", "SouthWest", "West", "NorthWest" };
+            cJSON *arrows = get(get(get(project(), "Settings"), "MousePointers"), "U8Arrows");
+            char key[40]; snprintf(key, sizeof key, "%s.%s", set, DIRS[dir]);
+            cJSON *link = get(arrows, key);
+            if (!str(link, "SpriteName")[0] && strcmp(set, "Walk")) { snprintf(key, sizeof key, "Walk.%s", DIRS[dir]); link = get(arrows, key); }
+            const Sprite *arrow = str(link, "SpriteName")[0] ? sprite_find(str(link, "SpriteGroup"), str(link, "SpriteName")) : NULL;
+            if (arrow && arrow->frameCount) s = arrow;
+        }
+        const Picture *own = s && s->frameCount ? frame_picture(&s->frames[0]) : NULL;
+        if (own) { w = own->width; h = own->height; }
+    }
     const Picture *pic = s ? sprite_picture_at(s, ms) : NULL;
     if (pic) { sprite_frame_sound(s, ms); world_blit(pixels, pic, mouseX - s->originX, mouseY - s->originY, w, h); return; }
     frame_fill(pixels, mouseX, mouseY, w, h, 0xFF000000u);

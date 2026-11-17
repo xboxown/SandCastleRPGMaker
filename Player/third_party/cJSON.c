@@ -1453,10 +1453,78 @@ static cJSON_bool print_value(const cJSON * const item, printbuffer * const outp
 }
 
 /* Build an array from input text. */
+/* Sandcastle: "TileIndices":[1,2,-1,...] as one block of ints (cJSON_PackedInts). Whole numbers only: anything else
+   (a fraction, an exponent, not a number) and it's 0 - the offset as it was, parsed as an ordinary array. */
+static cJSON_bool parse_packed_ints(cJSON * const item, parse_buffer * const input_buffer)
+{
+    size_t start = input_buffer->offset, capacity = 1024, count = 0;
+    int *values = NULL;
+    if (cannot_access_at_index(input_buffer, 0) || buffer_at_offset(input_buffer)[0] != '[') return false;
+    values = (int *)input_buffer->hooks.allocate(capacity * sizeof(int));
+    if (values == NULL) return false;
+    input_buffer->offset++;
+    buffer_skip_whitespace(input_buffer);
+    if (can_access_at_index(input_buffer, 0) && buffer_at_offset(input_buffer)[0] == ']') goto done;
+    for (;;)
+    {
+        long long v = 0;
+        int negative = 0, digits = 0;
+        buffer_skip_whitespace(input_buffer);
+        if (can_access_at_index(input_buffer, 0) && buffer_at_offset(input_buffer)[0] == '-') { negative = 1; input_buffer->offset++; }
+        while (can_access_at_index(input_buffer, 0) && buffer_at_offset(input_buffer)[0] >= '0' && buffer_at_offset(input_buffer)[0] <= '9')
+        {
+            v = v * 10 + (buffer_at_offset(input_buffer)[0] - '0');
+            if (v > 2147483647LL) goto not_packed;
+            digits++;
+            input_buffer->offset++;
+        }
+        if (digits == 0) goto not_packed;
+        buffer_skip_whitespace(input_buffer);
+        if (cannot_access_at_index(input_buffer, 0)) goto not_packed;
+        if (count == capacity)
+        {
+            int *bigger = (int *)input_buffer->hooks.allocate(capacity * 2 * sizeof(int));
+            if (bigger == NULL) goto not_packed;
+            memcpy(bigger, values, capacity * sizeof(int));
+            input_buffer->hooks.deallocate(values);
+            values = bigger;
+            capacity *= 2;
+        }
+        values[count++] = (int)(negative ? -v : v);
+        if (buffer_at_offset(input_buffer)[0] == ',') { input_buffer->offset++; continue; }
+        if (buffer_at_offset(input_buffer)[0] == ']') break;
+        goto not_packed;
+    }
+done:
+    input_buffer->offset++; /* past the ] */
+    if (count == 0)
+    {
+        input_buffer->hooks.deallocate(values);
+        item->type = cJSON_Array;
+        return true;
+    }
+    if (count < capacity)
+    {
+        int *exact = (int *)input_buffer->hooks.allocate(count * sizeof(int)); /* no room wasted */
+        if (exact != NULL) { memcpy(exact, values, count * sizeof(int)); input_buffer->hooks.deallocate(values); values = exact; }
+    }
+    item->type = cJSON_Array | cJSON_PackedInts;
+    item->child = NULL;
+    item->valuestring = (char *)values;
+    item->valueint = (int)count;
+    return true;
+not_packed:
+    input_buffer->hooks.deallocate(values);
+    input_buffer->offset = start;
+    return false;
+}
+
 static cJSON_bool parse_array(cJSON * const item, parse_buffer * const input_buffer)
 {
     cJSON *head = NULL; /* head of the linked list */
     cJSON *current_item = NULL;
+
+    if (item->string != NULL && strcmp(item->string, "TileIndices") == 0 && parse_packed_ints(item, input_buffer)) return true; /* Sandcastle */
 
     if (input_buffer->depth >= CJSON_NESTING_LIMIT)
     {
@@ -1574,6 +1642,19 @@ static cJSON_bool print_array(const cJSON * const item, printbuffer * const outp
     output_buffer->offset++;
     output_buffer->depth++;
 
+    if (item->type & cJSON_PackedInts) /* Sandcastle: the block's numbers, as the array they are */
+    {
+        const int *values = (const int *)item->valuestring;
+        int i;
+        for (i = 0; i < item->valueint; i++)
+        {
+            output_pointer = ensure(output_buffer, 16);
+            if (output_pointer == NULL) return false;
+            length = (size_t)sprintf((char *)output_pointer, i + 1 < item->valueint ? (output_buffer->format ? "%d, " : "%d,") : "%d", values[i]);
+            output_buffer->offset += length;
+        }
+    }
+
     while (current_element != NULL)
     {
         if (!print_value(current_element, output_buffer))
@@ -1610,6 +1691,29 @@ static cJSON_bool print_array(const cJSON * const item, printbuffer * const outp
     output_buffer->depth--;
 
     return true;
+}
+
+/* Sandcastle: an object's keys ("Id", "X", "Name"...) kept once each for the whole game, shared by every item with that
+   key (cJSON_StringIsConst: never freed with an item) - a few hundred names instead of a copy in every one of the
+   hundreds of thousands of items. Only the parser's thread uses it. */
+typedef struct KeyNode { struct KeyNode *next; char *text; } KeyNode;
+#define KEY_BUCKETS 2048
+static KeyNode *keyBuckets[KEY_BUCKETS];
+
+static char *intern_key(char *key, const internal_hooks * const hooks)
+{
+    unsigned hash = 2166136261u;
+    const unsigned char *p;
+    KeyNode *node;
+    for (p = (const unsigned char *)key; *p; p++) hash = (hash ^ *p) * 16777619u;
+    for (node = keyBuckets[hash % KEY_BUCKETS]; node != NULL; node = node->next)
+        if (strcmp(node->text, key) == 0) { hooks->deallocate(key); return node->text; }
+    node = (KeyNode *)hooks->allocate(sizeof(KeyNode));
+    if (node == NULL) return NULL; /* the caller keeps its own copy */
+    node->text = key;
+    node->next = keyBuckets[hash % KEY_BUCKETS];
+    keyBuckets[hash % KEY_BUCKETS] = node;
+    return key;
 }
 
 /* Build an object from the text. */
@@ -1698,6 +1802,10 @@ static cJSON_bool parse_object(cJSON * const item, parse_buffer * const input_bu
         if (!parse_value(current_item, input_buffer))
         {
             goto fail; /* failed to parse value */
+        }
+        {
+            char *shared = intern_key(current_item->string, &input_buffer->hooks); /* Sandcastle: the key kept once */
+            if (shared != NULL) { current_item->string = shared; current_item->type |= cJSON_StringIsConst; }
         }
         buffer_skip_whitespace(input_buffer);
     }
@@ -1854,6 +1962,7 @@ CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array)
     {
         return 0;
     }
+    if (array->type & cJSON_PackedInts) return array->valueint; /* Sandcastle */
 
     child = array->child;
 
@@ -1866,6 +1975,28 @@ CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array)
     /* FIXME: Can overflow here. Cannot be fixed without breaking the API */
 
     return (int)size;
+}
+
+/* Sandcastle: packed arrays (cJSON_PackedInts) */
+CJSON_PUBLIC(const int *) cJSON_GetPackedInts(const cJSON *array, int *count)
+{
+    if (array == NULL || !(array->type & cJSON_PackedInts)) { if (count) *count = 0; return NULL; }
+    if (count) *count = array->valueint;
+    return (const int *)array->valuestring;
+}
+
+CJSON_PUBLIC(cJSON *) cJSON_CreatePackedInts(const int *values, int count)
+{
+    cJSON *item = cJSON_New_Item(&global_hooks);
+    if (item == NULL) return NULL;
+    item->type = cJSON_Array;
+    if (count <= 0) return item;
+    item->valuestring = (char *)global_hooks.allocate((size_t)count * sizeof(int));
+    if (item->valuestring == NULL) { global_hooks.deallocate(item); return NULL; }
+    memcpy(item->valuestring, values, (size_t)count * sizeof(int));
+    item->valueint = count;
+    item->type = cJSON_Array | cJSON_PackedInts;
+    return item;
 }
 
 static cJSON* get_array_item(const cJSON *array, size_t index)
@@ -2750,7 +2881,16 @@ CJSON_PUBLIC(cJSON *) cJSON_Duplicate(const cJSON *item, cJSON_bool recurse)
     newitem->type = item->type & (~cJSON_IsReference);
     newitem->valueint = item->valueint;
     newitem->valuedouble = item->valuedouble;
-    if (item->valuestring)
+    if (item->valuestring && (item->type & cJSON_PackedInts)) /* Sandcastle: a copy of the block */
+    {
+        newitem->valuestring = (char *)global_hooks.allocate((size_t)item->valueint * sizeof(int));
+        if (!newitem->valuestring)
+        {
+            goto fail;
+        }
+        memcpy(newitem->valuestring, item->valuestring, (size_t)item->valueint * sizeof(int));
+    }
+    else if (item->valuestring)
     {
         newitem->valuestring = (char*)cJSON_strdup((unsigned char*)item->valuestring, &global_hooks);
         if (!newitem->valuestring)

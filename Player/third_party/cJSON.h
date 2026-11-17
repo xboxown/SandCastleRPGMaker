@@ -98,6 +98,10 @@ then using the CJSON_API_VISIBILITY flag to "export" the same symbols the way CJ
 
 #define cJSON_IsReference 256
 #define cJSON_StringIsConst 512
+/* Sandcastle: an array of whole numbers kept as one block (a map's "TileIndices": hundreds of thousands of them would be a
+   node each - 14 MB for a 512x512 map, more than a PlayStation 2 has). valuestring holds the ints, valueint how many; no
+   children. Printed, duplicated, deleted and counted as the array it is; read with cJSON_GetPackedInts. */
+#define cJSON_PackedInts 1024
 
 /* The cJSON structure: */
 typedef struct cJSON
@@ -166,6 +170,10 @@ CJSON_PUBLIC(void) cJSON_Delete(cJSON *item);
 
 /* Returns the number of items in an array (or object). */
 CJSON_PUBLIC(int) cJSON_GetArraySize(const cJSON *array);
+/* Sandcastle: a packed array's numbers (NULL, count 0, if it isn't one). */
+CJSON_PUBLIC(const int *) cJSON_GetPackedInts(const cJSON *array, int *count);
+/* Sandcastle: a new packed array holding a copy of the numbers. */
+CJSON_PUBLIC(cJSON *) cJSON_CreatePackedInts(const int *values, int count);
 /* Retrieve item number "index" from array "array". Returns NULL if unsuccessful. */
 CJSON_PUBLIC(cJSON *) cJSON_GetArrayItem(const cJSON *array, int index);
 /* Get item "string" from object. Case insensitive. */

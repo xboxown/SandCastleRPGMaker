@@ -10,6 +10,7 @@
 typedef struct SaveInfo { char folder[1200], name[64], gameTime[48], savedAt[32], playerName[64]; int slot; } SaveInfo;
 
 void save_init(const char *gameFolder);
+void save_use_folder(const char *folder);            /* an installed game: its saves in the player's own folder */
 void save_take_screenshot(const uint32_t *pixels);   /* as the Save/Load screen opens, before it covers the view */
 int save_list(SaveInfo *out, int max);               /* newest first */
 int save_write(const char *name, int slot, const char *overwrite, char *error, size_t errorSize);

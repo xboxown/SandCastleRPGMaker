@@ -17,7 +17,13 @@ typedef struct ScriptGrid ScriptGrid;
 enum { V_NUM, V_TEXT, V_LIST, V_GRID };
 
 /* A value: a number or a text (an array or grid only as a function's argument). Texts from formulas live till script_arena_reset. */
+#ifdef PLATFORM_PS2
+/* The PS2's compiler (r5900) can't pass a struct holding a plain double by value ("maximum number of generated reload insns");
+   in a union with its bits it can - the same layout, the same numbers. */
+typedef struct Value { int kind; union { double n; long long nBits; }; const char *s; ScriptList *list; ScriptGrid *grid; } Value;
+#else
 typedef struct Value { int kind; double n; const char *s; ScriptList *list; ScriptGrid *grid; } Value;
+#endif
 
 Value value_number(double n);
 Value value_text(const char *s);            /* copied into the arena */

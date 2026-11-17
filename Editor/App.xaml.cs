@@ -79,6 +79,16 @@ public partial class App : Application
         editor.Show();
         // A project named on the command line (or a .msrp double-clicked): opened as File > Open does.
         if (e.Args.FirstOrDefault(a => a.EndsWith(".msrp", StringComparison.OrdinalIgnoreCase) && System.IO.File.Exists(a)) is { } project)
+        {
             editor.Dispatcher.BeginInvoke(() => editor.OpenFromCommandLine(project), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Testing only: the player's game data written, then closed (MainWindow.PlayerBuild.cs).
+            if (Environment.GetEnvironmentVariable("SANDCASTLE_EXPORT_PLAYER_DATA") is { Length: > 0 } exportTo)
+                editor.Dispatcher.BeginInvoke(() => editor.ExportPlayerDataForTesting(exportTo), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            // Testing only: the PlayStation 3 package Build makes, written, then closed (MainWindow.Ps3Build.cs).
+            else if (Environment.GetEnvironmentVariable("SANDCASTLE_BUILD_PS3_PKG") is { Length: > 0 } pkgTo)
+                editor.Dispatcher.BeginInvoke(() => editor.BuildPs3PackageForTesting(pkgTo), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+            else if (Environment.GetEnvironmentVariable("SANDCASTLE_BUILD_LINUX_DEB") is { Length: > 0 } debTo) // testing: Ubuntu's .deb (MainWindow.LinuxBuild.cs)
+                editor.Dispatcher.BeginInvoke(() => editor.BuildLinuxDebForTesting(debTo), System.Windows.Threading.DispatcherPriority.ApplicationIdle);
+        }
     }
 }

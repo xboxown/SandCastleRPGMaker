@@ -32,6 +32,14 @@ void vitals_save(cJSON *runtime);
 void vitals_add(int characterId);
 int vitals_resurrect_player(void);    /* the main character lives again (Resurrect) */
 int vitals_resurrect(int characterId);
+/* Ultima 8 (U8Reactions): points built up toward Strength, Dexterity, Intelligence; hunger (0-200); the heal clock - saved with the vitals. */
+typedef struct U8Vitals { int builtStrength, builtDexterity, builtIntelligence, hunger; double healClockMs; } U8Vitals;
+U8Vitals *vitals_u8(int characterId);
+void vitals_vanish(int characterId);  /* Ultima 8: drowned - no body, nothing left */
+/* Toughness (GameTestWindow.Toughness): a damage type's rule for this character; Feign Death; Withstand Death given / taken away. */
+int vitals_after_response(int characterId, int damage, int type);
+int vitals_feign_death(int characterId, double seconds, int endSound);
+int vitals_withstand_death(int characterId, int give);
 void vitals_restore(cJSON *runtime);        /* VerboseKind: Hungry 0 .. Uneasy 10 */
 
 #endif

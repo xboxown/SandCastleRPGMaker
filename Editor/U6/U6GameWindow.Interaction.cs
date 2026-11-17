@@ -1161,7 +1161,7 @@ public partial class U6GameWindow
         var alreadyInside = payloadObject as InventoryItemInstance;
         if (!ContainerHasRoomFor(data, container, volume, alreadyInside))
         {
-            reason = $"\"{name}\" won't fit in \"{data.Name}\" - {UsedVolume(container, alreadyInside):0.##} + {volume:0.##} would exceed the max volume of {data.MaxVolume:0.##}.";
+            reason = $"\"{data.Name}\" is full.";
             return false;
         }
         return true;
@@ -1183,7 +1183,7 @@ public partial class U6GameWindow
 
     /// <summary>The single volume/fit check - every container drop path goes through this, so there is exactly one rule for "does it fit".</summary>
     private bool ContainerHasRoomFor(ContainerData containerData, IHasContainerContents container, double newItemVolume, InventoryItemInstance? excluding = null) =>
-        true; // Ultima 6: no volume - weight is what counts
+        !U6BagFull(containerData, container, excluding); // Ultima 6: no volume - one thing to a cell (Container Editor: Across x Down)
 
     /// <summary>
     /// Exult Gump::add: dropped into the open container window, an item goes

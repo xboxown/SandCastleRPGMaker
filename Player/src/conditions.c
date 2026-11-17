@@ -11,6 +11,8 @@
 #include "events.h"
 #include "items.h"
 #include "world.h"
+#include "vitals.h"
+#include "combat.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -120,6 +122,56 @@ static int test(cJSON *c, const char *evaluatingEvent)
             else if (!strncmp(t, "false", 5) || !strncmp(t, "False", 5)) target = 0;
             else target = sc_strtod(t, NULL);
             return compare(value, num(c, "Comparison", 0), target);
+        }
+        /* ---- Characters and areas (GameTestWindow.Toughness TestWorldCondition) ---- */
+        case 35: /* In the party: who has joined (the main character always has); Anyone - at least Number have joined */
+        {
+            if (charId == -1)
+            {
+                int n = 0; cJSON *ch;
+                cJSON_ArrayForEach(ch, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters"))
+                { int id = num(ch, "Id", -1); if (id != main_character() && items_in_party(id) && !vitals_dead(id)) n++; }
+                return n >= (num(c, "Number", 1) > 1 ? num(c, "Number", 1) : 1);
+            }
+            return who >= 0 && (who == main_character() || items_in_party(who));
+        }
+        case 36: /* Character state */
+        {
+            if (who < 0) return 0;
+            const char *v = str(c, "Value");
+            if (!strcmp(v, "Unconscious")) return vitals_unconscious(who);
+            if (!strcmp(v, "In combat")) { int a = world_actor_by_character(who); return who == main_character() ? combat_mode() : a > 0 && combat_busy(a); }
+            if (!strcmp(v, "Dead")) return vitals_dead(who);
+            if (!strcmp(v, "Controlled by the player")) return who == main_character();
+            static const char *A[] = { "Poisoned", "Asleep", "Paralyzed", "Charmed", "Cursed", "Invisible", "Protected", "FeignDeath", "WithstandDeath", "Surrendered" };
+            for (int i = 0; i < 10; i++) if (!strcmp(v, A[i])) return vitals_has(who, 1 << i);
+            return 0;
+        }
+        case 37: return who >= 0 && !vitals_dead(who) && events_enemy_near(who, num(c, "Number", 1) > 1 ? num(c, "Number", 1) : 1); /* An enemy near */
+        case 38: /* Objects in an area round them */
+        {
+            if (who < 0) return 0;
+            int any = itemId < 0;
+            int count = events_objects_around(who, num(c, "Number2", 0), any ? -1 : category, any ? -1 : itemId, cJSON_IsFalse(get(c, "On")));
+            return compare(count, num(c, "Comparison", 0), num(c, "Number", 1));
+        }
+        case 39: /* An item's charges */
+        {
+            if (who < 0 || itemId < 0) return 0;
+            Item *it = items_carried_kind(who, category, itemId);
+            return it && compare(items_charges_now(it), num(c, "Comparison", 0), num(c, "Number", 1));
+        }
+        case 40: /* Weight on an object: any placed copy of it with this much resting on it */
+        {
+            if (itemId < 0) return 0;
+            for (int i = 0, n = world_thing_count(); i < n; i++)
+            {
+                int uid = world_thing_uid_at(i), tc, ti, tq, tx, ty, tin;
+                if (!uid || !world_thing_there(uid)) continue;
+                world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+                if (tc == CAT_OBJECT && ti == itemId && compare(world_weight_on(uid), num(c, "Comparison", 0), num(c, "Number", 1))) return 1;
+            }
+            return 0;
         }
         case 2: return who >= 0 && items_equipped(who, category, itemId);                 /* Equipped */
         case 12: return who >= 0 && items_carried_not_worn(who, category, itemId);        /* Unequipped: carried, not worn */

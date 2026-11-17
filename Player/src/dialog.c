@@ -1,6 +1,11 @@
 #include "blend.h"
 #include "dialog.h"
 #include "font.h"
+#include "u6.h"
+#include "u8.h"
+#include "world.h"
+#include "combat.h"
+#include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -11,7 +16,12 @@
 #define PADDING 4
 #define MIN_HEIGHT 32
 #define FACE_MAX 48
-#define BOX_W (SCREEN_W - 2 * MARGIN)
+#define BOX_W (BASE_W - 2 * MARGIN)
+/* Where the boxes go (Fill the screen widens the screen): Ultima VII's 320 x 200 in its middle, as U7's MessageLayer is; Ultima 8's
+   the whole view, as U8GameWindow's MessageLayer is. */
+#define AREA_X (u8_on() ? 0 : BASE_X)
+#define AREA_Y (u8_on() ? 0 : BASE_Y)
+#define AREA_H (u8_on() ? SCREEN_H : BASE_H)
 #define LINES_PER_PAGE 4      /* Exult's NPC text box: four lines (Conversation::set_face_rect) */
 #define REPLIES_PER_ROW 5
 #define REPLY_ROWS 5
@@ -22,6 +32,7 @@ typedef struct Message
 {
     char *title, *text;
     const Sprite *face; int faceRight, position, dim;
+    int speakerPlus1; /* who speaks: their character id + 1 (0: none) */
     const Sprite *frame;
     const Font *wordsFont; /* a language not understood (NULL: the DialogFont) */
     int replyCount, replyIds[DIALOG_MAX_REPLIES];
@@ -81,7 +92,12 @@ int dialog_showing(void) { return current || pages.count || messages.count; }
 
 /* ---------------- Measuring ---------------- */
 
-static const Font *font(void) { return font_get("DialogFont"); }
+/* The DialogFont; while it has no letters (none imported yet), the In-game font - as the Windows game shows it. */
+static const Font *font(void)
+{
+    const Font *f = font_get("DialogFont");
+    return font_is_built_in(f) ? font_get("InGameFont") : f;
+}
 
 static void face_size(const Sprite *face, int *w, int *h)
 {
@@ -180,6 +196,7 @@ void dialog_queue(const DialogBox *box)
     Message *m = (Message *)calloc(1, sizeof(Message));
     m->title = copy(box->title); m->text = copy(box->text);
     m->face = box->face; m->faceRight = box->faceRight; m->position = box->position; m->dim = box->dim; m->frame = box->frame;
+    m->speakerPlus1 = box->speakerPlus1;
     const Sprite *words = box->wordsFont && box->wordsFont[0] ? sprite_find("Fonts", box->wordsFont) : NULL;
     m->wordsFont = words && words->frameCount > 0 ? font_get(box->wordsFont) : NULL; /* SpriteFont.For: no letters - the DialogFont */
     m->replyCount = box->replyCount > DIALOG_MAX_REPLIES ? DIALOG_MAX_REPLIES : box->replyCount;
@@ -214,6 +231,14 @@ static void show_next(void)
             goOn(ctx);
             if (current) return;
             continue;
+        }
+        if (!isPage && u6_talking())
+        {
+            /* Ultima 6 (U6GameWindow.U6Talk ShowU6Message): no box - the words in the text area, the portrait in the panel */
+            current = m;
+            cursor = lit = -1; replyPage = 0; shownAt = nowMs;
+            u6_talk_show(m->speakerPlus1 - 1, m->text, m->face, (const char *const *)m->replies, m->replyCount);
+            return;
         }
         if (!isPage)
         {
@@ -278,6 +303,13 @@ static int spot_at(int x, int y)
     return -1;
 }
 
+/* Ultima 6's talk (u6.c asks): go on past a page without replies; the reply picked by its index. */
+void dialog_go_on(void) { advance(); }
+void dialog_pick_reply(int index) { pick_reply(index); }
+int dialog_reply_count(void) { return current ? current->replyCount : 0; }
+const char *dialog_reply_text(int index) { return current && index >= 0 && index < current->replyCount ? current->replies[index] : ""; }
+int dialog_speaker(void) { return current ? current->speakerPlus1 - 1 : -1; }
+
 void dialog_key(enum PlatformKey key)
 {
     if (!current) return;
@@ -316,6 +348,7 @@ void dialog_mouse_move(int x, int y)
 void dialog_click(int x, int y)
 {
     if (!current) return;
+    if (u6_talking()) return; /* Ultima 6: no clicking through a talk - its keys (u6.c) */
     if (current->replyCount) { pick_slot(spot_at(x, y)); return; } /* away from the replies: nothing */
     advance();
 }
@@ -498,14 +531,14 @@ static void place(const Plan *plan, int boxTop)
 {
     int l, t, r, b;
     inset_of(plan->frame, &l, &t, &r, &b);
-    if (plan->frame) draw_frame(plan->frame, MARGIN, boxTop, BOX_W, plan->height);
+    if (plan->frame) draw_frame(plan->frame, AREA_X + MARGIN, boxTop, BOX_W, plan->height);
     if (plan->face && plan->faceW)
     {
         const Picture *p = sprite_picture_at(plan->face, 0);
-        int fx = plan->faceRight ? MARGIN + BOX_W - r - plan->faceW : MARGIN + l;
+        int fx = AREA_X + (plan->faceRight ? MARGIN + BOX_W - r - plan->faceW : MARGIN + l);
         blit_part(p, 0, 0, p->width, p->height, fx, boxTop + t, plan->faceW, plan->faceH);
     }
-    int left = MARGIN + l + (plan->faceRight || !plan->faceW ? 0 : plan->faceW + PADDING), top = boxTop + t;
+    int left = AREA_X + MARGIN + l + (plan->faceRight || !plan->faceW ? 0 : plan->faceW + PADDING), top = boxTop + t;
     const Font *f = font();
     for (int i = 0; i < plan->pieceCount; i++)
     {
@@ -524,14 +557,200 @@ static void place(const Plan *plan, int boxTop)
 
 static int top_for(int position, int height)
 {
-    return position == 0 ? MARGIN : position == 1 ? (SCREEN_H - height) / 2 : SCREEN_H - MARGIN - height;
+    return AREA_Y + (position == 0 ? MARGIN : position == 1 ? (AREA_H - height) / 2 : AREA_H - MARGIN - height);
+}
+
+/* ---------------- Ultima 8's conversations (U8GameWindow.U8Talk: Pentagram's BarkGump and AskGump) ----------------
+   What a character says floats over its head - wrapped to BarkWidth, a page at a time; a page with no answers goes on by itself
+   after its time (its length at the talk speed) or on a click - and the player's answers are a row of words over the Avatar,
+   rows of at most AskWidth, 4 apart. Narration (no speaker on the map) keeps the box. The clicks, the hover and the keys are the
+   box's own: the drawing fills the same reply spots. */
+
+static int talkPoser = -1; /* who shows the Talk pose now (an actor) */
+static const Message *talkShown; /* the page the Talk pose went with */
+
+static cJSON *u8_talk_settings(void) { return cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Ultima8"); }
+static int u8_setting(const char *k, int fallback) { cJSON *v = cJSON_GetObjectItem(u8_talk_settings(), k); return cJSON_IsNumber(v) ? v->valueint : fallback; }
+static const char *u8_setting_text(const char *k) { const char *s = cJSON_GetStringValue(cJSON_GetObjectItem(u8_talk_settings(), k)); return s ? s : ""; }
+
+static cJSON *speaker_json(int characterId)
+{
+    cJSON *c;
+    cJSON_ArrayForEach(c, cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Characters"), "Characters"))
+        if (cJSON_IsNumber(cJSON_GetObjectItem(c, "Id")) && cJSON_GetObjectItem(c, "Id")->valueint == characterId) return c;
+    return NULL;
+}
+
+/* Its own bark font and colour (Character Editor > Verbose); none set: the game's font as it is. */
+static const Font *bark_font(int characterId)
+{
+    const char *name = cJSON_GetStringValue(cJSON_GetObjectItem(speaker_json(characterId), "BarkFont"));
+    return name && name[0] ? font_get(name) : font_get("InGameFont");
+}
+static uint32_t bark_colour(int characterId)
+{
+    const char *s = cJSON_GetStringValue(cJSON_GetObjectItem(speaker_json(characterId), "BarkColor"));
+    if (!s || s[0] != '#') return 0;
+    unsigned long v = strtoul(s + 1, NULL, 16);
+    size_t n = strlen(s + 1);
+    return n == 6 ? (uint32_t)(0xFF000000u | v) : n == 8 ? (uint32_t)v : 0;
+}
+
+/* WrapGameText: lines no wider than this ('*' or a new line starts one). */
+static int wrap_bark(const Font *f, const char *text, int width, char lines[][160], int max)
+{
+    int n = 0;
+    char line[160] = "", word[160];
+    for (const char *p = text; ; p++)
+    {
+        if (*p == '*' || *p == '\n' || *p == 0)
+        {
+            if (line[0] && n < max) snprintf(lines[n++], 160, "%s", line);
+            line[0] = 0;
+            if (!*p) break;
+            continue;
+        }
+        if (*p == ' ') continue;
+        size_t k = 0;
+        while (p[k] && p[k] != ' ' && p[k] != '*' && p[k] != '\n' && k < sizeof word - 1) { word[k] = p[k]; k++; }
+        word[k] = 0;
+        p += k - 1;
+        char candidate[320];
+        snprintf(candidate, sizeof candidate, line[0] ? "%s %s" : "%s%s", line, word);
+        if (font_text_width(f, candidate) > width && line[0]) { if (n < max) snprintf(lines[n++], 160, "%s", line); snprintf(line, sizeof line, "%s", word); }
+        else snprintf(line, sizeof line, "%s", candidate);
+    }
+    if (!n) lines[n++][0] = 0;
+    return n;
+}
+
+static void end_talk_pose(void)
+{
+    if (talkPoser < 0) return;
+    if (world_actor_pose_is(talkPoser, "Talk")) world_set_pose(talkPoser, talkPoser == 0 && combat_mode() && world_has_pose(0, "Combat Stand") ? "Combat Stand" : "Idle", -1);
+    talkPoser = -1; talkShown = NULL;
+}
+
+/* A portrait (its Face, frames playing - a talking head - at most 64 pixels tall). */
+static void draw_portrait(int characterId, int x, int bottom, int *w)
+{
+    cJSON *c = speaker_json(characterId);
+    const char *g = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteGroup")), *n = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteName"));
+    const Sprite *s = n && n[0] ? sprite_find(g ? g : "", n) : NULL;
+    const Picture *p = s ? sprite_picture_at(s, nowMs) : NULL;
+    *w = 0;
+    if (!p) return;
+    int qw = (p->width + 7) / 8 * 8, qh = (p->height + 7) / 8 * 8;
+    double scale = qh > 64 ? 64.0 / qh : 1;
+    int pw = (int)(qw * scale), ph = (int)(qh * scale);
+    world_blit(screen, p, x, bottom - ph, pw, ph);
+    *w = pw;
+}
+
+static int portrait_width(int characterId)
+{
+    cJSON *c = speaker_json(characterId);
+    const char *g = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteGroup")), *n = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteName"));
+    const Sprite *s = n && n[0] ? sprite_find(g ? g : "", n) : NULL;
+    const Picture *p = s ? sprite_picture_at(s, 0) : NULL;
+    if (!p) return 0;
+    int qw = (p->width + 7) / 8 * 8, qh = (p->height + 7) / 8 * 8;
+    return (int)(qw * (qh > 64 ? 64.0 / qh : 1));
+}
+
+/* TryDrawU8Message: the page up now drawn Ultima 8's way; 0: drawn as a box (nobody on the map to float over). */
+static int draw_u8_talk(void)
+{
+    const Message *m = current;
+    int speakerId = m->speakerPlus1 - 1, speaker = speakerId >= 0 ? world_actor_by_character(speakerId) : -1, sx, sy, sw, sh;
+    if (speaker < 0 || !world_actor_drawn_rect(speaker, &sx, &sy, &sw, &sh)) { end_talk_pose(); return 0; }
+    if (talkShown != m)
+    {
+        end_talk_pose();
+        talkShown = m;
+        if (world_has_pose(speaker, "Talk")) { world_set_pose(speaker, "Talk", -1); talkPoser = speaker; } /* its Talk pose while it speaks */
+    }
+    const char *portrait = u8_setting_text("TalkPortrait");
+    /* the words, over the speaker's head - in its own colour and font */
+    const Font *bf = bark_font(speakerId);
+    uint32_t colour = bark_colour(speakerId);
+    static char lines[16][160];
+    int n = wrap_bark(bf, m->text, u8_setting("BarkWidth", 194), lines, 16), lh = font_line_height(bf), ww = 0;
+    for (int i = 0; i < n; i++) { int w = font_text_width(bf, lines[i]); if (w > ww) ww = w; }
+    int beside = !strcmp(portrait, "Beside the words") ? portrait_width(speakerId) : 0;
+    int blockW = ww + (beside ? beside + 4 : 0), blockH = n * lh;
+    int bx = sx + sw / 2 - blockW / 2, by = sy - blockH - 2;
+    if (bx > SCREEN_W - blockW) bx = SCREEN_W - blockW;
+    if (bx < 0) bx = 0;
+    if (by > SCREEN_H - blockH) by = SCREEN_H - blockH;
+    if (by < 0) by = 0;
+    if (beside) { int pw; draw_portrait(speakerId, bx, by + blockH, &pw); }
+    int wx = bx + (beside ? beside + 4 : 0);
+    for (int i = 0; i < n; i++) font_draw(bf, screen, wx + (ww - font_text_width(bf, lines[i])) / 2, by + i * lh, lines[i], colour);
+    if (!strcmp(portrait, "In a corner of the screen"))
+    {
+        int who = m->replyCount ? world_actor_character(0) : speakerId, pw, ph = 0;
+        cJSON *c = speaker_json(who);
+        const char *g = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteGroup")), *nm = cJSON_GetStringValue(cJSON_GetObjectItem(c, "FaceSpriteName"));
+        const Sprite *s = nm && nm[0] ? sprite_find(g ? g : "", nm) : NULL;
+        const Picture *p = s ? sprite_picture_at(s, 0) : NULL;
+        if (p) { int qh = (p->height + 7) / 8 * 8; ph = qh > 64 ? 64 : qh; }
+        draw_portrait(who, 6, SCREEN_H - 6, &pw);
+        (void)ph;
+    }
+    spotCount = 0;
+    if (m->replyCount)
+    {
+        /* the answers, over the Avatar (AskGump): rows of at most AskWidth, 4 apart */
+        int ax, ay, aw, ah, playerId = world_actor_character(0);
+        if (!world_actor_drawn_rect(0, &ax, &ay, &aw, &ah)) { ax = SCREEN_W / 2; ay = SCREEN_H / 2; aw = 0; }
+        const Font *pf = bark_font(playerId);
+        uint32_t pc = bark_colour(playerId);
+        int askW = u8_setting("AskWidth", 160), plh = font_line_height(pf);
+        int rowOf[DIALOG_MAX_REPLIES], rowCount = 1, rowWidth = 0;
+        for (int i = 0; i < m->replyCount; i++)
+        {
+            int w = font_text_width(pf, m->replies[i]);
+            if (rowWidth + w > askW && rowWidth > 0) { rowCount++; rowWidth = 0; }
+            rowOf[i] = rowCount - 1;
+            rowWidth += w + 4;
+        }
+        int top = ay - rowCount * plh - 2;
+        if (speaker == 0) top -= blockH; /* the Avatar's own words above */
+        for (int r = 0; r < rowCount; r++, top += plh)
+        {
+            int width = 0, count = 0;
+            for (int i = 0; i < m->replyCount; i++) if (rowOf[i] == r) { width += font_text_width(pf, m->replies[i]); count++; }
+            width += 4 * (count - 1);
+            int x = ax + aw / 2 - width / 2;
+            for (int i = 0; i < m->replyCount && spotCount < 64; i++)
+            {
+                if (rowOf[i] != r) continue;
+                int w = font_text_width(pf, m->replies[i]), px = x < 0 ? 0 : x > SCREEN_W - w ? SCREEN_W - w : x, py = top < 0 ? 0 : top;
+                int s = spotCount++;
+                spotX[s] = px; spotY[s] = py; spotW[s] = w; spotH[s] = plh; spotSlot[s] = i;
+                if (s == lit) shade(px - 1, py, w + 2, plh, 0xFFFFFF, 110);
+                font_draw(pf, screen, px, py, m->replies[i], pc);
+                x += w + 4;
+            }
+        }
+    }
+    else
+    {
+        /* no answers: it goes on by itself after its time, as a bark (or on a click) */
+        int ms = (int)strlen(m->text) * u8_setting("BarkMsPerChar", 60), least = u8_setting("BarkMinMs", 1500);
+        if (nowMs - shownAt >= (uint32_t)(ms > least ? ms : least)) advance();
+    }
+    return 1;
 }
 
 void dialog_draw(uint32_t *pixels, uint32_t ms)
 {
     nowMs = ms;
-    if (!current) { spotCount = 0; return; }
+    if (!current) { spotCount = 0; if (u8_on()) end_talk_pose(); return; } /* (Ultima 8: the talk is over - its Talk pose ends) */
+    if (u6_talking()) { spotCount = 0; return; } /* Ultima 6: the text area shows it (u6.c) */
     screen = pixels;
+    if (u8_on() && draw_u8_talk()) return; /* Ultima 8: over the speaker's head, the answers over the Avatar */
     const Message *m = current;
     if (m->dim) shade(0, 0, SCREEN_W, SCREEN_H, 0, 128);
     static Plan words, replies;
@@ -540,7 +759,7 @@ void dialog_draw(uint32_t *pixels, uint32_t ms)
     {
         words = (Plan){ m->title, m->text, m->face, m->frame, m->faceRight };
         words.withReplies = 1;
-        measure(&words, SCREEN_H - 2 * MARGIN);
+        measure(&words, AREA_H - 2 * MARGIN);
         place(&words, top_for(m->position, words.height));
         return;
     }
@@ -548,12 +767,12 @@ void dialog_draw(uint32_t *pixels, uint32_t ms)
     int speaks = (m->title && m->title[0]) || (m->text && m->text[0]);
     replies = (Plan){ "", "", replyFace, m->frame, m->faceRight };
     replies.withReplies = 1;
-    measure(&replies, SCREEN_H - 2 * MARGIN);
+    measure(&replies, AREA_H - 2 * MARGIN);
     if (!speaks) { place(&replies, top_for(m->position, replies.height)); return; }
     int keep = spotCount, keepSlots[64];
     memcpy(keepSlots, spotSlot, sizeof keepSlots);
     words = (Plan){ m->title, m->text, m->face, m->frame, m->faceRight };
-    int room = SCREEN_H - 3 * MARGIN - replies.height;
+    int room = AREA_H - 3 * MARGIN - replies.height;
     measure(&words, room > MIN_HEIGHT ? room : MIN_HEIGHT);
     spotCount = keep;
     memcpy(spotSlot, keepSlots, sizeof keepSlots);

@@ -56,7 +56,7 @@ const Picture *font_file_glyph(const char *font, int n)
     Picture *p = (Picture *)malloc(sizeof(Picture));
     p->width = w; p->height = h;
     p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
-    p->shaded = NULL; p->shadeGen = 0; p->opaque = 0;
+    p->shaded = NULL; p->shadeGen = 0; p->runs = NULL; p->runAt = NULL; p->partial = 0; p->fleeting = 0; p->opaque = 0;
     for (int i = 0; i < w * h; i++) p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
     stbi_image_free(rgba);
     return p;
@@ -113,6 +113,9 @@ int sprites_load(const char *folder)
                     s->frames[i].weaponBehind = cJSON_IsTrue(cJSON_GetObjectItem(frame, "WeaponBehind"));
                     v = cJSON_GetObjectItem(frame, "GripX"); s->frames[i].gripX = cJSON_IsNumber(v) ? v->valueint : -1;
                     v = cJSON_GetObjectItem(frame, "GripY"); s->frames[i].gripY = cJSON_IsNumber(v) ? v->valueint : -1;
+                    v = cJSON_GetObjectItem(frame, "AnchorX"); s->frames[i].anchorX = cJSON_IsNumber(v) ? v->valueint : -1;
+                    v = cJSON_GetObjectItem(frame, "AnchorY"); s->frames[i].anchorY = cJSON_IsNumber(v) ? v->valueint : -1;
+                    s->frames[i].holdsStill = cJSON_IsTrue(cJSON_GetObjectItem(frame, "HoldsStill"));
                 }
                 cJSON *sound = cJSON_GetObjectItem(frame, "Sound");
                 s->frames[i].sound = cJSON_IsNumber(sound) ? sound->valueint : -1;
@@ -132,6 +135,25 @@ const Sprite *sprite_find(const char *group, const char *name)
         if ((!group || !*group || strcmp(sprites[i].group, group) == 0) && strcmp(sprites[i].name, name) == 0) return &sprites[i];
     for (int i = 0; i < spriteCount; i++)
         if (strcmp(sprites[i].name, name) == 0) return &sprites[i];
+    return NULL;
+}
+
+/* The index-th sprite of a group (case ignored), NULL past its last. */
+const Sprite *sprite_in_group(const char *group, int index)
+{
+    for (int i = 0; i < spriteCount; i++)
+    {
+        const char *a = sprites[i].group, *b = group;
+        while (*a && *b && (*a | 32) == (*b | 32)) { a++; b++; }
+        if (!*a && !*b && index-- == 0) return &sprites[i];
+    }
+    return NULL;
+}
+
+/* The first sprite of a group that has frames (Ultima 6's Hit Spark: whichever the maker drew); NULL if none. */
+const Sprite *sprite_first_in_group(const char *group)
+{
+    for (int i = 0; i < spriteCount; i++) if (strcmp(sprites[i].group, group) == 0 && sprites[i].frameCount > 0) return &sprites[i];
     return NULL;
 }
 
@@ -164,7 +186,7 @@ const Picture *frame_picture(const Frame *frame)
     p->width = w;
     p->height = h;
     p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
-    p->shaded = NULL; p->shadeGen = 0; p->opaque = 1;
+    p->shaded = NULL; p->shadeGen = 0; p->runs = NULL; p->runAt = NULL; p->partial = 0; p->fleeting = 0; p->opaque = 1;
     for (int i = 0; i < w * h; i++)
     {
         p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2];
@@ -220,13 +242,13 @@ Picture *picture_from_file(const char *path)
     Picture *p = (Picture *)malloc(sizeof(Picture));
     p->width = w; p->height = h;
     p->pixels = (uint32_t *)malloc((size_t)w * (size_t)h * 4);
-    p->shaded = NULL; p->shadeGen = 0; p->opaque = 1;
+    p->shaded = NULL; p->shadeGen = 0; p->runs = NULL; p->runAt = NULL; p->partial = 0; p->fleeting = 0; p->opaque = 1;
     for (int i = 0; i < w * h; i++) { p->pixels[i] = ((uint32_t)rgba[i * 4 + 3] << 24) | ((uint32_t)rgba[i * 4] << 16) | ((uint32_t)rgba[i * 4 + 1] << 8) | rgba[i * 4 + 2]; if (rgba[i * 4 + 3] != 255) p->opaque = 0; }
     stbi_image_free(rgba);
     return p;
 }
 
-void picture_free(Picture *p) { if (p) { free(p->pixels); free(p->shaded); free(p); } }
+void picture_free(Picture *p) { if (p) { free(p->pixels); free(p->shaded); free(p->runs); free(p->runAt); free(p); } }
 
 /* SpriteAnimator's frame sounds for a window's pictures (paperdolls, inventories): a frame with a sound plays it each time it comes round. */
 #include "sound.h"

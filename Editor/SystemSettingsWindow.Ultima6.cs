@@ -262,6 +262,73 @@ public partial class SystemSettingsWindow
         return section;
     }
 
+    /// <summary>
+    /// Debugging (Ultima 6 only): Game Test's notes - why a step was refused, a step up or down, the clock skip - each shown in
+    /// the text area or not, and its words changed (Engine/U6DebugNotes.cs). A played game never says them.
+    /// </summary>
+    private UIElement BuildU6DebuggingTab()
+    {
+        var u6 = _settings.Ultima6;
+        var panel = new StackPanel { Margin = new Thickness(10) };
+        panel.Children.Add(new TextBlock { Text = "Game Test notes", FontWeight = FontWeights.Bold });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "While you test your game, the engine tells you why something happened - why the avatar couldn't step somewhere, when it stepped up or down, when the test key moved the clock. "
+                + "They help you find what's wrong with a map: a tile that isn't walkable, a thing too tall to step onto. They always show in Game Test's status bar; ticked, they are said in the text area too. "
+                + "Change the words if you like - {0}, {1}, {2} are blanks the engine fills in (each note says with what). Empty: the standard words. A finished game never says these.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, FontSize = 11, Margin = new Thickness(0, 2, 0, 8)
+        });
+        var all = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 0, 0, 8) };
+        var ticks = new List<CheckBox>();
+        var showAll = new Button { Content = "Show all", Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 0, 6, 0) };
+        var hideAll = new Button { Content = "Show none", Padding = new Thickness(8, 1, 8, 1) };
+        showAll.Click += (_, _) => { foreach (var t in ticks) t.IsChecked = true; };
+        hideAll.Click += (_, _) => { foreach (var t in ticks) t.IsChecked = false; };
+        all.Children.Add(showAll);
+        all.Children.Add(hideAll);
+        panel.Children.Add(all);
+
+        foreach (var note in U6DebugNotes.All)
+        {
+            var card = new Border { BorderBrush = Brushes.Gray, BorderThickness = new Thickness(0, 0, 0, 1), Padding = new Thickness(0, 4, 0, 6), Margin = new Thickness(0, 0, 0, 4) };
+            var body = new StackPanel();
+            string id = note.Id;
+            var tick = new CheckBox { Content = "Show in the text area: " + note.Meaning, IsChecked = U6DebugNotes.Shown(u6, id), FontWeight = FontWeights.SemiBold };
+            tick.Checked += (_, _) => u6.HiddenDebugNotes.Remove(id);
+            tick.Unchecked += (_, _) => { if (!u6.HiddenDebugNotes.Contains(id)) u6.HiddenDebugNotes.Add(id); };
+            ticks.Add(tick);
+            body.Children.Add(tick);
+
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(20, 3, 0, 0) };
+            row.Children.Add(new TextBlock { Text = "Words:", Width = 50, VerticalAlignment = VerticalAlignment.Center });
+            var box = new TextBox { Width = 520, Text = u6.DebugNoteWords.TryGetValue(id, out var own) && own.Length > 0 ? own : note.Default };
+            var reset = new Button { Content = "Standard", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(5, 0, 0, 0), ToolTip = note.Default };
+            var missing = new TextBlock { Foreground = Brushes.IndianRed, FontSize = 11, Margin = new Thickness(70, 1, 0, 0), TextWrapping = TextWrapping.Wrap };
+            void Check()
+            {
+                var gone = note.Blanks.Where(b => !box.Text.Contains(b.Blank)).Select(b => b.Blank).ToList();
+                missing.Text = gone.Count == 0 || box.Text.Length == 0 ? "" : $"Not in your words: {string.Join(", ", gone)} - that part won't be said.";
+            }
+            box.TextChanged += (_, _) =>
+            {
+                if (box.Text.Length == 0 || box.Text == note.Default) u6.DebugNoteWords.Remove(id);
+                else u6.DebugNoteWords[id] = box.Text;
+                Check();
+            };
+            reset.Click += (_, _) => box.Text = note.Default;
+            row.Children.Add(box);
+            row.Children.Add(reset);
+            body.Children.Add(row);
+            body.Children.Add(missing);
+            foreach (var (blank, filled) in note.Blanks)
+                body.Children.Add(new TextBlock { Text = $"{blank}  =  {filled}", FontSize = 11, Opacity = 0.75, Margin = new Thickness(70, 1, 0, 0) });
+            Check();
+            card.Child = body;
+            panel.Children.Add(card);
+        }
+        return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+    }
+
     /// <summary>Ultima 6's keys, changeable (Engine/U6Keys.cs) - as the Ultima 8 tab's keyboard.</summary>
     private UIElement BuildU6KeysSection(Ultima6Settings u6)
     {

@@ -5,6 +5,8 @@
 #include "../third_party/cJSON.h"
 
 int books_read(int bookId);           /* its reading view: 0 if it has nothing to show */
+void books_paragraphs(int bookId, void (*paragraph)(const char *text)); /* Ultima 6: its words as plain paragraphs */
+int books_open_sound(int bookId);     /* the sound it opens with (-1 none) */
 int books_open(void);
 int books_click(void);                /* a click while it's open: the next page (1 = taken) */
 int books_escape(void);               /* Escape: finished */

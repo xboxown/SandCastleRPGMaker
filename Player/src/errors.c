@@ -6,6 +6,7 @@
 #include "events.h"
 #include "world.h"
 #include "dolls.h"
+#include "u6.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <string.h>
@@ -17,6 +18,7 @@ static const struct { int number; const char *words; } DEFAULTS[] = {
     { 107, "The saved game couldn't be loaded: %errdetail" }, { 108, "The saved game is damaged and can't be loaded." },
     { 109, "This save was made by a newer version of the game." }, { 110, "The save couldn't be deleted: %errdetail" },
     { 111, "Type a name for the save first." }, { 112, "Saving needs the project to be saved once first." },
+    { 113, "FMCB DETECTED." }, /* the PS2: the memory card in slot 1 is Free McBoot's - never written to */
     { 201, "There isn't enough room on the disk." }, { 202, "The disk can't be written to - it's read-only, or access is denied." },
     { 203, "A file is missing: %errdetail" }, { 301, "A game data file is missing: %errdetail" },
     { 302, "A game data file isn't this game's own: %errdetail" }, { 303, "The game's data is damaged: %errdetail" },
@@ -51,6 +53,7 @@ int game_error_shown(int number, const char *detail, int token)
     error_describe(number, detail ? detail : "", words, sizeof words);
     snprintf(line, sizeof line, "Error %d: %s", number, words);
     game_log(line);
+    if (u6_error(number, words)) return 0; /* Ultima 6: in the text area, no window - and nothing waits for it (U6GameWindow.Errors) */
     cJSON *errors = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Errors");
     cJSON *id = cJSON_GetObjectItem(errors, "DollDesignId");
     return cJSON_IsNumber(id) && dolls_error(id->valueint, number, words, detail ? detail : "", token);

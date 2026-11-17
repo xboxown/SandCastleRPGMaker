@@ -56,7 +56,7 @@ public partial class GameTestWindow
     {
         if (_titleGump is not { } gump) return;
         var design = gump.Design;
-        double scale = ViewportScale.ScaleX * Math.Min(ViewportWidth / Math.Max(1, design.Width), ViewportHeight / Math.Max(1, design.Height));
+        double scale = ViewportScale.ScaleX * Math.Min(BaseViewWidth / Math.Max(1, design.Width), BaseViewHeight / Math.Max(1, design.Height)); // its own 320 x 200 size, centred in a view Fill the screen widened
         gump.Scale = scale;
         var at = ViewportOffset();
         System.Windows.Controls.Canvas.SetLeft(gump.GumpBorder, at.X + (ViewportWidth * ViewportScale.ScaleX - design.Width * scale) / 2);

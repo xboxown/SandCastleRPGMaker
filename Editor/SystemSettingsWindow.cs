@@ -69,6 +69,7 @@ public partial class SystemSettingsWindow : Window
         if (!u6) tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs
         if (ProjectSession.IsUltima8) tabs.Items.Add(new TabItem { Header = "Ultima 8", Content = BuildUltima8Tab() }); // only an Ultima 8 project (SystemSettingsWindow.Ultima8.cs)
         if (ProjectSession.IsUltima6) tabs.Items.Add(new TabItem { Header = "Ultima 6", Content = BuildUltima6Tab() }); // only an Ultima 6 project (SystemSettingsWindow.Ultima6.cs)
+        if (ProjectSession.IsUltima6) tabs.Items.Add(new TabItem { Header = "Debugging", Content = BuildU6DebuggingTab() }); // Game Test's notes, Ultima 6 only (SystemSettingsWindow.Ultima6.cs)
 
         if (startTab is not null) tabs.SelectedItem = tabs.Items.OfType<TabItem>().FirstOrDefault(t => (t.Header as string) == startTab);
         var close = new Button { Content = "Close", Width = 80, Margin = new Thickness(4), HorizontalAlignment = HorizontalAlignment.Right };
@@ -356,9 +357,31 @@ public partial class SystemSettingsWindow : Window
         var row = LabeledRow("Window size:", scale);
         ((FrameworkElement)row).Margin = new Thickness(0, 12, 0, 0);
         panel.Children.Add(row);
+        var crt = new CheckBox { Content = "CRT effect - scanlines and a softened picture, as an old TV showed it", IsChecked = display.CrtEffect, Margin = new Thickness(0, 14, 0, 0) };
+        crt.Checked += (_, _) => display.CrtEffect = true;
+        crt.Unchecked += (_, _) => display.CrtEffect = false;
+        panel.Children.Add(crt);
         panel.Children.Add(new TextBlock
         {
-            Text = "Full screen fills the screen completely - no title bar, no taskbar. The game's view keeps Ultima VII's 320 x 200 shape, scaled up as big as it fits (black bars at the sides on a wide screen). " +
+            Text = "Off unless ticked. While it's ticked, every game you build has it - Windows, the PlayStations, the Amigas, Linux and the Macs - " +
+                   "so tick it before building for the machines you want it on, and untick it for the others. On the PlayStation 3 the game is then " +
+                   "drawn at 640 x 400 instead of 1280 x 800 (faster, and the scanlines make it look right). Game Test shows it too.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(20, 4, 0, 0)
+        });
+        var fill = new CheckBox { Content = "Fill the screen - show more of the world instead of black bars", IsChecked = display.FillScreen, Margin = new Thickness(0, 14, 0, 0) };
+        fill.Checked += (_, _) => display.FillScreen = true;
+        fill.Unchecked += (_, _) => display.FillScreen = false;
+        panel.Children.Add(fill);
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Off unless ticked. The picture stays pixel-perfect (a whole scale: every pixel a square, no blur), and the view grows in game pixels " +
+                   "till the window or screen is full, so a little more of the map shows round the edges. Windows, Linux, the Macs and MorphOS; " +
+                   "the Amigas, the PS2 and the PS3 always show Ultima VII's 320 x 200. Game Test shows it too.",
+            TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(20, 4, 0, 0)
+        });
+        panel.Children.Add(new TextBlock
+        {
+            Text = "Full screen fills the screen completely - no title bar, no taskbar. The game's view keeps Ultima VII's 320 x 200 shape, scaled up as big as it fits (black bars at the sides on a wide screen, unless Fill the screen is ticked). " +
                    "A window can still be resized or maximized by the player.\n\n" +
                    "Game Test in the editor always opens in a window, with its testing bar at the bottom (messages, the clock, F6 to skip time, F9 for the script data); a built game has none of these.",
             TextWrapping = TextWrapping.Wrap, Opacity = 0.75, Margin = new Thickness(0, 12, 0, 0)

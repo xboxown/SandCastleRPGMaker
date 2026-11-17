@@ -573,6 +573,7 @@ static void update_followers(double ms)
         if (leader < 0 || world_actor_gone(a) || world_actor_gone(leader)) continue;
         if (events_actor_busy(a) || combat_busy(a)) continue; /* carrying out an event's command, or fighting: it isn't pulled back */
         if (leader == 0 && sits_with_player(a)) continue; /* sitting with them, or on the way to a chair */
+        if (leader == 0 && world_u8() && world_u8_follow_by_leap(a)) continue; /* Ultima 8: up or down where the player climbed (U8Party) */
         int lx, ly, lf, x, y, f;
         world_actor_cell(leader, &lx, &ly, &lf);
         world_actor_cell(a, &x, &y, &f);
@@ -1075,4 +1076,29 @@ void schedules_add(int actor)
 {
     add_npc(actor, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters"));
     if (lastHour >= 0) update_schedule(&npcs[npcCount - 1], lastHour / 3, 0);
+}
+
+/* Pets (GameTestWindow.Pets): whom it follows (-1: no one); off its timetable for orders (ReleaseForOrders). */
+int schedules_leader(int actor) { return actor > 0 && actor < 256 ? leaderOf[actor] - 1 : -1; }
+void schedules_release(int actor)
+{
+    Npc *n = npc_of(actor);
+    if (n) { n->entry = NULL; n->activity = 0; n->walkingToSchedule = 0; }
+}
+
+/* Stumbling (Ultima 8): it stands where it is at least this long (Npc.WaitMs = max(it, ms)). */
+void schedules_wait_at_least(int actor, double ms)
+{
+    Npc *n = npc_of(actor);
+    if (n && n->waitMs < ms) n->waitMs = ms;
+}
+
+/* Ultima 8 (Crusader's control): another character is at this actor now - its schedule state made afresh (a party member: none,
+   it follows), nobody followed, no Change Schedule hours. */
+void schedules_rebind(int actor)
+{
+    for (int i = 0; i < npcCount; i++)
+        if (npcs[i].actor == actor) { free(npcs[i].entries); free(npcs[i].ruleEntries); npcs[i] = npcs[--npcCount]; break; }
+    if (actor > 0 && actor < 256) { leaderOf[actor] = 0; untilMinute[actor] = 0; sittingWithPlayer[actor] = 0; }
+    schedules_add(actor);
 }

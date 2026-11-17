@@ -46,9 +46,12 @@ public partial class ContainerEditorWindow : Window
     public ContainerEditorWindow(ContainerDatabase containers, SpriteDatabase sprites, BookDatabase books, ObjectDatabase objects, ResourceDatabase resources, VariableDatabase variables, StatDatabase stats, CharacterDatabase characters)
     {
         InitializeComponent();
-        if (ProjectSession.IsUltima6) // Ultima 6: no volume
+        if (ProjectSession.IsUltima6) // Ultima 6: no volume, no location, no open view of its own (ContainerEditorWindow.U6.cs)
+        {
             foreach (var box in new FrameworkElement[] { VolumeBox, MaxVolumeBox, CurrentVolumeText })
                 if (box.Parent is FrameworkElement holder) holder.Visibility = Visibility.Collapsed;
+            SetUpU6Layout();
+        }
         PreviewKeyDown += ContentsUndoKeys; // Ctrl+Z over the contents (ContainerEditorWindow.Undo.cs)
         SolidSize.SizeEdited += (_, _) =>
         {
@@ -252,6 +255,7 @@ public partial class ContainerEditorWindow : Window
             combo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == id) ?? NoneSound;
         }
 
+        if (ProjectSession.IsUltima6) ShowU6Grid(container); // Ultima 6: its grid in the HUD's Carried Items place (ContainerEditorWindow.U6.cs)
         CloseButtonHost.Content = BuildCloseButtonEditor(container); // the optional close button (ContainerEditorWindow.CloseButton.cs)
         BuildFramePreview(container);
         RefreshContentsList(container);
@@ -1001,6 +1005,17 @@ public partial class ContainerEditorWindow : Window
             ContainerX = Math.Clamp(newItemBounds.X + newItemBounds.Width / 2 - 16, 0, 320 - 32),
             ContainerY = Math.Clamp(newItemBounds.Y + newItemBounds.Height / 2 - 16, 0, 240 - 32)
         };
+        if (ProjectSession.IsUltima6) // Ultima 6: no volume - one thing to a cell (ContainerEditorWindow.U6.cs)
+        {
+            if (container.U6Capacity is int cells && container.StartingContents.Count >= cells)
+            {
+                MessageBox.Show($"It's full - {container.U6Columns} x {container.U6Rows} cells hold {cells} things (the first cell is the container itself). Raise Across or Down to hold more.", "Container Editor", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            container.StartingContents.Add(newItem);
+            RefreshContentsList(container);
+            return;
+        }
         double newVolume = container.StartingContents.Sum(ResolveItemVolume) + ResolveItemVolume(newItem);
         if (newVolume > container.MaxVolume)
         {

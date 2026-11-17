@@ -857,8 +857,14 @@ static int compare_values_down(const void *a, const void *b) { return value_comp
 
 static int clampi(int v, int lo, int hi) { return v < lo ? lo : v > hi ? hi : v; }
 
+#ifdef SANDCASTLE_NETLOG
+extern volatile int ps3dbg_script; /* testing: the PS3's watchdog (platform_ps3.c) */
+#endif
 static void execute(void)
 {
+#ifdef SANDCASTLE_NETLOG
+    ps3dbg_script = (int)commandType;
+#endif
     switch (commandType)
     {
         case C_Calculate: set_var("Variable", E("Formula")); break;
@@ -1072,13 +1078,15 @@ static void execute(void)
         {
             ScriptGrid *g = grid_of(name_of("Grid"));
             int line = I("Index"), row = strcmp(param("Line"), "Column") != 0;
-            Value tmp[4096];
+            Value *tmp = malloc(sizeof(Value) * 4096); /* not on the stack: as a local it made every command's frame 160 KB (the PS3's stack is small) */
+            if (!tmp) break;
             int n = 0;
             if (row) for (int x = 0; x < g->cols && n < 4096; x++) tmp[n++] = *cell(g, x, line);
             else for (int y = 0; y < g->rows && n < 4096; y++) tmp[n++] = *cell(g, line, y);
             for (int i = 0; i < n; i++) if (tmp[i].kind == V_TEXT) tmp[i] = value_text(tmp[i].s);
             ScriptList *l = new_list(name_of("Array"));
             for (int i = 0; i < n; i++) list_add(l, tmp[i], -1);
+            free(tmp);
             break;
         }
         case C_ArrayToGridLine:

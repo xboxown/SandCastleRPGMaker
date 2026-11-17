@@ -15,6 +15,10 @@ typedef struct Picture
     uint32_t *shaded; /* the same, under the sky's light (world.c: made when the light changes, shadeGen it was made for) */
     uint32_t shadeGen;
     int opaque;       /* every pixel fully opaque: its rows copied straight */
+    /* world.c's fast drawing (made when first drawn): each row's runs of pixels that show - x0, x1 pairs, row j's from
+       runs[runAt[j] * 2] to runs[runAt[j + 1] * 2] - and whether any pixel is only partly see-through (then blended) */
+    uint16_t *runs; int *runAt; int partial;
+    int fleeting;     /* drawn once and gone (a window's canvas, made each frame): never given runs */
 } Picture;
 
 typedef struct Frame
@@ -25,6 +29,8 @@ typedef struct Frame
     Picture *picture; /* decoded on first use */
     /* A weapon held in the hand: a character's frame says where the hand is (-1: no weapon in this frame), which weapon frame (-1: by itself), behind the body or over it; a weapon's frame, where it's gripped (-1: its middle). */
     int handX, handY, weaponFrame, weaponBehind, gripX, gripY;
+    int holdsStill;       /* Ultima 8: a step's frame that doesn't move (Sprite Editor) */
+    int anchorX, anchorY; /* Ultima 8: the frame's own stand point (-1: none - the sprite's Origin, else bottom-middle) */
 } Frame;
 
 typedef struct Sprite
@@ -45,6 +51,10 @@ const Picture *font_file_glyph(const char *font, int n);
 
 /* A sprite by its group and name (else the first of that name in any group, as the engine finds them). */
 const Sprite *sprite_find(const char *group, const char *name);
+
+/* The first sprite of a group that has frames; NULL if none. */
+const Sprite *sprite_first_in_group(const char *group);
+const Sprite *sprite_in_group(const char *group, int index);   /* the index-th of a group (case ignored); NULL past the last */
 
 /* A dialog frame by name: "None" = none (NULL), a name in the DialogFrame group, else its first sprite (NULL if the group is empty). */
 const Sprite *sprite_dialog_frame(const char *name);

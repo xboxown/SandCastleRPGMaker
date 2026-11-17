@@ -122,8 +122,11 @@ public partial class U8GameWindow : Window
     // change. World/tile/sprite sizes are never touched by any of this -
     // the camera only decides which 320x200 slice of the already-real-
     // sized world is currently visible.
-    private const double ViewportWidth = 320;
-    private const double ViewportHeight = 200;
+    /// <summary>Ultima VII's own view: 320 x 200. System Settings > Game Window > Fill the screen widens it in game pixels (RecomputeViewportScale).</summary>
+    private const double BaseViewWidth = 320, BaseViewHeight = 200;
+    private double _viewW = BaseViewWidth, _viewH = BaseViewHeight;
+    private double ViewportWidth => _viewW;
+    private double ViewportHeight => _viewH;
     /// <summary>Half-width/height of the centered dead-zone the player can move within before the camera starts following - a comfortable "safe area," not a hard lock to center.</summary>
     private const double DeadZoneHalfWidth = 60;
     private const double DeadZoneHalfHeight = 40;
@@ -1760,9 +1763,19 @@ public partial class U8GameWindow : Window
     private void RecomputeViewportScale()
     {
         if (ViewportHost.ActualWidth <= 0 || ViewportHost.ActualHeight <= 0) return;
-        int scaleX = (int)Math.Floor(ViewportHost.ActualWidth / ViewportWidth);
-        int scaleY = (int)Math.Floor(ViewportHost.ActualHeight / ViewportHeight);
+        int scaleX = (int)Math.Floor(ViewportHost.ActualWidth / BaseViewWidth);
+        int scaleY = (int)Math.Floor(ViewportHost.ActualHeight / BaseViewHeight);
         int scale = Math.Max(1, Math.Min(scaleX, scaleY));
+        // System Settings > Game Window > Fill the screen: the same whole scale, the view widened in game pixels till it fills the window.
+        var (viewW, viewH) = FillScreenView.Size(_systemSettings.Display.FillScreen, ViewportHost.ActualWidth, ViewportHost.ActualHeight, scale, BaseViewWidth, BaseViewHeight);
+        if (viewW != _viewW || viewH != _viewH)
+        {
+            _viewW = viewW; _viewH = viewH;
+            ViewportBorder.Width = viewW; ViewportBorder.Height = viewH;
+            MessageLayer.Width = viewW; MessageLayer.Height = viewH; // words over heads go by where they are in the view
+            UpdateCamera();
+        }
+        CrtLook.Apply((Grid)Content, (FrameworkElement)ViewportHost.Parent, ViewportBorder, scale, _systemSettings.Display.CrtEffect); // System Settings > Game Window > CRT effect (lined up again whenever the view moves)
         if (scale == ViewportScale.ScaleX) return; // genuinely unchanged - skip the gump rebuild below entirely
         ViewportScale.ScaleX = scale;
         ViewportScale.ScaleY = scale;

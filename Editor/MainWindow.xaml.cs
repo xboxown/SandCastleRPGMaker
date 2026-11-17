@@ -633,17 +633,12 @@ public partial class MainWindow : Window
         menu.Items.Add(new Separator());
 
         var propertiesMenu = new MenuItem { Header = "Properties" };
-        foreach (var (label, walkable) in new (string Label, bool Walkable)[]
+        foreach (var (label, walkable) in TileTypeProperties.Presets)
         {
-            ("Walkable", true), ("Blocks Movement", false), ("Water", false),
-            ("Swamp", true), ("Sand", true), ("Road", true),
-            ("Grass", true), ("Dirt", true), ("Snow", true)
-        })
-        {
-            var presetItem = new MenuItem { Header = label, IsCheckable = true, IsChecked = props.TerrainLabel == label };
+            var presetItem = new MenuItem { Header = label, IsCheckable = true, IsChecked = props.Preset == label };
             presetItem.Click += (_, _) =>
             {
-                props.TerrainLabel = label;
+                props.Preset = label; // the tile keeps its own name (Rename...)
                 props.Walkable = walkable;
                 StatusText.Text = $"Tile #{tileIndex}: set to \"{label}\" ({(walkable ? "walkable" : "blocked")}).";
             };
@@ -661,12 +656,12 @@ public partial class MainWindow : Window
             propertiesMenu.Items.Add(new Separator());
             foreach (var effect in props.CustomEffects.ToList())
             {
-                var customItem = new MenuItem { Header = $"(C) {effect.Name}", IsCheckable = true, IsChecked = props.TerrainLabel == effect.Name };
+                var customItem = new MenuItem { Header = $"(C) {effect.Name}", IsCheckable = true, IsChecked = props.Preset == effect.Name };
 
                 var applyItem = new MenuItem { Header = "Apply to this tile" };
                 applyItem.Click += (_, _) =>
                 {
-                    props.TerrainLabel = effect.Name;
+                    props.Preset = effect.Name;
                     StatusText.Text = $"Tile #{tileIndex}: set to custom effect \"{effect.Name}\".";
                 };
                 customItem.Items.Add(applyItem);
@@ -683,7 +678,7 @@ public partial class MainWindow : Window
                 deleteEffectItem.Click += (_, _) =>
                 {
                     props.CustomEffects.Remove(effect);
-                    if (props.TerrainLabel == effect.Name) props.TerrainLabel = string.Empty;
+                    if (props.Preset == effect.Name) props.Preset = string.Empty;
                     StatusText.Text = $"Deleted custom effect \"{effect.Name}\".";
                 };
                 customItem.Items.Add(deleteEffectItem);
@@ -723,8 +718,8 @@ public partial class MainWindow : Window
     /// <summary>Maps a tile's current Properties label to a short glyph for the palette overlay. Custom effect names (anything not one of the nine hardcoded presets) fall back to "(C)" - same marker the right-click menu uses for them, so the two stay visually consistent.</summary>
     private static string? GetTileGlyph(TileTypeProperties props)
     {
-        if (string.IsNullOrEmpty(props.TerrainLabel)) return null;
-        return props.TerrainLabel switch
+        if (string.IsNullOrEmpty(props.Preset)) return null;
+        return props.Preset switch
         {
             "Walkable" => null, // the default state - not worth cluttering every ordinary tile with an icon
             "Blocks Movement" => "\U0001F6AB",
@@ -1391,7 +1386,7 @@ public partial class MainWindow : Window
             MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
-        var platform = new BuildPlatformWindow(ultima8: IsUltima8, ultima6: IsUltima6) { Owner = this }; // which platform (BuildPlatformWindow.cs); an Ultima 8 game: Windows so far
+        var platform = new BuildPlatformWindow(ultima8: IsUltima8, ultima6: IsUltima6) { Owner = this }; // which platform (BuildPlatformWindow.cs)
         if (platform.ShowDialog() != true) return;
         if (platform.Picked != BuildPlatform.Windows) { BuildForPlayer(platform.Picked); return; } // the Sandcastle player's platforms (MainWindow.PlayerBuild.cs)
         if (MessageBox.Show("Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;

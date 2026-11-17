@@ -109,6 +109,10 @@ public class BookData : PlaceableItemBase
     /// <summary>Computed pagination cache - rebuilt automatically, not hand-edited.</summary>
     public List<BookPage> Pages { get; set; } = new();
 
+    /// <summary>Ultima 6 projects only: the book's words as plain text (Book Editor's notepad) - read in the text area, as much as fits,
+    /// then a key for the rest. Empty: the frames' words (books made before). The Ultima 7 and 8 engines never read it.</summary>
+    public string U6Text { get; set; } = string.Empty;
+
     /// <summary>The book's event: one or more pages, each with its own conditions and command list. Lazily edited via the Event tab.</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
 

@@ -138,9 +138,9 @@ public partial class U6GameWindow
             foreach (var piece in pieces) if (!TryFlyStep(piece, lift, height, mover, world, out _, out blockReason)) return false;
             return true;
         }
-        if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY) { blockReason = "Blocked: edge of the map."; return false; }
+        if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY) { blockReason = DebugNote("EdgeOfMap"); return false; }
         if (FreeBands(to, mover, world).Any(b => lift >= b.Low && lift + height <= b.High)) return true;
-        blockReason = "Blocked: no room to fly there.";
+        blockReason = DebugNote("NoRoomToFly");
         return false;
     }
 

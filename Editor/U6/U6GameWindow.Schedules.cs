@@ -110,7 +110,7 @@ public partial class U6GameWindow
         _clock.SkipToNextPeriod();
         ShowClock();
         ScheduleNpcs(_clock.Hour);
-        StatusText.Text = $"Skipped to {_clock} ({Schedules.PeriodNames[_clock.Period]} period).";
+        StatusText.Text = DebugNote("SkippedTo", _clock, Schedules.PeriodNames[_clock.Period]);
     }
 
     /// <summary>Game_window::schedule_npcs - each hour; companions told to Wait are left alone.</summary>

@@ -224,6 +224,7 @@ static int lift_by(cJSON *v, int dz)
 static cJSON *driving;        /* the vehicle the player has the controls of */
 static int drivingFrom;       /* the piece they took them at */
 static int seatToDriveFrom;   /* a driver's seat they're walking to */
+int vehicles_driving(void);
 static double driveUnits;
 static int rolling = -1;      /* the rolling vehicle's id (-1: none) */
 
@@ -545,3 +546,4 @@ void vehicles_update(double ms)
 }
 
 void vehicles_reset(void) { driving = NULL; drivingFrom = seatToDriveFrom = 0; driveUnits = 0; rolling = -1; pilotCount = climbCount = 0; climbMs = 0; sound_stop_owner(SOUND_OWNER); }
+int vehicles_driving(void) { return driving != NULL; } /* at a vehicle's controls (Ultima 8: safe over water) */

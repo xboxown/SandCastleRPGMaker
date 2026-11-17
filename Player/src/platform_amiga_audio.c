@@ -13,13 +13,14 @@
 #include <dos/dostags.h>
 #include <devices/ahi.h>
 #include <devices/audio.h>
+#include <devices/timer.h>
 #include <proto/exec.h>
 #include <proto/dos.h>
 #include <clib/alib_protos.h>
 #include <string.h>
 
-/* MorphOS (PowerPC) has no Paula: it plays through AHI, at CD rate. */
-#ifdef __MORPHOS__
+/* MorphOS (PowerPC) has no Paula: it plays through AHI, at CD rate. The Vampire: its own SAGA sound, 16-bit at CD rate. */
+#if defined(__MORPHOS__) || defined(VAMPIRE)
 #define AMIGA_RATE 44100
 #else
 #define AMIGA_RATE 22050           /* half CD rate: the 68060 / 68080 keeps the game's speed */
@@ -172,8 +173,73 @@ static int run_paula(void)
 }
 #endif
 
+#ifdef VAMPIRE
+/* ---- The Vampire's own sound (SAGA's extended Paula): two of its 16-bit channels (4 left, 5 right) at CD rate, played
+   straight from fast memory - no AHI, no chip memory. Two buffers: when a channel starts one (its INTREQ2 flag), the other is
+   mixed and pointed to, to follow it. Registers: DFF400 + 16 x channel (pointer, length in words, volume 8.8 left|right,
+   control - bit 0 16-bit, bit 1 one-shot -, period); DMACON2 DFF296, INTREQ2 DFF29C (INTREQR2 DFF21E). ---- */
+#define SAGA_REG16(a) (*(volatile UWORD *)(a))
+#define SAGA_REG32(a) (*(volatile ULONG *)(a))
+#define SAUD(ch, off) (0xDFF400 + (ch) * 16 + (off))
+static int run_saga(void)
+{
+    if ((SAGA_REG16(0xDFF016) & 0x00FE) == 0) return 0; /* POTINP bits 1-7: SAGA's extended Paula there? */
+    int16_t *buf[2][2]; /* [left/right][which] */
+    for (int c = 0; c < 2; c++) for (int b = 0; b < 2; b++) buf[c][b] = (int16_t *)AllocVec(FRAMES * 2, MEMF_ANY | MEMF_CLEAR);
+    for (int c = 0; c < 2; c++) for (int b = 0; b < 2; b++) if (!buf[c][b]) { for (c = 0; c < 2; c++) for (b = 0; b < 2; b++) FreeVec(buf[c][b]); return 0; }
+    struct MsgPort *port = CreateMsgPort();
+    struct timerequest *tick = port ? (struct timerequest *)CreateIORequest(port, sizeof(struct timerequest)) : NULL;
+    if (!tick || OpenDevice((CONST_STRPTR)TIMERNAME, UNIT_MICROHZ, (struct IORequest *)tick, 0) != 0)
+    { if (tick) DeleteIORequest((struct IORequest *)tick); if (port) DeleteMsgPort(port); for (int c = 0; c < 2; c++) for (int b = 0; b < 2; b++) FreeVec(buf[c][b]); return 0; }
+    device = "Vampire SAGA (16-bit)";
+    UWORD period = (UWORD)(PAL_CLOCK / AMIGA_RATE);
+    /* both buffers mixed before it starts */
+    for (int b = 0; b < 2; b++) { mix_into(); for (int i = 0; i < FRAMES; i++) { buf[0][b][i] = mixed[i * 2]; buf[1][b][i] = mixed[i * 2 + 1]; } }
+    SAGA_REG16(0xDFF296) = 0x0003;           /* DMACON2: channels 4 and 5 off while they're set */
+    SAGA_REG16(0xDFF29C) = 0x0003;           /* INTREQ2: their flags cleared */
+    for (int c = 0; c < 2; c++)
+    {
+        int ch = 4 + c;
+        SAGA_REG32(SAUD(ch, 0x00)) = (ULONG)buf[c][0];
+        SAGA_REG32(SAUD(ch, 0x04)) = FRAMES;                   /* in words: one a 16-bit sample */
+        SAGA_REG16(SAUD(ch, 0x08)) = c == 0 ? 0x8000 : 0x0080; /* left 128 | right 0 - and the other way */
+        SAGA_REG16(SAUD(ch, 0x0A)) = 0x0001;                   /* 16-bit, repeating */
+        SAGA_REG16(SAUD(ch, 0x0C)) = period;
+    }
+    SAGA_REG16(0xDFF296) = 0x8003;           /* DMACON2: both on together */
+    started = 1;
+    Signal(mainTask, SIGBREAKF_CTRL_F);
+    int playing = 0; /* the buffer that started: the other is the next one */
+    while (!quit)
+    {
+        if ((SAGA_REG16(0xDFF21E) & 0x0001) == 0) /* channel 4 hasn't started a buffer since: a short wait (2 ms) */
+        {
+            tick->tr_node.io_Command = TR_ADDREQUEST; tick->tr_time.tv_secs = 0; tick->tr_time.tv_micro = 2000;
+            DoIO((struct IORequest *)tick);
+            continue;
+        }
+        SAGA_REG16(0xDFF29C) = 0x0003;       /* seen */
+        int next = playing ^ 1;              /* the one just finished: mixed again, and pointed to next */
+        mix_into();
+        for (int i = 0; i < FRAMES; i++) { buf[0][next][i] = mixed[i * 2]; buf[1][next][i] = mixed[i * 2 + 1]; }
+        SAGA_REG32(SAUD(4, 0x00)) = (ULONG)buf[0][next];
+        SAGA_REG32(SAUD(5, 0x00)) = (ULONG)buf[1][next];
+        playing = next;
+    }
+    SAGA_REG16(0xDFF296) = 0x0003;           /* off */
+    CloseDevice((struct IORequest *)tick);
+    DeleteIORequest((struct IORequest *)tick);
+    DeleteMsgPort(port);
+    for (int c = 0; c < 2; c++) for (int b = 0; b < 2; b++) FreeVec(buf[c][b]);
+    return 1;
+}
+#endif
+
 static void sound_task(void)
 {
+#ifdef VAMPIRE
+    if (run_saga()) { Forbid(); running = 0; Signal(mainTask, SIGBREAKF_CTRL_F); return; } /* its own sound; else Paula below */
+#endif
     int played = route == 1 ? run_paula() : run_ahi();
     if (!played && route == 0) played = run_paula();
     if (!played) { started = -1; Signal(mainTask, SIGBREAKF_CTRL_F); }

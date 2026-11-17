@@ -32,6 +32,10 @@ int world_actor_in_sight(int actor);
 int world_actor_at(int screenX, int screenY);    /* the last frame drawn; -1 for none */
 int world_direction_of(const char *name);        /* "North".."NorthWest" -> 0..7, "" -> -1 */
 int world_set_pose(int actor, const char *pose, int facing);
+int world_has_pose(int actor, const char *pose);
+int world_actor_drawn_rect(int actor, int *x, int *y, int *w, int *h);
+int world_actor_pose_is(int actor, const char *pose);
+int world_pose_ms(int actor, const char *pose);  /* its length as it faces now (500 without art) */
 int world_teleport(int actor, int x, int y);
 void world_player_cell(int *x, int *y, int *onFloor);
 void world_turn_to_player(int actor);
@@ -92,6 +96,7 @@ void world_thing_center(int uid, double *px, double *py);
 int world_things_near(double px, double py, double reach, int *out, int max);
 void world_effect_once(const Sprite *sprite, int cellX, int cellY);
 void world_blit(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h);
+void world_blit_alpha(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h, int opacity);
 const Sprite *world_item_look(int category, int itemId, int lit, int spent, int locked, int quantity, int liquid);
 const Sprite *world_thing_sprite(int uid);
 void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor);
@@ -102,7 +107,8 @@ int world_reachable_thing(int uid);   /* Exult is_grabable for a thing on the ma
 void world_thing_add_quantity(int uid, int n);
 int world_thing_quantity(int uid);
 int world_thing_at_cell(int category, int itemId, int x, int y, int except);
-void world_thing_drop_at(int uid, int screenX, int screenY, int onFloor);
+/* 0: where it would rest is out of reach (behind a wall) - it stays where it was. */
+int world_thing_drop_at(int uid, int screenX, int screenY, int onFloor);
 /* Saving and loading. */
 void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entry));
 void world_restore_player(cJSON *runtime);
@@ -124,6 +130,7 @@ double world_thing_grow(int uid, double minutes);
 void world_thing_set_grow(int uid, double minutes);
 int world_thing_liquid(int uid);
 void world_thing_set_liquid(int uid, int liquid);
+int world_thing_is_liquid(int uid); /* a liquid container (a bucket, a bottle) */
 void world_thing_set_frame(int uid, int frame);
 cJSON *world_thing_entry(int uid);
 int world_thing_by_instance(int instanceId);
@@ -232,5 +239,45 @@ void world_bark(int actor, const char *text, int ms);
 void world_draw_barks(uint32_t *pixels);
 /* The game (game.json) as read, kept while the game runs (a cJSON root). */
 void *world_json(void);
+double world_weight_on(int uid);   /* objects, containers and people resting on a placed thing (Weight On Object) */
+int world_raise_platform(int uid, int dir);      /* Ultima 8's Move Platform: one lift, with all on it */
+/* Things that fly and bounce (Burst): one thrown (map pixels, a lift, speeds in pixels a second), each frame, bursting on death. */
+struct Item;
+int world_hurl(struct Item *gift, double x, double y, int lift, double vx, double vy, double vz);
+void world_hurled_update(double ms);
+void world_burst_on_death(int characterId, int actor);
+void world_hurled_reset(void);
+void world_u8_liquids(double ms);                /* Ultima 8: water and lava, each frame the game runs */
+int world_u8_player_hidden(void);
+void world_u8_new_map(void);
+int world_u8_follow_by_leap(int actor);         /* a follower climbing after the player: 1 = seen to */
+void world_u8_toggle_kneel(void);
+void world_u8_dodge(int roll, int left);       /* Crusader: a roll (2 cells) or a side-step (1) left or right */
+int world_u8_swap(int actor);                  /* Crusader: the player and this character change places */
+int world_u8_in_air(void);
+/* Ultima 6 (u6.c): the world seen through the HUD's Game View at (x, y), w x h on the screen, the avatar in its middle. */
+void world_set_view(int x, int y, int w, int h);
+/* After the window opens (main.c): the view the screen's size, as Fill the screen may have widened it (not Ultima 6's Game View). */
+void world_screen_opened(void);
+/* Ultima 8 (world.c): the Avatar's speed this frame, a jump, where it is drawn on the screen. */
+int world_u8(void);
+void world_u8_set_speed(double factor);
+void world_u8_jump(int dx, int dy, int up);
+void world_u8_player_screen(double *x, double *y);
+void world_u8_facing_vector(int *dx, int *dy);
+int world_u8_running(void);
+int world_u8_jumping(void);
+int world_u8_stepping(void);
+int world_u8_was_moving(void);
+void world_u8_landing(int on);                 /* a thrown thing landing: no reach asked */
+int world_u8_beside(int actor);                /* close enough to talk (32) */
+int world_u8_reaches_actor(int actor);         /* close enough to hand them something (128) */
+int world_u8_can_throw_to(int cellX, int cellY, int rangeUnits); /* 1 yes, 0 too far, -1 in the way */
+void world_camera_now(double *x, double *y);
+void world_screen_to_map(double sx, double sy, double *mx, double *my);
+void world_map_to_screen(double mx, double my, double *sx, double *sy);
+void world_draw_center(uint32_t *pixels, const Picture *pic, double mx, double my, double rise);
+/* Ultima 6: can the avatar see this square now (line of sight; 1 when it's off)? */
+int world_square_seen(int x, int y);
 
 #endif

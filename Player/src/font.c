@@ -103,6 +103,9 @@ static void make_built_in(Font *f)
     }
 }
 
+/* 1 when the font has no letters of its own (none drawn or imported): the player's small built-in one stands in. */
+int font_is_built_in(const Font *f) { return !f || f->builtIn; }
+
 Font *font_get(const char *name)
 {
     for (int i = 0; i < fontCount; i++) if (strcmp(fonts[i].name, name) == 0) return &fonts[i];

@@ -330,6 +330,13 @@ public class PlacedCharacter
     public int BodyInstanceId { get; set; } = -1;
     /// <summary>In a save only: which of the save's characters this placement is (each copy of a character placed more than once has its own health, things and fights); -1 = by its CharacterId.</summary>
     public int SavedCharacterIndex { get; set; } = -1;
+
+    /// <summary>In a save only: exactly where the character stood (pixels) and how high (its lift) when saved - a loaded game puts it
+    /// back there. Without them it was put in its cell's middle on its floor: beside a wall that was inside the wall, and near an
+    /// upper floor's edge off it (down to the floor below). Null: as the Map Editor placed it (a new game).</summary>
+    public double? PixelXRuntime { get; set; }
+    public double? PixelYRuntime { get; set; }
+    public int? LiftRuntime { get; set; }
 }
 
 /// <summary>What an egg does when it hatches (Exult's Egg_types: monster, jukebox, soundsfx/voice, usecode, missile, teleport/intermap, weather, path, button).</summary>

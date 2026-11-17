@@ -23,11 +23,15 @@ public partial class MainWindow
     {
         BuildPlatform.Amiga68k => Path.Combine(AppContext.BaseDirectory, "Runtimes", "Amiga68k", "Game"),
         BuildPlatform.MorphOS => Path.Combine(AppContext.BaseDirectory, "Runtimes", "MorphOS", "Game"),
+        BuildPlatform.AmigaVampire => Path.Combine(AppContext.BaseDirectory, "Runtimes", "AmigaVampire", "Game"), // Player/build_vampire.sh: SAGA, AMMX, its own sound
         _ => null
     };
 
     private void BuildForPlayer(BuildPlatform platform)
     {
+        if (platform == BuildPlatform.PlayStation2) { BuildForPs2(); return; } // a disc image (MainWindow.Ps2Build.cs)
+        if (platform == BuildPlatform.PlayStation3) { BuildForPs3(); return; } // an installer, never a disc image (MainWindow.Ps3Build.cs)
+        if (platform == BuildPlatform.Linux) { BuildForLinux(); return; } // Ubuntu's .deb installer (MainWindow.LinuxBuild.cs)
         string? player = ShippedPlayer(platform);
         if (player is not null && !File.Exists(player))
         {
@@ -56,7 +60,7 @@ public partial class MainWindow
             if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
             PlayerBookText.UsedFonts.Clear();
             PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
-            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform == BuildPlatform.MorphOS); // the fonts it uses, drawn into fonts.sdbx
+            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform is BuildPlatform.MorphOS or BuildPlatform.AmigaVampire); // the fonts it uses, drawn into fonts.sdbx
             string machine = platform switch
             {
                 BuildPlatform.Linux => "Linux", BuildPlatform.MacModern => "Mac", BuildPlatform.MacPowerPC => "PowerPC Mac", BuildPlatform.MorphOS => "MorphOS",
@@ -71,9 +75,10 @@ public partial class MainWindow
                 string needs = platform switch
                 {
                     BuildPlatform.MorphOS => "Needs MorphOS 3.x and 128 MB of free memory. Sound plays through AHI.",
+                    BuildPlatform.AmigaVampire => "For a Vampire only (Apollo 68080): V4 Standalone, V4 Firebird, V1200, V600, V500. Its SAGA driver (P96) must be installed. The game takes over SAGA's display (640 x 400), draws with the 68080's AMMX and plays through the Vampire's own 16-bit sound. It won't start on any other Amiga - use the Amiga 68k (RTG) build there.",
                     _ => "Needs an RTG card (Picasso96 or CyberGraphX), a 68060 or 68080 with its FPU (68060.library installed), and 128 MB of RAM. Sound plays through Paula; put a file named \"ahi\" beside Game for AHI instead."
                 };
-                string where = platform == BuildPlatform.Amiga68k ? "hard drive (or a WinUAE / AmiKit shared folder)" : "disk";
+                string where = platform is BuildPlatform.Amiga68k or BuildPlatform.AmigaVampire ? "hard drive (or a WinUAE / AmiKit shared folder)" : "disk";
                 MessageBox.Show($"The game is built in:\n{folder}\n\nCopy that whole drawer to the {machine}'s {where} and double-click \"Game\".\n{needs}",
                                 "Build", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
@@ -89,6 +94,24 @@ public partial class MainWindow
         {
             Mouse.OverrideCursor = null;
         }
+    }
+
+    /// <summary>
+    /// Testing only (the Sandcastle player's own tests): SANDCASTLE_EXPORT_PLAYER_DATA=folder with a project on the command line -
+    /// the project's Game_Data (as Build makes it for Linux) written there, and the editor closes. Nothing else changes.
+    /// </summary>
+    internal void ExportPlayerDataForTesting(string target)
+    {
+        try
+        {
+            if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
+            PlayerBookText.UsedFonts.Clear();
+            PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
+            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: false);
+            File.WriteAllText(Path.Combine(target, "export.ok"), "ok");
+        }
+        catch (Exception ex) { Directory.CreateDirectory(target); File.WriteAllText(Path.Combine(target, "export.failed"), ex.ToString()); }
+        Application.Current.Shutdown();
     }
 
     /// <summary>A drawer name the Amiga takes: no characters its file systems refuse, at most 30 long (FFS), never empty.</summary>

@@ -207,7 +207,7 @@ public partial class U6GameWindow
     {
         why = "";
         int wu = _map.Width * UnitsPerTileX, hu = _map.Height * UnitsPerTileY;
-        if (to.Left < 0 || to.Top < 0 || to.Right > wu || to.Bottom > hu) { why = "Blocked: the edge of the map."; return false; }
+        if (to.Left < 0 || to.Top < 0 || to.Right > wu || to.Bottom > hu) { why = DebugNote("EdgeOfMap"); return false; }
         var movement = SettingsOf(vehicle).Movement;
         var mine = new HashSet<object>(ReferenceEqualityComparer.Instance);
         foreach (var o in aboard.Objects) mine.Add(o);
@@ -222,18 +222,18 @@ public partial class U6GameWindow
                 {
                     int tile = _map.Layers[0].GetTile(x / UnitsPerTileX, y / UnitsPerTileY, _map.Width);
                     var ground = tile >= 0 ? TilePropertiesOf(tile) : null;
-                    if (movement == MovementKind.Sea && ground is not { IsWater: true }) { why = "Blocked: a ship sails only on water."; return false; }
-                    if (movement == MovementKind.Land && (ground is null || !ground.Walkable || ground.IsWater)) { why = "Blocked: it can't go over that ground."; return false; }
+                    if (movement == MovementKind.Sea && ground is not { IsWater: true }) { why = DebugNote("ShipOnWater"); return false; }
+                    if (movement == MovementKind.Land && (ground is null || !ground.Walkable || ground.IsWater)) { why = DebugNote("VehicleGround"); return false; }
                 }
                 var unit = new UnitRect(x, y, 1, 1);
                 foreach (var body in world.Overlapping(unit))
                 {
                     if (!body.Solid || mine.Contains(body.Entity) || !body.Overlaps(unit)) continue;
                     if (body.TopLift <= vehicle.Lift || body.Z >= aboard.TopLift) continue; // under its floor (the ground, a floor slab) or above it (a bridge)
-                    why = $"Blocked: {NameOfEntity(body.Entity) ?? "something"} is in the way.";
+                    why = DebugNote("VehicleThingInWay", NameOfEntity(body.Entity) ?? "something");
                     return false;
                 }
-                if (!aboard.Player && _player is not null && PlayerBody() is { } you && you.Overlaps(unit) && you.TopLift > vehicle.Lift && you.Z < aboard.TopLift) { why = "Blocked: you are in the way."; return false; }
+                if (!aboard.Player && _player is not null && PlayerBody() is { } you && you.Overlaps(unit) && you.TopLift > vehicle.Lift && you.Z < aboard.TopLift) { why = DebugNote("VehicleYouInWay"); return false; }
             }
         return true;
     }
@@ -303,7 +303,7 @@ public partial class U6GameWindow
         bool sideways = quarters % 2 == 1;
         int w = sideways ? from.Depth : from.Width, d = sideways ? from.Width : from.Depth;
         var to = new UnitRect((int)Math.Round(cx - w / 2.0), (int)Math.Round(cy - d / 2.0), w, d);
-        if (!CanVehicleCover(vehicle, aboard, to, from, out string why)) { StatusText.Text = why.Replace("Blocked:", "No room to turn:"); return false; }
+        if (!CanVehicleCover(vehicle, aboard, to, from, out string why)) { StatusText.Text = DebugNote("NoRoomToTurn", why.StartsWith("Blocked:") ? why[8..].TrimStart() : why); return false; }
 
         (double X, double Y) Turned(double x, double y) => quarters switch
         {

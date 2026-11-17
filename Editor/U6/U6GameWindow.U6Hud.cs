@@ -32,6 +32,8 @@ public partial class U6GameWindow
     private readonly Dictionary<int, Canvas> _hudWordPieces = new();
     private readonly Dictionary<int, (Image Image, SpriteEntry Sprite)> _hudFramePieces = new();
     private readonly Dictionary<int, Image> _hudButtons = new();
+    /// <summary>Pictures ticked In front (HUD Editor): moved over the panel's pieces each time the panel is drawn.</summary>
+    private readonly List<Image> _hudFrontPictures = new();
     /// <summary>The member shown in the panel (null: the main character) and which view - Ultima 6's inventory or portrait.</summary>
     private CharacterDefinition? _hudMember;
     private HudPanelView _hudView = HudPanelView.Inventory;
@@ -78,6 +80,7 @@ public partial class U6GameWindow
         _hudWordPieces.Clear();
         _hudFramePieces.Clear();
         _hudButtons.Clear();
+        _hudFrontPictures.Clear();
         HudBackLayer.Children.Clear();
         HudLayer.Children.Clear();
         HudBackLayer.Width = HudLayer.Width = _screenW;
@@ -93,7 +96,12 @@ public partial class U6GameWindow
                 case HudPieceKind.GameView:
                     break;
                 case HudPieceKind.Picture or HudPieceKind.Panel:
-                    if (SpriteOfLink(piece.Sprite) is { } picture) HudLayer.Children.Add(HudImage(picture, piece.X, piece.Y, piece.Width, piece.Height, _hudAnimators));
+                    if (SpriteOfLink(piece.Sprite) is { } picture)
+                    {
+                        var image = HudImage(picture, piece.X, piece.Y, piece.Width, piece.Height, _hudAnimators);
+                        HudLayer.Children.Add(image);
+                        if (piece.Kind == HudPieceKind.Picture && piece.InFront) _hudFrontPictures.Add(image); // over the panel's pieces (RefreshHudPanel)
+                    }
                     break;
                 case HudPieceKind.CommandButton or HudPieceKind.CustomButton:
                 {
@@ -203,6 +211,11 @@ public partial class U6GameWindow
             _hudPanelVisuals.Add(visual);
             HudLayer.Children.Add(visual);
         }
+        foreach (var front in _hudFrontPictures) // In front (HUD Editor): over the body slots and carried items just drawn
+        {
+            HudLayer.Children.Remove(front);
+            HudLayer.Children.Add(front);
+        }
     }
 
     private FrameworkElement? HudPortrait(HudPiece piece, CharacterDefinition member)
@@ -225,19 +238,19 @@ public partial class U6GameWindow
     /// <summary>What the member carries and doesn't wear - and what's in the bag on their back - cell by cell.</summary>
     private FrameworkElement HudCarried(HudPiece piece, CharacterDefinition member)
     {
-        int cell = Math.Max(4, piece.CellSize);
-        var holder = new Canvas { Width = piece.Columns * cell, Height = piece.Rows * cell, IsHitTestVisible = false, ClipToBounds = true };
+        var (columns, rows, cell, emptyLook) = CarriedGrid(piece); // an open bag: its own grid (Container Editor), here (U6GameWindow.U6Things.cs)
+        var holder = new Canvas { Width = columns * cell, Height = rows * cell, IsHitTestVisible = false, ClipToBounds = true };
         Canvas.SetLeft(holder, piece.X);
         Canvas.SetTop(holder, piece.Y);
-        var empty = SpriteOfLink(piece.Sprite);
-        for (int i = 0; i < piece.Columns * piece.Rows; i++)
-            if (empty is not null) holder.Children.Add(HudImage(empty, i % piece.Columns * cell, i / piece.Columns * cell, cell, cell, null));
+        var empty = SpriteOfLink(emptyLook);
+        for (int i = 0; i < columns * rows; i++)
+            if (empty is not null) holder.Children.Add(HudImage(empty, i % columns * cell, i / columns * cell, cell, cell, null));
         int n = 0;
         foreach (var item in HudCarriedItems(member))
         {
-            if (n >= piece.Columns * piece.Rows) break;
+            if (n >= columns * rows) break;
             if (DollLook.ItemSprite(item.Category, item.ItemId, _objects, _books, _containers, _sprites) is { } sprite)
-                holder.Children.Add(HudImage(sprite, n % piece.Columns * cell, n / piece.Columns * cell, cell, cell, null, fit: true));
+                holder.Children.Add(HudImage(sprite, n % columns * cell, n / columns * cell, cell, cell, null, fit: true));
             n++;
         }
         return holder;

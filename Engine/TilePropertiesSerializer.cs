@@ -14,7 +14,9 @@ public static class TilePropertiesSerializer
 
     public static TilePropertiesDatabase Load(string path)
     {
-        return JsonSerializer.Deserialize<TilePropertiesDatabase>(File.ReadAllText(path), Options)
+        var db = JsonSerializer.Deserialize<TilePropertiesDatabase>(File.ReadAllText(path), Options)
                ?? throw new InvalidDataException($"Could not parse tile properties file: {path}");
+        foreach (var props in db.ByTileKey.Values) props.MovePresetOffName(); // picking a preset no longer renames the tile
+        return db;
     }
 }

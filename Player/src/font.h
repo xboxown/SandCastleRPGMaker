@@ -15,6 +15,9 @@ typedef struct Font Font;
 /* A font by its sprite's name in the Fonts group ("InGameFont", "DialogFont"); never NULL (the built-in one if it has no glyphs). */
 Font *font_get(const char *name);
 
+/* 1 when the font has no letters of its own (none drawn or imported): the built-in one stands in. */
+int font_is_built_in(const Font *font);
+
 int font_line_height(const Font *font);
 int font_text_width(const Font *font, const char *text);
 

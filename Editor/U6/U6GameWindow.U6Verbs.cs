@@ -47,11 +47,32 @@ public partial class U6GameWindow
         {
             string said = StatusText.Text?.Trim() ?? string.Empty;
             if (said.Length == 0 || said == _lastStatusSaid || said.StartsWith("Frame rate") || said.Contains("\" fired (") || (said.StartsWith('(') && said.Contains(" lift "))) return; // Game Test's own notes stay out
+            if (_debugNoteOf.TryGetValue(said, out var noteId))
+            {
+                // A debugging note (why a step was refused...): said only if ticked in System Settings > Debugging, never reworded by the rules below.
+                if (!U6DebugNotes.Shown(_systemSettings.Ultima6, noteId)) return;
+                _lastStatusSaid = said;
+                if (_hudHeard is not null) _hudHeard.Add(said);
+                else U6Say(said);
+                return;
+            }
             _lastStatusSaid = said;
             if (U6Notes.Rewrite(_systemSettings.Ultima6, said) is not { } note) return; // the maker's rules: changed, or not said (System Settings > Ultima 6 > Text area notes)
             if (_hudHeard is not null) _hudHeard.Add(note);
             else U6Say(note);
         });
+    }
+
+    /// <summary>The debugging notes made so far (their words -> note id), so the text area knows one when the status bar shows it.</summary>
+    private readonly Dictionary<string, string> _debugNoteOf = new();
+
+    /// <summary>A debugging note's words (U6DebugNotes: the maker's or the standard ones), blanks filled in - remembered as that note.</summary>
+    private string DebugNote(string id, params object[] values)
+    {
+        string text = U6DebugNotes.Format(_systemSettings.Ultima6, id, values);
+        if (_debugNoteOf.Count > 500) _debugNoteOf.Clear();
+        _debugNoteOf[text.Trim()] = id;
+        return text;
     }
 
     private string W(string id) => U6Words.Of(_systemSettings.Ultima6, id);
@@ -602,9 +623,9 @@ public partial class U6GameWindow
             cells.Add(new PanelCell(new Rect(piece.X, piece.Y, piece.Width, piece.Height), piece.Slot, -1));
         foreach (var piece in Hud.Pieces.Where(p => p.Kind == HudPieceKind.CarriedItems))
         {
-            int cell = Math.Max(4, piece.CellSize);
-            for (int i = 0; i < piece.Columns * piece.Rows; i++)
-                cells.Add(new PanelCell(new Rect(piece.X + i % piece.Columns * cell, piece.Y + i / piece.Columns * cell, cell, cell), null, i));
+            var (columns, rows, cell, _) = CarriedGrid(piece); // an open bag: its own grid (U6GameWindow.U6Things.cs)
+            for (int i = 0; i < columns * rows; i++)
+                cells.Add(new PanelCell(new Rect(piece.X + i % columns * cell, piece.Y + i / columns * cell, cell, cell), null, i));
         }
         return cells;
     }

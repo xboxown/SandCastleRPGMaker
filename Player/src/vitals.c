@@ -21,6 +21,8 @@
  * All of it stands still while the game is paused.
  */
 #include "vitals.h"
+#include "u6.h"
+#include "u8.h"
 #include <math.h>
 #include "pictures.h"
 #include "sound.h"
@@ -36,7 +38,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-enum { POISONED = 1, ASLEEP = 2, PARALYZED = 4, CHARMED = 8, CURSED = 16, INVISIBLE = 32, PROTECTED = 64 };
+enum { POISONED = 1, ASLEEP = 2, PARALYZED = 4, CHARMED = 8, CURSED = 16, INVISIBLE = 32, PROTECTED = 64, FEIGN_DEATH = 128, WITHSTAND_DEATH = 256 };
 enum { K_STRENGTH = 1, K_HITS = 6 };
 #define MAX_FOOD 31
 #define MEND_CHECK_MS 30000
@@ -46,6 +48,8 @@ typedef struct Vital
     int cold, heat; /* how cold and how hot it is, 0-63 (Exult's temperature) */
     int characterId, food, ailments, dead, unconscious;
     double poisonLeft, poisonNext, sleepLeft, paralyzeLeft, charmLeft, curseLeft, invisibleLeft, protectedLeft, mendCheck, damageCarry;
+    U8Vitals u8; /* Ultima 8: points built toward its stats, hunger, its heal clock (U8Reactions) */
+    double feignLeft, riseLeft, showMs; int feignSound, showStep; /* Feign Death's time and its end sound; dead: till it gets back up (0: it won't) */
     int cellX, cellY, hasCell;
     /* tile effects being felt: which, its ticks, its timer, on its tiles now, its recovery */
     struct { cJSON *effect; int ticks, onTile; double timer, recovery; } exposures[8]; int exposureCount;
@@ -110,7 +114,13 @@ static void set_stat_of(int characterId, int kind, int value)
 }
 
 int vitals_hp(int characterId, int *hp) { return stat_of(characterId, K_HITS, hp); }
-int vitals_max_hp(int characterId) { int v = 0; return stat_of(characterId, K_STRENGTH, &v) ? v : 0; }
+int vitals_max_hp(int characterId)
+{
+    int u6 = u6_max_hp(characterId); /* Ultima 6: 30 a level (U6GameWindow.Vitals MaxHp) */
+    if (u6 >= 0) return u6;
+    int v = 0;
+    return stat_of(characterId, K_STRENGTH, &v) ? v : 0;
+}
 void vitals_set_hp(int characterId, int hp) { set_stat_of(characterId, K_HITS, hp); }
 
 static Vital *vital_of(int characterId)
@@ -152,15 +162,16 @@ static const char *const DEFAULT_LINES[][9] = {
     { "I feel faint!", "This heat is killing me!" },
     { "I am burning up!", "I... cannot... breathe..." },
     { "I am cooling down.", "That is better." },
+    { "Thy party is full. I cannot join thee.", "There is no room for me with thee.", "Perhaps another time - thou hast enough companions." }, /* Party is full (Ultima 8) */
 };
-static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy", "Munching", "WantsFood", "FoodStolen", "WaiterAsks", "WaiterServes", "CantSit", "OutdoorsOnly", "FeelingCold", "VeryCold", "Frostbite", "Frozen", "WarmingUp", "FeelingHot", "VeryHot", "Heatstroke", "Scorched", "CoolingDown" };
+static const char *KIND_NAMES[] = { "Hungry", "VeryHungry", "Starving", "Hurt", "Fleeing", "CallForHelp", "TheftWarning", "HeardNoise", "WrongKey", "LockpickFailed", "Uneasy", "Munching", "WantsFood", "FoodStolen", "WaiterAsks", "WaiterServes", "CantSit", "OutdoorsOnly", "FeelingCold", "VeryCold", "Frostbite", "Frozen", "WarmingUp", "FeelingHot", "VeryHot", "Heatstroke", "Scorched", "CoolingDown", "PartyFull" };
 
 /* Bark: one line of its own for the situation, over its head (only the human speak; never the dead or the knocked out). */
 int vitals_bark(int characterId, int kind)
 {
     cJSON *ch = character_json(characterId);
     Vital *v = vital_of(characterId);
-    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 27) return 0;
+    if (!ch || cJSON_IsFalse(get(ch, "IsHuman")) || (v && (v->dead || v->unconscious)) || kind < 0 || kind > 28) return 0;
     int actor = actor_of_character(characterId);
     if (actor < 0) return 0;
     cJSON *own = get(get(get(ch, "Verbose"), "Lines"), KIND_NAMES[kind]);
@@ -180,6 +191,7 @@ int vitals_bark(int characterId, int kind)
         line = DEFAULT_LINES[kind][kind == 4 && n > 1 && rnd(4) > 0 ? 0 : rnd(n)];
     }
     if (!line) return 0;
+    if (u6_says_line(actor, characterId, line)) return 1; /* Ultima 6: in the text area (U6GameWindow.Verbose) */
     world_bark(actor, line, 3000);
     return 1;
 }
@@ -241,10 +253,14 @@ static void resume_acting(int characterId)
 /* Actor::die: out of the world, a body holding all it carried where it fell; its By Death events. */
 static void knock_out(int characterId);
 
+static void maybe_get_back_up(int characterId);
+static int vanishing = -1; /* Ultima 8: the one drowning now (no body) */
+static void stand_up_once(Vital *v, int actor);
 static void die(int characterId, const char *cause)
 {
     Vital *v = vital_of(characterId);
     if (!v || v->dead) return;
+    if (u8_on()) { u8_control_back_on_death(characterId); v = vital_of(characterId); if (!v || v->dead) return; } /* Crusader: the main character is controlled again first */
     if (flag(character_json(characterId), "Immortal")) { knock_out(characterId); return; }
     char key[32];
     snprintf(key, sizeof key, "killed:%d", world_character_source(characterId)); conditions_record(key); /* Character killed */
@@ -266,8 +282,16 @@ static void die(int characterId, const char *cause)
         return;
     }
     events_fire_character(characterId, 16); /* its own By Death events, while it's still where it fell */
+    if (vanishing == characterId && actor >= 0) /* Ultima 8: drowned - out of the world, with no body (VanishedInstead) */
+    {
+        world_walk_cancel(actor);
+        world_actor_remove(actor);
+        char line[160]; snprintf(line, sizeof line, "%s has drowned.", world_actor_name(actor)); game_log(line);
+        return;
+    }
     if (actor < 0) return;
     world_walk_cancel(actor);
+    world_burst_on_death(characterId, actor); /* its pieces fly (Burst); the body stays */
     /* the body: a container like it (its Body pose), holding everything it carried */
     Item *belongings = items_death_drops(characterId, items_strip(characterId), rnd); /* not human: what may be found in it */
     int x, y, f;
@@ -290,6 +314,7 @@ static void die(int characterId, const char *cause)
         return;
     }
     int uid = world_put_body(actor, x, y, f);
+    if (uid >= 0) maybe_get_back_up(characterId); /* some rise again (GameTestWindow.Toughness) */
     if (uid >= 0 && belongings)
     {
         Item **inside;
@@ -364,14 +389,26 @@ void vitals_damage(int characterId, int amount, const char *cause)
     if (amount <= 0 || vitals_dead(characterId) || !vitals_hp(characterId, &hp)) return;
     if (needs_special_wound(characterId) && !specialWound) return; /* only its weapon or spell hurts it (Character Editor > Health) */
     int actor = actor_of_character(characterId), max = vitals_max_hp(characterId);
-    /* Exult's hit: badly hurt, the main character's screen flashes red; anyone else a red outline */
-    if (actor == 0 && max > 0 && (amount >= max / 3 || hp < max / 4)) screen_flash(0xE00000, 0.15);
+    /* Exult's hit: badly hurt, the main character's screen flashes red; anyone else a red outline. Ultima 6: the hit's spark on
+       whoever is struck (Sprite Editor > Hit Spark) - no outline, no red screen (U6GameWindow.HitFlash). */
+    if (u6_on()) { if (actor >= 0) u6_hit_spark(actor); }
+    else if (actor == 0 && max > 0 && (amount >= max / 3 || hp < max / 4)) screen_flash(0xE00000, 0.15);
     else if (actor >= 0) world_hit_outline(actor);
     int half = max / 2;
     if (hp >= half && hp - amount < half && hp - amount > 0 && rnd(2) == 0) vitals_bark(characterId, 3); /* "Ouch!" */
+    /* Withstand Death (GameTestWindow.Toughness WithstoodDeath): the blow that would kill restores full health instead, once */
+    Vital *wv = vital_of(characterId);
+    if (wv && (wv->ailments & WITHSTAND_DEATH) && !vitals_immortal(characterId) && hp - amount < -(max / 3))
+    {
+        wv->ailments &= ~WITHSTAND_DEATH;
+        if (max > 0) vitals_set_hp(characterId, max);
+        if (actor == 0) game_log("You withstand death!");
+        return;
+    }
     hp -= amount;
     if (vitals_immortal(characterId) && hp < 0) hp = 0; /* knocked out at worst */
     vitals_set_hp(characterId, hp);
+    if (u6_on()) u6_tell_wound(characterId, actor, hp, max, hp < -(max / 3), cause); /* "Rat lightly wounded." in the text area */
     if (hp > 0) maybe_split(characterId, actor);
     if (hp < -(max / 3)) die(characterId, cause);
     else if (hp <= 0) knock_out(characterId);
@@ -379,14 +416,113 @@ void vitals_damage(int characterId, int amount, const char *cause)
 
 void vitals_kill(int characterId, const char *cause) { die(characterId, cause); }
 
+/* ---------------- Toughness (GameTestWindow.Toughness: Pentagram's rules, open to every game) ---------------- */
+
+/* Damage types (Character Editor > Health): this character's own rule for one - nothing, half, or adjusted. */
+int vitals_after_response(int characterId, int damage, int type)
+{
+    cJSON *r;
+    if (damage <= 0) return damage;
+    cJSON_ArrayForEach(r, get(character_json(characterId), "DamageResponses"))
+    {
+        if (num(r, "Type", 0) != type) continue;
+        switch (num(r, "Response", 0))
+        {
+            case 1: return 0;                                                      /* Immune */
+            case 2: return (damage + 1) / 2;                                       /* Half */
+            case 3: { int d = damage + num(r, "Amount", 0); return d > 0 ? d : 0; } /* Adjust */
+            default: return damage;
+        }
+    }
+    return damage;
+}
+
+/* Feign Death: falls (Die or Body), gets up (Stand Up); for the seconds after, those fooled by it leave it be. */
+int vitals_feign_death(int characterId, double seconds, int endSound)
+{
+    Vital *v = vital_of(characterId);
+    if (!v || v->dead || (v->ailments & FEIGN_DEATH)) return 0;
+    v->ailments |= FEIGN_DEATH;
+    v->feignLeft = (seconds > 0.1 ? seconds : 0.1) * 1000;
+    v->feignSound = endSound;
+    int actor = actor_of_character(characterId);
+    combat_forget_unseen(actor); /* those who no longer see it stop fighting it */
+    if (actor < 0) return 1;
+    /* Die (else Body) once, then Stand Up once - each only if it has the art (world_set_pose: 0 = none) */
+    if (world_set_pose(actor, "Die", -1)) { v->showStep = 1; v->showMs = world_pose_length(actor, "Die"); }
+    else if (world_set_pose(actor, "Body", -1)) { v->showStep = 1; v->showMs = world_pose_length(actor, "Body"); }
+    else stand_up_once(v, actor);
+    return 1;
+}
+
+/* Stand Up played once, if it has the art; then Idle. */
+static void stand_up_once(Vital *v, int actor)
+{
+    if (world_set_pose(actor, "Stand Up", -1)) { v->showStep = 2; v->showMs = world_pose_length(actor, "Stand Up"); }
+    else v->showStep = 0;
+}
+
+int vitals_withstand_death(int characterId, int give)
+{
+    Vital *v = vital_of(characterId);
+    if (!v || v->dead) return 0;
+    if (give) v->ailments |= WITHSTAND_DEATH; else v->ailments &= ~WITHSTAND_DEATH;
+    return 1;
+}
+
+/* Getting back up (Actor::dieU8): just died - its time till it rises, unless what killed it stops it (Pentagram: fire). It needs its body. */
+static void maybe_get_back_up(int characterId)
+{
+    cJSON *ch = character_json(characterId), *t;
+    Vital *v = vital_of(characterId);
+    if (!v || !flag(ch, "GetsBackUp") || flag(get(ch, "Body"), "NoBody")) return;
+    cJSON_ArrayForEach(t, get(ch, "BackUpNotFrom")) if (cJSON_IsNumber(t) && t->valueint == hitType) return;
+    int lo = num(ch, "BackUpMinSeconds", 0), hi = num(ch, "BackUpMaxSeconds", lo);
+    if (lo < 0) lo = 0;
+    if (hi < lo) hi = lo;
+    v->riseLeft = (lo + rnd(hi - lo + 1)) * 1000.0 + 0.001;
+}
+
+static void update_toughness(double ms)
+{
+    for (int i = 0; i < vitalCount; i++)
+    {
+        Vital *v = &vitals[i];
+        if (v->dead && v->riseLeft > 0 && (v->riseLeft -= ms) <= 0)
+        {
+            v->riseLeft = 0;
+            int risen = vitals_resurrect(v->characterId);
+            v = &vitals[i]; /* (resurrect may have grown the list) */
+            int a = actor_of_character(v->characterId);
+            if (risen && a >= 0) stand_up_once(v, a);
+        }
+        if (v->showStep && !v->dead && (v->showMs -= ms) <= 0)
+        {
+            int a = actor_of_character(v->characterId);
+            if (a < 0) v->showStep = 0;
+            else if (v->showStep == 1) stand_up_once(v, a);
+            else { v->showStep = 0; world_set_pose(a, "Idle", -1); }
+            if (!v->showStep && a >= 0) world_set_pose(a, "Idle", -1);
+        }
+        if (!v->dead && (v->ailments & FEIGN_DEATH) && (v->feignLeft -= ms) <= 0)
+        {
+            v->ailments &= ~FEIGN_DEATH; /* Cure: the end sound only */
+            int a = actor_of_character(v->characterId);
+            if (a >= 0) world_sound_from_actor(v->feignSound, a);
+        }
+    }
+}
+
 /* ---------------- Ailments ---------------- */
 
+/* Ailments no immunity stops and no By Ailment Effect hears: Invisible, Protected, Feign Death, Withstand Death; Ultima 8 also Surrendered. */
+static int quiet_ailment(int a) { return a == INVISIBLE || a == PROTECTED || a == FEIGN_DEATH || a == WITHSTAND_DEATH || (u8_on() && a == 512); }
 int vitals_inflict(int characterId, int ailment)
 {
     Vital *v = vital_of(characterId);
     if (!v || v->dead) return 0;
     cJSON *s = survival(characterId);
-    if (ailment != INVISIBLE && ailment != PROTECTED && (num(s, "Immunities", 0) & ailment)) return 0;
+    if (!quiet_ailment(ailment) && (num(s, "Immunities", 0) & ailment)) return 0;
     v->ailments |= ailment;
     switch (ailment)
     {
@@ -407,7 +543,7 @@ int vitals_inflict(int characterId, int ailment)
         case PROTECTED: v->protectedLeft = 60000 + rnd(20000); break;
     }
     if (ailment == ASLEEP || ailment == PARALYZED) stop_acting(characterId, ailment == ASLEEP);
-    if (ailment != INVISIBLE && ailment != PROTECTED) events_fire_character(characterId, 15 /* By Ailment Effect */);
+    if (!quiet_ailment(ailment)) events_fire_character(characterId, 15 /* By Ailment Effect */);
     return 1;
 }
 
@@ -456,6 +592,7 @@ static int too_cold_or_hot_to_mend(const Vital *v)
 
 static void mend(Vital *v)
 {
+    if (u6_food()) return; /* Ultima 6: healing is Rest's (fed) and magic's */
     int hp, max = vitals_max_hp(v->characterId);
     int starving = can_get_hungry(v->characterId) && v->food <= survival_num(v->characterId, "HungryAtOrBelow", 9);
     if ((v->ailments & POISONED) || !vitals_hp(v->characterId, &hp) || (starving && hp > 0) || too_cold_or_hot_to_mend(v)) return;
@@ -468,7 +605,7 @@ static void mend(Vital *v)
 
 static void use_food(Vital *v)
 {
-    if (!can_get_hungry(v->characterId)) return;
+    if (!can_get_hungry(v->characterId) || u6_food()) return; /* Ultima 6: nobody gets hungry */
     int most = survival_num(v->characterId, "FoodUsedPerHourMax", 3);
     v->food -= rnd((most > 0 ? most : 0) + 1);
     if (v->food < 0) v->food = 0;
@@ -481,10 +618,11 @@ static void use_food(Vital *v)
 }
 
 /* System Settings > Combat: starving goes on hurting someone knocked out by it, until they die (off: Ultima 7's way). */
-static int starvation_kills(void) { return flag(get(get((cJSON *)world_json(), "Project"), "Settings"), "StarvationKills"); }
+static int starvation_kills(void) { cJSON *k = get(get(get((cJSON *)world_json(), "Project"), "Settings"), "StarvationKills"); return cJSON_IsBool(k) ? cJSON_IsTrue(k) : u8_on(); } /* not set: off (Ultima 8: on) */
 
 static void hunger_minute(Vital *v)
 {
+    if (u6_food()) return; /* Ultima 6: nobody starves */
     int starvesOn = starvation_kills() && v->unconscious && !v->dead; /* it goes on losing health where it lies */
     if (!can_get_hungry(v->characterId) || (vitals_incapacitated(v->characterId) && !starvesOn)) return;
     if (v->food > survival_num(v->characterId, "HungryAtOrBelow", 9)) return;
@@ -824,8 +962,11 @@ static void update_joining(double ms)
 
 void vitals_update(double ms)
 {
+    world_hurled_update(ms); /* what flies and bounces (Burst) - the game over too */
     if (gameOver) return;
     update_joining(ms);
+    update_toughness(ms); /* the dead who get back up; Feign Death ending */
+    if (u8_eating_as_u8()) u8_update_healing(ms); /* Ultima 8: HealProcess (U8Reactions) */
     int hour = events_hour();
     int hourChanged = hour != lastHour;
     lastHour = hour;
@@ -834,7 +975,7 @@ void vitals_update(double ms)
         Vital *v = &vitals[i];
         int actor = actor_of_character(v->characterId);
         if (v->dead || actor < 0 || world_actor_gone(actor)) continue;
-        if (hourChanged) { mend(v); use_food(v); }
+        if (hourChanged && !u8_eating_as_u8()) { mend(v); use_food(v); } /* (Ultima 8's eating: its own healing below) */
     }
     long minute = events_total_minutes();
     if (minute != lastMinute)
@@ -843,7 +984,7 @@ void vitals_update(double ms)
         for (int i = 0; i < vitalCount; i++)
         {
             int actor = actor_of_character(vitals[i].characterId);
-            if (!vitals[i].dead && actor >= 0 && !world_actor_gone(actor)) hunger_minute(&vitals[i]);
+            if (!vitals[i].dead && actor >= 0 && !world_actor_gone(actor) && !u8_eating_as_u8()) hunger_minute(&vitals[i]);
             if (!vitals[i].dead && actor >= 0 && !world_actor_gone(actor)) temperature_minute(&vitals[i], actor);
         }
     }
@@ -875,6 +1016,12 @@ void vitals_save(cJSON *runtime)
         cJSON_AddNumberToObject(e, "ParalyzeRemainingMs", v->paralyzeLeft); cJSON_AddNumberToObject(e, "CharmRemainingMs", v->charmLeft);
         cJSON_AddNumberToObject(e, "CurseRemainingMs", v->curseLeft); cJSON_AddNumberToObject(e, "InvisibleRemainingMs", v->invisibleLeft);
         cJSON_AddNumberToObject(e, "ProtectedRemainingMs", v->protectedLeft);
+        cJSON_AddNumberToObject(e, "BuiltStrength", v->u8.builtStrength); cJSON_AddNumberToObject(e, "BuiltDexterity", v->u8.builtDexterity);
+        cJSON_AddNumberToObject(e, "BuiltIntelligence", v->u8.builtIntelligence); cJSON_AddNumberToObject(e, "U8Hunger", v->u8.hunger);
+        cJSON_AddNumberToObject(e, "HealClockMs", v->u8.healClockMs);
+        cJSON_AddNumberToObject(e, "FeignRemainingMs", v->feignLeft);
+        cJSON_AddNumberToObject(e, "FeignSoundId", v->feignSound);
+        cJSON_AddNumberToObject(e, "RiseRemainingMs", v->riseLeft);
         cJSON_AddBoolToObject(e, "Dead", v->dead); cJSON_AddBoolToObject(e, "Unconscious", v->unconscious);
         cJSON_AddItemToArray(all, e);
     }
@@ -898,6 +1045,11 @@ void vitals_restore(cJSON *runtime)
         v->curseLeft = get(e, "CurseRemainingMs") ? get(e, "CurseRemainingMs")->valuedouble : 0;
         v->invisibleLeft = get(e, "InvisibleRemainingMs") ? get(e, "InvisibleRemainingMs")->valuedouble : 0;
         v->protectedLeft = get(e, "ProtectedRemainingMs") ? get(e, "ProtectedRemainingMs")->valuedouble : 0;
+        v->u8.builtStrength = num(e, "BuiltStrength", 0); v->u8.builtDexterity = num(e, "BuiltDexterity", 0); v->u8.builtIntelligence = num(e, "BuiltIntelligence", 0);
+        v->u8.hunger = num(e, "U8Hunger", 0); v->u8.healClockMs = get(e, "HealClockMs") ? get(e, "HealClockMs")->valuedouble : 0;
+        v->feignLeft = get(e, "FeignRemainingMs") ? get(e, "FeignRemainingMs")->valuedouble : 0;
+        v->feignSound = get(e, "FeignSoundId") ? get(e, "FeignSoundId")->valueint : -1;
+        v->riseLeft = get(e, "RiseRemainingMs") ? get(e, "RiseRemainingMs")->valuedouble : 0;
         v->dead = flag(e, "Dead"); v->unconscious = flag(e, "Unconscious");
         int actor = world_actor_by_character(v->characterId);
         if (actor >= 0 && v->unconscious && !v->dead && !world_set_pose(actor, "Unconscious", -1)) world_set_pose(actor, "Sleeping", -1);
@@ -954,3 +1106,16 @@ int vitals_resurrect_player(void)
 }
 
 int vitals_can_get_hungry(int characterId) { return can_get_hungry(characterId); }
+
+U8Vitals *vitals_u8(int characterId) { Vital *v = vital_of(characterId); return v ? &v->u8 : NULL; }
+
+/* Ultima 8 (U8Liquids Vanish): drowned - gone for good, no body, nothing it carried left; its By Death events still run. */
+void vitals_vanish(int characterId)
+{
+    if (vitals_dead(characterId)) return;
+    Item *all = items_strip(characterId);
+    if (all) items_free(all);
+    vanishing = characterId;
+    die(characterId, "drowned");
+    vanishing = -1;
+}

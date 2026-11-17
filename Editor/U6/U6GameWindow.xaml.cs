@@ -1763,6 +1763,7 @@ public partial class U6GameWindow : Window
         int scaleX = (int)Math.Floor(ViewportHost.ActualWidth / ScreenWidth);
         int scaleY = (int)Math.Floor(ViewportHost.ActualHeight / ScreenHeight);
         int scale = Math.Max(1, Math.Min(scaleX, scaleY));
+        CrtLook.Apply((Grid)Content, (FrameworkElement)ViewportHost.Parent, ViewportBorder, scale, _systemSettings.Display.CrtEffect); // System Settings > Game Window > CRT effect (lined up again whenever the view moves)
         if (scale == ViewportScale.ScaleX) return; // genuinely unchanged - skip the gump rebuild below entirely
         ViewportScale.ScaleX = scale;
         ViewportScale.ScaleY = scale;
@@ -1972,7 +1973,7 @@ public partial class U6GameWindow : Window
             ? TryFlyStep(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, null, null, out newLift, out blockReason) // floating: room at this height, nothing under needed
             : TryStepActor(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, out newLift, out blockReason)))
         {
-            StatusText.Text = tileOffMap ? "Blocked: edge of the map." : blockReason;
+            StatusText.Text = tileOffMap ? DebugNote("EdgeOfMap") : blockReason;
             // Actor::is_really_blocked: a character in the way is asked to move aside (or swap places).
             if (!tileOffMap && CharacterInTheWay(PlayerFootprintAt(newPixelX, newPixelY), _playerZ, _playerSize.Z, null) is { } blocker)
                 MoveAside(blocker, dx, dy, walker: null);
@@ -1981,8 +1982,8 @@ public partial class U6GameWindow : Window
         if (newLift != _playerZ)
         {
             StatusText.Text = newLift > _playerZ
-                ? $"Stepped up to lift {newLift} ({newLift * 4}px)."
-                : $"Stepped down to lift {newLift} ({newLift * 4}px).";
+                ? DebugNote("SteppedUp", newLift, newLift * 4)
+                : DebugNote("SteppedDown", newLift, newLift * 4);
             _playerZ = newLift;
             _playerVisualLiftZ = _playerZ; // instant, both directions - per spec ("make it instant just like the books or container")
         }

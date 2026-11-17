@@ -1,4 +1,4 @@
-<Window x:Class="SandcastleRpgMaker.Editor.GameTestWindow"
+﻿<Window x:Class="SandcastleRpgMaker.Editor.GameTestWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Sandcastle RPG Maker - Game Test (Internal Engine, Alpha)" Height="700" Width="900"
@@ -68,10 +68,10 @@
                             blocks clicks.
                         -->
                         <!-- Weather (GameTestWindow.Weather.cs): cloud shadows over the land, then rain / snow / hail, under the sky's light; lightning flashes over it. -->
-                        <Canvas x:Name="CloudLayer" Width="320" Height="200" IsHitTestVisible="False" Panel.ZIndex="22" ClipToBounds="True"/>
-                        <Canvas x:Name="WeatherLayer" Width="320" Height="200" IsHitTestVisible="False" Panel.ZIndex="23" ClipToBounds="True"/>
-                        <Rectangle x:Name="LightingOverlay" Width="320" Height="200" IsHitTestVisible="False" Opacity="0" Panel.ZIndex="25"/>
-                        <Rectangle x:Name="FlashOverlay" Width="320" Height="200" IsHitTestVisible="False" Opacity="0" Fill="White" Panel.ZIndex="26"/>
+                        <Canvas x:Name="CloudLayer" IsHitTestVisible="False" Panel.ZIndex="22" ClipToBounds="True"/>
+                        <Canvas x:Name="WeatherLayer" IsHitTestVisible="False" Panel.ZIndex="23" ClipToBounds="True"/>
+                        <Rectangle x:Name="LightingOverlay" IsHitTestVisible="False" Opacity="0" Panel.ZIndex="25"/>
+                        <Rectangle x:Name="FlashOverlay" IsHitTestVisible="False" Opacity="0" Fill="White" Panel.ZIndex="26"/>
                         <!-- Show Text dialog boxes (speaker face + DialogFont text), in the same 320x200 space as the world. -->
                         <Canvas x:Name="MessageLayer" Width="320" Height="200" Panel.ZIndex="40" Visibility="Collapsed" Background="Transparent" RenderOptions.BitmapScalingMode="NearestNeighbor"/>
                     </Grid>

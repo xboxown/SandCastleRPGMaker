@@ -24,6 +24,7 @@
  *    else a harmful (or summoning) spell at their foe.
  */
 #include "magic.h"
+#include "u8.h"
 #include "world.h"
 #include "items.h"
 #include "events.h"
@@ -51,7 +52,7 @@ enum
     E_HEAL, E_MANA, E_CURE_POISON, E_POISON, E_SLEEP, E_AWAKEN, E_PARALYZE, E_CURE_PARALYSIS, E_CURSE, E_REMOVE_CURSE, E_PROTECTION, E_INVISIBILITY,
     E_LIGHT, E_DAMAGE, E_NOURISH, E_CUSTOM, E_TELEPORT, E_MARK, E_RECALL, E_SUMMON, E_CREATE_ITEM, E_CREATE_FIELD, E_UNLOCK, E_LOCK, E_DOUSE, E_IGNITE,
     E_REVEAL_TRAPS, E_DESTROY_TRAPS, E_TELEKINESIS, E_CHARM, E_FEAR, E_DANCE, E_RESURRECT, E_CLONE, E_REVEAL_INVISIBLE, E_TIME_STOP, E_TREMOR, E_LOCATE,
-    E_DESTROY_FIELD, E_COMMON_EVENT, E_LEVITATE, E_TRANSLATE
+    E_DESTROY_FIELD, E_COMMON_EVENT, E_LEVITATE, E_TRANSLATE, E_FEIGN_DEATH, E_WITHSTAND_DEATH
 };
 enum { A_POISONED = 1, A_ASLEEP = 2, A_PARALYZED = 4, A_CHARMED = 8, A_CURSED = 16, A_INVISIBLE = 32, A_PROTECTED = 64 };
 enum { K_STRENGTH = 1, K_MAGIC = 5, K_HITS = 6, K_MANA = 7, K_LEVEL = 8, K_EXP = 9 };
@@ -248,7 +249,8 @@ void magic_apply_effects(cJSON *effects, int target, const char *cause, int by)
             case E_INVISIBILITY: vitals_inflict(id, A_INVISIBLE); break;
             case E_LIGHT: lighting_special(amount); break;
             case E_DAMAGE:
-                if (amount > 0 && vitals_wounds_it(id, -1, by >= 0 ? cause : NULL)) { vitals_hit_type(2); vitals_damage_allowed(id, amount, cause); vitals_hit_type(0); } /* cause: the spell's name; 2: DamageType.Magic */
+                if (amount > 0 && vitals_wounds_it(id, -1, by >= 0 ? cause : NULL)) { vitals_hit_type(2); vitals_damage_allowed(id, vitals_after_response(id, amount, 2), cause); vitals_hit_type(0); }
+                if (amount > 0 && u8_on()) u8_stumble_from_hit(target); /* Ultima 8: Stumble Backwards */ /* cause: the spell's name; 2: DamageType.Magic */
                 if (by >= 0 && by != target && vitals_dead(id)) { int worth = stat_of(target, K_EXP, 0); if (worth > 0) combat_gain_experience(by, worth); } /* a spell's kill */
                 break;
             case E_CHARM: case E_FEAR: case E_DANCE: case E_REVEAL_INVISIBLE: case E_CLONE: character_spell(e, target, by); break;
@@ -259,9 +261,11 @@ void magic_apply_effects(cJSON *effects, int target, const char *cause, int by)
                     if (num(custom, "Id", -2) == num(e, "CustomEffectId", -1)) events_run_commands(get(custom, "Commands"), target > 0 ? target : -1);
                 break;
             }
-            case E_NOURISH: vitals_change_food(id, "Add", amount); break;
+            case E_NOURISH: if (u8_eating_as_u8()) u8_feed(id, amount); else vitals_change_food(id, "Add", amount); break; /* Ultima 8: its own hunger */
             case E_TRANSLATE: { double ms = (cJSON_IsNumber(get(e, "Seconds")) ? get(e, "Seconds")->valuedouble : 60) * 1000; if (ms > translateMs) translateMs = ms; break; }
             case E_LEVITATE: world_levitate(target, cJSON_IsNumber(get(e, "Seconds")) ? get(e, "Seconds")->valuedouble : 60); break;
+            case E_FEIGN_DEATH: vitals_feign_death(id_of(target), cJSON_IsNumber(get(e, "Seconds")) ? get(e, "Seconds")->valuedouble : 60, -1); break;
+            case E_WITHSTAND_DEATH: vitals_withstand_death(id_of(target), 1); break;
             case E_COMMON_EVENT: /* its Common Event runs on them ("Whoever set it off") */
             {
                 cJSON *common;
@@ -709,6 +713,7 @@ void magic_cast(int caster, cJSON *spell, int castOn)
     const char *why = why_cannot(caster, spell);
     if (why) { game_log(why); return; }
     int id = id_of(caster);
+    if (u8_on()) events_fire_character(id, 22 /* By Cast (Ultima 8) */);
     set_stat_of(caster, K_MANA, stat_of(caster, K_MANA, 0) - mana_cost(spell));
     int ids[16], qs[16], n = reagents_of(spell, ids, qs, 16);
     for (int i = 0; i < n; i++)
@@ -721,6 +726,7 @@ void magic_cast(int caster, cJSON *spell, int castOn)
     char *w = words;
     while (isspace((unsigned char)*w)) w++;
     if (*w) bark(caster, w, 2500); /* begin_casting: the words of power */
+    if (u8_on() && caster == 0 && world_set_pose(0, "Cast", -1)) combat_pose_back(0, 3 * 200); /* Ultima 8: the Cast pose (3 standard delays) */
     world_sound_from_actor(num(spell, "CastSoundResourceId", -1), caster);
     int x, y, fl;
     cell_of(caster, &x, &y, &fl);
@@ -740,6 +746,54 @@ static int knows(cJSON *book, Item *copy, cJSON *spell)
     if (!cJSON_IsFalse(get(get(book, "Spellbook"), "StartsWithAllSpells"))) return 1;
     return copy && items_knows_spell(copy, str(spell, "Name"));
 }
+
+/* ---------------- Ultima 6's Cast (U6GameWindow.U6Cast; Nuvie Magic) ---------------- */
+
+/* The spells of the books readied in a hand (Magic::book_equipped), each copy's own; -1: no spellbook readied. */
+int magic_u6_spells(int actor, cJSON **spells, int max)
+{
+    int id = id_of(actor), found = 0, n = 0;
+    static const int HANDS[2] = { 9, 10 }; /* EquipmentSlot RightHand, LeftHand */
+    for (int h = 0; h < 2; h++)
+    {
+        Item *held = items_in_slot(id, HANDS[h]);
+        if (!held || items_category(held) != CAT_OBJECT) continue;
+        cJSON *d = object_def(items_item_id(held));
+        if (num(d, "Type", -1) != OT_SPELLBOOK || flag(get(d, "Spellbook"), "U8Focus")) continue;
+        found = 1;
+        cJSON *s;
+        cJSON_ArrayForEach(s, get(get(d, "Spellbook"), "Spells"))
+        {
+            if (!knows(d, held, s)) continue;
+            int dup = 0;
+            for (int i = 0; i < n; i++) dup |= spells[i] == s;
+            if (!dup && n < max) spells[n++] = s;
+        }
+    }
+    return found ? n : -1;
+}
+
+/* Magic::cast's checks in Ultima 6's order - level at least the circle, the magic points, the reagents - then spent and its sound.
+   NULL: cast; else the Words id of why not ("LevelTooLow", "NoMagicPoints", "NoReagents"). */
+const char *magic_u6_spend(int actor, cJSON *spell)
+{
+    int id = id_of(actor), circle = num(spell, "Circle", 1) > 1 ? num(spell, "Circle", 1) : 1;
+    if (stat_of(actor, K_LEVEL, 1) < circle) return "LevelTooLow";
+    if (stat_of(actor, K_MANA, 0) < mana_cost(spell)) return "NoMagicPoints";
+    int ids[16], qs[16], n = reagents_of(spell, ids, qs, 16);
+    for (int i = 0; i < n; i++) if (items_count_any(id, CAT_OBJECT, ids[i]) < qs[i]) return "NoReagents";
+    set_stat_of(actor, K_MANA, stat_of(actor, K_MANA, 0) - mana_cost(spell));
+    for (int i = 0; i < n; i++)
+    {
+        Item *used[100]; int got = 0;
+        if (items_take(id, CAT_OBJECT, ids[i], qs[i], used, 100, &got)) for (int k = 0; k < got; k++) items_free(used[k]);
+    }
+    world_sound_from_actor(num(spell, "CastSoundResourceId", -1), actor);
+    return NULL;
+}
+
+/* The spell on whom / what / where it was cast (U6GameWindow.Spells DeliverSpell). */
+void magic_u6_deliver(int caster, cJSON *spell, int who, int thing, int cx, int cy) { deliver(caster, spell, who, thing, cx, cy); }
 
 /* Not everyone can read one: Can cast magic, and on the book's own list when it has one. */
 static int refused(cJSON *book, int reader)
@@ -933,6 +987,7 @@ int magic_book_click(int x, int y, uint32_t now)
 /* A thing being used: placed on the map (uid) or carried (item). */
 typedef struct Used { cJSON *def; int uid; Item *item; int holder; } Used;
 static Used using;
+static void cast_from_focus(const Used *u, int caster);
 static int bookReader = -1; /* who opened a spellbook last (its paperdoll's "whoever set it off") */
 
 static int still_there(const Used *u) { return u->uid > 0 ? world_thing_there(u->uid) : items_alive(u->item); }
@@ -985,6 +1040,17 @@ static void eat(const Used *u, int eater)
     cJSON *food = get(u->def, "Food");
     if (!in_party(eater) || dead(eater) || vitals_has(id, A_ASLEEP) || vitals_has(id, A_PARALYZED)) return;
     if (flag(food, "IsLiquid") && flag(food, "Undrinkable")) { bark(eater, "No, thank thee.", 2500); return; }
+    if (u8_eating_as_u8()) /* Ultima 8's eating (HealProcess::feedAvatar): hunger off, health back */
+    {
+        if (u->uid > 0) combat_owned_theft(u->uid);
+        sound_play(num(food, "EatSoundResourceId", -1));
+        use_up_one(u);
+        u8_feed(id, num(food, "Nutrition", 0));
+        char cause8[96]; snprintf(cause8, sizeof cause8, "\"%s\"", str(u->def, "Name"));
+        magic_apply_effects(get(food, "Effects"), eater, cause8, -1);
+        if (eater == 0) { char line8[120]; snprintf(line8, sizeof line8, "You eat \"%s\".", str(u->def, "Name")); game_log(line8); }
+        return;
+    }
     int level = vitals_food(id), nutrition = num(food, "Nutrition", 0), after = level + nutrition;
     if (level >= FOOD_FULL) { bark(eater, "No, thank thee.", 2500); return; }
     if (u->uid > 0) combat_owned_theft(u->uid); /* stealItem: eaten in sight of its owner's side */
@@ -1083,6 +1149,7 @@ static int use(Used u)
             return 1;
         case OT_SPELLBOOK:
             bookReader = user_of(&u);
+            if (u8_on() && flag(get(u.def, "Spellbook"), "U8Focus")) { if (fire_use(&u)) return 1; if (bookReader < 0 || refused(u.def, bookReader)) return 1; cast_from_focus(&u, bookReader); return 1; } /* Ultima 8: a focus */
             if (fire_use(&u)) return 1;
             open_book(u.def, u.uid > 0 ? items_parked(u.uid, CAT_OBJECT, num(u.def, "Id", -1), 1) : u.item, user_of(&u));
             return 1;
@@ -1117,6 +1184,28 @@ int magic_use_map(int uid)
     int objectId = world_thing_object_id(uid);
     cJSON *def = object_def(objectId);
     return def ? use((Used){ def, uid, NULL, -1 }) : 0;
+}
+
+/* Ultima 8 (U8GameWindow.U8Magic CastFromFocus): a focus - a wand, a rod, a symbol - casts its spell at once, using one of its charges
+   (each copy its own; -1 never runs out); no book opens. */
+static void cast_from_focus(const Used *u, int caster)
+{
+    cJSON *book = get(u->def, "Spellbook"), *s, *spell = NULL;
+    Item *copy = u->uid > 0 ? items_parked(u->uid, CAT_OBJECT, num(u->def, "Id", -1), 1) : u->item;
+    char line[160];
+    cJSON_ArrayForEach(s, get(book, "Spells")) if (!spell && knows(u->def, copy, s)) spell = s;
+    if (!spell) { snprintf(line, sizeof line, "\"%s\" holds no spell.", str(u->def, "Name")); game_log(line); return; }
+    int most = num(book, "U8FocusCharges", -1), charges = copy ? items_charges(copy) : -1;
+    if (charges < 0 && most >= 0) charges = most; /* not used yet: as it starts */
+    if (most >= 0 && charges <= 0) { snprintf(line, sizeof line, "\"%s\" has no charges left.", str(u->def, "Name")); game_log(line); return; }
+    const char *why = why_cannot(caster, spell);
+    if (why) { game_log(why); return; }
+    magic_cast(caster, spell, -1);
+    if (most < 0 || !copy) return;
+    charges--;
+    items_set_charges(copy, charges);
+    snprintf(line, sizeof line, "\"%s\": %d charge%s left.", str(u->def, "Name"), charges, charges == 1 ? "" : "s");
+    game_log(line);
 }
 
 int magic_use_carried(Item *it)

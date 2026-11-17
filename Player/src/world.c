@@ -28,6 +28,9 @@
 #include "sound.h"
 #include "items.h"
 #include "schedules.h"
+#include "u8.h"
+#include "vehicles.h"
+#include "dialog.h"
 #include "platform.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
@@ -103,6 +106,7 @@ typedef struct Thing
     int bodyN;                                       /* how many boxes it has from body on (stairs: a box a step) */
     int owner;                                       /* who it belongs to now, set in play (+1; 0: as placed) */
     int sprung;                                      /* a trap that has gone off (TrapSprungRuntime): a hidden one shows from then on */
+    int keptInLiquid;                                /* Ultima 8: in water or lava as the map was made (a bridge's posts) - it stays */
     int stage; double grow;                          /* a plant: its stage, the game minutes grown towards the next */
     int liquid;                                      /* a liquid container: what it holds (a liquid Food's id, -1: empty) */
     cJSON *steps;                                    /* a designed staircase: its steps for its facing */
@@ -144,6 +148,7 @@ static char sheetNames[8][128]; static int sheetCount;
 static unsigned char *walkable; /* per ground cell */
 static int *underTile;          /* per ground cell: the tile drawn under its tile (Tile Properties "UnderTileIndex"), -1 none */
 static unsigned char *water;    /* per ground cell: Is Water (ships sail on it) */
+static unsigned char *liquid;   /* per ground cell: Ultima 8's real water (1) or lava (2) (Tile Properties > Ultima 8) */
 static ObjectDef *defs; static int defCount;
 static Thing *things; static int thingCount;
 static Body *bodies; static int bodyCount;
@@ -196,6 +201,27 @@ static int num(cJSON *o, const char *k, int fallback) { cJSON *v = get(o, k); re
 static int flag(cJSON *o, const char *k) { return cJSON_IsTrue(get(o, k)); }
 static const char *str(cJSON *o, const char *k) { const char *s = cJSON_GetStringValue(get(o, k)); return s ? s : ""; }
 static const Sprite *link_of(cJSON *o) { return o ? sprite_find(str(o, "SpriteGroup"), str(o, "SpriteName")) : NULL; }
+
+/* An Ultima 6 project (its manifest's Style): the U6 engine's own rules here (u6.c has its HUD). */
+static int is_u6(void) { return !strcmp(str(get(get(gameJson, "Project"), "Manifest"), "Style"), "Ultima6"); }
+/* An Ultima 8 project: the map's cells are square here (the copied Ultima 7 engine's own coordinates) and drawn as diamonds
+   (U8ProjectionCanvas, Pentagram's ItemSorter): map point (x, y) goes to (x - y + originX, (x + y) / 2) on the screen. */
+static int u8View;                  /* the Ultima 8 view is on (an Ultima 8 project) */
+static int sheetTileW, sheetTileH;  /* a tile on its sheet: the diamond drawn (a map cell is sheetTileH x sheetTileH) */
+static double u8OriginX;            /* the map's height in map pixels: its west corner at 0 */
+static int is_u8(void) { return !strcmp(str(get(get(gameJson, "Project"), "Manifest"), "Style"), "Ultima8"); }
+static inline double u8_sx(double mx, double my) { return mx - my + u8OriginX; }
+static inline double u8_sy(double mx, double my) { return (mx + my) / 2; }
+int world_u8(void) { return u8View; }
+/* Ultima 8 (U8GameWindow.U8Movement ScreenSlot): a pose's direction slots are the screen's - the world's north is up-right on the
+   screen, so a character facing the world's way f shows the slot one round clockwise. Everything else: the way it faces. */
+static int slot_of(int facing) { return u8View ? (facing + 1) & 7 : facing; }
+/* Ultima 6 draws four directions: a diagonal shows the side it leans to, east or west (U6GameWindow.Characters Cardinal). */
+static void four_directions(const Sprite **dirs)
+{
+    dirs[1] = dirs[3] = dirs[2]; /* NE, SE: east */
+    dirs[7] = dirs[5] = dirs[6]; /* NW, SW: west */
+}
 static int dir_of(const char *name) { for (int i = 0; i < 8; i++) if (strcmp(DIR_NAMES[i], name) == 0) return i; return DIR_S; }
 
 static const ObjectDef *def_of(int id) { for (int i = 0; i < defCount; i++) if (defs[i].id == id) return &defs[i]; return NULL; }
@@ -385,6 +411,7 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
             if (!any) any = sp;
         }
         for (int i = 0; i < 8; i++) if (!pose->dirs[i]) pose->dirs[i] = south ? south : any;
+        if (is_u6()) four_directions(pose->dirs);
     }
     cJSON_ArrayForEach(p, get(poses, "Poses"))
     {
@@ -407,6 +434,7 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
             if (!any) any = s;
         }
         for (int i = 0; i < 8; i++) if (!into[i]) into[i] = south ? south : any; /* PoseAssignment.Resolve */
+        if (is_u6()) four_directions(into);
     }
     /* ActorSizing: its own size, else from its idle picture (footprint = width / 16, height = what's left / 4). */
     a->sizeX = num(character, "SizeX", 0); a->sizeY = num(character, "SizeY", 0); a->sizeZ = num(character, "SizeZ", 0);
@@ -473,6 +501,24 @@ static int step_unit(const Body **here, int n, int lift, int height, int *newLif
     return 1;
 }
 
+/* LiquidUnder: real water (1) or lava (2) when every part of the footprint is over it (lava wins); else 0 - half on the shore is on the shore. */
+static int liquid_under(int l, int t, int w, int d)
+{
+    if (!liquid) return 0;
+    int found = 0;
+    for (int y = t; y < t + d; y++)
+        for (int x = l; x < l + w; x++)
+        {
+            int cx = x / unitsX, cy = y / unitsY;
+            if (cx < 0 || cy < 0 || cx >= mapW || cy >= mapH) return 0;
+            int q = liquid[cy * mapW + cx];
+            if (!q) return 0;
+            if (q == 2 || !found) found = q;
+        }
+    return found;
+}
+static int u8LiquidOk; /* the player's own step (not a planned walk): water and lava may be walked into */
+
 static int ground_walkable(int l, int t, int w, int d)
 {
     for (int y = t; y < t + d; y++)
@@ -489,6 +535,17 @@ static int ground_walkable(int l, int t, int w, int d)
 /* Reach's walk (world_reachable): only the boxes round the player are looked at for each of its many steps. */
 static int stepWindowOn, stepWindowL, stepWindowT, stepWindowR, stepWindowB, *stepWindow, stepWindowN, stepWindowCap;
 
+/* Testing (SANDCASTLE_STEP_DEBUG set): why a step was refused, and what was in the way. */
+static int step_debug(void) { static int on = -1; if (on < 0) on = getenv("SANDCASTLE_STEP_DEBUG") != NULL; return on; }
+static void step_refused(const char *why, int l, int t, int w, int d, int lift, int height, const Body **solids, int ns)
+{
+    if (!step_debug()) return;
+    fprintf(stderr, "STEP refused (%s): foot %d,%d %dx%d lift %d height %d;", why, l, t, w, d, lift, height);
+    for (int i = 0; i < ns && i < 12; i++) fprintf(stderr, " [%d,%d %dx%d z%d h%d]", solids[i]->left, solids[i]->top, solids[i]->width, solids[i]->depth, solids[i]->z, solids[i]->height);
+    fprintf(stderr, "\n");
+}
+
+static int stepMaxDrop = 1; /* how far down a step may go (ActorMaxDrop; the Ultima 8 Avatar walks off ledges: any) */
 static int try_step(int l, int t, int w, int d, int lift, int height)
 {
     int W = mapW * unitsX, H = mapH * unitsY;
@@ -526,12 +583,13 @@ static int try_step(int l, int t, int w, int d, int lift, int height)
             int n = 0;
             for (int i = 0; i < ns && n < 512; i++) if (overlaps(solids[i], x, y, 1, 1)) here[n++] = solids[i];
             int unitLift;
-            if (!step_unit(here, n, lift, height, &unitLift)) return -1;
+            if (!step_unit(here, n, lift, height, &unitLift)) { step_refused("a unit", x, y, 1, 1, lift, height, here, n); return -1; }
             if (unitLift > highest) highest = unitLift;
         }
-    if (lift - highest > 1) return -1;
-    if (!is_clear(solids, ns, highest, height)) return -1;
-    if (highest == 0 && !ground_walkable(l, t, w, d)) return -1;
+    if (lift - highest > stepMaxDrop) { step_refused("a drop", l, t, w, d, lift, height, solids, ns); return -1; }
+    if (!is_clear(solids, ns, highest, height)) { step_refused("not clear", l, t, w, d, highest, height, solids, ns); return -1; }
+    if (highest == 0 && u8View && liquid_under(l, t, w, d)) { if (!u8LiquidOk) { step_refused("deep water or lava", l, t, w, d, lift, height, solids, ns); return -1; } } /* Ultima 8: only the player walks in, as they choose */
+    else if (highest == 0 && !ground_walkable(l, t, w, d)) { step_refused("ground", l, t, w, d, lift, height, solids, ns); return -1; }
     return highest;
 }
 
@@ -551,9 +609,12 @@ int world_load(const char *folder)
     if (!sprites_load(folder)) { snprintf(error_text, sizeof error_text, "Couldn't read %s/sprites.sdbx (missing, damaged, or not this game's).", folder); return 0; }
     char path[1100];
     snprintf(path, sizeof path, "%s/game.sdbx", folder);
+    game_log("World: sprites read.");
     char *text = (char *)pack_read(path, NULL);
     if (!text) { snprintf(error_text, sizeof error_text, "Couldn't read %s (missing, damaged, or not this game's).", path); return 0; }
+    game_log("World: game.sdbx read.");
     cJSON *root = cJSON_Parse(text);
+    game_log("World: game.sdbx parsed.");
     free(text);
     if (!root) { snprintf(error_text, sizeof error_text, "game.sdbx is damaged."); return 0; }
     return world_build(root);
@@ -696,7 +757,10 @@ int world_build(cJSON *root)
     wraps = flag(map, "WrapsAround");
     cJSON *tileset = get(map, "Tileset"), *e;
     tileW = num(tileset, "TileWidth", 32); tileH = num(tileset, "TileHeight", 32);
+    u8View = !strcmp(str(get(project, "Manifest"), "Style"), "Ultima8"); sheetTileW = tileW; sheetTileH = tileH; /* (gameJson isn't set yet) */
+    if (u8View) tileW = tileH; /* Ultima 8: a tile on the sheet is a diamond W x H, on the map a square cell H x H */
     unitsX = tileW / UNIT > 0 ? tileW / UNIT : 1; unitsY = tileH / UNIT > 0 ? tileH / UNIT : 1;
+    u8OriginX = (double)mapH * tileH;
     snprintf(sheetNames[0], sizeof sheetNames[0], "%s", str(tileset, "TilesetSpriteName"));
     sheetCount = 1;
     cJSON_ArrayForEach(e, get(tileset, "ExtraSheetNames")) if (sheetCount < 8) snprintf(sheetNames[sheetCount++], sizeof sheetNames[0], "%s", e->valuestring);
@@ -707,14 +771,18 @@ int world_build(cJSON *root)
         int floor = first ? 1 : num(layer, "Floor", 1);
         first = 0;
         if (floor < 1 || floor > MAX_FLOORS || floors[floor]) continue;
+        if (floor > 1 && is_u6()) continue; /* Ultima 6 has no upper floors: buildings are one floor (U6GameWindow.Floors NoUpperFloors) */
         floors[floor] = (int *)malloc(sizeof(int) * (size_t)(mapW * mapH));
-        int i = 0;
-        cJSON_ArrayForEach(e, get(layer, "TileIndices")) if (i < mapW * mapH) floors[floor][i++] = e->valueint;
+        int i = 0, packedCount = 0;
+        const int *packed = cJSON_GetPackedInts(get(layer, "TileIndices"), &packedCount); /* kept as one block (cJSON_PackedInts) */
+        for (; i < packedCount && i < mapW * mapH; i++) floors[floor][i] = packed[i];
+        if (!packed) cJSON_ArrayForEach(e, get(layer, "TileIndices")) if (i < mapW * mapH) floors[floor][i++] = e->valueint;
         for (; i < mapW * mapH; i++) floors[floor][i] = -1;
     }
     /* The ground's walkable cells (Tile Properties). */
     walkable = (unsigned char *)malloc((size_t)(mapW * mapH));
     water = (unsigned char *)calloc((size_t)(mapW * mapH), 1);
+    free(liquid); liquid = (unsigned char *)calloc((size_t)(mapW * mapH), 1);
     underTile = (int *)malloc(sizeof(int) * (size_t)(mapW * mapH));
     cJSON *byKey = get(get(project, "TileProperties"), "ByTileKey");
     for (int i = 0; i < mapW * mapH; i++)
@@ -729,6 +797,7 @@ int world_build(cJSON *root)
         cJSON *props = get(byKey, key);
         if (props && !flag(props, "Walkable")) walkable[i] = 0;
         if (props && flag(props, "IsWater")) water[i] = 1;
+        if (props && num(props, "U8Liquid", 0) > 0) liquid[i] = (unsigned char)num(props, "U8Liquid", 0);
         if (props && num(props, "UnderTileIndex", -1) >= 0) underTile[i] = slot * 100000 + num(props, "UnderTileIndex", -1);
     }
 
@@ -737,13 +806,16 @@ int world_build(cJSON *root)
     int capacity = cJSON_GetArraySize(objects) + cJSON_GetArraySize(items) + 1;
     thingCap = capacity + 64;
     bodyCap = capacity + 64 + mapW * mapH * MAX_FLOORS + cJSON_GetArraySize(get(map, "Characters"));
+    game_log("World: floors and tile properties built.");
     things = (Thing *)calloc((size_t)thingCap, sizeof(Thing));
     bodies = (Body *)calloc((size_t)bodyCap, sizeof(Body));
+    { char line[160]; snprintf(line, sizeof line, "World: map %dx%d, %d things (%u bytes each), %d bodies (%u bytes each).", mapW, mapH, thingCap, (unsigned)sizeof(Thing), bodyCap, (unsigned)sizeof(Body)); game_log(line); }
     cJSON_ArrayForEach(o, objects)
     {
         if (num(o, "ContainerInstanceId", -1) >= 0) continue;
         const ObjectDef *d = def_of(num(o, "ObjectId", -1));
         if (!d) continue;
+        if (is_u6() && (d->type == T_ROOF || num(o, "Z", 0) >= base_lift(2))) continue; /* Ultima 6: no roofs, no upper floors (U6GameWindow.Objects) */
         Thing *t = &things[thingCount++];
         t->def = d;
         t->placed = o; /* its Map Editor entry (a save writes it back) */
@@ -837,7 +909,7 @@ int world_build(cJSON *root)
         if (flag(ch, "IsTestPlayer")) read_actor_poses(ch, poses, &player);
     int sx = num(map, "StartX", -1), sy = num(map, "StartY", -1), sf = num(map, "StartFloor", 1);
     if (sx < 0 || sy < 0) { sx = mapW / 2; sy = mapH / 2; }
-    player.px = sx * tileW + tileW / 2.0; player.py = sy * tileH + tileH / 2.0; player.facing = DIR_S;
+    player.px = sx * tileW + tileW / 2.0; player.py = sy * tileH + tileH / 2.0; player.facing = u8View ? DIR_SE : DIR_S; /* Ultima 8: the world's south-east - down the screen (its South slot) */
     int l, t;
     player_foot(player.px, player.py, &l, &t);
     player.lift = standing_lift(l, t, player.sizeX, player.sizeY, sf);
@@ -864,10 +936,14 @@ int world_build(cJSON *root)
         Actor *a = &npcs[npcCount++];
         read_actor_poses(who, poses, a);
         a->px = num(o, "X", 0) * tileW + tileW / 2.0; a->py = num(o, "Y", 0) * tileH + tileH / 2.0;
+        int exact = cJSON_IsNumber(get(o, "PixelXRuntime")) && cJSON_IsNumber(get(o, "PixelYRuntime")); /* a save: exactly where it stood */
+        if (exact) { a->px = get(o, "PixelXRuntime")->valuedouble; a->py = get(o, "PixelYRuntime")->valuedouble; }
         a->facing = num(o, "Facing", DIR_S) & 7;
+        if (u8View) a->facing = (a->facing + 7) & 7; /* Ultima 8: picked as seen on the screen (WorldOfSlot) */
         double feetY = a->py + tileH / 2.0;
         int al = (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), at = (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5);
         a->lift = standing_lift(al, at, a->sizeX, a->sizeY, num(o, "Floor", 1));
+        if (exact && cJSON_IsNumber(get(o, "LiftRuntime"))) a->lift = num(o, "LiftRuntime", a->lift); /* and as high */
         a->body = bodyCount;
         Body *b = &bodies[bodyCount++]; /* solid, like Exult's actors */
         b->left = al; b->top = at; b->width = a->sizeX; b->depth = a->sizeY; b->z = a->lift; b->height = a->sizeZ;
@@ -887,6 +963,8 @@ int world_build(cJSON *root)
         memset(b, 0, sizeof *b); b->z = -100000;
     }
     gameJson = root; /* kept: the events run from it */
+    world_u8_new_map(); /* Ultima 8: what is in water and lava now is noted afresh */
+    world_hurled_reset(); /* nothing in the air */
     settle_all(); /* every authored thing comes to rest: stacks form in placement order */
     spawn_bed_covers();
     cameraX = cameraY = 0; camera_update(); /* from the map's corner, as the Windows engine's camera starts */
@@ -910,14 +988,439 @@ int world_walking(int actor);
 
 static int ask_aside(int walker, int l, int t, int dx, int dy);
 
+/* ---------------- Ultima 8: the Avatar's movement (U8GameWindow.U8Movement, Pentagram's U8AvatarMoverProcess) ----------------
+   Directions are the world's (north up-right on the screen); u8.c turns what the player presses (the screen's) into them. Walking
+   off a ledge falls (drawn falling, hurt on landing); a jump goes through the air; a step (the pointer near) is one whole step
+   animation; standing still a while the Avatar looks about. */
+
+#define U8_RUN 2.0
+#define U8_STEP 0.5
+#define U8_UNITS_PER_LIFT 8
+static double u8Speed = 1.0;        /* this frame's speed (u8.c): 2 a run, 1 a walk, 0.5 a step */
+static int u8Running, u8WasMoving;
+static double u8VisLift = -1, u8FallVel; /* the Avatar drawn at this lift (falling, jumping); -1: at its own */
+static int u8FallFrom = -1;
+typedef struct U8Jump { int on; double fromX, fromY, toX, toY, t, duration, arc; int fromLift, toLift, dodge, quiet; } U8Jump; /* dodge: a roll (no blow or shot lands); quiet: a roll or a side-step */
+static U8Jump u8Jump;
+typedef struct U8Step { int on, dx, dy, turnOnly; const Sprite *sprite; double elapsed, duration, distance; } U8Step;
+static U8Step u8Step;
+static double u8IdleTicks; static int u8Looking; static const char *u8LastLook = "Look Left";
+static int u8Rand(int n) { return n > 0 ? rand() % n : 0; }
+static uint32_t lastMs; /* (the last frame drawn; set below) */
+static int ask_aside(int walker, int l, int t, int dx, int dy);
+static void wrap_actor(Actor *a, int isPlayer);
+int world_seated(int actor);
+int world_walking(int actor);
+
+void world_u8_set_speed(double factor) { u8Speed = factor; }
+int world_u8_running(void) { return u8Running; }
+int world_u8_jumping(void) { return u8Jump.on; }
+int world_u8_stepping(void) { return u8Step.on; }
+int world_u8_was_moving(void) { return u8WasMoving; }
+
+/* The lift the Avatar is drawn at. */
+static double player_drawn_lift(void) { return u8View && u8VisLift >= 0 ? u8VisLift : player.lift; }
+
+/* The Avatar's feet on the screen (where they're drawn). */
+void world_u8_player_screen(double *x, double *y)
+{
+    double l = player_drawn_lift(), mx = player.px - l * LIFT_SHIFT, my = player.py - l * LIFT_SHIFT;
+    *x = u8_sx(mx, my) - cameraX; *y = u8_sy(mx, my) - cameraY;
+}
+
+static int facing_of(int dx, int dy)
+{
+    return dx == 0 && dy < 0 ? DIR_N : dx > 0 && dy < 0 ? DIR_NE : dx > 0 && dy == 0 ? DIR_E : dx > 0 && dy > 0 ? DIR_SE
+         : dx == 0 && dy > 0 ? DIR_S : dx < 0 && dy > 0 ? DIR_SW : dx < 0 && dy == 0 ? DIR_W : DIR_NW;
+}
+static void vector_of(int facing, int *dx, int *dy)
+{
+    static const int X[8] = { 0, 1, 1, 1, 0, -1, -1, -1 }, Y[8] = { -1, -1, 0, 1, 1, 1, 0, -1 };
+    *dx = X[facing & 7]; *dy = Y[facing & 7];
+}
+void world_u8_facing_vector(int *dx, int *dy) { vector_of(player.facing, dx, dy); }
+
+/* A pose the Avatar has art for, facing the way it faces (WithArt); -1: none. */
+static int pose_index(const Actor *a, const char *name)
+{
+    for (int i = 0; i < a->poseCount; i++)
+        if (!strcmp(a->poses[i].name, name)) { const Sprite *s = a->poses[i].dirs[slot_of(a->facing)]; return s && s->frameCount ? i : -1; }
+    return -1;
+}
+/* ApplyPoseSprite: the pose (-1: walking or idle), from its first frame when it changes. */
+static void show_pose(Actor *a, int index, int walking)
+{
+    if (a->shownPose != index) { a->shownPose = index; a->poseSince = lastMs; }
+    a->walkingNow = walking;
+}
+static int with_art(const Actor *a, const char *name) { return name ? pose_index(a, name) : -1; }
+
+/* U8RestPose: standing still - in combat the combat stance, else Idle. */
+static void u8_rest_pose(void) { show_pose(&player, combat_mode() ? with_art(&player, "Combat Stand") : -1, 0); }
+
+/* U8MovePose: walking, running, a step; in combat advancing or backing away. */
+static void u8_move_pose(int retreating)
+{
+    int p = -1;
+    if (u8Step.on) p = with_art(&player, "Step");
+    else if (combat_mode() && u8Speed < U8_RUN) p = with_art(&player, retreating ? "Retreat" : "Advance");
+    else if (u8Speed >= U8_RUN) p = with_art(&player, "Run");
+    else if (u8Speed <= U8_STEP) p = with_art(&player, "Step");
+    show_pose(&player, p, p < 0);
+}
+
+/* LandU8: from a height - 80 or more of Ultima 8's units hurts, (height - 72) / 4; 104 or more kills; the Land pose. */
+static void u8_land(int fromLift)
+{
+    int height = (fromLift - player.lift) * U8_UNITS_PER_LIFT, id = player.characterId;
+    if (height >= 80)
+    {
+        int damage = height < 104 ? (height - 72) / 4 : 100000;
+        if (damage < 1) damage = 1;
+        damage = vitals_after_response(id, damage, 12); /* its own rule for falling (Character Editor > Health) */
+        vitals_hit_type(12);
+        vitals_damage(id, damage, "a fall");
+        vitals_hit_type(0);
+        if (u8_knocked_down_by_fall(damage)) return; /* down, stunned (u8.c: U8Reactions) */
+    }
+    if (!vitals_dead(id) && !vitals_unconscious(id)) show_pose(&player, with_art(&player, "Land"), 0);
+}
+
+/* UpdatePlayerFallAnimation + UpdateFallU8: drawn falling down to where it stands; landed, the fall hurts. */
+static void u8_fall_update(double seconds)
+{
+    if (u8_holding_ledge() || u8Jump.on) return; /* hanging: the fall waits */
+    if (u8VisLift >= 0 && u8VisLift > player.lift)
+    {
+        u8FallVel = fmin(18.0, u8FallVel + 24.0 * seconds);
+        u8VisLift = fmax(player.lift, u8VisLift - u8FallVel * seconds);
+    }
+    if (u8VisLift <= player.lift) { u8VisLift = -1; u8FallVel = 0; }
+    if (u8FallFrom >= 0 && u8VisLift < 0)
+    {
+        int from = u8FallFrom;
+        u8FallFrom = -1;
+        u8_note_drop_landed();
+        u8_land(from);
+    }
+}
+
+/* StepPlayerContinuous for Ultima 8: eight ways, a diagonal as fast as a straight line, off a ledge is a fall. 1: it moved. */
+static int u8_walk(int dx, int dy, double seconds)
+{
+    int newFacing = facing_of(dx, dy);
+    int retreating = combat_mode() && u8Speed < U8_RUN && newFacing == ((player.facing + 4) & 7); /* backs away facing the foe */
+    if (newFacing != player.facing && !retreating) { player.facing = newFacing; u8_rest_pose(); }
+    u8_move_pose(retreating);
+    double distance = TILES_PER_SECOND * u8Speed * tileW * seconds * (dx && dy ? sqrt(0.5) : 1.0);
+    int pieces = (int)ceil(distance / (UNIT / 2.0)), moved = 0;
+    if (pieces < 1) pieces = 1;
+    double piece = distance / pieces;
+    for (int k = 0; k < pieces; k++)
+    {
+        double nx = player.px + dx * piece, ny = player.py + dy * piece;
+        int l0, t0, l1, t1;
+        player_foot(player.px, player.py, &l0, &t0);
+        player_foot(nx, ny, &l1, &t1);
+        if (l1 == l0 && t1 == t0) { player.px = nx; player.py = ny; moved = 1; continue; }
+        if (!u8_liquid_step_ok(l1, t1, player.sizeX, player.sizeY)) break; /* deep water or lava (u8.c: U8Liquids) */
+        stepMaxDrop = player.levitateMs > 0 ? 1 : 1 << 20;
+        u8LiquidOk = 1;
+        int lift = player.levitateMs > 0 ? fly_room(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ) : try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
+        stepMaxDrop = 1;
+        u8LiquidOk = 0;
+        if (lift < 0) { ask_aside(0, l1, t1, dx, dy); break; }
+        int from = player.lift;
+        player.px = nx; player.py = ny; player.lift = lift; moved = 1;
+        wrap_actor(&player, 1);
+        if (from - lift > 1) /* off a ledge: drawn falling, hurt on landing */
+        {
+            if (u8FallFrom < from) u8FallFrom = from;
+            if (u8VisLift < from) u8VisLift = from;
+        }
+    }
+    return moved;
+}
+
+/* StartU8Step: one whole step animation, a short step (a quarter tile); a step another way turns first. */
+static void u8_start_step(int dx, int dy)
+{
+    int facing = facing_of(dx, dy);
+    memset(&u8Step, 0, sizeof u8Step);
+    if (facing != player.facing)
+    {
+        player.facing = facing;
+        u8_rest_pose();
+        u8Step.on = 1; u8Step.dx = dx; u8Step.dy = dy; u8Step.turnOnly = 1; u8Step.duration = 180;
+        return;
+    }
+    if (u8_balancing_at_edge(dx, dy)) return; /* the step ends off the land (u8.c: U8Reactions) */
+    int p = with_art(&player, "Step");
+    const Sprite *s = p >= 0 ? player.poses[p].dirs[slot_of(player.facing)] : player.walking[slot_of(player.facing)];
+    double duration = s && s->frameCount ? s->totalMs : 600;
+    u8Step.on = 1; u8Step.dx = dx; u8Step.dy = dy; u8Step.sprite = s;
+    u8Step.duration = duration > 150 ? duration : 150;
+    u8Step.distance = 32.0 * tileW / 128.0;
+    player.shownPose = -2; /* from its first frame */
+    u8_move_pose(0);
+}
+
+/* A frame of a step that doesn't move (Sprite Editor's Holds Still; none marked: the first). */
+static int step_still(const Sprite *s, int frames, int anyTicked, int i) { return frames > 1 && (anyTicked ? s->frames[i].holdsStill : i == 0); }
+
+/* ContinueU8Step: on (its distance over the frames that move), or done - then the pointer is read again. */
+static void u8_continue_step(double seconds)
+{
+    U8Step *st = &u8Step;
+    st->elapsed += seconds * 1000;
+    if (!st->turnOnly)
+    {
+        const Sprite *s = st->sprite;
+        int frames = s ? s->frameCount : 0, anyTicked = 0, moving = 0;
+        for (int i = 0; i < frames; i++) if (s->frames[i].holdsStill) anyTicked = 1;
+        for (int i = 0; i < frames; i++) if (!step_still(s, frames, anyTicked, i)) moving++;
+        if (frames == 0) moving = 1;
+        int shown = frames ? sprite_frame_at(s, lastMs - player.poseSince) : 0;
+        if (shown < 0 || shown >= frames) shown = 0;
+        if (moving > 0 && !(frames > 0 && step_still(s, frames, anyTicked, shown)))
+        {
+            double movingMs = frames == 0 ? st->duration : st->duration * moving / frames;
+            double pace = st->distance / (movingMs / 1000.0) / (TILES_PER_SECOND * tileW);
+            u8Speed = pace < U8_STEP ? pace : U8_STEP;
+            u8_walk(st->dx, st->dy, seconds);
+        }
+    }
+    if (st->elapsed >= st->duration) st->on = 0;
+}
+
+/* TryStartU8Jump: toward (dx, dy) (world; 0, 0: the way it faces), or up - onto a ledge in front 2 to 9 lifts higher, else a hop on the spot. */
+void world_u8_jump(int dx, int dy, int up)
+{
+    if (!u8View || u8Jump.on || world_seated(0) || vitals_dead(player.characterId) || vitals_unconscious(player.characterId) || u8_stunned()) return;
+    if (u8_hanging()) { u8_climb_from_hang(); return; }
+    if (player.levitateMs > 0) /* walking in the air: its own jump on the spot */
+    {
+        int p = with_art(&player, "Airwalk Jump");
+        if (p >= 0) show_pose(&player, p, 0);
+        return;
+    }
+    if (dx == 0 && dy == 0) vector_of(player.facing, &dx, &dy);
+    player.facing = facing_of(dx, dy);
+    double len = sqrt((double)(dx * dx + dy * dy));
+    int l, t, p;
+    memset(&u8Jump, 0, sizeof u8Jump);
+    u8Jump.fromX = player.px; u8Jump.fromY = player.py; u8Jump.fromLift = player.lift;
+    if (up)
+    {
+        double x = player.px + dx / len * tileW, y = player.py + dy / len * tileH;
+        player_foot(x, y, &l, &t);
+        int top = standing_lift(l, t, player.sizeX, player.sizeY, floor_of(player.lift)), rise = top - player.lift;
+        if (rise >= 2 && rise <= 9 && fly_room(l, t, player.sizeX, player.sizeY, top, player.sizeZ) >= 0)
+        {
+            u8_build_up_from_climb(rise); /* climbing gives Strength and Dexterity (u8.c) */
+            u8Jump.on = 1; u8Jump.toX = x; u8Jump.toY = y; u8Jump.duration = 0.5 + rise * 0.05; u8Jump.toLift = top; u8Jump.arc = 1;
+            p = with_art(&player, "Climb"); if (p < 0) p = with_art(&player, "Climb Up"); if (p < 0) p = with_art(&player, "Jump Up");
+            show_pose(&player, p, p < 0);
+            return;
+        }
+        u8Jump.on = 1; u8Jump.toX = player.px; u8Jump.toY = player.py; u8Jump.duration = 0.45; u8Jump.toLift = player.lift; u8Jump.arc = 2;
+        p = with_art(&player, "Jump Up"); if (p < 0) p = with_art(&player, "Jump");
+        show_pose(&player, p, 0);
+        return;
+    }
+    int running = u8Running;
+    double cells = running ? 3 : 2, arc = running ? 3 : 2;
+    double toX = player.px + dx / len * cells * tileW, toY = player.py + dy / len * cells * tileH, lastX = player.px, lastY = player.py;
+    for (int i = 1; i <= 12; i++) /* through the air: as far as there's room at the jump's height */
+    {
+        double s = i / 12.0, x = player.px + (toX - player.px) * s, y = player.py + (toY - player.py) * s;
+        if (x < 0 || y < 0 || x >= mapW * tileW || y >= mapH * tileH) break;
+        int liftHere = player.lift + (int)floor(arc * 4 * s * (1 - s) + 0.5);
+        player_foot(x, y, &l, &t);
+        if (fly_room(l, t, player.sizeX, player.sizeY, liftHere, player.sizeZ) < 0) break;
+        lastX = x; lastY = y;
+    }
+    player_foot(lastX, lastY, &l, &t);
+    int landLift = standing_lift(l, t, player.sizeX, player.sizeY, floor_of(player.lift));
+    if (landLift > player.lift + 2) landLift = player.lift; /* can't land up there */
+    u8Jump.on = 1; u8Jump.toX = lastX; u8Jump.toY = lastY; u8Jump.duration = running ? 0.75 : 0.6; u8Jump.toLift = landLift; u8Jump.arc = arc;
+    p = with_art(&player, running ? "Running Jump" : "Jump"); if (p < 0) p = with_art(&player, "Jump");
+    show_pose(&player, p, p < 0);
+}
+
+/* UpdateU8Jump: in the air this frame; 1 while it lasts (nothing else moves the Avatar). */
+static int u8_jump_update(double seconds)
+{
+    u8_tick_stun(seconds);
+    if (!u8Jump.on) return 0;
+    U8Jump *j = &u8Jump;
+    j->t = fmin(j->duration, j->t + seconds);
+    double s = j->t / j->duration;
+    player.px = j->fromX + (j->toX - j->fromX) * s; player.py = j->fromY + (j->toY - j->fromY) * s;
+    u8VisLift = floor(j->fromLift + (j->toLift - j->fromLift) * s + j->arc * 4 * s * (1 - s) + 0.5); /* drawn up in the air; it stands at its old lift till it lands */
+    if (j->t < j->duration) return 1;
+    j->on = 0;
+    int fellFrom = j->fromLift;
+    player.lift = j->toLift;
+    u8VisLift = -1;
+    if (!j->quiet) u8_note_leap(j->fromX, j->fromY, j->fromLift, j->toX, j->toY, j->toLift); /* the party climbs after (U8Party) */
+    if (fellFrom > player.lift + (j->quiet ? 1 : 0)) u8_land(fellFrom);
+    else if (j->quiet) u8_rest_pose();
+    else show_pose(&player, with_art(&player, "Land"), 0);
+    return 1;
+}
+
+/* UpdateU8Idle: standing still a while, the Avatar looks left or right now and then (only with art: Look Left / Look Right). */
+static void u8_idle_update(double seconds, int idle)
+{
+    if (!idle || combat_mode() || world_seated(0) || vitals_dead(player.characterId) || vitals_unconscious(player.characterId) || u8Jump.on)
+    {
+        u8IdleTicks = 0;
+        if (u8Looking) { u8Looking = 0; if (idle) show_pose(&player, -1, 0); }
+        return;
+    }
+    double before = u8IdleTicks;
+    u8IdleTicks += seconds * 30;
+    for (int tick = (int)before + 1; tick <= (int)u8IdleTicks; tick++)
+    {
+        if (u8Looking)
+        {
+            if (u8Rand(1500) + 30 >= tick) continue;
+            u8Looking = 0;
+            show_pose(&player, -1, 0);
+        }
+        else
+        {
+            if (u8Rand(3000) + 150 >= tick) continue;
+            const char *look = u8Rand(4) == 0 ? u8LastLook : !strcmp(u8LastLook, "Look Left") ? "Look Right" : "Look Left";
+            int p = pose_index(&player, look);
+            if (p < 0) { u8IdleTicks = 1; return; } /* no art for it: just standing */
+            u8LastLook = look;
+            u8Looking = 1;
+            show_pose(&player, p, 0);
+        }
+        u8IdleTicks = 1;
+        return;
+    }
+}
+
+
+/* ---------------- Ultima 8: the Avatar's reactions that move it (U8GameWindow.U8Reactions) ----------------
+   Knocked down by a fall; hanging from a ledge (AvatarGravityProcess); keeping balance at an edge (U8AvatarMoverProcess::step). */
+
+static double u8StunMs;
+static int u8Hang, u8HangTop, u8Balanced; static double u8HangToX, u8HangToY;
+
+static int pose_ms(const Actor *a, int index) { const Sprite *s = index >= 0 ? a->poses[index].dirs[slot_of(a->facing)] : NULL; return s && s->totalMs > 0 ? s->totalMs : 500; }
+
+int u8_stunned(void) { return u8StunMs > 0; }
+
+void u8_tick_stun(double seconds)
+{
+    if (u8StunMs <= 0) return;
+    u8StunMs -= seconds * 1000;
+    if (u8StunMs > 0 || vitals_dead(player.characterId) || vitals_unconscious(player.characterId)) return;
+    u8_rest_pose();
+}
+
+/* KnockedDownByFall: a fall doing 6 or more - down, stunned while Fall Backwards plays. 1: knocked down. */
+int u8_knocked_down_by_fall(int damage)
+{
+    int p = pose_index(&player, "Fall Backwards");
+    if (damage < 6 || vitals_dead(player.characterId) || vitals_unconscious(player.characterId) || p < 0) return 0;
+    player.shownPose = -2; show_pose(&player, p, 0); /* from its first frame */
+    u8StunMs = pose_ms(&player, p) > 300 ? pose_ms(&player, p) : 300;
+    u8_drop_arrows(); /* the keys held must be pressed again */
+    return 1;
+}
+
+/* HoldingALedge: falling with a way held and a ledge in front within the climb's reach (5 lifts) - the fall stops; they hang. */
+int u8_holding_ledge(void)
+{
+    int holding = u8FallFrom >= 0 && !vitals_dead(player.characterId) && !vitals_unconscious(player.characterId) && u8_direction_held();
+    if (!holding) { u8Hang = 0; return 0; }
+    if (u8Hang) return 1;
+    int dx, dy, l, t;
+    vector_of(player.facing, &dx, &dy);
+    double len = sqrt((double)(dx * dx + dy * dy)), x = player.px + dx / len * tileW, y = player.py + dy / len * tileH;
+    int p = pose_index(&player, "Hang");
+    if (x < 0 || y < 0 || x >= mapW * tileW || y >= mapH * tileH || p < 0) return 0;
+    player_foot(x, y, &l, &t);
+    int top = standing_lift(l, t, player.sizeX, player.sizeY, floor_of(player.lift));
+    double rise = top - player_drawn_lift();
+    if (top <= player.lift || rise <= 0 || rise > 5 || fly_room(l, t, player.sizeX, player.sizeY, top, player.sizeZ) < 0) return 0;
+    u8Hang = 1; u8HangToX = x; u8HangToY = y; u8HangTop = top;
+    show_pose(&player, p, 0);
+    u8FallVel = 0;
+    return 1;
+}
+
+int u8_hanging(void) { return u8Hang; }
+
+/* ClimbFromHang: the jump key while hanging - up onto the ledge. */
+void u8_climb_from_hang(void)
+{
+    int from = (int)floor(player_drawn_lift() + 0.5);
+    u8Hang = 0; u8FallFrom = -1;
+    u8_build_up_from_climb(u8HangTop - from);
+    memset(&u8Jump, 0, sizeof u8Jump);
+    u8Jump.on = 1; u8Jump.fromX = player.px; u8Jump.fromY = player.py; u8Jump.toX = u8HangToX; u8Jump.toY = u8HangToY;
+    u8Jump.duration = 0.5; u8Jump.fromLift = from; u8Jump.toLift = u8HangTop; u8Jump.arc = 1;
+    int p = pose_index(&player, "Climb Up"); if (p < 0) p = pose_index(&player, "Climb");
+    show_pose(&player, p, 0);
+}
+
+/* BalancingAtEdge: the step ends off the land - Keep Balance instead, once; the step after that goes over. 1: balancing. */
+int u8_balancing_at_edge(int dx, int dy)
+{
+    if (u8Balanced) { u8Balanced = 0; return 0; }
+    double len = sqrt((double)(dx * dx + dy * dy)), reach = 32.0 * tileW / 128.0, x = player.px + dx / len * reach, y = player.py + dy / len * reach;
+    if (x < 0 || y < 0 || x >= mapW * tileW || y >= mapH * tileH) return 0;
+    int l, t, p = pose_index(&player, "Keep Balance");
+    player_foot(x, y, &l, &t);
+    if (player.lift - standing_lift(l, t, player.sizeX, player.sizeY, floor_of(player.lift)) <= 1 || p < 0) return 0;
+    u8Balanced = 1;
+    player.shownPose = -2; show_pose(&player, p, 0);
+    memset(&u8Step, 0, sizeof u8Step);
+    u8Step.on = 1; u8Step.dx = dx; u8Step.dy = dy; u8Step.turnOnly = 1;
+    u8Step.duration = pose_ms(&player, p) > 150 ? pose_ms(&player, p) : 150;
+    return 1;
+}
+
+/* A pose's length for this character as it faces now (Stumble Backwards...). */
+int world_pose_ms(int actor, const char *pose) { const Actor *a = actor_of(actor); return a ? pose_ms(a, pose_index(a, pose)) : 500; }
+/* The Avatar's frame (U8GameWindow's game loop order): the fall, a jump, kneeling, a step under way, walking; stopped, the rest pose. */
+static void u8_party_update(double seconds);
+static void u8_player_update(int dx, int dy, double seconds)
+{
+    u8_fall_update(seconds);
+    u8_party_update(seconds); /* the party climbing after (U8Party) */
+    int moving = 0, down = vitals_dead(player.characterId) || vitals_unconscious(player.characterId);
+    if (u8_jump_update(seconds)) moving = 0;
+    else if (u8_kneeling() && !down) { if (dx || dy) u8_kneel(0); }
+    else if (u8Step.on && !down) { u8_continue_step(seconds); moving = 1; }
+    else if (!down && (dx || dy) && !world_walking(0))
+    {
+        if (u8Speed <= U8_STEP) u8_start_step(dx, dy);
+        else u8_walk(dx, dy, seconds);
+        moving = 1;
+    }
+    if (!moving && u8WasMoving && !u8Jump.on) u8_rest_pose(); /* genuinely stopped now */
+    else if (!moving && !u8Jump.on) player.walkingNow = 0;
+    u8WasMoving = moving;
+    u8Running = moving && u8Speed >= U8_RUN;
+    u8_idle_update(seconds, !moving && !world_walking(0) && !dialog_showing() && !u8_kneeling());
+}
+
 void world_update(int dx, int dy, double seconds)
 {
     if (seconds > 0) keysHeld = dx || dy;
     if (dx || dy) { if (world_seated(0)) world_stand_up(0); world_cancel_player_sit(); } /* moving gets up again */
     player_sit_update(seconds);
-    if (seconds > 0) doors_update(seconds * 1000);
+    if (seconds > 0 && !u8View) doors_update(seconds * 1000); /* (Ultima 8: no moving or self-opening doors - its engine is the Ultima 7 one from before them) */
     if (dx || dy) world_walk_cancel(0); /* a direction key takes over from a walk an event began */
-    if (world_walking(0)) { /* walked by the event (world_walks_update) */ }
+    if (u8View && !world_walking(0)) u8_player_update(dx, dy, seconds); /* Ultima 8: its own movement */
+    else if (world_walking(0)) { /* walked by the event (world_walks_update) */ }
     else if (dx == 0 && dy == 0) { player.walkingNow = 0; }
     else
     {
@@ -925,17 +1428,23 @@ void world_update(int dx, int dy, double seconds)
         player.walkingNow = 1;
         player.shownPose = -1; /* walking on: the pose an event gave is over */
         double distance = TILES_PER_SECOND * tileW * seconds;
-        double nx = player.px + dx * distance, ny = player.py + dy * distance;
-        int l0, t0, l1, t1;
-        player_foot(player.px, player.py, &l0, &t0);
-        player_foot(nx, ny, &l1, &t1);
-        if (l1 == l0 && t1 == t0) { player.px = nx; player.py = ny; }
-        else
+        /* As the Windows engine at its 60 frames a second: never more than half a unit at a time, each piece's footprint tried in
+           turn. A slow frame (the PS2's 20-odd, a hitch) moved the whole way at once could cross two units - a stair's two lifts,
+           refused as a drop or a climb too high, over and over: stuck halfway up or down the stairs. */
+        int pieces = (int)ceil(distance / (UNIT / 2.0));
+        if (pieces < 1) pieces = 1;
+        double piece = distance / pieces;
+        for (int k = 0; k < pieces; k++)
         {
+            double nx = player.px + dx * piece, ny = player.py + dy * piece;
+            int l0, t0, l1, t1;
+            player_foot(player.px, player.py, &l0, &t0);
+            player_foot(nx, ny, &l1, &t1);
+            if (l1 == l0 && t1 == t0) { player.px = nx; player.py = ny; continue; }
             int lift = player.levitateMs > 0 ? fly_room(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ) /* floating: room at this height */
                                              : try_step(l1, t1, player.sizeX, player.sizeY, player.lift, player.sizeZ);
             if (lift >= 0) { player.px = nx; player.py = ny; player.lift = lift; wrap_actor(&player, 1); }
-            else ask_aside(0, l1, t1, dx, dy); /* Actor::is_really_blocked: a character in the way is asked to move aside */
+            else { if (step_debug()) fprintf(stderr, "PLAYER step refused: foot %d,%d -> %d,%d lift %d\n", l0, t0, l1, t1, player.lift); ask_aside(0, l1, t1, dx, dy); break; } /* Actor::is_really_blocked: a character in the way is asked to move aside */
         }
     }
     world_walks_update(seconds);
@@ -944,11 +1453,45 @@ void world_update(int dx, int dy, double seconds)
 
 /* The camera (GameTestWindow.UpdateCamera): a dead zone round the middle, following where the player (or whoever it follows) is
    drawn (up and left by its lift); kept inside the map. It is never centred: a new game's starts at the map's corner. */
+/* Ultima 6 (u6.c): the world is seen through the HUD's Game View - (viewX, viewY) on the screen, viewW x viewH - with the avatar
+   always in its middle (U6GameWindow: no dead zone) and the view kept inside the map. The world is drawn where the view is, so
+   the screen's pixels are the world's everywhere (clicks need no changing); the HUD's frame covers the rest. */
+static int u6View, viewX, viewY, viewW = BASE_W, viewH = BASE_H;
+static int viewClip; /* while the world is drawn for Ultima 6: blits only inside the Game View (blit_box) */
+void world_set_view(int x, int y, int w, int h) { u6View = 1; viewX = x; viewY = y; viewW = w; viewH = h; }
+/* The window open: the view the whole screen (Fill the screen may have widened it) - Ultima 6's Game View stays as its HUD has it. */
+void world_screen_opened(void) { if (!u6View) { viewW = SCREEN_W; viewH = SCREEN_H; } }
+
 static void camera_update(void)
 {
     const Actor *followed = cameraFollow > 0 ? actor_of(cameraFollow) : NULL;
     if (!followed) followed = &player;
-    double fx = followed->px - followed->lift * LIFT_SHIFT, fy = followed->py - followed->lift * LIFT_SHIFT;
+    double flift = followed == &player ? player_drawn_lift() : followed->lift; /* where they're drawn (a fall, a jump) */
+    double fx = followed->px - flift * LIFT_SHIFT, fy = followed->py - flift * LIFT_SHIFT;
+    if (u6View)
+    {
+        double vx = cameraHeld ? holdX - viewW / 2.0 : fx - viewW / 2.0, vy = cameraHeld ? holdY - viewH / 2.0 : fy - viewH / 2.0;
+        double worldW = mapW * tileW, worldH = mapH * tileH;
+        if (!(wraps && worldW > viewW)) vx = worldW <= viewW ? (worldW - viewW) / 2 : fmin(fmax(vx, 0), worldW - viewW);
+        if (!(wraps && worldH > viewH)) vy = worldH <= viewH ? (worldH - viewH) / 2 : fmin(fmax(vy, 0), worldH - viewH);
+        cameraX = vx - viewX; cameraY = vy - viewY;
+        return;
+    }
+    if (u8View)
+    {
+        /* Ultima 8 (U8GameWindow.UpdateCamera): the camera is on the screen - where they're drawn, the dead zone, kept inside
+           the screen the whole map covers (W + H wide, half that tall) */
+        double sx = u8_sx(fx, fy) - cameraX, sy = u8_sy(fx, fy) - cameraY;
+        if (sx < SCREEN_W / 2.0 - DEAD_HALF_W) cameraX -= SCREEN_W / 2.0 - DEAD_HALF_W - sx;
+        else if (sx > SCREEN_W / 2.0 + DEAD_HALF_W) cameraX += sx - (SCREEN_W / 2.0 + DEAD_HALF_W);
+        if (sy < SCREEN_H / 2.0 - DEAD_HALF_H) cameraY -= SCREEN_H / 2.0 - DEAD_HALF_H - sy;
+        else if (sy > SCREEN_H / 2.0 + DEAD_HALF_H) cameraY += sy - (SCREEN_H / 2.0 + DEAD_HALF_H);
+        if (cameraHeld) { cameraX = holdX - SCREEN_W / 2.0; cameraY = holdY - SCREEN_H / 2.0; }
+        double vw = (double)mapW * tileW + (double)mapH * tileH, vh = vw / 2;
+        cameraX = vw <= SCREEN_W ? (vw - SCREEN_W) / 2 : fmin(fmax(cameraX, 0), vw - SCREEN_W);
+        cameraY = vh <= SCREEN_H ? (vh - SCREEN_H) / 2 : fmin(fmax(cameraY, 0), vh - SCREEN_H);
+        return;
+    }
     double rx = fx - cameraX, ry = fy - cameraY;
     if (rx < SCREEN_W / 2.0 - DEAD_HALF_W) cameraX -= SCREEN_W / 2.0 - DEAD_HALF_W - rx;
     else if (rx > SCREEN_W / 2.0 + DEAD_HALF_W) cameraX += rx - (SCREEN_W / 2.0 + DEAD_HALF_W);
@@ -965,11 +1508,7 @@ static void camera_update(void)
 static uint32_t *screen;
 
 typedef struct Puddle { int ux, uy, lift, frame, mirrored, hurts, madeBy; const Sprite *blood; } Puddle; /* hurts, madeBy: a trail's HP on stepping in, and the kind it spares */
-#ifdef FRAME_HIRES
-#define PUDDLE_MAX 512
-#else
-#define PUDDLE_MAX 128 /* Amiga 68k: speed first */
-#endif
+#define PUDDLE_MAX 512 /* every machine the same (b579: the Amiga 68k had 128); Windows keeps them all - 512 is more than a fight leaves */
 static Puddle puddles[PUDDLE_MAX]; static int puddleCount, puddleOldest;
 typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
 static Bleeding bleeding[32]; static int bleedingCount;
@@ -1005,6 +1544,37 @@ static const uint32_t *shaded_pixels(const Picture *p)
 }
 uint32_t world_shade_colour(uint32_t c) { return shadeOn ? shade_px(c) : c; }
 
+/* A picture's rows as runs of pixels that show (made once): drawing skips what's see-through instead of testing each pixel. */
+static int picture_runs(const Picture *p)
+{
+    Picture *q = (Picture *)p;
+    if (q->runAt) return 1;
+    if (p->fleeting || p->width > 65535) return 0;
+    int *at = (int *)malloc(sizeof(int) * (size_t)(p->height + 1));
+    if (!at) return 0;
+    size_t cap = 64, n = 0;
+    uint16_t *runs = (uint16_t *)malloc(cap * 2 * sizeof(uint16_t));
+    if (!runs) { free(at); return 0; }
+    int partial = 0;
+    for (int j = 0; j < p->height; j++)
+    {
+        at[j] = (int)n;
+        const uint32_t *row = p->pixels + (size_t)j * (size_t)p->width;
+        for (int i = 0; i < p->width; )
+        {
+            while (i < p->width && (row[i] >> 24) == 0) i++;
+            if (i >= p->width) break;
+            int start = i;
+            while (i < p->width && (row[i] >> 24) != 0) { if ((row[i] >> 24) != 255) partial = 1; i++; }
+            if (n == cap) { uint16_t *more = (uint16_t *)realloc(runs, cap * 4 * sizeof(uint16_t)); if (!more) { free(runs); free(at); return 0; } runs = more; cap *= 2; }
+            runs[n * 2] = (uint16_t)start; runs[n * 2 + 1] = (uint16_t)i; n++;
+        }
+    }
+    at[p->height] = (int)n;
+    q->runs = runs; q->runAt = at; q->partial = partial;
+    return 1;
+}
+
 /* A picture fitted (keeping its shape, centred, nearest pixel) into a box at (x, y). */
 static void blit_box(const Picture *p, int x, int y, int bw, int bh)
 {
@@ -1014,9 +1584,12 @@ static void blit_box(const Picture *p, int x, int y, int bw, int bh)
     double s = fmin((double)bw / p->width, (double)bh / p->height);
     int dw = (int)(p->width * s + 0.5), dh = (int)(p->height * s + 0.5);
     int ox = x + (bw - dw) / 2, oy = y + (bh - dh) / 2;
-    /* clipped to the screen once: the columns and rows of it that show */
-    int i0 = ox < 0 ? -ox : 0, i1 = ox + dw > FRAME_W ? FRAME_W - ox : dw;
-    int j0 = oy < 0 ? -oy : 0, j1 = oy + dh > FRAME_H ? FRAME_H - oy : dh;
+    /* clipped to the screen once: the columns and rows of it that show - while the world is drawn for Ultima 6, only the Game View's
+       (what's outside it the HUD covers: never drawn at all) */
+    int L = 0, T = 0, R = FRAME_W, B = FRAME_H;
+    if (viewClip) { L = viewX * frame_scale; T = viewY * frame_scale; R = (viewX + viewW) * frame_scale; B = (viewY + viewH) * frame_scale; }
+    int i0 = ox < L ? L - ox : 0, i1 = ox + dw > R ? R - ox : dw;
+    int j0 = oy < T ? T - oy : 0, j1 = oy + dh > B ? B - oy : dh;
     if (blitClip)
     {
         int cl = blitClipL * frame_scale - ox, cr = blitClipR * frame_scale - ox, ct = blitClipT * frame_scale - oy, cb = blitClipB * frame_scale - oy;
@@ -1031,6 +1604,70 @@ static void blit_box(const Picture *p, int x, int y, int bw, int bh)
     if (same && p->opaque && !blitMirror && blitOpacity >= 255)
     {
         for (int j = j0; j < j1; j++) memcpy(&screen[(oy + j) * FRAME_W + ox + i0], src + (size_t)j * (size_t)p->width + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); /* a whole tile: its rows as they are */
+        return;
+    }
+    /* A whole-number size (the hi-res picture: each of its pixels k x k), not mirrored, not faded: only the runs that show are
+       drawn - each pixel written k times, and a row that repeats the one above it copied run by run (none partly see-through:
+       a blended pixel can't be copied). The same picture as the loop below, without testing every pixel (the PS3's U8 ground). */
+    int k = dw / p->width;
+    static int fastOff = -1; /* testing: SANDCASTLE_NO_FAST_BLIT=1 draws everything the old way, to compare */
+    if (fastOff < 0) fastOff = getenv("SANDCASTLE_NO_FAST_BLIT") != NULL;
+    if (!fastOff && k >= 1 && dw == p->width * k && dh == p->height * k && !blitMirror && blitOpacity >= 255 && picture_runs(p))
+    {
+        int lastRow = -1;
+        for (int j = j0; j < j1; j++)
+        {
+            int sj = j / k;
+            uint32_t *d = &screen[(oy + j) * FRAME_W + ox];
+            const uint16_t *r = p->runs + (size_t)p->runAt[sj] * 2, *re = p->runs + (size_t)p->runAt[sj + 1] * 2;
+            int copy = !p->partial && sj == lastRow;
+            lastRow = sj;
+            const uint32_t *row = src + (size_t)sj * (size_t)p->width;
+            for (; r < re; r += 2)
+            {
+                int a = r[0] * k, b = r[1] * k;
+                if (a < i0) a = i0;
+                if (b > i1) b = i1;
+                if (a >= b) continue;
+                if (copy) { memcpy(d + a, d - FRAME_W + a, sizeof(uint32_t) * (size_t)(b - a)); continue; }
+                if (!p->partial)
+                    for (int i = a; i < b; )
+                    {
+                        int si = i / k, e = (si + 1) * k;
+                        uint32_t c = row[si];
+                        if (e > b) e = b;
+                        for (; i < e; i++) d[i] = c;
+                    }
+                else
+                    for (int i = a; i < b; i++) { uint32_t c = row[i / k], al = c >> 24; d[i] = al >= 255 ? c : blend_px(d[i], c, al); }
+            }
+        }
+        return;
+    }
+    /* The same whole-number size for a picture with no runs (a window's canvas, made each frame): each pixel written k times, and a
+       row with nothing see-through in it drawn once and copied for its other k - 1 rows. */
+    static int fast2Off = -1; /* testing: SANDCASTLE_NO_FAST_BLIT2=1 - this one only */
+    if (fast2Off < 0) fast2Off = getenv("SANDCASTLE_NO_FAST_BLIT2") != NULL;
+    if (!fastOff && !fast2Off && k >= 2 && dw == p->width * k && dh == p->height * k && !blitMirror && blitOpacity >= 255)
+    {
+        int lastRow = -1, lastSolid = 0;
+        for (int j = j0; j < j1; j++)
+        {
+            int sj = j / k;
+            uint32_t *d = &screen[(oy + j) * FRAME_W + ox];
+            if (sj == lastRow && lastSolid) { memcpy(d + i0, d - FRAME_W + i0, sizeof(uint32_t) * (size_t)(i1 - i0)); continue; }
+            const uint32_t *row = src + (size_t)sj * (size_t)p->width;
+            int solid = 1;
+            for (int i = i0; i < i1; )
+            {
+                int si = i / k, e = (si + 1) * k;
+                uint32_t c = row[si], al = c >> 24;
+                if (e > i1) e = i1;
+                if (al >= 255) for (; i < e; i++) d[i] = c;
+                else { solid = 0; if (al) for (; i < e; i++) d[i] = blend_px(d[i], c, al); else i = e; }
+            }
+            lastRow = sj; lastSolid = solid;
+        }
         return;
     }
     uint32_t stepX = ((uint32_t)p->width << 16) / (uint32_t)dw, stepY = ((uint32_t)p->height << 16) / (uint32_t)dh;
@@ -1079,6 +1716,8 @@ typedef struct Drawn
     int band;  /* its floor's band (floor - 1) */
     int slab, sl, sr, sf, sn; /* an upper floor's tiles (UpperFloorOrder): its tile box in 8px units */
     int order; /* at the same depth, the later drawn over (the Windows engine: the order its visuals were added) */
+    /* Ultima 8 (U8ProjectionCanvas): how it is placed in the diamond view; its stand point in the box (hasHot); a weapon: the body it goes with */
+    int place, hasHot, attachTo; double hotX, hotY;
 } Drawn;
 
 static int by_key(const void *a, const void *b)
@@ -1124,6 +1763,23 @@ static int exult_compare(const Drawn *a, const Drawn *b)
     return 0;
 }
 
+/* Ultima 6 is seen from straight above (U6GameWindow.Walls TopDownCompare - Exult's compare is for Ultima 7's slanted view):
+   -1 the thing under the wall, 1 over it, 0 their pictures don't meet. Wholly above / below: the higher over. Wholly south of
+   the wall: in front, over it; wholly north: behind. Side by side: the wall over - unless the thing's feet are in the wall's
+   picture's columns (a doorway, past a door frame's post): over it. */
+static int u6Rules; /* an Ultima 6 project (is_u6, read once each draw) */
+static double drawCameraX;
+static int top_down_compare(const Drawn *a, const Drawn *w)
+{
+    if (a->x >= w->x + w->w || w->x >= a->x + a->w || a->y >= w->y + w->h || w->y >= a->y + a->h) return 0;
+    if (a->zb > w->zt) return 1;
+    if (a->zt < w->zb) return -1;
+    if (a->yf > w->yn) return 1;
+    if (a->yn < w->yf) return -1;
+    double foot = (a->xl + a->xr + 1) / 2.0 * UNIT - drawCameraX;
+    return foot >= w->x && foot < w->x + w->w ? 1 : -1;
+}
+
 static void set_box(Drawn *d, int left, int top, int width, int depth, int lift, int height)
 {
     d->hasBox = 1;
@@ -1144,7 +1800,7 @@ static FrameSeen seen[1024]; static int seenCount;
 static Thing *thing_by_uid(int uid);
 int world_hearing_at(double drawnX, double drawnY, double *volume, double *balance)
 {
-    double dx = world_wrap_dx(drawnX - (cameraX + SCREEN_W / 2.0)), dy = world_wrap_dy(drawnY - (cameraY + SCREEN_H / 2.0));
+    double dx = world_wrap_dx(drawnX - (cameraX + viewX + viewW / 2.0)), dy = world_wrap_dy(drawnY - (cameraY + viewY + viewH / 2.0));
     double hx = dx / (UNIT / 2.0), hy = dy / (UNIT / 2.0);
     double squared = (hx * hx + hy * hy) / 4;
     if (squared > 24.0 * 24.0) return 0;
@@ -1210,7 +1866,7 @@ static uint32_t lastMs;
 static Drawn *add_drawn(int floorBand, double depth, const Picture *pic, int x, int y, int w, int h, int *count)
 {
     if (!pic) return NULL;
-    if (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H) return NULL;
+    if (!u8View && (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H)) return NULL; /* Ultima 8: kept in map space till it is placed (u8_place) */
     if (*count >= drawnCap) { drawnCap = drawnCap ? drawnCap * 2 : 1024; drawn = (Drawn *)realloc(drawn, sizeof(Drawn) * (size_t)drawnCap); }
     Drawn *d = &drawn[(*count)++];
     memset(d, 0, sizeof *d);
@@ -1227,7 +1883,7 @@ static HiddenSlab *hiddenSlabs; static int hiddenSlabCount, hiddenSlabCap;
 
 static void add_hidden_slab(int floorBand, int x, int y, int w, int h, int left, int top, int width, int depth)
 {
-    if (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H) return;
+    if (!u8View && (x + w < 0 || y + h < 0 || x > SCREEN_W || y > SCREEN_H)) return;
     if (hiddenSlabCount >= hiddenSlabCap) { hiddenSlabCap = hiddenSlabCap ? hiddenSlabCap * 2 : 256; hiddenSlabs = (HiddenSlab *)realloc(hiddenSlabs, sizeof(HiddenSlab) * (size_t)hiddenSlabCap); }
     hiddenSlabs[hiddenSlabCount++] = (HiddenSlab){ floorBand, x, y, w, h, left, left + width - 1, top, top + depth - 1 };
 }
@@ -1261,7 +1917,132 @@ static int hidden_above(int z, int solid, int ceiling)
 static void draw_world_once(uint32_t *pixels, uint32_t ms);
 
 /* The world - and on a map that wraps around, the land beyond an edge drawn in the gap, one map-width (or height) along. */
-void world_draw(uint32_t *pixels, uint32_t ms)
+static void world_draw_inner(uint32_t *pixels, uint32_t ms);
+static void sight_draw(uint32_t *pixels, uint32_t ms);
+void world_draw(uint32_t *pixels, uint32_t ms) { viewClip = u6View; world_draw_inner(pixels, ms); viewClip = 0; if (u6View) sight_draw(pixels, ms); }
+
+/* ---------------- Ultima 6: what the avatar can't see is black (U6GameWindow.U6Sight; Nuvie's boundaryFill) ----------------
+   From the avatar's square sight spreads to every square it can pass through; those, and the walls bordering them, are drawn -
+   the rest of the view is black. Walls, closed doors and things marked Occludes stop it, and ground that can't be walked on and
+   isn't water; windows, open doors and water let it through. Worked out only for the squares round the view, again when the
+   avatar's square or the view moves (and four times a second, for doors) - a few hundred squares: nothing for a 68k. */
+#define SIGHT_MAX 40
+static unsigned char sightSeen[SIGHT_MAX][SIGHT_MAX], sightBlock[SIGHT_MAX][SIGHT_MAX], sightWall[SIGHT_MAX][SIGHT_MAX];
+static int sightL, sightT, sightR, sightB, sightPx = -99999, sightPy, sightOn;
+static uint32_t sightAt;
+
+static int sight_wanted(void)
+{
+    cJSON *los = get(get(get(get(gameJson, "Project"), "Settings"), "Ultima6"), "LineOfSight");
+    return u6View && (!cJSON_IsBool(los) || cJSON_IsTrue(los));
+}
+
+static int in_sight_window(int x, int y) { return x >= sightL && y >= sightT && x <= sightR && y <= sightB; }
+
+static int blocks_sight(int x, int y)
+{
+    if (x < 0 || y < 0 || x >= mapW || y >= mapH) return 1;
+    if (in_sight_window(x, y) && sightBlock[y - sightT][x - sightL]) return 1;
+    int i = y * mapW + x;
+    return floors[1] && floors[1][i] >= 0 && !walkable[i] && !water[i];
+}
+
+static void sight_update(uint32_t ms)
+{
+    int px, py, pf;
+    world_player_cell(&px, &py, &pf);
+    int l = (int)floor((cameraX + viewX) / tileW) - 1, t = (int)floor((cameraY + viewY) / tileH) - 1;
+    int r = (int)ceil((cameraX + viewX + viewW) / tileW) + 1, b = (int)ceil((cameraY + viewY + viewH) / tileH) + 1;
+    if (r - l >= SIGHT_MAX) r = l + SIGHT_MAX - 1;
+    if (b - t >= SIGHT_MAX) b = t + SIGHT_MAX - 1;
+    if (px == sightPx && py == sightPy && l == sightL && t == sightT && r == sightR && b == sightB && ms - sightAt < 250) return;
+    sightPx = px; sightPy = py; sightL = l; sightT = t; sightR = r; sightB = b; sightAt = ms;
+    memset(sightBlock, 0, sizeof sightBlock); memset(sightWall, 0, sizeof sightWall); memset(sightSeen, 0, sizeof sightSeen);
+    int upx = tileW / UNIT > 0 ? tileW / UNIT : 1, upy = tileH / UNIT > 0 ? tileH / UNIT : 1;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *th = &things[i];
+        if (th->gone || !th->def || th->z >= base_lift(2)) continue;
+        int type = th->def->type, wall = type == T_WALL || type == T_DOOR || type == T_WINDOW;
+        int blocks = th->def->occludes || type == T_WALL || (type == T_DOOR && !th->open);
+        if (!wall && (!blocks || type == T_WINDOW)) continue;
+        if (th->x < l - 4 || th->x > r + 4 || th->y < t - 4 || th->y > b + 4) continue;
+        if (blocks && type != T_WINDOW)
+        {
+            if (th->body >= 0)
+            {
+                const Body *bd = &bodies[th->body];
+                for (int ux = bd->left; ux < bd->left + (bd->width > 0 ? bd->width : 1); ux++)
+                    for (int uy = bd->top; uy < bd->top + (bd->depth > 0 ? bd->depth : 1); uy++)
+                    {
+                        int cx = (int)floor(ux / (double)upx), cy = (int)floor(uy / (double)upy);
+                        if (in_sight_window(cx, cy)) sightBlock[cy - t][cx - l] = 1;
+                    }
+            }
+            else if (in_sight_window(th->x, th->y)) sightBlock[th->y - t][th->x - l] = 1;
+        }
+        if (wall && in_sight_window(th->x, th->y)) sightWall[th->y - t][th->x - l] = 1; /* the square its picture stands on: never black */
+    }
+    /* spread from the avatar's square, the four ways; a wall is seen, not seen through */
+    static short queue[SIGHT_MAX * SIGHT_MAX][2];
+    int head = 0, tail = 0;
+    if (!in_sight_window(px, py)) return;
+    sightSeen[py - t][px - l] = 1; queue[tail][0] = (short)px; queue[tail][1] = (short)py; tail++;
+    static const int D4[4][2] = { { 1, 0 }, { -1, 0 }, { 0, 1 }, { 0, -1 } };
+    while (head < tail)
+    {
+        int x = queue[head][0], y = queue[head][1]; head++;
+        if ((x != px || y != py) && blocks_sight(x, y)) continue;
+        for (int k = 0; k < 4; k++)
+        {
+            int nx = x + D4[k][0], ny = y + D4[k][1];
+            if (!in_sight_window(nx, ny) || sightSeen[ny - t][nx - l]) continue;
+            sightSeen[ny - t][nx - l] = 1;
+            queue[tail][0] = (short)nx; queue[tail][1] = (short)ny; tail++;
+        }
+    }
+    /* walls at a corner of what is seen show too (a room's corners) */
+    static const int DD[4][2] = { { 1, 1 }, { 1, -1 }, { -1, 1 }, { -1, -1 } };
+    for (int y = t; y <= b; y++)
+        for (int x = l; x <= r; x++)
+        {
+            if (sightSeen[y - t][x - l] != 1 || ((x != px || y != py) && blocks_sight(x, y))) continue;
+            for (int k = 0; k < 4; k++)
+            {
+                int nx = x + DD[k][0], ny = y + DD[k][1];
+                if (in_sight_window(nx, ny) && !sightSeen[ny - t][nx - l] && blocks_sight(nx, ny)) sightSeen[ny - t][nx - l] = 2; /* 2: added here, not spread from */
+            }
+        }
+}
+
+static void sight_draw(uint32_t *pixels, uint32_t ms)
+{
+    sightOn = sight_wanted();
+    if (!sightOn) return;
+    sight_update(ms);
+    int x0 = viewX * frame_scale, y0 = viewY * frame_scale, x1 = (viewX + viewW) * frame_scale, y1 = (viewY + viewH) * frame_scale;
+    for (int y = sightT; y <= sightB; y++)
+        for (int x = sightL; x <= sightR; x++)
+        {
+            if (sightSeen[y - sightT][x - sightL] || sightWall[y - sightT][x - sightL]) continue;
+            /* this square's rectangle on the screen, inside the Game View */
+            int sx = (int)floor(x * tileW - cameraX) * frame_scale, sy = (int)floor(y * tileH - cameraY) * frame_scale;
+            int ex = sx + tileW * frame_scale, ey = sy + tileH * frame_scale;
+            if (sx < x0) sx = x0;
+            if (sy < y0) sy = y0;
+            if (ex > x1) ex = x1;
+            if (ey > y1) ey = y1;
+            for (int j = sy; j < ey; j++) for (int i = sx; i < ex; i++) pixels[j * FRAME_W + i] = 0xFF000000u;
+        }
+}
+
+/* Can the avatar see this square now (Look, a click: what's black is "nothing")? */
+int world_square_seen(int x, int y)
+{
+    if (!sightOn || !in_sight_window(x, y)) return 1;
+    return sightSeen[y - sightT][x - sightL] || sightWall[y - sightT][x - sightL];
+}
+static void world_draw_inner(uint32_t *pixels, uint32_t ms)
 {
     shade_update();
     double w = mapW * tileW, h = mapH * tileH, cx = floor(cameraX), cy = floor(cameraY);
@@ -1369,6 +2150,7 @@ static const DoorMove *door_move_of(int uid)
 
 static void door_move_start(const Thing *t, int opening)
 {
+    if (u8View) return; /* Ultima 8: no door motion - open or closed at once */
     const ObjectDef *d = t->def;
     for (int i = 0; i < doorMoveCount; i++) if (doorMoves[i].uid == t->uid) doorMoves[i--] = doorMoves[--doorMoveCount];
     if (d->doorOpening == 0 || doorMoveCount >= 16) return;
@@ -1428,20 +2210,149 @@ static void doors_update(double ms)
     }
 }
 
+/* ---------------- The Ultima 8 view (U8ProjectionCanvas) ---------------- */
+
+enum { P_THING, P_CHAR, P_CELL, P_CENTER, P_SCREEN, P_ATTACHED };
+
+/* SetU8Anchor: a sprite's Origin (Sprite Editor) as the point of its box that stands on the map point - the picture fitted into
+   the box (keeping its shape, centred) as it is drawn. No Origin: none (it stands on its bottom-middle). */
+static void u8_sprite_hot(Drawn *d, const Sprite *s)
+{
+    if (!d || !s || (s->originX == 0 && s->originY == 0) || !s->frameCount || d->w <= 0 || d->h <= 0) return;
+    const Picture *first = frame_picture(&s->frames[0]);
+    if (!first || first->width <= 0 || first->height <= 0) return;
+    double scale = fmin((double)d->w / first->width, (double)d->h / first->height);
+    d->hasHot = 1;
+    d->hotX = (d->w - first->width * scale) / 2 + s->originX * scale;
+    d->hotY = (d->h - first->height * scale) / 2 + s->originY * scale;
+}
+
+/* FitToFrame: a character's frame stands on its own stand point (Sprite Editor), else on its sprite's Origin. */
+static void u8_frame_hot(Drawn *d, const Sprite *s, uint32_t at)
+{
+    if (!d || !s || !s->frameCount) return;
+    int f = sprite_frame_at(s, at);
+    if (f < 0 || f >= s->frameCount) f = 0;
+    if (s->frames[f].anchorX >= 0 && s->frames[f].anchorY >= 0) { d->hasHot = 1; d->hotX = s->frames[f].anchorX; d->hotY = s->frames[f].anchorY; return; }
+    u8_sprite_hot(d, s);
+}
+
+/* Ultima 8: a box laid out on the map (as the Ultima 7 engine does) to where it is drawn on the screen - a character's (feet
+   on its point) or by its middle. */
+static void u8_box(int place, double x, double y, int w, int h, int *sx, int *sy)
+{
+    double px, py;
+    if (place == P_CENTER) { double mx = x + w / 2.0, my = y + h / 2.0; px = u8_sx(mx, my) - w / 2.0; py = u8_sy(mx, my) - h / 2.0; }
+    else { double ax = x + w / 2.0, ay = y + h - tileW / 2.0; px = u8_sx(ax, ay) - w / 2.0; py = u8_sy(ax, ay) - h; }
+    *sx = (int)floor(px - cameraX); *sy = (int)floor(py - cameraY);
+}
+
+/* Where a character (actor >= 0) or a thing (uid) was drawn in the last frame, on the screen; 0: not drawn. */
+static int drawn_rect_of(int actor, int uid, int *x, int *y, int *w, int *h)
+{
+    for (int i = 0; i < drawnCount; i++)
+    {
+        const Drawn *d = &drawn[i];
+        if (actor >= 0 ? d->actor != actor : d->thing != uid) continue;
+        *x = d->x; *y = d->y; *w = d->w; *h = d->h;
+        return 1;
+    }
+    return 0;
+}
+
+/* PlaceIn: every picture from where the Ultima 7 engine would put it on the map to where it is drawn in the diamond view, the camera
+   (on the screen) taken off; what can't be seen is dropped. Returns the new count. */
+static int u8_place(int count, double camX, double camY)
+{
+    double cell = tileW;
+    for (int pass = 0; pass < 2; pass++)
+        for (int i = 0; i < count; i++)
+        {
+            Drawn *d = &drawn[i];
+            if ((d->place == P_ATTACHED) != (pass == 1)) continue;
+            double sx, sy;
+            if (d->place == P_ATTACHED)
+            {
+                const Drawn *body = d->attachTo >= 0 && d->attachTo < count ? &drawn[d->attachTo] : NULL;
+                if (!body) { d->picture = NULL; continue; }
+                d->x = body->x + (int)d->hotX; d->y = body->y + (int)d->hotY; /* by the body as it is drawn */
+                continue;
+            }
+            if (d->place == P_SCREEN) { sx = d->x; sy = d->y; }
+            else if (d->place == P_CENTER) { double mx = d->x + d->w / 2.0, my = d->y + d->h / 2.0; sx = u8_sx(mx, my) - d->w / 2.0; sy = u8_sy(mx, my) - d->h / 2.0; }
+            else
+            {
+                double ax = d->x + d->w / 2.0, ay = d->y + d->h;
+                if (d->place == P_THING) ax += cell / 2;             /* the nearest corner of its cell */
+                else if (d->place == P_CHAR) ay -= cell / 2;         /* its feet's own point */
+                else if (d->place == P_CELL) { ax = d->x + cell; ay = d->y + cell; } /* its cell's nearest corner */
+                double px = u8_sx(ax, ay), py = u8_sy(ax, ay);
+                if (d->hasHot) { sx = px - d->hotX; sy = py - d->hotY; }
+                else { sx = px - d->w / 2.0; sy = py - d->h; }
+            }
+            d->x = (int)floor(sx - camX); d->y = (int)floor(sy - camY);
+        }
+    /* what's off the screen goes (the slabs' and walls' order was settled on the map already) */
+    int n = 0;
+    for (int i = 0; i < count; i++)
+    {
+        Drawn *d = &drawn[i];
+        if (!d->picture || d->x + d->w < 0 || d->y + d->h < 0 || d->x > SCREEN_W || d->y > SCREEN_H) continue;
+        if (n != i) drawn[n] = *d;
+        n++;
+    }
+    return n;
+}
+
+/* The ground in the diamond view (U8GameWindow.Tiles): each cell's diamond (its tile under it first), back to front. */
+static void u8_ground(uint32_t ms, double camX, double camY)
+{
+    if (!floors[1]) return;
+    int t = tileW;
+    int s0 = (int)floor(camY * 2 / t) - 2, s1 = (int)ceil((camY + SCREEN_H) * 2 / t) + 1;
+    int d0 = (int)floor((camX - u8OriginX) / t) - 2, d1 = (int)ceil((camX + SCREEN_W - u8OriginX) / t) + 2;
+    for (int s = s0 < 0 ? 0 : s0; s <= s1 && s <= mapW + mapH - 2; s++)
+        for (int dd = d0; dd <= d1; dd++)
+        {
+            if (((s + dd) & 1) != 0) continue;
+            int x = (s + dd) / 2, y = (s - dd) / 2;
+            if (x < 0 || y < 0 || x >= mapW || y >= mapH) continue;
+            int left = (int)floor((x - y) * t + u8OriginX - t - camX), top = (int)floor((x + y) * t / 2.0 - camY);
+            if (underTile[y * mapW + x] >= 0) blit_box(tile_picture(underTile[y * mapW + x], ms), left, top, 2 * t, t);
+            blit_box(tile_picture(floors[1][y * mapW + x], ms), left, top, 2 * t, t);
+        }
+}
+
+/* The map cells the screen can show (the view back on the map), a few more south for what stands high. */
+static void u8_cells_seen(double camX, double camY, int *x0, int *y0, int *x1, int *y1)
+{
+    double a0 = camX - u8OriginX, a1 = camX + SCREEN_W - u8OriginX, b0 = 2 * camY, b1 = 2 * (camY + SCREEN_H);
+    *x0 = (int)floor((a0 + b0) / 2 / tileW) - 1; *x1 = (int)floor((a1 + b1) / 2 / tileW) + 1;
+    *y0 = (int)floor((b0 - a1) / 2 / tileH) - 1; *y1 = (int)floor((b1 - a0) / 2 / tileH) + 1;
+}
+
 static void draw_world_once(uint32_t *pixels, uint32_t ms)
 {
     screen = pixels;
     uint32_t black = world_shade_colour(0xFF000000u);
-    for (int i = 0; i < FRAME_PIXELS; i++) pixels[i] = black;
     blitShading = 1;
     int cx = (int)floor(cameraX), cy = (int)floor(cameraY);
+    double camX = cx, camY = cy;
+    if (u8View) cx = cy = 0; /* Ultima 8: everything laid out on the map first, then placed in the diamond view (u8_place) */
+    u6Rules = u6View; drawCameraX = cx;
+    if (u6View) /* Ultima 6: only the Game View is seen - only it is cleared (the HUD covers the rest) */
+        for (int j = viewY * frame_scale; j < (viewY + viewH) * frame_scale && j < FRAME_H; j++)
+            for (int i = viewX * frame_scale; i < (viewX + viewW) * frame_scale && i < FRAME_W; i++) pixels[j * FRAME_W + i] = black;
+    else for (int i = 0; i < FRAME_PIXELS; i++) pixels[i] = black;
     int ceiling = ceiling_over_player();
     int draggedUid = gumps_dragged_map_thing();
     hiddenSlabCount = 0;
 
     /* The ground. */
     int x0 = cx / tileW - 1, y0 = cy / tileH - 1, x1 = (cx + SCREEN_W) / tileW + 1, y1 = (cy + SCREEN_H) / tileH + 1;
-    for (int y = y0 < 0 ? 0 : y0; y <= y1 && y < mapH; y++)
+    if (u6View) { x0 = (cx + viewX) / tileW - 1; y0 = (cy + viewY) / tileH - 1; x1 = (cx + viewX + viewW) / tileW + 1; y1 = (cy + viewY + viewH) / tileH + 1; } /* Ultima 6: the Game View's tiles only */
+    if (u8View) { u8_cells_seen(camX, camY, &x0, &y0, &x1, &y1); u8_ground(ms, camX, camY); } /* Ultima 8: the diamonds */
+    for (int y = y0 < 0 ? 0 : y0; !u8View && y <= y1 && y < mapH; y++)
         for (int x = x0 < 0 ? 0 : x0; x <= x1 && x < mapW; x++)
             if (floors[1])
             {
@@ -1461,7 +2372,8 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 int tile = floors[f][y * mapW + x];
                 if (tile < 0) continue;
                 if (overhead) { add_hidden_slab(f - 1, x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, x * unitsX, y * unitsY, unitsX, unitsY); continue; }
-                Drawn *d = add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, tileW, tileH, &count); /* a floor: before everything standing on it */
+                Drawn *d = add_drawn(f - 1, -5000000.0 + (x + y) * 100.0, tile_picture(tile, ms), x * tileW - lift * LIFT_SHIFT - cx, y * tileH - lift * LIFT_SHIFT - cy, u8View ? sheetTileW : tileW, u8View ? sheetTileH : tileH, &count); /* a floor: before everything standing on it */
+                if (d && u8View) d->place = P_CELL; /* Ultima 8: its cell's diamond */
                 if (d) { d->slab = 1; d->sl = x * unitsX; d->sr = (x + 1) * unitsX - 1; d->sf = y * unitsY; d->sn = (y + 1) * unitsY - 1; }
             }
     }
@@ -1588,6 +2500,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         d->occludes = t->def && t->def->occludes;
         d->hangs = t->hangs || t->staysPut; /* staying where it's put: drawn as a hung thing */
         d->thing = t->uid; d->order = t->seq ? t->seq : t->uid;
+        if (u8View) u8_sprite_hot(d, ls); /* Ultima 8: its Origin on the nearest corner of its cell (U8Anchor) */
         if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
         { d->slab = 1; d->sl = b.left; d->sr = b.left + b.width - 1; d->sf = b.top; d->sn = b.top + b.depth - 1; } /* a tile object that is part of an upper floor */
     }
@@ -1599,24 +2512,27 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         if (!pic || hidden_above(pd->lift, 0, ceiling)) continue;
         double px = pd->ux * 8 + 4.0, py = pd->uy * 8 + 4.0;
         Drawn *d = add_drawn(floor_of(pd->lift) - 1, (px / tileW + py / tileH) * 100.0 + pd->lift - 50, pic, (int)(px - pic->width / 2.0) - pd->lift * LIFT_SHIFT - cx, (int)(py - pic->height / 2.0) - pd->lift * LIFT_SHIFT - cy, pic->width, pic->height, &count);
-        if (d) d->mirror = pd->mirrored;
+        if (d) { d->mirror = pd->mirrored; if (u8View) d->place = P_CENTER; }
     }
     /* Characters and the player. */
     for (int i = -1; i < npcCount; i++)
     {
         const Actor *a = i < 0 ? &player : &npcs[i];
         if (i >= 0 && (a->gone || (ceiling < (1 << 30) && a->lift >= ceiling + ceilingIsFloor))) continue;
+        if (i < 0 && u8View && world_u8_player_hidden()) continue; /* Ultima 8: drowned - gone */
         int invisible = vitals_has(a->characterId, 32), shimmer = invisible && (i < 0 || items_in_party(a->characterId));
         if (invisible && !shimmer) continue; /* ShowInvisibility: unseen */
-        const Sprite *s = a->walkingNow && a->walking[a->facing] ? a->walking[a->facing] : a->idle[a->facing];
+        const Sprite *s = a->walkingNow && a->walking[slot_of(a->facing)] ? a->walking[slot_of(a->facing)] : a->idle[slot_of(a->facing)];
         uint32_t at = ms; /* standing plays its Idle frames too, as Windows */
-        if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[a->facing]) { s = a->poses[a->shownPose].dirs[a->facing]; at = ms - a->poseSince; }
+        if (a->shownPose >= 0 && a->poses[a->shownPose].dirs[slot_of(a->facing)]) { s = a->poses[a->shownPose].dirs[slot_of(a->facing)]; at = ms - a->poseSince; }
         const Picture *pic = sprite_picture_at(s, at);
         if (a->joinedSprite && a->joinedFrame < a->joinedSprite->frameCount) pic = frame_picture(&a->joinedSprite->frames[a->joinedFrame]);
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
-        int left = (int)floor(a->px - qw / 2.0) - a->lift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - a->lift * LIFT_SHIFT;
-        if (i < 0) frame_sound(-(i + 2), s, at, cameraX + SCREEN_W / 2.0, cameraY + SCREEN_H / 2.0); /* the main character's own: as it is */
+        if (u8View) { qw = pic->width; qh = pic->height; } /* Ultima 8 (FitToFrame): each frame at its own size, the feet kept */
+        int drawnLift = i < 0 ? (int)floor(player_drawn_lift() + 0.5) : a->lift; /* Ultima 8: the Avatar drawn falling or in a jump */
+        int left = (int)floor(a->px - qw / 2.0) - drawnLift * LIFT_SHIFT, top = (int)floor(a->py + tileH / 2.0 - qh) - drawnLift * LIFT_SHIFT;
+        if (i < 0) frame_sound(-(i + 2), s, at, cameraX + viewX + viewW / 2.0, cameraY + viewY + viewH / 2.0); /* the main character's own: as it is */
         else frame_sound(-(i + 2), s, at, left + qw / 2.0, top + qh / 2.0);
         Drawn *d = add_drawn(floor_of(a->lift) - 1, (a->px / tileW + a->py / tileH) * 100.0 + a->lift, pic, left - cx, top - cy, qw, qh, &count);
         if (!d) continue;
@@ -1624,7 +2540,15 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         double feetY = a->py + tileH / 2.0;
         set_box(d, (int)floor((a->px - a->sizeX * UNIT / 2.0) / UNIT + 0.5), (int)floor((feetY - a->sizeY * UNIT) / UNIT + 0.5), a->sizeX, a->sizeY, a->lift, a->sizeZ);
         d->actor = i + 1; d->order = 1 << 30;
-        if (!a->joinedSprite) draw_weapon_in_hand(a, s, at, pic, left - cx, top - cy, qw, qh, floor_of(a->lift) - 1, d->key - (floor_of(a->lift) - 1) * 10000000.0, &count);
+        int bodyIndex = (int)(d - drawn), before = count;
+        if (u8View) { d->place = P_CHAR; if (!a->joinedSprite) u8_frame_hot(d, s, at); }
+        if (!a->joinedSprite) draw_weapon_in_hand(a, s, at, pic, left - cx, top - cy, qw, qh, floor_of(a->lift) - 1, drawn[bodyIndex].key - (floor_of(a->lift) - 1) * 10000000.0, &count);
+        if (u8View && count > before) /* the weapon: by the body as it is drawn (U8GameWindow.WeaponInHand: placed on the screen) */
+        {
+            Drawn *w = &drawn[count - 1];
+            w->place = P_ATTACHED; w->attachTo = bodyIndex;
+            w->hotX = w->x - (left - cx); w->hotY = w->y - (top - cy);
+        }
     }
     /* Whatever rests on something is drawn after it (Exult: greater in z). */
     for (int pass = 0; pass < 2; pass++)
@@ -1654,7 +2578,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
                 if (!(d->x >= w->x + w->w || w->x >= d->x + d->w || d->y >= w->y + w->h || w->y >= d->y + d->h) && w->key + 0.25 > key) key = w->key + 0.25;
                 continue;
             }
-            int cmp = exult_compare(d, w);
+            int cmp = u6Rules ? top_down_compare(d, w) : exult_compare(d, w);
             if (cmp > 0 && w->key + 0.25 > key) key = w->key + 0.25;
             else if (cmp < 0 && w->key - 0.25 < lowest) lowest = w->key - 0.25;
         }
@@ -1685,6 +2609,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
         if (liftTo >= 0) d->key = liftTo * 10000000.0 - 2500000.0 + (d->key - d->band * 10000000.0) * 0.1; /* over that floor's slabs, under all that stands on it */
     }
     count = seated_draw_order(count);
+    if (u8View) count = u8_place(count, camX, camY); /* Ultima 8: into the diamond view, on the screen */
     qsort(drawn, (size_t)count, sizeof(Drawn), by_key);
     for (int i = 0; i < count; i++)
     {
@@ -1723,7 +2648,8 @@ const Sprite *world_actor_face(int actor) { const Actor *a = actor_of(actor); re
 int world_actor_in_sight(int actor)
 {
     const Actor *a = actor_of(actor);
-    return a && a->px >= cameraX && a->px <= cameraX + SCREEN_W && a->py >= cameraY && a->py <= cameraY + SCREEN_H;
+    if (a && u8View) { double sx = u8_sx(a->px, a->py), sy = u8_sy(a->px, a->py); return sx >= cameraX && sx <= cameraX + SCREEN_W && sy >= cameraY && sy <= cameraY + SCREEN_H; } /* Ultima 8: where it is drawn */
+    return a && a->px >= cameraX + viewX && a->px <= cameraX + viewX + viewW && a->py >= cameraY + viewY && a->py <= cameraY + viewY + viewH; /* the Game View (Ultima 6), else the screen */
 }
 
 /* The character whose picture is under a point of the screen, topmost first (as a click hits it); -1 for none. */
@@ -1745,7 +2671,7 @@ int world_actor_at(int sx, int sy)
     return -1;
 }
 
-int world_direction_of(const char *name) { return name && name[0] ? dir_of(name) : -1; }
+int world_direction_of(const char *name) { int d = name && name[0] ? dir_of(name) : -1; return d >= 0 && u8View ? (d + 7) & 7 : d; } /* Ultima 8: picked as seen on the screen (WorldOfSlot) */
 
 /* Change Pose: the pose kept (and facing, -1 = as it is); 0 when it has no such pose. "Idle" / "Walking" go back to the usual. */
 int world_set_pose(int actor, const char *pose, int facing)
@@ -1992,7 +2918,7 @@ static int can_sweep(const Actor *a, double fx, double fy, double tx, double ty,
     return 1;
 }
 
-static int door_by_hand_early(const ObjectDef *d) { return d->doorOpening != 2 && !d->notByHand; }
+static int door_by_hand_early(const ObjectDef *d) { return u8View || (d->doorOpening != 2 && !d->notByHand); } /* (Ultima 8: every door opens by hand) */
 
 static int can_stand_at(const Actor *a, int cx, int cy, int fromLift, int *lift)
 {
@@ -2438,7 +3364,7 @@ static void door_set_open(Thing *t, int open)
         if (open) { bodies[t->body].width = bodies[t->body].depth = 0; bodies[t->body].z = -100000; }
         else thing_box(t, &bodies[t->body]);
     }
-    if (!t->def->withNeighbours || movingPartners) return;
+    if (u8View || !t->def->withNeighbours || movingPartners) return; /* (Ultima 8: no double doors moving together) */
     /* a double door: the double doors right next to it (on its floor) follow */
     movingPartners = 1;
     for (int i = 0; i < thingCount; i++)
@@ -2452,7 +3378,7 @@ static void door_set_open(Thing *t, int open)
 }
 
 /* Opened by hand (a double-click, someone walking through)? Never a sliding door, nor one set Not by hand (a laser door's button). */
-static int door_by_hand(const ObjectDef *d) { return d->doorOpening != 2 && !d->notByHand; }
+static int door_by_hand(const ObjectDef *d) { return u8View || (d->doorOpening != 2 && !d->notByHand); } /* (Ultima 8: every door opens by hand) */
 
 int world_door_by_hand(int uid)
 {
@@ -2552,7 +3478,7 @@ static void step_walk(int actor, double seconds)
         double rx = world_wrap_dx(gx - a->px), ry = world_wrap_dy(gy - a->py);
         if (fabs(rx) < 0.01 && fabs(ry) < 0.01) { a->px = gx; a->py = gy; w->at++; continue; }
         int alongX = fabs(rx) > 0.01;
-        double remaining = alongX ? rx : ry, move = fmin(fabs(remaining), budget);
+        double remaining = alongX ? rx : ry, move = fmin(fmin(fabs(remaining), budget), UNIT / 2.0); /* half a unit at a time, as at Windows' 60 frames a second: a slow frame never takes a stair's two lifts at once */
         a->facing = alongX ? (remaining > 0 ? DIR_E : DIR_W) : (remaining > 0 ? DIR_S : DIR_N);
         double nx = a->px + (alongX ? (remaining > 0 ? move : -move) : 0), ny = a->py + (alongX ? 0 : (remaining > 0 ? move : -move));
         int l0, t0, l1, t1;
@@ -2657,6 +3583,8 @@ void world_thing_remove(int uid)
 }
 
 /* Put down at a cell (PutDownAt): resting on whatever is there, on that floor. Returns its uid (-1 if it can't be shown). */
+static const Sprite *body_look(int characterId, int *sizeX, int *sizeY);
+
 int world_thing_put(int category, int itemId, int quantity, int x, int y, int onFloor)
 {
     if (thingCount >= thingCap) { thingCap *= 2; things = (Thing *)realloc(things, sizeof(Thing) * (size_t)thingCap); }
@@ -2676,6 +3604,12 @@ int world_thing_put(int category, int itemId, int quantity, int x, int y, int on
         t->solid = d->solid; t->solidOffX = d->solidOffX; t->solidOffY = d->solidOffY;
         t->open = d->type == T_DOOR && d->doorStartsOpen; t->lit = d->type == T_LIGHT && d->lightStartsLit;
         t->liquid = d->type == T_LIQUID ? d->liquidStart : -1;
+    }
+    else if (category == 5 && itemId <= -1000)
+    {
+        /* a body put down again: looking as it did, not solid, walked over (world_put_body) */
+        t->sprite = body_look(-1000 - itemId, &t->sizeX, &t->sizeY);
+        t->sizeZ = 1;
     }
     else
     {
@@ -2730,7 +3664,7 @@ int world_pose_length(int actor, const char *pose)
     Actor *a = actor_of(actor);
     if (!a) return 500;
     for (int i = 0; i < a->poseCount; i++)
-        if (strcmp(a->poses[i].name, pose) == 0 && a->poses[i].dirs[a->facing]) return a->poses[i].dirs[a->facing]->totalMs > 0 ? a->poses[i].dirs[a->facing]->totalMs : 500;
+        if (strcmp(a->poses[i].name, pose) == 0 && a->poses[i].dirs[slot_of(a->facing)]) return a->poses[i].dirs[slot_of(a->facing)]->totalMs > 0 ? a->poses[i].dirs[slot_of(a->facing)]->totalMs : 500;
     return 500;
 }
 
@@ -2763,6 +3697,8 @@ static void draw_thing_barks(uint32_t *pixels);
 
 /* Drawn over everything: centred over the head, 2 pixels above the picture (GameTextLabel in the InGameFont). */
 static void draw_effects(uint32_t *pixels);
+static void draw_splashes(uint32_t *pixels);
+static void draw_hurled(uint32_t *pixels);
 
 static void draw_hit_outline(uint32_t *pixels);
 
@@ -2770,6 +3706,8 @@ void world_draw_barks(uint32_t *pixels)
 {
     draw_hit_outline(pixels);
     draw_effects(pixels);
+    if (u8View) draw_splashes(pixels); /* Ultima 8: water and lava splashes */
+    draw_hurled(pixels); /* things in the air (Burst) */
     draw_thing_barks(pixels);
     const Font *f = font_get("InGameFont");
     for (int i = 0; i < 16; i++)
@@ -2777,10 +3715,12 @@ void world_draw_barks(uint32_t *pixels)
         if (barks[i].until <= lastMs || !barks[i].text[0]) continue;
         const Actor *a = actor_of(barks[i].actor);
         if (!a) continue;
-        const Picture *pic = sprite_picture_at(a->idle[a->facing], 0);
+        const Picture *pic = sprite_picture_at(a->idle[slot_of(a->facing)], 0);
         int h = pic ? (pic->height + UNIT - 1) / UNIT * UNIT : tileH;
         int w = font_text_width(f, barks[i].text);
         int x = (int)floor(a->px - cameraX - w / 2.0), y = (int)floor(a->py + tileH / 2.0 - h - font_line_height(f) - 2 - a->lift * LIFT_SHIFT - cameraY);
+        int rx, ry, rw, rh;
+        if (u8View && drawn_rect_of(barks[i].actor, 0, &rx, &ry, &rw, &rh)) { x = rx + rw / 2 - w / 2; y = ry - font_line_height(f) - 2; } /* Ultima 8: over where it is drawn */
         font_draw(f, pixels, x, y, barks[i].text, 0);
     }
 }
@@ -2834,9 +3774,10 @@ int world_walk_blocked(int actor) { Walk *w = walk_of(actor); int b = w && w->bl
 /* On the screen, enlarged by margin pixels all round. */
 int world_on_screen(double px, double py, double margin)
 {
+    if (u8View) { double sx = u8_sx(px, py), sy = u8_sy(px, py); px = sx; py = sy; } /* Ultima 8: where it is drawn - the camera is on the screen */
     return px >= cameraX - margin && px <= cameraX + SCREEN_W + margin && py >= cameraY - margin && py <= cameraY + SCREEN_H + margin;
 }
-void world_view_center(double *x, double *y) { *x = cameraX + SCREEN_W / 2.0; *y = cameraY + SCREEN_H / 2.0; }
+void world_view_center(double *x, double *y) { *x = cameraX + viewX + viewW / 2.0; *y = cameraY + viewY + viewH / 2.0; }
 
 /* ---------------- Chairs and beds (GameTestWindow.Furniture, from Exult's Sit / Sleep schedules) ---------------- */
 
@@ -3097,7 +4038,7 @@ static void player_sit_update(double seconds)
         double rx = pendingSit.targetX - player.px, ry = pendingSit.targetY - player.py;
         int alongX = fabs(rx) > 0.5;
         if (!alongX && fabs(ry) <= 0.5) goto look;
-        double remaining = fabs(alongX ? rx : ry), step = fmin(TILES_PER_SECOND * tileW * seconds, remaining);
+        double remaining = fabs(alongX ? rx : ry), step = fmin(fmin(TILES_PER_SECOND * tileW * seconds, remaining), UNIT / 2.0); /* half a unit a frame at most, as at Windows' 60 */
         if (step <= 0) return;
         double nx = player.px + (alongX ? (rx > 0 ? step : -step) : 0), ny = player.py + (alongX ? 0 : (ry > 0 ? step : -step));
         int l0, t0, l1, t1;
@@ -3319,6 +4260,8 @@ static void draw_thing_barks(uint32_t *pixels)
         int qw = pic ? (pic->width + UNIT - 1) / UNIT * UNIT : tileW, qh = pic ? (pic->height + UNIT - 1) / UNIT * UNIT : tileH;
         int left = t->x * tileW + (tileW - qw) / 2 + t->offX * UNIT - t->z * LIFT_SHIFT, top = (t->y + 1) * tileH - qh + t->offY * UNIT - t->z * LIFT_SHIFT;
         int w = font_text_width(f, thingBarks[i].text);
+        int rx, ry, rw, rh;
+        if (u8View && drawn_rect_of(-1, t->uid, &rx, &ry, &rw, &rh)) { font_draw(f, pixels, rx + rw / 2 - w / 2, ry - font_line_height(f) - 4, thingBarks[i].text, 0); continue; } /* Ultima 8: just over where it is drawn */
         font_draw(f, pixels, (int)floor(left + qw / 2.0 - w / 2.0 - cameraX), (int)floor(top - font_line_height(f) - 2 - cameraY), thingBarks[i].text, 0);
     }
 }
@@ -3394,10 +4337,12 @@ static int below_ceiling(const SettleBody *support, int lift) { return support->
 static void settle_all_things(void);
 
 /* Gravity for all - but a kite up in the air stays there: nothing holds it but the wind. */
+static void u8_gravity(void);
 static void settle_all(void)
 {
     settle_all_things();
     for (int i = 0; i < thingCount; i++) if (things[i].flying && !things[i].gone) things[i].z = things[i].flying - 1;
+    if (u8View) u8_gravity(); /* Ultima 8: a real fall for every character (U8Liquids ApplyGravityToCharacters) */
 }
 
 static void settle_all_things(void)
@@ -3494,7 +4439,7 @@ void world_camera_hold(int held, double x, double y) { cameraHeld = held; holdX 
 void world_camera_center(double *x, double *y)
 {
     if (cameraHeld) { *x = holdX; *y = holdY; return; }
-    *x = cameraX + SCREEN_W / 2.0; *y = cameraY + SCREEN_H / 2.0;
+    *x = cameraX + viewX + viewW / 2.0; *y = cameraY + viewY + viewH / 2.0;
 }
 /* Camera Follows: someone else (0 = the player again). */
 void world_camera_follow(int actor) { cameraFollow = actor; cameraHeld = 0; }
@@ -3622,9 +4567,10 @@ int world_set_tile(int x, int y, int onFloor, int tile)
             cJSON *props = get(byKey, key);
             if (props && !flag(props, "Walkable")) walkable[y * mapW + x] = 0;
             water[y * mapW + x] = props && flag(props, "IsWater");
+            liquid[y * mapW + x] = props ? (unsigned char)num(props, "U8Liquid", 0) : 0;
             if (props && num(props, "UnderTileIndex", -1) >= 0) underTile[y * mapW + x] = slot * 100000 + num(props, "UnderTileIndex", -1);
         }
-        else water[y * mapW + x] = 0;
+        else { water[y * mapW + x] = 0; liquid[y * mapW + x] = 0; }
         return 1;
     }
     /* an upper floor's slab: added, or taken away */
@@ -3684,6 +4630,7 @@ static void draw_effects(uint32_t *pixels)
         if (!pic) continue;
         int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
         screen = pixels;
+        if (u8View) { int sx, sy; u8_box(P_CHAR, x - qw / 2.0 - lift * LIFT_SHIFT, y + tileH / 2.0 - qh - lift * LIFT_SHIFT, qw, qh, &sx, &sy); blit_box(pic, sx, sy, qw, qh); continue; } /* Ultima 8: as a character is placed */
         blit_box(pic, (int)floor(x - qw / 2.0 - lift * LIFT_SHIFT - cameraX), (int)floor(y + tileH / 2.0 - qh - lift * LIFT_SHIFT - cameraY), qw, qh);
     }
 }
@@ -3718,6 +4665,38 @@ static void draw_hit_outline(uint32_t *pixels)
     }
 }
 
+/* How a character's body looks and its size (their Body pose as they fell; never seen fall: facing south) - for it carried
+   and put down again. */
+static struct { int characterId, sizeX, sizeY; const Sprite *sprite; } bodyLooks[64];
+static int bodyLookCount;
+
+static void remember_body_look(int characterId, const Sprite *sprite, int sizeX, int sizeY)
+{
+    int i = 0;
+    while (i < bodyLookCount && bodyLooks[i].characterId != characterId) i++;
+    if (i == bodyLookCount) { if (bodyLookCount >= 64) return; bodyLookCount++; }
+    bodyLooks[i].characterId = characterId; bodyLooks[i].sprite = sprite; bodyLooks[i].sizeX = sizeX; bodyLooks[i].sizeY = sizeY;
+}
+
+static const Sprite *body_look(int characterId, int *sizeX, int *sizeY)
+{
+    for (int i = 0; i < bodyLookCount; i++)
+        if (bodyLooks[i].characterId == characterId) { if (sizeX) *sizeX = bodyLooks[i].sizeX; if (sizeY) *sizeY = bodyLooks[i].sizeY; return bodyLooks[i].sprite; }
+    cJSON *project = get(gameJson, "Project"), *ch = NULL, *c;
+    cJSON_ArrayForEach(c, get(get(project, "Characters"), "Characters")) if (num(c, "Id", -2) == characterId) ch = c;
+    if (!ch) return NULL;
+    static Actor made;
+    memset(&made, 0, sizeof made);
+    read_actor_poses(ch, get(project, "Poses"), &made);
+    const Sprite *body = NULL;
+    for (int i = 0; i < made.poseCount; i++) if (!strcmp(made.poses[i].name, "Body")) body = made.poses[i].dirs[slot_of(DIR_S)];
+    if (!body) body = made.idle[slot_of(DIR_S)];
+    remember_body_look(characterId, body, made.sizeX > 0 ? made.sizeX : 1, made.sizeY > 0 ? made.sizeY : 1);
+    if (sizeX) *sizeX = made.sizeX > 0 ? made.sizeX : 1;
+    if (sizeY) *sizeY = made.sizeY > 0 ? made.sizeY : 1;
+    return body;
+}
+
 /* A body where someone fell: a container on the map looking like them (their Body pose), not solid, walked over. Its uid. */
 int world_put_body(int actor, int x, int y, int onFloor)
 {
@@ -3729,9 +4708,10 @@ int world_put_body(int actor, int x, int y, int onFloor)
     t->uid = nextUid++; t->category = 5; t->itemId = -1000 - a->characterId; t->quantity = 1; t->burnLeft = -1;
     t->x = x; t->y = y; t->facing = a->facing;
     const Sprite *body = NULL;
-    for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Body")) body = a->poses[i].dirs[a->facing];
-    t->sprite = body ? body : a->idle[a->facing];
+    for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Body")) body = a->poses[i].dirs[slot_of(a->facing)];
+    t->sprite = body ? body : a->idle[slot_of(a->facing)];
     t->sizeX = a->sizeX; t->sizeY = a->sizeY; t->sizeZ = 1;
+    remember_body_look(a->characterId, t->sprite, a->sizeX, a->sizeY); /* picked up and put down again: the same look */
     t->homeFloor = onFloor;
     Body b;
     thing_box(t, &b);
@@ -3798,6 +4778,7 @@ void world_draw_sprite(uint32_t *pixels, const Sprite *sprite, double x, double 
     if (!pic) return;
     int qw = (pic->width + UNIT - 1) / UNIT * UNIT, qh = (pic->height + UNIT - 1) / UNIT * UNIT;
     screen = pixels;
+    if (u8View) { int sx, sy; u8_box(P_CENTER, x - qw / 2.0 - lift * LIFT_SHIFT, y + tileH / 2.0 - qh - lift * LIFT_SHIFT, qw, qh, &sx, &sy); blit_box(pic, sx, sy, qw, qh); return; } /* Ultima 8: in flight, by its middle */
     blit_box(pic, (int)floor(x - qw / 2.0 - lift * LIFT_SHIFT - cameraX), (int)floor(y + tileH / 2.0 - qh - lift * LIFT_SHIFT - cameraY), qw, qh);
 }
 
@@ -3863,6 +4844,8 @@ int world_get_tile(int x, int y, int onFloor)
 /* ---------------- For the inventory windows (gumps.c) ---------------- */
 
 /* A sprite scaled into a box on the screen (kept in proportion, centred). */
+/* A picture see-through (0-255 opaque): Ultima 8's equip preview. */
+void world_blit_alpha(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h, int opacity) { screen = pixels; blitOpacity = opacity; blit_box(picture, x, y, w, h); blitOpacity = 255; }
 void world_blit(uint32_t *pixels, const Picture *picture, int x, int y, int w, int h)
 {
     screen = pixels;
@@ -3883,6 +4866,7 @@ const Sprite *world_item_look(int category, int itemId, int lit, int spent, int 
         as.def = d; as.lit = lit; as.spent = spent; as.quantity = quantity > 1 ? quantity : 1; as.liquid = liquid; as.facing = DIR_S;
         return look_of(&as);
     }
+    if (category == 5 && itemId <= -1000) return body_look(-1000 - itemId, NULL, NULL); /* a body carried */
     cJSON *list = category == 5 ? get(get(get(gameJson, "Project"), "Containers"), "Containers") : get(get(gameJson, "Books"), "Books"), *o;
     cJSON_ArrayForEach(o, list)
         if (num(o, "Id", -2) == itemId)
@@ -3899,7 +4883,9 @@ const Sprite *world_thing_sprite(int uid) { Thing *t = thing_by_uid(uid); return
 /* The map cell under a point on the screen, on the player's floor. */
 void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor)
 {
-    *x = (int)floor((sx + cameraX) / tileW); *y = (int)floor((sy + cameraY) / tileH); *onFloor = floor_of(player.lift);
+    double mx = sx + cameraX, my = sy + cameraY;
+    if (u8View) { double a = mx - u8OriginX, b = 2 * my; mx = (a + b) / 2; my = (b - a) / 2; } /* Ultima 8: the diamond view back on the map (ToMap) */
+    *x = (int)floor(mx / tileW); *y = (int)floor(my / tileH); *onFloor = floor_of(player.lift);
 }
 
 /* ---------------- Reach (GameTestWindow.Reach: Exult's Fast_pathfinder_client::is_grabable, paths.cc) ----------------
@@ -3913,7 +4899,7 @@ void world_screen_cell(int sx, int sy, int *x, int *y, int *onFloor)
 #define MAX_GRAB_DIST 5
 typedef struct T3 { int x, y, z; } T3;
 typedef struct Vol { int x, y, z, w, d, h; } Vol;
-typedef struct ReachSolid { Body b; int table, movable; } ReachSolid;
+typedef struct ReachSolid { Body b; int table, movable, owner; } ReachSolid; /* owner: its thing's uid, or -(the actor + 2) */
 static ReachSolid *reachSolids; static int reachSolidCount, reachSolidCap;
 
 static int vol_has(const Vol *v, T3 t) { return t.x >= v->x && t.x < v->x + v->w && t.y >= v->y && t.y < v->y + v->d && t.z >= v->z && t.z < v->z + v->h; }
@@ -3921,12 +4907,15 @@ static T3 anchor_of(const Vol *v) { T3 t = { v->x + v->w - 1, v->y + v->d - 1, v
 static int imax(int a, int b) { return a > b ? a : b; }
 static int tile_distance(T3 a, T3 b) { return imax(imax(abs(b.x - a.x), abs(b.y - a.y)), abs(b.z - a.z)); }
 
+static int reachOwner; /* whose the next solid is (ReachSolid.owner) */
+static int u8_can_reach(const Vol *target, int rangeUnits, int owner, const Vol *stuckIn);
+static int u8Landing;
 static void add_reach_solid(const Body *b, int table, int movable)
 {
     if (b->z <= -100000 || b->width <= 0 || b->depth <= 0) return;
     if (reachSolidCount >= reachSolidCap) { reachSolidCap = reachSolidCap * 2 + 64; reachSolids = (ReachSolid *)realloc(reachSolids, sizeof(ReachSolid) * (size_t)reachSolidCap); }
     ReachSolid *r = &reachSolids[reachSolidCount++];
-    r->b = *b; r->table = table; r->movable = movable;
+    r->b = *b; r->table = table; r->movable = movable; r->owner = reachOwner;
 }
 
 /* ReachQuery's solids: the things' boxes (walls, doors and windows to the roof), the upper floors' slabs, the characters. */
@@ -3943,11 +4932,14 @@ static void reach_solids(void)
         {
             Body b = bodies[t->body + k];
             if (wallLike && b.height < 64) b.height = 64;
+            reachOwner = t->uid;
             add_reach_solid(&b, type == T_TABLE, t->def ? t->def->portable : 1); /* IsMovable: an object if Portable; books and containers can always be moved */
+
         }
     }
+    reachOwner = 0;
     for (int i = slabStart; i < slabEnd; i++) add_reach_solid(&bodies[i], 0, 0); /* a floor overhead: not reached through */
-    for (int i = 0; i < npcCount; i++) if (!npcs[i].gone && npcs[i].body >= 0) add_reach_solid(&bodies[npcs[i].body], 0, 1);
+    for (int i = 0; i < npcCount; i++) if (!npcs[i].gone && npcs[i].body >= 0) { reachOwner = -(i + 1 + 2); add_reach_solid(&bodies[npcs[i].body], 0, 1); }
 }
 
 /* BlockingAt / ReachBlockerAt: the solid filling this tile and lift (forReach: not a table). -1: none. */
@@ -4224,6 +5216,7 @@ int world_reachable_thing(int uid)
     Body b;
     thing_box(t, &b);
     Vol v = { b.left, b.top, b.z, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1, b.height > 0 ? b.height : 1 };
+    if (u8View) return u8_can_reach(&v, 128, t->uid, t->staysPut ? &v : NULL); /* Ultima 8: Pentagram's reach - 128 and a clear line */
     reachStuckIn = t->staysPut ? &v : NULL;
     int reached = grabable(v, 0);
     reachStuckIn = NULL;
@@ -4234,9 +5227,126 @@ int world_reachable_thing(int uid)
 int world_reachable(int x, int y, int z)
 {
     Vol v = { x * unitsX + unitsX / 2, y * unitsY + unitsY / 2, z, 1, 1, 1 };
+    if (u8View) return u8Landing || u8_can_reach(&v, 128, 0, NULL); /* Ultima 8: Pentagram's reach; a thrown thing lands where it falls */
     return grabable(v, 1);
 }
 
+
+/* ---------------- Ultima 8's reach (U8GameWindow.U8Reach: Pentagram's Item::canReach) ----------------
+   The gap between the two footprints, along each axis, at most 128 of Ultima 8's units (a map cell), and a clear line - feet to
+   feet, middle to middle (from eye height when tall), or eye height to its top - through nothing solid but the target itself (and
+   what a staying thing is stuck in). Talking: beside them (32). A thrown thing lands where it falls (u8Landing). */
+
+static int u8Landing;
+void world_u8_landing(int on) { u8Landing = on; }
+
+static Vol player_vol(void)
+{
+    int l, t;
+    player_foot(player.px, player.py, &l, &t);
+    Vol v = { l, t, player.lift, player.sizeX, player.sizeY, player.sizeZ };
+    return v;
+}
+
+static int u8_line_of_sight(const Vol *me, const Vol *target, int owner, const Vol *stuckIn)
+{
+    reach_solids();
+    int meX = me->x + me->w / 2, meY = me->y + me->d / 2, toX = target->x + target->w / 2, toY = target->y + target->d / 2;
+    int eye = me->h > 2 ? me->z + me->h - 1 : me->z;
+    T3 lines[3][2] = {
+        { { meX, meY, me->z }, { toX, toY, target->z } },
+        { { meX, meY, eye }, { toX, toY, target->z + target->h / 2 } },
+        { { meX, meY, eye }, { toX, toY, target->z + (target->h - 1 > 0 ? target->h - 1 : 0) } } };
+    static T3 line[512];
+    for (int k = 0; k < 3; k++)
+    {
+        int n = zombie_line(lines[k][0], lines[k][1], line, 512), clear = 1;
+        for (int i = 0; i < n && clear; i++)
+        {
+            if (vol_has(target, line[i]) || vol_has(me, line[i])) continue;
+            int b = reach_blocker(line[i], 0);
+            if (b < 0) continue;
+            if (owner && reachSolids[b].owner == owner) continue;
+            const Body *o = &reachSolids[b].b;
+            if (stuckIn && o->left < stuckIn->x + stuckIn->w && stuckIn->x < o->left + o->width && o->top < stuckIn->y + stuckIn->d && stuckIn->y < o->top + o->depth) continue;
+            clear = 0;
+        }
+        if (clear) return 1;
+    }
+    return 0;
+}
+
+/* CanReachU8: within so many of Ultima 8's units (the footprints' gap) and a clear line. */
+static int u8_can_reach(const Vol *target, int rangeUnits, int owner, const Vol *stuckIn)
+{
+    Vol me = player_vol();
+    double unitsPerFoot = 8.0 * 128 / (tileW > 0 ? tileW : 1);
+    int range = (int)floor(rangeUnits / unitsPerFoot);
+    int gapX = imax(0, imax(target->x - (me.x + me.w), me.x - (target->x + target->w)));
+    int gapY = imax(0, imax(target->y - (me.y + me.d), me.y - (target->y + target->d)));
+    if (gapX > range || gapY > range) return 0;
+    return u8_line_of_sight(&me, target, owner, stuckIn);
+}
+
+static Vol actor_vol(const Actor *a)
+{
+    int l, t;
+    foot_at(a, a->px, a->py, &l, &t);
+    Vol v = { l, t, a->lift, a->sizeX, a->sizeY, a->sizeZ };
+    return v;
+}
+
+/* IsBesideU8: talking to someone - you stand beside them (and can see them). */
+int world_u8_beside(int actor)
+{
+    const Actor *a = actor_of(actor);
+    if (!a || actor == 0) return 1;
+    Vol v = actor_vol(a);
+    return u8_can_reach(&v, 32, -(actor + 2), NULL);
+}
+
+/* Handing something to a party member: only within reach (128). */
+int world_u8_reaches_actor(int actor)
+{
+    const Actor *a = actor_of(actor);
+    if (!a || actor == 0 || u8Landing) return 1;
+    Vol v = actor_vol(a);
+    return u8_can_reach(&v, 128, -(actor + 2), NULL);
+}
+
+/* TryThrowU8's tests: a cell's middle within the throw range (Ultima 8's units) and a clear path. 1 yes, 0 too far, -1 in the way. */
+int world_u8_can_throw_to(int cellX, int cellY, int rangeUnits)
+{
+    Vol spot = { cellX * unitsX + unitsX / 2, cellY * unitsY + unitsY / 2, player.lift, 1, 1, 1 }, me = player_vol();
+    double unitsPerFoot = 8.0 * 128 / (tileW > 0 ? tileW : 1);
+    int range = (int)floor(rangeUnits / unitsPerFoot);
+    if (imax(0, imax(spot.x - (me.x + me.w), me.x - (spot.x + spot.w))) > range || imax(0, imax(spot.y - (me.y + me.d), me.y - (spot.y + spot.d))) > range) return 0;
+    return u8_line_of_sight(&me, &spot, 0, NULL) ? 1 : -1;
+}
+
+/* The canvas (the screen plus the camera) and back: a thrown thing's landing point is kept on it. */
+void world_camera_now(double *x, double *y) { *x = cameraX; *y = cameraY; }
+void world_screen_to_map(double sx, double sy, double *mx, double *my)
+{
+    double cx = sx + cameraX, cy = sy + cameraY;
+    if (u8View) { double a = cx - u8OriginX, b = 2 * cy; *mx = (a + b) / 2; *my = (b - a) / 2; return; }
+    *mx = cx; *my = cy;
+}
+void world_map_to_screen(double mx, double my, double *sx, double *sy)
+{
+    if (u8View) { *sx = u8_sx(mx, my) - cameraX; *sy = u8_sy(mx, my) - cameraY; return; }
+    *sx = mx - cameraX; *sy = my - cameraY;
+}
+
+/* A picture by its middle at a map point raised by some pixels (a thrown thing in the air). */
+void world_draw_center(uint32_t *pixels, const Picture *pic, double mx, double my, double rise)
+{
+    if (!pic) return;
+    double sx, sy;
+    world_map_to_screen(mx - rise, my - rise, &sx, &sy);
+    screen = pixels;
+    blit_box(pic, (int)floor(sx - pic->width / 2.0), (int)floor(sy - pic->height / 2.0), pic->width, pic->height);
+}
 /* A stack on the map grows (a stackable thing dropped on it). */
 void world_thing_add_quantity(int uid, int n) { Thing *t = thing_by_uid(uid); if (t) t->quantity += n; }
 int world_thing_quantity(int uid) { Thing *t = thing_by_uid(uid); return t ? t->quantity : 0; }
@@ -4253,13 +5363,41 @@ int world_thing_at_cell(int category, int itemId, int x, int y, int except)
 }
 
 /* Let go of by hand (drag.cc drop_on_map): its picture's top-left on the screen - the cell under its middle, and the 8-pixel offset that keeps it exactly where it was shown. */
-void world_thing_drop_at(int uid, int sx, int sy, int onFloor)
+static int grabable(Vol target, int isSpot);
+
+/* drag.cc drop_at_lift (TryResolveMapPlacement): where it came to rest - its own tile (the lower right of its footprint) at the
+   lift it lies on - must be in reach, except when it's just lower than the player, so it can fall down. Not Ultima 8 (its own
+   reach and throwing). */
+static int drop_spot_reachable(Thing *t)
+{
+    if (u8View) return 1;
+    Body b;
+    thing_box(t, &b);
+    int hidden = t->body >= 0 ? bodies[t->body].z : 0;
+    if (t->body >= 0) bodies[t->body].z = -100000; /* not in its own way */
+    Vol spot = { b.left + (b.width > 0 ? b.width : 1) - 1, b.top + (b.depth > 0 ? b.depth : 1) - 1, t->z, 1, 1, 1 };
+    int ok = grabable(spot, 1);
+    if (!ok && player.lift > t->z) { spot.z = player.lift; ok = grabable(spot, 1); }
+    if (t->body >= 0) bodies[t->body].z = hidden;
+    return ok;
+}
+
+int world_thing_drop_at(int uid, int sx, int sy, int onFloor)
 {
     Thing *t = thing_by_uid(uid);
-    if (!t) return;
+    if (!t) return 0;
+    int wasX = t->x, wasY = t->y, wasOffX = t->offX, wasOffY = t->offY, wasZ = t->z, wasFloor = t->homeFloor;
     const Picture *p = sprite_picture_at(look_of(t), 0);
     int qw = p ? (p->width + UNIT - 1) / UNIT * UNIT : tileW, qh = p ? (p->height + UNIT - 1) / UNIT * UNIT : tileH;
     double left = sx + cameraX, top = sy + cameraY;
+    if (u8View && p)
+    {
+        /* Ultima 8 (U8GameWindow.Interaction): the ghost's bottom-middle is the nearest corner of the cell it lands on - back on the
+           map, where the engine's own placement would have put its top-left */
+        double a = left + p->width / 2.0 - u8OriginX, b = 2 * (top + p->height);
+        double mx = (a + b) / 2, my = (b - a) / 2;
+        left = mx - tileW / 2.0 - p->width / 2.0; top = my - p->height;
+    }
     int cx = (int)floor((left + qw / 2.0) / tileW), cy = (int)floor((top + qh / 2.0) / tileH);
     cx = cx < 0 ? 0 : cx >= mapW ? mapW - 1 : cx; cy = cy < 0 ? 0 : cy >= mapH ? mapH - 1 : cy;
     double defaultLeft = cx * tileW + (tileW - qw) / 2.0, defaultTop = (cy + 1) * tileH - qh;
@@ -4271,7 +5409,17 @@ void world_thing_drop_at(int uid, int sx, int sy, int onFloor)
     if (t->body >= 0) bodies[t->body].z = -100000;
     t->z = standing_lift(b.left, b.top, b.width, b.depth, onFloor);
     if (t->body >= 0) { if (bodies[t->body].width || t->solid) thing_box(t, &bodies[t->body]); }
+    if (!drop_spot_reachable(t))
+    {
+        /* out of reach (behind a wall): back where it was */
+        world_thing_move(uid, wasX, wasY, wasFloor);
+        t = thing_by_uid(uid);
+        t->offX = wasOffX; t->offY = wasOffY; t->z = wasZ;
+        if (t->body >= 0) { if (bodies[t->body].width || t->solid) thing_box(t, &bodies[t->body]); }
+        return 0;
+    }
     settle_all();
+    return 1;
 }
 
 /* ---------------- Saving (GameSaveData.Map): the map as it is now ---------------- */
@@ -4323,9 +5471,7 @@ void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entr
         int f = first ? 1 : num(layer, "Floor", 1);
         first = 0;
         if (f < 1 || f > MAX_FLOORS || !floors[f]) continue;
-        cJSON *tiles = cJSON_CreateArray();
-        for (int i = 0; i < mapW * mapH; i++) cJSON_AddItemToArray(tiles, cJSON_CreateNumber(floors[f][i]));
-        set_item(layer, "TileIndices", tiles);
+        set_item(layer, "TileIndices", cJSON_CreatePackedInts(floors[f], mapW * mapH)); /* one block, printed as the array it is */
     }
     /* things */
     int top = 0;
@@ -4354,7 +5500,11 @@ void world_save(cJSON *map, cJSON *runtime, cJSON *(*extra)(int uid, cJSON *entr
         cJSON_AddNumberToObject(p, "CharacterId", a->characterId);
         cJSON_AddNumberToObject(p, "X", (int)floor(a->px / tileW)); cJSON_AddNumberToObject(p, "Y", (int)floor(a->py / tileH));
         cJSON_AddNumberToObject(p, "Floor", floor_of(a->lift < 0 ? 0 : a->lift));
-        cJSON_AddNumberToObject(p, "Facing", a->facing);
+        cJSON_AddNumberToObject(p, "Facing", u8View ? (a->facing + 1) & 7 : a->facing); /* Ultima 8: as the map has it (screen slots) - read back through WorldOfSlot, it faced one step round each load */
+        /* exactly where it stands and how high (PlacedCharacter.PixelXRuntime..., as Windows): a loaded game puts it back there -
+           not in its cell's middle (inside a wall beside it), nor dropped off an upper floor's edge */
+        cJSON_AddNumberToObject(p, "PixelXRuntime", a->px); cJSON_AddNumberToObject(p, "PixelYRuntime", a->py);
+        cJSON_AddNumberToObject(p, "LiftRuntime", a->lift);
         cJSON_AddItemToArray(placed, p);
     }
     set_item(map, "Characters", placed);
@@ -4390,7 +5540,7 @@ const char *world_actor_name(int actor)
 void world_reset(void)
 {
     for (int f = 0; f <= MAX_FLOORS; f++) { free(floors[f]); floors[f] = NULL; }
-    free(walkable); free(water); free(underTile); water = NULL; walkable = NULL; underTile = NULL;
+    free(walkable); free(water); free(liquid); liquid = NULL; free(underTile); water = NULL; walkable = NULL; underTile = NULL;
     puddleCount = 0; bleedingCount = 0;
     free(defs); defs = NULL; defCount = 0;
     free(things); things = NULL; thingCount = 0;
@@ -4502,6 +5652,7 @@ double world_thing_grow(int uid, double minutes) { Thing *t = thing_by_uid(uid);
 void world_thing_set_grow(int uid, double minutes) { Thing *t = thing_by_uid(uid); if (t) t->grow = minutes; }
 int world_thing_liquid(int uid) { Thing *t = thing_by_uid(uid); return t ? t->liquid : -1; }
 void world_thing_set_liquid(int uid, int liquid) { Thing *t = thing_by_uid(uid); if (t) t->liquid = liquid; }
+int world_thing_is_liquid(int uid) { Thing *t = thing_by_uid(uid); return t && t->def && t->def->type == T_LIQUID; }
 void world_thing_set_frame(int uid, int frame) { Thing *t = thing_by_uid(uid); if (t) t->fixedFrame = frame >= 0 ? frame + 1 : 0; }
 cJSON *world_thing_entry(int uid) { Thing *t = thing_by_uid(uid); return t ? t->placed : NULL; }
 int world_thing_by_instance(int instanceId)
@@ -4946,7 +6097,7 @@ void world_update_bleeding(double ms)
     }
     if ((puddleSweepMs -= ms) > 0) return;
     puddleSweepMs = 2000;
-    double cx = cameraX + SCREEN_W / 2.0, cy = cameraY + SCREEN_H / 2.0;
+    double cx = cameraX + viewX + viewW / 2.0, cy = cameraY + viewY + viewH / 2.0;
     for (int i = 0; i < puddleCount; i++)
         if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) { puddles[i--] = puddles[--puddleCount]; puddleOldest = 0; }
 }
@@ -5032,3 +6183,591 @@ static int ask_aside(int walker, int l, int t, int dx, int dy)
     }
     return 0;
 }
+
+/* ---------------- What lies on a thing (GameTestWindow.Burst: ThingsOn, WeightOn) ---------------- */
+
+static double item_weight(int category, int itemId)
+{
+    cJSON *list = category == 4 ? get(get(get(gameJson, "Project"), "Objects"), "Objects") : category == 5 ? containersJson : NULL, *d;
+    cJSON_ArrayForEach(d, list) if (num(d, "Id", -2) == itemId) return cJSON_IsNumber(get(d, "Weight")) ? get(d, "Weight")->valuedouble : 0;
+    return 0;
+}
+
+/* What rests on a placed thing, and on what rests on it (Item::getSurfaceWeight's list), without the thing itself; whoever stands on any of them. */
+static void weight_above(Thing *t, unsigned char *seen, unsigned char *people, double *total)
+{
+    Body b; thing_box(t, &b);
+    int top = b.z + b.height;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *o = &things[i];
+        if (o->gone || seen[i]) continue;
+        Body ob; thing_box(o, &ob);
+        if (ob.z != top || ob.left >= b.left + b.width || b.left >= ob.left + ob.width || ob.top >= b.top + b.depth || b.top >= ob.top + ob.depth) continue;
+        seen[i] = 1;
+        if (o->category == 4) *total += item_weight(4, o->itemId) * (o->quantity > 1 ? o->quantity : 1);
+        else if (o->category == 5) *total += item_weight(5, o->itemId);
+        weight_above(o, seen, people, total);
+    }
+    for (int i = 0; i <= npcCount && i < 4096; i++)
+    {
+        Actor *a = actor_of(i);
+        if (!a || a->gone || people[i] || a->lift != top) continue;
+        int l, tp; foot_at(a, a->px, a->py, &l, &tp);
+        if (l >= b.left + b.width || b.left >= l + a->sizeX || tp >= b.top + b.depth || b.top >= tp + a->sizeY) continue;
+        people[i] = 1;
+        cJSON *ch = character_json_of(a->characterId);
+        if (!ch || vitals_dead(a->characterId)) continue;
+        cJSON *w = get(get(ch, "Body"), "Weight");
+        *total += cJSON_IsNumber(w) ? w->valuedouble : 0;
+    }
+}
+
+/* All that weighs on a placed thing: objects and containers on it, and whoever stands on it (their Body weight). */
+double world_weight_on(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t || t->gone) return 0;
+    unsigned char *seen = (unsigned char *)calloc((size_t)thingCount + 1, 1), people[4097] = { 0 };
+    double total = 0;
+    if (!seen) return 0;
+    seen[t - things] = 1;
+    weight_above(t, seen, people, &total);
+    free(seen);
+    return total;
+}
+
+/* The character has art for this pose, facing the way it faces (WithArt). */
+int world_has_pose(int actor, const char *pose) { const Actor *a = actor_of(actor); return a && pose_index(a, pose) >= 0; }
+
+/* Item::ascend (Ultima 8's Move Platform): a placed thing one lift up or down, and everything and everyone on it goes with it.
+   0: the ground - it sinks no further. */
+int world_raise_platform(int uid, int dir)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t || t->gone || t->z + dir < 0) return 0;
+    unsigned char *seen = (unsigned char *)calloc((size_t)thingCount + 1, 1), people[4097] = { 0 };
+    double ignore = 0;
+    if (!seen) return 0;
+    seen[t - things] = 1;
+    weight_above(t, seen, people, &ignore);
+    seen[t - things] = 1;
+    for (int i = 0; i < thingCount; i++)
+        if (seen[i])
+        {
+            Thing *o = &things[i];
+            o->z += dir;
+            if (o->body >= 0) for (int k = 0; k < o->bodyN; k++) bodies[o->body + k].z += dir;
+        }
+    for (int i = 0; i <= npcCount && i < 4096; i++)
+    {
+        if (!people[i]) continue;
+        Actor *a = actor_of(i);
+        if (!a) continue;
+        a->lift += dir;
+        if (i > 0 && a->body >= 0) bodies[a->body].z = a->lift;
+    }
+    free(seen);
+    return 1;
+}
+
+/* ---------------- Ultima 8's water and lava (U8GameWindow.U8Liquids) ----------------
+   At the ground over real water a character drowns - it sinks with a splash and is gone, body, belongings and all; over lava it
+   burns (Fire, by its own rule). A thing that comes down in water sinks; in lava it burns away. What the map was made with in them
+   stays. Splashes: the maker's sprite (else the locked group's first), scaled by size, else drops and a ring. */
+
+typedef struct Sinking { int actor; double left; } Sinking;
+static Sinking sinking[32]; static int sinkingCount;
+static double lavaBurn[1024]; static unsigned char inLava[1024];
+static double liquidCheckMs;
+static int mapHasLiquid = -1, playerHidden;
+typedef struct Splash { int used, lava; double x, y, size, left, total, since; const Sprite *sprite; double dvx[16], dvy[16], dvz[16]; int drops; } Splash;
+static Splash splashes[16];
+
+static cJSON *u8_settings_w(void) { return get(get(get(gameJson, "Project"), "Settings"), "Ultima8"); }
+
+/* A splash (or lava's flare) there, as big as size; its sound (the big one from size 2 up). */
+static void splash(double x, double y, double size, int lava)
+{
+    cJSON *s = u8_settings_w();
+    int sound = lava ? num(s, "LavaSoundId", -1) : size >= 2 && num(s, "BigSplashSoundId", -1) >= 0 ? num(s, "BigSplashSoundId", -1) : num(s, "SplashSoundId", -1);
+    if (sound >= 0) sound_play(sound);
+    cJSON *link = get(s, lava ? "LavaSprite" : "SplashSprite");
+    const Sprite *sp = str(link, "SpriteName")[0] ? sprite_find(str(link, "SpriteGroup"), str(link, "SpriteName")) : sprite_first_in_group(lava ? "Lava Flare" : "Water Splash");
+    Splash *f = NULL;
+    for (int i = 0; i < 16 && !f; i++) if (!splashes[i].used) f = &splashes[i];
+    if (!f) f = &splashes[0];
+    memset(f, 0, sizeof *f);
+    f->used = 1; f->lava = lava; f->x = x; f->y = y; f->size = size;
+    if (sp && sp->frameCount) { f->sprite = sp; f->total = sp->totalMs > 200 ? sp->totalMs : 200; }
+    else
+    {
+        f->total = 700;
+        f->drops = (int)floor(4 + 4 * size + 0.5); if (f->drops > 16) f->drops = 16;
+        for (int i = 0; i < f->drops; i++)
+        {
+            double angle = (rand() % 6283) / 1000.0, speed = 10 + (rand() % 20) * sqrt(size);
+            f->dvx[i] = cos(angle) * speed; f->dvy[i] = sin(angle) * speed * 0.5; f->dvz[i] = 40 + (rand() % 40) * sqrt(size);
+        }
+    }
+    f->left = f->total;
+}
+
+static void draw_splashes(uint32_t *pixels)
+{
+    for (int i = 0; i < 16; i++)
+    {
+        Splash *f = &splashes[i];
+        if (!f->used) continue;
+        if (f->sprite)
+        {
+            const Picture *p = sprite_picture_at(f->sprite, (uint32_t)(f->total - f->left));
+            if (!p) continue;
+            int qw = (p->width + UNIT - 1) / UNIT * UNIT, qh = (p->height + UNIT - 1) / UNIT * UNIT, w = (int)(qw * f->size), h = (int)(qh * f->size), sx, sy;
+            u8_box(P_CHAR, f->x - w / 2.0, f->y + h / 2.0 - tileH / 2.0 + tileH / 2.0 - h, w, h, &sx, &sy);
+            screen = pixels;
+            blit_box(p, sx, sy, w, h);
+            continue;
+        }
+        double t = (f->total - f->left) / 1000.0, grow = 1 + 2 * t, fade = f->left / f->total;
+        uint32_t c = f->lava ? 0xFFFF7814u : 0xFFAAD2FFu;
+        double rw = 8 * f->size * grow, rh = 4 * f->size * grow, cx, cy;
+        world_map_to_screen(f->x, f->y, &cx, &cy);
+        if (fade > 0.3) for (int k = 0; k < 48; k++) { double a = k * 6.2832 / 48; frame_dot(pixels, (int)(cx + cos(a) * rw / 2), (int)(cy + sin(a) * rh / 2), c); }
+        for (int d = 0; d < f->drops; d++)
+        {
+            double up = fmax(0, f->dvz[d] * t - 120 * t * t), dx, dy;
+            world_map_to_screen(f->x + f->dvx[d] * t - up, f->y + f->dvy[d] * t - up, &dx, &dy);
+            if (fade > 0.2) frame_fill(pixels, (int)dx, (int)dy, 2, 2, c);
+        }
+    }
+}
+
+/* Safe in it: dead, immortal, already sinking; the player levitating, driving, jumping, hanging, falling, seated; a flier, a sea creature, one seated. */
+static int liquid_safe(int a)
+{
+    Actor *ac = actor_of(a);
+    int id = ac ? ac->characterId : -1;
+    if (!ac || id < 0 || vitals_dead(id) || vitals_immortal(id)) return 1;
+    for (int i = 0; i < sinkingCount; i++) if (sinking[i].actor == a) return 1;
+    if (a == 0) return player.levitateMs > 0 || vehicles_driving() || u8Jump.on || u8Hang || (u8VisLift >= 0 && u8VisLift > player.lift) || world_seated(0);
+    return ac->movement == 2 /* flies */ || ac->levitateMs > 0 || ac->movement == 1 /* sea */ || world_seated(a);
+}
+
+/* StartDrowning: a splash, the Drown pose if it has one, and soon it is gone. */
+static void start_drowning(int a)
+{
+    Actor *ac = actor_of(a);
+    splash(ac->px, ac->py, 2.5, 0);
+    int p = pose_index(ac, "Drown"), ms = p >= 0 ? (pose_ms(ac, p) > 400 ? pose_ms(ac, p) : 400) : 300;
+    if (p >= 0) { ac->shownPose = -2; show_pose(ac, p, 0); }
+    if (a == 0) { u8StunMs = ms + 100; u8_drop_arrows(); world_walk_cancel(0); }
+    else { world_walk_cancel(a); schedules_wait_at_least(a, ms + 1000); }
+    if (sinkingCount < 32) sinking[sinkingCount++] = (Sinking){ a, ms };
+}
+
+/* What the map starts with in water or lava stays (only what comes down in it later is lost). */
+static void note_kept_in_liquid(void)
+{
+    mapHasLiquid = 0;
+    if (!liquid) return;
+    for (int i = 0; i < mapW * mapH; i++) if (liquid[i]) { mapHasLiquid = 1; break; }
+    if (!mapHasLiquid) return;
+    for (int i = 0; i < thingCount; i++)
+    {
+        Body b; thing_box(&things[i], &b);
+        things[i].keptInLiquid = b.z <= 0 && liquid_under(b.left, b.top, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1);
+    }
+}
+
+/* Each frame: splashes, the sinking, then five times a second who's in water or lava, and the things in them. */
+void world_u8_liquids(double ms)
+{
+    if (!u8View) return;
+    for (int i = 0; i < 16; i++) if (splashes[i].used && (splashes[i].left -= ms) <= 0) splashes[i].used = 0;
+    for (int i = 0; i < sinkingCount; i++)
+        if ((sinking[i].left -= ms) <= 0)
+        {
+            int a = sinking[i].actor;
+            sinking[i--] = sinking[--sinkingCount];
+            Actor *ac = actor_of(a);
+            if (ac && !vitals_dead(ac->characterId)) { vitals_vanish(ac->characterId); if (a == 0) playerHidden = 1; }
+        }
+    if (playerHidden && !vitals_dead(player.characterId)) playerHidden = 0; /* raised by an event */
+    if (mapHasLiquid < 0) note_kept_in_liquid();
+    if (!mapHasLiquid || (liquidCheckMs += ms) < 200) return;
+    double seconds = liquidCheckMs / 1000.0;
+    liquidCheckMs = 0;
+    cJSON *s = u8_settings_w();
+    double every = (cJSON_IsNumber(get(s, "LavaEverySeconds")) ? get(s, "LavaEverySeconds")->valuedouble : 0.5) * 1000;
+    if (every < 100) every = 100;
+    int lavaDamage = num(s, "LavaDamage", 10);
+    for (int a = 0; a <= npcCount && a < 1024; a++)
+    {
+        Actor *ac = actor_of(a);
+        if (!ac || ac->gone || ac->lift > 0 || liquid_safe(a)) { inLava[a] = 0; continue; }
+        int l, t; foot_at(ac, ac->px, ac->py, &l, &t);
+        int q = liquid_under(l, t, ac->sizeX, ac->sizeY);
+        if (q == 1) { start_drowning(a); continue; }
+        if (q != 2) { inLava[a] = 0; continue; }
+        /* lava: it burns, as often as System Settings > Ultima 8 says, by its own rule for Fire */
+        int first = !inLava[a];
+        double burned = (first ? 0 : lavaBurn[a]) + seconds * 1000;
+        if (first) splash(ac->px, ac->py, 2, 1);
+        inLava[a] = 1;
+        while (burned >= every || first)
+        {
+            if (!first) burned -= every;
+            first = 0;
+            int damage = vitals_after_response(ac->characterId, lavaDamage > 1 ? lavaDamage : 1, 1);
+            if (damage > 0) { vitals_hit_type(1); vitals_damage_allowed(ac->characterId, damage, "burned in lava"); vitals_hit_type(0); }
+            if (vitals_dead(ac->characterId)) break;
+            int p = pose_index(ac, "Burn");
+            if (p >= 0) show_pose(ac, p, ac->walkingNow);
+        }
+        lavaBurn[a] = burned;
+    }
+    /* things in them: sunk or burnt away (never what the map was made with, a wall set's piece, a flying kite, what's being dragged) */
+    int gone = 0, dragged = gumps_dragged_map_thing();
+    for (int i = 0; i < thingCount; i++)
+    {
+        Thing *th = &things[i];
+        if (th->gone || th->keptInLiquid || th->wallSetPiece || th->flying || th->uid == dragged || th->z > 0) continue;
+        Body b; thing_box(th, &b);
+        int q = liquid_under(b.left, b.top, b.width > 0 ? b.width : 1, b.depth > 0 ? b.depth : 1);
+        if (!q) continue;
+        double weight = th->category == 4 ? item_weight(4, th->itemId) : th->category == 5 ? item_weight(5, th->itemId) : 1;
+        double size = sqrt(fmax(1, b.width * b.depth * (b.height > 1 ? b.height : 1))) / 2.0 + weight / 40.0;
+        size = size < 0.5 ? 0.5 : size > 4 ? 4 : size;
+        splash((b.left + b.width / 2.0) * UNIT, (b.top + b.depth / 2.0) * UNIT, size, q == 2);
+        if (th->category == 5) { Item *box = items_parked(th->uid, th->category, th->itemId, th->quantity); if (box) gumps_close_container(box); }
+        world_thing_remove(th->uid);
+        gone = 1;
+    }
+    if (gone) settle_all();
+}
+
+int world_u8_player_hidden(void) { return playerHidden; }
+void world_u8_new_map(void) { mapHasLiquid = -1; sinkingCount = 0; memset(inLava, 0, sizeof inLava); for (int i = 0; i < 16; i++) splashes[i].used = 0; playerHidden = 0; }
+
+/* GravityProcess::actorFallStoppedU8 for any character but the main one: 80 units or more (10 lifts) hurts, (height - 72) / 4;
+   104 or more (13 lifts) kills; the Land pose, if it has it. */
+static void character_fell(int a, int fromLift, int toLift)
+{
+    Actor *ac = actor_of(a);
+    int height = (fromLift - toLift) * U8_UNITS_PER_LIFT, id = ac->characterId;
+    if (height >= 80)
+    {
+        int damage = vitals_after_response(id, height < 104 ? ((height - 72) / 4 > 1 ? (height - 72) / 4 : 1) : 100000, 12);
+        if (damage > 0) { vitals_hit_type(12); vitals_damage_allowed(id, damage, "a fall"); vitals_hit_type(0); }
+    }
+    int p = pose_index(ac, "Land");
+    if (!vitals_dead(id) && !vitals_incapacitated(id) && p >= 0) { ac->shownPose = -2; show_pose(ac, p, 0); schedules_wait_at_least(a, pose_ms(ac, p)); }
+}
+
+/* Map_chunk::gravity for everyone else: what they stood on is gone, they fall onto what's left under them (not fliers, the seated,
+   those climbing after the player). */
+static void u8_gravity(void)
+{
+    for (int a = 1; a <= npcCount; a++)
+    {
+        Actor *ac = actor_of(a);
+        if (!ac || ac->gone || vitals_dead(ac->characterId) || ac->movement == 2 || ac->levitateMs > 0 || world_seated(a) || u8_leaping(a)) continue;
+        int l, t; foot_at(ac, ac->px, ac->py, &l, &t);
+        static const Body *under[1024];
+        int n = 0;
+        for (int i = 0; i < bodyCount && n < 1024; i++) if (i != ac->body && overlaps(&bodies[i], l, t, ac->sizeX, ac->sizeY)) under[n++] = &bodies[i];
+        int ground = floor_below(under, n, ac->lift);
+        if (ground >= ac->lift) continue;
+        int from = ac->lift;
+        world_walk_cancel(a);
+        ac->lift = ground;
+        if (ac->body >= 0) bodies[ac->body].z = ground;
+        if (from - ground > 1) character_fell(a, from, ground);
+    }
+}
+
+/* ---------------- Ultima 8: the party climbing after the player (U8GameWindow.U8Party) ----------------
+   Where the player climbed a ledge, jumped up or down or dropped off one, a member left below (or above) walks to the same spot,
+   waits till the player has moved off the top, and climbs (jumps, climbs down) the same way - no fall hurts them doing it. */
+
+typedef struct Leap { double fromX, fromY, toX, toY; int fromLift, toLift; } Leap;
+static Leap leaps[8]; static int leapCount;
+typedef struct Leaping { int actor, leap, startLift; double startX, startY, t, duration; } Leaping;
+static Leaping leapingNow[16]; static int leapingCount;
+static int lastGroundOn, lastGroundLift; static double lastGroundX, lastGroundY;
+
+/* NoteLeap: a change of level a walker can't make (2 lifts or more) - kept, the last few. */
+void u8_note_leap(double fromX, double fromY, int fromLift, double toX, double toY, int toLift)
+{
+    if (abs(toLift - fromLift) < 2) return;
+    if (leapCount == 8) { memmove(leaps, leaps + 1, sizeof leaps[0] * 7); leapCount = 7; }
+    leaps[leapCount++] = (Leap){ fromX, fromY, toX, toY, fromLift, toLift };
+}
+
+/* NoteDropLanded: walked off a ledge and landed - a leap down from where it last stood. */
+void u8_note_drop_landed(void) { if (lastGroundOn) u8_note_leap(lastGroundX, lastGroundY, lastGroundLift, player.px, player.py, player.lift); }
+
+int u8_leaping(int actor) { for (int i = 0; i < leapingCount; i++) if (leapingNow[i].actor == actor) return 1; return 0; }
+
+/* FollowByLeap: a follower of the player on another level - to the foot (or top) of where the player went, then up or down the same way. 1: seen to. */
+int world_u8_follow_by_leap(int a)
+{
+    Actor *f = actor_of(a);
+    if (!f || u8_leaping(a)) return 1;
+    if (f->movement == 2 || f->levitateMs > 0) return 0;
+    int at = f->lift, goal = player.lift;
+    if (abs(at - goal) <= 1) return 0;
+    int way = goal > at ? 1 : -1, li = -1;
+    for (int i = leapCount - 1; i >= 0 && li < 0; i--) if (abs(leaps[i].fromLift - at) <= 1 && (leaps[i].toLift > leaps[i].fromLift ? 1 : -1) == way) li = i;
+    if (li < 0) return 0;
+    Leap *l = &leaps[li];
+    int fromCellX = (int)floor(l->fromX / tileW), fromCellY = (int)floor(l->fromY / tileH);
+    if (!(fabs(f->px - l->fromX) <= tileW * 0.75 && fabs(f->py - l->fromY) <= tileH * 0.75))
+    {
+        if (!world_walking(a)) world_walk_to(a, fromCellX, fromCellY, 0, 0);
+        return 1;
+    }
+    /* at the foot: it waits till the player and the others are off the top, then goes */
+    int toCellX = (int)floor(l->toX / tileW), toCellY = (int)floor(l->toY / tileH), px = (int)floor(player.px / tileW), py = (int)floor(player.py / tileH);
+    if (imax(abs(px - toCellX), abs(py - toCellY)) <= 1) { world_walk_cancel(a); return 1; }
+    for (int i = 0; i < leapingCount; i++) if (leapingNow[i].leap == li) { world_walk_cancel(a); return 1; }
+    for (int k = 1; k <= npcCount; k++)
+    {
+        Actor *m = actor_of(k);
+        if (k == a || !m || m->gone || abs(m->lift - l->toLift) > 1) continue;
+        if ((int)floor(m->px / tileW) == toCellX && (int)floor(m->py / tileH) == toCellY) { world_walk_cancel(a); return 1; }
+    }
+    world_walk_cancel(a);
+    if (leapingCount >= 16) return 1;
+    int rise = l->toLift - at;
+    const char *pose = rise > 0 ? (pose_index(f, "Climb") >= 0 ? "Climb" : "Jump Up") : "Jump";
+    double seconds = rise > 0 ? 0.5 + rise * 0.05 : 0.45;
+    int p = pose_index(f, pose);
+    if (p >= 0 && pose_ms(f, p) / 1000.0 > seconds) seconds = pose_ms(f, p) / 1000.0;
+    leapingNow[leapingCount++] = (Leaping){ a, li, at, f->px, f->py, 0, seconds };
+    double dx = l->toX - f->px, dy = l->toY - f->py;
+    world_set_pose(a, pose, fabs(dx) > fabs(dy) ? (dx > 0 ? DIR_E : DIR_W) : (dy > 0 ? DIR_S : DIR_N));
+    return 1;
+}
+
+/* UpdateLeaps and TrackLastGround: each frame. */
+static void u8_party_update(double seconds)
+{
+    if (!u8Jump.on && u8FallFrom < 0 && u8VisLift < 0) { lastGroundOn = 1; lastGroundX = player.px; lastGroundY = player.py; lastGroundLift = player.lift; }
+    for (int i = 0; i < leapingCount; i++)
+    {
+        Leaping *g = &leapingNow[i];
+        Actor *m = actor_of(g->actor);
+        if (!m || m->gone || vitals_dead(m->characterId)) { leapingNow[i--] = leapingNow[--leapingCount]; continue; }
+        const Leap *l = &leaps[g->leap];
+        g->t = fmin(g->duration, g->t + seconds);
+        double s = g->t / g->duration, arc = l->toLift > g->startLift ? 1 : 0.5;
+        m->px = g->startX + (l->toX - g->startX) * s; m->py = g->startY + (l->toY - g->startY) * s;
+        m->lift = (int)floor(g->startLift + (l->toLift - g->startLift) * s + arc * 4 * s * (1 - s) + 0.5);
+        if (g->t >= g->duration) { m->lift = l->toLift; world_set_pose(g->actor, "Idle", -1); leapingNow[i--] = leapingNow[--leapingCount]; }
+        if (m->body >= 0) { int bl, bt; foot_at(m, m->px, m->py, &bl, &bt); bodies[m->body].left = bl; bodies[m->body].top = bt; bodies[m->body].z = m->lift; }
+    }
+}
+
+/* Where a character was drawn in the last frame (Ultima 8's talk floats over its head); 0: not drawn. */
+int world_actor_drawn_rect(int actor, int *x, int *y, int *w, int *h) { return drawn_rect_of(actor, 0, x, y, w, h); }
+/* The pose a character shows now is this one. */
+int world_actor_pose_is(int actor, const char *pose) { const Actor *a = actor_of(actor); return a && a->shownPose >= 0 && !strcmp(a->poses[a->shownPose].name, pose); }
+
+/* ---------------- Crusader in an Ultima 8 project: kneeling, rolling, side-stepping (U8GameWindow.U8Crusader) ---------------- */
+
+static int u8Kneel;
+static unsigned shotOverSeed;
+
+int u8_kneeling(void) { return u8Kneel; }
+
+/* Kneel: down (the Kneel pose), or up (Stand Up, then standing). */
+void u8_kneel(int down)
+{
+    u8Kneel = down;
+    if (down) { int p = pose_index(&player, "Kneel"); if (p >= 0) show_pose(&player, p, 0); else u8_rest_pose(); return; }
+    int p = pose_index(&player, "Stand Up");
+    if (p >= 0) { player.shownPose = -2; show_pose(&player, p, 0); combat_pose_back(0, pose_ms(&player, p)); }
+    else u8_rest_pose();
+}
+
+/* The Kneel key: not in the air, seated, knocked out, or driving. */
+void world_u8_toggle_kneel(void)
+{
+    if (u8Jump.on || world_seated(0) || vitals_incapacitated(player.characterId) || vehicles_driving()) return;
+    u8_kneel(!u8Kneel);
+}
+
+int u8_player_dodging(void) { return u8Jump.on && u8Jump.dodge; }
+
+/* A shot that would hit the player: rolling, it misses; kneeling, it flies over 1 time in 2. */
+int u8_player_dodges_shot(void)
+{
+    if (u8_player_dodging()) return 1;
+    if (!u8Kneel) return 0;
+    shotOverSeed = shotOverSeed * 1103515245u + 12345u;
+    return (shotOverSeed >> 16) & 1;
+}
+
+/* StartDodge: a roll (2 cells) or a side-step (1 cell) to the left or right of the way the player faces; it keeps facing that way. */
+void world_u8_dodge(int roll, int left)
+{
+    if (!u8View || u8Jump.on || world_seated(0) || vitals_incapacitated(player.characterId) || u8_stunned() || u8Hang || vehicles_driving()) return;
+    u8Kneel = 0;
+    world_walk_cancel(0);
+    memset(&u8Step, 0, sizeof u8Step);
+    int dx, dy, l, t;
+    vector_of((player.facing + (left ? 6 : 2)) & 7, &dx, &dy);
+    double len = sqrt((double)(dx * dx + dy * dy)), cells = roll ? 2 : 1;
+    double toX = player.px + dx / len * cells * tileW, toY = player.py + dy / len * cells * tileH, lastX = player.px, lastY = player.py;
+    for (int i = 1; i <= 8; i++)
+    {
+        double s = i / 8.0, x = player.px + (toX - player.px) * s, y = player.py + (toY - player.py) * s;
+        if (x < 0 || y < 0 || x >= mapW * tileW || y >= mapH * tileH) break;
+        player_foot(x, y, &l, &t);
+        if (fly_room(l, t, player.sizeX, player.sizeY, player.lift, player.sizeZ) < 0 && fly_room(l, t, player.sizeX, player.sizeY, player.lift + 1, player.sizeZ) < 0) break;
+        lastX = x; lastY = y;
+    }
+    player_foot(lastX, lastY, &l, &t);
+    int landLift = standing_lift(l, t, player.sizeX, player.sizeY, floor_of(player.lift));
+    if (landLift > player.lift + 1) landLift = player.lift;
+    const char *pose = roll ? (left ? "Roll Left" : "Roll Right") : (left ? "Side Step Left" : "Side Step Right");
+    int p = pose_index(&player, pose);
+    double seconds = p >= 0 ? fmax(0.25, pose_ms(&player, p) / 1000.0) : roll ? 0.55 : 0.3;
+    memset(&u8Jump, 0, sizeof u8Jump);
+    u8Jump.on = 1; u8Jump.fromX = player.px; u8Jump.fromY = player.py; u8Jump.toX = lastX; u8Jump.toY = lastY;
+    u8Jump.duration = seconds; u8Jump.fromLift = player.lift; u8Jump.toLift = landLift; u8Jump.arc = 0; u8Jump.dodge = roll; u8Jump.quiet = 1;
+    if (p < 0 && roll) p = pose_index(&player, "Jump");
+    if (p >= 0) { player.shownPose = -2; show_pose(&player, p, 0); } else u8_rest_pose();
+}
+
+/* ---------------- Crusader's control (U8GameWindow.U8Crusader SwapControlTo): who is the player ----------------
+   The player (actor 0) and the character at this actor change places: the one controlled from now on is actor 0 (no solid box of
+   its own), the one left stands where it stood as a character on the map (with the box). What the player was doing stops. */
+int world_u8_swap(int k)
+{
+    Actor *t = actor_of(k);
+    if (!t || k == 0) return 0;
+    world_walk_cancel(0); world_walk_cancel(k);
+    int body = t->body;
+    Actor keep = player;
+    player = *t;
+    *t = keep;
+    player.body = -1; player.gone = 0; player.walkingNow = 0; player.shownPose = -1;
+    t->body = body; t->gone = 0; t->walkingNow = 0;
+    if (body >= 0)
+    {
+        int l, tp; foot_at(t, t->px, t->py, &l, &tp);
+        bodies[body].left = l; bodies[body].top = tp; bodies[body].width = t->sizeX; bodies[body].depth = t->sizeY; bodies[body].z = t->lift; bodies[body].height = t->sizeZ;
+    }
+    memset(&u8Jump, 0, sizeof u8Jump); memset(&u8Step, 0, sizeof u8Step);
+    u8FallFrom = -1; u8VisLift = -1; u8Hang = 0; u8Kneel = 0; u8WasMoving = 0;
+    cameraFollow = 0;
+    return 1;
+}
+
+/* WhyCannotControl's "in mid-air": a jump, hanging, falling. */
+int world_u8_in_air(void) { return u8Jump.on || u8Hang || u8FallFrom >= 0; }
+
+/* ---------------- Things that fly and bounce (GameTestWindow.Burst: Pentagram's Item::hurl, GravityProcess's bounce) ----------------
+   A real thing in the air, drawn on its own, which comes down, bounces, turns back from walls and is put on the map where it stops -
+   an ordinary thing from then on. Bursting on death (Character Editor > Health): its pieces are thrown out round it; the body stays. */
+
+#define HURL_GRAVITY 520.0
+#define HURL_BOUNCE_KEEPS 0.5
+#define HURL_FRICTION_KEEPS 0.6
+#define HURL_MOST_BOUNCES 3
+typedef struct Hurled { int used, floor, bounces; Item *gift; const Sprite *look; double x, y, vx, vy, vz, height; } Hurled;
+static Hurled hurled[32];
+
+/* HurlThing: a thing into the air from a point (map pixels, at a lift), with its speeds (pixels a second). 0: nothing to draw. */
+int world_hurl(Item *gift, double x, double y, int lift, double vx, double vy, double vz)
+{
+    const Sprite *look = gift ? world_item_look(items_category(gift), items_item_id(gift), 0, 0, 0, items_quantity(gift), -1) : NULL;
+    if (!look || !look->frameCount) { if (gift) items_free(gift); return 0; }
+    Hurled *h = NULL;
+    for (int i = 0; i < 32 && !h; i++) if (!hurled[i].used) h = &hurled[i];
+    if (!h) { items_free(gift); return 0; }
+    *h = (Hurled){ 1, floor_of(lift), 0, gift, look, x, y, vx, vy, vz, lift * (double)LIFT_SHIFT };
+    return 1;
+}
+
+/* LandHurled: put on the map where it stopped (its cell). */
+static void land_hurled(Hurled *h)
+{
+    h->used = 0;
+    int x = (int)floor(h->x / tileW), y = (int)floor(h->y / tileH);
+    x = x < 0 ? 0 : x >= mapW ? mapW - 1 : x; y = y < 0 ? 0 : y >= mapH ? mapH - 1 : y;
+    int uid = world_thing_put(items_category(h->gift), items_item_id(h->gift), items_quantity(h->gift), x, y, h->floor);
+    if (uid >= 0) items_park(uid, h->gift); else items_free(h->gift);
+    h->gift = NULL;
+}
+
+/* UpdateHurled: on through the air; it bounces off the ground and turns back from what is solid; stopped, it's put down there. */
+void world_hurled_update(double ms)
+{
+    double seconds = ms / 1000.0 < 0.1 ? ms / 1000.0 : 0.1;
+    for (int i = 0; i < 32; i++)
+    {
+        Hurled *h = &hurled[i];
+        if (!h->used) continue;
+        double groundPx = base_lift(h->floor) * (double)LIFT_SHIFT, nx = h->x + h->vx * seconds, ny = h->y + h->vy * seconds;
+        int liftNow = (int)floor(h->height / LIFT_SHIFT + 0.5), ux = (int)floor(nx / UNIT), uy = (int)floor(ny / UNIT), blocked = nx < 0 || ny < 0 || nx >= mapW * tileW || ny >= mapH * tileH;
+        for (int b = 0; b < bodyCount && !blocked; b++)
+        {
+            const Body *o = &bodies[b];
+            int isActor = 0;
+            for (int k = 0; k < npcCount && !isActor; k++) if (npcs[k].body == b) isActor = 1;
+            if (!isActor && overlaps(o, ux, uy, 1, 1) && liftNow >= o->z && liftNow < o->z + o->height) blocked = 1;
+        }
+        if (blocked) { h->vx = -h->vx * HURL_FRICTION_KEEPS; h->vy = -h->vy * HURL_FRICTION_KEEPS; } /* a wall: back the other way */
+        else { h->x = nx; h->y = ny; }
+        h->vz -= HURL_GRAVITY * seconds;
+        h->height += h->vz * seconds;
+        if (h->height <= groundPx)
+        {
+            h->height = groundPx;
+            h->bounces++;
+            h->vz = -h->vz * HURL_BOUNCE_KEEPS;
+            h->vx *= HURL_FRICTION_KEEPS; h->vy *= HURL_FRICTION_KEEPS;
+            if (h->bounces >= HURL_MOST_BOUNCES || h->vz < 30) land_hurled(h);
+        }
+    }
+}
+
+static void draw_hurled(uint32_t *pixels)
+{
+    for (int i = 0; i < 32; i++)
+    {
+        const Hurled *h = &hurled[i];
+        if (!h->used) continue;
+        const Picture *p = sprite_picture_at(h->look, lastMs);
+        if (p) world_draw_center(pixels, p, h->x, h->y, h->height);
+    }
+}
+
+/* BurstOnDeath (Actor::dieU8's explode): its Death Pieces thrown out round where it fell. */
+void world_burst_on_death(int characterId, int actor)
+{
+    Actor *a = actor_of(actor);
+    cJSON *ch = character_json_of(characterId), *piece;
+    if (!a || !ch) return;
+    cJSON_ArrayForEach(piece, get(ch, "DeathPieces"))
+    {
+        int id = num(piece, "ObjectId", -1), count = num(piece, "Count", 1);
+        if (id < 0) continue;
+        for (int n = 0; n < (count > 1 ? count : 1); n++)
+        {
+            Item *gifts[100];
+            int g = items_make_gifts(CAT_OBJECT, id, 1, gifts, 100);
+            for (int k = 0; k < g; k++)
+            {
+                double angle = (rand() % 62832) / 10000.0, speed = 40 + rand() % 90;
+                world_hurl(gifts[k], a->px, a->py, a->lift, cos(angle) * speed, sin(angle) * speed, 110 + rand() % 100);
+            }
+        }
+    }
+}
+
+void world_hurled_reset(void) { for (int i = 0; i < 32; i++) if (hurled[i].used) { items_free(hurled[i].gift); hurled[i].used = 0; } }

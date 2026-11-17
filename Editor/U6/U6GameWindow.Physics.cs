@@ -316,7 +316,7 @@ public partial class U6GameWindow
         if (SplitAtSeam(to) is { } pieces) return TryStepAcrossSeam(pieces, lift, height, out newLift, out blockReason, mover, world, explain); // a map that wraps around (U6GameWindow.Wrap.cs)
         if (to.Left < 0 || to.Top < 0 || to.Right > _map.Width * UnitsPerTileX || to.Bottom > _map.Height * UnitsPerTileY)
         {
-            blockReason = "Blocked: edge of the map.";
+            blockReason = DebugNote("EdgeOfMap");
             return false;
         }
         if (movement == MovementKind.Ghost) return true; // Exult's MOVE_ETHEREAL: walls and everything else are nothing to it
@@ -334,7 +334,7 @@ public partial class U6GameWindow
                     if (x >= b.Left && x < b.Right && y >= b.Top && y < b.Bottom) here.Add(b);
                 if (!TryStepUnit(here, lift, height, out int unitLift))
                 {
-                    blockReason = explain ? DescribeBlock(here, lift, height) : "Blocked.";
+                    blockReason = explain ? DescribeBlock(here, lift, height) : DebugNote("Blocked");
                     return false;
                 }
                 highest = Math.Max(highest, unitLift);
@@ -347,24 +347,24 @@ public partial class U6GameWindow
         // while the walker stands on the one just below - a 1-lift step down, as walking down stairs is.
         if (lift - standLift > ActorMaxDrop)
         {
-            blockReason = explain ? $"Blocked: a drop of {lift - standLift} lifts - a walker steps down only {ActorMaxDrop} at a time." : "Blocked.";
+            blockReason = explain ? DebugNote("DropLifts", lift - standLift, ActorMaxDrop) : DebugNote("Blocked");
             return false;
         }
         // Standing on the highest support under any part of the footprint, the whole footprint must be clear for the actor's full height.
         if (!IsClear(solids, standLift, height))
         {
-            if (!explain) { blockReason = "Blocked."; return false; }
+            if (!explain) { blockReason = DebugNote("Blocked"); return false; }
             var overhead = solids.Where(b => b.Z < standLift + height && standLift < b.TopLift).OrderBy(b => b.Z).First();
-            blockReason = $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
+            blockReason = DebugNote("HeadHeight", NameOfEntity(overhead.Entity), height * LiftPixelsPerLift);
             return false;
         }
         if (movement == MovementKind.Sea)
         {
-            if (!AllWaterUnder(to)) { blockReason = "Blocked: a sea creature stays in the water."; return false; }
+            if (!AllWaterUnder(to)) { blockReason = DebugNote("SeaCreature"); return false; }
         }
         else if (newLift == 0 && !TerrainWalkableUnder(to))
         {
-            blockReason = "Blocked: the ground there isn't walkable.";
+            blockReason = DebugNote("NotWalkable");
             return false;
         }
         return true;
@@ -378,14 +378,14 @@ public partial class U6GameWindow
         int floor = FloorBelow(here, lift);
         bool clearHere = IsClear(here, lift, height);
         if (clearHere && lift - floor > ActorMaxDrop)
-            return $"Blocked: that's a drop of {(lift - floor) * LiftPixelsPerLift}px - you can only step down 4px (1 lift) at a time.";
+            return DebugNote("DropTooFar", (lift - floor) * LiftPixelsPerLift);
         var riser = here.Where(b => b.TopLift > lift + ActorMaxRise && b.Z <= lift + ActorMaxRise).OrderByDescending(b => b.TopLift).FirstOrDefault();
         if (riser.Entity is not null)
-            return $"Blocked: \"{NameOfEntity(riser.Entity)}\" rises {(riser.TopLift - lift) * LiftPixelsPerLift}px above where you stand (lift {lift}) - you can only step up 4px (1 lift) at a time.";
+            return DebugNote("RisesTooHigh", NameOfEntity(riser.Entity), (riser.TopLift - lift) * LiftPixelsPerLift, lift);
         var overhead = here.Where(b => b.Z < lift + ActorMaxRise + height && lift < b.TopLift).OrderBy(b => b.Z).FirstOrDefault();
         if (overhead.Entity is not null)
-            return $"Blocked: \"{NameOfEntity(overhead.Entity)}\" is in the way at head height - you need {height * LiftPixelsPerLift}px of headroom.";
-        return "Blocked.";
+            return DebugNote("HeadHeight", NameOfEntity(overhead.Entity), height * LiftPixelsPerLift);
+        return DebugNote("Blocked");
     }
 
     private string NameOfEntity(object entity) => entity switch

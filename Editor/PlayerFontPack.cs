@@ -15,8 +15,7 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 internal static class PlayerFontPack
 {
-    /// <summary>Glyphs are drawn this much smaller than the book's own size: its 700 x 400 canvas on a 320 x 200 screen, kept readable.</summary>
-    private const double BookSizeToPixels = 0.8;
+    /// <summary>The smallest a book font is drawn for the Amiga 68k's 320 x 200, so it stays readable there.</summary>
     private const double SmallestPixels = 10;
     /// <summary>The game's own fonts drawn from a system font, for a project with no sprite font for them: as Windows falls back.</summary>
     private const string FallbackFamily = "Segoe UI";
@@ -45,7 +44,9 @@ internal static class PlayerFontPack
             }
         else
         {
-            foreach (var (family, size) in fonts) AddFont(files, BookFontKey(family, size), family, Math.Max(SmallestPixels, Math.Round(size * BookSizeToPixels)));
+            // The canvas fitted to 320 x 200 as on Windows and the other machines (a 24-point scroll line 11 pixels, not 19: it fits its frame),
+            // never under SmallestPixels so a book's ordinary 12-point text stays readable.
+            foreach (var (family, size) in fonts) AddFont(files, BookFontKey(family, size), family, Math.Max(SmallestPixels, Math.Round(size * BookCanvasToScreen)));
             foreach (string name in fallbacks) AddFont(files, name, FallbackFamily, FallbackPixels);
         }
         string path = Path.Combine(folder, "fonts.sdbx");

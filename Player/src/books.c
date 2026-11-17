@@ -20,6 +20,7 @@
 #include "magic.h"
 #include "pictures.h"
 #include "platform.h"
+#include "u6.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -200,8 +201,9 @@ static void lay_out(const Font *bookFont, cJSON *paragraphs, int width, double s
                 char word[160];
                 int n = (int)(p - start) < 159 ? (int)(p - start) : 159;
                 memcpy(word, start, (size_t)n); word[n] = 0;
+                /* Spaces starting a paragraph (or after a line break) are kept, as on Windows - a book's text set in the middle
+                   with spaces (a scroll's "      WATER! WATER!") stays there; only a line the text wraps onto starts without them. */
                 const char *visible = word;
-                if (line.width == 0) while (*visible == ' ' || *visible == '\t') visible++; /* no spaces starting a line */
                 int w = text_width(f, visible, scale) + bold;
                 if (line.width > 0 && line.width + w > width)
                 {
@@ -321,12 +323,73 @@ static void build_page(void)
     open_.turn = 0;
 }
 
+/* Ultima 6 (U6GameWindow.U6ReadBook): the book's words as plain paragraphs, one call each - the Book Editor's notepad
+   (U6Text) if it has words, else every page's frames in order (a Change Book Content's words where one was made). */
+void books_paragraphs(int bookId, void (*paragraph)(const char *text))
+{
+    cJSON *book = book_json(bookId);
+    if (!book) return;
+    const char *notepad = str(book, "U6Text");
+    int any = 0;
+    for (const char *p = notepad; *p; p++) if (*p != ' ' && *p != '\n' && *p != '\r' && *p != '\t') any = 1;
+    char buf[1200];
+    if (any)
+    {
+        /* its lines as they are (the trailing blank ones gone) */
+        size_t len = strlen(notepad);
+        while (len && (notepad[len - 1] == ' ' || notepad[len - 1] == '\n' || notepad[len - 1] == '\r' || notepad[len - 1] == '\t')) len--;
+        const char *p = notepad, *end = notepad + len;
+        while (p <= end)
+        {
+            size_t n = strcspn(p, "\n");
+            if (p + n > end) n = (size_t)(end - p);
+            size_t k = 0;
+            for (size_t i = 0; i < n && k < sizeof buf - 1; i++) if (p[i] != '\r') buf[k++] = p[i];
+            buf[k] = 0;
+            paragraph(buf);
+            p += n + 1;
+        }
+        return;
+    }
+    cJSON *page; int pageIndex = 0;
+    cJSON_ArrayForEach(page, get(book, "Pages"))
+    {
+        cJSON *f;
+        cJSON_ArrayForEach(f, get(book, "Frames"))
+        {
+            char key[48], fid[16];
+            snprintf(key, sizeof key, "%d:%d:%d", bookId, pageIndex, num(f, "Id", -1));
+            snprintf(fid, sizeof fid, "%d", num(f, "Id", -1));
+            const char *text = cJSON_GetStringValue(get(overrides, key));
+            if (!text) text = cJSON_GetStringValue(get(get(page, "FrameTexts"), fid));
+            cJSON *paragraphs = text ? cJSON_Parse(text) : NULL, *para;
+            cJSON_ArrayForEach(para, paragraphs)
+            {
+                size_t k = 0; cJSON *run;
+                cJSON_ArrayForEach(run, get(para, "Runs")) k += (size_t)snprintf(buf + k, k < sizeof buf ? sizeof buf - k : 0, "%s", str(run, "Text"));
+                if (k >= sizeof buf) buf[sizeof buf - 1] = 0;
+                paragraph(buf);
+            }
+            cJSON_Delete(paragraphs);
+        }
+        pageIndex++;
+    }
+}
+
+/* The sound a book opens with: the paperdoll open sound when System Settings has one on, else its own (as books_read plays it). */
+int books_open_sound(int bookId)
+{
+    cJSON *sounds = get(get(get((cJSON *)world_json(), "Project"), "Settings"), "Sounds");
+    return !cJSON_IsFalse(get(sounds, "PaperdollOpenSoundEnabled")) && num(sounds, "PaperdollOpenSoundId", -1) >= 0 ? num(sounds, "PaperdollOpenSoundId", -1) : num(book_json(bookId), "OpenSoundResourceId", -1);
+}
+
 /* Use a book (no By Use page took it): its reading view. 0 if it has no pages or frames, or no artwork. */
 int books_read(int bookId)
 {
     cJSON *book = book_json(bookId);
     char line[200];
     if (!book) return 0;
+    if (u6_talking()) return u6_read_book(bookId); /* Ultima 6: read in the text area (U6GameWindow.U6Things) */
     int pages = cJSON_GetArraySize(get(book, "Pages")), frames = cJSON_GetArraySize(get(book, "Frames"));
     if (!pages || !frames) { snprintf(line, sizeof line, "\"%s\" has no pages or text frames set up yet.", books_name(bookId)); game_log(line); return 0; }
     const Sprite *doll = sprite_find(str(book, "PaperDollSpriteGroup"), str(book, "PaperDollSpriteName"));
@@ -338,7 +401,7 @@ int books_read(int bookId)
     const char *language = magic_language_font(num(book, "LanguageId", -1)); /* in a language not understood: its font */
     open_.font = font_get(language ? language : str(book, "TextFontSpriteName")[0] ? str(book, "TextFontSpriteName") : "InGameFont");
     layRunFonts = !language && !str(book, "TextFontSpriteName")[0];
-    open_.s = SCREEN_W / DESIGN_W < SCREEN_H / DESIGN_H ? SCREEN_W / DESIGN_W : SCREEN_H / DESIGN_H;
+    open_.s = BASE_W / DESIGN_W < BASE_H / DESIGN_H ? BASE_W / DESIGN_W : BASE_H / DESIGN_H; /* its 320 x 200 size, in the middle of a screen Fill the screen widened */
     open_.bw = (int)(DESIGN_W * open_.s); open_.bh = (int)(DESIGN_H * open_.s);
     open_.bx = (SCREEN_W - open_.bw) / 2; open_.by = (SCREEN_H - open_.bh) / 2;
     build_page();

@@ -138,14 +138,34 @@ public partial class U6GameWindow
                     if (seen.Add(i)) yield return walls[i];
     }
 
-    /// <summary>A paint order for something moving among walls: after every wall Exult says it's in front of, before every wall it's behind.</summary>
+    /// <summary>
+    /// Ultima 6 is seen from straight above (Exult's compare is for Ultima 7's slanted view, where further east is in front too):
+    /// -1 if the thing is drawn before (under) the wall, 1 after (over it), 0 when their pictures don't meet.
+    ///  - Wholly above or below the wall (lifts): the higher one over.
+    ///  - Wholly south of the wall's solid part: in front - over it (a head over the wall behind). Wholly north: behind it.
+    ///  - Side by side with it: the wall over the thing beside it (a cape doesn't lie on the wall next to you).
+    ///  - Going through the square the wall's picture is on (a doorway, past a door frame's post): over it.
+    /// </summary>
+    private int TopDownCompare(OrderBox me, OrderBox wall)
+    {
+        if (!me.Screen.IntersectsWith(wall.Screen)) return 0;
+        if (me.ZBot > wall.ZTop) return 1;
+        if (me.ZTop < wall.ZBot) return -1;
+        if (me.YFar > wall.YNear) return 1;
+        if (me.YNear < wall.YFar) return -1;
+        double pixelsPerUnit = _tileWidth / (double)UnitsPerTileX;
+        double footMiddle = (me.XLeft + me.XRight + 1) / 2.0 * pixelsPerUnit;
+        return footMiddle >= wall.Screen.Left && footMiddle < wall.Screen.Right ? 1 : -1;
+    }
+
+    /// <summary>A paint order for something moving among walls: after every wall it's in front of, before every wall it's behind (TopDownCompare).</summary>
     private int OrderAmongWalls(UnitRect foot, int lift, int height, Rect screen, int zIndex)
     {
         var me = BoxOf(foot, lift, height, screen);
         int lowest = int.MaxValue;
-        foreach (var (_, box, visual, occludes) in WallsNear(screen))
+        foreach (var (_, box, visual, _) in WallsNear(screen))
         {
-            int cmp = ExultCompare(me, box, false, occludes);
+            int cmp = TopDownCompare(me, box);
             int wallZ = Panel.GetZIndex(visual);
             if (cmp > 0) zIndex = Math.Max(zIndex, wallZ + 1);
             else if (cmp < 0) lowest = Math.Min(lowest, wallZ - 1);

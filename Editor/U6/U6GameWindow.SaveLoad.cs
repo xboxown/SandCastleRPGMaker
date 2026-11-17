@@ -555,6 +555,8 @@ public partial class U6GameWindow
             if (map.Characters.FirstOrDefault(c => c.Id == mapCharacter.Placement.Id) is { } placed)
             {
                 placed.Floor = MapFloors.FloorOfLift(Math.Max(0, mapCharacter.Lift));
+                placed.PixelXRuntime = mapCharacter.PixelX; placed.PixelYRuntime = mapCharacter.PixelY; placed.LiftRuntime = mapCharacter.Lift; // exactly where it stands, and how high - put back there when loaded
+                placed.X = (int)Math.Floor(mapCharacter.PixelX / _tileWidth); placed.Y = (int)Math.Floor(mapCharacter.PixelY / _tileHeight);
                 placed.SavedCharacterIndex = SavedIndexOf(mapCharacter.Character);
             }
         foreach (var (dead, lying) in _bodies) // the dead: which character lies in which body

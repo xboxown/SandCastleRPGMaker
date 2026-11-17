@@ -60,6 +60,10 @@ void events_knocked_out(int characterId);
 int events_fire_doll(cJSON *pages, int trigger, void *state, int part, int itemCategory, int itemId, int combinedPartId);
 void events_set_doll_context(void *doll);
 void events_doll_answered(int token, int yes);
+void events_tick_waits(double ms);   /* Ultima 6's scenes: Wait counts while the world waits */
+int events_objects_around(int characterId, int cells, int category, int itemId, int onlyLit); /* placed things of a kind round someone */
+int events_enemy_near(int characterId, double cells);                                         /* an enemy within so many cells, same floor */
+void events_run_commands_then(cJSON *commands, int actor, void (*finished)(void)); /* finished(): told when they're over */
 void events_save(cJSON *runtime);
 const char *events_save_blocker(void);
 void events_restore(cJSON *runtime);
@@ -76,6 +80,7 @@ void events_request_restart(int toTitle);   /* New Game during play (0), Return 
 int events_restart_requested(void);
 int events_has_combine(int category, int itemId);
 int events_has_trigger(int category, int itemId, int trigger);
+int events_character_has_trigger(int characterId, int trigger);
 int events_dropped_on(int uid, int category, int itemId);
 int events_dropped_at_cell(int x, int y, int lift, int category, int itemId);
 int events_combine(int uid, int ontoCategory, int ontoId, int category, int itemId);

@@ -52,6 +52,28 @@ public class TileTypeProperties
     /// <summary>Free-text name for the designer's own reference (e.g. "Ocean", "Swamp", "Lava") - also doubles as the tile's display name, per spec ("Name: that will be the name of the tile and the property name at the same time"). Not used by the engine directly - CustomEffects drive actual behavior.</summary>
     public string TerrainLabel { get; set; } = string.Empty;
 
+    /// <summary>Which right-click Properties preset (or "(C)" custom effect) was picked - its tick in the menu and its glyph in the palette. Picking one never renames the tile (TerrainLabel stays the tile's own name).</summary>
+    public string Preset { get; set; } = string.Empty;
+
+    /// <summary>The nine built-in presets of the tilesheet's right-click Properties menu.</summary>
+    public static readonly (string Label, bool Walkable)[] Presets =
+    {
+        ("Walkable", true), ("Blocks Movement", false), ("Water", false),
+        ("Swamp", true), ("Sand", true), ("Road", true),
+        ("Grass", true), ("Dirt", true), ("Snow", true)
+    };
+
+    /// <summary>Older projects: picking a preset renamed the tile after it. The preset moves to Preset; "Walkable" and "Blocks Movement" were never names, so the tile's name is cleared - the rest (Water, Grass...) stay as names too.</summary>
+    public void MovePresetOffName()
+    {
+        if (Preset.Length > 0 || TerrainLabel.Length == 0) return;
+        bool builtIn = Array.Exists(Presets, p => p.Label == TerrainLabel);
+        bool custom = CustomEffects.Exists(e => e.Name == TerrainLabel);
+        if (!builtIn && !custom) return;
+        Preset = TerrainLabel;
+        if (TerrainLabel is "Walkable" or "Blocks Movement") TerrainLabel = string.Empty;
+    }
+
     public bool Walkable { get; set; } = true;
 
     /// <summary>Water: sea creatures (Character Editor > Moves on: Sea) swim here - and only here. Land walkers go by Walkable (deep water: not walkable).</summary>

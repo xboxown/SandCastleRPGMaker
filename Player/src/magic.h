@@ -20,6 +20,11 @@ void magic_update(double ms);
 void magic_reset(void);
 void magic_set_mana(int actor, int mana);
 
+/* Ultima 6's Cast (u6.c): the readied books' spells (-1: none readied); the checks and the cost (NULL: cast, else a Words id); the spell delivered. */
+int magic_u6_spells(int actor, cJSON **spells, int max);
+const char *magic_u6_spend(int actor, cJSON *spell);
+void magic_u6_deliver(int caster, cJSON *spell, int who, int thing, int cx, int cy);
+
 /* The open spellbook (Exult's Spellbook_gump): over everything, it takes every click. */
 int magic_book_open(void);
 void magic_close_book(void);

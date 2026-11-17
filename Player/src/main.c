@@ -5,7 +5,10 @@
  * or the folder given on the command line.
  */
 #include "platform.h"
+#include "crt.h"
 #include "world.h"
+#include "u6.h"
+#include "u8.h"
 #include "font.h"
 #include "dialog.h"
 #include "events.h"
@@ -38,6 +41,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifdef PS2_DIAG_SHOTS
+#include <sys/stat.h>
+#endif
 
 double sc_strtod(const char *text, char **end);
 
@@ -55,12 +61,23 @@ void main_show_now(void)
 /* Game.log beside the game: each step of starting, so a game that stops can say where. */
 static void note(const char *step)
 {
+#ifdef PLATFORM_PS2
+    extern long ps2_memory_used_kb(void);
+    printf("Game: %s  [memory in use: %ld KB]\n", step, ps2_memory_used_kb()); /* the disc can't be written: the log goes to the console (PCSX2's log) */
+    return;
+#endif
 #if defined(__amigaos__) && !defined(__MORPHOS__)
     static int fresh = 0; /* amiga_start.c began Game.log */
 #else
     static int fresh = 1;
 #endif
+#ifdef PLATFORM_PS3
+    void ps3_netlog(const char *line);
+    ps3_netlog(step); /* testing: the line sent at once over the network (platform_ps3.c), if asked */
+    FILE *f = fopen("/dev_hdd0/tmp/sandcastle_game.log", fresh ? "w" : "a"); /* the PS3 has no current folder: fetched over FTP */
+#else
     FILE *f = fopen("Game.log", fresh ? "w" : "a");
+#endif
     fresh = 0;
     if (!f) return;
     fprintf(f, "%s\n", step);
@@ -71,6 +88,13 @@ void game_log(const char *line) { note(line); }
 
 /* Testing: a key pressed at a moment ("--press 2:E,3.5:1": Enter at 2 s, the 1 key at 3.5 s; T7 = double-click the character with id 7). */
 static int testDx, testDy; /* testing: a direction held by --press "J..." */
+/* testing: key events put in front of the platform's (--press "!Up" a key down, "!Up^" up again, "!Ctrl+Q") */
+static PlatformEvent injected[16]; static int injectedCount;
+static int next_event(PlatformEvent *e)
+{
+    if (injectedCount) { *e = injected[0]; memmove(injected, injected + 1, sizeof injected[0] * (size_t)--injectedCount); return 1; }
+    return platform_poll(e);
+}
 static int forceWindow; /* "window" / --window: a window, not full screen */
 
 static void scripted_presses(const char *presses, double t, double *done)
@@ -85,10 +109,15 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'W') { char name[64]; snprintf(name, sizeof name, "%.*s", (int)strcspn(what + 1, ","), what + 1); events_set_variable(name, 1); } /* Wname: a switch on */
         else if (*what == 'C') { const char *semi = strchr(what, ';'); if (semi) use_at(atoi(what + 1), atoi(semi + 1)); } /* C160;100: a double-click there */
         else if (*what == 'K') combat_toggle_mode(); /* K: C pressed (combat mode) */
+        else if (*what == 'y') { SaveInfo list[8]; if (save_list(list, 8) > 0) { dolls_request_load(list[0].folder, list[0].name); note("DBG loading the newest save"); } } /* y: the newest save loaded (testing) */
+        else if (*what == '%') { for (int a = 1; a < world_actor_count(); a++) { int x, y, f; double px, py; world_actor_cell(a, &x, &y, &f); world_actor_pixel(a, &px, &py); char line[128]; snprintf(line, sizeof line, "DBG actor %d (character %d): pixel %.1f,%.1f cell %d,%d floor %d", a, world_actor_character(a), px, py, x, y, f); note(line); } } /* %: every character's exact spot (testing) */
         else if (*what == 'q') { int x = atoi(what + 1), y = 0, id = -1; const char *comma = strchr(what, ' '); comma = strchr(what, '/'); const char *semi = strchr(what, ';'); if (comma) y = atoi(comma + 1); if (semi) id = atoi(semi + 1); int uid = world_thing_at_cell(4, id, x, y, 0); char line[96]; snprintf(line, sizeof line, "DBG qty: floor %d/%d %d, carried %d", x, y, uid ? world_thing_quantity(uid) : 0, items_count_any(world_actor_character(0), 4, id)); note(line); } /* q11/7;80: the stack of object 80 on cell 11,7, and how many of it the player carries */
         else if (*what == 'B') books_read(atoi(what + 1)); /* B1: read the book with id 1 */
         else if (*what == 'Z') gumps_next_stats(); /* Z: the stats paperdoll */
-        else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); int dbgHp = 0; vitals_hp(world_actor_character(a), &dbgHp); char line[160]; snprintf(line, sizeof line, "DBG actor %d walknow %d walking %d char %d at (%d,%d) floor %d gone %d food %d hp %d seat %d fight %d", a, world_actor_walking_now(a), world_walking(a), world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a)), dbgHp, world_seated_on(a), combat_busy(a)); note(line); } } /* Q: where everyone is (testing) */
+#ifdef SAVE_SELFTEST
+        else if (*what == 'Y') { void save_selftest(const char *, const char *); save_selftest("save_old.json", "save_new.json"); note("DBG save self-test written"); } /* Y: the save's text both ways (testing) */
+#endif
+        else if (*what == 'Q') { for (int a = 0; a < world_actor_count(); a++) { int x, y, f; world_actor_cell(a, &x, &y, &f); int dbgHp = 0; vitals_hp(world_actor_character(a), &dbgHp); char line[160]; snprintf(line, sizeof line, "DBG actor %d lift %d walknow %d walking %d char %d at (%d,%d) floor %d gone %d food %d hp %d seat %d fight %d", a, world_actor_lift(a), world_actor_walking_now(a), world_walking(a), world_actor_character(a), x, y, f, world_actor_gone(a), vitals_food(world_actor_character(a)), dbgHp, world_seated_on(a), combat_busy(a)); note(line); } { char line[64]; snprintf(line, sizeof line, "DBG box %d cinema %d", dialog_showing(), events_cinema()); note(line); } } /* Q: where everyone is (testing) */
         else if (*what == 'J') { char d = what[1]; testDx = d == 'e' ? 1 : d == 'w' ? -1 : 0; testDy = d == 's' ? 1 : d == 'n' ? -1 : 0; } /* Jn/Je/Js/Jw: hold a direction, Jx: let go */
         else if (*what == 'U') { int uid = world_thing_by_instance(atoi(what + 1)); if (uid) use_thing(uid); } /* U38: double-click the placed thing with instance id 38 */
         else if (*what == 'I') gumps_open_paperdoll(world_actor_character(0)); /* I: the inventory */
@@ -96,9 +125,34 @@ static void scripted_presses(const char *presses, double t, double *done)
         else if (*what == 'D' || *what == 'V' || *what == 'R') /* D160;100 press, V moves, R releases there */
         {
             const char *semi = strchr(what, ';');
-            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) gumps_mouse_down(x, y); } else if (*what == 'V') { platform_warp_mouse(x, y); gumps_mouse_move(x, y); } else gumps_mouse_up(x, y); }
+            if (semi) { int x = atoi(what + 1), y = atoi(semi + 1); if (*what == 'D') { if (!video_input(1)) { if (dialog_showing()) dialog_click(x, y); else gumps_mouse_down(x, y); } } else if (*what == 'V') { platform_warp_mouse(x, y); gumps_mouse_move(x, y); } else gumps_mouse_up(x, y); }
         }
         else if (*what == 'X') gumps_close_top(); /* X: Escape on a window */
+        else if (*what == '#') /* #L, #Ctrl+S, #Up: a key by its name, as Ultima 6 reads it (u6.c) */
+        {
+            PlatformEvent ke; memset(&ke, 0, sizeof ke);
+            ke.type = EV_KEY_DOWN;
+            const char *name = what + 1;
+            if (!strncmp(name, "Ctrl+", 5)) { ke.keyMods |= KEYMOD_CTRL; name += 5; }
+            snprintf(ke.keyName, sizeof ke.keyName, "%.*s", (int)strcspn(name, ","), name);
+            if (dialog_showing()) u6_talk_key(&ke);
+            else { u6_key(&ke); ke.type = EV_KEY_UP; u6_key(&ke); }
+        }
+        else if (*what == '!' && injectedCount < 16) /* !Up, !Up^, !Ctrl+Q: a key event through the game's own loop */
+        {
+            PlatformEvent ke; memset(&ke, 0, sizeof ke);
+            const char *name = what + 1;
+            if (!strncmp(name, "Ctrl+", 5)) { ke.keyMods |= KEYMOD_CTRL; name += 5; }
+            if (!strncmp(name, "Shift+", 6)) { ke.keyMods |= KEYMOD_SHIFT; name += 6; }
+            size_t n = strcspn(name, ",^");
+            snprintf(ke.keyName, sizeof ke.keyName, "%.*s", (int)n, name);
+            ke.type = name[n] == '^' ? EV_KEY_UP : EV_KEY_DOWN;
+            ke.key = KEY_OTHER;
+            injected[injectedCount++] = ke;
+        }
+        else if (*what == '~') { for (const char *c = what + 1; *c && *c != ','; c++) u6_talk_text(*c); } /* ~job: letters typed */
+        else if (*what == '@') { const char *semi = strchr(what, ';'); if (semi && !u6_mouse_down(atoi(what + 1), atoi(semi + 1))) { gumps_mouse_down(atoi(what + 1), atoi(semi + 1)); gumps_mouse_up(atoi(what + 1), atoi(semi + 1)); } } /* @x;y: a click there (Ultima 6's HUD first) */
+        else if (*what == 'k') { void dolls_vk_test(void); dolls_vk_test(); } /* k: the on-screen keyboard for slot 1 (testing) */
         else if (*what == 'L') { const char *t = what + 1; size_t n = strcspn(t, ","); for (size_t q = 0; q < n; q++) if (!prompt_key(0, t[q])) dolls_key(0, t[q]); } /* Lname: letters typed */
         else if (*what == 'F') { save_take_screenshot(pixels); dolls_open_save_screen(); } /* F: S pressed (the Save/Load screen) */
         else if (*what == 'A') combat_attack(0, world_actor_by_character(atoi(what + 1))); /* A7: attack the character with id 7 */
@@ -135,19 +189,28 @@ static void save_bmp(const char *path)
 {
     FILE *f = fopen(path, "wb");
     if (!f) return;
+    /* testing with SANDCASTLE_CRT: the picture as the screen gets it - the CRT effect's, twice the size (crt.c) */
+    const uint32_t *shown = pixels;
+    int W = FRAME_W, H = FRAME_H;
+    uint32_t *doubled = NULL;
+    if (getenv("SANDCASTLE_CRT") && (doubled = (uint32_t *)malloc(sizeof(uint32_t) * 4 * FRAME_PIXELS)) != NULL)
+    { crt_double(pixels, FRAME_W, FRAME_H, doubled, 2 * FRAME_W, 0, FRAME_H); shown = doubled; W = 2 * FRAME_W; H = 2 * FRAME_H; }
     unsigned char h[54] = { 'B', 'M' };
-    int size = 54 + FRAME_W * FRAME_H * 3;
+    int pad = (4 - W * 3 % 4) % 4; /* each row a multiple of 4 bytes (Fill the screen's width can be any) */
+    int size = 54 + (W * 3 + pad) * H;
     h[2] = size & 255; h[3] = (size >> 8) & 255; h[4] = (size >> 16) & 255; h[5] = (size >> 24) & 255;
-    h[10] = 54; h[14] = 40; h[18] = FRAME_W & 255; h[19] = FRAME_W >> 8; h[22] = FRAME_H & 255; h[23] = FRAME_H >> 8; h[26] = 1; h[28] = 24;
+    h[10] = 54; h[14] = 40; h[18] = W & 255; h[19] = W >> 8; h[22] = H & 255; h[23] = H >> 8; h[26] = 1; h[28] = 24;
     fwrite(h, 1, 54, f);
-    for (int y = FRAME_H - 1; y >= 0; y--)
-        for (int x = 0; x < FRAME_W; x++)
+    for (int y = H - 1; y >= 0; y--)
+        for (int x = 0; x < W; x++)
         {
-            uint32_t c = pixels[y * FRAME_W + x];
+            uint32_t c = shown[y * W + x];
             unsigned char px[3] = { c & 255, (c >> 8) & 255, (c >> 16) & 255 };
             fwrite(px, 1, 3, f);
+            if (x == W - 1 && pad) { static const unsigned char zero[3]; fwrite(zero, 1, (size_t)pad, f); }
         }
     fclose(f);
+    free(doubled);
 }
 
 /* The timing diary: every 10 seconds Game.log says the frame rate and where a frame's time went (so a slow
@@ -156,9 +219,21 @@ static void save_bmp(const char *path)
 #define TIMING_PARTS 9
 static double timingMs[TIMING_PARTS], timingMark, timingFrom;
 static int timingFrames;
-static void timing(int part) { double t = platform_ms_precise(); timingMs[part] += t - timingMark; timingMark = t; }
+#ifdef SANDCASTLE_NETLOG
+extern volatile int ps3dbg_stage, ps3dbg_frame; /* testing: the PS3's watchdog says where a frame stopped (platform_ps3.c) */
+#endif
+static void timing(int part)
+{
+#ifdef SANDCASTLE_NETLOG
+    ps3dbg_stage = part;
+#endif
+    double t = platform_ms_precise(); timingMs[part] += t - timingMark; timingMark = t;
+}
 static void timing_frame_done(void)
 {
+#ifdef SANDCASTLE_NETLOG
+    ps3dbg_frame++;
+#endif
     timingFrames++;
     double span = timingMark - timingFrom;
     if (span < 10000) return;
@@ -273,6 +348,8 @@ static int travel(int worldId, int hasSpot, int x, int y, int floorOf)
         int px = x + n % 3 - 1, py = y + 1 + n / 3;
         setn(pc, "Id", nextId++);
         setn(pc, "X", px < 0 ? 0 : px >= width ? width - 1 : px); setn(pc, "Y", py < 0 ? 0 : py >= height ? height - 1 : py); setn(pc, "Floor", floorOf);
+        /* not the exact spot they had in the world left (a save's PixelXRuntime...): built there, they stayed at their old place */
+        cJSON_DeleteItemFromObject(pc, "PixelXRuntime"); cJSON_DeleteItemFromObject(pc, "PixelYRuntime"); cJSON_DeleteItemFromObject(pc, "LiftRuntime");
         cJSON_AddItemToArray(there, pc);
         n++;
     }
@@ -301,6 +378,7 @@ static void intro_done(int ok, void *context) { (void)ok; (void)context; introPe
 
 static int title_with_intro(void)
 {
+    if (u6_on()) { u6_show_title(); return 1; } /* Ultima 6's own menu, not a paperdoll (U6GameWindow.Title ShowTitleIfAny) */
     cJSON *title = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Title");
     cJSON *intro = cJSON_GetObjectItem(title, "IntroVideoId"), *design = cJSON_GetObjectItem(title, "DollDesignId");
     if (cJSON_IsNumber(intro) && intro->valueint >= 0 && video_exists(intro->valueint) && cJSON_IsNumber(design) && dolls_design_exists(design->valueint))
@@ -324,8 +402,10 @@ static int rebuild(cJSON *root, cJSON *runtime)
     save_set_world_states(runtime && cJSON_GetObjectItem(runtime, "WorldStates") ? cJSON_Duplicate(cJSON_GetObjectItem(runtime, "WorldStates"), 1) : NULL);
     /* the saved one */
     if (!world_build(root)) { note("The saved game couldn't be built."); cJSON_Delete(root); return -1; }
+    u6_load(); /* Ultima 6: its HUD read again from the game just built (the old one is gone) */
+    u8_load(); /* Ultima 8: its keys (u8.c) */
     events_load();
-    if (runtime) { events_restore(runtime); script_restore(runtime); books_restore(runtime); }
+    if (runtime) { events_restore(runtime); script_restore(runtime); books_restore(runtime); u6_restore(runtime); u8_restore(runtime); }
     else books_reset();
     dolls_load();
     vitals_load();
@@ -359,7 +439,22 @@ static int rebuild(cJSON *root, cJSON *runtime)
 int main(int argc, char **argv)
 {
     char folder[1024] = "Game_Data";
+#ifdef PLATFORM_PS2
+    ps2_boot(argc, argv, folder, sizeof folder); /* the PS2's drivers; the data on the disc (platform_ps2.c) */
+    argc = 1;
+#endif
+#ifdef SANDCASTLE_INSTALLED
+    platform_installed_data(argc > 0 ? argv[0] : "", folder, sizeof folder); /* installed (Ubuntu's .deb, the Mac's .app): the data where it was installed */
+#endif
+#ifdef PLATFORM_PS3
+    void ps3_boot(int argc, char **argv, char *folder, int folderSize);
+    ps3_boot(argc, argv, folder, sizeof folder); /* the game's data beside the EBOOT on the hard drive (platform_ps3.c) */
+    argc = 1;
+#endif
     const char *shot = NULL, *keys = NULL, *say = NULL, *presses = NULL;
+#ifdef PS2_DIAG_SHOTS
+    presses = "10:D170;117,10.3:R170;117,25:Jn,27:Jx,28:Je,31:Jx,33:I,34:E,34.5:E,35:E,36:F,38:k,40:LHello,42:r,42.5:d"; /* testing: New Game, a walk, the inventory, the Save screen, a slot, a name typed */
+#endif
     int noSound = 0, noTitle = 0;
     double shotAt = -1, pressedTill = -1;
     for (int i = 1; i < argc; i++)
@@ -411,12 +506,16 @@ int main(int argc, char **argv)
         platform_message("Game", text);
         return 1;
     }
+    u6_load(); /* an Ultima 6 project: its HUD, the world in its Game View (u6.c) */
+    u8_load(); /* an Ultima 8 project: its keys, its own rules (u8.c) */
     note("Loaded. Opening the window...");
     /* System Settings > Game Window: in a window, or full screen (DisplaySettings.Mode 1) */
     cJSON *display = cJSON_GetObjectItem(cJSON_GetObjectItem(cJSON_GetObjectItem((cJSON *)world_json(), "Project"), "Settings"), "Display");
     cJSON *mode = cJSON_GetObjectItem(display, "Mode");
     int fullScreen = cJSON_IsNumber(mode) && mode->valueint == 1 && !forceWindow;
     { cJSON *windowScale = cJSON_GetObjectItem(display, "WindowScale"); platform_want_window_scale(cJSON_IsNumber(windowScale) ? windowScale->valueint : 2); }
+    platform_want_crt(cJSON_IsTrue(cJSON_GetObjectItem(display, "CrtEffect")) || getenv("SANDCASTLE_CRT") != NULL); /* System Settings > Game Window > CRT effect (SANDCASTLE_CRT: testing) */
+    platform_want_fill((cJSON_IsTrue(cJSON_GetObjectItem(display, "FillScreen")) || getenv("SANDCASTLE_FILL") != NULL) && !u6_on()); /* System Settings > Game Window > Fill the screen (Ultima 6: its HUD is 320 x 200; SANDCASTLE_FILL: testing) */
     if (!platform_open(world_title()[0] ? world_title() : "Game", fullScreen))
     {
         char text[400];
@@ -428,8 +527,13 @@ int main(int argc, char **argv)
     }
     pixels = (uint32_t *)calloc((size_t)FRAME_PIXELS, sizeof(uint32_t));
     if (!pixels) { platform_message("Game", "There isn't enough memory for the picture."); return 1; }
+    world_screen_opened(); /* the screen's size known now (Fill the screen may have widened it): the camera's view the same */
+    { char line[96]; snprintf(line, sizeof line, "Screen: %d x %d game pixels, drawn %d x %d.", SCREEN_W, SCREEN_H, FRAME_W, FRAME_H); note(line); }
     note("Window open. Starting.");
     save_init(folder); /* the saves: beside the game */
+#ifdef SANDCASTLE_INSTALLED
+    { char saves[1100]; if (platform_installed_saves(saves, sizeof saves)) save_use_folder(saves); } /* installed (Ubuntu, Mac): in the player's own folder */
+#endif
     snprintf(gameFolder, sizeof gameFolder, "%s", folder);
     { FILE *quiet = fopen("nosound", "rb"); if (quiet) { fclose(quiet); noSound = 1; } } /* a file called nosound beside the game: no sound */
     { FILE *p = fopen("paula", "rb"); if (p) { fclose(p); platform_audio_route(1); note("Sound through Paula (paula)."); } } /* a file called paula: audio.device, never AHI */
@@ -450,24 +554,42 @@ int main(int argc, char **argv)
     weather_load();
     events_player_moved(); /* where the player starts: arriving doesn't set its event off */
     note("Running.");
-    if (!noTitle && title_with_intro() && dolls_title_open()) note("Title Screen."); /* System Settings > Title Screen: before play, the game waits */
+    if (!noTitle && title_with_intro() && (dolls_title_open() || u6_title_on())) note("Title Screen."); /* System Settings > Title Screen: before play, the game waits */
     int held[4] = { 0, 0, 0, 0 }; /* left, right, up, down: when pressed (0 = not held) */
     int order = 0, running = 1;
     uint32_t last = platform_ticks(), start = last, worldMs = 0;
     timingMark = timingFrom = platform_ms_precise();
+#ifdef SANDCASTLE_NETLOG
+#define DBG_STEP(n) (ps3dbg_stage = (n)) /* testing: the PS3's watchdog says which step of a frame's start it's in */
+#else
+#define DBG_STEP(n) ((void)0)
+#endif
     while (running)
     {
         PlatformEvent e;
-        while (platform_poll(&e))
+        DBG_STEP(9);
+        while ((memset(&e, 0, sizeof e), next_event(&e)))
         {
+            if (e.keyRepeat && !u6_on()) continue; /* a held key's repeats: only Ultima 6's cursor uses them */
+            if (u8_on() && u8_key_ask_event(&e)) continue; /* Ultima 8's Ask For Key: the next key is its answer */
+            if (u8_screen_open() && e.type == EV_MOUSE_DOWN && e.button == 1 && u8_screen_click(e.mouseX, e.mouseY)) continue; /* Ultima 8: its screens take the clicks */
+            if (u8_screen_open() && e.type == EV_KEY_DOWN && e.key != KEY_F11) { u8_screen_key(&e); continue; } /* and the keys */
+            if (u8_on()) u8_translate(&e, dialog_showing() || slider_open_now() || prompt_open() || dolls_modal_open() || dolls_save_screen_open() || video_playing() || dolls_typing(), dolls_typing() || dolls_save_screen_open()); /* the key as the action it is now (U8Keys) */
+            if (e.type != EV_QUIT && dolls_vk_open()) /* the on-screen keyboard up: everything is its own */
+            {
+                if (e.type == EV_MOUSE_MOVE) { gumps_pointer_at(e.mouseX, e.mouseY); dolls_vk_event(0, 0, 0, 0, e.mouseX, e.mouseY); continue; }
+                int vt = e.type == EV_MOUSE_DOWN ? 1 : e.type == EV_MOUSE_UP ? 2 : e.type == EV_KEY_DOWN ? 3 : e.type == EV_TEXT ? 4 : -1;
+                if (vt < 0 || dolls_vk_event(vt, e.key, e.ch, e.button, e.mouseX, e.mouseY)) continue;
+            }
+            if (u8_on() && (e.type == EV_MOUSE_DOWN || e.type == EV_MOUSE_UP || e.type == EV_MOUSE_MOVE) && u8_mouse(&e)) continue; /* Ultima 8: the right button walks, both jump (u8.c) */
             if (e.type == EV_QUIT) running = 0;
             else if (e.type == EV_MOUSE_MOVE) { gumps_pointer_at(e.mouseX, e.mouseY); /* the pointer follows the mouse whatever is up: a box, a slider */ if (slider_open_now()) { slider_mouse_move(e.mouseX, e.mouseY); continue; } dialog_mouse_move(e.mouseX, e.mouseY); if (!dialog_showing()) gumps_mouse_move(e.mouseX, e.mouseY); }
             else if (e.type == EV_MOUSE_DOWN && e.button == 1)
             {
                 if (video_input(1)) continue; /* a click skips a video */
                 if (slider_mouse_down(e.mouseX, e.mouseY)) continue; /* the slider up: its clicks */
-                if (dialog_showing()) dialog_click(e.mouseX, e.mouseY);
-                else if (!vitals_game_over() || dolls_window_count()) gumps_mouse_down(e.mouseX, e.mouseY); /* identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
+                if (dialog_showing()) { if (!u6_talk_click(e.mouseX, e.mouseY)) dialog_click(e.mouseX, e.mouseY); }
+                else if (!vitals_game_over() || dolls_window_count()) { if (dolls_window_count() || gumps_open() || !u6_mouse_down(e.mouseX, e.mouseY)) gumps_mouse_down(e.mouseX, e.mouseY); } /* Ultima 6's HUD first (u6.c); identify, use, drag (GameTestWindow.Interaction); dead: only the Save/Load screen */
                 else
                 {
                     /* the game over: a double click on the main character's body opens Save/Load (to load a game) */
@@ -484,7 +606,7 @@ int main(int argc, char **argv)
             }
             else if (e.type == EV_MOUSE_UP && e.button == 1 && slider_open_now()) slider_mouse_up(e.mouseX, e.mouseY);
             else if (e.type == EV_MOUSE_UP && e.button == 1 && !dialog_showing()) gumps_mouse_up(e.mouseX, e.mouseY);
-            else if (e.type == EV_TEXT) { if (!prompt_key(0, e.ch)) dolls_key(0, e.ch); } /* a letter for a question's box, or a paperdoll's text box */
+            else if (e.type == EV_TEXT) { if (!u6_talk_text(e.ch) && !prompt_key(0, e.ch)) dolls_key(0, e.ch); } /* Ultima 6's typed answer, a letter for a question's box, or a paperdoll's text box */
             else if (e.type == EV_KEY_DOWN || e.type == EV_KEY_UP)
             {
                 int down = e.type == EV_KEY_DOWN;
@@ -495,9 +617,12 @@ int main(int argc, char **argv)
                 if (down && e.key != KEY_F11 && mechanisms_key(e.key)) continue; /* sleeping */
                 if (down && dialog_showing() && e.key != KEY_F11)
                 {
+                    if (u6_talk_key(&e)) continue; /* Ultima 6: the talk in the text area (u6.c) */
                     dialog_key(e.key); /* while a box is up the keys are its own */
                     continue;
                 }
+                /* Ultima 6's keys (u6.c): every key not Ultima 6's is swallowed - Escape and F11 still reach the engine below */
+                if (u6_on() && !dolls_title_open() && !events_cinema() && !vitals_game_over() && u6_key(&e)) continue;
                 switch (e.key)
                 {
                     case KEY_LEFT: held[0] = down ? ++order : 0; break;
@@ -513,10 +638,12 @@ int main(int argc, char **argv)
                     case KEY_F11: if (down) platform_toggle_fullscreen(); break;
                     case KEY_CTRL_Q: if (down) dolls_ask_to_quit(); break; /* Ctrl+Q: the Quit prompt, any time */
                     case KEY_C: if (down && !vitals_game_over() && !events_combat_forbidden() && !events_keys_forbidden()) combat_toggle_mode(); break; /* Exult: C for combat */
-                    default: break;
+                    default: if (down && u8_on()) u8_world_key(u8_action_id()); break; /* Ultima 8's own keys (u8.c) */
                 }
             }
         }
+        DBG_STEP(10);
+        if (u8_on() && u8_take_drop_arrows()) { memset(held, 0, sizeof held); u8_release_all(); } /* Ultima 8: knocked down - the keys held must be pressed again */
         /* The most recently pressed direction still held wins (as the Windows engine). */
         int best = 0, dx = 0, dy = 0;
         for (int i = 0; i < 4; i++) if (held[i] > best) best = held[i];
@@ -525,6 +652,8 @@ int main(int argc, char **argv)
             if (held[0] == best) dx = -1; else if (held[1] == best) dx = 1; else if (held[2] == best) dy = -1; else dy = 1;
         }
         else { dx = testDx; dy = testDy; }
+        if (u6_hud() && !best && !testDx && !testDy) u6_walk(&dx, &dy); /* Ultima 6's walking keys (diagonals too) */
+        if (u8_on() && (best || (!testDx && !testDy))) u8_walk_input(held[0] != 0, held[1] != 0, held[2] != 0, held[3] != 0, &dx, &dy); /* Ultima 8: the screen's way, 8 directions, the right button too */
         uint32_t now = platform_ticks();
         if (presses) scripted_presses(presses, (now - start) / 1000.0, &pressedTill);
         if (shotAt >= 0 && (now - start) / 1000.0 >= shotAt)
@@ -538,10 +667,13 @@ int main(int argc, char **argv)
                 world_draw_barks(pixels);
             }
             combat_draw(pixels, worldMs);
+            gumps_draw_thrown(pixels); /* Ultima 8: something thrown in the air */
             traps_draw(pixels, worldMs);
+            u6_draw(pixels, now);
             gumps_draw(pixels, worldMs);
             screen_draw(pixels, now);
             dialog_draw(pixels, now); slider_draw(pixels, now);
+            u6_draw_title(pixels, now); u6_draw_scene(pixels, now);
             video_draw(pixels);
             gumps_draw_pointer(pixels, now);
             save_bmp(shot);
@@ -583,18 +715,23 @@ int main(int argc, char **argv)
         double seconds = (now - last) / 1000.0;
         if (seconds > 0.1) seconds = 0.1;
         last = now;
+        DBG_STEP(11);
         sound_update(seconds * 1000);
+        DBG_STEP(12);
         screen_update(seconds * 1000);
-        int title = dolls_title_open() || introPending; /* the Title Screen (or its intro video): nothing in the world goes on behind it */
+        int title = dolls_title_open() || introPending || u6_title_on(); /* the Title Screen (or its intro video, or Ultima 6's menu): nothing in the world goes on behind it */
+        DBG_STEP(13);
         video_update(seconds * 1000);
         timing(0);
-        int paused = dialog_showing() || title || mechanisms_pausing() || slider_open_now() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps) */
+        int paused = dialog_showing() || title || mechanisms_pausing() || slider_open_now() || video_playing() || books_open() || prompt_open() || gumps_pausing() || vitals_game_over() || u6_scene_on(); /* a box up: the game waits, as in an Exult conversation (and while the party sleeps); an Ultima 6 scene */
+        if (u8_on()) paused = title || vitals_game_over() || gumps_choosing() || mechanisms_pausing() || slider_open_now() || video_playing() || prompt_open(); /* Ultima 8 (U8GameWindow.Pause): no window, box, book or spellbook pauses - only choosing a target, a map looked at, sleeping, a video, a number being typed */
         if (!title) events_update(seconds * 1000, paused);
+        if (u6_scene_on()) events_tick_waits(seconds * 1000); /* Wait counts in a scene (the world waits) */
         else gumps_update(seconds * 1000);
         timing(1);
         if (events_quit_requested()) running = 0; /* Quit Game */
         if (loadRequested) { loadRequested = 0; if (load_game(loadFolder, loadName) < 0) running = 0; }
-        { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && travel(w, hs, wx, wy, wf) < 0) running = 0; } /* Change Map to another world */
+        { int w, hs, wx, wy, wf; if (events_world_trip(&w, &hs, &wx, &wy, &wf) && (u8_control_back(), travel(w, hs, wx, wy, wf) < 0)) running = 0; } /* Change Map to another world */
         if (events_restart_requested()) { int title = events_restart_requested() == 2; events_clear_restart(); if (new_game(title) < 0) running = 0; } /* New Game, Return To Title */
         /* Exult's "gumps pause the game" (GameTestWindow.UpdateGamePause): as it pauses, a direction held is let go and the
            avatar stands where it is - the key has to be pressed again (so an event's Walk To isn't taken for the player taking over). */
@@ -603,15 +740,19 @@ int main(int argc, char **argv)
         if ((paused && !wasPaused) || (cinemaNow && !wasCinema)) { for (int i = 0; i < 4; i++) held[i] = 0; testDx = testDy = 0; world_keys_let_go(); }
         wasPaused = paused; wasCinema = cinemaNow;
         if (paused) dx = dy = 0;
-        if (!paused)
+        int frozen = !paused && u6_turn_frozen(seconds * 1000); /* Ultima 6 combat: the world waits for the avatar's turn */
+        if (frozen) dx = dy = 0;
+        if (!paused && !frozen)
         {
             if (events_cinema()) dx = dy = 0; /* Cinema Mode: the player can't move */
             if (vitals_game_over() || vitals_incapacitated(world_actor_character(0))) dx = dy = 0; /* dead, knocked out, asleep, paralyzed */
             if (vehicles_drive(dx, dy, seconds)) dx = dy = 0; /* at a vehicle's controls: the keys drive it */
+            if (u6_solo_step(dx, dy)) dx = dy = 0; /* Ultima 6 solo mode: the member moves, the avatar stands */
             world_update(dx, dy, seconds);
             schedules_update(seconds * 1000);
             weather_update(seconds * 1000);
             vitals_update(seconds * 1000);
+            u8_update(seconds * 1000); /* Ultima 8: platforms, a flip, a recharge, view events (u8.c) */
             combat_update(seconds * 1000);
             magic_update(seconds * 1000);
             mechanisms_update(seconds * 1000);
@@ -625,7 +766,7 @@ int main(int argc, char **argv)
         if (!title) gumps_update(seconds * 1000); /* the windows themselves go on while the game waits (dragging, their animations) */
         mechanisms_frame(seconds * 1000); /* the sleep fade runs while the world waits */
         if (gumps_save_screen_wanted() && !dolls_title_open()) { save_take_screenshot(pixels); dolls_open_save_screen(); } /* the paperdoll's disk */
-        if (!paused) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
+        if (!paused && !frozen) worldMs += (uint32_t)(seconds * 1000); /* the world's own time: still while a box is up (Exult: paused) */
         timing(2);
         if (title) memset(pixels, 0, sizeof(uint32_t) * FRAME_PIXELS); /* the world isn't seen behind the title */
         else
@@ -638,20 +779,32 @@ int main(int argc, char **argv)
             timing(5);
             world_draw_barks(pixels);
             combat_draw(pixels, worldMs);
+            gumps_draw_thrown(pixels); /* Ultima 8: something thrown in the air */
             traps_draw(pixels, worldMs);
+            u6_draw(pixels, now); /* Ultima 6: the HUD round the Game View (u6.c) */
             timing(6);
         }
-        gumps_draw(pixels, title ? now : worldMs);
+        gumps_draw(pixels, now); /* the windows on real time, as on Windows (GameTestWindow.Pause: "the interface keeps animating while the game is paused") - on the world's time a paperdoll's eyes stopped whenever a window or message paused the game */
         if (!title) screen_draw(pixels, now);
         dialog_draw(pixels, now); slider_draw(pixels, now);
+        u6_draw_title(pixels, now); /* Ultima 6's title menu */
+        u6_draw_scene(pixels, now); /* an Ultima 6 scene over everything (the title menu too) */
         screen_shake_apply(pixels);
         video_draw(pixels); /* a video over everything */
+        dolls_vk_draw(pixels); /* the on-screen keyboard, over every window */
+        u8_draw_screen(pixels); /* Ultima 8: a reading screen, a keypad, a computer */
+        u8_flip_frame(pixels); /* Ultima 8: Flip Screen */
         gumps_draw_pointer(pixels, now); /* the pointer over everything */
         timing(7);
         platform_present(pixels);
         timing(8);
         timing_frame_done();
-        { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); } /* how far it got, if it ever stops */
+        { static int frames; if (++frames == 1 || frames == 100) note(frames == 1 ? "First frame shown." : "100 frames shown."); /* how far it got, if it ever stops */
+#ifdef PS2_DIAG_SHOTS
+          /* testing in PCSX2: frames as pictures on the memory card in slot 1 (read off its image with a memory card tool) */
+          if (frames % 150 == 0 && frames <= 2400) { char name[40]; mkdir("mc0:/SANDDIAG", 0777); snprintf(name, sizeof name, "mc0:/SANDDIAG/F%04d.BMP", frames); save_bmp(name); note(name); }
+#endif
+        }
     }
     platform_audio_close();
     platform_close();

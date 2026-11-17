@@ -41,6 +41,19 @@ public partial class U6GameWindow
             foreach (var inside in backpack.Contents) yield return inside;
     }
 
+    /// <summary>The Carried Items grid as it's shown now: an open bag's own (Container Editor: Across, Down, Cell size, empty cell) at the
+    /// HUD's Carried Items X and Y - else the HUD's own.</summary>
+    private (int Columns, int Rows, int Cell, SpriteLink Empty) CarriedGrid(HudPiece piece)
+    {
+        if (_hudOpenBag is { } bag && HudMember is { } member && Carries(member, bag) && ContainerDef(bag.ItemId) is { U6Columns: > 0, U6Rows: > 0 } data)
+            return (data.U6Columns, data.U6Rows, Math.Max(4, data.U6CellSize > 0 ? data.U6CellSize : piece.CellSize), data.U6EmptyCell.IsSet ? data.U6EmptyCell : piece.Sprite);
+        return (piece.Columns, piece.Rows, Math.Max(4, piece.CellSize), piece.Sprite);
+    }
+
+    /// <summary>Its cells are full (Container Editor: Across x Down, less the first cell - the container itself). excluding: already inside.</summary>
+    private bool U6BagFull(ContainerData data, IHasContainerContents bag, InventoryItemInstance? excluding = null) =>
+        data.U6Capacity is int cells && bag.Contents.Count(i => !ReferenceEquals(i, excluding)) >= cells;
+
     /// <summary>Use on a carried bag: open it in the panel, or (the open one) close it.</summary>
     private bool U6UseBag(InventoryItemInstance item, string name)
     {
@@ -60,6 +73,7 @@ public partial class U6GameWindow
     private bool PutInOpenBag(CharacterDefinition owner, InventoryItemInstance item)
     {
         if (_hudOpenBag is not { } bag || ReferenceEquals(item, bag)) return false;
+        if (ContainerDef(bag.ItemId) is { } data && U6BagFull(data, bag, item)) { StatusText.Text = $"\"{data.Name}\" is full."; return false; }
         if (TakeFromCarrier(owner, item.Category, item.ItemId, Math.Max(1, item.Quantity)) is not { } taken) return false;
         bag.Contents.AddRange(taken);
         RefreshAfterMove();
@@ -86,6 +100,10 @@ public partial class U6GameWindow
     {
         var lines = new List<string>();
         var area = Hud.First(HudPieceKind.TextArea);
+        if (book.U6Text.Trim().Length > 0) // the Book Editor's notepad (Ultima 6)
+            foreach (var paragraph in book.U6Text.Replace("\r", "").TrimEnd().Split('\n'))
+                lines.AddRange(area is null ? new List<string> { paragraph } : HudWrap(paragraph, area.Width, area.FontName));
+        else
         for (int page = 0; page < book.Pages.Count; page++)
             foreach (var frame in book.Frames)
             {

@@ -1,0 +1,1 @@
+esr_dvd_video.bin: the 12 DVD-Video sectors of the ESR disc patch (ESR by ffgriever, scene freeware; the block every ESR patcher writes at sector 128, SHA-256 D61083E8BC90A959C21958E46216A8531C2095C2F6F780B779D9489F3FD5A845 - taken from github.com/Dougwan/ESR-Disc-Patcher). Engine/Ps2Iso.cs writes it into every PlayStation 2 ISO.

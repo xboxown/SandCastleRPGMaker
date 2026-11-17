@@ -5,6 +5,7 @@
 #include "sound.h"
 #include "conditions.h"
 #include "dolls.h"
+#include "u6.h"
 #include "../third_party/cJSON.h"
 #include <stdio.h>
 #include <stdlib.h>
@@ -64,8 +65,11 @@ static double dbl(cJSON *o, const char *k) { cJSON *v = get(o, k); return cJSON_
 static int flag(cJSON *o, const char *k) { return cJSON_IsTrue(get(o, k)); }
 static const char *str(cJSON *o, const char *k) { const char *s = cJSON_GetStringValue(get(o, k)); return s ? s : ""; }
 
+static cJSON *body_def(int characterId);
+
 static cJSON *def_of(int category, int itemId)
 {
+    if (category == CAT_CONTAINER && itemId <= -1000) return body_def(-1000 - itemId); /* a body (LeaveBody's own container) */
     cJSON *list = category == CAT_OBJECT ? objectsJson : category == CAT_CONTAINER ? containersJson : category == CAT_BOOK ? booksJson : NULL, *d;
     cJSON_ArrayForEach(d, list) if (num(d, "Id", -2) == itemId) return d;
     return NULL;
@@ -170,6 +174,9 @@ static double weight_of(const Item *it)
     return w;
 }
 
+double items_weight_of(const Item *it) { return it ? weight_of(it) : 0; }
+double items_own_weight(int category, int itemId) { return dbl(def_of(category, itemId), "Weight"); }
+
 /* ResolveContentsVolume: its Volume times how many. */
 static double volume_of(const Item *it) { return dbl(def_of(it->category, it->itemId), "Volume") * it->quantity; }
 
@@ -190,6 +197,29 @@ static Carrier *carrier_of(int characterId)
 }
 
 int items_in_party(int characterId) { Carrier *c = carrier_of(characterId); return c && (c->isPlayer || c->inParty); }
+
+/* LeaveBody's container for a character's body: "body of" them, weighing and taking the room its Body settings say, liftable
+   unless Too Heavy (Character Editor > Body) - made once per character. */
+static cJSON *body_def(int characterId)
+{
+    static struct { int id; cJSON *def; } made[64];
+    static int madeCount;
+    for (int i = 0; i < madeCount; i++) if (made[i].id == characterId) return made[i].def;
+    cJSON *ch = NULL, *c;
+    cJSON_ArrayForEach(c, get(get(get((cJSON *)world_json(), "Project"), "Characters"), "Characters")) if (num(c, "Id", -2) == characterId) ch = c;
+    cJSON *body = get(ch, "Body"), *d = cJSON_CreateObject();
+    char name[128];
+    snprintf(name, sizeof name, "body of %s", str(ch, "Name"));
+    cJSON_AddNumberToObject(d, "Id", -1000 - characterId);
+    cJSON_AddStringToObject(d, "Name", name);
+    cJSON_AddNumberToObject(d, "Weight", cJSON_IsNumber(get(body, "Weight")) ? get(body, "Weight")->valuedouble : 50);
+    cJSON_AddNumberToObject(d, "Volume", cJSON_IsNumber(get(body, "Volume")) ? get(body, "Volume")->valuedouble : 20);
+    cJSON_AddBoolToObject(d, "CanBePicked", !flag(body, "TooHeavy"));
+    cJSON_AddBoolToObject(d, "IsBodyContainer", 1);
+    cJSON_AddNumberToObject(d, "MaxVolume", 9999);
+    if (madeCount < 64) { made[madeCount].id = characterId; made[madeCount].def = d; madeCount++; }
+    return d;
+}
 
 static int slot_key_of(const char *name) { for (int i = 0; i < SLOT_COUNT; i++) if (strcmp(SLOT_NAMES[i], name) == 0) return i; return -1; }
 
@@ -309,9 +339,116 @@ static int container_accepts(const Item *bag, const Item *it)
     if (!d || flag(d, "IsBodyContainer")) return 0;
     if (bag->locked >= 0 ? bag->locked : flag(d, "IsLocked")) return 0;
     if (bag == it || holds(it->contents, it->count, bag)) return 0;
+    if (u6_on()) return !u6_bag_full(bag, it); /* Ultima 6: one thing to a cell */
     double used = 0;
     for (int i = 0; i < bag->count; i++) used += volume_of(bag->contents[i]);
     return used + volume_of(it) <= dbl(d, "MaxVolume");
+}
+
+/* ---------------- Items Inside, Item Charges (GameTestWindow.Toughness) ---------------- */
+
+static Item *find_item_where(Item **list, int count, int (*match)(const Item *, const void *), const void *ctx)
+{
+    for (int i = 0; i < count; i++)
+    {
+        if (match(list[i], ctx)) return list[i];
+        Item *inside = list[i]->count ? find_item_where(list[i]->contents, list[i]->count, match, ctx) : NULL;
+        if (inside) return inside;
+    }
+    return NULL;
+}
+static int named(const Item *it, const void *ctx)
+{
+    const char *a = items_name(it->category, it->itemId), *b = (const char *)ctx;
+    while (*a && *b && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+    return !*a && !*b;
+}
+typedef struct Kind { int category, itemId; } Kind;
+static int of_kind(const Item *it, const void *ctx) { const Kind *k = (const Kind *)ctx; return it->category == k->category && it->itemId == k->itemId; }
+
+/* A bag someone carries, by its name as in its editor (at any depth). */
+Item *items_carried_named(int characterId, const char *name)
+{
+    Carrier *k = carrier_of(characterId);
+    return k ? find_item_where(k->items, k->count, named, name) : NULL;
+}
+
+/* A carried thing of this kind (at any depth). */
+Item *items_carried_kind(int characterId, int category, int itemId)
+{
+    Carrier *k = carrier_of(characterId);
+    Kind want = { category, itemId };
+    return k ? find_item_where(k->items, k->count, of_kind, &want) : NULL;
+}
+
+/* What is inside a bag (at any depth) of a kind (itemId below 0: anything): counted; taken away too if asked. */
+int items_inside(Item *bag, int category, int itemId, int remove)
+{
+    int total = 0;
+    for (int i = 0; i < bag->count; )
+    {
+        Item *it = bag->contents[i];
+        int wanted = itemId < 0 || (it->category == category && it->itemId == itemId);
+        if (wanted)
+        {
+            total += it->quantity > 0 ? it->quantity : 1;
+            if (it->count) total += items_inside(it, category, itemId, 0);
+            if (remove) { items_free(it); memmove(&bag->contents[i], &bag->contents[i + 1], sizeof(Item *) * (size_t)(bag->count - i - 1)); bag->count--; continue; }
+        }
+        else if (it->count) total += items_inside(it, category, itemId, remove);
+        i++;
+    }
+    return total;
+}
+
+/* A carried item's charges as they stand: not used yet, what it starts with (a charged weapon, a focus). */
+int items_charges_now(const Item *it)
+{
+    if (it->charges >= 0) return it->charges;
+    cJSON *d = it->category == CAT_OBJECT ? def_of(CAT_OBJECT, it->itemId) : NULL;
+    if (!d) return 0;
+    int c = num(d, "Type", 0) == OT_WEAPON && num(get(d, "Weapon"), "Ammo", 0) == 2 ? num(get(d, "Weapon"), "Charges", 0) : num(get(d, "Spellbook"), "U8FocusCharges", 0);
+    return c > 0 ? c : 0;
+}
+void items_set_charges_now(Item *it, int charges) { it->charges = charges > 0 ? charges : 0; }
+
+/* Ultima 6's Rest (TimedRest::eat): one food (not a drink) eaten from what they carry, at any depth. 1 eaten. */
+static Item *food_in(Item **list, int count)
+{
+    for (int i = 0; i < count; i++)
+    {
+        Item *it = list[i];
+        cJSON *d = it->category == CAT_OBJECT ? def_of(CAT_OBJECT, it->itemId) : NULL;
+        if (d && num(d, "Type", 0) == 17 && !flag(get(d, "Food"), "IsLiquid")) return it; /* ObjectType.Food */
+        Item *inside = it->count ? food_in(it->contents, it->count) : NULL;
+        if (inside) return inside;
+    }
+    return NULL;
+}
+
+int items_eat_one_food(int characterId)
+{
+    Carrier *k = carrier_of(characterId);
+    Item *food = k ? food_in(k->items, k->count) : NULL;
+    if (!food) return 0;
+    if (food->quantity > 1) { food->quantity--; return 1; }
+    ItemPlace from;
+    int category = food->category, itemId = food->itemId;
+    if (!items_detach(food, &from)) return 0;
+    items_detach_done(&from, category, itemId);
+    items_free(food);
+    return 1;
+}
+
+/* Ultima 6 (U6BagFull): its cells are full - Container Editor's Across x Down, less the first (the container itself); none set: no limit. */
+int u6_bag_full(const Item *bag, const Item *excluding)
+{
+    cJSON *d = def_of(CAT_CONTAINER, bag->itemId);
+    int columns = num(d, "U6Columns", 0), rows = num(d, "U6Rows", 0);
+    if (columns <= 0 || rows <= 0) return 0;
+    int n = 0;
+    for (int i = 0; i < bag->count; i++) if (bag->contents[i] != excluding) n++;
+    return n >= columns * rows - 1;
 }
 
 /* DropOnCharacter for a loose thing (picked up, given). */
@@ -330,6 +467,9 @@ int items_give_to(int characterId, Item *it)
             return 0;
         }
     }
+    /* Ultima 6 (U6GameWindow.Interaction DropOnCharacter): things are carried loose - the HUD panel's carried cells, bags
+       among them - limited by weight only (above), never needing a backpack or a free hand as in Ultima 7. */
+    if (u6_on()) { add_to(&k->items, &k->count, &k->cap, it); received(k); return 1; }
     cJSON *d = def_of(it->category, it->itemId);
     /* Ammo goes to its own slot, joining a stack of the same ammo there. */
     if (it->category == CAT_OBJECT && num(d, "Type", 0) == OT_AMMO)
@@ -473,14 +613,31 @@ void items_park(int uid, Item *item)
 {
     if (parkedCount == parkedCap) { parkedCap = parkedCap ? parkedCap * 2 : 16; parked = (Parked *)realloc(parked, sizeof(Parked) * (size_t)parkedCap); }
     parked[parkedCount++] = (Parked){ uid, item };
+    if (item && item->category == CAT_CONTAINER)
+    {
+        int c, i, q, x, y, n;
+        world_thing_info(uid, &c, &i, &q, &x, &y, &n);
+        if (c == CAT_CONTAINER && i <= -1000) item->itemId = i; /* what a body holds: it is that body (lifted, it stays theirs) */
+    }
     if (item && item->category == CAT_OBJECT) world_thing_set_facing(uid, item->facing); /* put down the way it faced (FacingRuntime) */
+    if (item && item->liquidSet && world_thing_is_liquid(uid)) world_thing_set_liquid(uid, item->liquid); /* a bucket put down full stays full */
+    if (item && item->category == CAT_OBJECT) world_set_light_state(uid, item->lit, item->spent, item->burnLeft); /* a burnt-out candle put down stays burnt out (CreateMapEntityFor) */
+}
+
+/* Picked up: a liquid container holds what it holds on the map now (filled at a well, emptied on a fire) - not what it held
+   when last carried, nor as it starts. A light the same: its flame, burn time and burnt out as on the map now. */
+static Item *with_liquid_of(int uid, Item *it)
+{
+    if (it && world_thing_is_liquid(uid)) { it->liquid = world_thing_liquid(uid); it->liquidSet = 1; }
+    if (it && it->category == CAT_OBJECT) world_light_state(uid, &it->lit, &it->spent, &it->burnLeft);
+    return it;
 }
 
 /* The thing on the map with that uid as it was put down - or, never carried, a fresh one (a container with its Starting Contents). */
 Item *items_unpark(int uid, int category, int itemId, int quantity)
 {
     for (int i = 0; i < parkedCount; i++)
-        if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; it->facing = world_thing_facing(uid); return it; }
+        if (parked[i].uid == uid) { Item *it = parked[i].item; parked[i] = parked[--parkedCount]; it->quantity = quantity; it->facing = world_thing_facing(uid); return with_liquid_of(uid, it); }
     /* never carried: SeedContentsOf - its own contents if the Map Editor gave it some, else its Starting Contents */
     cJSON *own = (cJSON *)world_thing_own_contents(uid), *c, *placed = world_thing_placed(uid);
     Item *it;
@@ -498,7 +655,7 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
     if (cJSON_IsArray(get(placed, "KeyIdsRuntime"))) it->keysSet = 1;
     it->charges = num(placed, "ChargesRuntime", -1);
     it->facing = world_thing_facing(uid); /* picked up: the way it faced goes with it */
-    return it;
+    return with_liquid_of(uid, it);
 }
 
 /* Put back where it was found (a pick-up that was refused). */
@@ -1206,12 +1363,19 @@ int items_put_into(Item *bag, Item *it, int atSpot, double x, double y)
     if (flag(d, "IsBodyContainer")) { snprintf(refusal, sizeof refusal, "You can't put things into \"%s\" - it's a body, not a real container.", str(d, "Name")); return 0; }
     if (items_is_locked(bag)) { snprintf(refusal, sizeof refusal, "\"%s\" is locked.", str(d, "Name")); return 0; }
     if (bag == it || holds(it->contents, it->count, bag)) { snprintf(refusal, sizeof refusal, "\"%s\" can't go inside itself.", name); return 0; }
+    if (u6_on()) /* Ultima 6: no volume - one thing to a cell (U6BagFull) */
+    {
+        if (u6_bag_full(bag, it)) { snprintf(refusal, sizeof refusal, "\"%s\" is full.", str(d, "Name")); return 0; }
+    }
+    else
+    {
     double used = 0;
     for (int i = 0; i < bag->count; i++) used += volume_of(bag->contents[i]);
     if (used + volume_of(it) > dbl(d, "MaxVolume"))
     {
         snprintf(refusal, sizeof refusal, "\"%s\" won't fit in \"%s\" - %.2f + %.2f would exceed the max volume of %.2f.", name, str(d, "Name"), used, volume_of(it), dbl(d, "MaxVolume"));
         return 0;
+    }
     }
     int carrier = items_carrier_of(bag);
     if (carrier >= 0 && !items_check_weight(carrier, it)) return 0;

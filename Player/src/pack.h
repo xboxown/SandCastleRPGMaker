@@ -23,5 +23,11 @@ void pack_stream_close(PackStream *stream);
 
 /* A save: encrypted with the game's own key (read from game.sdbx), as the Windows game's saves are. malloc'd. */
 unsigned char *pack_encrypt(const unsigned char *plain, long length, long *size);
+/* The same written to a file as it comes: open with the plain length to come, put it all, close (1: written). */
+#include <stdio.h>
+typedef struct PackWriter PackWriter;
+PackWriter *pack_writer_open(FILE *f, long plainLength);
+void pack_writer_put(PackWriter *w, const void *data, long n);
+int pack_writer_close(PackWriter *w);
 
 #endif

@@ -60,6 +60,10 @@ public class Ultima6Settings
     public List<U6NoteRule> NoteRules { get; set; } = new();
     /// <summary>A note no rule matches: said as the engine words it (on), or not at all (off).</summary>
     public bool ShowOtherNotes { get; set; } = true;
+    /// <summary>Game Test's debugging notes (U6DebugNotes) the maker turned off in the text area.</summary>
+    public List<string> HiddenDebugNotes { get; set; } = new();
+    /// <summary>Game Test's debugging notes the maker reworded (note id -> words, with its {0} {1} blanks).</summary>
+    public Dictionary<string, string> DebugNoteWords { get; set; } = new();
     /// <summary>What the avatar can't see is black (walls, closed doors, Occludes stop sight) - Ultima 6's view (U6GameWindow.U6Sight.cs).</summary>
     public bool LineOfSight { get; set; } = true;
     /// <summary>The title menu's picture, filling the screen (U6GameWindow.U6Title.cs); not set: black.</summary>
@@ -286,6 +290,12 @@ public class HudPiece
     public SpriteLink PressedSprite { get; set; } = new();
     public HudVerb Verb { get; set; }
     public EquipmentSlot Slot { get; set; } = EquipmentSlot.Head;
+    /// <summary>Picture: drawn in front of the panel's pieces (body slots and what they wear, carried items, portrait, stats, name).
+    /// Off (the default): behind them - a paperdoll picture under the weapons and armour.</summary>
+    public bool InFront { get; set; }
+    /// <summary>Panel contents: drawn over the HUD's other pieces, as the game draws them - after them, member by member.</summary>
+    public static bool IsPanelContent(HudPieceKind kind) => kind is HudPieceKind.BodySlot or HudPieceKind.CarriedItems or HudPieceKind.Portrait
+        or HudPieceKind.Stats or HudPieceKind.MemberName or HudPieceKind.CombatMode;
     /// <summary>Carried items: cells across and down, each this many pixels.</summary>
     public int Columns { get; set; } = 4;
     public int Rows { get; set; } = 3;

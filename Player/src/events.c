@@ -1,4 +1,6 @@
 #include "events.h"
+#include "u6.h"
+#include "u8.h"
 #include "save.h"
 #include "magic.h"
 #include "shop.h"
@@ -15,6 +17,7 @@
 #include "lighting.h"
 #include "schedules.h"
 #include "sound.h"
+#include "use.h"
 #include "weather.h"
 #include "conditions.h"
 #include "screen.h"
@@ -490,7 +493,7 @@ static int conditions_met(cJSON *c, int just, int timesSoFar, int triggerOverrid
 
 /* ---------------- Running commands ---------------- */
 
-enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN, W_DOLL };
+enum { W_NONE, W_TIMER, W_CHOICE, W_READ, W_WALK, W_ACTION, W_UNTIL, W_YIELD, W_SCREEN, W_DOLL, W_PICK, W_SNIFF };
 enum { A_PICKUP = 1, A_DROP, A_SIT, A_POSE, A_OPEN_DOOR, A_PICKLOCK, A_TAKE, A_EFFECT, A_ATTACK_THING };
 
 typedef struct Loop { const Cmd *opener; int count, total; } Loop;
@@ -529,6 +532,10 @@ typedef struct Run
     int choiceAt, afterBranches, choicePinned[DIALOG_MAX_REPLIES], choiceIds[DIALOG_MAX_REPLIES], choiceCount;
     void *doll;                      /* the paperdoll whose part's (or object's) event this is: "this paperdoll" */
     int answerToken;                 /* waiting for a paperdoll's answer (Open Paperdoll, Show Error) */
+    void (*finished)(void);          /* told when it's over (events_run_commands_then) */
+    /* Pets (GameTestWindow.Pets): follows the main character again after its walk / action (-1: no); Order On A Target; Sniff And Lead */
+    int petFollowAfter, pet, petPicked, petOrder; GumpsPick petPick;
+    const Cmd *sniffCmd; double sniffAll, sniffThink, sniffGiveUp, sniffWaitCells; int sniffWaiting, sniffKeepFollowing;
 } Run;
 
 #define MAX_RUNS 32
@@ -709,6 +716,7 @@ static int build_box(const Run *r, const Cmd *c, DialogBox *box, int withReplies
     }
     if (onMap > 0 && !world_actor_in_sight(onMap)) return 0; /* not in sight: their line isn't shown */
     box->face = speaker >= 0 ? world_actor_face(speaker) : NULL;
+    box->speakerPlus1 = speaker >= 0 ? world_actor_character(speaker) + 1 : 0; /* who speaks (Ultima 6: their name and portrait in the panel) */
     const char *frame = "", *bg = param(c, "Background");
     int dim = 0;
     if (get(c->params, "Frame")) { frame = param(c, "Frame"); dim = strcmp(param(c, "Dim"), "True") == 0; }
@@ -731,7 +739,13 @@ static Picked *picked_of(const Cmd *showText, int id)
     return &picked[pickedCount++];
 }
 
-static void end_run(Run *r) { r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; release_held(r); }
+static void end_run(Run *r)
+{
+    void (*finished)(void) = r->finished;
+    r->used = 0; r->cinema = 0; free(r->callers); r->callers = NULL; r->depth = 0; release_held(r);
+    r->finished = NULL;
+    if (finished) finished(); /* whoever started it hears it's over (Ultima 6's title menu: its Introduction, Create New Character) */
+}
 
 /* A video the event waits on has ended (or couldn't be played): it goes on. */
 static void video_done(int ok, void *context) { events_doll_answered((int)(intptr_t)context, ok); }
@@ -815,6 +829,10 @@ static Value formula(const Cmd *c, const char *key)
 }
 
 static double formula_number(const Cmd *c, const char *key) { return value_number_of(formula(c, key)); }
+/* Ultima 6's commands read their formulas through this (u6.c): the command being run. */
+static const Cmd *u6Cmd;
+static double u6_formula(const char *key) { return u6Cmd ? formula_number(u6Cmd, key) : 0; }
+const char *u6_formula_text(const char *key) { return u6Cmd ? value_text_of(formula(u6Cmd, key)) : ""; } /* a formula's words (Type Text's Start) */
 
 static Value value_of_text(const char *f)
 {
@@ -947,6 +965,143 @@ static int category_of(const char *name)
     return strcmp(name, "Object") == 0 ? CAT_OBJECT : strcmp(name, "Container") == 0 ? CAT_CONTAINER : strcmp(name, "Book") == 0 ? CAT_BOOK : -1;
 }
 
+/* ---- GameTestWindow.Toughness's helpers ---- */
+static cJSON *character_data(int characterId);
+
+/* DamageType by its name (Normal 0 ...). */
+static int damage_type_of(const char *name)
+{
+    static const char *T[] = { "Normal", "Fire", "Magic", "Lightning", "Ethereal", "Sonic", "Freezing", "Blade", "Blunt", "Undead", "Slayer", "Pierce", "Falling" };
+    for (int i = 0; i < 13; i++) if (!strcmp(T[i], name)) return i;
+    return 0;
+}
+
+/* A character's own rule for a damage type that isn't Normal (Character Editor > Health). */
+static int has_damage_rule(int characterId, int type)
+{
+    cJSON *rr;
+    cJSON_ArrayForEach(rr, get(character_data(characterId), "DamageResponses")) if (num(rr, "Type", 0) == type && num(rr, "Response", 0) != 0) return 1;
+    return 0;
+}
+
+/* A character's Exp stat (what killing it is worth). */
+static int exp_of(int characterId)
+{
+    cJSON *s, *values = get(character_data(characterId), "StatValues");
+    cJSON_ArrayForEach(s, statsJson)
+        if (num(s, "Kind", 0) == 9) { char key[16]; snprintf(key, sizeof key, "%d", num(s, "Id", -1)); const char *v = cJSON_GetStringValue(get(values, key)); return v ? atoi(v) : 0; }
+    return 0;
+}
+
+/* Changeling: looks like something else and waits, until an enemy comes near or it is hurt. */
+typedef struct Changeling { int actor, hpAtStart; double cells; int attacks; } Changeling;
+static Changeling changelings[16]; static int changelingCount;
+
+static void update_changelings(void)
+{
+    for (int i = 0; i < changelingCount; )
+    {
+        Changeling *ch = &changelings[i];
+        int id = world_actor_character(ch->actor), hp = 0, foe = -1;
+        if (world_actor_gone(ch->actor) || vitals_dead(id)) { changelings[i] = changelings[--changelingCount]; continue; }
+        vitals_hp(id, &hp);
+        double best = 1e18, x, y, ox, oy;
+        world_actor_pixel(ch->actor, &x, &y);
+        int f0, cx0, cy0; world_actor_cell(ch->actor, &cx0, &cy0, &f0);
+        for (int a = 0; a < world_actor_count(); a++)
+        {
+            int oid = world_actor_character(a), ox_, oy_, f;
+            if (a == ch->actor || oid < 0 || world_actor_gone(a) || vitals_dead(oid) || !combat_enemies(a, ch->actor)) continue;
+            world_actor_cell(a, &ox_, &oy_, &f);
+            if (f != f0) continue;
+            world_actor_pixel(a, &ox, &oy);
+            double apart = fmax(fabs(ox - x) / world_tile_w(), fabs(oy - y) / world_tile_h());
+            if (apart <= ch->cells && apart < best) { best = apart; foe = a; }
+        }
+        if (foe < 0 && hp >= ch->hpAtStart) { i++; continue; } /* still waiting */
+        world_change_look(ch->actor, -1); /* itself again */
+        world_set_pose(ch->actor, "Idle", -1);
+        if (ch->attacks) combat_start(ch->actor, foe >= 0 ? foe : 0);
+        changelings[i] = changelings[--changelingCount];
+    }
+}
+
+static int things_in_area(int cx, int cy, int cf, int cells, int category, int itemId, int onlyLit, int *uids, int *counts, int max);
+
+/* For the conditions (conditions.c): how many placed things of a kind (itemId below 0: any) round someone; an enemy near them. */
+int events_objects_around(int characterId, int cells, int category, int itemId, int onlyLit)
+{
+    int a = world_actor_by_character(characterId), x, y, f;
+    if (a < 0) return 0;
+    world_actor_cell(a, &x, &y, &f);
+    static int uids[512], counts[512];
+    int n = things_in_area(x, y, f, cells < 0 ? 0 : cells, category, itemId, onlyLit, uids, counts, 512), total = 0;
+    for (int i = 0; i < n; i++) total += counts[i];
+    return total;
+}
+
+int events_enemy_near(int characterId, double cells)
+{
+    int me = world_actor_by_character(characterId), mf, mx, my;
+    if (me < 0) return 0;
+    world_actor_cell(me, &mx, &my, &mf);
+    double x, y, ox, oy;
+    world_actor_pixel(me, &x, &y);
+    for (int a = 0; a < world_actor_count(); a++)
+    {
+        int id = world_actor_character(a), ax, ay, f;
+        if (a == me || id < 0 || world_actor_gone(a) || vitals_dead(id) || !combat_enemies(a, me)) continue;
+        world_actor_cell(a, &ax, &ay, &f);
+        if (f != mf) continue;
+        world_actor_pixel(a, &ox, &oy);
+        if (fmax(fabs(ox - x) / world_tile_w(), fabs(oy - y) / world_tile_h()) <= cells) return 1;
+    }
+    return 0;
+}
+
+/* The middle of an area command: a spot, this object, or Who. */
+static int area_centre(const Run *r, const Cmd *c, int *x, int *y, int *f)
+{
+    const char *around = param(c, "Around");
+    if (!strcmp(around, "A spot (below)"))
+    {
+        if (!param(c, "X")[0] || !param(c, "Y")[0]) return 0;
+        *x = atoi(param(c, "X")); *y = atoi(param(c, "Y")); *f = param(c, "Floor")[0] ? atoi(param(c, "Floor")) : 1;
+        return 1;
+    }
+    if (!strcmp(around, "This object"))
+    {
+        if (r->ownerUid <= 0) return 0;
+        int ox, oy, z; world_thing_spot(r->ownerUid, x, y, &ox, &oy, &z);
+        *f = world_floor_of_lift(z);
+        return 1;
+    }
+    int who = actor_for(r, param(c, "Who"));
+    if (who < 0) return 0;
+    world_actor_cell(who, x, y, f);
+    return 1;
+}
+
+/* Placed things within so many cells on the floor: of one kind (itemId below 0: any), lit ones only if asked; each with its count. */
+static int things_in_area(int cx, int cy, int cf, int cells, int category, int itemId, int onlyLit, int *uids, int *counts, int max)
+{
+    int n = 0, total = world_thing_count();
+    for (int i = 0; i < total && n < max; i++)
+    {
+        int uid = world_thing_uid_at(i);
+        if (!uid || !world_thing_there(uid)) continue;
+        int cat, id, q, x, y, inst, ox, oy, z;
+        world_thing_info(uid, &cat, &id, &q, &x, &y, &inst);
+        if (abs(x - cx) > cells || abs(y - cy) > cells) continue;
+        world_thing_spot(uid, &x, &y, &ox, &oy, &z);
+        if (world_floor_of_lift(z) != cf) continue;
+        if (itemId >= 0 && (cat != category || id != itemId)) continue;
+        if (onlyLit && (cat != CAT_OBJECT || !world_light_lit(uid))) continue; /* only objects burn */
+        uids[n] = uid; counts[n] = cat == CAT_OBJECT && q > 1 ? q : 1; n++;
+    }
+    return n;
+}
+
 static void start_walk(Run *r, int actor, int x, int y, int beside)
 {
     r->walker = actor; r->goalX = x; r->goalY = y; r->goalFloor = 0; r->beside = beside;
@@ -955,6 +1110,8 @@ static void start_walk(Run *r, int actor, int x, int y, int beside)
 }
 
 static void cancel_actions_of(Run *self, int actor);
+static void pet_target_chosen(void *context, const GumpsPick *pick);
+static int scent_at(Run *r, const Cmd *c, int sniffer, int *gx, int *gy);
 
 /* BeginScriptAction: whatever they were doing for an earlier command is cancelled. */
 static void begin_action(Run *r, int actor, int kind)
@@ -1434,9 +1591,15 @@ static void get_game_data(Run *r, const Cmd *c)
 }
 
 /* A command that isn't control flow; 0 = it waits (the run stops here till it's done). */
+#ifdef SANDCASTLE_NETLOG
+extern volatile int ps3dbg_event; /* testing: the PS3's watchdog (platform_ps3.c) */
+#endif
 static int execute(Run *r, const Cmd *c)
 {
     char text[160];
+#ifdef SANDCASTLE_NETLOG
+    ps3dbg_event = (int)c->type;
+#endif
     switch (c->type)
     {
         case C_ShowText:
@@ -1571,7 +1734,9 @@ static int execute(Run *r, const Cmd *c)
                 if (end == param(c, "Value") || *end) { lastResult = 0; return 1; }
                 int old = stat_int(id, stat);
                 const char *op = param(c, "Operation");
-                set_stat_int(id, stat, !strcmp(op, "Set") ? (int)amount : !strcmp(op, "Subtract") ? old - (int)amount : old + (int)amount, "a change of stats");
+                int wanted = !strcmp(op, "Set") ? (int)amount : !strcmp(op, "Subtract") ? old - (int)amount : old + (int)amount;
+                if (u8_stats_grow_by_use() && num(stat, "Kind", 0) == 8 && num(character_data(id), "LevelLock", 0) > 0 && wanted > num(character_data(id), "LevelLock", 0)) wanted = num(character_data(id), "LevelLock", 0); /* Ultima 8: never past its Most Level */
+                set_stat_int(id, stat, wanted, "a change of stats");
                 int delta = stat_int(id, stat) - old; /* what it really moved (0 is the floor) */
                 if (delta) add_stat_change(id, stat, delta, NULL, NULL, until);
             }
@@ -1769,6 +1934,8 @@ static int execute(Run *r, const Cmd *c)
             if (actor <= 0 || world_actor_gone(actor)) { lastResult = 0; return 1; }
             int join = strcmp(param(c, "Value"), "Leave the party") != 0, id = world_actor_character(actor);
             if (items_in_party(id) == join) return 1;
+            if (join && u6_party_full(id)) { lastResult = 0; return 1; } /* Ultima 6: the party's most (System Settings > Ultima 6) */
+            if (join && u8_party_full(id)) { lastResult = 0; return 1; } /* Ultima 8: the party's most (System Settings > Ultima 8) */
             items_set_in_party(id, join);
             schedules_join(actor, join);
             return 1;
@@ -1804,6 +1971,7 @@ static int execute(Run *r, const Cmd *c)
             if (actor < 0) return 1;
             const char *t = param(c, "Towards");
             int facing = !strcmp(t, "North") ? 0 : !strcmp(t, "South") ? 4 : !strcmp(t, "East") ? 2 : !strcmp(t, "West") ? 6 : -1;
+            if (facing >= 0 && world_u8()) facing = (facing + 7) & 7; /* Ultima 8: as seen on the screen (WorldOfSlot) */
             int other = !strcmp(t, "The main player") ? 0 : !strcmp(t, "Whoever set it off") ? (r->activator >= 0 ? r->activator : 0) : !strcmp(t, "Another character") ? actor_for(r, param(c, "Other")) : -1;
             if (facing < 0 && other >= 0)
             {
@@ -1822,6 +1990,79 @@ static int execute(Run *r, const Cmd *c)
             int leader = actor_for(r, param(c, "Other"));
             if (leader >= 0 && leader != actor) schedules_follow(actor, leader);
             return 1;
+        }
+        /* ---- Pets (GameTestWindow.Pets): Call Character, Order On A Target, Sniff And Lead ---- */
+        case C_CallCharacter:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            if (who <= 0 || world_actor_gone(who) || vitals_dead(world_actor_character(who))) { lastResult = 0; return 1; }
+            if (param(c, "SoundId")[0]) sound_play_ex(atoi(param(c, "SoundId")), -1, 0, OWNER_NONE, 1);
+            schedules_release(who);
+            int px, py, pf, wx, wy, wf;
+            world_player_cell(&px, &py, &pf);
+            double ax, ay;
+            world_actor_pixel(who, &ax, &ay);
+            if (!world_on_screen(ax, ay, 0))
+            {
+                /* from off the screen: just outside the view on the side it is on, on the main character's floor, then it walks in */
+                int halfX = (int)ceil(SCREEN_W / 2.0 / world_tile_w()) + 1, halfY = (int)ceil(SCREEN_H / 2.0 / world_tile_h()) + 1;
+                world_actor_cell(who, &wx, &wy, &wf);
+                int dx = (wx > px) - (wx < px), dy = (wy > py) - (wy < py);
+                if (!dx && !dy) dx = 1;
+                int ex = px + dx * halfX, ey = py + dy * halfY;
+                ex = ex < 0 ? 0 : ex > world_map_w() - 1 ? world_map_w() - 1 : ex;
+                ey = ey < 0 ? 0 : ey > world_map_h() - 1 ? world_map_h() - 1 : ey;
+                world_actor_place(who, ex, ey, pf);
+            }
+            char words[256]; snprintf(words, sizeof words, "%s", param(c, "Value"));
+            char *w = words; while (*w == ' ') w++;
+            size_t wl = strlen(w); while (wl && w[wl - 1] == ' ') w[--wl] = 0;
+            if (*w) world_bark(who, w, 2500);
+            cancel_actions_of(r, who);
+            start_walk(r, who, px, py, 1);
+            r->waiting = W_WALK;
+            r->petFollowAfter = strcmp(param(c, "Follows"), "False") ? who : 0; /* follows once there (or once it gives up) */
+            return 0;
+        }
+        case C_OrderOnTarget:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            if (who <= 0 || world_actor_gone(who) || vitals_dead(world_actor_character(who))) { lastResult = 0; return 1; }
+            const char *order = param(c, "Order");
+            r->pet = who; r->petPicked = 0;
+            r->petOrder = !strcmp(order, "Attack") ? 1 : !strcmp(order, "Fetch") ? 2 : !strcmp(order, "Go to") ? 3 : 0;
+            char prompt[160]; snprintf(prompt, sizeof prompt, "%s", param(c, "Prompt"));
+            char *p = prompt; while (*p == ' ') p++;
+            size_t pl = strlen(p); while (pl && p[pl - 1] == ' ') p[--pl] = 0;
+            if (!*p) { snprintf(prompt, sizeof prompt, "%s: which one?", order); p = prompt; }
+            gumps_choose_target(p, pet_target_chosen, r);
+            r->waiting = W_PICK;
+            return 0;
+        }
+        case C_SniffAndLead:
+        {
+            int who = actor_for(r, param(c, "Who")), gx, gy;
+            if (who <= 0 || world_actor_gone(who) || vitals_dead(world_actor_character(who))) { lastResult = 0; return 1; }
+            if (!scent_at(r, c, who, &gx, &gy))
+            {
+                char lost[160]; snprintf(lost, sizeof lost, "%s", param(c, "Lost"));
+                char *l = lost; while (*l == ' ') l++;
+                size_t ll = strlen(l); while (ll && l[ll - 1] == ' ') l[--ll] = 0;
+                world_bark(who, *l ? l : "...", 2000);
+                lastResult = 0;
+                return 1;
+            }
+            r->sniffKeepFollowing = schedules_leader(who) == 0;
+            if (schedules_leader(who) >= 0) schedules_follow(who, -1);
+            schedules_release(who);
+            cancel_actions_of(r, who);
+            double waitCells = formula_number(c, "WaitCells"), seconds = formula_number(c, "Seconds");
+            r->pet = who; r->sniffCmd = c; r->sniffAll = 0; r->sniffThink = 0; r->sniffWaiting = 0;
+            r->sniffWaitCells = waitCells > 2 ? waitCells : 2;
+            r->sniffGiveUp = (seconds > 5 ? seconds : 5) * 1000;
+            r->walker = who;
+            r->waiting = W_SNIFF;
+            return 0;
         }
         case C_ChangeName:
         {
@@ -2440,7 +2681,165 @@ static int execute(Run *r, const Cmd *c)
             }
             return 1;
         }
+        /* ---- GameTestWindow.Toughness: Feign Death, Withstand Death, Changeling, things in an area, bags, charges, Hurt In Area ---- */
+        case C_FeignDeath:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            lastResult = who >= 0 && vitals_feign_death(world_actor_character(who), formula_number(c, "Seconds"), param(c, "SoundId")[0] ? atoi(param(c, "SoundId")) : -1);
+            return 1;
+        }
+        case C_WithstandDeath:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            lastResult = who >= 0 && vitals_withstand_death(world_actor_character(who), strcmp(param(c, "Value"), "Take it away") != 0);
+            return 1;
+        }
+        case C_Changeling:
+        {
+            int who = actor_for(r, param(c, "Who")), other = actor_for(r, param(c, "Other"));
+            if (who <= 0 || other < 0 || other == who || vitals_dead(world_actor_character(who)) || changelingCount >= 16) { lastResult = 0; return 1; }
+            int hp = 0; vitals_hp(world_actor_character(who), &hp);
+            double cells = formula_number(c, "Cells");
+            changelings[changelingCount++] = (Changeling){ who, hp, cells > 1 ? cells : 1, strcmp(param(c, "Attacks"), "False") != 0 };
+            world_change_look(who, other);
+            world_set_pose(who, "Idle", -1);
+            return 1;
+        }
+        case C_FindObjectsInArea: case C_DeleteObjectsInArea:
+        {
+            int cx, cy, cf;
+            if (!area_centre(r, c, &cx, &cy, &cf)) { lastResult = 0; return 1; }
+            int category = category_of(param(c, "Category")), itemId = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+            int cells = (int)formula_number(c, "Cells"); if (cells < 0) cells = 0;
+            static int uids[512], counts[512];
+            int n = things_in_area(cx, cy, cf, cells, category, itemId, !strcmp(param(c, "OnlyLit"), "True"), uids, counts, 512);
+            if (c->type == C_FindObjectsInArea)
+            {
+                int total = 0; for (int i = 0; i < n; i++) total += counts[i];
+                set_var(param(c, "Variable"), total);
+                return 1;
+            }
+            int most = (int)formula_number(c, "Most");
+            if (most > 0 && n > most) n = most;
+            for (int i = 0; i < n; i++) world_thing_remove(uids[i]);
+            lastResult = n > 0;
+            return 1;
+        }
+        case C_ItemsInside:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            if (who < 0) { lastResult = 0; return 1; }
+            char name[96]; snprintf(name, sizeof name, "%s", param(c, "BagName"));
+            char *nm = name; while (*nm == ' ') nm++;
+            size_t nl = strlen(nm); while (nl && nm[nl - 1] == ' ') nm[--nl] = 0;
+            Item *bag = items_carried_named(world_actor_character(who), nm);
+            if (!bag) { set_var(param(c, "Variable"), 0); lastResult = 0; return 1; }
+            int category = category_of(param(c, "Category")), itemId = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+            set_var(param(c, "Variable"), items_inside(bag, category, itemId, 0));
+            if (!strcmp(param(c, "Remove"), "True")) items_inside(bag, category, itemId, 1);
+            return 1;
+        }
+        case C_ItemCharges:
+        {
+            int who = actor_for(r, param(c, "Who"));
+            Item *it = who >= 0 ? items_carried_kind(world_actor_character(who), category_of(param(c, "Category")), atoi(param(c, "ItemId"))) : NULL;
+            if (!it) { lastResult = 0; return 1; }
+            int amount = (int)formula_number(c, "Amount");
+            if (!strcmp(param(c, "Operation"), "Set")) items_set_charges_now(it, amount);
+            else if (!strcmp(param(c, "Operation"), "Add")) items_set_charges_now(it, items_charges_now(it) + amount);
+            if (param(c, "Variable")[0]) set_var(param(c, "Variable"), items_charges_now(it));
+            return 1;
+        }
+        case C_HurtInArea:
+        {
+            int cx, cy, cf;
+            if (!area_centre(r, c, &cx, &cy, &cf)) { lastResult = 0; return 1; }
+            int cells = (int)formula_number(c, "Cells"), amount = (int)formula_number(c, "Amount"), type = damage_type_of(param(c, "DamageType"));
+            if (cells < 0) cells = 0;
+            int by = param(c, "Who")[0] ? actor_for(r, param(c, "Who")) : -1, struck = 0;
+            const char *affects = param(c, "Affects");
+            char cause[96];
+            if (by >= 0) snprintf(cause, sizeof cause, "struck by %s", world_actor_name(by)); else snprintf(cause, sizeof cause, "an event");
+            for (int a = 0; a < world_actor_count(); a++)
+            {
+                int id = world_actor_character(a), x, y, f;
+                if (a == by || id < 0 || world_actor_gone(a) || vitals_dead(id)) continue;
+                world_actor_cell(a, &x, &y, &f);
+                if (f != cf || abs(x - cx) > cells || abs(y - cy) > cells) continue;
+                if (!strcmp(affects, "Enemies of Who") && !(by >= 0 && combat_would_attack(a, by))) continue;
+                if (!strcmp(affects, "Only those with a rule for this type") && !has_damage_rule(id, type)) continue;
+                struck++;
+                vitals_hit_type(type);
+                vitals_damage_allowed(id, vitals_after_response(id, amount, type), cause);
+                vitals_hit_type(0);
+                if (by >= 0 && vitals_dead(id) && exp_of(id) > 0) combat_gain_experience(by, exp_of(id)); /* AwardKill: its Exp to the killer */
+            }
+            lastResult = struck > 0;
+            return 1;
+        }
+        case C_LightSource:
+        {
+            /* GameTestWindow.LightCommand: this object (whose event runs - also from its paperdoll) or a thing on the map: light it, put it out,
+               burn it out, make it fresh, its minutes left (set / read), read lit or burnt out */
+            int uid = 0; Item *it = NULL;
+            if (!strcmp(param(c, "Which"), "A thing on the map (below)")) uid = thing_of(c);
+            else if (r->ownerUid > 0) uid = r->ownerUid;
+            else { void *doll = r->doll ? r->doll : lastDoll; int dollUid = 0; if (doll) it = items_find_doll(doll, &dollUid); if (!it) uid = dollUid; }
+            int objectId = it ? (items_category(it) == 4 ? items_item_id(it) : -1) : uid > 0 ? world_thing_object_id(uid) : -1;
+            cJSON *obj = NULL, *o;
+            cJSON_ArrayForEach(o, objectsJson) if (num(o, "Id", -2) == objectId) obj = o;
+            if (!obj || num(obj, "Type", -1) != 4) { game_log("Light Source: that isn't a Light Source object (Object Editor > Type)."); lastResult = 0; return 1; }
+            int lit, spent; double left;
+            if (it) items_light_state(it, &lit, &spent, &left); else world_light_state(uid, &lit, &spent, &left);
+            cJSON *light = get(obj, "Light");
+            double burn = num(light, "BurnMinutes", 0);
+            const char *doing = param(c, "Do");
+            if (!strcmp(doing, "Light or put out (switch)")) doing = lit ? "Put it out" : "Light it";
+            int on = lit, burnt = spent; double minutes = left, set = 0;
+            if (!strcmp(doing, "Light it")) { if (spent || lit) return 1; on = 1; burnt = 0; minutes = burn > 0 && left < 0 ? burn : left; set = 1; }
+            else if (!strcmp(doing, "Put it out")) { if (!lit) return 1; if (!it) { use_put_out_light(uid, obj, 1); return 1; } on = 0; set = 1; }
+            else if (!strncmp(doing, "Burn it out", 11)) { on = 0; burnt = 1; set = 1; }
+            else if (!strncmp(doing, "Make it fresh", 13)) { burnt = 0; minutes = burn > 0 ? burn : -1; set = 1; }
+            else if (!strcmp(doing, "Set its minutes left")) { double m = formula_number(c, "Minutes"); minutes = m > 0 ? m : 0; set = 1; }
+            else if (!strcmp(doing, "Read its minutes left")) set_var(param(c, "Variable"), left < 0 ? burn : left);
+            else if (!strcmp(doing, "Read: lit (1) or not (0)")) set_var(param(c, "Variable"), lit ? 1 : 0);
+            else if (!strcmp(doing, "Read: burnt out (1) or not (0)")) set_var(param(c, "Variable"), spent ? 1 : 0);
+            if (set)
+            {
+                if (it) items_set_light_state(it, on, burnt, minutes); else world_set_light_state(uid, on, burnt, minutes);
+                if (on && !lit) sound_play(num(light, "LitSoundResourceId", -1));
+                else if (!on && lit) sound_play(num(light, burnt ? "SpentSoundResourceId" : "OffSoundResourceId", -1));
+            }
+            return 1;
+        }
         default:
+            if (u8_on() && ((c->type >= C_U8AskKey && c->type <= C_U8ResetKeys) || (c->type >= C_U8BuildUpStat && c->type <= C_U8Alarm) || c->type == C_U8ControlCharacter || c->type == C_U8ReturnControl))
+            {
+                /* Ultima 8's own commands (u8.c): done (1), failed (-1), waiting for its token's answer (0) - a key */
+                int who = actor_for(r, param(c, "Who")), token = new_answer(r, "");
+                u6Cmd = c; /* (the formula reader reads this command's values) */
+                int thing = c->type == C_U8MovePlatform || c->type == C_U8WeightOn ? thing_of(c) : -1;
+                int res = u8_command(c->type, c->params, who >= 0 ? world_actor_character(who) : -1, r->activator >= 0 ? world_actor_character(r->activator) : -1, token, u6_formula, u6_formula_text, thing);
+                if (res != -2)
+                {
+                    if (res == 0 && token) { r->waiting = W_DOLL; r->answerToken = token; return 0; }
+                    if (token) answers[token - 1].used = 0;
+                    lastResult = res > 0;
+                    return 1;
+                }
+                if (token) answers[token - 1].used = 0;
+            }
+            if (c->type >= C_U6AskKey && c->type <= C_U6SceneEnd && c->type != C_LightSource && u6_on())
+            {
+                /* Ultima 6's own commands (u6.c): done (1), failed (-1), or waiting for its token's answer (0) - a key, a choice */
+                int who = actor_for(r, param(c, "Who")), token = new_answer(r, "");
+                u6Cmd = c;
+                int res = u6_command(c->type, c->params, who >= 0 ? world_actor_character(who) : -1, r->activator >= 0 ? world_actor_character(r->activator) : -1, token, u6_formula);
+                if (res == 0 && token) { r->waiting = W_DOLL; r->answerToken = token; return 0; }
+                if (token) answers[token - 1].used = 0;
+                lastResult = res > 0;
+                return 1;
+            }
             if (c->type >= 0 && c->type < C_COUNT)
             {
                 snprintf(text, sizeof text, "\"%s\" isn't in the player yet - skipped.", COMMAND_NAMES[c->type]);
@@ -2486,6 +2885,117 @@ static void cancel_actions_of(Run *self, int actor)
         o->act = 0;
         continue_run(o);
     }
+}
+
+/* ---------------- Pets (GameTestWindow.Pets) ---------------- */
+
+static int cells_apart(int ax, int ay, int bx, int by) { int dx = abs(ax - bx), dy = abs(ay - by); return dx > dy ? dx : dy; }
+
+/* Order On A Target: the player clicked someone or something. */
+static void pet_target_chosen(void *context, const GumpsPick *pick)
+{
+    Run *r = (Run *)context;
+    if (!r->used || r->waiting != W_PICK || !pick) return;
+    r->petPick = *pick;
+    r->petPicked = 1;
+}
+
+/* Where the scent leads now: a character, the nearest placed copy of an object, or the owner of an object (its Belongs To). 0: nowhere. */
+static int scent_at(Run *r, const Cmd *c, int sniffer, int *gx, int *gy)
+{
+    int itemId = atoi(param(c, "ItemId")), f;
+    const char *find = param(c, "Find");
+    if (!strcmp(find, "A character (below)"))
+    {
+        int other = actor_for(r, param(c, "Other"));
+        if (other < 0 || other == sniffer || world_actor_gone(other) || vitals_dead(world_actor_character(other))) return 0;
+        world_actor_cell(other, gx, gy, &f);
+        return 1;
+    }
+    if (!strcmp(find, "The owner of the object (below)"))
+    {
+        cJSON *o, *def = NULL;
+        cJSON_ArrayForEach(o, objectsJson) if (num(o, "Id", -2) == itemId) def = o;
+        int ownerId = def ? num(def, "BelongToId", -1) : -1;
+        if (ownerId < 0) return 0;
+        int owner = world_actor_by_character(ownerId);
+        if (owner < 0 || world_actor_gone(owner) || vitals_dead(ownerId)) return 0;
+        world_actor_cell(owner, gx, gy, &f);
+        return 1;
+    }
+    int sx, sy, best = 1 << 30, found = 0, category = category_of(param(c, "Category"));
+    world_actor_cell(sniffer, &sx, &sy, &f);
+    for (int i = 0, n = world_thing_count(); i < n; i++)
+    {
+        int uid = world_thing_uid_at(i), tc, ti, tq, tx, ty, tin;
+        if (!uid || !world_thing_there(uid)) continue;
+        world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+        if (ti != itemId || (tc != CAT_OBJECT && tc != category)) continue;
+        int d = abs(tx - sx) + abs(ty - sy);
+        if (d < best) { best = d; *gx = tx; *gy = ty; found = 1; }
+    }
+    return found;
+}
+
+/* Order On A Target, the answer heard: it attacks it, fetches it, goes to it. 1 = still waiting for the click. */
+static int pick_tick(Run *r, int *ok)
+{
+    if (!r->petPicked) { if (gumps_choosing_for(r)) return 1; *ok = 0; return 0; } /* Escape: no order */
+    int pet = r->pet, someone = r->petPick.actor, thing = r->petPick.item ? -1 : r->petPick.uid, keep = schedules_leader(pet) == 0;
+    *ok = 0;
+    if (world_actor_gone(pet) || vitals_dead(world_actor_character(pet))) return 0;
+    if (r->petOrder == 1 && someone >= 0 && someone != pet)
+    {
+        if (someone == 0) return 0;
+        combat_start(pet, someone);
+        *ok = 1;
+        return 0;
+    }
+    int tc = 0, ti, tq, tx, ty, tin;
+    if (thing > 0) world_thing_info(thing, &tc, &ti, &tq, &tx, &ty, &tin);
+    if ((r->petOrder == 1 || r->petOrder == 2) && thing > 0 && someone < 0)
+    {
+        if (r->petOrder == 1 && !combat_can_break(thing)) return 0;
+        begin_action(r, pet, r->petOrder == 1 ? A_ATTACK_THING : A_PICKUP);
+        r->thing = thing; r->actX = tx; r->actY = ty;
+        start_walk(r, pet, tx, ty, 1);
+        r->petFollowAfter = keep ? pet : 0;
+        return 2; /* the action carries on */
+    }
+    if (r->petOrder == 3 && (someone >= 0 || thing > 0))
+    {
+        int gx = tx, gy = ty, gf;
+        if (someone >= 0) world_actor_cell(someone, &gx, &gy, &gf);
+        cancel_actions_of(r, pet);
+        start_walk(r, pet, gx, gy, 1);
+        r->waiting = W_WALK;
+        return 2;
+    }
+    return 0; /* nothing it can do that to */
+}
+
+/* Sniff And Lead: it follows the scent, the main character behind; it waits, sniffing, when they fall behind. 1 = still going. */
+static int sniff_tick(Run *r, double ms, int *ok)
+{
+    int pet = r->pet, gx, gy, x, y, f, px, py, pf;
+    *ok = 0;
+    if ((r->sniffAll += ms) > r->sniffGiveUp) return 0;
+    if (world_actor_gone(pet) || vitals_dead(world_actor_character(pet))) return 0;
+    if ((r->sniffThink -= ms) > 0) return 1;
+    r->sniffThink = 500;
+    if (!scent_at(r, r->sniffCmd, pet, &gx, &gy)) return 0; /* the scent went cold */
+    world_actor_cell(pet, &x, &y, &f);
+    if (cells_apart(x, y, gx, gy) <= 1) { world_face_cell(pet, gx, gy, "Idle"); *ok = 1; return 0; } /* there */
+    world_player_cell(&px, &py, &pf);
+    if (cells_apart(x, y, px, py) > r->sniffWaitCells)
+    {
+        /* the main character fell behind: it stops, sniffs and waits */
+        if (!r->sniffWaiting) { world_walk_cancel(pet); r->sniffWaiting = 1; world_set_pose(pet, "Sniffing", -1); }
+        return 1;
+    }
+    r->sniffWaiting = 0;
+    if (!world_walking(pet)) world_walk_to(pet, gx, gy, 0, 1);
+    return 1;
 }
 
 /* PoseOnce: the pose played once through (at least 0.3 s), then standing again. 1 = still playing. */
@@ -3032,6 +3542,7 @@ static void continue_run(Run *r)
 }
 
 static void start_run_as(const List *list, int activator, int byStepping, const char *owner);
+static void (*nextFinished)(void); /* the next run started is told to whoever this is when it ends */
 
 static void start_run(const List *list, int activator, int byStepping) { start_run_as(list, activator, byStepping, NULL); }
 
@@ -3052,6 +3563,7 @@ static void start_run_as(const List *list, int activator, int byStepping, const 
             else snprintf(r->owner, sizeof r->owner, "global");
             r->doll = dollContext;
             if (dollContext) lastDoll = dollContext;
+            r->finished = nextFinished; nextFinished = NULL;
             continue_run(r);
             return;
         }
@@ -3232,6 +3744,7 @@ void events_update(double ms, int paused)
         if (effectTimers[k].used && (effectTimers[k].minutes > 0 ? total_minutes() - effectTimers[k].fromMinute >= effectTimers[k].minutes : (effectTimers[k].ms -= ms) <= 0))
         { world_effect_stop(effectTimers[k].id); effectTimers[k].used = 0; }
     burn_lights();
+    update_changelings(); /* changelings waiting for an enemy or a wound (GameTestWindow.Toughness) */
     lighting_update(ms);
     update_ambient();
     /* Waits run while the game does. */
@@ -3247,6 +3760,8 @@ void events_update(double ms, int paused)
             hold(r, r->walker);
             r->waiting = W_NONE;
             r->act = 0;
+            if (r->petFollowAfter > 0 && !world_actor_gone(r->petFollowAfter)) schedules_follow(r->petFollowAfter, 0); /* a pet follows again */
+            r->petFollowAfter = 0;
             continue_run(r);
         }
         if (r->used && r->waiting == W_WALK && !walk_tick(r, ms, &ok))
@@ -3254,6 +3769,22 @@ void events_update(double ms, int paused)
             lastResult = ok;
             hold(r, r->walker);
             if (!ok) { char t[128]; snprintf(t, sizeof t, "Someone can't find a way to (%d, %d).", r->goalX, r->goalY); game_log(t); }
+            r->waiting = W_NONE;
+            if (r->petFollowAfter > 0 && !world_actor_gone(r->petFollowAfter)) schedules_follow(r->petFollowAfter, 0); /* a called pet follows */
+            r->petFollowAfter = 0;
+            continue_run(r);
+        }
+        if (r->used && r->waiting == W_PICK)
+        {
+            int done = pick_tick(r, &ok);
+            if (done == 0) { lastResult = ok; r->waiting = W_NONE; continue_run(r); }
+        }
+        if (r->used && r->waiting == W_SNIFF && !sniff_tick(r, ms, &ok))
+        {
+            int pet = r->pet;
+            if (r->sniffKeepFollowing && !world_actor_gone(pet)) schedules_follow(pet, 0);
+            char t[160]; snprintf(t, sizeof t, "sniffed: %s %s", world_actor_name(pet), ok ? "found it" : "lost the scent"); game_log(t);
+            lastResult = ok;
             r->waiting = W_NONE;
             continue_run(r);
         }
@@ -3341,6 +3872,15 @@ void events_log_once(int key, const char *text) { log_once(key, text); }
 typedef struct CustomList { cJSON *source; List list; } CustomList;
 static CustomList customs[600]; static int customCount; /* custom effects, eggs' effects */
 
+/* The same, and finished() told when they're over (at once if there are none). */
+void events_run_commands_then(cJSON *commands, int actor, void (*finished)(void))
+{
+    if (!cJSON_GetArraySize(commands)) { if (finished) finished(); return; }
+    nextFinished = finished;
+    events_run_commands(commands, actor);
+    if (nextFinished == finished) { nextFinished = NULL; if (finished) finished(); } /* it couldn't start */
+}
+
 void events_run_commands(cJSON *commands, int actor)
 {
     if (!cJSON_GetArraySize(commands)) return;
@@ -3398,6 +3938,16 @@ void events_knocked_out(int characterId) { (void)characterId; }
 void events_set_doll_context(void *doll) { dollContext = doll; }
 
 /* A paperdoll answered (Yes / OK = 1; No / Cancel, Escape, closed = 0): its variable, and the event waiting on it goes on. */
+/* Ultima 6's scenes: the world waits while one is up, but Wait still counts in it (U6GameWindow.U6Scene TickSceneWaits). */
+void events_tick_waits(double ms)
+{
+    for (int i = 0; i < MAX_RUNS; i++)
+    {
+        Run *r = &runs[i];
+        if (r->used && r->waiting == W_TIMER && r->waitMinutes == 0 && (r->timerMs -= ms) <= 0) { r->waiting = W_NONE; continue_run(r); }
+    }
+}
+
 void events_doll_answered(int token, int yes)
 {
     if (token < 1 || token > 64 || !answers[token - 1].used) return;
@@ -3640,4 +4190,16 @@ int events_dropped_at_cell(int x, int y, int lift, int category, int itemId)
     int ran = fire_pages(o, 3, -1, 0);
     combining = 0;
     return ran;
+}
+
+/* Ultima 8's By Coming Into View / By Leaving View: whether a character has a page set off so (only those are watched). */
+int events_character_has_trigger(int characterId, int trigger)
+{
+    for (int i = 0; i < ownerCount; i++)
+        if (!owners[i].isMapEvent && owners[i].itemCategory == 0 && owners[i].characterId == characterId)
+        {
+            for (int k = 0; k < owners[i].pageCount; k++) if (num(owners[i].pages[k].cond, "TriggerConditionBased", 0) == trigger) return 1;
+            return 0;
+        }
+    return 0;
 }

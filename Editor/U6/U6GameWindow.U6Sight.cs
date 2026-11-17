@@ -19,6 +19,8 @@ public partial class U6GameWindow
     private Path? _sightShade;
     private (int X, int Y, long World, int Left, int Top, int Right, int Bottom)? _sightKey;
     private HashSet<(int, int)>? _sightBlockers;
+    /// <summary>The squares walls, doors and windows stand on: never black - the dark is only what's inside them.</summary>
+    private HashSet<(int, int)> _sightWallCells = new();
     private long _sightBlockersVersion = -1;
 
     /// <summary>The squares things stop sight on (walls, closed doors, Occludes), made again when the world changes.</summary>
@@ -26,19 +28,31 @@ public partial class U6GameWindow
     {
         if (_sightBlockers is not null && _sightBlockersVersion == _worldVersion) return _sightBlockers;
         var cells = new HashSet<(int, int)>();
+        var wallCells = new HashSet<(int, int)>();
+        bool allPictured = true;
         foreach (var obj in _map.Objects)
         {
             if (obj.ContainerInstanceId >= 0 || DefinitionOf(obj) is not { } def) continue;
-            bool blocks = def.Occludes || def.Type == ObjectType.Wall || (def.Type == ObjectType.Door && !IsDoorOpen(obj));
-            if (!blocks || def.Type == ObjectType.Window) continue;
             if (obj.Z >= MapFloors.BaseLift(2)) continue;
+            bool wall = def.Type is ObjectType.Wall or ObjectType.Door or ObjectType.Window;
+            bool blocks = def.Occludes || def.Type == ObjectType.Wall || (def.Type == ObjectType.Door && !IsDoorOpen(obj));
+            if (!wall && (!blocks || def.Type == ObjectType.Window)) continue;
             var body = BodyOf(null, obj);
             for (int ux = body.Left; ux < body.Left + Math.Max(1, body.Width); ux++)
                 for (int uy = body.Top; uy < body.Top + Math.Max(1, body.Depth); uy++)
-                    cells.Add(((int)Math.Floor(ux / (double)UnitsPerTileX), (int)Math.Floor(uy / (double)UnitsPerTileY)));
+                {
+                    var cell = ((int)Math.Floor(ux / (double)UnitsPerTileX), (int)Math.Floor(uy / (double)UnitsPerTileY));
+                    if (blocks && def.Type != ObjectType.Window) cells.Add(cell);
+                }
+            // The square its picture stands on (a wall piece is a tile; its solid box can reach into the room beside it).
+            if (!wall) continue;
+            if (_objectVisuals.TryGetValue(obj, out var visual) && ScreenRectOf(visual) is { IsEmpty: false } picture)
+                wallCells.Add(((int)Math.Floor((picture.Left + picture.Width / 2) / _tileWidth), (int)Math.Floor((picture.Top + picture.Height / 2) / _tileHeight)));
+            else allPictured = false;
         }
         _sightBlockers = cells;
-        _sightBlockersVersion = _worldVersion;
+        _sightWallCells = wallCells;
+        _sightBlockersVersion = allPictured ? _worldVersion : -1; // a wall not drawn yet: worked out again next time
         return cells;
     }
 
@@ -91,7 +105,7 @@ public partial class U6GameWindow
             int runStart = -1;
             for (int x = left; x <= right + 1; x++)
             {
-                bool hidden = x <= right && !seen.Contains((x, y));
+                bool hidden = x <= right && !seen.Contains((x, y)) && !_sightWallCells.Contains((x, y)); // walls always show; only inside them is dark
                 if (hidden && runStart < 0) runStart = x;
                 if (!hidden && runStart >= 0)
                 {
@@ -109,6 +123,7 @@ public partial class U6GameWindow
         }
         _sightShade.Data = black;
         _sightShade.Visibility = Visibility.Visible;
+        if (_sightBlockersVersion != _worldVersion) _sightKey = null; // some wall wasn't drawn yet: again next frame, so it shows
     }
 
     /// <summary>The ground's name on a square: the top tile with a name (Tile Properties > Name); null: none named.</summary>

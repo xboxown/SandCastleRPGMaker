@@ -71,6 +71,7 @@ public partial class U8GameWindow
             placed.X = Math.Clamp(x + n % 3 - 1, 0, arriving.Width - 1);
             placed.Y = Math.Clamp(y + 1 + n / 3, 0, arriving.Height - 1);
             placed.Floor = floor;
+            placed.PixelXRuntime = null; placed.PixelYRuntime = null; placed.LiftRuntime = null; // not their exact spot in the world left (a save's): built there, they stayed at their old place
             arriving.Characters.Add(placed);
             n++;
         }

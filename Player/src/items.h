@@ -31,6 +31,16 @@ int items_quantity(const Item *item);
 /* Actor::add as for a drop on them (weight, ammo slot, container slot, backpack / pouch, hands): 1 = they have it now (the item is theirs), 0 = refused (why in items_refusal). */
 int items_give_to(int characterId, Item *item);
 const char *items_refusal(void);
+/* Ultima 6: a bag's cells are full (Container Editor's Across x Down, less the first - the bag itself); excluding: already inside. */
+int u6_bag_full(const Item *bag, const Item *excluding);
+/* Ultima 6's Rest: one food (not a drink) eaten from what they carry, at any depth; 1 eaten. */
+int items_eat_one_food(int characterId);
+/* Items Inside, Item Charges: a carried bag by name, a carried thing of a kind, what's in a bag (counted / taken), charges. */
+Item *items_carried_named(int characterId, const char *name);
+Item *items_carried_kind(int characterId, int category, int itemId);
+int items_inside(Item *bag, int category, int itemId, int remove);
+int items_charges(const Item *it);
+void items_set_charges(Item *it, int charges);
 
 /* TakeFromCarrier: this many out of everything they carry (at any depth); 0 when they haven't that many (nothing taken). The things taken go into out (up to max). */
 int items_take(int characterId, int category, int itemId, int quantity, Item **out, int max, int *taken);
@@ -116,6 +126,8 @@ Item *items_parked(int uid, int category, int itemId, int quantity);
 int items_alive(const Item *it);
 int items_use_light(Item *it);
 void items_weights(int characterId, double *carried, double *max);
+double items_weight_of(const Item *it);              /* its weight, with what's inside (ItemWeights.WeightOf) */
+double items_own_weight(int category, int itemId);   /* one of it, empty */
 int items_stackable(int category, int itemId);
 void *items_doll(const Item *it);
 void items_set_doll(Item *it, void *doll);
@@ -135,8 +147,8 @@ int items_take_all(Item *container, Item **out, int max);
 void items_add_carrier(cJSON *character);
 int items_knows_spell(const Item *it, const char *name);
 void items_learn_spell(Item *it, const char *name);
-int items_charges(const Item *it);
-void items_set_charges(Item *it, int charges);
+int items_charges_now(const Item *it);          /* as they stand: not used yet - what it starts with */
+void items_set_charges_now(Item *it, int charges);
 int items_spent(const Item *it);
 void items_set_spent(Item *it, int spent);
 int items_carried_objects(int characterId, Item **out, int max);

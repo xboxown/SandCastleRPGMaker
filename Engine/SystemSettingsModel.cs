@@ -257,6 +257,13 @@ public class DisplaySettings
     public GameScreenMode Mode { get; set; } = GameScreenMode.Window;
     /// <summary>Window mode: the game's view drawn this many times its 320 x 200 (2-6), the window sized round it.</summary>
     public int WindowScale { get; set; } = 3;
+    /// <summary>The CRT effect (off unless ticked): scanlines and a softened picture, as an old TV showed it - on every platform's
+    /// build while it's ticked (Windows: Editor/CrtLook.cs; the Sandcastle player: the PS3 draws at 640 x 400 for it).</summary>
+    public bool CrtEffect { get; set; }
+    /// <summary>Fill the screen (off unless ticked): the view kept at a whole scale (every pixel square, no blur) and widened in
+    /// game pixels till the window is full - more of the world shows instead of black bars. Windows, Linux, the Macs and MorphOS;
+    /// the Amigas, the PS2 and the PS3 keep 320 x 200.</summary>
+    public bool FillScreen { get; set; }
 }
 
 /// <summary>The editor saving the project by itself (System Settings > Autosave) - every so many real minutes while it's open.</summary>

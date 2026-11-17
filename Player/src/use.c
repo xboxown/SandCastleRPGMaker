@@ -8,6 +8,7 @@
  *    anything else: nothing happens.
  */
 #include "use.h"
+#include "u8.h"
 #include "books.h"
 #include "vehicles.h"
 #include "mechanisms.h"
@@ -110,6 +111,7 @@ void use_actor(int actor)
     int id = world_actor_character(actor);
     if (gumps_pausing() && items_in_party(id)) { gumps_open_paperdoll(id); return; } /* Actor::activate: show_party_inv while gumps show */
     if (combat_mode() && !gumps_pausing() && !items_in_party(id)) combat_player_target(actor); /* Game_window::double_clicked: no combat in gump mode */
+    else if (u8_on() && !world_u8_beside(actor)) gumps_refuse(P_BLOCKED, "You must stand beside them to talk."); /* Ultima 8: beside them (U8Reach) */
     else events_talk(actor);
 }
 

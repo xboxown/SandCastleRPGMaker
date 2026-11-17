@@ -102,6 +102,7 @@ public partial class BookEditorWindow : Window
     {
         InitializeComponent();
         if (ProjectSession.IsUltima6 && VolumeBox.Parent is FrameworkElement volumeHolder) volumeHolder.Visibility = Visibility.Collapsed; // Ultima 6: no volume
+        if (ProjectSession.IsUltima6) SetUpU6BookLayout(); // Ultima 6: no paper doll - a notepad (BookEditorWindow.U6.cs)
         SolidSize.SizeEdited += (_, _) =>
         {
             if (_current is null) return;
@@ -288,6 +289,7 @@ public partial class BookEditorWindow : Window
         CloseSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.CloseSoundResourceId) ?? NoneSound;
         FlipSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.PageFlipSoundResourceId) ?? NoneSound;
         DestructibleSoundCombo.SelectedItem = soundChoices.FirstOrDefault(s => s.Id == _current.DestructibleSoundResourceId) ?? NoneSound;
+        if (ProjectSession.IsUltima6) ShowU6Text(_current); // Ultima 6: the notepad (BookEditorWindow.U6.cs)
 
         _suppress = false;
         EditorPanel.IsEnabled = true;
