@@ -52,6 +52,31 @@ jobs:
             exit 1
           fi
 
+      - name: It plays a game on Apple silicon
+        run: |
+          GAME=Player/build/mac/Game.app/Contents/MacOS/Game
+          # The user's Peter demo (Player/testgame): loaded, played for 8 seconds, the screen saved.
+          ( SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy arch -arm64 "$GAME" nosound window --notitle --shot-at 8 --shot /tmp/shot.bmp "$PWD/Player/testgame/Game_Data" > /tmp/play.txt 2>&1 & echo $! > /tmp/pid )
+          for i in $(seq 1 25); do sleep 1; kill -0 $(cat /tmp/pid) 2>/dev/null || break; done
+          kill $(cat /tmp/pid) 2>/dev/null || true
+          echo "--- what it said:"; cat /tmp/play.txt
+          mkdir -p shot && cp /tmp/shot.bmp shot/ 2>/dev/null || true
+          SIZE=$(stat -f %z /tmp/shot.bmp 2>/dev/null || echo 0)
+          if [ "$SIZE" -gt 100000 ]; then
+            echo "::notice title=Played::the Peter demo loaded and drew on Apple silicon - screenshot $SIZE bytes (artifact AppleSiliconShot)"
+          else
+            echo "::error title=Did not play::no screenshot from the Peter demo on Apple silicon - see the log above"
+            exit 1
+          fi
+
+      - name: Keep the screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: AppleSiliconShot
+          path: shot/
+          retention-days: 30
+
       - name: Keep GameMac.zip
         uses: actions/upload-artifact@v4
         with:
