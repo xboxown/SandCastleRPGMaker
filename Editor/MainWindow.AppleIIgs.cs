@@ -319,6 +319,7 @@ public partial class MainWindow
         var keys = new Dictionary<string, int>();
         var tilePixels = new List<uint[]>();
         var flags = new List<byte>();
+        var tileNames = new List<string>();
         var map = new ushort[start.Width * start.Height];
         for (int y = 0; y < start.Height; y++)
             for (int x = 0; x < start.Width; x++)
@@ -340,6 +341,13 @@ public partial class MainWindow
                     }
                     n = keys[key] = tilePixels.Count;
                     tilePixels.Add(px);
+                    string tileName = "";
+                    foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
+                    {
+                        int colon = part.LastIndexOf(':');
+                        if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{part[..colon]}:{part[(colon + 1)..]}", out var named) && named.TerrainLabel.Length > 0) tileName = named.TerrainLabel;
+                    }
+                    tileNames.Add(tileName);
                     flags.Add((byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
                 }
                 map[y * start.Width + x] = (ushort)n;
@@ -356,7 +364,7 @@ public partial class MainWindow
             spritePixels.Add(FitSprite(file));
             return spriteIndex[file] = spritePixels.Count - 1;
         }
-        var objects = new List<(int X, int Y, int Sprite, int Flags)>();
+        var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other)>();
         foreach (var instance in start.Objects.Where(o => o.ContainerInstanceId < 0))
         {
             var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
@@ -367,9 +375,19 @@ public partial class MainWindow
             string? file = sprite?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
             int n = SpriteOf(file);
             if (n < 0 || instance.X < 0 || instance.Y < 0 || instance.X >= start.Width || instance.Y >= start.Height) continue;
-            objects.Add((instance.X, instance.Y, n, def.IsSolid ? 1 : 0));
+            int objFlags = (def.IsSolid ? 1 : 0) | (def.IsPortable && def.Type != ObjectType.Door ? 2 : 0), other = 0xFFFF;
+            if (def.Type == ObjectType.Door)
+            {
+                // A door: its other look (open while closed, closed while open); closed it stops walkers, open it doesn't.
+                bool open = instance.IsOpenRuntime ?? def.Door.StartsOpen, locked = instance.IsLockedRuntime ?? def.Door.StartsLocked;
+                var otherState = state with { Open = !open, Locked = false };
+                string? otherFile = ObjectLooks.SpriteFor(def, otherState, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
+                objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
+            }
+            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other));
         }
-        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait)>();
+        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
         // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.
         var variableIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var v in _variableDatabase.Variables) variableIndex.TryAdd(v.Name, variableIndex.Count);
@@ -412,7 +430,7 @@ public partial class MainWindow
                 }
                 portraitOf[who.Id] = portrait;
             }
-            characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait));
+            characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
         }
         if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
         var hud = ComposeHud(pack);
@@ -422,17 +440,15 @@ public partial class MainWindow
             if (pack.Labels[i].Color < 0) pack.Labels[i] = pack.Labels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.Labels[i].Color - 1) | 0xFF000000u, false) };
         foreach (var px in tilePixels) pack.Tiles.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: false));
         pack.TileFlags.AddRange(flags);
+        pack.TileNames.AddRange(tileNames.Select(pack.NameOf));
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
         pack.Objects.AddRange(objects);
         pack.Characters.AddRange(characters);
         pack.PortraitRect = portraitRect;
         if (design.First(HudPieceKind.MemberName) is { } namePiece) pack.NameRect = (namePiece.X & ~1, namePiece.Y, Math.Min(320 - (namePiece.X & ~1), (namePiece.Width + 3) / 4 * 4), namePiece.Height);
-        for (int i = 0; i < pack.Words.Count; i++)
-        {
-            string id = new[] { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf" }[i];
-            pack.Words[i] = U6Words.Of(_systemSettings.Ultima6, id);
-        }
+        for (int i = 0; i < AppleIIgsGamePack.WordIds.Length; i++) pack.Words[i] = U6Words.Of(_systemSettings.Ultima6, AppleIIgsGamePack.WordIds[i]);
+        pack.Words[^1] = PlayerCharacter()?.Name ?? "Avatar";
         int Colour(string text, int fallback)
         {
             try { if (text.Length > 0 && ColorConverter.ConvertFromString(text) is Color c) return SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(c.R << 16 | c.G << 8 | c.B), false); } catch { }

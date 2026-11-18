@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 5 (b623): the verbs (verbs.s): Look, Get, Use (doors), Talk with Ultima 6's cursor.
 ; Version 4 (b622): talk (talk.s): T and a direction; portrait, name, words with keywords, "you say:", replies.
 ; Version 3 (b621): the HUD (HUD Editor): its background, the Game View where and as big as it is, the name; the
 ;   text area's prompt.
@@ -93,6 +94,7 @@ RScr      = $CE   ; 4
 T4        = $D2
 T5        = $D4
 SayP      = $D6   ; 4: words being written
+TNamePtr  = $DA   ; 4: the tiles' names
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -185,22 +187,15 @@ MainLoop:
         sta Key
         lda Mode
         beq .walk
-        cmp #1
-        beq .dir
+        cmp #4
+        beq .cur
         cmp #2
         bne MainLoop            ; the talk is running
         lda Key
         jsr TalkKey
         bra MainLoop
-.dir:   lda Key                 ; Talk-: which way
-        cmp #$1B
-        bne .d1
-        stz Mode
-        jsr PromptLine
-        bra MainLoop
-.d1:    jsr ArrowDelta
-        bcc MainLoop
-        jsr TalkTo
+.cur:   lda Key                 ; the verb's cursor
+        jsr CursorKey
         bra MainLoop
 .walk:  lda Key
         cmp #$1B
@@ -209,15 +204,26 @@ MainLoop:
         beq .quit
         cmp #'Q'
         beq .quit
+        ora #$20                ; the verbs' letters, either case
+        ldx #VERB_TALK
         cmp #'t'
-        beq .talk
-        cmp #'T'
-        beq .talk
+        beq .verb
+        ldx #VERB_LOOK
+        cmp #'l'
+        beq .verb
+        ldx #VERB_GET
+        cmp #'g'
+        beq .verb
+        ldx #VERB_USE
+        cmp #'u'
+        beq .verb
+        lda Key
         jsr ArrowDelta
-        bcc MainLoop
+        bcc .none
         jsr TryMove
-        brl MainLoop
-.talk:  jsr TalkVerb
+.none:  brl MainLoop
+.verb:  txa
+        jsr StartVerb
         brl MainLoop
 .quit:
         jmp Quit
@@ -409,7 +415,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #4
+        cmp #5
         beq .known
 .bad:   sec
         rts
@@ -461,6 +467,13 @@ ParseData:
         lda Ptr+2
         sta FlagsPtr+2
         lda TileCount
+        jsr AddPtr
+        lda Ptr                 ; the tiles' names
+        sta TNamePtr
+        lda Ptr+2
+        sta TNamePtr+2
+        lda TileCount
+        asl a
         jsr AddPtr
         ; the map
         lda [Ptr]
@@ -536,10 +549,13 @@ ParseData:
         sta ObjPtr
         lda Ptr+2
         sta ObjPtr+2
-        lda ObjCount
+        lda ObjCount            ; 12 bytes each
         asl a
         asl a
+        sta T0
         asl a
+        clc
+        adc T0
         jsr AddPtr
         ; the characters: 10 bytes each
         lda [Ptr]
@@ -799,7 +815,11 @@ DrawView:
         jsr DrawObjects
         jsr DrawCharacters
         jsr DrawAvatar
-        rts
+        lda Mode
+        cmp #4
+        bne .nocur
+        jmp DrawCursor
+.nocur: rts
 
 ; After the HUD's words: the portrait and name places, the colours, the words, the variables, the talks.
 ParseTalk:
@@ -853,7 +873,36 @@ ParseTalk:
         inx
         dec Count
         bra .w
-.wdone: lda [Ptr]               ; the variables' starting values
+.wdone: lda [Ptr]               ; the names
+        sta Count
+        lda #2
+        jsr AddPtr
+        ldx #0
+.nm:    lda Count
+        beq .nmdone
+        cpx #2048
+        bcs .nmskip
+        lda Ptr
+        clc
+        adc #1
+        sta NameTab,x
+        lda Ptr+2
+        adc #0
+        sta NameTab+2,x
+.nmskip:
+        lda [Ptr]
+        and #$00FF
+        clc
+        adc #2
+        jsr AddPtr
+        inx
+        inx
+        inx
+        inx
+        dec Count
+        bra .nm
+.nmdone:
+        lda [Ptr]               ; the variables' starting values
         sta Count
         lda #2
         jsr AddPtr
@@ -1083,7 +1132,7 @@ MakeOcc:
         sta [Ptr]
         rep #$20
         .a16
-.on:    lda #8
+.on:    lda #12
         jsr NextItem
         dec Item
         bra .o
@@ -1166,13 +1215,22 @@ DrawObjects:
         ldy #2
         lda [ItemPtr],y
         tay
+        ldy #6                  ; taken away: not drawn
+        lda [ItemPtr],y
+        and #32
+        bne .n
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
         jsr CellOnScreen
         bcc .n
         ldy #4
         lda [ItemPtr],y
         sta SprId
         jsr DrawSprite
-.n:     lda #8
+.n:     lda #12
         jsr NextItem
         dec Item
         bra .l
@@ -1657,6 +1715,7 @@ TryMove:
         rts
 
         .include "talk.s"
+        .include "verbs.s"
 
 ; ---- data ----
 StartStop:
@@ -1765,7 +1824,16 @@ NameW:    .dw 0
 NameH:    .dw 0
 TxtColor: .dw 0
 KeyColor: .dw 0
-WordTab:  .ds 32
+WordTab:  .ds 64
+NameTab:  .ds 2048
+Verb:     .dw 0
+Kind:     .dw 0
+CurX:     .dw 0
+CurY:     .dw 0
+CurRect:  .dw 0,0,0,0
+ObjRec:   .dd 0
+FmtName:  .dd 0
+FmtBuf:   .ds 128
 InBuf:    .ds 34
 WBuf:     .ds 64
 VarTab:   .ds 512

@@ -347,16 +347,8 @@ TalkVerb:
         sta Mode
         rts
 
-; A direction for Talk: T2 = dx, T3 = dy (Esc: X = 1).
-TalkTo:
-        lda PX
-        clc
-        adc T2
-        sta NX
-        lda PY
-        clc
-        adc T3
-        sta NY
+; Talk at NX, NY (the verb's cursor, verbs.s).
+TalkAt:
         stz Mode
         ; who is there?
         lda ChrPtr
