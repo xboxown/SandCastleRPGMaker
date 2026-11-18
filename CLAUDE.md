@@ -25,7 +25,9 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
 - Then Ultima Underworld: a real 3D game editor with the heart of Ultima Underworld (any 3D game - Silent Hill-like,
   Doom/Quake-like, first-person horror) with tools that make an Underworld game easy. Ultima 5 comes last.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.
-- Every change goes into Windows and the C player (`Player/src`) together.
+- Every change goes into Windows and the C player (`Player/src`) together, and EVERY platform's player is rebuilt -
+  Amiga 68k, Vampire, MorphOS, Ubuntu, PS2, PS3 (`Player/build_*.sh` in WSL) and Mac (`build_mac.sh`, only on a Mac: if it
+  can't be built, say so). No platform may be left outdated.
 - Consoles use the controller; Ultima 6 games need a USB keyboard and mouse on every console. PS2 ISO max 8 GB.
 - Mechanics follow Exult / Pentagram / Nuvie sources (U7 / U8 / U6); verify there before inventing.
 - Write numbers as plain ASCII (3.5, not a fraction sign).
