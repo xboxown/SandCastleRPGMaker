@@ -61,7 +61,7 @@ public partial class MainWindow
             if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
             PlayerBookText.UsedFonts.Clear();
             PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
-            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform is BuildPlatform.MorphOS or BuildPlatform.AmigaVampire or BuildPlatform.AmigaOS4); // the fonts it uses, drawn into fonts.sdbx
+            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform is BuildPlatform.MorphOS or BuildPlatform.AmigaOS4); // the fonts it uses, drawn into fonts.sdbx
             string machine = platform switch
             {
                 BuildPlatform.Linux => "Linux", BuildPlatform.MacModern => "Mac", BuildPlatform.MacPowerPC => "PowerPC Mac", BuildPlatform.MorphOS => "MorphOS",

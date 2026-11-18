@@ -23,3 +23,6 @@ every frame while its window is active (platform_amiga.c saga_hide_pointer). Wai
 
 b614 (2026-11-17): NEVER compile with gcc -m68080 - it emits the 68080's A-line instructions and the user's V4 Firebird
 core crashed at once (guru 8000000A). Use -m68060 (+ AMMX only in vampire_ammx.s). Check with objdump for 0xAxxx opcodes.
+b615 (2026-11-17): b614 ran but at 8-9 fps (FRAME_HIRES = 640x400 drawn in C). Vampire now has no FRAME_HIRES: 320x200 drawn,
+doubled in saga_present (AMMX 565 row + long writes + ammx_copy_row); editor fonts hires=false for Vampire. Awaiting fps result
+vs the Amiga 68k build on the same Firebird (the user's 10 fps bar).

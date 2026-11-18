@@ -1,5 +1,5 @@
 #!/bin/sh
-# Builds "Game" for the Vampire (Apollo 68080) alone: its SAGA display taken over (two frames flipped at the vertical blank
+# Builds "Game" for the Vampire (Apollo 68080) alone: drawn at 320 x 200 like the 68k build (b615: 640 x 400 ran at 8-9 fps), its SAGA display taken over (two frames flipped at the vertical blank
 # through SAGA's plane pointer), the frames made by AMMX (src/vampire_ammx.s, checked against C as it starts), its own 16-bit
 # SAGA sound (no AHI, no Paula), 640 x 400. Won't start on another Amiga (Build > Amiga 68k (RTG) is for those).
 # Needs bebbo's amiga-gcc and vasm (in ~/amiga, or AMIGA_GCC=... / AMIGA_VASM=...).
@@ -12,7 +12,7 @@ mkdir -p $OUT
 # -m68060, not -m68080: gcc's 68080 mode uses the 68080's extra A-line instructions, which the user's V4 Firebird core
 # doesn't run (b613: guru 8000000A at once). The 68080 runs 68060 code at full speed; the Vampire's own parts stay (AMMX in
 # vampire_ammx.s, checked as it starts; SAGA's display; its sound). strtod -> sc_strtod as in build_amiga68k.sh.
-FLAGS="-noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall -Wno-unused-function -Wno-format-truncation -Dstrtod=sc_strtod -DVAMPIRE -DFRAME_HIRES"
+FLAGS="-noixemul -m68060 -mhard-float -O2 -fomit-frame-pointer -std=gnu99 -Wall -Wno-unused-function -Wno-format-truncation -Dstrtod=sc_strtod -DVAMPIRE"
 "$VASM" -m68080 -Fhunk -quiet -o $OUT/vampire_ammx.o src/vampire_ammx.s
 "$GCC" $FLAGS -Dmain=game_main -c src/main.c -o $OUT/main.o
 "$GCC" $FLAGS -o $OUT/Game \

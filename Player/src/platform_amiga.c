@@ -194,6 +194,22 @@ static int open_display(void)
         if (screen) { sw = deskW; sh = deskH; offX = (deskW - FRAME_W) / 2; offY = (deskH - FRAME_H) / 2; }
     }
     if (!screen) fullscreen = 0;
+#elif defined(VAMPIRE)
+    /* The Vampire (b615): the game drawn at 320 x 200 as on the Amiga 68k - a quarter of the pixels of 640 x 400, which ran at
+       8-9 fps on a V4 Firebird - and doubled on its way to SAGA's own 16-bit 640 x 400 screen (640 x 480: in the middle). */
+    {
+        static const int TRY[][2] = { { 640, 400 }, { 640, 480 } };
+        for (int t = 0; t < 2 && !screen; t++)
+        {
+            ULONG mode = BestCModeIDTags(CYBRBIDTG_NominalWidth, TRY[t][0], CYBRBIDTG_NominalHeight, TRY[t][1], CYBRBIDTG_Depth, 16, TAG_DONE);
+            if (mode == INVALID_ID || !IsCyberModeID(mode)) continue;
+            if ((int)GetCyberIDAttr(CYBRIDATTR_WIDTH, mode) != TRY[t][0] || (int)GetCyberIDAttr(CYBRIDATTR_HEIGHT, mode) != TRY[t][1]) continue;
+            screen = OpenScreenTags(NULL, SA_DisplayID, mode, SA_Width, TRY[t][0], SA_Height, TRY[t][1], SA_Depth, 16,
+                                    SA_Title, (ULONG)title, SA_ShowTitle, FALSE, SA_Quiet, TRUE, SA_Type, CUSTOMSCREEN, TAG_DONE);
+            if (screen) { sw = TRY[t][0]; sh = TRY[t][1]; scale = 2; offX = (sw - SCREEN_W * 2) / 2; offY = (sh - SCREEN_H * 2) / 2; fullscreen = 1; }
+        }
+    }
+    if (!screen) { snprintf(error_text, sizeof error_text, "No 640 x 400 or 640 x 480 16-bit screen: this build needs a Vampire with its SAGA driver (P96)."); return 0; }
 #else
     if (fullscreen)
     {
@@ -593,11 +609,25 @@ static void saga_hide_pointer(void)
 static void saga_present(const uint32_t *pixels)
 {
     UBYTE *to = sagaBuf[sagaBack] + (size_t)offY * sagaPerRow + (size_t)offX * 2;
+#ifdef FRAME_HIRES
     for (int y = 0; y < FRAME_H; y++, to += sagaPerRow)
     {
         if (ammxOk > 0 && (FRAME_W & 3) == 0) ammx_rgb565_row(pixels + (size_t)y * FRAME_W, (uint16_t *)to, FRAME_W);
         else c_rgb565_row(pixels + (size_t)y * FRAME_W, (uint16_t *)to, FRAME_W);
     }
+#else
+    /* 320 x 200 doubled (b615): each row made 5-6-5 by AMMX, each pixel written twice in one long, the row copied below it */
+    static uint16_t half[FRAME_W] __attribute__((aligned(16)));
+    for (int y = 0; y < FRAME_H; y++, to += sagaPerRow * 2)
+    {
+        if (ammxOk > 0) ammx_rgb565_row(pixels + (size_t)y * FRAME_W, half, FRAME_W);
+        else c_rgb565_row(pixels + (size_t)y * FRAME_W, half, FRAME_W);
+        ULONG *wide = (ULONG *)to;
+        for (int x = 0; x < FRAME_W; x++) { ULONG c = half[x]; wide[x] = (c << 16) | c; }
+        if (ammxOk > 0) ammx_copy_row(to, to + sagaPerRow, FRAME_W * 4);
+        else memcpy(to + sagaPerRow, to, FRAME_W * 4);
+    }
+#endif
     WaitTOF();
     SAGA_PLANEPTR = (ULONG)sagaBuf[sagaBack];
     saga_hide_pointer();
