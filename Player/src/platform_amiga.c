@@ -575,6 +575,23 @@ static int saga_start(void)
     return 1;
 }
 
+/* SAGA's own hardware pointer (the Firebird/V4 core's 16 x 16, three colours) is drawn by the core over any picture, so the
+   game's frame can't cover it - it showed a hand on top of the game's own pointer. Hidden as AROS's SAGA driver hides it
+   (arch/m68k-amiga/hidd/sagagfx): its 16 lines ($DFF800, one long each: two bitplanes) made see-through and it parked past
+   the display's edge ($DFF1D0 X, $DFF1D2 Y; AmigaOS's largest 4096 x 2048). Done every frame while the game's window is the
+   active one, as the system's driver moves and redraws it with the mouse; when another window is active it is left alone,
+   and closing the game sets the system's pointer again (ClearPointer), which the driver draws back into SAGA. */
+#define SAGA_SPRITE_X (*(volatile UWORD *)0xDFF1D0)
+#define SAGA_SPRITE_Y (*(volatile UWORD *)0xDFF1D2)
+#define SAGA_SPRITE_LINES ((volatile ULONG *)0xDFF800)
+static void saga_hide_pointer(void)
+{
+    if (IntuitionBase->ActiveWindow != window) return; /* the Workbench's pointer is the system's while it has the mouse */
+    for (int i = 0; i < 16; i++) SAGA_SPRITE_LINES[i] = 0;
+    SAGA_SPRITE_X = 4096 - 1;
+    SAGA_SPRITE_Y = 2048 - 1;
+}
+
 /* The frame made straight into the back buffer (5-6-5), then shown at the next vertical blank. */
 static void saga_present(const uint32_t *pixels)
 {
@@ -586,6 +603,7 @@ static void saga_present(const uint32_t *pixels)
     }
     WaitTOF();
     SAGA_PLANEPTR = (ULONG)sagaBuf[sagaBack];
+    saga_hide_pointer();
     sagaBack ^= 1;
 }
 
