@@ -18,5 +18,5 @@ Later 2026-11-04: the user accepts Amiga 68k as the inferior target ("cannot squ
 **How to apply:** when results arrive, give a plain go or cancel against the 10 fps bar, stating what is measured and what is estimated. If cancelled, take item 9 off [[player-still-to-do]]. Related: [[platform-ports]], [[winuae-test-harness]], [[morphos-hires]].
 
 b611 (2026-11-17): the hand pointer on top of the game was SAGA's HARDWARE pointer (the core's 16x16 sprite: lines at
-$DFF800, colours $DFF3A2-6, X $DFF1D0, Y $DFF1D2 - from AROS arch/m68k-amiga/hidd/sagagfx). The game now blanks and parks it
+$DFF800, colours $DFF3A2-6, X $DFF1D0, Y $DFF1D2 - from AROS arch/m68k-amiga/hidd/sagagfx). b612: the game blanks only its picture (no parking - position stays the system's, so nothing to restore)
 every frame while its window is active (platform_amiga.c saga_hide_pointer). Waiting for the user's Firebird test.

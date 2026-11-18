@@ -576,20 +576,17 @@ static int saga_start(void)
 }
 
 /* SAGA's own hardware pointer (the Firebird/V4 core's 16 x 16, three colours) is drawn by the core over any picture, so the
-   game's frame can't cover it - it showed a hand on top of the game's own pointer. Hidden as AROS's SAGA driver hides it
-   (arch/m68k-amiga/hidd/sagagfx): its 16 lines ($DFF800, one long each: two bitplanes) made see-through and it parked past
-   the display's edge ($DFF1D0 X, $DFF1D2 Y; AmigaOS's largest 4096 x 2048). Done every frame while the game's window is the
-   active one, as the system's driver moves and redraws it with the mouse; when another window is active it is left alone,
-   and closing the game sets the system's pointer again (ClearPointer), which the driver draws back into SAGA. */
-#define SAGA_SPRITE_X (*(volatile UWORD *)0xDFF1D0)
-#define SAGA_SPRITE_Y (*(volatile UWORD *)0xDFF1D2)
+   game's frame can't cover it - it showed a hand on top of the game's own pointer. Its picture is SAGA's 16 lines at $DFF800
+   (one long each: two bitplanes; AROS's SAGA driver, arch/m68k-amiga/hidd/sagagfx, writes it there): all made see-through,
+   every frame while the game's window is the active one, as the system's driver redraws it. Only the picture - its position
+   ($DFF1D0/$DFF1D2) stays the system's, so nothing of it is left to put back but the picture, and the system does that itself:
+   another window made active draws that window's pointer, and closing the game sets the system's pointer again
+   (close_display's ClearPointer, after saga_stop has stopped the blanking), which the driver draws back into SAGA. */
 #define SAGA_SPRITE_LINES ((volatile ULONG *)0xDFF800)
 static void saga_hide_pointer(void)
 {
     if (IntuitionBase->ActiveWindow != window) return; /* the Workbench's pointer is the system's while it has the mouse */
     for (int i = 0; i < 16; i++) SAGA_SPRITE_LINES[i] = 0;
-    SAGA_SPRITE_X = 4096 - 1;
-    SAGA_SPRITE_Y = 2048 - 1;
 }
 
 /* The frame made straight into the back buffer (5-6-5), then shown at the next vertical blank. */
