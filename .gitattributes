@@ -1,0 +1,26 @@
+# Never change these files' bytes (line endings): game data, pictures, sounds, programs, documents.
+*.sdbx binary
+*.msrp binary
+*.sav binary
+*.png binary
+*.bmp binary
+*.gif binary
+*.jpg binary
+*.ico binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.mid binary
+*.elf binary
+*.ELF binary
+*.bin binary
+*.exe binary
+*.dll binary
+*.docx binary
+*.odt binary
+*.zip binary
+*.iso binary
+*.pkg binary
+*.deb binary
+*.info binary
+Editor/Runtimes/*/Game binary
