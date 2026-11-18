@@ -34,3 +34,5 @@ combat, sound (Ensoniq DOC from SOUNDS.DAT), events/commands, more maps (Change 
 **Why:** the user's wish; U6 never shipped on the IIgs.
 **How to apply:** ORDER now: ports (Mac/Ubuntu/PS2 left) and this IIgs mode in between as the user asks; then Underworld 3D,
 Ultima 5, Ultima 5 Apple IIgs mode. See [[plan-from-nov-10]], [[platform-ports]], [[u6-mode-requirements]].
+
+The user owns a REAL Apple IIgs (2026-11-18) but no accelerator yet (will buy one later): testing is in KEGS for now. On the real IIgs the game can only show the accelerator alert until then.
