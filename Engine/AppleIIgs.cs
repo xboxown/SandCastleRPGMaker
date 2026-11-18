@@ -333,7 +333,7 @@ public static class SuperHiRes
 ///   variables: u16 count, i16 each (their starting values; switches are variables 0 / 1)
 ///   talks: u16 count, count x u32 offset, u32 all their bytes, then each: u8 length, the speaker's name, 0, its code
 ///          (Engine/AppleIIgsTalk.cs)
-///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
+///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (sound n's bytes are the file SND.n, from 1)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
 /// Version 7: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
 /// </summary>
@@ -467,8 +467,13 @@ public sealed class AppleIIgsGamePack
 
     private static byte[] Ascii(string text, int max) => Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(max).ToArray()));
 
-    /// <summary>SOUNDS.DAT: every sound's bytes, one after another (as GAME.DAT lists them).</summary>
-    public byte[] WriteSounds() => Sounds.SelectMany(s => s.Data).ToArray();
+    /// <summary>Every file of the game but the player: GAME.DAT, then each sound as its own file SND.1, SND.2... (ProDOS type $D8: SND).</summary>
+    public List<(string Name, byte FileType, ushort AuxType, byte[] Data)> Files()
+    {
+        var files = new List<(string, byte, ushort, byte[])> { ("GAME.DAT", 0x06, 0x0000, Write()) };
+        for (int i = 0; i < Sounds.Count; i++) files.Add(($"SND.{i + 1}", 0xD8, 0x0000, Sounds[i].Data));
+        return files;
+    }
 
     /// <summary>8-bit unsigned samples for the Ensoniq DOC: a 0 byte ends a sound there, so none may be 0.</summary>
     public static byte[] DocSafe(byte[] samples)
@@ -476,5 +481,47 @@ public sealed class AppleIIgsGamePack
         var s = (byte[])samples.Clone();
         for (int i = 0; i < s.Length; i++) if (s[i] == 0) s[i] = 1;
         return s;
+    }
+}
+
+/// <summary>
+/// A game on 3.5-inch floppies (800 KB ProDOS disks): the player and GAME.DAT on the first, the rest wherever there is room
+/// (the biggest first). Not bootable: GS/OS starts from its own disk, the game from disk 1; every file can also be copied
+/// into one folder of a hard disk, and the game finds them all there.
+/// </summary>
+public static class AppleIIgsFloppies
+{
+    public const int Blocks = 1600;
+    private const int Overhead = 2 + 4 + 1; // boot blocks, the top folder, the bitmap
+    private const int MostFiles = 51;
+
+    public static int BlocksFor(int length)
+    {
+        int data = Math.Max(1, (length + 511) / 512);
+        return data == 1 ? 1 : data <= 256 ? data + 1 : data + 1 + (data + 255) / 256;
+    }
+
+    /// <summary>The files on each disk; the first files given (the player, GAME.DAT) go on disk 1.</summary>
+    public static List<List<(string Name, byte FileType, ushort AuxType, byte[] Data)>> Spread(List<(string Name, byte FileType, ushort AuxType, byte[] Data)> first, List<(string Name, byte FileType, ushort AuxType, byte[] Data)> rest)
+    {
+        var disks = new List<List<(string, byte, ushort, byte[])>> { new() };
+        var free = new List<int> { Blocks - Overhead };
+        foreach (var f in first)
+        {
+            int need = BlocksFor(f.Data.Length);
+            if (need > free[0]) throw new InvalidOperationException($"{f.Name} ({f.Data.Length / 1024} KB) and the player don't fit on one 800 KB floppy - build a hard disk instead.");
+            disks[0].Add(f);
+            free[0] -= need;
+        }
+        foreach (var f in rest.OrderByDescending(f => f.Data.Length))
+        {
+            int need = BlocksFor(f.Data.Length);
+            if (need > Blocks - Overhead) throw new InvalidOperationException($"{f.Name} is bigger than a floppy.");
+            int at = Enumerable.Range(0, disks.Count).FirstOrDefault(i => free[i] >= need && disks[i].Count < MostFiles, -1);
+            if (at < 0) { disks.Add(new()); free.Add(Blocks - Overhead); at = disks.Count - 1; }
+            disks[at].Add(f);
+            free[at] -= need;
+        }
+        return disks;
     }
 }

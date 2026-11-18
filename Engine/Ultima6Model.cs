@@ -351,8 +351,33 @@ public class HudDesign
     public List<EventCommand> IntroCommands { get; set; } = new();
     /// <summary>The title menu's Create New Character: its scene (questions, choices) before the game begins; none - straight in.</summary>
     public List<EventCommand> CreateCommands { get; set; } = new();
+    /// <summary>Ultima 6 Apple IIgs mode: the screen asking for another floppy, and the floppies' names.</summary>
+    public DiskSwapScreen DiskSwap { get; set; } = new();
 
     public HudPiece? Piece(int id) => Pieces.FirstOrDefault(p => p.Id == id);
     public HudPiece? First(HudPieceKind kind) => Pieces.FirstOrDefault(p => p.Kind == kind);
     public int NextId() => Pieces.Count == 0 ? 1 : Pieces.Max(p => p.Id) + 1;
+}
+
+/// <summary>
+/// Ultima 6 Apple IIgs mode, a game built as 3.5-inch floppies: the screen that asks for another disk when the game needs
+/// a file on it (HUD Editor > Disk Swap screen) - a picture over the whole screen, an animation on it, a sound, and the
+/// words ({0}: the disk's name) - and the disks' names (disk 1 first; more disks than names: "Game 4"...).
+/// </summary>
+public class DiskSwapScreen
+{
+    public SpriteLink Picture { get; set; } = new();
+    public SpriteLink Animation { get; set; } = new();
+    public int AnimationX { get; set; } = 144;
+    public int AnimationY { get; set; } = 60;
+    public string Message { get; set; } = "Please insert the disk \"{0}\" and press a key.";
+    public int TextX { get; set; } = 16;
+    public int TextY { get; set; } = 120;
+    public string TextColor { get; set; } = string.Empty;
+    /// <summary>A sound (Sound Editor) played as the screen comes up; -1 none.</summary>
+    public int SoundId { get; set; } = -1;
+    public List<string> DiskNames { get; set; } = new();
+
+    /// <summary>Disk n's name (1 = the first).</summary>
+    public string NameOf(int disk, string game) => disk - 1 < DiskNames.Count && DiskNames[disk - 1].Trim().Length > 0 ? DiskNames[disk - 1].Trim() : $"{game} {disk}";
 }

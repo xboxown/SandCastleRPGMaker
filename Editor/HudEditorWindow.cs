@@ -73,6 +73,8 @@ public sealed class HudEditorWindow : Window
         left.Children.Add(new TextBlock { Text = "The title menu's scenes", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 10, 0, 0) });
         left.Children.Add(MakeButton("Introduction scene...", () => OpenSceneEvent("Introduction", _hud.IntroCommands, c => _hud.IntroCommands = c)));
         left.Children.Add(MakeButton("Create New Character scene...", () => OpenSceneEvent("Create New Character", _hud.CreateCommands, c => _hud.CreateCommands = c)));
+        if (ProjectSession.IsAppleIIgs) // Ultima 6 Apple IIgs mode: the screen that asks for another floppy
+            left.Children.Add(MakeButton("Disk Swap screen (Apple IIgs)...", () => new DiskSwapScreenWindow(_hud.DiskSwap, _sprites, _resources) { Owner = this }.ShowDialog()));
         left.Children.Add(Note("As Ultima 6: black, then pictures, words and choices (Ultima 6 tab > Scenes: Begin Scene, Scene Picture, Scene Text, Scene Wait For Key, Scene Choice, Scene Remove, End Scene). Introduction plays this (none: the intro video); Create New Character plays this before the game begins - its choices can set stats, give items, anything. The same commands make cutscenes in any event during play."));
         Grid.SetColumn(left, 0);
         root.Children.Add(new ScrollViewer { Content = left, VerticalScrollBarVisibility = ScrollBarVisibility.Auto });

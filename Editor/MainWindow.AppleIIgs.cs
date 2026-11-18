@@ -631,17 +631,22 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>The game's disk: the player (S16), GAME.DAT and SOUNDS.DAT on a ProDOS volume, as a .2mg (or plain blocks).</summary>
-    private byte[] MakeAppleIIgsDisk(bool twoMg, out string volumeName)
+    /// <summary>The player (an S16 GS/OS application: aux $DB03, desktop and GS/OS aware).</summary>
+    private static (string Name, byte FileType, ushort AuxType, byte[] Data) IIgsPlayerFile()
     {
         string player = Path.Combine(IIgsRuntimeFolder, IIgsPlayerName);
         if (!File.Exists(player)) throw new FileNotFoundException("The Apple IIgs player isn't installed with the editor (Runtimes\\AppleIIgs\\SANDCASTLE).");
-        var pack = MakeAppleIIgsPack();
+        return (IIgsPlayerName, 0xB3, 0xDB03, File.ReadAllBytes(player));
+    }
+
+    /// <summary>The game's disk: the player, GAME.DAT and the sounds (SND.1...) on a ProDOS volume, as a .2mg (or plain blocks).</summary>
+    private byte[] MakeAppleIIgsDisk(bool twoMg, out string volumeName) => MakeAppleIIgsDisk(MakeAppleIIgsPack(), twoMg, out volumeName);
+
+    private byte[] MakeAppleIIgsDisk(AppleIIgsGamePack pack, bool twoMg, out string volumeName)
+    {
         var volume = new ProDosVolume(_currentProjectName ?? "GAME");
         volumeName = volume.VolumeName;
-        volume.Add(IIgsPlayerName, 0xB3, 0xDB03, File.ReadAllBytes(player)); // S16: a GS/OS application (aux $DB03: desktop, GS/OS aware)
-        volume.Add("GAME.DAT", 0x06, 0x0000, pack.Write());
-        volume.Add("SOUNDS.DAT", 0x06, 0x0000, pack.WriteSounds());
+        foreach (var f in pack.Files().Prepend(IIgsPlayerFile())) volume.Add(f.Name, f.FileType, f.AuxType, f.Data);
         var blocks = volume.Build();
         return twoMg ? ProDosVolume.Wrap2mg(blocks) : blocks;
     }
@@ -651,22 +656,76 @@ public partial class MainWindow
         if (!ShowAppleIIgsCheck(onlyIfProblems: true)) return;
         if (MessageBox.Show(this, "Building saves the project first, so the game is exactly what you have now. Continue?", "Build", MessageBoxButton.OKCancel, MessageBoxImage.Question) != MessageBoxResult.OK) return;
         if (!SaveProject()) return;
-        string gameName = ProDosVolume.CleanName(_currentProjectName ?? "Game", "GAME");
-        var pick = new SaveFileDialog
-        {
-            Title = "Where should the Apple IIgs disk be built?",
-            Filter = "Apple IIgs hard disk image (*.2mg)|*.2mg|ProDOS-order image (*.po)|*.po|Hard disk image (*.hdv)|*.hdv",
-            FileName = gameName + ".2mg",
-            OverwritePrompt = true
-        };
-        if (pick.ShowDialog(this) != true) return;
+        string game = _currentProjectName is { Length: > 0 } n ? n : "Game";
+        AppleIIgsGamePack pack;
+        List<List<(string Name, byte FileType, ushort AuxType, byte[] Data)>> floppies;
+        (string Name, byte FileType, ushort AuxType, byte[] Data) player;
         try
         {
             Mouse.OverrideCursor = Cursors.Wait;
-            var disk = MakeAppleIIgsDisk(Path.GetExtension(pick.FileName).Equals(".2mg", StringComparison.OrdinalIgnoreCase), out string volumeName);
+            pack = MakeAppleIIgsPack();
+            player = IIgsPlayerFile();
+            var files = pack.Files();
+            try { floppies = AppleIIgsFloppies.Spread(new() { player, files[0] }, files.Skip(1).ToList()); }
+            catch { floppies = new(); }
+        }
+        catch (Exception ex) { MessageBox.Show(this, $"The game could not be made: {ex.Message}", "Build", MessageBoxButton.OK, MessageBoxImage.Error); return; }
+        finally { Mouse.OverrideCursor = null; }
+        long bytes = pack.Files().Sum(f => (long)f.Data.Length) + player.Data.Length;
+        var swap = _systemSettings.Ultima6.Hud.DiskSwap;
+        var ask = new AppleIIgsBuildWindow(bytes, floppies.Count, swap.DiskNames, game) { Owner = this };
+        if (ask.ShowDialog() != true) return;
+        try
+        {
+            if (ask.Kind == AppleIIgsDiskKind.Floppies)
+            {
+                swap.DiskNames = ask.DiskNames.Take(floppies.Count).ToList(); // kept with the project (HUD Editor > Disk Swap screen)
+                using var folderPick = new System.Windows.Forms.FolderBrowserDialog { Description = $"Where should the {floppies.Count} floppy images go?" };
+                if (folderPick.ShowDialog() != System.Windows.Forms.DialogResult.OK) return;
+                Mouse.OverrideCursor = Cursors.Wait;
+                var written = new List<string>();
+                var volumeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                for (int d = 0; d < floppies.Count; d++)
+                {
+                    string name = swap.NameOf(d + 1, game);
+                    string volumeName = ProDosVolume.CleanName(name, $"DISK{d + 1}");
+                    for (int k = 2; !volumeNames.Add(volumeName); k++) volumeName = ProDosVolume.CleanName(name, "DISK")[..Math.Min(13, ProDosVolume.CleanName(name, "DISK").Length)] + k;
+                    var volume = new ProDosVolume(volumeName);
+                    foreach (var f in floppies[d]) volume.Add(f.Name, f.FileType, f.AuxType, f.Data);
+                    string file = Path.Combine(folderPick.SelectedPath, string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".2mg");
+                    File.WriteAllBytes(file, ProDosVolume.Wrap2mg(volume.Build(AppleIIgsFloppies.Blocks)));
+                    written.Add($"{Path.GetFileName(file)}  (disk \"{volumeName}\": {string.Join(", ", floppies[d].Select(f => f.Name))})");
+                }
+                StatusText.Text = $"Apple IIgs floppies built: {floppies.Count} in {folderPick.SelectedPath}";
+                MessageBox.Show(this, $"Your game's {floppies.Count} floppies were built:\n\n{string.Join("\n", written)}\n\nStart GS/OS from its own disk, put in disk 1 and double-click {IIgsPlayerName}. Or copy every disk's files into one folder of a hard disk: the game runs from there and never asks for a disk.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            bool hfs = ask.Kind == AppleIIgsDiskKind.HfsHardDisk;
+            var pick = new SaveFileDialog
+            {
+                Title = "Where should the Apple IIgs disk be built?",
+                Filter = hfs ? "Apple IIgs hard disk image, HFS (*.2mg)|*.2mg|Hard disk image (*.hdv)|*.hdv"
+                             : "Apple IIgs hard disk image (*.2mg)|*.2mg|ProDOS-order image (*.po)|*.po|Hard disk image (*.hdv)|*.hdv",
+                FileName = ProDosVolume.CleanName(game, "GAME") + ".2mg",
+                OverwritePrompt = true
+            };
+            if (pick.ShowDialog(this) != true) return;
+            Mouse.OverrideCursor = Cursors.Wait;
+            bool twoMg = Path.GetExtension(pick.FileName).Equals(".2mg", StringComparison.OrdinalIgnoreCase);
+            string shownName;
+            byte[] disk;
+            if (hfs)
+            {
+                var volume = new HfsVolume(game);
+                foreach (var f in pack.Files().Prepend(player)) volume.Add(f.Name, f.FileType, f.AuxType, f.Data);
+                var blocks = volume.Build();
+                disk = twoMg ? ProDosVolume.Wrap2mg(blocks) : blocks;
+                shownName = volume.VolumeName;
+            }
+            else disk = MakeAppleIIgsDisk(pack, twoMg, out shownName);
             File.WriteAllBytes(pick.FileName, disk);
             StatusText.Text = $"Apple IIgs disk built: {pick.FileName}";
-            MessageBox.Show(this, $"Your game's disk was built:\n{pick.FileName}\n\nOn the Apple IIgs (GS/OS 6, an accelerator), or in KEGS as a second hard disk: open the disk \"{volumeName}\" on the desktop and double-click {IIgsPlayerName}.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show(this, $"Your game's disk was built ({(hfs ? "HFS" : "ProDOS")}):\n{pick.FileName}\n\nOn the Apple IIgs (GS/OS 6, an accelerator), or in KEGS as a second hard disk: open the disk \"{shownName}\" on the desktop and double-click {IIgsPlayerName}.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
         }
         catch (Exception ex) { MessageBox.Show(this, $"The disk could not be built: {ex.Message}", "Build", MessageBoxButton.OK, MessageBoxImage.Error); }
         finally { Mouse.OverrideCursor = null; }
