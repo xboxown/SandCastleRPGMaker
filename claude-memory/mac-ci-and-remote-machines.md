@@ -13,6 +13,8 @@ metadata:
   lipo, starts it with no game, then plays the test game 8 s and saves a screenshot. First green run 2026-11-17 (44209866720,
   macOS 26.7.2). Artifacts GameMac (GameMac.zip, universal x86_64+arm64) and AppleSiliconShot - downloading needs a GitHub
   login; results are readable without login via the check-run annotations API (::notice lines).
+- The workflow publishes the tested player as the public release "mac-player" (GameMac.zip + shot.bmp, no login needed);
+  tools/fetch_mac_player.sh puts it in Editor/Runtimes/Mac. The user: Apple silicon is Claude's alone - they never handle its files.
 - Test game: Player/testgame/Game_Data = the user's Peter demo (public with permission: their demos are already on their
   website; they said Claude may use their games).
 - LESSON: Player/.gitattributes had `* text eol=lf` and corrupted .sdbx on commit; binary exceptions added there and a root

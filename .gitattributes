@@ -24,3 +24,4 @@
 *.deb binary
 *.info binary
 Editor/Runtimes/*/Game binary
+*.zip binary
