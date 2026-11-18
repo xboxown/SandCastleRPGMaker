@@ -246,6 +246,12 @@ internal sealed class MapSizeWindow : Window
                 MessageBox.Show(this, "Width and height are numbers of cells, 1 to 4000.", Title);
                 return;
             }
+            // Ultima 6 Apple IIgs mode: a map the IIgs can hold.
+            if (!nameOnly && ProjectSession.IsAppleIIgs && (int.Parse(widthBox.Text) > Engine.AppleIIgsLimits.MaxMapWidth || int.Parse(heightBox.Text) > Engine.AppleIIgsLimits.MaxMapHeight))
+            {
+                MessageBox.Show(this, $"Apple IIgs: a map is at most {Engine.AppleIIgsLimits.MaxMapWidth} x {Engine.AppleIIgsLimits.MaxMapHeight} cells. Make more maps for more world (Maps tab, Change Map).", Title);
+                return;
+            }
             MapWidth = nameOnly ? width : int.Parse(widthBox.Text);
             MapHeight = nameOnly ? height : int.Parse(heightBox.Text);
             Wraps = wrapBox.IsChecked == true;

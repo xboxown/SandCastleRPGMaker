@@ -50,5 +50,5 @@
 - [Commands only from now](commands-only-from-now.md) — from 2026-11-07 every new feature (all engines) is a command + CommandList.docx; editor UI only if impossible
 - [Plan from Nov 10](plan-from-nov-10.md) — ports left: Mac, Ubuntu, PS2 (Vampire awaiting test); THEN Underworld 3D (any 3D genre), then U6 Apple IIgs, U5, U5 Apple IIgs
 - [Commands first, push for it](commands-first-push.md) — check if commands can do it; push commands first; small editor change + LOTS of commands + CommandList tutorial
-- [Apple IIgs modes (to do)](apple-iigs-modes.md) — U5 + U6 Apple IIgs project modes: own 65816 GS/OS player, accelerator required (error if none), editor enforces hardware limits, KEGS, .2mg
+- [Apple IIgs modes](apple-iigs-modes.md) — U6 Apple IIgs mode STARTED b618 (pulled forward); Player/iigs (asm816 + sim816), GS/OS + accelerator, editor limits, KEGS test; U5 IIgs later
 - [Mac CI + remote machines](mac-ci-and-remote-machines.md) — Apple silicon built/tested by GitHub Actions; PPC/Intel Mac/Ubuntu over SSH per mac instruction.txt; .gitattributes binary lesson

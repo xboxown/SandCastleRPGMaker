@@ -28,6 +28,7 @@
             <ComboBoxItem Content="Ultima 7" Tag="Ultima7" ToolTip="Ultima VII's engine (as Exult): everything built so far"/>
             <ComboBoxItem Content="Ultima 8" Tag="Ultima8" ToolTip="Ultima 8's engine (as Pentagram): the same editor, with more for Ultima 8 - its own engine"/>
             <ComboBoxItem Content="Ultima 6" Tag="Ultima6" ToolTip="Ultima 6's engine (as Nuvie) - also Savage Empire and Martian Dreams: the HUD Editor in place of the PaperDoll Editor, its own engine"/>
+            <ComboBoxItem Content="Ultima 6 Apple IIgs" Tag="Ultima6|AppleIIgs" ToolTip="Ultima 6 for the Apple IIgs: GS/OS and an accelerator (TransWarp GS, ZipGS...) required. The editor keeps the game inside what the IIgs can do: 16 colours, 16 x 16 tiles, maps up to 256 x 256, SND sounds (8-bit mono, 22 kHz or less), no videos. Built as a .2mg hard disk image; tested in KEGS."/>
         </ComboBox>
         <TextBlock Margin="0,0,0,14" Opacity="0.7" FontSize="11" TextWrapping="Wrap"
                    Text="The same editor for all. An Ultima 8 or Ultima 6 project also gets that game's own features, and its game runs in its own engine."/>

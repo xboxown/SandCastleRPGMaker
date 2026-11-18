@@ -23,6 +23,8 @@ public partial class NewProjectWindow : Window
     public DateTime CreatedAtUtc { get; private set; }
     /// <summary>GameStyle.Ultima7, GameStyle.Ultima8 or GameStyle.Ultima6.</summary>
     public string Style { get; private set; } = GameStyle.Ultima7;
+    /// <summary>GameMachine.Any, or GameMachine.AppleIIgs for Ultima 6 Apple IIgs mode.</summary>
+    public string Machine { get; private set; } = GameMachine.Any;
 
     public NewProjectWindow()
     {
@@ -118,9 +120,11 @@ public partial class NewProjectWindow : Window
                 ProjectName = projectName,
                 Platform = "All", // the platform is chosen at Build
                 CreatedAtUtc = DateTime.UtcNow,
-                Style = (StyleBox.SelectedItem as ComboBoxItem)?.Tag as string ?? GameStyle.Ultima7
+                Style = ((StyleBox.SelectedItem as ComboBoxItem)?.Tag as string ?? GameStyle.Ultima7).Split('|')[0],
+                Machine = ((StyleBox.SelectedItem as ComboBoxItem)?.Tag as string ?? "").Split('|') is { Length: > 1 } parts ? parts[1] : GameMachine.Any
             };
             Style = manifest.Style;
+            Machine = manifest.Machine;
 
             // All four files are married from the moment the project exists,
             // not only once the person first hits Save - every one of them is

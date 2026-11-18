@@ -3,3 +3,4 @@ obj/
 .vs/
 backup/
 *.user
+Player/iigs/main.lst

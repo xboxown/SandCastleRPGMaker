@@ -25,3 +25,7 @@
 *.info binary
 Editor/Runtimes/*/Game binary
 *.zip binary
+Editor/Runtimes/AppleIIgs/SANDCASTLE binary
+*.2mg binary
+*.po binary
+*.hdv binary

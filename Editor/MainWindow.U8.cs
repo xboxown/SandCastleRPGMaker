@@ -167,5 +167,5 @@ public partial class MainWindow
     }
 
     /// <summary>The style shown after the project's name in the title bar.</summary>
-    private string StyleTitleSuffix => IsUltima8 ? "  [Ultima 8 style]" : IsUltima6 ? "  [Ultima 6 style]" : string.Empty;
+    private string StyleTitleSuffix => IsUltima8 ? "  [Ultima 8 style]" : IsUltima6 ? (_projectMachine == GameMachine.AppleIIgs ? "  [Ultima 6 Apple IIgs]" : "  [Ultima 6 style]") : string.Empty;
 }

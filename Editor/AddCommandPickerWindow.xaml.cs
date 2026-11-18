@@ -11,6 +11,19 @@ public partial class AddCommandPickerWindow : Window
     {
         InitializeComponent();
         AddScriptTabs();
+        if (ProjectSession.IsAppleIIgs) Loaded += (_, _) => HideForAppleIIgs(this); // Ultima 6 Apple IIgs mode: no videos on the IIgs
+    }
+
+    /// <summary>Ultima 6 Apple IIgs mode: the IIgs plays no video - Play Video isn't offered.</summary>
+    private static void HideForAppleIIgs(DependencyObject root) => HideLogical(root);
+
+    private static void HideLogical(DependencyObject root)
+    {
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is System.Windows.Controls.Button { Tag: "PlayVideo" } b) b.Visibility = Visibility.Collapsed;
+            HideLogical(child);
+        }
     }
 
     /// <summary>The script commands' tabs (Engine/ScriptCommands.cs): each tab's groups in two columns, a button per command.</summary>

@@ -29,6 +29,9 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
 - The Apple IIgs modes: "Ultima 5 Apple IIgs" and "Ultima 6 Apple IIgs" project modes - own low-level
   65816 player under GS/OS (required), accelerator required (error message if none), the editor enforces the IIgs limits
   (colours, sprites, sizes, map size, sound). Tested in KEGS. See claude-memory/apple-iigs-modes.md.
+- 2026-11-18: the user pulled Ultima 6 Apple IIgs mode forward (b618 started it). Its player is `Player/iigs/main.s`
+  (65816 assembly) built by OUR assembler `Player/iigs/asm816.py` (`bash Player/build_iigs.sh`); test it headless with
+  `Player/iigs/sim816.py` before every push. It is IIgs-only: the C player and the other platforms are not affected.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.
 - Every change goes into Windows and the C player (`Player/src`) together, and EVERY platform's player is rebuilt -
   Amiga 68k, Vampire, MorphOS, AmigaOS 4, Ubuntu, PS2, PS3 (`Player/build_*.sh` in WSL) and Mac. No platform may be left outdated.

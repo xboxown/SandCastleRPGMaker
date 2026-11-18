@@ -63,7 +63,8 @@ public class ResourceEntry
     /// <summary>Made in the Sound Mixer (Compose): it never existed as a file outside the editor - it lives only in the project.</summary>
     public bool IsMix { get; set; }
 
-    public string DisplayLocation => IsMix ? "\U0001F39B Composed in the Sound Mixer" + (IsProjectIntegrated ? " (in the project)" : " (goes into the project at the next Save)")
+    public string DisplayLocation => IsMix && ConversionMode == "Apple IIgs SND" ? "\U0001F34E Converted for the Apple IIgs (SND)" + (IsProjectIntegrated ? " (in the project)" : " (goes into the project at the next Save)")
+        : IsMix ? "\U0001F39B Composed in the Sound Mixer" + (IsProjectIntegrated ? " (in the project)" : " (goes into the project at the next Save)")
         : IsProjectIntegrated ? "\U0001F5A5 Integrated Into System" : FilePath;
 }
 

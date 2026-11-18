@@ -1,28 +1,36 @@
 ---
 name: apple-iigs-modes
-description: "TO DO after Underworld 3D (user, 2026-11-17) - two new project modes \"Ultima 5 Apple IIgs\" and \"Ultima 6 Apple IIgs\": own low-level GS/OS player, accelerator REQUIRED, editor enforces hardware limits; test in KEGS"
+description: "Ultima 6 Apple IIgs mode STARTED b618 (user pulled it forward 2026-11-18); U5 Apple IIgs later. Own 65816 player (Player/iigs, our asm816.py + sim816.py), GS/OS + accelerator required, editor enforces limits, KEGS test via Game > Apple IIgs Emulator"
 metadata:
   node_type: memory
   type: project
   originSessionId: e02e316e-a1c8-42c0-a7f7-69326088b5ec
-  modified: 2026-11-18T04:28:40.221Z
+  modified: 2026-11-18T20:50:29.073Z
 ---
 
-The user, 2026-11-17: add two NEW project modes in the same editor, Ultima 5 Apple IIgs mode and Ultima 6 Apple IIgs mode,
-each its own mode (alongside the normal U5 / U6 modes).
+The user, 2026-11-17: two NEW project modes, "Ultima 5 Apple IIgs" and "Ultima 6 Apple IIgs", same editor with the IIgs's
+limits enforced (sprites, colours, sizes, map size, HUD sprite sizes...); own very low-level player; GS/OS REQUIRED;
+accelerator REQUIRED (alert inside GS/OS if none); tested in KEGS.
 
-Requirements (user's words, as given):
-- Same editor, but choosing the mode when making a project switches on the IIgs restrictions: number of sprites, colours
-  (Super Hi-Res 320x200, 16 colours per line, 16 palettes), sprite/picture sizes, map size, sound size (Ensoniq DOC 64 KB) -
-  "and you name it": every limit the real hardware needs, enforced by the editor.
-- Its OWN player, written in a very low-level language (65816 assembly, maybe ORCA/C or Calypsi C for glue) - NOT the shared
-  C player in Player/src.
-- Runs under GS/OS and REQUIRES GS/OS (use the GS/OS toolbox/libraries as needed).
-- ACCELERATOR REQUIRED (TransWarp GS, ZipGS or similar): at start the player checks for one; if none, it shows an error
-  message inside GS/OS saying an accelerator is required, and quits. Applies to both modes.
-- Test with KEGS (emulator) on the main PC.
-- Build output: a hard-disk image (.2mg / .hdv / .po; ProDOS or HFS inside - the user said "HDF ... HF format", meaning HFS).
+2026-11-18 the user pulled Ultima 6 Apple IIgs mode forward ("while I am busy... do the Ultima 6 apple //gs mode... GO"), with:
+- Settings: the emulator's path, the GS/OS boot .hdv/.2mg; the game's test.2mg mounted as the SECOND hard disk; KEGS boots,
+  the user double-clicks the game's partition and the program.
+- The editor is LOCKED (modal) while the emulator runs, until it is closed.
+- The editor checks the emulator supports an accelerator; if not, an error asking for a different emulator.
+- No video at all (Video Library / Play Video removed). Audio: ONLY SND (22 kHz or lower, mono). The Sound Mixer is REPLACED
+  by Convert Audio in this mode only: pick files, Convert, they fill the Sound Editor as snd1, snd2...; rename there; the
+  editor plays them.
+- Mimic the Windows Ultima 6 engine within the IIgs's limits and environment.
 
-**Why:** the user's what-if became a wish: U5 shipped on the 8-bit Apple II; U6 never did, so a U6 IIgs mode is new.
-**How to apply:** ORDER (user, 2026-11-17): 1. finish all ports, 2. finalize and complete Underworld 3D,
-3. Ultima 6 Apple IIgs mode, 4. Ultima 5, 5. Ultima 5 Apple IIgs mode. See [[plan-from-nov-10]]. Related: [[platform-ports]], [[u6-mode-requirements]].
+State (b618): editor side done (MainWindow.AppleIIgs.cs, ConvertAudioWindow.cs, Engine/AppleIIgs.cs: limits, ProDOS/.2mg
+writer, SHR palette/packing, GAME.DAT format). Player v1 (Player/iigs/main.s): GS/OS start, StartUpTools, speed-loop
+accelerator check (count per VBL frame, 560 = needed; stock ~370) -> AlertWindow, GAME.DAT, palette, 10x10 view, Avatar
+walks, Q quits. asm816.py is OUR assembler (building downloaded Merlin32 was denied by the classifier - don't retry).
+sim816.py runs the player headless (stubbed toolbox/GS/OS) and writes a PNG - use it before every push. KEGS 1.38 is in
+H:\_sandcastle_test_temp\kegs (not run by me: no ROM/GS/OS here). Not yet tested in KEGS by the user.
+Next for the IIgs player, following the Windows U6 engine: NPCs + objects on the map, HUD (from the HUD Editor), talk,
+combat, sound (Ensoniq DOC from SOUNDS.DAT), events/commands, more maps (Change Map).
+
+**Why:** the user's wish; U6 never shipped on the IIgs.
+**How to apply:** ORDER now: ports (Mac/Ubuntu/PS2 left) and this IIgs mode in between as the user asks; then Underworld 3D,
+Ultima 5, Ultima 5 Apple IIgs mode. See [[plan-from-nov-10]], [[platform-ports]], [[u6-mode-requirements]].

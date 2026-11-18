@@ -53,6 +53,7 @@ public partial class MainWindow
             var icon = new Image { Source = ToolIcons.For(name), Width = 28, Height = 28 };
             RenderOptions.SetBitmapScalingMode(icon, BitmapScalingMode.HighQuality);
             var button = new Button { Content = icon, ToolTip = tip, Padding = new Thickness(2), Margin = new Thickness(1, 0, 1, 0) };
+            _toolButtons[name] = button; // Ultima 6 Apple IIgs mode hides some (MainWindow.AppleIIgs.cs)
             if (name == "PaperDoll Editor") _paperDollToolButton = button; // Ultima 6: the HUD Editor (MainWindow.U6.cs)
             ToolTipService.SetShowOnDisabled(button, true);
             button.Click += open;

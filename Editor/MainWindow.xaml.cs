@@ -130,6 +130,7 @@ public partial class MainWindow : Window
         ProjectSession.BooksProvider = () => _bookDatabase;
         ProjectSession.ObjectsProvider = () => _objectDatabase;
         ProjectSession.PosesProvider = () => _poseDatabase;
+        ProjectSession.MachineProvider = () => _projectMachine; // Ultima 6 Apple IIgs mode (MainWindow.AppleIIgs.cs)
         ProjectSession.StyleProvider = () => _projectStyle; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
         ProjectSession.CurrenciesProvider = () => _currencyDatabase;
         ProjectSession.ContainersProvider = () => _containerDatabase;
@@ -884,6 +885,7 @@ public partial class MainWindow : Window
         LoadHouses(null);
 
         _projectStyle = dialog.Style; // Ultima 7 or Ultima 8 (MainWindow.U8.cs)
+        _projectMachine = dialog.Machine; // Ultima 6 Apple IIgs mode (MainWindow.AppleIIgs.cs)
         if (IsUltima8) _poseDatabase.EnsureUltima8Poses(); // as the new project was saved
         SetActiveProject(dialog.ProjectFilePath, dialog.ProjectId, dialog.ProjectName, dialog.Platform, dialog.CreatedAtUtc);
     }
@@ -946,6 +948,7 @@ public partial class MainWindow : Window
             }
             // Its style before its map is drawn: an Ultima 8 map shows in the diamond view (MainWindow.U8.cs).
             _projectStyle = manifest.Style is GameStyle.Ultima8 or GameStyle.Ultima6 ? manifest.Style : GameStyle.Ultima7; // none: Ultima 7, as every project before styles
+            _projectMachine = _projectStyle == GameStyle.Ultima6 && manifest.Machine == GameMachine.AppleIIgs ? GameMachine.AppleIIgs : GameMachine.Any;
             LoadWorlds(payload.Map, payload.Worlds); // the starting world and the others (Maps tab)
             LoadHouses(payload.Houses); // the House Editor's houses (MainWindow.Houses.cs)
             _map = payload.Map;
@@ -1123,7 +1126,8 @@ public partial class MainWindow : Window
                     ProjectName = _currentProjectName ?? string.Empty,
                     Platform = _currentProjectPlatform ?? "Windows",
                     CreatedAtUtc = _currentProjectCreatedAtUtc,
-                    Style = _projectStyle
+                    Style = _projectStyle,
+                    Machine = _projectMachine
                 },
                 Factions = _factionDatabase,
                 Characters = _characterDatabase,
@@ -1386,6 +1390,7 @@ public partial class MainWindow : Window
             MessageBox.Show("The game needs a map with a tileset - create or load one first.", "Build", MessageBoxButton.OK, MessageBoxImage.Information);
             return;
         }
+        if (IsAppleIIgs) { BuildAppleIIgsGame(); return; } // Ultima 6 Apple IIgs mode: a .2mg hard disk (MainWindow.AppleIIgs.cs)
         var platform = new BuildPlatformWindow(ultima8: IsUltima8, ultima6: IsUltima6) { Owner = this }; // which platform (BuildPlatformWindow.cs)
         if (platform.ShowDialog() != true) return;
         if (platform.Picked != BuildPlatform.Windows) { BuildForPlayer(platform.Picked); return; } // the Sandcastle player's platforms (MainWindow.PlayerBuild.cs)
@@ -1555,6 +1560,7 @@ public partial class MainWindow : Window
             return;
         }
 
+        if (IsAppleIIgs) { LaunchAppleIIgsTest(); return; } // Ultima 6 Apple IIgs mode: the game in the emulator (MainWindow.AppleIIgs.cs)
         if (IsUltima8) { LaunchU8GameTest(atTitle); return; } // an Ultima 8 project: its own engine (MainWindow.U8.cs)
         if (IsUltima6) { LaunchU6GameTest(atTitle); return; } // an Ultima 6 project: its own engine (MainWindow.U6.cs)
         // A loaded save carries on in a new window built from it (GameTestWindow.SaveLoad.cs); Return To Title and New Game start a fresh one.

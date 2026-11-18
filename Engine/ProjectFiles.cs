@@ -12,6 +12,8 @@ public class ProjectManifest
     public DateTime CreatedAtUtc { get; set; }
     /// <summary>The game's style (File > New Project): GameStyle.Ultima7 (every project made before styles existed), GameStyle.Ultima8 or GameStyle.Ultima6 - each its own engine.</summary>
     public string Style { get; set; } = GameStyle.Ultima7;
+    /// <summary>GameMachine.Any (every platform) or one machine with its own player and limits: GameMachine.AppleIIgs (Ultima 6 Apple IIgs mode).</summary>
+    public string Machine { get; set; } = GameMachine.Any;
 }
 
 /// <summary>A project's style: which engine its game runs in.</summary>

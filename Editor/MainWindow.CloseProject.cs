@@ -91,6 +91,7 @@ public partial class MainWindow
         LoadWorlds(null, null);
         LoadHouses(null);
         _projectStyle = GameStyle.Ultima7;
+        _projectMachine = GameMachine.Any;
         ApplyStyleToTools();
 
         // What was copied, chosen and undoable in it.

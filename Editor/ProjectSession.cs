@@ -31,6 +31,9 @@ internal static class ProjectSession
     public static bool IsUltima8 => StyleProvider?.Invoke() == GameStyle.Ultima8;
     /// <summary>An Ultima 6 project (Savage Empire, Martian Dreams): its HUD Editor, its own engine (Editor/U6).</summary>
     public static bool IsUltima6 => StyleProvider?.Invoke() == GameStyle.Ultima6;
+    /// <summary>The project's machine (GameMachine): Ultima 6 Apple IIgs mode keeps everything inside the IIgs's limits. MainWindow sets it.</summary>
+    public static Func<string>? MachineProvider;
+    public static bool IsAppleIIgs => MachineProvider?.Invoke() == GameMachine.AppleIIgs;
 
     /// <summary>More of the project, for the schedule and event dialogs. MainWindow sets these once.</summary>
     public static Func<ResourceDatabase>? ResourcesProvider;
