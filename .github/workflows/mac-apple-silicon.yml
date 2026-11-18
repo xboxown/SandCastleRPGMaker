@@ -1,7 +1,8 @@
 # The Mac player built and started on a real Apple silicon Mac (GitHub's M1 machines, free for public repositories) at
 # every push that touches the player - the user has no Apple silicon Mac. It builds Game.app as Player/build_mac.sh does
 # (one program for Intel and Apple silicon), checks the Apple silicon part is in it, starts that part, and keeps the
-# result (GameMac.zip) for 30 days: Actions > this run > Artifacts.
+# result (GameMac.zip) for 30 days: Actions > this run > Artifacts. A tested player from master is also published as the
+# release "mac-player" (a public download, no login), which Claude fetches into Editor/Runtimes/Mac (tools/fetch_mac_player.sh).
 name: Mac player (Apple silicon)
 
 on:
@@ -10,6 +11,9 @@ on:
       - "Player/**"
       - ".github/workflows/mac-apple-silicon.yml"
   workflow_dispatch:
+
+permissions:
+  contents: write # to publish the tested player as the "mac-player" release
 
 jobs:
   apple-silicon:
@@ -83,3 +87,14 @@ jobs:
           name: GameMac
           path: Player/build/mac/GameMac.zip
           retention-days: 30
+
+      - name: Publish the tested player (release "mac-player")
+        if: github.ref == 'refs/heads/master'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          NOTE="The Mac player (Intel + Apple silicon), built and tested on Apple silicon from ${GITHUB_SHA::7}. For the editor's Runtimes/Mac - not a game."
+          gh release view mac-player >/dev/null 2>&1 || gh release create mac-player --prerelease --title "Mac player (latest tested)" --notes "$NOTE"
+          gh release edit mac-player --notes "$NOTE"
+          gh release upload mac-player Player/build/mac/GameMac.zip shot/shot.bmp --clobber
+          echo "::notice title=Published::GameMac.zip from ${GITHUB_SHA::7} is the mac-player release's download"
