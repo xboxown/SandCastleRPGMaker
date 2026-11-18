@@ -1,3 +1,17 @@
 * text eol=lf
 *.h text eol=lf
 *.c text eol=lf
+# Never change these files' bytes: game data, pictures, sounds, programs.
+*.sdbx binary
+*.png binary
+*.bmp binary
+*.wav binary
+*.ogg binary
+*.mp3 binary
+*.elf binary
+*.ELF binary
+*.bin binary
+*.exe binary
+*.dll binary
+*.zip binary
+*.info binary
