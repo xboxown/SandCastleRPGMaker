@@ -618,6 +618,23 @@ static void saga_present(const uint32_t *pixels)
 #else
     /* 320 x 200 doubled (b615): each row made 5-6-5 by AMMX, each pixel written twice in one long, the row copied below it */
     static uint16_t half[FRAME_W] __attribute__((aligned(16)));
+    if (crtOn)
+    {
+        /* The CRT effect made while doubling, as Windows makes it (crt_double: each game row a bright line and one 45% darker,
+           each pixel softened into the next) - real 400-line scanlines, for little more than the doubling itself. */
+        static uint32_t two[4 * FRAME_W] __attribute__((aligned(16)));
+        for (int y = 0; y < FRAME_H; y++, to += sagaPerRow * 2)
+        {
+            crt_double(pixels + (size_t)y * FRAME_W, FRAME_W, 1, two, 2 * FRAME_W, 0, 1);
+            if (ammxOk > 0) { ammx_rgb565_row(two, (uint16_t *)to, 2 * FRAME_W); ammx_rgb565_row(two + 2 * FRAME_W, (uint16_t *)(to + sagaPerRow), 2 * FRAME_W); }
+            else { c_rgb565_row(two, (uint16_t *)to, 2 * FRAME_W); c_rgb565_row(two + 2 * FRAME_W, (uint16_t *)(to + sagaPerRow), 2 * FRAME_W); }
+        }
+        WaitTOF();
+        SAGA_PLANEPTR = (ULONG)sagaBuf[sagaBack];
+        saga_hide_pointer();
+        sagaBack ^= 1;
+        return;
+    }
     for (int y = 0; y < FRAME_H; y++, to += sagaPerRow * 2)
     {
         if (ammxOk > 0) ammx_rgb565_row(pixels + (size_t)y * FRAME_W, half, FRAME_W);
@@ -707,6 +724,9 @@ static int raw_works(int bytes)
 void platform_present(const uint32_t *pixels)
 {
     if (!window) return;
+#if defined(VAMPIRE) && !defined(FRAME_HIRES)
+    if (sagaOn) { saga_present(pixels); return; } /* SAGA's own display: the CRT effect, if on, is made while doubling (saga_present) */
+#endif
     if (crtOn) /* the CRT effect on a copy (some screens draw over the last frame rather than afresh) */
     {
         static uint32_t *crt;
