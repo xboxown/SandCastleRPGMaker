@@ -78,7 +78,7 @@ public partial class U8GameWindow
     {
         var (ax, ay) = CellOf(a);
         var (bx, by) = CellOf(b);
-        return CellsApart((ax, ay), (bx, by)) <= 1 && Math.Abs(LiftOf(a) - LiftOf(b)) <= 4;
+        return CellsApart((ax, ay), (bx, by)) <= MagicItems.Reach(WornMagic(a)) && Math.Abs(LiftOf(a) - LiftOf(b)) <= 4; // Magic reach: the magic sword strikes 4 cells away
     }
 
     /// <summary>What one character does about another, by their factions (FactionDatabase bands).</summary>

@@ -52,10 +52,12 @@ public partial class U8GameWindow
         else if (weapon is { Type: ObjectType.Weapon } w)
             damage = U8Random(w.Weapon.U8DamageModifier) + w.Weapon.Damage + (ammo?.Ammo.DamageBonus ?? 0) + str / 5;
         else damage = U8Random(str / 2) + 1;
+        damage += MagicTotal(attacker, MagicBonusKind.Damage); // Magic / Enchant Item damage
+        if (MagicItems.Immune(WornMagic(defender), type)) return 0; // Magic immunities of what they wear or hold
         foreach (var worn in WornArmor(defender))
             if (worn.Armor.Immunities.Contains(type)) { PlaySoundFrom(worn.Armor.ImmuneSoundResourceId, defender); return 0; }
         if (defender == _player && _u8Blocking) damage -= Stat(defender, BuiltInStatKind.Strength, 10) / 5; // blocking
-        int ac = WornArmor(defender).Sum(a => Math.Max(0, a.Armor.ArmorPoints)) + (WieldedWeapon(defender)?.Def?.Weapon.U8ArmourBonus ?? 0);
+        int ac = WornArmor(defender).Sum(a => Math.Max(0, a.Armor.ArmorPoints)) + (WieldedWeapon(defender)?.Def?.Weapon.U8ArmourBonus ?? 0) + MagicTotal(defender, MagicBonusKind.Defense); // + Magic defense
         int acMod = 3 * ac;
         if (type == DamageType.Fire) acMod /= 2; // armour doesn't protect from fire as well
         if (IsMotionless(defender)) acMod /= 2; // stunned

@@ -147,6 +147,7 @@ public partial class ObjectEditorWindow
                                "less 1..(all the armor the foe wears) - lightning, ethereal and sonic damage ignore armor. A ranged weapon always shoots; a thrown one is thrown at a foe out of reach, " +
                                "losing aim with distance (badly: the whole distance, well: half). The strike style sets how long a blow takes (reach is quickest, slow swing slowest); " +
                                "the pose is what the wielder shows meanwhile - any pose with art for that character, else Attacking Melee."));
+        BuildMagic(obj, weapon: true);
     }
 
     private void BuildArmor(WorldObject obj)
@@ -172,5 +173,87 @@ public partial class ObjectEditorWindow
         body.Children.Add(immune);
         body.Children.Add(SoundPicker("Sound when a blow does nothing (a clang)", () => a.ImmuneSoundResourceId, v => a.ImmuneSoundResourceId = v));
         body.Children.Add(Note("As Exult: armor worn anywhere counts, a shield held in a hand too. A blow of a damage type it's immune to does nothing at all - no damage, no poison or sleep."));
+        BuildMagic(obj, weapon: false);
+    }
+
+    /// <summary>
+    /// Weapon / Armor > Magic (Engine/MagicItems.cs): what it does while worn or held -
+    /// reach, defense, stat bonuses (+ or -, any stat), light, immunities, a curse,
+    /// and common events as it goes on and comes off. Per copy, the Equipment tab's
+    /// commands add more (Enchant Item, Curse Item, Lift Curse...).
+    /// </summary>
+    private void BuildMagic(WorldObject obj, bool weapon)
+    {
+        var m = obj.Magic;
+        var body = Group("Magic (while worn or held)");
+        var row = new WrapPanel();
+        if (weapon)
+            row.Children.Add(NumberField("Reach (map cells)", () => m.ReachCells, v => m.ReachCells = (int)Math.Clamp(v, 1, 20),
+                "Hand to hand: how far away its blows land. 1 = next to the foe (every weapon in Exult); a magic sword or a halberd: 2 to 4."));
+        row.Children.Add(NumberField("Defense bonus", () => m.DefenseBonus, v => m.DefenseBonus = (int)Math.Clamp(v, -127, 127),
+            "Added to all the armor the wearer has on (every blow is reduced by 1 to that total). Below 0: a cursed item that leaves them open."));
+        row.Children.Add(NumberField("Light (brightness, 0 = none)", () => m.LightBrightness, v => m.LightBrightness = (int)Math.Clamp(v, 0, 20),
+            "Gives light while worn or held, as a lit Light Source of this brightness - and never burns out (a fire sword, a glowing amulet)."));
+        body.Children.Add(row);
+
+        // Stat bonuses: any stat, + or -.
+        body.Children.Add(new TextBlock { Text = "Stats while worn (below 0 takes away - a cursed item; taken back exactly when it comes off):", Margin = new Thickness(0, 6, 0, 2) });
+        var statsPanel = new StackPanel();
+        var stats = ProjectSession.StatsProvider?.Invoke()?.Stats.Where(st => st.Type == VariableValueType.Integer).ToList() ?? new List<StatDefinition>();
+        void ShowStats()
+        {
+            statsPanel.Children.Clear();
+            foreach (var bonus in m.StatBonuses.ToList())
+            {
+                var b = bonus;
+                var line = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+                var which = new ComboBox { Width = 150, ItemsSource = stats, DisplayMemberPath = "Name", SelectedItem = stats.FirstOrDefault(st => st.Id == b.StatId) };
+                which.SelectionChanged += (_, _) => b.StatId = (which.SelectedItem as StatDefinition)?.Id ?? -1;
+                var amount = new TextBox { Width = 50, Text = b.Amount.ToString(), TextAlignment = TextAlignment.Right, Margin = new Thickness(6, 0, 0, 0) };
+                amount.TextChanged += (_, _) => { if (int.TryParse(amount.Text.Trim(), out int v)) b.Amount = Math.Clamp(v, -999, 999); };
+                var remove = new Button { Content = "Remove", Padding = new Thickness(6, 0, 6, 0), Margin = new Thickness(6, 0, 0, 0) };
+                remove.Click += (_, _) => { m.StatBonuses.Remove(b); ShowStats(); };
+                line.Children.Add(which);
+                line.Children.Add(amount);
+                line.Children.Add(remove);
+                statsPanel.Children.Add(line);
+            }
+            var add = new Button { Content = "Add a stat bonus", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 1, 8, 1), Margin = new Thickness(0, 2, 0, 0) };
+            add.Click += (_, _) => { m.StatBonuses.Add(new MagicBonus { Kind = MagicBonusKind.Stat, StatId = stats.FirstOrDefault()?.Id ?? -1, Amount = 1 }); ShowStats(); };
+            statsPanel.Children.Add(add);
+        }
+        ShowStats();
+        body.Children.Add(statsPanel);
+
+        var immune = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        immune.Children.Add(new TextBlock { Text = "Whoever wears or holds it is immune to:", Margin = new Thickness(0, 4, 8, 0) });
+        foreach (var type in Enum.GetValues<DamageType>())
+        {
+            var t = type;
+            immune.Children.Add(Check(t.ToString(), () => m.Immunities.Contains(t), v => { m.Immunities.Remove(t); if (v) m.Immunities.Add(t); }));
+        }
+        body.Children.Add(immune);
+
+        var curse = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        curse.Children.Add(Check("Cursed: once on, it won't come off (until a Lift Curse command)", () => m.Cursed, v => m.Cursed = v));
+        curse.Children.Add(TextField("Said when they try", 260, () => m.CursedText, v => m.CursedText = v));
+        body.Children.Add(curse);
+
+        var commons = new List<CommonEventDefinition> { new() { Id = -1, Name = "(none)" } };
+        commons.AddRange(ProjectSession.SettingsProvider?.Invoke()?.CommonEvents.OrderBy(c => c.Name) ?? Enumerable.Empty<CommonEventDefinition>());
+        FrameworkElement CommonPicker(string label, Func<int> get, Action<int> set)
+        {
+            var combo = new ComboBox { Width = 180, ItemsSource = commons, DisplayMemberPath = "Name", SelectedItem = commons.FirstOrDefault(c => c.Id == get()) ?? commons[0] };
+            combo.SelectionChanged += (_, _) => set((combo.SelectedItem as CommonEventDefinition)?.Id ?? -1);
+            return Labeled(label, combo);
+        }
+        var events = new WrapPanel { Margin = new Thickness(0, 6, 0, 0) };
+        events.Children.Add(CommonPicker("On Equip (common event)", () => m.OnEquipCommonEventId, v => m.OnEquipCommonEventId = v));
+        events.Children.Add(CommonPicker("On Unequip (common event)", () => m.OnUnequipCommonEventId, v => m.OnUnequipCommonEventId = v));
+        body.Children.Add(events);
+        body.Children.Add(Note("Not Exult (its magic items are written in usecode): everything here works while it is worn or held, by anyone, and stops the moment it comes off - " +
+                               "the stats are taken back exactly. The common events run with the wearer as the one who set them off: use them for custom stats or anything else. " +
+                               "Per copy, the Equipment tab's commands do more: Curse Item, Lift Curse (a spell, a healer's paid service), Is Item Cursed, Enchant Item, Remove Enchantments, " +
+                               "Get Magic Bonus, Get Equipped Item, Combine Items."));
     }
 }

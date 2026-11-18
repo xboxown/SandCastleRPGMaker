@@ -48,6 +48,7 @@ public partial class GameTestWindow
         h[EventCommandType.FindObjectsInArea] = FindObjectsCommand;
         h[EventCommandType.DeleteObjectsInArea] = DeleteObjectsInAreaCommand;
         h[EventCommandType.ItemsInside] = ItemsInsideCommand;
+        InitializeMagicItemCommands(); // the Equipment tab (.MagicItems.cs)
         h[EventCommandType.ItemCharges] = ItemChargesCommand;
         h[EventCommandType.HurtInArea] = HurtInAreaCommand;
         h[EventCommandType.SetAttackMode] = c =>

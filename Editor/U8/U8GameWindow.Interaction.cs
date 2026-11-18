@@ -481,6 +481,7 @@ public partial class U8GameWindow
                 if (!TryGetEquippedInstanceId(character, slot.SlotKey, out int equippedId)) return false; // an empty slot has nothing to drag
                 var equipped = character.Inventory.FirstOrDefault(i => i.InstanceId == equippedId);
                 if (equipped is null) return false;
+                if (MagicItems.IsCursed(ObjectDef(equipped), equipped)) { Refuse(MousePointerKind.RedX, MagicItems.CursedText(ObjectDef(equipped))); return false; } // a cursed item won't come off (Lift Curse)
                 origin = new SlotOrigin(character, slot.SlotKey, equipped);
                 source = FindTaggedVisual(slot.Gump.BodyCanvas, slot);
                 break;
@@ -1399,6 +1400,7 @@ public partial class U8GameWindow
                     IsSpentRuntime = o.Obj.IsSpentRuntime, FrameRuntime = o.Obj.FrameRuntime, HitPointsRuntime = o.Obj.HitPointsRuntime,
                     KeyIdsRuntime = o.Obj.KeyIdsRuntime, ChargesRuntime = o.Obj.ChargesRuntime, LiquidIdRuntime = o.Obj.LiquidIdRuntime,
                     DollRuntime = o.Obj.DollRuntime, // its paperdoll as it is (the tape still in the radio)
+                    CursedRuntime = o.Obj.CursedRuntime, EnchantsRuntime = o.Obj.EnchantsRuntime, // a magic item's curse and enchantments
                     BelongsToId = o.Obj.BelongsToId
                 };
             default:
@@ -1448,7 +1450,8 @@ public partial class U8GameWindow
                 Facing = item.FacingRuntime, IsLitRuntime = item.IsLitRuntime, BurnLeftRuntime = item.BurnLeftRuntime,
                 IsSpentRuntime = item.IsSpentRuntime, FrameRuntime = item.FrameRuntime, HitPointsRuntime = item.HitPointsRuntime,
                 KeyIdsRuntime = item.KeyIdsRuntime, ChargesRuntime = item.ChargesRuntime, LiquidIdRuntime = item.LiquidIdRuntime,
-                DollRuntime = item.DollRuntime, BelongsToId = item.BelongsToId
+                DollRuntime = item.DollRuntime, BelongsToId = item.BelongsToId,
+                CursedRuntime = item.CursedRuntime, EnchantsRuntime = item.EnchantsRuntime // a magic item's curse and enchantments go with it
             };
         var placed = new PlacedItemInstance { Category = item.Category, ItemId = item.ItemId, BelongsToId = item.BelongsToId };
         if (item.Category == ReferencedItemCategory.Container)

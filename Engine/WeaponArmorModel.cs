@@ -81,6 +81,67 @@ public class WeaponSettings
     public int HitSoundResourceId { get; set; } = -1;
 }
 
+/// <summary>What one magic bonus (on the item, or put on one copy by Enchant Item) adds while the item is worn or held.</summary>
+public enum MagicBonusKind { Stat, Defense, Damage, Reach, Light }
+
+/// <summary>One bonus: a stat (+ or -, any stat - custom ones too), defense (armor points), damage, reach (cells) or light (brightness).</summary>
+public class MagicBonus
+{
+    public MagicBonusKind Kind { get; set; } = MagicBonusKind.Stat;
+    /// <summary>Stat: the stat's id (Stat Editor).</summary>
+    public int StatId { get; set; } = -1;
+    public int Amount { get; set; }
+}
+
+/// <summary>
+/// Object Editor > Weapon / Armor > Magic: what the item does while it's worn
+/// or held - the magic sword's long reach and its bonuses, the fire sword's
+/// light, immunities, a curse (it won't come off until Lift Curse), and
+/// common events run as it goes on and comes off (for anything else).
+/// Not Exult (Exult hardcodes these in usecode); Ultima 8 has some of it
+/// (WeaponInfo armour / dex bonuses - kept in their own fields).
+/// </summary>
+public class MagicSettings
+{
+    /// <summary>Hand to hand: how many map cells away it strikes (1 = next to it, as every weapon in Exult).</summary>
+    public int ReachCells { get; set; } = 1;
+    /// <summary>Added to the wearer's armor (every blow reduced by 1..all armor) - a weapon that defends.</summary>
+    public int DefenseBonus { get; set; }
+    /// <summary>Stats raised (or lowered: a cursed item) while it's worn. Applied as it goes on, taken back exactly as it comes off.</summary>
+    public List<MagicBonus> StatBonuses { get; set; } = new();
+    /// <summary>Light while worn or held: a Light Source's brightness (0 = none). Never burns out - the fire sword.</summary>
+    public int LightBrightness { get; set; }
+    /// <summary>Damage types that do nothing to whoever wears or holds it.</summary>
+    public List<DamageType> Immunities { get; set; } = new();
+    /// <summary>Once on, it won't come off until a Lift Curse command (a spell, a healer's paid service, a condition met).</summary>
+    public bool Cursed { get; set; }
+    /// <summary>Said (status line / box) when someone tries to take it off while it's cursed.</summary>
+    public string CursedText { get; set; } = "It will not come off - it is cursed!";
+    /// <summary>Common events run as it goes on / comes off (the wearer is the one who set it off) - for custom stats or anything else. -1: none.</summary>
+    public int OnEquipCommonEventId { get; set; } = -1;
+    public int OnUnequipCommonEventId { get; set; } = -1;
+
+    public bool IsEmpty => ReachCells <= 1 && DefenseBonus == 0 && StatBonuses.Count == 0 && LightBrightness <= 0 && Immunities.Count == 0
+        && !Cursed && OnEquipCommonEventId < 0 && OnUnequipCommonEventId < 0;
+}
+
+/// <summary>A stat change a worn magic item really made on its wearer (kept on the character, saved): taken back exactly when the item comes off.</summary>
+public class AppliedMagic
+{
+    public int InstanceId { get; set; }
+    public int StatId { get; set; }
+    /// <summary>What it really moved the stat by (a stat never goes below 0), and what the item asked for.</summary>
+    public int Amount { get; set; }
+    public int Wanted { get; set; }
+}
+
+/// <summary>A worn item whose On Equip common event has run - its On Unequip runs when it comes off.</summary>
+public class WornMagicItem
+{
+    public int InstanceId { get; set; }
+    public int ObjectId { get; set; }
+}
+
 /// <summary>Armor settings (Object Editor > Armor), after Exult's Armor_info: armor points and immunities, for whatever slot it's worn in.</summary>
 public class ArmorSettings
 {

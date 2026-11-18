@@ -47,9 +47,9 @@ internal static class CommandFields
     public static string StatName(string id) =>
         id == "All" ? "every stat" : Stats().FirstOrDefault(s => s.Id.ToString() == id)?.Name ?? $"stat #{id}";
 
-    public static string ItemName(EventCommand command)
+    public static string ItemName(EventCommand command, string suffix = "")
     {
-        if (!int.TryParse(command.Get("ItemId"), out int id) || !Enum.TryParse<ReferencedItemCategory>(command.Get("Category"), out var category)) return "(no item)";
+        if (!int.TryParse(command.Get("ItemId" + suffix), out int id) || !Enum.TryParse<ReferencedItemCategory>(command.Get("Category" + suffix), out var category)) return "(no item)";
         return DollLook.ItemName(new ItemReference { Category = category, ItemId = id },
             ProjectSession.ObjectsProvider?.Invoke() ?? new ObjectDatabase(), ProjectSession.BooksProvider?.Invoke() ?? new BookDatabase(), ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase());
     }

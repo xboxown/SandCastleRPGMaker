@@ -14,6 +14,7 @@
 #include "world.h"
 #include "items.h"
 #include "script.h"
+#include <ctype.h>
 #include "lighting.h"
 #include "schedules.h"
 #include "sound.h"
@@ -1119,6 +1120,165 @@ static void begin_action(Run *r, int actor, int kind)
     cancel_actions_of(r, actor);
     r->act = kind; r->walker = actor; r->stage = 0; r->stageMs = -1;
     r->waiting = W_ACTION;
+}
+
+/* ---------------- Magic weapons and armor (Engine/MagicItems.cs, GameTestWindow.MagicItems.cs) ---------------- */
+
+static double magicCheckMs;
+static const char *SLOT_NAME[15] = { "Head", "Neck", "Body", "Arms", "Gloves", "Belt", "Back", "Legs", "Feet", "RightHand", "LeftHand", "Ring1", "Ring2", "Backpack", "Pouch" };
+static cJSON *stat_by_id(int id);
+static int stat_int(int characterId, cJSON *stat);
+static void set_stat_int(int characterId, cJSON *stat, int value, const char *cause);
+static cJSON *project_json(void);
+
+/* A common event run with this character as the one who set it off (On Equip / On Unequip). */
+static void run_common_on(int commonId, int characterId)
+{
+    cJSON *common;
+    cJSON_ArrayForEach(common, get(get(project_json(), "Settings"), "CommonEvents"))
+        if (num(common, "Id", -2) == commonId) { int a = world_actor_by_character(characterId); events_run_commands(get(common, "Commands"), a > 0 ? a : -1); return; }
+}
+
+static cJSON *own_array(cJSON *data, const char *key)
+{
+    cJSON *a = get(data, key);
+    if (cJSON_IsArray(a)) return a;
+    if (a) cJSON_DeleteItemFromObject(data, key);
+    return cJSON_AddArrayToObject(data, key);
+}
+
+/* MagicItems.Reconcile: worn-item stat bonuses made / taken back exactly, On Equip / On Unequip run - kept on the character (saved with it). */
+static void magic_reconcile(int characterId)
+{
+    cJSON *data = character_data(characterId);
+    if (!data) return;
+    Item *worn[64];
+    int n = items_worn(characterId, worn, 64);
+    static int wi[256], ws[256], wa[256];
+    int wc = 0;
+    for (int i = 0; i < n; i++)
+    {
+        int kinds[48], stats[48], amounts[48], b = items_bonuses(worn[i], kinds, stats, amounts, 48), inst = items_instance_id(worn[i]);
+        for (int j = 0; j < b; j++)
+        {
+            if (kinds[j] != MB_STAT || stats[j] < 0) continue;
+            int k;
+            for (k = 0; k < wc; k++) if (wi[k] == inst && ws[k] == stats[j]) break;
+            if (k == wc) { if (wc >= 256) continue; wi[wc] = inst; ws[wc] = stats[j]; wa[wc++] = 0; }
+            wa[k] += amounts[j];
+        }
+    }
+    cJSON *applied = get(data, "MagicAppliedRuntime");
+    int count = cJSON_IsArray(applied) ? cJSON_GetArraySize(applied) : 0;
+    for (int i = count - 1; i >= 0; i--) /* taken back: what came off, or changed */
+    {
+        cJSON *a = cJSON_GetArrayItem(applied, i);
+        int inst = num(a, "InstanceId", -1), st = num(a, "StatId", -1), amount = num(a, "Amount", 0), wanted = num(a, "Wanted", 0), keep = 0;
+        for (int k = 0; k < wc && !keep; k++) keep = wi[k] == inst && ws[k] == st && wa[k] == wanted;
+        if (keep) continue;
+        cJSON *stat = stat_by_id(st);
+        if (amount && stat && num(stat, "Type", 0) == 0) set_stat_int(characterId, stat, stat_int(characterId, stat) - amount, "a cursed item");
+        cJSON_DeleteItemFromArray(applied, i);
+    }
+    for (int k = 0; k < wc; k++) /* made: what went on */
+    {
+        if (!wa[k]) continue;
+        int there = 0;
+        cJSON *a;
+        cJSON_ArrayForEach(a, applied) if (num(a, "InstanceId", -1) == wi[k] && num(a, "StatId", -1) == ws[k]) there = 1;
+        cJSON *stat = stat_by_id(ws[k]);
+        if (there || !stat || num(stat, "Type", 0) != 0) continue;
+        int before = stat_int(characterId, stat);
+        set_stat_int(characterId, stat, before + wa[k], "a cursed item");
+        applied = own_array(data, "MagicAppliedRuntime");
+        cJSON *rec = cJSON_CreateObject();
+        cJSON_AddNumberToObject(rec, "InstanceId", wi[k]); cJSON_AddNumberToObject(rec, "StatId", ws[k]);
+        cJSON_AddNumberToObject(rec, "Amount", stat_int(characterId, stat) - before); cJSON_AddNumberToObject(rec, "Wanted", wa[k]);
+        cJSON_AddItemToArray(applied, rec);
+    }
+    if (cJSON_IsArray(applied) && cJSON_GetArraySize(applied) == 0) cJSON_DeleteItemFromObject(data, "MagicAppliedRuntime");
+
+    /* On Equip / On Unequip */
+    cJSON *seen = get(data, "MagicWornRuntime");
+    count = cJSON_IsArray(seen) ? cJSON_GetArraySize(seen) : 0;
+    for (int i = count - 1; i >= 0; i--)
+    {
+        cJSON *s = cJSON_GetArrayItem(seen, i);
+        int inst = num(s, "InstanceId", -1), obj = num(s, "ObjectId", -1), still = 0;
+        for (int w = 0; w < n && !still; w++) still = items_instance_id(worn[w]) == inst;
+        if (still) continue;
+        cJSON_DeleteItemFromArray(seen, i);
+        int ev = items_magic_event(obj, 1);
+        if (ev >= 0) run_common_on(ev, characterId);
+    }
+    for (int w = 0; w < n; w++)
+    {
+        int inst = items_instance_id(worn[w]), obj = items_item_id(worn[w]), on = items_magic_event(obj, 0), off = items_magic_event(obj, 1), known = 0;
+        if (on < 0 && off < 0) continue;
+        seen = get(data, "MagicWornRuntime");
+        count = cJSON_IsArray(seen) ? cJSON_GetArraySize(seen) : 0;
+        for (int i = count - 1; i >= 0; i--)
+        {
+            cJSON *s = cJSON_GetArrayItem(seen, i);
+            if (num(s, "InstanceId", -1) != inst) continue;
+            if (num(s, "ObjectId", -1) == obj) known = 1; else cJSON_DeleteItemFromArray(seen, i);
+        }
+        if (known) continue;
+        seen = own_array(data, "MagicWornRuntime");
+        cJSON *rec = cJSON_CreateObject();
+        cJSON_AddNumberToObject(rec, "InstanceId", inst); cJSON_AddNumberToObject(rec, "ObjectId", obj);
+        cJSON_AddItemToArray(seen, rec);
+        if (on >= 0) run_common_on(on, characterId);
+    }
+    seen = get(data, "MagicWornRuntime");
+    if (cJSON_IsArray(seen) && cJSON_GetArraySize(seen) == 0) cJSON_DeleteItemFromObject(data, "MagicWornRuntime");
+}
+
+/* The items a magic command works on: of an item kind, in a slot, or everything worn or held. */
+static int magic_targets(const Cmd *c, int characterId, Item **out, int max)
+{
+    Item *worn[64];
+    int n = items_worn(characterId, worn, 64), m = 0;
+    const char *which = param(c, "Which");
+    if (!strncmp(which, "Everything", 10)) { for (int i = 0; i < n && m < max; i++) out[m++] = worn[i]; return m; }
+    if (!strncmp(which, "What is in the slot", 19))
+    {
+        for (int s = 0; s < 15; s++)
+            if (!strcmp(param(c, "Slot"), SLOT_NAME[s])) { Item *it = items_in_slot(characterId, s); if (it && items_category(it) == CAT_OBJECT && m < max) out[m++] = it; }
+        return m;
+    }
+    int category = category_of(param(c, "Category")), itemId = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+    for (int i = 0; i < n && m < max; i++) if (items_category(worn[i]) == category && items_item_id(worn[i]) == itemId) out[m++] = worn[i];
+    return m;
+}
+
+/* A bonus kind as the command names it (MagicBonusKind), and its stat (by name in the Stat Editor) for a stat bonus; -1 when there's no such stat. */
+static int magic_kind_of(const Cmd *c, int *statId)
+{
+    const char *kind = param(c, "Kind");
+    *statId = -1;
+    if (!strncmp(kind, "Stat", 4))
+    {
+        char want[96]; snprintf(want, sizeof want, "%s", param(c, "StatName"));
+        char *w = want; while (*w == ' ') w++;
+        size_t wl = strlen(w); while (wl && w[wl - 1] == ' ') w[--wl] = 0;
+        cJSON *s;
+        cJSON_ArrayForEach(s, statsJson)
+        {
+            const char *name = str(s, "Name");
+            while (*name == ' ') name++;
+            size_t nl = strlen(name); while (nl && name[nl - 1] == ' ') nl--;
+            if (nl != wl) continue;
+            size_t i = 0; while (i < nl && tolower((unsigned char)name[i]) == tolower((unsigned char)w[i])) i++;
+            if (i == nl) { *statId = num(s, "Id", -1); return MB_STAT; }
+        }
+        return -1;
+    }
+    if (!strcmp(kind, "Defense")) return MB_DEFENSE;
+    if (!strcmp(kind, "Damage")) return MB_DAMAGE;
+    if (!strcmp(kind, "Reach")) return MB_REACH;
+    if (!strcmp(kind, "Light")) return MB_LIGHT;
+    return -1;
 }
 
 /* SayCommandLine: a line of a command said by someone - their own line for it if the command has one - in a box, or over their head when they're out of sight. */
@@ -2750,6 +2910,92 @@ static int execute(Run *r, const Cmd *c)
             if (param(c, "Variable")[0]) set_var(param(c, "Variable"), items_charges_now(it));
             return 1;
         }
+        case C_CurseItem: case C_LiftCurse: case C_IsItemCursed: case C_EnchantItem: case C_RemoveEnchantments: case C_GetMagicBonus:
+        {
+            int who = actor_for(r, param(c, "Who")), id = who >= 0 ? world_actor_character(who) : -1;
+            if (id < 0) { lastResult = 0; return 1; }
+            Item *t[64];
+            int n = c->type == C_GetMagicBonus ? 0 : magic_targets(c, id, t, 64), count = 0;
+            switch (c->type)
+            {
+                case C_CurseItem: for (int i = 0; i < n; i++) items_set_cursed(t[i], 1); lastResult = n > 0; break;
+                case C_LiftCurse:
+                    for (int i = 0; i < n; i++)
+                    {
+                        if (items_cursed(t[i])) count++;
+                        items_set_cursed(t[i], 0);
+                        if (!strcmp(param(c, "Unequip"), "True") && !vitals_dead(id)) { Item *out = items_take_off(id, t[i]); if (out) put_down(out, who, -1, -1); }
+                    }
+                    magic_reconcile(id);
+                    lastResult = count > 0;
+                    break;
+                case C_IsItemCursed:
+                    for (int i = 0; i < n; i++) if (items_cursed(t[i])) count++;
+                    if (strncmp(param(c, "Which"), "Everything", 10) && count > 1) count = 1;
+                    if (param(c, "Variable")[0]) set_var(param(c, "Variable"), count);
+                    break;
+                case C_EnchantItem:
+                {
+                    int statId, kind = magic_kind_of(c, &statId);
+                    if (kind < 0) { char line[160]; snprintf(line, sizeof line, "Enchant Item: there is no stat named \"%s\" (Stat Editor).", param(c, "StatName")); game_log(line); lastResult = 0; break; }
+                    int amount = (int)formula_number(c, "Amount");
+                    for (int i = 0; i < n; i++) items_enchant(t[i], kind, statId, amount);
+                    magic_reconcile(id);
+                    lastResult = n > 0;
+                    break;
+                }
+                case C_RemoveEnchantments:
+                    for (int i = 0; i < n; i++) { if (items_enchant_count(t[i])) count++; items_clear_enchants(t[i]); }
+                    magic_reconcile(id);
+                    lastResult = count > 0;
+                    break;
+                case C_GetMagicBonus:
+                {
+                    int statId, kind = magic_kind_of(c, &statId);
+                    if (kind < 0) { lastResult = 0; break; }
+                    int total = kind == MB_REACH ? items_reach(id) : items_magic_total(id, kind, statId);
+                    if (param(c, "Variable")[0]) set_var(param(c, "Variable"), total);
+                    break;
+                }
+            }
+            return 1;
+        }
+        case C_GetEquippedItem:
+        {
+            int who = actor_for(r, param(c, "Who")), id = who >= 0 ? world_actor_character(who) : -1, slot = -1;
+            for (int s = 0; s < 15; s++) if (!strcmp(param(c, "Slot"), SLOT_NAME[s])) slot = s;
+            if (id < 0 || slot < 0) { lastResult = 0; return 1; }
+            Item *it = items_in_slot(id, slot);
+            if (param(c, "Variable")[0]) set_var(param(c, "Variable"), it ? items_item_id(it) : -1);
+            if (param(c, "NameVariable")[0]) script_set(param(c, "NameVariable"), value_text(it ? items_name(items_category(it), items_item_id(it)) : ""));
+            lastResult = it != NULL;
+            return 1;
+        }
+        case C_CombineItems:
+        {
+            int who = actor_for(r, param(c, "Who")), id = who >= 0 ? world_actor_character(who) : -1;
+            if (id < 0 || vitals_dead(id)) { lastResult = 0; return 1; }
+            int c1 = category_of(param(c, "Category")), i1 = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+            int c2 = category_of(param(c, "Category2")), i2 = param(c, "ItemId2")[0] ? atoi(param(c, "ItemId2")) : -1;
+            int c3 = category_of(param(c, "Category3")), i3 = param(c, "ItemId3")[0] ? atoi(param(c, "ItemId3")) : -1;
+            if (c1 < 0 || c2 < 0 || c3 < 0 || i1 < 0 || i2 < 0 || i3 < 0) { lastResult = 0; return 1; }
+            int q1 = (int)formula_number(c, "Quantity"), q2 = (int)formula_number(c, "Quantity2"), q3 = (int)formula_number(c, "Quantity3");
+            if (q1 < 1) q1 = 1;
+            if (q2 < 1) q2 = 1;
+            if (q3 < 1) q3 = 1;
+            int same = c1 == c2 && i1 == i2;
+            int enough = same ? items_count_free(id, c1, i1) >= q1 + q2 : items_count_free(id, c1, i1) >= q1 && items_count_free(id, c2, i2) >= q2;
+            if (!enough) { say_line(r, c, "Missing", who); lastResult = 0; return 1; }
+            static Item *out[256];
+            int taken = 0;
+            items_take(id, c1, i1, same ? q1 + q2 : q1, out, 256, &taken);
+            for (int i = 0; i < taken; i++) items_free(out[i]);
+            if (!same) { taken = 0; items_take(id, c2, i2, q2, out, 256, &taken); for (int i = 0; i < taken; i++) items_free(out[i]); }
+            int made = items_make_gifts(c3, i3, q3, out, 256);
+            for (int i = 0; i < made; i++) if (!items_give_to(id, out[i])) put_down(out[i], who, -1, -1);
+            lastResult = 1;
+            return 1;
+        }
         case C_HurtInArea:
         {
             int cx, cy, cf;
@@ -3698,6 +3944,15 @@ static void actors_stepping(void)
 void events_update(double ms, int paused)
 {
     expire_stat_changes();
+    if (!paused && (magicCheckMs -= ms) <= 0) /* a few times a second: everyone's worn magic up to date (GameTestWindow.UpdateMagicItems) */
+    {
+        magicCheckMs = 250;
+        for (int a = 0; a < world_actor_count(); a++)
+        {
+            int id = world_actor_character(a);
+            if (id >= 0 && !world_actor_gone(a) && !vitals_dead(id)) magic_reconcile(id);
+        }
+    }
     if (!paused) actors_stepping();
     if (arrival.on && (arrival.ms -= ms) <= 0) { arrival.on = 0; arrive_at(arrival.x, arrival.y, arrival.floor); screen_fade(0, 0, 0.4); }
     if (worldTrip.on == 1 && (worldTrip.ms -= ms) <= 0) worldTrip.on = 2; /* main takes the party there now */

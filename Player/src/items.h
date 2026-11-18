@@ -91,6 +91,25 @@ void items_use_one(int characterId, Item *it);
 void items_spill(Item *box, int x, int y, int onFloor);
 void items_spill_on(Item *box, const int *xs, const int *ys, int cells, int x, int y, int onFloor);
 
+/* ---- Magic weapons and armor (Engine/MagicItems.cs): bonus kinds as MagicBonusKind ---- */
+enum { MB_STAT = 0, MB_DEFENSE = 1, MB_DAMAGE = 2, MB_REACH = 3, MB_LIGHT = 4 };
+int items_cursed(const Item *it);
+void items_set_cursed(Item *it, int cursed);
+const char *items_cursed_text(const Item *it);
+int items_bonuses(const Item *it, int *kinds, int *stats, int *amounts, int max);
+int items_worn(int characterId, Item **out, int max);
+int items_magic_total(int characterId, int kind, int statId);
+int items_reach(int characterId);
+int items_magic_immune(int characterId, int type);
+int items_worn_cursed(int characterId, const Item *it);
+void items_enchant(Item *it, int kind, int statId, int amount);
+int items_enchant_count(const Item *it);
+void items_clear_enchants(Item *it);
+int items_instance_id(const Item *it);
+int items_magic_event(int objectId, int unequip);
+Item *items_take_off(int characterId, Item *it);
+int items_count_free(int characterId, int category, int itemId);
+
 /* ---- The inventory windows (gumps.c) ---- */
 Item *items_in_slot(int characterId, int slotKey);           /* built-in 0..14, custom 100 + its id */
 int items_slot_shown(int characterId, int slotKey);

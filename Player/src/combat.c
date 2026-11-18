@@ -238,13 +238,13 @@ static double tiles_between(int a, int b)
     return fmax(fabs(world_wrap_dx(ax - bx)), fabs(world_wrap_dy(ay - by))) / 8; /* the short way round a map that wraps */
 }
 
-/* Melee reach: neighbouring cells (diagonals too), within a few lifts. */
+/* Melee reach: neighbouring cells (diagonals too), within a few lifts - farther with Magic reach (the magic sword strikes 4 cells away). */
 static int in_reach(int a, int b)
 {
-    int ax, ay, af, bx, by, bf;
+    int ax, ay, af, bx, by, bf, reach = items_reach(id_of(a));
     world_actor_cell(a, &ax, &ay, &af);
     world_actor_cell(b, &bx, &by, &bf);
-    return abs(world_wrap_cells_x(ax - bx)) <= 1 && abs(world_wrap_cells_y(ay - by)) <= 1 && abs(world_actor_lift(a) - world_actor_lift(b)) <= 4;
+    return abs(world_wrap_cells_x(ax - bx)) <= reach && abs(world_wrap_cells_y(ay - by)) <= reach && abs(world_actor_lift(a) - world_actor_lift(b)) <= 4;
 }
 
 /* On the same floor (GameTestWindow.SameFloor): floors are apart - those on another one don't know the others are there. */
@@ -843,6 +843,8 @@ static int weapon_damage(int attacker, int defender, int points, int type)
         cJSON_ArrayForEach(t, get(a, "Immunities"))
             if (cJSON_IsNumber(t) && t->valueint == type) { world_sound_from_actor(num(a, "ImmuneSoundResourceId", -1), defender); return 0; } /* a metal clang */
     }
+    total += items_magic_total(id_of(defender), MB_DEFENSE, -1); /* Magic: weapons and armor that defend */
+    if (items_magic_immune(id_of(defender), type)) return 0;      /* Magic immunities of what they wear or hold */
     if (points >= 127 || type == D_LIGHTNING || type == D_ETHEREAL || type == D_SONIC) total = 0;
     if (total > 0) damage -= 1 + rnd(total);
     if (damage <= 0 && incapacitated(defender)) damage = str > 0 ? 1 + rnd(str) : 0; /* the defenceless get hurt anyway */
@@ -857,7 +859,7 @@ static void land_blow(int attacker, int defender, cJSON *weapon, cJSON *ammo)
 {
     party_hit_music(defender);
     cJSON *w = weapon_settings(weapon);
-    int points = w ? num(w, "Damage", 4) : 1, type = w ? num(w, "DamageType", D_NORMAL) : D_NORMAL, powers = w ? num(w, "Powers", 0) : 0;
+    int points = (w ? num(w, "Damage", 4) : 1) + items_magic_total(id_of(attacker), MB_DAMAGE, -1), type = w ? num(w, "DamageType", D_NORMAL) : D_NORMAL, powers = w ? num(w, "Powers", 0) : 0; /* + Magic / Enchant Item damage */
     if (ammo)
     {
         cJSON *a = get(ammo, "Ammo");
@@ -1083,6 +1085,8 @@ static int u8_damage(int attacker, int defender, cJSON *weapon, cJSON *ammo, int
         damage = u8_random(num(w, "U8DamageModifier", 0)) + num(w, "Damage", 4) + (ammo ? num(get(ammo, "Ammo"), "DamageBonus", 0) : 0) + str / 5;
     }
     else damage = u8_random(str / 2) + 1;
+    damage += items_magic_total(id_of(attacker), MB_DAMAGE, -1); /* Magic / Enchant Item damage */
+    if (items_magic_immune(id_of(defender), type)) return 0;      /* Magic immunities of what they wear or hold */
     int n = items_armor(id_of(defender), armor, 16), ac = 0;
     for (int i = 0; i < n; i++)
     {
@@ -1094,7 +1098,7 @@ static int u8_damage(int attacker, int defender, cJSON *weapon, cJSON *ammo, int
     }
     if (defender == 0 && u8Blocking) damage -= stat(defender, K_STRENGTH, 10) / 5; /* blocking */
     cJSON *dw = weapon_settings(wielded(defender, NULL));
-    ac += dw ? num(dw, "U8ArmourBonus", 0) : 0;
+    ac += (dw ? num(dw, "U8ArmourBonus", 0) : 0) + items_magic_total(id_of(defender), MB_DEFENSE, -1); /* + Magic defense */
     int acMod = 3 * ac;
     if (type == D_FIRE) acMod /= 2;          /* armour doesn't protect from fire as well */
     if (motionless(defender)) acMod /= 2;    /* stunned */

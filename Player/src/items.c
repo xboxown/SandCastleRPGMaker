@@ -37,6 +37,8 @@ struct Item
     char **learned; int learnedCount; /* a spellbook: the spells this copy has learned (LearnedSpellsRuntime) */
     int liquid, liquidSet;            /* a liquid container: what it holds (a liquid Food's id, -1 empty); liquidSet: its own, not as it starts */
     int facing;                       /* the way it faces when put down (FacingRuntime; 4 = south) */
+    int cursed;                       /* a magic item's curse: -1 as its kind says, else 0 / 1 (CursedRuntime) */
+    int enchKind[8], enchStat[8], enchAmount[8], enchCount; /* Enchant Item's bonuses on this copy (EnchantsRuntime) */
     Item **contents; int count, cap;
 };
 
@@ -103,7 +105,7 @@ static void remove_from(Item **list, int *count, const Item *item)
 static Item *new_item(int category, int itemId, int quantity)
 {
     Item *it = (Item *)calloc(1, sizeof(Item));
-    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1; it->cx = it->cy = UNPLACED; it->facing = 4;
+    it->category = category; it->itemId = itemId; it->quantity = quantity > 0 ? quantity : 1; it->locked = -1; it->burnLeft = -1; it->charges = -1; it->cx = it->cy = UNPLACED; it->facing = 4; it->cursed = -1;
     return it;
 }
 
@@ -121,6 +123,34 @@ void items_free(Item *item)
 void items_learn_spell(Item *it, const char *name);
 
 /* An inventory entry from the game (InventoryItemInstance), with what's inside. */
+/* A magic item's curse and Enchant Item bonuses, from an InventoryItemInstance or a map entry (CursedRuntime, EnchantsRuntime). */
+static void read_magic(Item *it, cJSON *j)
+{
+    cJSON *cursed = get(j, "CursedRuntime"), *b;
+    if (cJSON_IsBool(cursed)) it->cursed = cJSON_IsTrue(cursed);
+    it->enchCount = 0;
+    cJSON_ArrayForEach(b, get(j, "EnchantsRuntime"))
+        if (it->enchCount < 8) { it->enchKind[it->enchCount] = num(b, "Kind", 0); it->enchStat[it->enchCount] = num(b, "StatId", -1); it->enchAmount[it->enchCount++] = num(b, "Amount", 0); }
+}
+
+static void write_magic(const Item *it, cJSON *j, int replace)
+{
+    cJSON *cursed = it->cursed >= 0 ? cJSON_CreateBool(it->cursed) : NULL, *list = NULL;
+    if (it->enchCount)
+    {
+        list = cJSON_CreateArray();
+        for (int i = 0; i < it->enchCount; i++)
+        {
+            cJSON *b = cJSON_CreateObject();
+            cJSON_AddNumberToObject(b, "Kind", it->enchKind[i]); cJSON_AddNumberToObject(b, "StatId", it->enchStat[i]); cJSON_AddNumberToObject(b, "Amount", it->enchAmount[i]);
+            cJSON_AddItemToArray(list, b);
+        }
+    }
+    if (cursed) { if (replace && get(j, "CursedRuntime")) cJSON_ReplaceItemInObject(j, "CursedRuntime", cursed); else cJSON_AddItemToObject(j, "CursedRuntime", cursed); }
+    if (list) { if (replace && get(j, "EnchantsRuntime")) cJSON_ReplaceItemInObject(j, "EnchantsRuntime", list); else cJSON_AddItemToObject(j, "EnchantsRuntime", list); }
+    else if (replace && get(j, "EnchantsRuntime")) cJSON_DeleteItemFromObject(j, "EnchantsRuntime");
+}
+
 static Item *read_item(cJSON *j)
 {
     Item *it = new_item(num(j, "Category", CAT_OBJECT), num(j, "ItemId", -1), num(j, "Quantity", 1));
@@ -135,6 +165,7 @@ static Item *read_item(cJSON *j)
     it->burnLeft = cJSON_IsNumber(get(j, "BurnLeftRuntime")) ? get(j, "BurnLeftRuntime")->valuedouble : -1;
     it->charges = num(j, "ChargesRuntime", -1);
     it->facing = num(j, "FacingRuntime", 4);
+    read_magic(it, j);
     if (cJSON_IsNumber(get(j, "LiquidIdRuntime"))) { it->liquid = num(j, "LiquidIdRuntime", -1); it->liquidSet = 1; }
     cJSON *spell;
     cJSON_ArrayForEach(spell, get(j, "LearnedSpellsRuntime")) if (cJSON_IsString(spell)) items_learn_spell(it, spell->valuestring);
@@ -558,15 +589,33 @@ static void find_all(Item ***list, int *count, int category, int itemId, Found *
     }
 }
 
+static int is_worn(const Carrier *k, const Item *it);
+
+/* How many of it they carry that can be taken off them (a cursed thing they wear can't). */
+int items_count_free(int characterId, int category, int itemId)
+{
+    Carrier *k = carrier_of(characterId);
+    if (!k) return 0;
+    Found found[256];
+    int n = 0, have = 0;
+    find_all(&k->items, &k->count, category, itemId, found, &n, 256);
+    for (int i = 0; i < n; i++)
+        if (!(found[i].list == &k->items && is_worn(k, found[i].item) && items_cursed(found[i].item))) have += found[i].item->quantity > 0 ? found[i].item->quantity : 1;
+    return have;
+}
+
 int items_take(int characterId, int category, int itemId, int quantity, Item **out, int max, int *taken)
 {
     *taken = 0;
     Carrier *k = carrier_of(characterId);
     if (!k) return 0;
-    if (count_in(k->items, k->count, category, itemId) < quantity) return 0;
     Found found[256];
-    int n = 0;
+    int n = 0, have = 0;
     find_all(&k->items, &k->count, category, itemId, found, &n, 256);
+    for (int i = 0; i < n; i++) /* a cursed thing they wear can't be taken off them */
+        if (found[i].list == &k->items && is_worn(k, found[i].item) && items_cursed(found[i].item)) { found[i] = found[n - 1]; n--; i--; }
+    for (int i = 0; i < n; i++) have += found[i].item->quantity > 0 ? found[i].item->quantity : 1;
+    if (have < quantity) return 0;
     int left = quantity;
     for (int i = 0; i < n && left > 0 && *taken < max; i++)
     {
@@ -654,6 +703,7 @@ Item *items_unpark(int uid, int category, int itemId, int quantity)
     cJSON_ArrayForEach(placedKey, get(placed, "KeyIdsRuntime")) if (it->keyCount < 32 && cJSON_IsNumber(placedKey)) it->keys[it->keyCount++] = placedKey->valueint;
     if (cJSON_IsArray(get(placed, "KeyIdsRuntime"))) it->keysSet = 1;
     it->charges = num(placed, "ChargesRuntime", -1);
+    read_magic(it, placed); /* a magic item's curse and enchantments */
     it->facing = world_thing_facing(uid); /* picked up: the way it faced goes with it */
     return with_liquid_of(uid, it);
 }
@@ -721,6 +771,8 @@ int items_hand_lights(int characterId, int *brightness, int *gives)
         if (!d || num(d, "Type", 0) != 4) continue;
         brightness[n] = num(get(d, "Light"), "Brightness", 0); gives[n] = num(get(d, "Light"), "Gives", 0); n++;
     }
+    int magic = items_magic_total(characterId, MB_LIGHT, -1); /* Magic light while worn or held: the fire sword - it never burns out */
+    if (magic > 0) { brightness[n] = magic; gives[n] = 0; n++; }
     return n;
 }
 
@@ -919,6 +971,11 @@ int items_equip(int characterId, int category, int itemId, Item **dropped, int *
     int clear[2] = { slot, -1 };
     if (is_two_handed(it) && slot == S_RIGHT) clear[1] = S_LEFT;
     if (slot == S_LEFT && left_hand_locked(k)) clear[1] = S_RIGHT;
+    for (int c = 0; c < 2; c++) /* a cursed thing in the way won't come off */
+    {
+        Item *occupant = clear[c] < 0 ? NULL : in_slot(k, clear[c]);
+        if (occupant && occupant != it && items_cursed(occupant)) { snprintf(refusal, sizeof refusal, "%s", items_cursed_text(occupant)); return 0; }
+    }
     for (int c = 0; c < 2; c++)
     {
         if (clear[c] < 0) continue;
@@ -943,6 +1000,7 @@ int items_unequip(int characterId, int category, int itemId, Item **dropped)
         Item *it = k->items[i];
         int slot = slot_of_item(k, it);
         if (slot < 0 || it->category != category || it->itemId != itemId) continue;
+        if (items_cursed(it)) { snprintf(refusal, sizeof refusal, "%s", items_cursed_text(it)); return 0; } /* cursed: Lift Curse first */
         *dropped = stow_or_drop(k, slot, it);
         return 1;
     }
@@ -1033,6 +1091,110 @@ int items_armor(int characterId, cJSON **out, int max)
     for (int i = 0; k && i < k->count && n < max; i++)
         if (is_worn(k, k->items[i]) && object_type(k->items[i]) == 36) out[n++] = def_of(CAT_OBJECT, k->items[i]->itemId);
     return n;
+}
+
+/* ---------------- Magic weapons and armor (Engine/MagicItems.cs) ---------------- */
+
+static cJSON *magic_of(const Item *it)
+{
+    int t = object_type(it);
+    return t == 35 || t == 36 ? get(def_of(CAT_OBJECT, it->itemId), "Magic") : NULL;
+}
+
+int items_cursed(const Item *it) { return it->category == CAT_OBJECT && (it->cursed >= 0 ? it->cursed : cJSON_IsTrue(get(magic_of(it), "Cursed"))); }
+void items_set_cursed(Item *it, int cursed) { it->cursed = cursed ? 1 : 0; }
+const char *items_cursed_text(const Item *it) { const char *s = str(magic_of(it), "CursedText"); return *s ? s : "It will not come off - it is cursed!"; }
+
+/* MagicItems.Bonuses: its kind's own (stats, defense, reach - 1, light), then this copy's enchantments. */
+int items_bonuses(const Item *it, int *kinds, int *stats, int *amounts, int max)
+{
+    int n = 0, v;
+    cJSON *m = magic_of(it), *b;
+    if (m)
+    {
+        cJSON_ArrayForEach(b, get(m, "StatBonuses")) if (n < max && num(b, "Amount", 0)) { kinds[n] = MB_STAT; stats[n] = num(b, "StatId", -1); amounts[n++] = num(b, "Amount", 0); }
+        if ((v = num(m, "DefenseBonus", 0)) != 0 && n < max) { kinds[n] = MB_DEFENSE; stats[n] = -1; amounts[n++] = v; }
+        if ((v = num(m, "ReachCells", 1)) > 1 && n < max) { kinds[n] = MB_REACH; stats[n] = -1; amounts[n++] = v - 1; }
+        if ((v = num(m, "LightBrightness", 0)) > 0 && n < max) { kinds[n] = MB_LIGHT; stats[n] = -1; amounts[n++] = v; }
+    }
+    for (int i = 0; i < it->enchCount && n < max; i++) if (it->enchAmount[i]) { kinds[n] = it->enchKind[i]; stats[n] = it->enchStat[i]; amounts[n++] = it->enchAmount[i]; }
+    return n;
+}
+
+/* The objects they wear or hold (in a slot). */
+int items_worn(int characterId, Item **out, int max)
+{
+    Carrier *k = carrier_of(characterId);
+    int n = 0;
+    for (int i = 0; k && i < k->count && n < max; i++) if (k->items[i]->category == CAT_OBJECT && is_worn(k, k->items[i])) out[n++] = k->items[i];
+    return n;
+}
+
+int items_magic_total(int characterId, int kind, int statId)
+{
+    Item *worn[64];
+    int n = items_worn(characterId, worn, 64), total = 0, kinds[48], stats[48], amounts[48];
+    for (int i = 0; i < n; i++)
+    {
+        int b = items_bonuses(worn[i], kinds, stats, amounts, 48);
+        for (int j = 0; j < b; j++) if (kinds[j] == kind && (kind != MB_STAT || stats[j] == statId)) total += amounts[j];
+    }
+    return total;
+}
+
+/* Hand-to-hand reach in cells: 1 plus every reach bonus worn (the magic sword's 4 cells). */
+int items_reach(int characterId) { int r = 1 + items_magic_total(characterId, MB_REACH, -1); return r < 1 ? 1 : r; }
+
+int items_magic_immune(int characterId, int type)
+{
+    Item *worn[64];
+    int n = items_worn(characterId, worn, 64);
+    for (int i = 0; i < n; i++)
+    {
+        cJSON *t;
+        cJSON_ArrayForEach(t, get(magic_of(worn[i]), "Immunities")) if (cJSON_IsNumber(t) && t->valueint == type) return 1;
+    }
+    return 0;
+}
+
+/* Worn (in a slot) and cursed: it won't come off. */
+int items_worn_cursed(int characterId, const Item *it)
+{
+    Carrier *k = carrier_of(characterId);
+    return k && is_worn(k, it) && items_cursed(it);
+}
+
+void items_enchant(Item *it, int kind, int statId, int amount)
+{
+    int i;
+    for (i = 0; i < it->enchCount; i++) if (it->enchKind[i] == kind && it->enchStat[i] == statId) break;
+    if (i == it->enchCount) { if (it->enchCount >= 8) return; it->enchKind[i] = kind; it->enchStat[i] = statId; it->enchAmount[i] = 0; it->enchCount++; }
+    it->enchAmount[i] += amount;
+    if (it->enchAmount[i] == 0)
+    {
+        for (int j = i; j < it->enchCount - 1; j++) { it->enchKind[j] = it->enchKind[j + 1]; it->enchStat[j] = it->enchStat[j + 1]; it->enchAmount[j] = it->enchAmount[j + 1]; }
+        it->enchCount--;
+    }
+}
+int items_enchant_count(const Item *it) { return it->enchCount; }
+void items_clear_enchants(Item *it) { it->enchCount = 0; }
+int items_instance_id(const Item *it) { return it->instanceId; }
+
+/* An object kind's On Equip (0) / On Unequip (1) common event; -1 none. */
+int items_magic_event(int objectId, int unequip)
+{
+    cJSON *d = def_of(CAT_OBJECT, objectId);
+    int t = num(d, "Type", -1);
+    if (t != 35 && t != 36) return -1;
+    return num(get(d, "Magic"), unequip ? "OnUnequipCommonEventId" : "OnEquipCommonEventId", -1);
+}
+
+/* Off its slot into the pack (else returned, to be put down): Lift Curse's "take it off too". */
+Item *items_take_off(int characterId, Item *it)
+{
+    Carrier *k = carrier_of(characterId);
+    int slot = k ? slot_of_item(k, it) : -1;
+    return slot < 0 ? NULL : stow_or_drop(k, slot, it);
 }
 
 static int same_family(const char *a, const char *b)
@@ -1485,6 +1647,7 @@ cJSON *items_item_json(const Item *it)
     if (it->liquidSet) cJSON_AddNumberToObject(j, "LiquidIdRuntime", it->liquid);
     if (it->learnedCount) { cJSON *spells = cJSON_CreateArray(); for (int i = 0; i < it->learnedCount; i++) cJSON_AddItemToArray(spells, cJSON_CreateString(it->learned[i])); cJSON_AddItemToObject(j, "LearnedSpellsRuntime", spells); }
     if (it->doll) cJSON_AddItemToObject(j, "DollRuntime", dolls_state_json(it->doll));
+    write_magic(it, j, 0);
     return j;
 }
 
@@ -1530,6 +1693,7 @@ cJSON *items_save_thing(int uid, cJSON *entry)
         if (it->charges >= 0) put_into(entry, "ChargesRuntime", cJSON_CreateNumber(it->charges));
         if (it->keysSet) { cJSON *keys = cJSON_CreateArray(); for (int i = 0; i < it->keyCount; i++) cJSON_AddItemToArray(keys, cJSON_CreateNumber(it->keys[i])); put_into(entry, "KeyIdsRuntime", keys); } /* a keychain lying on the map */
         if (it->doll) put_into(entry, "DollRuntime", dolls_state_json(it->doll));
+        write_magic(it, entry, 1); /* a magic item's curse and enchantments */
         if (it->category == CAT_CONTAINER && it->itemId <= -1000) put_into(entry, "BodyOf", cJSON_CreateNumber(-1000 - it->itemId));
         break;
     }

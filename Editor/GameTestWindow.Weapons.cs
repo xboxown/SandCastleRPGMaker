@@ -90,6 +90,9 @@ public partial class GameTestWindow
                 return 0;
             }
         }
+        var magicWorn = WornMagic(defender);
+        armor += MagicItems.Total(magicWorn, MagicBonusKind.Defense); // Magic: weapons and armor that defend (Object Editor > Magic)
+        if (MagicItems.Immune(magicWorn, type)) return 0; // Magic immunities of what they wear or hold
         if (weaponPoints >= 127 || type is DamageType.Lightning or DamageType.Ethereal or DamageType.Sonic) armor = 0; // these ignore armor
         if (armor > 0) damage -= 1 + Rng.Next(armor);
         if (damage <= 0 && IsIncapacitated(defender)) damage = str > 0 ? 1 + Rng.Next(str) : 0; // the defenceless get hurt anyway
@@ -100,7 +103,7 @@ public partial class GameTestWindow
     private void LandBlow(CharacterDefinition attacker, CharacterDefinition defender, WorldObject? weapon, WorldObject? ammo)
     {
         PartyHitMusic(defender); // from the danger music to the battle music (GameTestWindow.CombatMusic.cs)
-        int points = weapon?.Weapon.Damage ?? 1; // bare hands: 1
+        int points = (weapon?.Weapon.Damage ?? 1) + MagicTotal(attacker, MagicBonusKind.Damage); // bare hands: 1; plus Magic / Enchant Item damage
         var type = weapon?.Weapon.DamageType ?? DamageType.Normal;
         var powers = weapon?.Weapon.Powers ?? WeaponPowers.None;
         if (ammo is not null)

@@ -97,6 +97,11 @@ public class InventoryItemInstance : IHasContainerContents, IHasDollState
 
     /// <summary>An object's own paperdoll as it is now (a radio's door open, its tape in) - goes with it (see ObjectInstance).</summary>
     public DollState? DollRuntime { get; set; }
+
+    /// <summary>This copy's curse: null = as its Object Editor > Magic says; Curse Item / Lift Curse set it. Goes with it.</summary>
+    public bool? CursedRuntime { get; set; }
+    /// <summary>Bonuses put on this copy alone (Enchant Item) - on top of its kind's own. Goes with it.</summary>
+    public List<MagicBonus>? EnchantsRuntime { get; set; }
 }
 
 /// <summary>Where one equipment slot's icon draws on the paperdoll canvas when something is equipped there - real, authored, per-character pixel position (not derived from anything), so the designer can genuinely move each slot around to fit their own paperdoll body art, per spec.</summary>

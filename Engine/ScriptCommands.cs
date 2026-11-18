@@ -81,6 +81,14 @@ public static class ScriptCommands
     /// <summary>The tab of the commands only an Ultima 6 project has.</summary>
     public const string Ultima6Tab = "Ultima 6";
     public static bool IsUltima6Only(string tab) => tab is Ultima6Tab;
+    /// <summary>Magic weapons and armor: curses, enchantments, what's worn, combining items.</summary>
+    public const string EquipmentTab = "Equipment";
+    private static readonly string[] SlotNames = Enum.GetNames<EquipmentSlot>();
+    private static ScriptField Which(bool everything = true) => everything
+        ? Choice("Which", "Which item", "What they wear or hold of the item below", "What is in the slot below", "Everything they wear or hold")
+        : Choice("Which", "Which item", "What they wear or hold of the item below", "What is in the slot below");
+    private static ScriptField ItemField(string label = "Item (optional - for \"of the item below\")") => new("Category", label, ScriptFieldKind.Item);
+    private static ScriptField Slot() => Choice("Slot", "Slot (for \"in the slot below\")", SlotNames);
 
     private static ScriptField F(string key, string label, ScriptFieldKind kind = ScriptFieldKind.Formula, string def = "", string help = "", params string[] options) =>
         new(key, label, kind, def, options.Length > 0 ? options : null, help);
@@ -360,6 +368,26 @@ public static class ScriptCommands
             new[] { Who("Who carries it"), new("Category", "Item", ScriptFieldKind.Item), Choice("Operation", "Do", "Read", "Set", "Add"), F("Amount", "Amount (formula)", def: "1"), Var("Variable", "Into the variable (optional)") }, "{Operation} {Category} of {Who}"),
         new(EventCommandType.HurtInArea, "Hurt In Area", AreasTab, "Areas & Rituals", "Everyone chosen around someone, a spot or this object takes this damage, of this type, by their own rules for it (Character Editor > Health). Grant Peace: Undead, only those with a rule for it. Who is the one doing it: never hurt, and gets the experience for a kill.",
             new[] { Choice("Around", "Around", "Who (below)", "A spot (below)", "This object"), Who("Who does it"), new("X", "Spot", ScriptFieldKind.Spot), F("Cells", "Within (map cells)", def: "5"), F("Amount", "Damage (formula)", def: "10"), Choice("DamageType", "Damage type", Enum.GetNames<DamageType>()), Choice("Affects", "Who it strikes", "Everyone else", "Enemies of Who", "Only those with a rule for this type") }, "{Amount} {DamageType} within {Cells}"),
+
+        // ---- Magic weapons and armor (Object Editor > Weapon / Armor > Magic; Engine/MagicItems.cs) ----
+        new(EventCommandType.CurseItem, "Curse Item", EquipmentTab, "Curses", "Curses what someone wears or holds: it won't come off (dragged, unequipped, dropped) until Lift Curse. A trap that curses the sword in your hand, a witch's revenge. Only that copy is cursed.",
+            new[] { Who(), Which(), ItemField(), Slot() }, "{Which} of {Who}"),
+        new(EventCommandType.LiftCurse, "Lift Curse", EquipmentTab, "Curses", "Lifts the curse from what someone wears or holds - it can come off again. A Remove Curse spell, a healer's paid service (take the gold first with Remove Item), a quest done. Last command succeeded: something was cursed.",
+            new[] { Who(), Which(), ItemField(), Slot(), Check("Unequip", "Take it off too (into the pack)") }, "{Which} of {Who}"),
+        new(EventCommandType.IsItemCursed, "Is Item Cursed", EquipmentTab, "Curses", "Whether what someone wears or holds is cursed (1) or not (0) - Everything: how many cursed things they wear - into a variable. For a healer: \"Thou art cursed! 100 gold to lift it.\"",
+            new[] { Who(), Which(), ItemField(), Slot(), Var() }, "{Variable} = cursed: {Which} of {Who}"),
+        new(EventCommandType.EnchantItem, "Enchant Item", EquipmentTab, "Enchantments", "Puts a bonus on one copy someone wears or holds, on top of its own magic: a stat (+ or -, any stat, custom ones too), defense, damage, reach (cells) or light. It works while the item is worn and goes wherever the copy goes. A blacksmith's sharpening, an enchanter's shop, a blessing.",
+            new[] { Who(), Which(false), ItemField(), Slot(), Choice("Kind", "Bonus", "Stat (below)", "Defense", "Damage", "Reach", "Light"),
+                    F("StatName", "Stat (its name in the Stat Editor)", ScriptFieldKind.Text, "Strength"), F("Amount", "Amount (formula; below 0 takes away)", def: "2") }, "{Kind} {Amount} on {Which} of {Who}"),
+        new(EventCommandType.RemoveEnchantments, "Remove Enchantments", EquipmentTab, "Enchantments", "Takes away every Enchant Item bonus from what someone wears or holds (the item's own magic stays). A disenchanting trap, a dispel.",
+            new[] { Who(), Which(), ItemField(), Slot() }, "{Which} of {Who}"),
+        new(EventCommandType.GetMagicBonus, "Get Magic Bonus", EquipmentTab, "Enchantments", "The total bonus everything someone wears gives - a stat, defense, damage, reach or light - into a variable. Custom stats: read it in a common event and do anything with it.",
+            new[] { Who(), Choice("Kind", "Bonus", "Stat (below)", "Defense", "Damage", "Reach", "Light"), F("StatName", "Stat (its name in the Stat Editor)", ScriptFieldKind.Text, "Strength"), Var() }, "{Variable} = {Kind} of {Who}"),
+        new(EventCommandType.GetEquippedItem, "Get Equipped Item", EquipmentTab, "What's Worn", "What someone has in a slot: its Object Editor id into a variable (-1: nothing there), and its name into another (optional).",
+            new[] { Who(), Choice("Slot", "Slot", SlotNames), Var("Variable", "Its id into"), Var("NameVariable", "Its name into (optional)") }, "{Variable} = {Slot} of {Who}"),
+        new(EventCommandType.CombineItems, "Combine Items", EquipmentTab, "What's Worn", "Two items someone carries become a third: the hilt and the blade become a sword, a gem set into a ring. Both must be there (anywhere they carry them) or nothing happens and Last command succeeded is false.",
+            new[] { Who(), new("Category", "First item", ScriptFieldKind.Item), F("Quantity", "How many of it", def: "1"), new("Category2", "Second item", ScriptFieldKind.Item), F("Quantity2", "How many of it", def: "1"),
+                    new("Category3", "Makes", ScriptFieldKind.Item), F("Quantity3", "How many", def: "1"), F("Missing", "Said when something is missing (optional)", ScriptFieldKind.Text) }, "{Category} + {Category2} -> {Category3}"),
 
         // ---- Ultima 6 projects only: the keyboard (Engine/U6Keys.cs) ----
         new(EventCommandType.U6AskKey, "Ask For Key", Ultima6Tab, "Keyboard", "The event waits for the player to press a key (the text area says so), and that key does this action from now on - kept for good, through new games and loads. A key can be held with Ctrl, Shift or Alt. The Cancel key: no change (\"last command succeeded\" is false).",

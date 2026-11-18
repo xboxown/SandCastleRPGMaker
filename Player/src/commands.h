@@ -229,6 +229,15 @@ enum Command
     C_U6SceneChoice = 222,
     C_U6SceneRemove = 223,
     C_U6SceneEnd = 224,
+    /* Magic weapons and armor (Engine/MagicItems.cs) */
+    C_CurseItem = 225,
+    C_LiftCurse = 226,
+    C_EnchantItem = 227,
+    C_RemoveEnchantments = 228,
+    C_GetEquippedItem = 229,
+    C_IsItemCursed = 230,
+    C_CombineItems = 231,
+    C_GetMagicBonus = 232,
     C_COUNT
 };
 
@@ -420,6 +429,7 @@ static const char *const COMMAND_NAMES[] =
     "U6 Run Level Event", "U6 Change Portrait", "U6 Conversation Style", "Light Source", "U6 Scene Type Text", "U6 Scene Pick Picture",
     "U6 Set Gender", "U6 Scene Distribute Points", "U6 Scene Begin", "U6 Scene Picture", "U6 Scene Text", "U6 Scene Wait Key", "U6 Scene Choice",
     "U6 Scene Remove", "U6 Scene End",
+    "Curse Item", "Lift Curse", "Enchant Item", "Remove Enchantments", "Get Equipped Item", "Is Item Cursed", "Combine Items", "Get Magic Bonus",
 };
 
 #endif

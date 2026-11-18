@@ -139,7 +139,7 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 AddLabel(field.Label);
                 var row = CommandFields.Row(Rows);
                 bool optional = field.Label.Contains("optional", StringComparison.OrdinalIgnoreCase);
-                var item = new ItemKindField(this, row, existing, optional ? "(none)" : null);
+                var item = new ItemKindField(this, row, existing, optional ? "(none)" : null, ItemSuffix(field.Key));
                 _savers.Add(c => { if (!item.Validate()) return false; item.Save(c); return true; });
                 break;
             }
@@ -442,11 +442,14 @@ public class ScriptCommandWindow : FactionCommandWindowBase
         return text.Replace("()", "").Replace("  ", " ").Trim();
     }
 
+    /// <summary>An item box's key suffix: "Category" -> "", "Category2" -> "2" (its keys Category2 / ItemId2).</summary>
+    private static string ItemSuffix(string key) => key.StartsWith("Category") ? key["Category".Length..] : "";
+
     private static string Show(ScriptField field, EventCommand command) => field.Kind switch
     {
         ScriptFieldKind.Who => WhoChoice.Describe(command.Get(field.Key)),
         ScriptFieldKind.Vehicle => command.Get("VehicleName"),
-        ScriptFieldKind.Item => command.Get("ItemId") is "" or "-1" ? "(none)" : CommandFields.ItemName(command),
+        ScriptFieldKind.Item => command.Get("ItemId" + ItemSuffix(field.Key)) is "" or "-1" ? "(none)" : CommandFields.ItemName(command, ItemSuffix(field.Key)),
         ScriptFieldKind.Thing => command.Get("ThingName") is { Length: > 0 } name ? $"{name} at ({command.Get("X")}, {command.Get("Y")})" : "?",
         ScriptFieldKind.Spot => SpotText(command, field.Key.EndsWith("X") ? field.Key[..^1] : field.Key),
         ScriptFieldKind.Paperdoll => command.Get("DesignName") is { Length: > 0 } doll ? doll : "this paperdoll",

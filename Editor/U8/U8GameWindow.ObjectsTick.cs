@@ -50,6 +50,7 @@ public partial class U8GameWindow
         CloseDoorsBehindNpcs();
         UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
+        UpdateMagicItems(elapsedMs); // worn magic: stat bonuses, On Equip / On Unequip (.MagicItems.cs)
         UpdateProjectiles(elapsedMs); // shooting traps, and whatever is flying
         UpdateThrownU8(elapsedMs); // something the Avatar threw (U8GameWindow.U8Reach.cs)
         UpdateEggs(elapsedMs); // spawn points and the other eggs (U8GameWindow.Spawns.cs)

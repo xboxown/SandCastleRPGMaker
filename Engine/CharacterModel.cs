@@ -226,6 +226,10 @@ public class CharacterDefinition
     /// <summary>Real, confirmed new field - same exact real role as EquippedSlots, for this character's own custom slots instead of the fixed built-in list. Keyed by CustomEquipmentSlot.Id (never by its display Name, which can be renamed freely without orphaning whatever's equipped here).</summary>
     public Dictionary<int, int> CustomEquippedSlots { get; set; } = new();
 
+    /// <summary>In play: the stat changes worn magic items made on this character (taken back exactly as each comes off), and the items whose On Equip has run.</summary>
+    public List<AppliedMagic>? MagicAppliedRuntime { get; set; }
+    public List<WornMagicItem>? MagicWornRuntime { get; set; }
+
     private int _nextInventoryInstanceId = 1;
     /// <summary>Never below the highest id already held: the counter isn't serialized, so after a load it would otherwise restart at 1 and hand out an id an item already has (two items then both show as in the same slot).</summary>
     public int GetNextInventoryInstanceId()

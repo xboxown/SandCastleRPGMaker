@@ -154,6 +154,8 @@ public partial class U6GameWindow
                 if (member.Inventory.FirstOrDefault(i => i.InstanceId == id) is { IsLitRuntime: true } held && DefinitionOf(held) is { Type: ObjectType.LightSource } obj)
                     Add(Strength(x, y, obj.Light.Brightness), obj);
             }
+            int magicLight = MagicTotal(member, MagicBonusKind.Light); // Magic light while worn or held: the fire sword - it never burns out
+            if (magicLight > 0) total += Strength(x, y, magicLight);
         }
         return (total, gives);
     }

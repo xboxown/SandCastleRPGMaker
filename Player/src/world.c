@@ -3754,7 +3754,7 @@ int world_light_strength(int *gives)
         int dx = (int)fabs(floor((who->px - player.px) / UNIT + 0.5)), dy = (int)fabs(floor((who->py - player.py) / UNIT + 0.5));
         int strength = 75 - 2 * dx - 3 * dy;
         if (strength <= 0) continue;
-        int brightness[2], lightGives[2], n = items_hand_lights(who->characterId, brightness, lightGives);
+        int brightness[3], lightGives[3], n = items_hand_lights(who->characterId, brightness, lightGives); /* two hands and Magic light */
         for (int k = 0; k < n; k++)
         {
             total += strength * brightness[k];

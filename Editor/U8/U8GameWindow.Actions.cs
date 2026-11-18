@@ -511,6 +511,9 @@ public partial class U8GameWindow
         if (IsPaperdollItemTwoHanded(item) && Equals(slot, EquipmentSlot.RightHand)) clear.Add(EquipmentSlot.LeftHand);
         if (Equals(slot, EquipmentSlot.LeftHand) && IsPaperdollLeftHandLocked(who)) clear.Add(EquipmentSlot.RightHand); // a two-handed weapon holds the left hand
         foreach (var key in clear)
+            if (TryGetEquippedInstanceId(who, key, out int occupantId) && who.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { } cursedOccupant && !ReferenceEquals(cursedOccupant, item) && IsWornCursed(who, cursedOccupant))
+                return Cancel(MagicItems.CursedText(ObjectDef(cursedOccupant))); // a cursed thing in the way won't come off
+        foreach (var key in clear)
             if (TryGetEquippedInstanceId(who, key, out int occupantId) && who.Inventory.FirstOrDefault(i => i.InstanceId == occupantId) is { } occupant && !ReferenceEquals(occupant, item))
                 StowOrDrop(who, key, occupant);
         if (OriginOfCarried(who, item, holder) is not { } origin) return false;
@@ -525,6 +528,7 @@ public partial class U8GameWindow
         if (!Enum.TryParse<ReferencedItemCategory>(command.Get("Category"), out var category) || !int.TryParse(command.Get("ItemId"), out int itemId)) return false;
         var worn = ItemsInSlots(who).FirstOrDefault(e => e.Item.Category == category && e.Item.ItemId == itemId);
         if (worn.Item is null) return Cancel($"{who.Name} isn't wearing or holding it.");
+        if (IsWornCursed(who, worn.Item)) return Cancel(MagicItems.CursedText(ObjectDef(worn.Item))); // cursed: Lift Curse first
         StowOrDrop(who, worn.Slot, worn.Item);
         RefreshAfterMove();
         return true;

@@ -136,7 +136,9 @@ public enum EventCommandType
     U6SetCombatMode,
     U6RiseLevel, U6RunLevelEvent, U6ChangePortrait, U6ConversationStyle, LightSource,
     U6SceneTypeText, U6ScenePickPicture, U6SetGender, U6SceneDistributePoints,
-    U6SceneBegin, U6ScenePicture, U6SceneText, U6SceneWaitKey, U6SceneChoice, U6SceneRemove, U6SceneEnd
+    U6SceneBegin, U6ScenePicture, U6SceneText, U6SceneWaitKey, U6SceneChoice, U6SceneRemove, U6SceneEnd,
+    // ---- Magic weapons and armor (Engine/MagicItems.cs) ----
+    CurseItem, LiftCurse, EnchantItem, RemoveEnchantments, GetEquippedItem, IsItemCursed, CombineItems, GetMagicBonus
 }
 
 /// <summary>

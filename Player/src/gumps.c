@@ -955,6 +955,7 @@ static int start_drag(const Target *t)
     }
     else if ((t->kind == T_SLOT || t->kind == T_ROW || t->kind == T_BOX_ITEM) && t->item)
     {
+        if (t->kind == T_SLOT && items_cursed(t->item)) { gumps_refuse(P_RED_X, items_cursed_text(t->item)); return 0; } /* a cursed item won't come off (Lift Curse) */
         if (t->kind == T_BOX_ITEM && gumps[t->gump].uid > 0)
         {
             int c, i, q, x, y, n;

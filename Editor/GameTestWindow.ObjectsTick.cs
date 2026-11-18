@@ -49,6 +49,7 @@ public partial class GameTestWindow
         CloseDoorsBehindNpcs();
         UpdateNewTypeObjects(elapsedMs); // plants, fuses, buttons, crafting, roofs
         UpdateLighting(elapsedMs);
+        UpdateMagicItems(elapsedMs); // worn magic: stat bonuses, On Equip / On Unequip (.MagicItems.cs)
         UpdateProjectiles(elapsedMs); // shooting traps, and whatever is flying
         UpdateEggs(elapsedMs); // spawn points and the other eggs (GameTestWindow.Spawns.cs)
         UpdateWeather(elapsedMs); // rain, snow, clouds, lightning

@@ -159,12 +159,16 @@ internal sealed class ItemKindField
     private readonly string? _anyText;
     public ItemReference? Item { get; private set; }
 
-    public ItemKindField(Window owner, Panel parent, EventCommand? existing, string? anyText = null)
+    /// <summary>Its keys: "Category" + suffix and "ItemId" + suffix (a second item: suffix "2").</summary>
+    private readonly string _suffix;
+
+    public ItemKindField(Window owner, Panel parent, EventCommand? existing, string? anyText = null, string suffix = "")
     {
         _owner = owner;
         _anyText = anyText;
-        if (existing is not null && int.TryParse(existing.Get("ItemId"), out int id) && id >= 0 && Enum.TryParse<ReferencedItemCategory>(existing.Get("Category"), out var category))
-            Item = new ItemReference { Category = category, ItemId = id, DisplayName = CommandFields.ItemName(existing) };
+        _suffix = suffix;
+        if (existing is not null && int.TryParse(existing.Get("ItemId" + suffix), out int id) && id >= 0 && Enum.TryParse<ReferencedItemCategory>(existing.Get("Category" + suffix), out var category))
+            Item = new ItemReference { Category = category, ItemId = id, DisplayName = CommandFields.ItemName(existing, suffix) };
         _button.Click += (_, _) =>
         {
             var picker = new SelectItemPickerWindow(ProjectSession.BooksProvider?.Invoke() ?? new BookDatabase(), ProjectSession.ObjectsProvider?.Invoke() ?? new ObjectDatabase(),
@@ -193,8 +197,8 @@ internal sealed class ItemKindField
 
     public void Save(EventCommand command)
     {
-        command.Parameters["Category"] = Item?.Category.ToString() ?? "";
-        command.Parameters["ItemId"] = Item?.ItemId.ToString() ?? "-1";
+        command.Parameters["Category" + _suffix] = Item?.Category.ToString() ?? "";
+        command.Parameters["ItemId" + _suffix] = Item?.ItemId.ToString() ?? "-1";
     }
 }
 

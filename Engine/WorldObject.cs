@@ -130,6 +130,8 @@ public class WorldObject
     public AmmoSettings Ammo { get; set; } = new();
     public WeaponSettings Weapon { get; set; } = new();
     public ArmorSettings Armor { get; set; } = new();
+    /// <summary>A weapon's or armor's magic while worn or held (Object Editor > Weapon / Armor > Magic).</summary>
+    public MagicSettings Magic { get; set; } = new();
     public MoneySettings Money { get; set; } = new();
     public FurnitureSettings Furniture { get; set; } = new();
     /// <summary>A piece of a vehicle (Object Editor > Vehicle part): what it's for in it.</summary>
@@ -324,6 +326,9 @@ public class ObjectInstance : IHasDollState
     public double FuseRuntime { get; set; } = -1;
     /// <summary>Who this one belongs to in play, over its Object Editor Belong To (a dish a waiter served: the customer's). -1 = as the Object Editor says.</summary>
     public int OwnerIdRuntime { get; set; } = -1;
+    /// <summary>A weapon's or armor's curse and enchantments, carried with it when it's put down (see InventoryItemInstance).</summary>
+    public bool? CursedRuntime { get; set; }
+    public List<MagicBonus>? EnchantsRuntime { get; set; }
     /// <summary>Who this placed copy belongs to (Map Editor, right-click > Belongs to): Mary's loom, Tom's shears. Over the Object Editor's Belong To; -1 = as the Object Editor says. Workers use their own things first.</summary>
     public int BelongsToId { get; set; } = -1;
 }

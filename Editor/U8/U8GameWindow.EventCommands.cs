@@ -150,7 +150,7 @@ public partial class U8GameWindow
         {
             foreach (var item in list)
             {
-                if (item.Category == category && item.ItemId == itemId) found.Add((item, list));
+                if (item.Category == category && item.ItemId == itemId && !(ReferenceEquals(list, carrier.Inventory) && IsWornCursed(carrier, item))) found.Add((item, list)); // a cursed thing they wear can't be taken off them
                 Walk(item.Contents);
             }
         }
