@@ -455,6 +455,21 @@ public sealed class AppleIIgsEmulatorSettings
     }
 
     /// <summary>
+    /// A config.kegs line whose path is relative (a disk "s7d3 = ../Games.po", the ROM "g_cfg_rom_path = ../ROM") made
+    /// whole from the emulator's folder: the copy is read from the test folder, where the relative path would be wrong.
+    /// </summary>
+    private static string Absolute(string line, string emuFolder)
+    {
+        int eq = line.IndexOf('=');
+        if (eq < 0 || line.TrimStart().StartsWith("#")) return line;
+        string key = line[..eq].Trim();
+        bool isPath = key == "g_cfg_rom_path" || key == "g_cfg_charrom_path" || System.Text.RegularExpressions.Regex.IsMatch(key, @"^s\d+d\d+$");
+        string value = line[(eq + 1)..].Trim();
+        if (!isPath || value.Length == 0 || value.StartsWith("#") || Path.IsPathRooted(value)) return line;
+        try { return $"{key} = {Path.GetFullPath(Path.Combine(emuFolder, value))}"; } catch { return line; }
+    }
+
+    /// <summary>
     /// Starts the emulator: GS/OS's disk as the first hard disk (s7d1, it boots), the game's disk as the second (s7d2), the
     /// accelerator on. KEGS gets its own config.kegs in the test folder (a copy of the one beside it, if any, so its ROM and
     /// settings stay), started with -cfg.
@@ -465,7 +480,7 @@ public sealed class AppleIIgsEmulatorSettings
         string cfg = Path.Combine(folder, "config.kegs");
         var lines = new List<string>();
         string own = Path.Combine(emuFolder, "config.kegs");
-        if (File.Exists(own)) lines.AddRange(File.ReadAllLines(own));
+        if (File.Exists(own)) lines.AddRange(File.ReadAllLines(own).Select(l => Absolute(l, emuFolder)));
         else lines.Add("# KEGS configuration file version 1.07");
         void Set(string key, string value)
         {
