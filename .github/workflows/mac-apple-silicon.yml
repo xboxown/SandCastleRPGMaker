@@ -1,0 +1,60 @@
+# The Mac player built and started on a real Apple silicon Mac (GitHub's M1 machines, free for public repositories) at
+# every push that touches the player - the user has no Apple silicon Mac. It builds Game.app as Player/build_mac.sh does
+# (one program for Intel and Apple silicon), checks the Apple silicon part is in it, starts that part, and keeps the
+# result (GameMac.zip) for 30 days: Actions > this run > Artifacts.
+name: Mac player (Apple silicon)
+
+on:
+  push:
+    paths:
+      - "Player/**"
+      - ".github/workflows/mac-apple-silicon.yml"
+  workflow_dispatch:
+
+jobs:
+  apple-silicon:
+    runs-on: macos-14
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: The machine
+        run: |
+          echo "Processor: $(uname -m)   macOS $(sw_vers -productVersion)"
+          test "$(uname -m)" = "arm64"
+          echo "::notice title=Machine::Apple silicon ($(uname -m)), macOS $(sw_vers -productVersion)"
+
+      - name: Build the Mac player (build_mac.sh)
+        run: bash Player/build_mac.sh
+
+      - name: The Apple silicon part is in it
+        run: |
+          GAME=Player/build/mac/Game.app/Contents/MacOS/Game
+          lipo -info "$GAME"
+          lipo -info "$GAME" | grep -q arm64
+          codesign --verify --verbose "Player/build/mac/Game.app"
+          echo "::notice title=Built::$(lipo -info "$GAME" | sed 's/.*: //') - signed ad hoc"
+
+      - name: It starts on Apple silicon
+        run: |
+          GAME=Player/build/mac/Game.app/Contents/MacOS/Game
+          # No game's data yet: the player must get as far as loading it and say why it can't - not crash.
+          # (It then shows a message box that nobody here can close, so it is stopped after 20 seconds.)
+          mkdir -p /tmp/nogame
+          ( SDL_VIDEODRIVER=dummy SDL_AUDIODRIVER=dummy arch -arm64 "$GAME" nosound window /tmp/nogame > /tmp/run.txt 2>&1 & echo $! > /tmp/pid )
+          for i in $(seq 1 20); do sleep 1; kill -0 $(cat /tmp/pid) 2>/dev/null || break; done
+          kill $(cat /tmp/pid) 2>/dev/null || true
+          echo "--- what it said:"; cat /tmp/run.txt
+          if grep -q "The game couldn't start" /tmp/run.txt; then
+            echo "::notice title=Started::the Apple silicon player ran and reached the game's data (none given, as expected)"
+          else
+            echo "::error title=Did not start::the Apple silicon player didn't reach loading the game - see the log above"
+            exit 1
+          fi
+
+      - name: Keep GameMac.zip
+        uses: actions/upload-artifact@v4
+        with:
+          name: GameMac
+          path: Player/build/mac/GameMac.zip
+          retention-days: 30
