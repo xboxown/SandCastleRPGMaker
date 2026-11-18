@@ -324,6 +324,8 @@ public static class SuperHiRes
 ///        u16 labels, each: u16 x, u16 y (top), u16 colour (0-15; $FFFF: the brightest), u8 length, text, 0
 ///        u16 portrait x, y, width, height; u16 name x, y, width, height; u16 text colour, keyword colour ($FFFF: the brightest)
 ///        u16 carried things' grid: x, y, columns, rows, cell (columns 0: none)
+///        u16 the panel: x, y, width, height (width 0: none), then its portrait view: width/2 x height bytes (the HUD as it
+///        is there in that view, the member's portrait in it), u16 labels (its stats, as the labels above)
 ///   words: u16 count, each u8 length, text, 0 - you say, bye, no help, funny no response, talk, nothing, talking to
 ///          yourself, you see {0}, {1} gets {0}, not possible, out of range, look, get, use, locked, drop, where?,
 ///          {1} drops {0}, the Avatar's name (always the last)
@@ -333,11 +335,11 @@ public static class SuperHiRes
 ///          (Engine/AppleIIgsTalk.cs)
 ///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 6: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
+/// Version 7: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 6;
+    public const ushort Version = 7;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -353,6 +355,10 @@ public sealed class AppleIIgsGamePack
     public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)> Objects { get; } = new();
     /// <summary>The HUD's Carried Items grid (Columns 0: none).</summary>
     public (int X, int Y, int Columns, int Rows, int Cell) CarriedGrid { get; set; }
+    /// <summary>The HUD's panel (Width 0: none) and its portrait view: the pixels there (width/2 x height bytes) and its words (the stats).</summary>
+    public (int X, int Y, int Width, int Height) PanelRect { get; set; }
+    public byte[]? PortraitPanel { get; set; }
+    public List<(int X, int Y, int Color, string Text)> PortraitLabels { get; } = new();
     public List<int> TileNames { get; } = new();
     public List<string> Names { get; } = new();
     /// <summary>A name's number in Names (the same name once); "" = $FFFF.</summary>
@@ -429,6 +435,15 @@ public sealed class AppleIIgsGamePack
         foreach (var r in new[] { PortraitRect, NameRect }) { w.Write((ushort)r.X); w.Write((ushort)r.Y); w.Write((ushort)r.Width); w.Write((ushort)r.Height); }
         w.Write((ushort)TextColor); w.Write((ushort)KeywordColor);
         w.Write((ushort)(CarriedGrid.X & ~1)); w.Write((ushort)CarriedGrid.Y); w.Write((ushort)CarriedGrid.Columns); w.Write((ushort)CarriedGrid.Rows); w.Write((ushort)CarriedGrid.Cell);
+        bool panel = PortraitPanel is not null && PanelRect.Width > 0;
+        w.Write((ushort)(panel ? PanelRect.X & ~1 : 0)); w.Write((ushort)PanelRect.Y); w.Write((ushort)(panel ? PanelRect.Width & ~1 : 0)); w.Write((ushort)PanelRect.Height);
+        if (panel) w.Write(PortraitPanel!);
+        w.Write((ushort)PortraitLabels.Count);
+        foreach (var (x, y, color, text) in PortraitLabels)
+        {
+            var t = Ascii(text, 40);
+            w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)color); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0);
+        }
         w.Write((ushort)Words.Count);
         foreach (var word in Words) { var t = Ascii(word, 60); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0); }
         w.Write((ushort)Names.Count);

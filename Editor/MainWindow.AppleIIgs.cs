@@ -456,9 +456,12 @@ public partial class MainWindow
             characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
         }
         if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
-        var hud = ComposeHud(pack);
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()));
+        var hud = ComposeHud(pack, out var portraitPanel);
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()));
         if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
+        if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);
+        for (int i = 0; i < pack.PortraitLabels.Count; i++)
+            if (pack.PortraitLabels[i].Color < 0) pack.PortraitLabels[i] = pack.PortraitLabels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.PortraitLabels[i].Color - 1) | 0xFF000000u, false) };
         for (int i = 0; i < pack.Labels.Count; i++)
             if (pack.Labels[i].Color < 0) pack.Labels[i] = pack.Labels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.Labels[i].Color - 1) | 0xFF000000u, false) };
         foreach (var px in tilePixels) pack.Tiles.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: false));
@@ -509,8 +512,9 @@ public partial class MainWindow
     /// words. Null: no HUD (no Game View) - the world shows in the middle of the screen. Label colours are -1 - RGB
     /// until the palette is made (then 0-15), or $FFFF for the brightest.
     /// </summary>
-    private uint[]? ComposeHud(AppleIIgsGamePack pack)
+    private uint[]? ComposeHud(AppleIIgsGamePack pack, out uint[]? portraitPanel)
     {
+        portraitPanel = null;
         var design = _systemSettings.Ultima6.Hud;
         if (design.First(HudPieceKind.GameView) is not { } view) return null;
         var canvas = new uint[320 * 200];
@@ -535,10 +539,40 @@ public partial class MainWindow
                     if ((c >> 24) >= 128) canvas[py * 320 + px] = c | 0xFF000000u;
                 }
         }
-        Draw(Of(design.Frame), 0, 0, 320, 200, fit: false);
         var player = PlayerCharacter();
+        // The inventory view (as the game starts), then the portrait view - only its panel is kept.
+        Paint(portraitView: false);
+        var main = canvas;
+        var panelPieces = design.Pieces.Where(p => p.Kind == HudPieceKind.Panel).ToList();
+        if (panelPieces.Count == 0) panelPieces = design.Pieces.Where(p => HudPiece.IsPanelContent(p.Kind) || p.Kind == HudPieceKind.MemberName).ToList();
+        if (panelPieces.Count > 0)
+        {
+            int left = panelPieces.Min(p => p.X) & ~1, top = panelPieces.Min(p => p.Y);
+            int right = Math.Min(320, panelPieces.Max(p => p.X + p.Width)), bottom = Math.Min(200, panelPieces.Max(p => p.Y + p.Height));
+            int width = Math.Max(2, (right - left + 1) & ~1), height = Math.Max(1, bottom - top);
+            if (left + width > 320) width = (320 - left) & ~1;
+            pack.PanelRect = (left, top, width, height);
+            canvas = new uint[320 * 200];
+            Paint(portraitView: true);
+            portraitPanel = new uint[width * height];
+            for (int y = 0; y < height; y++)
+                for (int x = 0; x < width; x++)
+                    portraitPanel[y * width + x] = canvas[(top + y) * 320 + left + x];
+            canvas = main;
+        }
+        int columns = Math.Clamp(view.Width / AppleIIgsLimits.TileSize, 1, 20), rows = Math.Clamp(view.Height / AppleIIgsLimits.TileSize, 1, 12);
+        pack.View = (Math.Clamp(view.X & ~1, 0, 320 - columns * 16), Math.Clamp(view.Y, 0, 200 - rows * 16), columns, rows);
+        if (design.First(HudPieceKind.TextArea) is { } text) pack.TextArea = (text.X, text.Y, text.Width, text.Height);
+        return canvas;
+
+        void Paint(bool portraitView)
+        {
+        Draw(Of(design.Frame), 0, 0, 320, 200, fit: false);
         var front = new List<HudPiece>();
         foreach (var piece in design.Pieces)
+        {
+            var only = HudPiece.ViewOf(piece.Kind);
+            if (only != HudPanelView.Always && only != (portraitView ? HudPanelView.Portrait : HudPanelView.Inventory)) continue;
             switch (piece.Kind)
             {
                 case HudPieceKind.Picture or HudPieceKind.Panel:
@@ -563,15 +597,32 @@ public partial class MainWindow
                             Draw(Of(piece.Sprite), (piece.X & ~1) + c * size, piece.Y + r * size, size, size, fit: false);
                     break;
                 }
-                case HudPieceKind.MemberName when player is not null:
+                case HudPieceKind.MemberName when player is not null && !portraitView:
                     pack.Labels.Add((piece.X, piece.Y, LabelColor(piece.TextColor), player.Name));
                     break;
+                case HudPieceKind.Portrait when player is not null: // the portrait view: the member's face
+                {
+                    var face = player.FaceSpriteName.Length == 0 ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == player.FaceSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == player.FaceSpriteName)
+                        ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == player.FaceSpriteName);
+                    Draw(face, piece.X, piece.Y, piece.Width, piece.Height, fit: true);
+                    break;
+                }
+                case HudPieceKind.Stats when player is not null: // the portrait view: "Name value", a line each
+                {
+                    int line = 0;
+                    foreach (var stat in piece.StatIds.Count > 0 ? _statDatabase.Stats.Where(s => piece.StatIds.Contains(s.Id)) : _statDatabase.Stats)
+                    {
+                        if ((line + 1) * 10 > Math.Max(10, piece.Height)) break;
+                        string value = player.StatValues.TryGetValue(stat.Id, out var v) && !string.IsNullOrWhiteSpace(v) ? v : "0";
+                        pack.PortraitLabels.Add((piece.X, piece.Y + line * 10, LabelColor(piece.TextColor), $"{stat.Name} {value}"));
+                        line++;
+                    }
+                    break;
+                }
             }
+        }
         foreach (var piece in front) Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: false);
-        int columns = Math.Clamp(view.Width / AppleIIgsLimits.TileSize, 1, 20), rows = Math.Clamp(view.Height / AppleIIgsLimits.TileSize, 1, 12);
-        pack.View = (Math.Clamp(view.X & ~1, 0, 320 - columns * 16), Math.Clamp(view.Y, 0, 200 - rows * 16), columns, rows);
-        if (design.First(HudPieceKind.TextArea) is { } text) pack.TextArea = (text.X, text.Y, text.Width, text.Height);
-        return canvas;
+        }
 
         static int LabelColor(string color)
         {

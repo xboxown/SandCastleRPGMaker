@@ -6,9 +6,11 @@ VERB_DROP = 5
 
 ; The grid again: its cells as the HUD has them, a carried thing's icon in each, in order.
 RefreshInventory:
+        lda PanelView           ; the portrait view: counted, not drawn
+        bne .count
         lda GridCols
         bne .grid
-        stz InvCount            ; no grid: still counted, for Drop
+.count: stz InvCount
         jmp CountCarried
 .grid:  lda GridX
         sta RX
@@ -178,8 +180,100 @@ DrawInvCursor:
         tool $5404              ; FrameRect
 .out:   rts
 
+; *: the panel's other view.
+ToggleView:
+        lda PanW
+        beq .out
+        lda PanelView
+        eor #1
+        sta PanelView
+        jmp DrawPanel
+.out:   rts
+
+; The panel as its view is: the inventory (the HUD's own picture, the words, the grid) or the portrait view (its
+; picture with the member's portrait, the words, the stats).
+DrawPanel:
+        lda PanW
+        bne .some
+        jmp RefreshInventory
+.some:  lda PanelView
+        bne .portrait
+        lda PanX
+        sta RX
+        lda PanY
+        sta RY
+        lda PanW
+        sta RW
+        lda PanH
+        sta RH
+        jsr RestoreRect
+        jsr DrawLabels
+        jmp RefreshInventory
+.portrait:
+        lda PanY                ; its pixels, row by row
+        sta RY
+        lda PanH
+        sta RH
+        lda PanPix
+        sta RSrc
+        lda PanPix+2
+        sta RSrc+2
+.row:   lda RY
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        sta T5
+        asl a
+        asl a
+        clc
+        adc T5
+        sta T5
+        lda PanX
+        lsr a
+        clc
+        adc T5
+        clc
+        adc #$2000
+        sta RScr
+        lda #$00E1
+        sta RScr+2
+        lda PanW
+        lsr a
+        tax
+        ldy #0
+        sep #$20
+        .a8
+.b:     lda [RSrc],y
+        sta [RScr],y
+        iny
+        dex
+        bne .b
+        rep #$20
+        .a16
+        lda PanW
+        lsr a
+        clc
+        adc RSrc
+        sta RSrc
+        lda RSrc+2
+        adc #0
+        sta RSrc+2
+        inc RY
+        dec RH
+        bne .row
+        jsr DrawLabels
+        jsr DrawStats
+        jmp RefreshInventory
+
 ; D: "Drop-" and the grid's cursor on the first thing carried.
 StartDrop:
+        lda PanelView           ; the inventory view for it
+        beq .inv
+        stz PanelView
+        jsr DrawPanel
+.inv:
         lda #15
         jsr PrintSaid
         lda #Dash

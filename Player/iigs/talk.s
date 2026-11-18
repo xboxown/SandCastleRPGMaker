@@ -506,7 +506,7 @@ EndTalk:
         lda NameH
         sta RH
         jsr RestoreRect
-.l:     jsr DrawLabels
+.l:     jsr DrawPanel           ; the panel as its view is (inventory.s)
         stz Mode
         jmp PromptLine
 

@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 7 (b625): the panel's two views (*): the inventory, or the portrait and the stats.
 ; Version 6 (b624): the inventory (inventory.s): the HUD's Carried Items grid, Get into it, Drop out of it.
 ; Version 5 (b623): the verbs (verbs.s): Look, Get, Use (doors), Talk with Ultima 6's cursor.
 ; Version 4 (b622): talk (talk.s): T and a direction; portrait, name, words with keywords, "you say:", replies.
@@ -174,7 +175,7 @@ start:
 .occ:
         tool $9004              ; HideCursor
         jsr SetupScreen
-        jsr RefreshInventory
+        jsr DrawPanel
         jsr DrawView
 MainLoop:
         pha
@@ -211,6 +212,11 @@ MainLoop:
         beq .quit
         cmp #'Q'
         beq .quit
+        cmp #'*'
+        bne .notstar
+        jsr ToggleView
+        brl MainLoop
+.notstar:
         ora #$20                ; the verbs' letters, either case
         ldx #VERB_TALK
         cmp #'t'
@@ -426,7 +432,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #6
+        cmp #7
         beq .known
 .bad:   sec
         rts
@@ -867,6 +873,52 @@ ParseTalk:
         bcc .max
         lda #64
 .max:   sta InvMax
+        ldx #0                  ; the panel
+        ldy #0
+.pan:   lda [Ptr],y
+        sta PanX,x
+        iny
+        iny
+        inx
+        inx
+        cpx #8
+        bne .pan
+        lda #8
+        jsr AddPtr
+        lda PanW
+        beq .nopan
+        lda Ptr                 ; its portrait view's pixels
+        sta PanPix
+        lda Ptr+2
+        sta PanPix+2
+        lda PanW
+        lsr a
+        sta MulA
+        lda PanH
+        sta MB0
+        jsr Mul16
+        jsr AddPtrLong
+.nopan: lda [Ptr]               ; its words (the stats)
+        sta StatCount
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta StatPtr
+        lda Ptr+2
+        sta StatPtr+2
+        lda StatCount
+        sta Item
+.sk:    lda Item
+        beq .skd
+        ldy #6
+        lda [Ptr],y
+        and #$00FF
+        clc
+        adc #8
+        jsr AddPtr
+        dec Item
+        bra .sk
+.skd:
         lda [Ptr]               ; the words
         sta Count
         lda #2
@@ -1045,6 +1097,19 @@ DrawLabels:
         sta ItemPtr+2
         lda LblCount
         sta Item
+        bra LabelList
+
+; The portrait view's words (the stats).
+DrawStats:
+        lda StatPtr
+        sta ItemPtr
+        lda StatPtr+2
+        sta ItemPtr+2
+        lda StatCount
+        sta Item
+
+; Item words from ItemPtr: x, y, colour, length, the words, 0.
+LabelList:
 .l:     lda Item
         beq .text
         ldy #4                  ; its colour ($FFFF: the brightest)
@@ -1859,6 +1924,14 @@ InvCol:   .dw 0
 InvSel:   .dw 0
 InvList:  .ds 256
 DropRec:  .dd 0
+PanX:     .dw 0                 ; the panel (as GAME.DAT has it)
+PanY:     .dw 0
+PanW:     .dw 0
+PanH:     .dw 0
+PanPix:   .dd 0
+StatPtr:  .dd 0
+StatCount: .dw 0
+PanelView: .dw 0                ; 0 the inventory, 1 the portrait and the stats
 AvatarW:  .dw 0
 WordTab:  .ds 128                ; up to 32 words
 NameTab:  .ds 2048
