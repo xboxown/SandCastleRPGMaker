@@ -118,6 +118,11 @@ public partial class MainWindow
         catch (Exception ex) { problems.Add("The tiles couldn't be read: " + ex.Message); }
         if (PlayerCharacter() is null) problems.Add("No Avatar: tick Test Player on a character (Character Editor) - the game is played as them.");
         problems.AddRange(PictureSizeProblems());
+        // Talk: the commands the IIgs player doesn't do yet are left out of it.
+        var leftOut = new SortedSet<string>();
+        foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
+            foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _).Unsupported) leftOut.Add(type);
+        if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. Show Text with replies, Set / Conditional Branch on variables and switches, Labels and Stop Conversation work.");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -259,6 +264,21 @@ public partial class MainWindow
         return list;
     }
 
+    /// <summary>A picture fitted into w x h (shrunk or grown keeping its shape, in the middle); the rest see-through.</summary>
+    private static uint[] FitPicture(string file, int w, int h)
+    {
+        var img = new BitmapImage();
+        img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(file)); img.EndInit();
+        var src = Pixels(img, out int sw, out int sh);
+        double k = Math.Min((double)w / sw, (double)h / sh);
+        int dw = Math.Max(1, (int)(sw * k)), dh = Math.Max(1, (int)(sh * k)), ox = (w - dw) / 2, oy = (h - dh) / 2;
+        var dst = new uint[w * h];
+        for (int y = 0; y < dh; y++)
+            for (int x = 0; x < dw; x++)
+                dst[(oy + y) * w + ox + x] = src[Math.Min(sh - 1, (int)(y / k)) * sw + Math.Min(sw - 1, (int)(x / k))];
+        return dst;
+    }
+
     /// <summary>A sprite as the IIgs player draws it: at most 32 x 32 (shrunk, keeping its shape), its width a multiple of 4 (padded each side).</summary>
     private static (uint[] Px, int W, int H) FitSprite(string file)
     {
@@ -349,7 +369,17 @@ public partial class MainWindow
             if (n < 0 || instance.X < 0 || instance.Y < 0 || instance.X >= start.Width || instance.Y >= start.Height) continue;
             objects.Add((instance.X, instance.Y, n, def.IsSolid ? 1 : 0));
         }
-        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing)>();
+        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait)>();
+        // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.
+        var variableIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        foreach (var v in _variableDatabase.Variables) variableIndex.TryAdd(v.Name, variableIndex.Count);
+        int VariableOf(string name) { if (!variableIndex.TryGetValue(name, out int n)) variableIndex[name] = n = variableIndex.Count; return n; }
+        var talkOf = new Dictionary<int, int>();
+        var design = _systemSettings.Ultima6.Hud;
+        var portraitPiece = design.First(HudPieceKind.Portrait) ?? design.First(HudPieceKind.Panel);
+        var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
+            : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
+        var portraitOf = new Dictionary<int, int>();
         foreach (var placed in start.Characters.Where(c => !c.Dead))
         {
             var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
@@ -359,7 +389,30 @@ public partial class MainWindow
             int first = spritePixels.Count;
             foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
             int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
-            characters.Add((placed.X, placed.Y, first, 1, facing));
+            if (!talkOf.TryGetValue(who.Id, out int talk))
+            {
+                talk = -1;
+                if (who.TalkCommands.Count > 0)
+                {
+                    AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code);
+                    talk = pack.Talks.Count;
+                    pack.Talks.Add((who.Name, code));
+                }
+                talkOf[who.Id] = talk;
+            }
+            if (!portraitOf.TryGetValue(who.Id, out int portrait))
+            {
+                portrait = -1;
+                var face = who.FaceSpriteName.Length == 0 ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == who.FaceSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == who.FaceSpriteName)
+                    ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == who.FaceSpriteName);
+                if (portraitRect.Width > 0 && face?.Frames.FirstOrDefault()?.FilePath is { } faceFile && File.Exists(faceFile))
+                {
+                    portrait = spritePixels.Count;
+                    spritePixels.Add((FitPicture(faceFile, portraitRect.Width, portraitRect.Height), portraitRect.Width, portraitRect.Height));
+                }
+                portraitOf[who.Id] = portrait;
+            }
+            characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait));
         }
         if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
         var hud = ComposeHud(pack);
@@ -373,6 +426,25 @@ public partial class MainWindow
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
         pack.Objects.AddRange(objects);
         pack.Characters.AddRange(characters);
+        pack.PortraitRect = portraitRect;
+        if (design.First(HudPieceKind.MemberName) is { } namePiece) pack.NameRect = (namePiece.X & ~1, namePiece.Y, Math.Min(320 - (namePiece.X & ~1), (namePiece.Width + 3) / 4 * 4), namePiece.Height);
+        for (int i = 0; i < pack.Words.Count; i++)
+        {
+            string id = new[] { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf" }[i];
+            pack.Words[i] = U6Words.Of(_systemSettings.Ultima6, id);
+        }
+        int Colour(string text, int fallback)
+        {
+            try { if (text.Length > 0 && ColorConverter.ConvertFromString(text) is Color c) return SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(c.R << 16 | c.G << 8 | c.B), false); } catch { }
+            return fallback;
+        }
+        pack.TextColor = design.First(HudPieceKind.TextArea) is { TextColor.Length: > 0 } area ? Colour(area.TextColor, 0xFFFF) : 0xFFFF;
+        pack.KeywordColor = Colour(_systemSettings.Ultima6.KeywordColor, 0xFFFF);
+        foreach (var name in variableIndex.OrderBy(kv => kv.Value).Select(kv => kv.Key))
+        {
+            var v = _variableDatabase.Variables.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
+            pack.Variables.Add(0);
+        }
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;
         pack.StartX = start.StartX >= 0 && start.StartX < start.Width ? start.StartX : start.Width / 2;
         pack.StartY = start.StartY >= 0 && start.StartY < start.Height ? start.StartY : start.Height / 2;

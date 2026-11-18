@@ -6,7 +6,7 @@ Loads an S16 (OMF 2) as the System Loader would (relocating cRELOC / RELOC recor
 toolbox (JSL $E10000) and GS/OS (JSL $E100A8) calls it uses answered by simple stand-ins, feeds it keys, and saves the
 Super Hi-Res screen as a PNG. It tests the player's own logic - the real toolbox and GS/OS are tested in KEGS.
 Usage: sim816.py SANDCASTLE folder-with-GAME.DAT out.png [--keys "RRDDL q"] [--slow] [--trace]
-Keys: U D L R = arrows, other letters as typed.
+Keys: U D L R = arrows, ~ Enter, ^ Esc, < Delete, other letters as typed.
 """
 import struct, sys, zlib, os
 
@@ -36,6 +36,7 @@ class Machine:
         self.quit = False
         self.steps = 0
         self.key_waits = 0
+        self.typed = []
 
     # ---- memory ----
     def rd(self, a):
@@ -157,7 +158,7 @@ class Machine:
             self.key_waits += 1
             if self.keys and self.key_waits % 3 == 0:
                 k = self.keys.pop(0)
-                code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15}.get(k, ord(k))
+                code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F}.get(k, ord(k))
                 self.wr16(rec, 3); self.wr16(rec + 2, code); self.wr16(rec + 4, 0); res = 0xFFFF
             elif not self.keys and self.key_waits > 10:
                 self.wr16(rec, 3); self.wr16(rec + 2, ord('q')); self.wr16(rec + 4, 0); res = 0xFFFF
@@ -171,13 +172,23 @@ class Machine:
                 self.pset(x, top); self.pset(x, bottom - 1)
             for y in range(top, bottom):
                 self.pset(left, y); self.pset(right - 1, y)
-        elif n in (0xA004, 0xA204): pb, rb = 2, 0                          # SetForeColor / SetBackColor
-        elif n == 0x3A04: pb, rb = 4, 0                                    # MoveTo
+        elif n == 0xA004: pb, rb = 2, 0; self.fore = word(0)               # SetForeColor
+        elif n == 0xA204: pb, rb = 2, 0                                    # SetBackColor
+        elif n == 0x3A04: pb, rb = 4, 0; self.penpos = (word(2), word(0))  # MoveTo
+        elif n == 0xA804: pb, rb = 2, 2; res = 6                           # CharWidth: 6 pixels a letter here
+        elif n == 0xAA04:                                                  # CStringWidth
+            pb, rb = 4, 2
+            ptr = long(0); k = 0
+            while self.mem[ptr + k]: k += 1
+            res = 6 * k
+        elif n == 0xA404:                                                  # DrawChar
+            pb, rb = 2, 0
+            self.typed.append(chr(word(0) & 0xFF))
         elif n == 0xA604:                                                  # DrawCString
             pb, rb = 4, 0
             ptr = long(0); s = b''
             while self.mem[ptr]: s += bytes([self.mem[ptr]]); ptr += 1
-            self.texts.append(s.decode('latin-1'))
+            self.texts.append((getattr(self, 'penpos', (0, 0)), getattr(self, 'fore', 0), s.decode('latin-1')))
         else:
             raise Stop(f'tool ${n:04X} not stood in for')
         ret = self.rd24(self.s + 1)
@@ -456,7 +467,7 @@ def png(path, m):
 def main(argv):
     if len(argv) < 4: print(__doc__); return 2
     keys = ''
-    if '--keys' in argv: keys = argv[argv.index('--keys') + 1].replace(' ', '')
+    if '--keys' in argv: keys = argv[argv.index('--keys') + 1]
     m = Machine(argv[2], keys, accelerated='--slow' not in argv, trace='--trace' in argv)
     m.load_omf(argv[1])
     try:
@@ -467,7 +478,9 @@ def main(argv):
     dp = m.d
     print(f'steps {m.steps}  speed count {m.rd16(dp + 0x4C)}  avatar at {m.rd16(dp + 0x2E)},{m.rd16(dp + 0x30)} facing {m.rd16(dp + 0x32)}')
     print('alerts:', m.alerts)
-    print('texts:', m.texts)
+    print('texts:')
+    for (pos, colour, text) in m.texts: print(f'   {pos} colour {colour}: {text}')
+    print('typed letters echoed:', ''.join(m.typed))
     print('quit to the desktop:', m.quit)
     return 0
 

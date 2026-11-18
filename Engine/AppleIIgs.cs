@@ -313,17 +313,23 @@ public static class SuperHiRes
 ///   sprites: u16 count, count x u32 offset (from the first sprite), u32 all the sprites' bytes, then each: u16 width (a multiple of 4, at most 32),
 ///            u16 height (at most 32), width/2 x height bytes (colour 0 see-through)
 ///   objects: u16 count, each: u16 x, u16 y, u16 sprite, u16 flags (bit 0: solid) - sorted top to bottom
-///   characters: u16 count, each: u16 x, u16 y, u16 sprite (south; +1 north, +2 east, +3 west), u16 flags, u16 facing
+///   characters: u16 count, each 16 bytes: u16 x, u16 y, u16 sprite (south; +1 north, +2 east, +3 west), u16 flags,
+///               u16 facing, u16 talk (a script; $FFFF none), u16 portrait (a sprite the portrait's size; $FFFF none), u16 0
 ///   hud: u16 1 = a HUD (then 32000 bytes: the 320 x 200 background, 4 bits a pixel), 0 = none (the world in the middle)
 ///        u16 view x (even), view y, columns, rows (the Game View, 16 x 16 cells); u16 text x, y, width, height
 ///        u16 labels, each: u16 x, u16 y (top), u16 colour (0-15; $FFFF: the brightest), u8 length, text, 0
+///        u16 portrait x, y, width, height; u16 name x, y, width, height; u16 text colour, keyword colour ($FFFF: the brightest)
+///   words: u16 count, each u8 length, text, 0 - you say, bye, no help, funny no response, talk, nothing, talking to yourself
+///   variables: u16 count, i16 each (their starting values; switches are variables 0 / 1)
+///   talks: u16 count, count x u32 offset, u32 all their bytes, then each: u8 length, the speaker's name, 0, its code
+///          (Engine/AppleIIgsTalk.cs)
 ///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 3: the map, its tiles, the Avatar, objects, characters, the HUD and the sounds - the rest comes build by build.
+/// Version 4: the map, its tiles, the Avatar, objects, characters, the HUD, talk and the sounds - the rest comes build by build.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 3;
+    public const ushort Version = 4;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -337,11 +343,20 @@ public sealed class AppleIIgsGamePack
     public List<(string Name, int Rate, byte[] Data)> Sounds { get; } = new();
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
     public List<(int X, int Y, int Sprite, int Flags)> Objects { get; } = new();
-    public List<(int X, int Y, int Sprite, int Flags, int Facing)> Characters { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait)> Characters { get; } = new();
+    public (int X, int Y, int Width, int Height) PortraitRect { get; set; }
+    public (int X, int Y, int Width, int Height) NameRect { get; set; }
+    public int TextColor { get; set; } = 0xFFFF;
+    public int KeywordColor { get; set; } = 0xFFFF;
+    /// <summary>you say, bye, no help, funny no response, talk, nothing, talking to yourself.</summary>
+    public List<string> Words { get; } = new() { "you say: ", "bye", "\"I cannot help thee with that.\"", "Funny, no response.", "Talk", "nothing", "Talking to yourself?" };
+    public List<short> Variables { get; } = new();
+    public List<(string Name, byte[] Code)> Talks { get; } = new();
     /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
     public byte[]? HudBackground { get; set; }
     public (int X, int Y, int Columns, int Rows) View { get; set; } = (80, 20, 10, 10);
-    public (int X, int Y, int Width, int Height) TextArea { get; set; }
+    /// <summary>Where the words go; without a HUD two lines under the world.</summary>
+    public (int X, int Y, int Width, int Height) TextArea { get; set; } = (8, 182, 304, 18);
     public List<(int X, int Y, int Color, string Text)> Labels { get; } = new();
 
     public byte[] Write()
@@ -369,17 +384,33 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Objects.Count);
         foreach (var o in Objects.OrderBy(o => o.Y).ThenBy(o => o.X)) { w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); }
         w.Write((ushort)Characters.Count);
-        foreach (var c in Characters) { w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing); }
+        foreach (var c in Characters)
+        {
+            w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing);
+            w.Write((ushort)c.Talk); w.Write((ushort)c.Portrait); w.Write((ushort)0);
+        }
         w.Write((ushort)(HudBackground is null ? 0 : 1));
         if (HudBackground is not null) w.Write(HudBackground);
         w.Write((ushort)(View.X & ~1)); w.Write((ushort)View.Y); w.Write((ushort)View.Columns); w.Write((ushort)View.Rows);
-        w.Write((ushort)TextArea.X); w.Write((ushort)TextArea.Y); w.Write((ushort)TextArea.Width); w.Write((ushort)TextArea.Height);
+        w.Write((ushort)(TextArea.X & ~1)); w.Write((ushort)TextArea.Y); w.Write((ushort)(TextArea.Width & ~1)); w.Write((ushort)TextArea.Height);
         w.Write((ushort)Labels.Count);
         foreach (var (x, y, color, text) in Labels)
         {
             var t = Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(40).ToArray()));
             w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)color); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0);
         }
+        foreach (var r in new[] { PortraitRect, NameRect }) { w.Write((ushort)r.X); w.Write((ushort)r.Y); w.Write((ushort)r.Width); w.Write((ushort)r.Height); }
+        w.Write((ushort)TextColor); w.Write((ushort)KeywordColor);
+        w.Write((ushort)Words.Count);
+        foreach (var word in Words) { var t = Ascii(word, 60); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0); }
+        w.Write((ushort)Variables.Count);
+        foreach (short v in Variables) w.Write(v);
+        w.Write((ushort)Talks.Count);
+        var blobs = Talks.Select(t => { var n = Ascii(t.Name, 30); return new byte[] { (byte)n.Length }.Concat(n).Append((byte)0).Concat(t.Code).ToArray(); }).ToList();
+        int at = 0;
+        foreach (var b in blobs) { w.Write(at); at += b.Length; }
+        w.Write(at);
+        foreach (var b in blobs) w.Write(b);
         w.Write((ushort)Sounds.Count);
         foreach (var (name, rate, data) in Sounds)
         {
@@ -388,6 +419,8 @@ public sealed class AppleIIgsGamePack
         }
         return ms.ToArray();
     }
+
+    private static byte[] Ascii(string text, int max) => Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(max).ToArray()));
 
     /// <summary>SOUNDS.DAT: every sound's bytes, one after another (as GAME.DAT lists them).</summary>
     public byte[] WriteSounds() => Sounds.SelectMany(s => s.Data).ToArray();

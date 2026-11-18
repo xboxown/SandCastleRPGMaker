@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 4 (b622): talk (talk.s): T and a direction; portrait, name, words with keywords, "you say:", replies.
 ; Version 3 (b621): the HUD (HUD Editor): its background, the Game View where and as big as it is, the name; the
 ;   text area's prompt.
 ; Version 2 (b620): objects and characters on the map too (solid ones and characters stop the Avatar).
@@ -83,6 +84,15 @@ LblCount  = $B0
 LblPtr    = $B2   ; 4
 TextX     = $B6
 TextY     = $B8
+TalkPtr   = $BA   ; 4: the talk's code
+TP        = $BE   ; 4: words to write
+TalkTab   = $C2   ; 4
+TalkBank  = $C6   ; 4
+RSrc      = $CA   ; 4
+RScr      = $CE   ; 4
+T4        = $D2
+T5        = $D4
+SayP      = $D6   ; 4: words being written
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -103,6 +113,14 @@ start:
         tool $0202              ; MMStartUp
         pla
         sta UserId
+        sep #$20
+        .a8
+        phk
+        pla
+        sta MyBank
+        stz MyBank+1
+        rep #$20
+        .a16
         jsr MakeMaskTable
         jsr SpeedCheck          ; carry set: accelerated
         php
@@ -164,50 +182,76 @@ MainLoop:
         beq MainLoop
         lda EvMsg
         and #$007F
+        sta Key
+        lda Mode
+        beq .walk
+        cmp #1
+        beq .dir
+        cmp #2
+        bne MainLoop            ; the talk is running
+        lda Key
+        jsr TalkKey
+        bra MainLoop
+.dir:   lda Key                 ; Talk-: which way
+        cmp #$1B
+        bne .d1
+        stz Mode
+        jsr PromptLine
+        bra MainLoop
+.d1:    jsr ArrowDelta
+        bcc MainLoop
+        jsr TalkTo
+        bra MainLoop
+.walk:  lda Key
         cmp #$1B
         beq .quit
         cmp #'q'
         beq .quit
         cmp #'Q'
         beq .quit
-        cmp #$0B                ; up arrow
-        bne .n1
-        lda #0
-        sta T2
-        lda #$FFFF
-        sta T3
-        lda #1
+        cmp #'t'
+        beq .talk
+        cmp #'T'
+        beq .talk
+        jsr ArrowDelta
+        bcc MainLoop
         jsr TryMove
-        bra MainLoop
-.n1:    cmp #$0A                ; down arrow
-        bne .n2
-        lda #0
-        sta T2
-        lda #1
-        sta T3
-        lda #0
-        jsr TryMove
-        bra MainLoop
-.n2:    cmp #$15                ; right arrow
-        bne .n3
-        lda #1
-        sta T2
-        lda #0
-        sta T3
-        lda #2
-        jsr TryMove
-        bra MainLoop
-.n3:    cmp #$08                ; left arrow
-        bne MainLoop
-        lda #$FFFF
-        sta T2
-        lda #0
-        sta T3
-        lda #3
-        jsr TryMove
+        brl MainLoop
+.talk:  jsr TalkVerb
         brl MainLoop
 .quit:
         jmp Quit
+
+; A = a key: carry set if an arrow - T2 = dx, T3 = dy, A = the facing (0 south, 1 north, 2 east, 3 west).
+ArrowDelta:
+        stz T2
+        stz T3
+        cmp #$0B                ; up
+        bne .n1
+        dec T3
+        lda #1
+        sec
+        rts
+.n1:    cmp #$0A                ; down
+        bne .n2
+        inc T3
+        lda #0
+        sec
+        rts
+.n2:    cmp #$15                ; right
+        bne .n3
+        inc T2
+        lda #2
+        sec
+        rts
+.n3:    cmp #$08                ; left
+        bne .no
+        dec T2
+        lda #3
+        sec
+        rts
+.no:    clc
+        rts
 
 ; ---- leaving ----
 Quit:
@@ -365,7 +409,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #3
+        cmp #4
         beq .known
 .bad:   sec
         rts
@@ -506,13 +550,11 @@ ParseData:
         sta ChrPtr
         lda Ptr+2
         sta ChrPtr+2
-        lda ChrCount            ; 10 bytes each
-        asl a
-        sta T0
+        lda ChrCount            ; 16 bytes each
         asl a
         asl a
-        clc
-        adc T0
+        asl a
+        asl a
         jsr AddPtr
         ; the HUD: its background (32000 bytes) if there is one, the Game View, the text area, the words
         lda [Ptr]
@@ -544,6 +586,12 @@ ParseData:
         ldy #10
         lda [Ptr],y
         sta TextY
+        ldy #12
+        lda [Ptr],y
+        sta TextW
+        ldy #14
+        lda [Ptr],y
+        sta TextH
         lda #16
         jsr AddPtr
         lda [Ptr]
@@ -555,6 +603,7 @@ ParseData:
         lda Ptr+2
         sta LblPtr+2
         jsr ViewSetup
+        jsr ParseTalk
         stz Facing
         clc
         rts
@@ -659,13 +708,9 @@ SetupScreen:
         pea #bank(TitleBuf)
         pea #TitleBuf
         tool $A604              ; DrawCString
-        pea 8
-        pea 196
-        tool $3A04
-        pea #bank(HelpText)
-        pea #HelpText
-        tool $A604
-        rts
+        jsr TextInit
+        lda #Prompt
+        jmp PrintMine
 
 ; The palette colour with the most light (red + green + blue).
 FindBright:
@@ -756,6 +801,98 @@ DrawView:
         jsr DrawAvatar
         rts
 
+; After the HUD's words: the portrait and name places, the colours, the words, the variables, the talks.
+ParseTalk:
+        lda LblCount            ; past the labels: 8 + length each
+        sta Item
+.lb:    lda Item
+        beq .lbdone
+        ldy #6
+        lda [Ptr],y
+        and #$00FF
+        clc
+        adc #8
+        jsr AddPtr
+        dec Item
+        bra .lb
+.lbdone:
+        ldx #0
+        ldy #0
+.rect:  lda [Ptr],y
+        sta PortX,x
+        iny
+        iny
+        inx
+        inx
+        cpx #20                 ; portrait x y w h, name x y w h, text colour, keyword colour
+        bne .rect
+        lda #20
+        jsr AddPtr
+        lda [Ptr]               ; the words
+        sta Count
+        lda #2
+        jsr AddPtr
+        ldx #0
+.w:     lda Count
+        beq .wdone
+        lda Ptr
+        clc
+        adc #1
+        sta WordTab,x
+        lda Ptr+2
+        adc #0
+        sta WordTab+2,x
+        lda [Ptr]
+        and #$00FF
+        clc
+        adc #2
+        jsr AddPtr
+        inx
+        inx
+        inx
+        inx
+        dec Count
+        bra .w
+.wdone: lda [Ptr]               ; the variables' starting values
+        sta Count
+        lda #2
+        jsr AddPtr
+        ldx #0
+        ldy #0
+.v:     lda Count
+        beq .vdone
+        cpx #512
+        bcs .vskip
+        lda [Ptr],y
+        sta VarTab,x
+.vskip: iny
+        iny
+        inx
+        inx
+        dec Count
+        bra .v
+.vdone: tya
+        jsr AddPtr
+        lda [Ptr]               ; the talks
+        sta MulA
+        lda #4
+        sta MB0
+        jsr Mul16
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta TalkTab
+        lda Ptr+2
+        sta TalkTab+2
+        jsr AddPtrLong
+        lda #4
+        jsr AddPtr
+        lda Ptr
+        sta TalkBank
+        lda Ptr+2
+        sta TalkBank+2
+        rts
+
 ; ---- the Game View ----
 ; From VX, VY, VCols, VRows: the Avatar's cell, the view's first byte on the screen, its edges (+ 64).
 ViewSetup:
@@ -824,6 +961,13 @@ DrawHud:
         inx
         cpx #32000
         bne .c
+        jsr DrawLabels
+        jsr TextInit
+        lda #Prompt
+        jmp PrintMine
+
+; The HUD's words (the member's name...).
+DrawLabels:
         lda LblPtr
         sta ItemPtr
         lda LblPtr+2
@@ -862,22 +1006,7 @@ DrawHud:
         jsr NextItem
         dec Item
         bra .l
-.text:  lda Bright              ; the text area: Ultima 6's prompt
-        pha
-        tool $A004
-        lda TextX
-        clc
-        adc #2
-        pha
-        lda TextY
-        clc
-        adc #9
-        pha
-        tool $3A04
-        pea #bank(Prompt)
-        pea #Prompt
-        tool $A604
-        rts
+.text:  rts
 
 ; ---- objects and characters ----
 ; Which cells are taken: OccPtr (map width x height bytes), 1 = a solid object, 2 = a character. Carry set: no memory.
@@ -979,7 +1108,7 @@ MakeOcc:
         sta [Ptr]
         rep #$20
         .a16
-        lda #10
+        lda #16
         jsr NextItem
         dec Item
         bra .c
@@ -1073,7 +1202,7 @@ DrawCharacters:
         adc [ItemPtr],y         ; + its first (south) sprite
         sta SprId
         jsr DrawSprite
-.n:     lda #10
+.n:     lda #16
         jsr NextItem
         dec Item
         bra .l
@@ -1276,6 +1405,10 @@ DrawSprite:
         sec
         sbc R0
         sta Count
+        ; on into BlitRows
+
+; Count rows from Src (BPR bytes a row) to Scr (160 a row), bytes C0 to C1 of each; colour 0 see-through.
+BlitRows:
 .row:   lda #0                  ; B = 0 for TAX
         sep #$20
         .a8
@@ -1523,6 +1656,8 @@ TryMove:
 .stay:  jsr DrawView
         rts
 
+        .include "talk.s"
+
 ; ---- data ----
 StartStop:
         .dw 0                   ; flags
@@ -1593,6 +1728,47 @@ AlertBadData:
         .cstr "42/GAME.DAT was made for another version of this player. Build the game again with the editor./^Quit"
 Prompt:
         .cstr ">"
+Dash:
+        .cstr "-"
+ByeWord:
+        .db "bye",0
+Key:      .dw 0
+Mode:     .dw 0                 ; 0 walking, 1 Talk- which way, 2 typing a word, 3 the talk running
+MyBank:   .dw 0
+PenX:     .dw 0
+PenY:     .dw 0
+SpaceW:   .dw 0
+RX:       .dw 0
+RY:       .dw 0
+RW:       .dw 0
+RH:       .dw 0
+TxtAt:    .dw 0
+WordKey:  .dw 0
+WordEnd:  .dw 0
+TPC:      .dw 0
+SayLen:   .dw 0
+PWWidth:  .dw 0
+PWEnd:    .dw 0
+AskPC:    .dw 0
+InLen:    .dw 0
+TalkPortrait: .dw 0
+NamePtr:  .dd 0
+TextW:    .dw 0
+TextH:    .dw 0
+PortX:    .dw 0                 ; portrait x y w h, name x y w h, text colour, keyword colour (as GAME.DAT has them)
+PortY:    .dw 0
+PortW:    .dw 0
+PortH:    .dw 0
+NameX:    .dw 0
+NameY:    .dw 0
+NameW:    .dw 0
+NameH:    .dw 0
+TxtColor: .dw 0
+KeyColor: .dw 0
+WordTab:  .ds 32
+InBuf:    .ds 34
+WBuf:     .ds 64
+VarTab:   .ds 512
 HelpText:
         .cstr "Arrows: walk     Q: quit"
 TitleBuf:
