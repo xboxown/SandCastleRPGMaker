@@ -1,0 +1,221 @@
+MAC INSTRUCTIONS - getting the PowerPC Mac, the Intel Mac (and the Ubuntu machine) ready for Claude
+=======================================================================================================
+
+What this is for
+----------------
+Claude will connect from this PC to each machine over the network, the way it already uses Ubuntu here:
+it copies the Sandcastle player's source over, compiles it there, runs the test game, and brings the
+finished player back into the editor (Editor\Runtimes\...). The connection is SSH ("Remote Login" on a
+Mac): a remote command line, built into every Mac and into Ubuntu. Nothing extra is installed for it.
+
+Apple silicon (M1, M2...) is NOT on this list: GitHub builds and tests the player on a real Apple silicon
+Mac by itself after every change (free, because the repository is public). You don't need one.
+
+Take your time: every step is something you do once.
+
+
+=======================================================================================================
+PART 0 - BEFORE YOU START (both Macs)
+=======================================================================================================
+
+You need:
+  [ ] The Mac plugged into power, a screen, a keyboard and a mouse (only for setting up).
+  [ ] A network cable from the Mac to your router (better than Wi-Fi; Wi-Fi works too).
+  [ ] The Mac and this PC on the SAME home network. This PC is 192.168.1.71, so the Macs should
+      get an address that also starts with 192.168.1.
+  [ ] Your Mac user account's name and password (an administrator account).
+  [ ] A USB stick (only the PowerPC Mac needs it, for Xcode - see Part 1, step 7).
+
+Write these down as you go (you'll give them to Claude at the end - NOT the passwords):
+
+        Machine       | macOS version | Short user name | IP address
+        --------------+---------------+-----------------+----------------
+        PowerPC Mac   | 10.5.__       |                 | 192.168.1.___
+        Intel Mac     |               |                 | 192.168.1.___
+        Ubuntu        | 24.04         |                 | 192.168.1.___
+
+NEVER type a password into the Claude chat. When a password is needed, you type it yourself in a
+command that starts with "!" (Part 4 explains), so it goes straight to the Mac, not into the chat.
+
+
+=======================================================================================================
+PART 1 - THE POWERPC MAC (Mac OS X 10.5 Leopard)
+=======================================================================================================
+
+1. Bring it up to date: 10.5.8
+   - Apple menu > About This Mac. It should say "Version 10.5.8".
+   - If it says 10.5.0 to 10.5.7: Apple's update servers for Leopard are gone, so Software Update may
+     not work. Download "Mac OS X 10.5.8 Combo Update" (MacOSXUpdCombo10.5.8.dmg, about 700 MB) on
+     this PC - Apple's support downloads site still has it, or archive.org - copy it to the USB stick,
+     open it on the Mac, run the installer, restart.
+
+2. The short user name
+   - Apple menu > System Preferences > Accounts. Click your account (it must say "Admin" under it).
+   - The "Short Name" is what Claude needs (for example "fahed"). Write it in the table.
+
+3. Turn on Remote Login (SSH)
+   - System Preferences > Sharing.
+   - Tick "Remote Login".
+   - "Allow access for": choose "All users" (or "Only these users" with your account in the list).
+   - The panel now shows a line like:  ssh fahed@192.168.1.123
+     That number is the Mac's IP address. Write it in the table.
+
+4. The network address must not change
+   - System Preferences > Network > Ethernet (or AirPort for Wi-Fi). Note the IP address shown.
+   - Best: in your router's settings, give this Mac a "reserved" / "static" DHCP address, so it keeps
+     the same number every day. (If you don't know how, skip it - just tell Claude the new number if
+     it ever changes.)
+
+5. Never go to sleep while plugged in
+   - System Preferences > Energy Saver.
+   - "Put the computer to sleep when it is inactive for": Never.
+   - "Put the hard disk(s) to sleep when possible": UNTICK it.
+   - The display may sleep - that's fine.
+   - Options tab: tick "Restart automatically after a power failure" (if it's there).
+
+6. Log in automatically (so games can open a window when Claude tests them)
+   - System Preferences > Accounts > Login Options (bottom left; click the lock and type your
+     password first).
+   - "Automatic login": choose your account, type its password when asked.
+   - The Mac should stay logged in at its desktop, with its screen connected (or the screen just off).
+
+7. Install Xcode 3.1.4 (Apple's compilers for Leopard) - THE ONE BIG STEP
+   - Leopard's last compiler package is "Xcode 3.1.4 Developer DVD" (file: xcode314_2809_developerdvd.dmg,
+     about 1 GB). It's free from Apple:
+       a. On this PC, go to  https://developer.apple.com/download/all/  and sign in with any Apple ID
+          (a free one is fine; accept the developer agreement if it asks).
+       b. Search for "Xcode 3.1.4" and download "Xcode 3.1.4 Developer DVD".
+          (If it's not listed any more, archive.org has the same file under that name.)
+       c. Copy the .dmg to the USB stick. The stick must be FAT32 (most are) - the file is under 4 GB,
+          so that's fine.
+   - On the PowerPC Mac: plug in the stick, double-click the .dmg, double-click "XcodeTools.mpkg".
+   - Click Continue / Agree. On "Installation Type" click Customize and make sure these are ticked:
+        [x] Developer Tools Essentials
+        [x] UNIX Development Support
+        [x] Mac OS X 10.4 Support   (so games can also run on Tiger, if we want that later)
+   - Install (it takes 10-20 minutes). Restart when it's done.
+   - Check it: open Applications > Utilities > Terminal and type:
+        gcc --version
+     It should say something like "powerpc-apple-darwin9-gcc-4.0.1" or 4.2.1. That's all Claude needs.
+
+8. Leave the firewall as it is
+   - System Preferences > Security > Firewall. Any setting works: Remote Login is allowed through it
+     automatically.
+
+9. Test it from this PC (optional, but nice)
+   - On this PC, open a Command Prompt or PowerShell and type (with YOUR name and number):
+        ssh -o HostKeyAlgorithms=+ssh-rsa -o KexAlgorithms=+diffie-hellman-group14-sha1 fahed@192.168.1.123
+   - It asks "Are you sure you want to continue connecting?" - type  yes
+   - Type the Mac's password. If you see a prompt like  "Mac:~ fahed$"  it works. Type  exit
+   - (Those extra words are needed because Leopard's SSH is from 2008; modern SSH refuses old Macs
+     unless told it's OK. Claude handles this itself - you only need it for this test.)
+   - If it says "Connection refused": Remote Login (step 3) isn't on.
+     If it says "Connection timed out": wrong IP address, or the Mac is asleep / not on the network.
+
+Note for later: the PowerPC player is a bigger job than the others (Leopard's compilers and the
+graphics library are old). Claude will work out what builds there once it's connected - you don't need
+to install anything else now. If something more is needed, Claude will tell you exactly what.
+
+
+=======================================================================================================
+PART 2 - THE INTEL MAC (macOS)
+=======================================================================================================
+
+1. Which macOS?
+   - Apple menu > About This Mac. Write the version in the table.
+   - Update it as far as it will go: Apple menu > System Settings (or System Preferences) > General >
+     Software Update. Newer is better: with macOS 10.15.4 (Catalina) or later its compilers can build
+     for Intel AND Apple silicon in one program. Older (10.13 / 10.14) still works for Intel.
+
+2. Install Apple's Command Line Tools (the compilers - no need for the whole of Xcode)
+   - Open Applications > Utilities > Terminal and type:
+        xcode-select --install
+   - A window asks to install them: click Install, then Agree. Wait until it says it's done
+     (5-20 minutes).
+   - Check it:  clang --version   should print "Apple clang version ...".
+   - If it says they're already installed, that's fine.
+
+3. The short user name
+   - In Terminal type:   whoami
+     That word is the short user name. Write it in the table.
+
+4. Turn on Remote Login (SSH)
+   - macOS 13 Ventura or newer: System Settings > General > Sharing > turn on "Remote Login".
+     Click the (i) next to it: "Allow access for: All users" (or only your account), and turn ON
+     "Allow full disk access for remote users".
+   - macOS 12 or older: System Preferences > Sharing > tick "Remote Login", "Allow access for: All users".
+   - It shows a line like  ssh fahed@192.168.1.124  - that number is the IP address. Write it down.
+
+5. The network address must not change - same as Part 1, step 4.
+
+6. Never sleep while plugged in
+   - macOS 13 or newer: System Settings > Displays > Advanced (or Energy / Battery > Options):
+     turn ON "Prevent automatic sleeping when the display is off" (and "Wake for network access").
+   - macOS 12 or older: System Preferences > Energy Saver (or Battery > Power Adapter):
+     tick "Prevent computer from sleeping automatically when the display is off", tick "Wake for
+     network access", untick "Put hard disks to sleep when possible".
+   - If it's a MacBook: keep it plugged in. Closing the lid makes it sleep - leave the lid open
+     (or use an external screen).
+
+7. Log in automatically
+   - System Settings > Users & Groups (> Login Options on older ones) > "Automatically log in as":
+     your account. (If this choice is greyed out, FileVault is on - then just stay logged in and don't
+     log out; that works too.)
+
+8. Test it from this PC (optional)
+   - Command Prompt or PowerShell on this PC:
+        ssh fahed@192.168.1.124
+   - yes, then the Mac's password. If you get a prompt, it works. Type  exit
+
+
+=======================================================================================================
+PART 3 - THE UBUNTU MACHINE (laptop)
+=======================================================================================================
+
+1. Ubuntu 24.04 LTS (Desktop) or newer, installed normally, updated:
+   open Terminal (Ctrl+Alt+T) and type:
+        sudo apt update && sudo apt upgrade -y
+2. Turn on SSH:
+        sudo apt install -y openssh-server
+        sudo systemctl enable --now ssh
+3. Its user name and IP address:
+        whoami
+        hostname -I
+   (the first number that starts with 192.168.1. is the one). Write them in the table.
+4. Settings > Power: "Automatic Suspend": Off (when plugged in). If it's a laptop, keep it plugged in;
+   Settings > Power > "When the lid is closed": do nothing (if offered).
+5. Settings > System > Users > "Automatic Login": On.
+6. Test from this PC:   ssh yourname@192.168.1.___   (yes, password, exit).
+
+
+=======================================================================================================
+PART 4 - HANDING OVER TO CLAUDE (on the day)
+=======================================================================================================
+
+1. Machines on, logged in, connected to the network.
+2. Tell Claude in the chat the table: for each machine, its short user name, IP address and version.
+   NOT the passwords.
+3. Claude will make a "key" so it can log in without a password from then on. To put the key on each
+   machine, it gives you a command that starts with "!", for example:
+        ! ssh-copy-id ... fahed@192.168.1.123
+   You type that in the Claude prompt yourself. The "!" makes it run on this PC directly; the machine
+   asks for its password, you type it there (it isn't shown and it isn't in the chat). Once per machine.
+4. From then on Claude connects by itself: it copies the player over, builds it, tests it with the
+   test game, and puts the result into the editor. After every change, every platform gets rebuilt
+   and everything goes to GitHub, as agreed.
+5. If Claude ever needs an administrator step on a Mac (installing something with "sudo"), it will
+   tell you, and you type the password yourself in a "!" command the same way.
+
+
+=======================================================================================================
+TROUBLESHOOTING
+=======================================================================================================
+
+- "Connection timed out": the machine is asleep, off, on another network, or its IP changed.
+  Check its IP again (Part 1 step 3 / Part 2 step 4 / Part 3 step 3).
+- "Connection refused": Remote Login / SSH isn't turned on.
+- "no matching host key type" or "no matching key exchange method" (PowerPC Mac only): that's the
+  old SSH - use the long command in Part 1, step 9. Claude does this by itself.
+- "Permission denied": wrong user name (use the SHORT name) or wrong password.
+- The Mac went to sleep overnight: re-check the Energy Saver steps; for a MacBook, the lid.
+- Anything else: tell Claude exactly what the screen says.
