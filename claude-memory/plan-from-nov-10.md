@@ -15,8 +15,7 @@ The user, 2026-11-07: ports only from 2026-11-10 until every platform is 100% (U
 - Amiga Vampire: b612 hides SAGA's hardware hand; user testing it side by side with Amiga 68k. Checkmark once they confirm.
 - AmigaOS 4.1: b613 (2026-11-17) built and switched on in Build; NOT yet run on an OS4 machine (needs the user's).
 - Left: **Macintosh, Ubuntu, PlayStation 2.** When these three are done, the ports are finished and the next part starts.
-- (PS3 has a player since b560-b610; the user didn't list it on 2026-11-17 - ask before assuming it is done or dropped.
-  PS4 was in the 11-07 plan and has no player yet.)
+- PS3: fine for now (user, 2026-11-17) - it is updated with every change like the rest. PS4 has no player yet.
 
 **After the ports - ORDER CHANGED 2026-11-17 (overrides the 11-07 order "U5 then Underworld"):**
 1. **Ultima Underworld - 3D.** NOT another top-down style like U5-U8. It is a real **3D game editor with the heart of Ultima
