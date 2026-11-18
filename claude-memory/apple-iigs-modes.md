@@ -28,8 +28,9 @@ accelerator check (count per VBL frame, 560 = needed; stock ~370) -> AlertWindow
 walks, Q quits. asm816.py is OUR assembler (building downloaded Merlin32 was denied by the classifier - don't retry).
 sim816.py runs the player headless (stubbed toolbox/GS/OS) and writes a PNG - use it before every push. KEGS 1.38 is in
 H:\_sandcastle_test_temp\kegs (not run by me: no ROM/GS/OS here). USER TESTED b619 IN KEGS 2026-11-18: BOTH PASSED (walks with the accelerator on; the alert with it off). User's KEGS: E:\Emulators\kegs.1.38\kegswin.exe, GS/OS disk System.po, ROM ../Clemens IIGS/APPLE2GS.ROM2 (ROM 03), settings in %APPDATA%/SandcastleRpgMaker/appleiigs-emulator.json.
-Next for the IIgs player, following the Windows U6 engine: NPCs + objects on the map, HUD (from the HUD Editor), talk,
-combat, sound (Ensoniq DOC from SOUNDS.DAT), events/commands, more maps (Change Map).
+Done: b620 objects + characters (GAME.DAT v2), b621 HUD composed by the editor (GAME.DAT v3: background, Game View place/size, labels, prompt).
+Next for the IIgs player, following the Windows U6 engine: talk (keyword conversations in the text area), the verbs,
+stats/portrait/inventory views, NPC schedules, combat, sound (Ensoniq DOC from SOUNDS.DAT), events/commands, more maps.
 
 **Why:** the user's wish; U6 never shipped on the IIgs.
 **How to apply:** ORDER now: ports (Mac/Ubuntu/PS2 left) and this IIgs mode in between as the user asks; then Underworld 3D,
