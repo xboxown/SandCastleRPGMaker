@@ -27,7 +27,7 @@ writer, SHR palette/packing, GAME.DAT format). Player v1 (Player/iigs/main.s): G
 accelerator check (count per VBL frame, 560 = needed; stock ~370) -> AlertWindow, GAME.DAT, palette, 10x10 view, Avatar
 walks, Q quits. asm816.py is OUR assembler (building downloaded Merlin32 was denied by the classifier - don't retry).
 sim816.py runs the player headless (stubbed toolbox/GS/OS) and writes a PNG - use it before every push. KEGS 1.38 is in
-H:\_sandcastle_test_temp\kegs (not run by me: no ROM/GS/OS here). Not yet tested in KEGS by the user.
+H:\_sandcastle_test_temp\kegs (not run by me: no ROM/GS/OS here). USER TESTED b619 IN KEGS 2026-11-18: BOTH PASSED (walks with the accelerator on; the alert with it off). User's KEGS: E:\Emulators\kegs.1.38\kegswin.exe, GS/OS disk System.po, ROM ../Clemens IIGS/APPLE2GS.ROM2 (ROM 03), settings in %APPDATA%\SandcastleRpgMakerppleiigs-emulator.json.
 Next for the IIgs player, following the Windows U6 engine: NPCs + objects on the map, HUD (from the HUD Editor), talk,
 combat, sound (Ensoniq DOC from SOUNDS.DAT), events/commands, more maps (Change Map).
 
