@@ -20,3 +20,6 @@ Later 2026-11-04: the user accepts Amiga 68k as the inferior target ("cannot squ
 b611 (2026-11-17): the hand pointer on top of the game was SAGA's HARDWARE pointer (the core's 16x16 sprite: lines at
 $DFF800, colours $DFF3A2-6, X $DFF1D0, Y $DFF1D2 - from AROS arch/m68k-amiga/hidd/sagagfx). b612: the game blanks only its picture (no parking - position stays the system's, so nothing to restore)
 every frame while its window is active (platform_amiga.c saga_hide_pointer). Waiting for the user's Firebird test.
+
+b614 (2026-11-17): NEVER compile with gcc -m68080 - it emits the 68080's A-line instructions and the user's V4 Firebird
+core crashed at once (guru 8000000A). Use -m68060 (+ AMMX only in vampire_ammx.s). Check with objdump for 0xAxxx opcodes.
