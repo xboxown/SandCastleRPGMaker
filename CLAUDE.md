@@ -24,6 +24,9 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
   the Vampire awaits the user's test, and Mac, Ubuntu and PS2 are left.
 - Then Ultima Underworld: a real 3D game editor with the heart of Ultima Underworld (any 3D game - Silent Hill-like,
   Doom/Quake-like, first-person horror) with tools that make an Underworld game easy. Ultima 5 comes last.
+- To do (2026-11-17, order not set yet): "Ultima 5 Apple IIgs" and "Ultima 6 Apple IIgs" project modes - own low-level
+  65816 player under GS/OS (required), accelerator required (error message if none), the editor enforces the IIgs limits
+  (colours, sprites, sizes, map size, sound). Tested in KEGS. See claude-memory/apple-iigs-modes.md.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.
 - Every change goes into Windows and the C player (`Player/src`) together, and EVERY platform's player is rebuilt -
   Amiga 68k, Vampire, MorphOS, AmigaOS 4, Ubuntu, PS2, PS3 (`Player/build_*.sh` in WSL) and Mac. No platform may be left outdated.
