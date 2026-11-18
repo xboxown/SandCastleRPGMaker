@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 3 (b621): the HUD (HUD Editor): its background, the Game View where and as big as it is, the name; the
+;   text area's prompt.
 ; Version 2 (b620): objects and characters on the map too (solid ones and characters stop the Avatar).
 ; Version 1: starts under GS/OS, checks for an accelerator (an Apple IIgs at its own 2.8 MHz gets an alert and the game
 ; quits), loads GAME.DAT from its own folder, sets the Super Hi-Res palette, draws the world (10 x 10 tiles of 16 x 16)
@@ -65,6 +67,22 @@ ViewX0    = $8E
 ViewY0    = $90
 CellX     = $92
 CellY     = $94
+VX        = $96   ; the Game View on the screen: left (even), top, columns, rows of 16 x 16
+VY        = $98
+VCols     = $9A
+VRows     = $9C
+HalfC     = $9E   ; the Avatar's cell in the view
+HalfR     = $A0
+ClipX0    = $A2   ; the view's edges, + 64 (sprites may start left of or above the screen)
+ClipX1    = $A4
+ClipY0    = $A6
+ClipY1    = $A8
+HudPtr    = $AA   ; 4
+HasHud    = $AE
+LblCount  = $B0
+LblPtr    = $B2   ; 4
+TextX     = $B6
+TextY     = $B8
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -347,7 +365,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #2
+        cmp #3
         beq .known
 .bad:   sec
         rts
@@ -488,6 +506,55 @@ ParseData:
         sta ChrPtr
         lda Ptr+2
         sta ChrPtr+2
+        lda ChrCount            ; 10 bytes each
+        asl a
+        sta T0
+        asl a
+        asl a
+        clc
+        adc T0
+        jsr AddPtr
+        ; the HUD: its background (32000 bytes) if there is one, the Game View, the text area, the words
+        lda [Ptr]
+        sta HasHud
+        lda #2
+        jsr AddPtr
+        lda HasHud
+        beq .nohud
+        lda Ptr
+        sta HudPtr
+        lda Ptr+2
+        sta HudPtr+2
+        lda #32000
+        jsr AddPtr
+.nohud: lda [Ptr]
+        sta VX
+        ldy #2
+        lda [Ptr],y
+        sta VY
+        ldy #4
+        lda [Ptr],y
+        sta VCols
+        ldy #6
+        lda [Ptr],y
+        sta VRows
+        ldy #8
+        lda [Ptr],y
+        sta TextX
+        ldy #10
+        lda [Ptr],y
+        sta TextY
+        lda #16
+        jsr AddPtr
+        lda [Ptr]
+        sta LblCount
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta LblPtr
+        lda Ptr+2
+        sta LblPtr+2
+        jsr ViewSetup
         stz Facing
         clc
         rts
@@ -570,7 +637,12 @@ SetupScreen:
         cpx #32000
         bne .clr
         jsr FindBright
-        lda Bright              ; the frame round the world and the words: the brightest colour
+        pea 0
+        tool $A204              ; SetBackColor
+        lda HasHud
+        beq .plain
+        jmp DrawHud
+.plain: lda Bright              ; the frame round the world and the words: the brightest colour
         pha
         tool $3704              ; SetSolidPenPat
         pea #bank(ViewRect)
@@ -632,20 +704,18 @@ FindBright:
 ; The world around the Avatar: 10 x 10 tiles, the Avatar in the middle.
 DrawView:
         stz Row
-        lda #VIEW_Y*160+VIEW_X/2
-        sta ViewOff
 .row:   stz Col
 .col:   lda PX
         clc
         adc Col
         sec
-        sbc #5
+        sbc HalfC
         tax
         lda PY
         clc
         adc Row
         sec
-        sbc #5
+        sbc HalfR
         tay
         jsr MapTile
         pha
@@ -671,15 +741,142 @@ DrawView:
         jsr DrawTile
         inc Col
         lda Col
-        cmp #10
-        bne .col
+        cmp VCols
+        beq .nextrow
+        jmp .col
+.nextrow:
         inc Row
         lda Row
-        cmp #10
-        bne .row
+        cmp VRows
+        beq .rowsdone
+        jmp .row
+.rowsdone:
         jsr DrawObjects
         jsr DrawCharacters
         jsr DrawAvatar
+        rts
+
+; ---- the Game View ----
+; From VX, VY, VCols, VRows: the Avatar's cell, the view's first byte on the screen, its edges (+ 64).
+ViewSetup:
+        lda VCols
+        lsr a
+        sta HalfC
+        lda VRows
+        lsr a
+        sta HalfR
+        lda VY                  ; ViewOff = VY * 160 + VX / 2
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        sta T0
+        asl a
+        asl a
+        clc
+        adc T0
+        sta T0
+        lda VX
+        lsr a
+        clc
+        adc T0
+        sta ViewOff
+        lda VX
+        clc
+        adc #64
+        sta ClipX0
+        lda VCols
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc ClipX0
+        sta ClipX1
+        lda VY
+        clc
+        adc #64
+        sta ClipY0
+        lda VRows
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc ClipY0
+        sta ClipY1
+        rts
+
+; The HUD's background over the whole screen, then its words.
+DrawHud:
+        lda HudPtr
+        sta Src
+        lda HudPtr+2
+        sta Src+2
+        ldx #0
+        ldy #0
+.c:     lda [Src],y
+        sta >SCREEN,x
+        iny
+        iny
+        inx
+        inx
+        cpx #32000
+        bne .c
+        lda LblPtr
+        sta ItemPtr
+        lda LblPtr+2
+        sta ItemPtr+2
+        lda LblCount
+        sta Item
+.l:     lda Item
+        beq .text
+        ldy #4                  ; its colour ($FFFF: the brightest)
+        lda [ItemPtr],y
+        cmp #$FFFF
+        bne .col
+        lda Bright
+.col:   pha
+        tool $A004              ; SetForeColor
+        lda [ItemPtr]
+        pha
+        ldy #2
+        lda [ItemPtr],y
+        clc
+        adc #8                  ; the top to the baseline
+        pha
+        tool $3A04              ; MoveTo
+        lda ItemPtr+2           ; the words: 7 bytes in, a C string
+        pha
+        lda ItemPtr
+        clc
+        adc #7
+        pha
+        tool $A604              ; DrawCString
+        ldy #6
+        lda [ItemPtr],y
+        and #$00FF
+        clc
+        adc #8                  ; x, y, colour, length, the words, 0
+        jsr NextItem
+        dec Item
+        bra .l
+.text:  lda Bright              ; the text area: Ultima 6's prompt
+        pha
+        tool $A004
+        lda TextX
+        clc
+        adc #2
+        pha
+        lda TextY
+        clc
+        adc #9
+        pha
+        tool $3A04
+        pea #bank(Prompt)
+        pea #Prompt
+        tool $A604
         rts
 
 ; ---- objects and characters ----
@@ -886,11 +1083,11 @@ DrawCharacters:
 ViewCorner:
         lda PX
         sec
-        sbc #5
+        sbc HalfC
         sta ViewX0
         lda PY
         sec
-        sbc #5
+        sbc HalfR
         sta ViewY0
         rts
 
@@ -902,26 +1099,39 @@ CellOnScreen:
         sbc ViewX0
         clc
         adc #1
-        cmp #12
-        bcs .no
+        sta T3
+        lda VCols
+        inc a
+        inc a
+        cmp T3                  ; columns -1 to VCols
+        beq .no
+        bcc .no
+        lda T3
         asl a
         asl a
         asl a
         asl a
         clc
-        adc #VIEW_X-16
-        sta CellX
+        adc ClipX0
+        sec
+        sbc #16
+        sta CellX               ; + 64, as the clip edges
         tya
         sec
         sbc ViewY0
-        cmp #11
-        bcs .no
+        sta T3
+        lda VRows
+        inc a
+        cmp T3                  ; rows 0 to VRows
+        beq .no
+        bcc .no
+        lda T3
         asl a
         asl a
         asl a
         asl a
         clc
-        adc #VIEW_Y
+        adc ClipY0
         sta CellY
         sec
         rts
@@ -979,17 +1189,17 @@ DrawSprite:
         ; the columns (bytes) that show
         stz C0
         lda SX
-        cmp #VIEW_X+160
+        cmp ClipX1
         bcc .x1
         rts
-.x1:    cmp #VIEW_X
+.x1:    cmp ClipX0
         bcs .x2
-        lda #VIEW_X
+        lda ClipX0
         sec
         sbc SX
         lsr a
         sta C0
-.x2:    lda #VIEW_X+160
+.x2:    lda ClipX1
         sec
         sbc SX
         lsr a
@@ -1003,15 +1213,15 @@ DrawSprite:
         ; the rows that show
         stz R0
         lda SY
-        cmp #VIEW_Y+160
+        cmp ClipY1
         bcs .out
-        cmp #VIEW_Y
+        cmp ClipY0
         bcs .y2
-        lda #VIEW_Y
+        lda ClipY0
         sec
         sbc SY
         sta R0
-.y2:    lda #VIEW_Y+160
+.y2:    lda ClipY1
         sec
         sbc SY
         cmp SH
@@ -1034,9 +1244,11 @@ DrawSprite:
         sta Src+2
         dex
         bra .skip
-.scr:   lda SY                  ; Scr = $E12000 + (SY + R0) * 160 + SX / 2
+.scr:   lda SY                  ; Scr = $E12000 + (SY - 64 + R0) * 160 + (SX - 64) / 2
         clc
         adc R0
+        sec
+        sbc #64
         asl a
         asl a
         asl a
@@ -1049,7 +1261,10 @@ DrawSprite:
         adc T0
         sta T0
         lda SX
-        lsr a
+        sec
+        sbc #64
+        cmp #$8000              ; halved keeping its sign: it may start left of the screen
+        ror a
         clc
         adc T0
         clc
@@ -1195,7 +1410,25 @@ DrawAvatar:
         lda AvatarPtr+2
         adc #0
         sta Src+2
-        lda #$2000+VIEW_Y*160+VIEW_X/2+5*16*160+5*8
+        lda HalfR               ; Scr = $E12000 + ViewOff + HalfR * 2560 + HalfC * 8
+        xba
+        asl a
+        sta T0
+        asl a
+        asl a
+        clc
+        adc T0
+        sta T0
+        lda HalfC
+        asl a
+        asl a
+        asl a
+        clc
+        adc T0
+        clc
+        adc ViewOff
+        clc
+        adc #$2000
         sta Scr
         lda #$00E1
         sta Scr+2
@@ -1358,6 +1591,8 @@ AlertNoMemory:
         .cstr "42/There is not enough memory for the game./^Quit"
 AlertBadData:
         .cstr "42/GAME.DAT was made for another version of this player. Build the game again with the editor./^Quit"
+Prompt:
+        .cstr ">"
 HelpText:
         .cstr "Arrows: walk     Q: quit"
 TitleBuf:

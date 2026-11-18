@@ -118,6 +118,11 @@ public partial class MainWindow
         catch (Exception ex) { problems.Add("The tiles couldn't be read: " + ex.Message); }
         if (PlayerCharacter() is null) problems.Add("No Avatar: tick Test Player on a character (Character Editor) - the game is played as them.");
         problems.AddRange(PictureSizeProblems());
+        var hudDesign = _systemSettings.Ultima6.Hud;
+        if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
+            problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
+        if (hudDesign.First(HudPieceKind.GameView) is { } gv && (gv.Width / AppleIIgsLimits.TileSize > 20 || gv.Height / AppleIIgsLimits.TileSize > 12))
+            problems.Add("The HUD's Game View is bigger than the screen holds (at most 20 x 12 cells of 16 x 16).");
         return problems;
     }
 
@@ -357,7 +362,11 @@ public partial class MainWindow
             characters.Add((placed.X, placed.Y, first, 1, facing));
         }
         if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)));
+        var hud = ComposeHud(pack);
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()));
+        if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
+        for (int i = 0; i < pack.Labels.Count; i++)
+            if (pack.Labels[i].Color < 0) pack.Labels[i] = pack.Labels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.Labels[i].Color - 1) | 0xFF000000u, false) };
         foreach (var px in tilePixels) pack.Tiles.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: false));
         pack.TileFlags.AddRange(flags);
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
@@ -380,6 +389,75 @@ public partial class MainWindow
             catch { /* the check already said so */ }
         }
         return pack;
+    }
+
+    /// <summary>
+    /// The HUD (HUD Editor) as the IIgs shows it at the start: its frame, pictures, buttons, dials and the inventory view's
+    /// body slots composed into one 320 x 200 background; where the Game View and the text area are; the member's name as
+    /// words. Null: no HUD (no Game View) - the world shows in the middle of the screen. Label colours are -1 - RGB
+    /// until the palette is made (then 0-15), or $FFFF for the brightest.
+    /// </summary>
+    private uint[]? ComposeHud(AppleIIgsGamePack pack)
+    {
+        var design = _systemSettings.Ultima6.Hud;
+        if (design.First(HudPieceKind.GameView) is not { } view) return null;
+        var canvas = new uint[320 * 200];
+        SpriteEntry? Of(SpriteLink link) => !link.IsSet ? null :
+            _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName)
+            ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
+        void Draw(SpriteEntry? sprite, int x, int y, int w, int h, bool fit)
+        {
+            string? file = sprite?.Frames.FirstOrDefault()?.FilePath ?? sprite?.FilePath;
+            if (string.IsNullOrEmpty(file) || !File.Exists(file) || w <= 0 || h <= 0) return;
+            var img = new BitmapImage();
+            img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(file)); img.EndInit();
+            var src = Pixels(img, out int sw, out int sh);
+            int dw = w, dh = h, ox = 0, oy = 0;
+            if (fit) { double k = Math.Min((double)w / sw, (double)h / sh); dw = Math.Max(1, (int)(sw * k)); dh = Math.Max(1, (int)(sh * k)); ox = (w - dw) / 2; oy = (h - dh) / 2; }
+            for (int yy = 0; yy < dh; yy++)
+                for (int xx = 0; xx < dw; xx++)
+                {
+                    int px = x + ox + xx, py = y + oy + yy;
+                    if (px < 0 || py < 0 || px >= 320 || py >= 200) continue;
+                    uint c = src[Math.Min(sh - 1, yy * sh / dh) * sw + Math.Min(sw - 1, xx * sw / dw)];
+                    if ((c >> 24) >= 128) canvas[py * 320 + px] = c | 0xFF000000u;
+                }
+        }
+        Draw(Of(design.Frame), 0, 0, 320, 200, fit: false);
+        var player = PlayerCharacter();
+        var front = new List<HudPiece>();
+        foreach (var piece in design.Pieces)
+            switch (piece.Kind)
+            {
+                case HudPieceKind.Picture or HudPieceKind.Panel:
+                    if (piece.Kind == HudPieceKind.Picture && piece.InFront) front.Add(piece);
+                    else Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: false);
+                    break;
+                case HudPieceKind.CommandButton or HudPieceKind.CustomButton or HudPieceKind.Compass or HudPieceKind.SunMoon:
+                    Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: false);
+                    break;
+                case HudPieceKind.BodySlot: // the inventory view: what the Avatar wears there, or the slot's own picture
+                {
+                    var worn = player is not null && player.EquippedSlots.TryGetValue(piece.Slot, out int id) ? player.Inventory.FirstOrDefault(i => i.InstanceId == id) : null;
+                    var sprite = worn is not null ? DollLook.ItemSprite(worn.Category, worn.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase) : Of(piece.Sprite);
+                    Draw(sprite, piece.X, piece.Y, piece.Width, piece.Height, fit: true);
+                    break;
+                }
+                case HudPieceKind.MemberName when player is not null:
+                    pack.Labels.Add((piece.X, piece.Y, LabelColor(piece.TextColor), player.Name));
+                    break;
+            }
+        foreach (var piece in front) Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: false);
+        int columns = Math.Clamp(view.Width / AppleIIgsLimits.TileSize, 1, 20), rows = Math.Clamp(view.Height / AppleIIgsLimits.TileSize, 1, 12);
+        pack.View = (Math.Clamp(view.X & ~1, 0, 320 - columns * 16), Math.Clamp(view.Y, 0, 200 - rows * 16), columns, rows);
+        if (design.First(HudPieceKind.TextArea) is { } text) pack.TextArea = (text.X, text.Y, text.Width, text.Height);
+        return canvas;
+
+        static int LabelColor(string color)
+        {
+            try { if (color.Length > 0 && ColorConverter.ConvertFromString(color) is Color c) return -1 - (c.R << 16 | c.G << 8 | c.B); } catch { }
+            return 0xFFFF;
+        }
     }
 
     /// <summary>The game's disk: the player (S16), GAME.DAT and SOUNDS.DAT on a ProDOS volume, as a .2mg (or plain blocks).</summary>

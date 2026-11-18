@@ -314,13 +314,16 @@ public static class SuperHiRes
 ///            u16 height (at most 32), width/2 x height bytes (colour 0 see-through)
 ///   objects: u16 count, each: u16 x, u16 y, u16 sprite, u16 flags (bit 0: solid) - sorted top to bottom
 ///   characters: u16 count, each: u16 x, u16 y, u16 sprite (south; +1 north, +2 east, +3 west), u16 flags, u16 facing
+///   hud: u16 1 = a HUD (then 32000 bytes: the 320 x 200 background, 4 bits a pixel), 0 = none (the world in the middle)
+///        u16 view x (even), view y, columns, rows (the Game View, 16 x 16 cells); u16 text x, y, width, height
+///        u16 labels, each: u16 x, u16 y (top), u16 colour (0-15; $FFFF: the brightest), u8 length, text, 0
 ///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 2: the map, its tiles, the Avatar, objects, characters and the sounds - the rest comes build by build.
+/// Version 3: the map, its tiles, the Avatar, objects, characters, the HUD and the sounds - the rest comes build by build.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 2;
+    public const ushort Version = 3;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -335,6 +338,11 @@ public sealed class AppleIIgsGamePack
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
     public List<(int X, int Y, int Sprite, int Flags)> Objects { get; } = new();
     public List<(int X, int Y, int Sprite, int Flags, int Facing)> Characters { get; } = new();
+    /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
+    public byte[]? HudBackground { get; set; }
+    public (int X, int Y, int Columns, int Rows) View { get; set; } = (80, 20, 10, 10);
+    public (int X, int Y, int Width, int Height) TextArea { get; set; }
+    public List<(int X, int Y, int Color, string Text)> Labels { get; } = new();
 
     public byte[] Write()
     {
@@ -362,6 +370,16 @@ public sealed class AppleIIgsGamePack
         foreach (var o in Objects.OrderBy(o => o.Y).ThenBy(o => o.X)) { w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); }
         w.Write((ushort)Characters.Count);
         foreach (var c in Characters) { w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing); }
+        w.Write((ushort)(HudBackground is null ? 0 : 1));
+        if (HudBackground is not null) w.Write(HudBackground);
+        w.Write((ushort)(View.X & ~1)); w.Write((ushort)View.Y); w.Write((ushort)View.Columns); w.Write((ushort)View.Rows);
+        w.Write((ushort)TextArea.X); w.Write((ushort)TextArea.Y); w.Write((ushort)TextArea.Width); w.Write((ushort)TextArea.Height);
+        w.Write((ushort)Labels.Count);
+        foreach (var (x, y, color, text) in Labels)
+        {
+            var t = Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(40).ToArray()));
+            w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)color); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0);
+        }
         w.Write((ushort)Sounds.Count);
         foreach (var (name, rate, data) in Sounds)
         {
