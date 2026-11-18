@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 2 (b620): objects and characters on the map too (solid ones and characters stop the Avatar).
 ; Version 1: starts under GS/OS, checks for an accelerator (an Apple IIgs at its own 2.8 MHz gets an alert and the game
 ; quits), loads GAME.DAT from its own folder, sets the Super Hi-Res palette, draws the world (10 x 10 tiles of 16 x 16)
 ; with the Avatar in the middle, walks with the arrow keys (walls stop the Avatar), Q or Esc quits back to the desktop.
@@ -40,6 +41,30 @@ TileCount = $50
 NX        = $52
 NY        = $54
 ViewOff   = $56
+SprTab    = $58   ; 4
+SprBank   = $5C   ; 4
+ObjPtr    = $60   ; 4
+ChrPtr    = $64   ; 4
+OccPtr    = $68   ; 4: one byte a cell - 1 a solid object, 2 a character
+OccHandle = $6C   ; 4
+ObjCount  = $70
+ChrCount  = $72
+SprId     = $74
+SX        = $76
+SY        = $78
+SW        = $7A
+SH        = $7C
+BPR       = $7E
+C0        = $80
+C1        = $82
+R0        = $84
+R1        = $86
+Item      = $88
+ItemPtr   = $8A   ; 4
+ViewX0    = $8E
+ViewY0    = $90
+CellX     = $92
+CellY     = $94
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -101,6 +126,13 @@ start:
         jsr Alert
         jmp Quit
 .parsed:
+        jsr MakeOcc
+        bcc .occ
+        lda #AlertNoMemory
+        ldx #bank(AlertNoMemory)
+        jsr Alert
+        jmp Quit
+.occ:
         tool $9004              ; HideCursor
         jsr SetupScreen
         jsr DrawView
@@ -171,6 +203,15 @@ Quit:
         pha
         tool $1002              ; DisposeHandle
 .nohandle:
+        lda OccHandle
+        ora OccHandle+2
+        beq .noocc
+        lda OccHandle+2
+        pha
+        lda OccHandle
+        pha
+        tool $1002
+.noocc:
         pea 0
         lda SSRef+2
         pha
@@ -306,7 +347,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #1
+        cmp #2
         beq .known
 .bad:   sec
         rts
@@ -385,12 +426,68 @@ ParseData:
         jsr Mul16               ; width x height x 2
         jsr AddPtrLong
         ; the Avatar: frame count, then 128 bytes a frame (south, north, east, west)
+        lda [Ptr]
+        sta T0
         lda #2
         jsr AddPtr
         lda Ptr
         sta AvatarPtr
         lda Ptr+2
         sta AvatarPtr+2
+        lda T0
+        sta MulA
+        lda #128
+        sta MB0
+        jsr Mul16
+        jsr AddPtrLong
+        ; the sprites: count, offsets, their size, the sprites
+        lda [Ptr]
+        sta MulA
+        lda #4
+        sta MB0
+        jsr Mul16               ; count * 4
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta SprTab
+        lda Ptr+2
+        sta SprTab+2
+        jsr AddPtrLong
+        lda [Ptr]
+        sta MulR
+        ldy #2
+        lda [Ptr],y
+        sta MulR+2
+        lda #4
+        jsr AddPtr
+        lda Ptr
+        sta SprBank
+        lda Ptr+2
+        sta SprBank+2
+        jsr AddPtrLong
+        ; the objects: 8 bytes each
+        lda [Ptr]
+        sta ObjCount
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta ObjPtr
+        lda Ptr+2
+        sta ObjPtr+2
+        lda ObjCount
+        asl a
+        asl a
+        asl a
+        jsr AddPtr
+        ; the characters: 10 bytes each
+        lda [Ptr]
+        sta ChrCount
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta ChrPtr
+        lda Ptr+2
+        sta ChrPtr+2
         stz Facing
         clc
         rts
@@ -580,7 +677,419 @@ DrawView:
         lda Row
         cmp #10
         bne .row
+        jsr DrawObjects
+        jsr DrawCharacters
         jsr DrawAvatar
+        rts
+
+; ---- objects and characters ----
+; Which cells are taken: OccPtr (map width x height bytes), 1 = a solid object, 2 = a character. Carry set: no memory.
+MakeOcc:
+        lda MapW
+        sta MulA
+        lda MapH
+        sta MB0
+        jsr Mul16
+        lda MulR                ; + 2: whole words to clear
+        clc
+        adc #2
+        sta T0
+        lda MulR+2
+        adc #0
+        sta T1
+        pha
+        pha
+        lda T1
+        pha
+        lda T0
+        pha
+        lda UserId
+        pha
+        pea $C000
+        pea 0
+        pea 0
+        tool $0902              ; NewHandle
+        pla
+        sta OccHandle
+        pla
+        sta OccHandle+2
+        bcc .got
+        rts
+.got:   ldy #2
+        lda [OccHandle],y
+        sta OccPtr+2
+        lda [OccHandle]
+        sta OccPtr
+        lda T0                  ; clear: (size + 2) / 2 words
+        lsr T1
+        ror a
+        tax
+        ldy #0
+        lda #0
+.z:     sta [OccPtr],y
+        iny
+        iny
+        dex
+        bne .z
+        ; solid objects
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta Item
+.o:     lda Item
+        beq .chars
+        ldy #6
+        lda [ItemPtr],y
+        and #$0001
+        beq .on
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr OccAt
+        sep #$20
+        .a8
+        lda [Ptr]
+        ora #1
+        sta [Ptr]
+        rep #$20
+        .a16
+.on:    lda #8
+        jsr NextItem
+        dec Item
+        bra .o
+.chars: lda ChrPtr
+        sta ItemPtr
+        lda ChrPtr+2
+        sta ItemPtr+2
+        lda ChrCount
+        sta Item
+.c:     lda Item
+        beq .done
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr OccAt
+        sep #$20
+        .a8
+        lda [Ptr]
+        ora #2
+        sta [Ptr]
+        rep #$20
+        .a16
+        lda #10
+        jsr NextItem
+        dec Item
+        bra .c
+.done:  clc
+        rts
+
+; ItemPtr += A
+NextItem:
+        clc
+        adc ItemPtr
+        sta ItemPtr
+        lda ItemPtr+2
+        adc #0
+        sta ItemPtr+2
+        rts
+
+; Ptr = the cell X, Y of OccPtr; A = what is there (0: free)
+OccAt:
+        stx T2
+        sty MulA
+        lda MapW
+        sta MB0
+        jsr Mul16
+        clc
+        lda MulR
+        adc T2
+        sta MulR
+        lda MulR+2
+        adc #0
+        sta MulR+2
+        clc
+        lda OccPtr
+        adc MulR
+        sta Ptr
+        lda OccPtr+2
+        adc MulR+2
+        sta Ptr+2
+        lda [Ptr]
+        and #$00FF
+        rts
+
+; Every object in or next to the view, top to bottom.
+DrawObjects:
+        jsr ViewCorner
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta Item
+.l:     lda Item
+        beq .end
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr CellOnScreen
+        bcc .n
+        ldy #4
+        lda [ItemPtr],y
+        sta SprId
+        jsr DrawSprite
+.n:     lda #8
+        jsr NextItem
+        dec Item
+        bra .l
+.end:   rts
+
+DrawCharacters:
+        jsr ViewCorner
+        lda ChrPtr
+        sta ItemPtr
+        lda ChrPtr+2
+        sta ItemPtr+2
+        lda ChrCount
+        sta Item
+.l:     lda Item
+        beq .end
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr CellOnScreen
+        bcc .n
+        ldy #8
+        lda [ItemPtr],y         ; its facing
+        ldy #4
+        clc
+        adc [ItemPtr],y         ; + its first (south) sprite
+        sta SprId
+        jsr DrawSprite
+.n:     lda #10
+        jsr NextItem
+        dec Item
+        bra .l
+.end:   rts
+
+; ViewX0, ViewY0: the map cell at the view's top left.
+ViewCorner:
+        lda PX
+        sec
+        sbc #5
+        sta ViewX0
+        lda PY
+        sec
+        sbc #5
+        sta ViewY0
+        rts
+
+; Cell X, Y: carry set if a sprite standing there can show (columns -1 to 10, rows 0 to 10 of the view);
+; CellX, CellY = the cell's top left on the screen.
+CellOnScreen:
+        txa
+        sec
+        sbc ViewX0
+        clc
+        adc #1
+        cmp #12
+        bcs .no
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc #VIEW_X-16
+        sta CellX
+        tya
+        sec
+        sbc ViewY0
+        cmp #11
+        bcs .no
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc #VIEW_Y
+        sta CellY
+        sec
+        rts
+.no:    clc
+        rts
+
+; Draws sprite SprId standing on the cell at CellX, CellY (its bottom middle), clipped to the view; colour 0 see-through.
+DrawSprite:
+        lda SprId
+        asl a
+        asl a
+        tay
+        lda [SprTab],y
+        sta T0
+        iny
+        iny
+        lda [SprTab],y
+        sta T1
+        clc
+        lda SprBank
+        adc T0
+        sta Src
+        lda SprBank+2
+        adc T1
+        sta Src+2
+        lda [Src]
+        sta SW
+        ldy #2
+        lda [Src],y
+        sta SH
+        lda #4
+        clc
+        adc Src
+        sta Src
+        lda Src+2
+        adc #0
+        sta Src+2
+        lda SW
+        lsr a
+        sta BPR
+        lsr a                   ; SX = CellX + 8 - width / 2
+        sta T0
+        lda CellX
+        clc
+        adc #8
+        sec
+        sbc T0
+        sta SX
+        lda CellY               ; SY = CellY + 16 - height
+        clc
+        adc #16
+        sec
+        sbc SH
+        sta SY
+        ; the columns (bytes) that show
+        stz C0
+        lda SX
+        cmp #VIEW_X+160
+        bcc .x1
+        rts
+.x1:    cmp #VIEW_X
+        bcs .x2
+        lda #VIEW_X
+        sec
+        sbc SX
+        lsr a
+        sta C0
+.x2:    lda #VIEW_X+160
+        sec
+        sbc SX
+        lsr a
+        cmp BPR
+        bcc .x3
+        lda BPR
+.x3:    sta C1
+        cmp C0
+        beq .out
+        bcc .out
+        ; the rows that show
+        stz R0
+        lda SY
+        cmp #VIEW_Y+160
+        bcs .out
+        cmp #VIEW_Y
+        bcs .y2
+        lda #VIEW_Y
+        sec
+        sbc SY
+        sta R0
+.y2:    lda #VIEW_Y+160
+        sec
+        sbc SY
+        cmp SH
+        bcc .y3
+        lda SH
+.y3:    sta R1
+        cmp R0
+        beq .out
+        bcs .draw
+.out:   rts
+.draw:  ldx R0                  ; Src += R0 rows
+.skip:  cpx #0
+        beq .scr
+        lda Src
+        clc
+        adc BPR
+        sta Src
+        lda Src+2
+        adc #0
+        sta Src+2
+        dex
+        bra .skip
+.scr:   lda SY                  ; Scr = $E12000 + (SY + R0) * 160 + SX / 2
+        clc
+        adc R0
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a                   ; * 32
+        sta T0
+        asl a
+        asl a                   ; * 128
+        clc
+        adc T0
+        sta T0
+        lda SX
+        lsr a
+        clc
+        adc T0
+        clc
+        adc #$2000
+        sta Scr
+        lda #$00E1
+        sta Scr+2
+        lda R1
+        sec
+        sbc R0
+        sta Count
+.row:   lda #0                  ; B = 0 for TAX
+        sep #$20
+        .a8
+        ldy C0
+.b:     lda [Src],y
+        beq .nb
+        tax
+        lda [Scr],y
+        and MaskTab,x
+        ora [Src],y
+        sta [Scr],y
+.nb:    iny
+        cpy C1
+        bne .b
+        rep #$20
+        .a16
+        lda Src
+        clc
+        adc BPR
+        sta Src
+        lda Src+2
+        adc #0
+        sta Src+2
+        lda Scr
+        clc
+        adc #160
+        sta Scr
+        dec Count
+        bne .row
         rts
 
 ; A = the tile at X, Y on the map; $FFFF off the map.
@@ -770,6 +1279,10 @@ TryMove:
         lda [FlagsPtr],y
         and #$0001
         beq .stay
+        ldx NX                  ; a solid object or a character there stops it too
+        ldy NY
+        jsr OccAt
+        bne .stay
         lda NX
         sta PX
         lda NY
@@ -841,6 +1354,8 @@ AlertSlow:
         .cstr "42/This game needs an Apple IIgs with an accelerator card (a TransWarp GS, a ZipGS or another). This Apple IIgs runs at its own speed./^Quit"
 AlertNoData:
         .cstr "42/GAME.DAT, the game itself, is missing: keep it in the same folder as this program./^Quit"
+AlertNoMemory:
+        .cstr "42/There is not enough memory for the game./^Quit"
 AlertBadData:
         .cstr "42/GAME.DAT was made for another version of this player. Build the game again with the editor./^Quit"
 HelpText:

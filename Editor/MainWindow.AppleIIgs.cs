@@ -233,9 +233,14 @@ public partial class MainWindow
     /// <summary>The Avatar's look, one 16 x 16 picture a facing (south, north, east, west): its Idle (or first) pose.</summary>
     private List<uint[]> AvatarPictures()
     {
-        var list = new List<uint[]>();
         var who = PlayerCharacter();
-        if (who is null) return list;
+        return who is null ? new List<uint[]>() : LookFiles(who).Select(f => f is not null && File.Exists(f) ? FitInto16(f) : new uint[256]).ToList();
+    }
+
+    /// <summary>A character's picture files for south, north, east and west: its Idle (or Walking, or first) pose, the first frame.</summary>
+    private List<string?> LookFiles(CharacterDefinition who)
+    {
+        var list = new List<string?>();
         var pose = _poseDatabase.Poses.FirstOrDefault(p => p.Name == "Idle" && who.PoseSprites.ContainsKey(p.Id))
                    ?? _poseDatabase.Poses.FirstOrDefault(p => p.Name == "Walking" && who.PoseSprites.ContainsKey(p.Id));
         PoseAssignment? assignment = pose is not null ? who.PoseSprites[pose.Id] : who.PoseSprites.Values.FirstOrDefault();
@@ -244,10 +249,25 @@ public partial class MainWindow
             var link = assignment?.Resolve(facing);
             var sprite = link is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName)
                                              ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
-            string? file = sprite?.Frames.FirstOrDefault()?.FilePath;
-            list.Add(file is not null && File.Exists(file) ? FitInto16(file) : new uint[256]);
+            list.Add(sprite?.Frames.FirstOrDefault()?.FilePath);
         }
         return list;
+    }
+
+    /// <summary>A sprite as the IIgs player draws it: at most 32 x 32 (shrunk, keeping its shape), its width a multiple of 4 (padded each side).</summary>
+    private static (uint[] Px, int W, int H) FitSprite(string file)
+    {
+        var img = new BitmapImage();
+        img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(file)); img.EndInit();
+        var src = Pixels(img, out int w, out int h);
+        double scale = Math.Min(1.0, Math.Min((double)AppleIIgsLimits.MaxSpriteWidth / w, (double)AppleIIgsLimits.MaxSpriteHeight / h));
+        int dw = Math.Max(1, (int)(w * scale)), dh = Math.Max(1, (int)(h * scale));
+        int pw = (dw + 3) / 4 * 4, left = (pw - dw) / 2;
+        var dst = new uint[pw * dh];
+        for (int y = 0; y < dh; y++)
+            for (int x = 0; x < dw; x++)
+                dst[y * pw + left + x] = src[Math.Min(h - 1, (int)(y / scale)) * w + Math.Min(w - 1, (int)(x / scale))];
+        return (dst, pw, dh);
     }
 
     /// <summary>A picture made to fit 16 x 16: shrunk (keeping its shape) if bigger, standing on the bottom, in the middle.</summary>
@@ -301,10 +321,49 @@ public partial class MainWindow
             }
         var avatar = AvatarPictures();
         while (avatar.Count < 4) avatar.Add(new uint[256]);
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)));
+        // Objects and characters on the starting map, each picture once (Engine/AppleIIgs.cs: sprites).
+        var spriteIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var spritePixels = new List<(uint[] Px, int W, int H)>();
+        int SpriteOf(string? file)
+        {
+            if (string.IsNullOrEmpty(file) || !File.Exists(file)) return -1;
+            if (spriteIndex.TryGetValue(file, out int known)) return known;
+            spritePixels.Add(FitSprite(file));
+            return spriteIndex[file] = spritePixels.Count - 1;
+        }
+        var objects = new List<(int X, int Y, int Sprite, int Flags)>();
+        foreach (var instance in start.Objects.Where(o => o.ContainerInstanceId < 0))
+        {
+            var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
+            if (def is null || def.Type == ObjectType.Roof || instance.Z >= MapFloors.BaseLift(2)) continue; // Ultima 6: no roofs, no upper floors
+            var state = new ObjectState(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime,
+                Math.Max(1, instance.Quantity), instance.Facing, Stage: instance.FrameRuntime, LiquidId: instance.LiquidIdRuntime ?? -1);
+            var sprite = ObjectLooks.SpriteFor(def, state, _spriteDatabase);
+            string? file = sprite?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
+            int n = SpriteOf(file);
+            if (n < 0 || instance.X < 0 || instance.Y < 0 || instance.X >= start.Width || instance.Y >= start.Height) continue;
+            objects.Add((instance.X, instance.Y, n, def.IsSolid ? 1 : 0));
+        }
+        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing)>();
+        foreach (var placed in start.Characters.Where(c => !c.Dead))
+        {
+            var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
+            if (who is null || who.IsTestPlayer) continue;
+            if (placed.X < 0 || placed.Y < 0 || placed.X >= start.Width || placed.Y >= start.Height) continue;
+            var files = LookFiles(who);
+            int first = spritePixels.Count;
+            foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
+            int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
+            characters.Add((placed.X, placed.Y, first, 1, facing));
+        }
+        if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)));
         foreach (var px in tilePixels) pack.Tiles.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: false));
         pack.TileFlags.AddRange(flags);
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
+        foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
+        pack.Objects.AddRange(objects);
+        pack.Characters.AddRange(characters);
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;
         pack.StartX = start.StartX >= 0 && start.StartX < start.Width ? start.StartX : start.Width / 2;
         pack.StartY = start.StartY >= 0 && start.StartY < start.Height ? start.StartY : start.Height / 2;

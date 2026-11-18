@@ -310,12 +310,17 @@ public static class SuperHiRes
 ///   tiles: u16 count, then count x 128 bytes (16 x 16, 4 bits a pixel), then count x u8 (bit 0: walkable, bit 1: water)
 ///   map: u16 width, u16 height, u16 start x, u16 start y, then width x height u16 tile numbers (row by row)
 ///   avatar: u16 frames (one per facing: south, north, east, west), each 128 bytes (16 x 16, colour 0 see-through)
+///   sprites: u16 count, count x u32 offset (from the first sprite), u32 all the sprites' bytes, then each: u16 width (a multiple of 4, at most 32),
+///            u16 height (at most 32), width/2 x height bytes (colour 0 see-through)
+///   objects: u16 count, each: u16 x, u16 y, u16 sprite, u16 flags (bit 0: solid) - sorted top to bottom
+///   characters: u16 count, each: u16 x, u16 y, u16 sprite (south; +1 north, +2 east, +3 west), u16 flags, u16 facing
 ///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
-/// Version 1: the map, its tiles, the Avatar and the sounds - the rest of the Ultima 6 engine comes build by build.
+/// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
+/// Version 2: the map, its tiles, the Avatar, objects, characters and the sounds - the rest comes build by build.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 1;
+    public const ushort Version = 2;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -327,6 +332,9 @@ public sealed class AppleIIgsGamePack
     public ushort[] Map { get; set; } = Array.Empty<ushort>();
     public List<byte[]> AvatarFrames { get; } = new();
     public List<(string Name, int Rate, byte[] Data)> Sounds { get; } = new();
+    public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags)> Objects { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags, int Facing)> Characters { get; } = new();
 
     public byte[] Write()
     {
@@ -345,6 +353,15 @@ public sealed class AppleIIgsGamePack
         foreach (ushort t in Map) w.Write(t);
         w.Write((ushort)AvatarFrames.Count);
         foreach (var f in AvatarFrames) w.Write(f);
+        w.Write((ushort)Sprites.Count);
+        int offset = 0;
+        foreach (var sp in Sprites) { w.Write(offset); offset += 4 + sp.Data.Length; }
+        w.Write(offset);
+        foreach (var sp in Sprites) { w.Write((ushort)sp.Width); w.Write((ushort)sp.Height); w.Write(sp.Data); }
+        w.Write((ushort)Objects.Count);
+        foreach (var o in Objects.OrderBy(o => o.Y).ThenBy(o => o.X)) { w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); }
+        w.Write((ushort)Characters.Count);
+        foreach (var c in Characters) { w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing); }
         w.Write((ushort)Sounds.Count);
         foreach (var (name, rate, data) in Sounds)
         {
