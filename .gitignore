@@ -4,3 +4,4 @@ obj/
 backup/
 *.user
 Player/iigs/main.lst
+__pycache__/
