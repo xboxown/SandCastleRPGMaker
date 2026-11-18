@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 6 (b624): the inventory (inventory.s): the HUD's Carried Items grid, Get into it, Drop out of it.
 ; Version 5 (b623): the verbs (verbs.s): Look, Get, Use (doors), Talk with Ultima 6's cursor.
 ; Version 4 (b622): talk (talk.s): T and a direction; portrait, name, words with keywords, "you say:", replies.
 ; Version 3 (b621): the HUD (HUD Editor): its background, the Game View where and as big as it is, the name; the
@@ -173,6 +174,7 @@ start:
 .occ:
         tool $9004              ; HideCursor
         jsr SetupScreen
+        jsr RefreshInventory
         jsr DrawView
 MainLoop:
         pha
@@ -189,6 +191,8 @@ MainLoop:
         beq .walk
         cmp #4
         beq .cur
+        cmp #5
+        beq .inv
         cmp #2
         bne MainLoop            ; the talk is running
         lda Key
@@ -196,7 +200,10 @@ MainLoop:
         bra MainLoop
 .cur:   lda Key                 ; the verb's cursor
         jsr CursorKey
-        bra MainLoop
+        brl MainLoop
+.inv:   lda Key                 ; the grid's cursor (Drop)
+        jsr InvKey
+        brl MainLoop
 .walk:  lda Key
         cmp #$1B
         beq .quit
@@ -217,6 +224,8 @@ MainLoop:
         ldx #VERB_USE
         cmp #'u'
         beq .verb
+        cmp #'d'
+        beq .drop
         lda Key
         jsr ArrowDelta
         bcc .none
@@ -224,6 +233,8 @@ MainLoop:
 .none:  brl MainLoop
 .verb:  txa
         jsr StartVerb
+        brl MainLoop
+.drop:  jsr StartDrop
         brl MainLoop
 .quit:
         jmp Quit
@@ -415,7 +426,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #5
+        cmp #6
         beq .known
 .bad:   sec
         rts
@@ -549,13 +560,11 @@ ParseData:
         sta ObjPtr
         lda Ptr+2
         sta ObjPtr+2
-        lda ObjCount            ; 12 bytes each
+        lda ObjCount            ; 16 bytes each
         asl a
         asl a
-        sta T0
         asl a
-        clc
-        adc T0
+        asl a
         jsr AddPtr
         ; the characters: 10 bytes each
         lda [Ptr]
@@ -844,10 +853,20 @@ ParseTalk:
         iny
         inx
         inx
-        cpx #20                 ; portrait x y w h, name x y w h, text colour, keyword colour
+        cpx #30                 ; portrait x y w h, name x y w h, text colour, keyword colour, the grid x y columns rows cell
         bne .rect
-        lda #20
+        lda #30
         jsr AddPtr
+        lda GridCols            ; how many cells it shows
+        sta MulA
+        lda GridRows
+        sta MB0
+        jsr Mul16
+        lda MulR
+        cmp #64
+        bcc .max
+        lda #64
+.max:   sta InvMax
         lda [Ptr]               ; the words
         sta Count
         lda #2
@@ -855,6 +874,8 @@ ParseTalk:
         ldx #0
 .w:     lda Count
         beq .wdone
+        cpx #128                ; room for 32
+        bcs .wdone
         lda Ptr
         clc
         adc #1
@@ -867,6 +888,7 @@ ParseTalk:
         clc
         adc #2
         jsr AddPtr
+        stx AvatarW             ; the last word is the Avatar's name
         inx
         inx
         inx
@@ -1117,8 +1139,9 @@ MakeOcc:
         beq .chars
         ldy #6
         lda [ItemPtr],y
-        and #$0001
-        beq .on
+        and #96+1
+        cmp #1                  ; solid, on the map
+        bne .on
         lda [ItemPtr]
         tax
         ldy #2
@@ -1132,7 +1155,7 @@ MakeOcc:
         sta [Ptr]
         rep #$20
         .a16
-.on:    lda #12
+.on:    lda #16
         jsr NextItem
         dec Item
         bra .o
@@ -1215,9 +1238,9 @@ DrawObjects:
         ldy #2
         lda [ItemPtr],y
         tay
-        ldy #6                  ; taken away: not drawn
+        ldy #6                  ; carried or gone: not on the map
         lda [ItemPtr],y
-        and #32
+        and #96
         bne .n
         lda [ItemPtr]
         tax
@@ -1230,7 +1253,7 @@ DrawObjects:
         lda [ItemPtr],y
         sta SprId
         jsr DrawSprite
-.n:     lda #12
+.n:     lda #16
         jsr NextItem
         dec Item
         bra .l
@@ -1716,6 +1739,7 @@ TryMove:
 
         .include "talk.s"
         .include "verbs.s"
+        .include "inventory.s"
 
 ; ---- data ----
 StartStop:
@@ -1824,7 +1848,19 @@ NameW:    .dw 0
 NameH:    .dw 0
 TxtColor: .dw 0
 KeyColor: .dw 0
-WordTab:  .ds 64
+GridX:    .dw 0                 ; the carried things' grid (as GAME.DAT has it, right after KeyColor)
+GridY:    .dw 0
+GridCols: .dw 0
+GridRows: .dw 0
+GridCell: .dw 0
+InvMax:   .dw 0
+InvCount: .dw 0
+InvCol:   .dw 0
+InvSel:   .dw 0
+InvList:  .ds 256
+DropRec:  .dd 0
+AvatarW:  .dw 0
+WordTab:  .ds 128                ; up to 32 words
 NameTab:  .ds 2048
 Verb:     .dw 0
 Kind:     .dw 0

@@ -364,7 +364,18 @@ public partial class MainWindow
             spritePixels.Add(FitSprite(file));
             return spriteIndex[file] = spritePixels.Count - 1;
         }
-        var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other)>();
+        var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)>();
+        // The inventory's cells (HUD Editor > Carried Items): every object gets its look fitted into one, once.
+        var carriedPiece = _systemSettings.Ultima6.Hud.First(HudPieceKind.CarriedItems);
+        int cell = carriedPiece is null ? 0 : Math.Clamp(carriedPiece.CellSize / 4 * 4, 4, 32);
+        var iconOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        int IconOf(string? file)
+        {
+            if (cell == 0 || string.IsNullOrEmpty(file) || !File.Exists(file)) return 0xFFFF;
+            if (iconOf.TryGetValue(file, out int known)) return known;
+            spritePixels.Add((FitPicture(file, cell, cell), cell, cell));
+            return iconOf[file] = spritePixels.Count - 1;
+        }
         foreach (var instance in start.Objects.Where(o => o.ContainerInstanceId < 0))
         {
             var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
@@ -385,8 +396,20 @@ public partial class MainWindow
                 other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
                 objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
             }
-            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other));
+            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other, IconOf(file)));
         }
+        // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
+        if (PlayerCharacter() is { } avatarWho)
+            foreach (var item in avatarWho.Inventory.Where(i => i.Category == ReferencedItemCategory.Object && !avatarWho.EquippedSlots.ContainsValue(i.InstanceId)))
+            {
+                var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
+                if (def is null) continue;
+                var look = ObjectLooks.SpriteFor(def, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), SpriteDirection.South), _spriteDatabase);
+                string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
+                int n = SpriteOf(file);
+                if (n < 0) continue;
+                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0), pack.NameOf(def.Name), 0xFFFF, IconOf(file)));
+            }
         var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
         // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.
         var variableIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -446,6 +469,7 @@ public partial class MainWindow
         pack.Objects.AddRange(objects);
         pack.Characters.AddRange(characters);
         pack.PortraitRect = portraitRect;
+        if (carriedPiece is not null && cell > 0) pack.CarriedGrid = (carriedPiece.X, carriedPiece.Y, Math.Clamp(carriedPiece.Columns, 1, 16), Math.Clamp(carriedPiece.Rows, 1, 12), cell);
         if (design.First(HudPieceKind.MemberName) is { } namePiece) pack.NameRect = (namePiece.X & ~1, namePiece.Y, Math.Min(320 - (namePiece.X & ~1), (namePiece.Width + 3) / 4 * 4), namePiece.Height);
         for (int i = 0; i < AppleIIgsGamePack.WordIds.Length; i++) pack.Words[i] = U6Words.Of(_systemSettings.Ultima6, AppleIIgsGamePack.WordIds[i]);
         pack.Words[^1] = PlayerCharacter()?.Name ?? "Avatar";
@@ -529,6 +553,14 @@ public partial class MainWindow
                     var worn = player is not null && player.EquippedSlots.TryGetValue(piece.Slot, out int id) ? player.Inventory.FirstOrDefault(i => i.InstanceId == id) : null;
                     var sprite = worn is not null ? DollLook.ItemSprite(worn.Category, worn.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase) : Of(piece.Sprite);
                     Draw(sprite, piece.X, piece.Y, piece.Width, piece.Height, fit: true);
+                    break;
+                }
+                case HudPieceKind.CarriedItems: // its empty cells (the things carried are drawn by the player)
+                {
+                    int size = Math.Clamp(piece.CellSize / 4 * 4, 4, 32);
+                    for (int r = 0; r < piece.Rows; r++)
+                        for (int c = 0; c < piece.Columns; c++)
+                            Draw(Of(piece.Sprite), (piece.X & ~1) + c * size, piece.Y + r * size, size, size, fit: false);
                     break;
                 }
                 case HudPieceKind.MemberName when player is not null:

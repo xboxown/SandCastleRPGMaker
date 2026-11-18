@@ -313,28 +313,31 @@ public static class SuperHiRes
 ///   avatar: u16 frames (one per facing: south, north, east, west), each 128 bytes (16 x 16, colour 0 see-through)
 ///   sprites: u16 count, count x u32 offset (from the first sprite), u32 all the sprites' bytes, then each: u16 width (a multiple of 4, at most 32),
 ///            u16 height (at most 32), width/2 x height bytes (colour 0 see-through)
-///   objects: u16 count, each 12 bytes: u16 x, u16 y, u16 sprite, u16 flags, u16 name, u16 other sprite - top to bottom
-///            flags: 1 solid, 2 can be taken, 4 a door, 8 locked, 16 open, 32 taken away (in play); a door's other sprite:
-///            its open look while closed, its closed look while open
+///   objects: u16 count, each 16 bytes: u16 x, u16 y, u16 sprite, u16 flags, u16 name, u16 other sprite, u16 icon, u16 0
+///            - top to bottom, then the Avatar's things. flags: 1 solid, 2 can be taken, 4 a door, 8 locked, 16 open,
+///            32 gone, 64 carried by the Avatar (x, y $FFFF). A door's other sprite: its open look while closed, its
+///            closed look while open. Its icon: its look fitted into the inventory's cell ($FFFF none).
 ///   characters: u16 count, each 16 bytes: u16 x, u16 y, u16 sprite (south; +1 north, +2 east, +3 west), u16 flags,
 ///               u16 facing, u16 talk (a script; $FFFF none), u16 portrait (a sprite the portrait's size; $FFFF none), u16 name
 ///   hud: u16 1 = a HUD (then 32000 bytes: the 320 x 200 background, 4 bits a pixel), 0 = none (the world in the middle)
 ///        u16 view x (even), view y, columns, rows (the Game View, 16 x 16 cells); u16 text x, y, width, height
 ///        u16 labels, each: u16 x, u16 y (top), u16 colour (0-15; $FFFF: the brightest), u8 length, text, 0
 ///        u16 portrait x, y, width, height; u16 name x, y, width, height; u16 text colour, keyword colour ($FFFF: the brightest)
+///        u16 carried things' grid: x, y, columns, rows, cell (columns 0: none)
 ///   words: u16 count, each u8 length, text, 0 - you say, bye, no help, funny no response, talk, nothing, talking to
-///          yourself, you see {0}, {1} gets {0}, not possible, out of range, look, get, use, locked, the Avatar's name
+///          yourself, you see {0}, {1} gets {0}, not possible, out of range, look, get, use, locked, drop, where?,
+///          {1} drops {0}, the Avatar's name (always the last)
 ///   names: u16 count, each u8 length, text, 0 (objects', characters', tiles' names)
 ///   variables: u16 count, i16 each (their starting values; switches are variables 0 / 1)
 ///   talks: u16 count, count x u32 offset, u32 all their bytes, then each: u8 length, the speaker's name, 0, its code
 ///          (Engine/AppleIIgsTalk.cs)
 ///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (the bytes are in SOUNDS.DAT, one after another)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 5: the map, its tiles, the Avatar, objects, characters, the HUD, talk, Look / Get / Use and the sounds.
+/// Version 6: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 5;
+    public const ushort Version = 6;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -347,7 +350,9 @@ public sealed class AppleIIgsGamePack
     public List<byte[]> AvatarFrames { get; } = new();
     public List<(string Name, int Rate, byte[] Data)> Sounds { get; } = new();
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
-    public List<(int X, int Y, int Sprite, int Flags, int Name, int Other)> Objects { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)> Objects { get; } = new();
+    /// <summary>The HUD's Carried Items grid (Columns 0: none).</summary>
+    public (int X, int Y, int Columns, int Rows, int Cell) CarriedGrid { get; set; }
     public List<int> TileNames { get; } = new();
     public List<string> Names { get; } = new();
     /// <summary>A name's number in Names (the same name once); "" = $FFFF.</summary>
@@ -365,8 +370,8 @@ public sealed class AppleIIgsGamePack
     public int KeywordColor { get; set; } = 0xFFFF;
     /// <summary>you say, bye, no help, funny no response, talk, nothing, talking to yourself.</summary>
     public List<string> Words { get; } = new() { "you say: ", "bye", "\"I cannot help thee with that.\"", "Funny, no response.", "Talk", "nothing", "Talking to yourself?",
-        "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Avatar" };
-    public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked" };
+        "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.", "Avatar" };
+    public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops" };
     public List<short> Variables { get; } = new();
     public List<(string Name, byte[] Code)> Talks { get; } = new();
     /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
@@ -400,7 +405,11 @@ public sealed class AppleIIgsGamePack
         w.Write(offset);
         foreach (var sp in Sprites) { w.Write((ushort)sp.Width); w.Write((ushort)sp.Height); w.Write(sp.Data); }
         w.Write((ushort)Objects.Count);
-        foreach (var o in Objects.OrderBy(o => o.Y).ThenBy(o => o.X)) { w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); w.Write((ushort)o.Name); w.Write((ushort)o.Other); }
+        foreach (var o in Objects.OrderBy(o => (o.Flags & 64) != 0 ? 1 : 0).ThenBy(o => o.Y).ThenBy(o => o.X))
+        {
+            w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); w.Write((ushort)o.Name); w.Write((ushort)o.Other);
+            w.Write((ushort)o.Icon); w.Write((ushort)0);
+        }
         w.Write((ushort)Characters.Count);
         foreach (var c in Characters)
         {
@@ -419,6 +428,7 @@ public sealed class AppleIIgsGamePack
         }
         foreach (var r in new[] { PortraitRect, NameRect }) { w.Write((ushort)r.X); w.Write((ushort)r.Y); w.Write((ushort)r.Width); w.Write((ushort)r.Height); }
         w.Write((ushort)TextColor); w.Write((ushort)KeywordColor);
+        w.Write((ushort)(CarriedGrid.X & ~1)); w.Write((ushort)CarriedGrid.Y); w.Write((ushort)CarriedGrid.Columns); w.Write((ushort)CarriedGrid.Rows); w.Write((ushort)CarriedGrid.Cell);
         w.Write((ushort)Words.Count);
         foreach (var word in Words) { var t = Ascii(word, 60); w.Write((byte)t.Length); w.Write(t); w.Write((byte)0); }
         w.Write((ushort)Names.Count);

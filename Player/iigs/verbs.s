@@ -140,7 +140,7 @@ WhatIsThere:
         bne .chars
         lda #1
         sta Kind
-        ldx #15*4               ; the Avatar's name
+        ldx AvatarW             ; the Avatar's name
         lda WordTab,x
         sta FmtName
         lda WordTab+2,x
@@ -181,7 +181,7 @@ WhatIsThere:
         beq .found
         ldy #6
         lda [ItemPtr],y
-        and #32                 ; taken away
+        and #96                 ; carried or gone
         bne .on
         lda [ItemPtr]
         cmp CurX
@@ -196,7 +196,7 @@ WhatIsThere:
         sta ObjRec
         lda ItemPtr+2
         sta ObjRec+2
-.on:    lda #12
+.on:    lda #16
         jsr NextItem
         dec Item
         bra .o
@@ -244,7 +244,11 @@ NameNumber:
 
 ; The cursor's cell picked: the verb on what is there.
 PickCell:
-        jsr WhatIsThere
+        lda Verb
+        cmp #VERB_DROP
+        bne .what
+        jmp DropHere            ; Drop's "Where?" (inventory.s)
+.what:  jsr WhatIsThere
         lda Verb
         cmp #VERB_TALK
         bne .named
@@ -282,13 +286,14 @@ PickCell:
         beq .np
         jsr NextToCursor
         bcc .rg
-        jsr ObjFlags            ; taken away: off the map (and no longer in the way)
-        ora #32
+        jsr ObjFlags            ; carried now: off the map (no longer in the way), in the grid
+        ora #64
         sta [ItemPtr],y
         jsr FreeCell
         lda #8                  ; {1} gets {0}.
         jsr Format
         jsr DrawView
+        jsr RefreshInventory
         jmp PromptLine
 .use:   cmp #VERB_USE
         bne .talk
@@ -426,7 +431,7 @@ Format:
         bra .name
 .avatar:
         phx
-        ldx #15*4
+        ldx AvatarW
         lda WordTab,x
         sta TP
         lda WordTab+2,x
