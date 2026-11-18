@@ -49,3 +49,4 @@
 - [U6: commands first](u6-commands-first.md) — new U6 features = Ultima 6 tab event commands; editor UI only if impossible; nothing wired
 - [Commands only from now](commands-only-from-now.md) — from 2026-11-07 every new feature (all engines) is a command + CommandList.docx; editor UI only if impossible
 - [Plan from Nov 10](plan-from-nov-10.md) — ports left: Mac, Ubuntu, PS2 (Vampire awaiting test); THEN Underworld as a real 3D game editor (any 3D genre); Ultima 5 LAST
+- [Mac CI + remote machines](mac-ci-and-remote-machines.md) — Apple silicon built/tested by GitHub Actions; PPC/Intel Mac/Ubuntu over SSH per mac instruction.txt; .gitattributes binary lesson
