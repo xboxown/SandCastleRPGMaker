@@ -20,8 +20,10 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
 
 ## Standing decisions
 - New features (all engines) are event commands only; change an editor only if a command truly can't do it, and say why first.
-- Plan from 2026-11-10: ports only (PS2, PS3, Ubuntu, Mac, MorphOS, Amiga 68k, Vampire - U6, U7 and U8 engines) until 100%;
-  then Ultima 5; Ultima Underworld last.
+- Plan from 2026-11-10: ports only (U6, U7 and U8 engines on every platform) until 100%. As of 2026-11-17 Amiga 68k is done,
+  the Vampire awaits the user's test, and Mac, Ubuntu and PS2 are left.
+- Then Ultima Underworld: a real 3D game editor with the heart of Ultima Underworld (any 3D game - Silent Hill-like,
+  Doom/Quake-like, first-person horror) with tools that make an Underworld game easy. Ultima 5 comes last.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.
 - Every change goes into Windows and the C player (`Player/src`) together.
 - Consoles use the controller; Ultima 6 games need a USB keyboard and mouse on every console. PS2 ISO max 8 GB.
