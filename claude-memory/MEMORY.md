@@ -1,4 +1,4 @@
-- [CURRENT BUILD b610](current-build-b610.md) — latest is b610 (commit 8c90808, 2026-11-17); b560-610 = PS2/PS3/Ubuntu/Vampire, U6+U8 in C, CRT; check BuildInfo.cs first
+- [CURRENT BUILD b610](current-build-b610.md) — b610 checkpoint 8c90808 (now b612+: see BUILD-HISTORY.md); b560-610 = PS2/PS3/Ubuntu/Vampire, U6+U8 in C, CRT; check BuildInfo.cs first
 - [Build number bump](build-number-bump.md) — increment DEBUG-BUILD each change; backup + git commit before/after changes
 - [Mimic Exult 100%](mimic-exult-100.md) — verify every mechanic in Exult source; NPCs talkable while gumps pause the game
 - [Edit scripts via Write](edit-scripts-via-write.md) — heredocs mangle backslashes; write .py scripts with Write; build to scratch buildout
@@ -48,4 +48,4 @@
 - [U6 demo focus](u6-demo-focus.md) — from 2026-11-06 the user builds a U6 demo and reports bugs; U7 project closed
 - [U6: commands first](u6-commands-first.md) — new U6 features = Ultima 6 tab event commands; editor UI only if impossible; nothing wired
 - [Commands only from now](commands-only-from-now.md) — from 2026-11-07 every new feature (all engines) is a command + CommandList.docx; editor UI only if impossible
-- [Plan from Nov 10](plan-from-nov-10.md) — ports only (all platforms incl. PS2-PS4, U6/U7/U8 engines) until 100%; then Ultima 5; Underworld last
+- [Plan from Nov 10](plan-from-nov-10.md) — ports left: Mac, Ubuntu, PS2 (Vampire awaiting test); THEN Underworld as a real 3D game editor (any 3D genre); Ultima 5 LAST
