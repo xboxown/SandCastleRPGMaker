@@ -23,8 +23,10 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
 - Plan from 2026-11-10: ports only (U6, U7 and U8 engines on every platform) until 100%. As of 2026-11-17 Amiga 68k is done,
   the Vampire awaits the user's test, and Mac, Ubuntu and PS2 are left.
 - Then Ultima Underworld: a real 3D game editor with the heart of Ultima Underworld (any 3D game - Silent Hill-like,
-  Doom/Quake-like, first-person horror) with tools that make an Underworld game easy. Ultima 5 comes last.
-- To do (2026-11-17, order not set yet): "Ultima 5 Apple IIgs" and "Ultima 6 Apple IIgs" project modes - own low-level
+  Doom/Quake-like, first-person horror) with tools that make an Underworld game easy.
+- ORDER (user, 2026-11-17): all ports -> finalize and complete Underworld 3D -> Ultima 6 Apple IIgs mode -> Ultima 5 ->
+  Ultima 5 Apple IIgs mode (last).
+- The Apple IIgs modes: "Ultima 5 Apple IIgs" and "Ultima 6 Apple IIgs" project modes - own low-level
   65816 player under GS/OS (required), accelerator required (error message if none), the editor enforces the IIgs limits
   (colours, sprites, sizes, map size, sound). Tested in KEGS. See claude-memory/apple-iigs-modes.md.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.

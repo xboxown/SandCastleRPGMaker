@@ -1,6 +1,6 @@
 ---
 name: apple-iigs-modes
-description: "TO DO (user, 2026-11-17) - two new project modes \"Ultima 5 Apple IIgs\" and \"Ultima 6 Apple IIgs\": own low-level GS/OS player, accelerator REQUIRED, editor enforces hardware limits; test in KEGS"
+description: "TO DO after Underworld 3D (user, 2026-11-17) - two new project modes \"Ultima 5 Apple IIgs\" and \"Ultima 6 Apple IIgs\": own low-level GS/OS player, accelerator REQUIRED, editor enforces hardware limits; test in KEGS"
 metadata:
   node_type: memory
   type: project
@@ -24,6 +24,5 @@ Requirements (user's words, as given):
 - Build output: a hard-disk image (.2mg / .hdv / .po; ProDOS or HFS inside - the user said "HDF ... HF format", meaning HFS).
 
 **Why:** the user's what-if became a wish: U5 shipped on the 8-bit Apple II; U6 never did, so a U6 IIgs mode is new.
-**How to apply:** this is a to-do, not current work. Order not set by the user - the ports (Mac, Ubuntu, PS2) come first,
-then Underworld 3D, then Ultima 5 ([[plan-from-nov-10]]); the IIgs U5 mode needs the U5 mode to exist first. Ask the user
-where it goes before starting. Related: [[platform-ports]], [[u6-mode-requirements]].
+**How to apply:** ORDER (user, 2026-11-17): 1. finish all ports, 2. finalize and complete Underworld 3D,
+3. Ultima 6 Apple IIgs mode, 4. Ultima 5, 5. Ultima 5 Apple IIgs mode. See [[plan-from-nov-10]]. Related: [[platform-ports]], [[u6-mode-requirements]].
