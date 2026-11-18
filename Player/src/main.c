@@ -66,8 +66,8 @@ static void note(const char *step)
     printf("Game: %s  [memory in use: %ld KB]\n", step, ps2_memory_used_kb()); /* the disc can't be written: the log goes to the console (PCSX2's log) */
     return;
 #endif
-#if defined(__amigaos__) && !defined(__MORPHOS__)
-    static int fresh = 0; /* amiga_start.c began Game.log */
+#if defined(__amigaos__) && !defined(__MORPHOS__) && !defined(__amigaos4__)
+    static int fresh = 0; /* amiga_start.c began Game.log (the 68k's; AmigaOS 4 starts it here) */
 #else
     static int fresh = 1;
 #endif
@@ -177,6 +177,10 @@ static void scripted_presses(const char *presses, double t, double *done)
 #if defined(__amigaos__) || defined(__MORPHOS__)
 /* libnix: the stack the game runs with, whatever the icon or shell gives it. */
 unsigned long __stack = 262144; /* 256 KB: the MP3 decoder alone needs some 17 KB when music starts */
+#endif
+#ifdef __amigaos4__
+/* AmigaOS 4 reads the stack a program needs from this text in it (newlib), whatever the icon or shell gives it. */
+static const char __attribute__((used)) os4StackCookie[] = "$STACK: 262144";
 #endif
 
 /* The least free memory an Amiga needs to start the game (megabytes). */

@@ -24,6 +24,7 @@ public partial class MainWindow
         BuildPlatform.Amiga68k => Path.Combine(AppContext.BaseDirectory, "Runtimes", "Amiga68k", "Game"),
         BuildPlatform.MorphOS => Path.Combine(AppContext.BaseDirectory, "Runtimes", "MorphOS", "Game"),
         BuildPlatform.AmigaVampire => Path.Combine(AppContext.BaseDirectory, "Runtimes", "AmigaVampire", "Game"), // Player/build_vampire.sh: SAGA, AMMX, its own sound
+        BuildPlatform.AmigaOS4 => Path.Combine(AppContext.BaseDirectory, "Runtimes", "AmigaOS4", "Game"), // Player/build_amigaos4.sh: SDL2, newlib
         _ => null
     };
 
@@ -60,7 +61,7 @@ public partial class MainWindow
             if (Directory.Exists(target)) Directory.Delete(target, recursive: true);
             PlayerBookText.UsedFonts.Clear();
             PlayerPack.Export(target, CurrentPayload(), _bookDatabase, _spriteDatabase, _resourceDatabase, _videoDatabase, xaml => PlayerBookText.Convert(xaml, _spriteDatabase));
-            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform is BuildPlatform.MorphOS or BuildPlatform.AmigaVampire); // the fonts it uses, drawn into fonts.sdbx
+            PlayerFontPack.Write(target, CurrentPayload().Manifest.ProjectId, PlayerBookText.UsedFonts, _spriteDatabase, hires: platform is BuildPlatform.MorphOS or BuildPlatform.AmigaVampire or BuildPlatform.AmigaOS4); // the fonts it uses, drawn into fonts.sdbx
             string machine = platform switch
             {
                 BuildPlatform.Linux => "Linux", BuildPlatform.MacModern => "Mac", BuildPlatform.MacPowerPC => "PowerPC Mac", BuildPlatform.MorphOS => "MorphOS",
@@ -75,6 +76,7 @@ public partial class MainWindow
                 string needs = platform switch
                 {
                     BuildPlatform.MorphOS => "Needs MorphOS 3.x and 128 MB of free memory. Sound plays through AHI.",
+                    BuildPlatform.AmigaOS4 => "Needs AmigaOS 4.1 (Final Edition recommended) and 128 MB of free memory (SDL2 is built into the game). Sound plays through AHI.",
                     BuildPlatform.AmigaVampire => "For a Vampire only (Apollo 68080): V4 Standalone, V4 Firebird, V1200, V600, V500. Its SAGA driver (P96) must be installed. The game takes over SAGA's display (640 x 400), draws with the 68080's AMMX and plays through the Vampire's own 16-bit sound. It won't start on any other Amiga - use the Amiga 68k (RTG) build there.",
                     _ => "Needs an RTG card (Picasso96 or CyberGraphX), a 68060 or 68080 with its FPU (68060.library installed), and 128 MB of RAM. Sound plays through Paula; put a file named \"ahi\" beside Game for AHI instead."
                 };

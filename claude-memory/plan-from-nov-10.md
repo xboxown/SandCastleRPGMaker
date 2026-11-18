@@ -13,6 +13,7 @@ The user, 2026-11-07: ports only from 2026-11-10 until every platform is 100% (U
 **Port status, 2026-11-17 (user's words):**
 - Amiga 68k: officially tested (checkmark).
 - Amiga Vampire: b612 hides SAGA's hardware hand; user testing it side by side with Amiga 68k. Checkmark once they confirm.
+- AmigaOS 4.1: b613 (2026-11-17) built and switched on in Build; NOT yet run on an OS4 machine (needs the user's).
 - Left: **Macintosh, Ubuntu, PlayStation 2.** When these three are done, the ports are finished and the next part starts.
 - (PS3 has a player since b560-b610; the user didn't list it on 2026-11-17 - ask before assuming it is done or dropped.
   PS4 was in the 11-07 plan and has no player yet.)

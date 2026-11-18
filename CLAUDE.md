@@ -26,7 +26,7 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
   Doom/Quake-like, first-person horror) with tools that make an Underworld game easy. Ultima 5 comes last.
 - Ports must be identical to Windows. Fix differences on the port side; never change Windows to match a port.
 - Every change goes into Windows and the C player (`Player/src`) together, and EVERY platform's player is rebuilt -
-  Amiga 68k, Vampire, MorphOS, Ubuntu, PS2, PS3 (`Player/build_*.sh` in WSL) and Mac. No platform may be left outdated.
+  Amiga 68k, Vampire, MorphOS, AmigaOS 4, Ubuntu, PS2, PS3 (`Player/build_*.sh` in WSL) and Mac. No platform may be left outdated.
 - Mac (Intel + Apple silicon): the user has no Apple silicon Mac - it's Claude's alone, on GitHub. A push touching `Player/`
   runs `.github/workflows/mac-apple-silicon.yml` (build, start, play the test game on Apple silicon, screenshot); when it
   passes it publishes the release `mac-player`. Then `bash tools/fetch_mac_player.sh` puts it in `Editor/Runtimes/Mac`,
@@ -40,4 +40,6 @@ other platforms have it. GitHub (public, by the user's choice) is the user's onl
 - Editor: .NET 8 WPF (`Editor/`, `Engine/`).
 - C player: `Player/` - PS2/PS3/Linux toolchains live in WSL Ubuntu on the main PC (`~/ps2dev-tc/ps2dev` for the PS2);
   run the `Player/build_*.sh` scripts through `wsl.exe -d Ubuntu`. Built players go in `Editor/Runtimes/<platform>/`.
+- AmigaOS 4: `Player/build_amigaos4.sh` uses walkero's amigagccondocker os4-gcc11 image unpacked in WSL `~/os4img`
+  (no Docker; the user allowed running it 2026-11-17). Its compiler wants /opt/ppc-amigaos: the script gives `base_sdk` in a specs file.
 - Write helper scripts to files instead of shell heredocs (heredocs mangle backslashes).
