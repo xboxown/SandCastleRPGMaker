@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 13;
+    public const ushort Version = 14;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -393,10 +393,12 @@ public sealed class AppleIIgsGamePack
         "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.",
         "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.",
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
-        "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.", "Avatar" };
+        "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.",
+        "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
-        "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse" };
+        "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
+        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon

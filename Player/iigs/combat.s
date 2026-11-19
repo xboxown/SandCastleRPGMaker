@@ -203,7 +203,6 @@ AvatarAtk:
 
 ; B: combat mode on / off.
 ToggleCombat:
-        jsr NewLine
         lda CombatOn
         eor #1
         sta CombatOn
@@ -216,7 +215,6 @@ ToggleCombat:
 
 ; Space: "Pass", a turn.
 PassTurn:
-        jsr NewLine
         lda #W_PASS
         jsr PrintSaid
         jsr PromptLine
@@ -816,13 +814,6 @@ Tell:
         stz UseWho
         jmp NewLine
 
-; The Avatar's (or a member's) hit points changed: the panel's stats again (stats.s, later builds).
-HpChanged:
-        rts
-
-; The Avatar's experience: a new level (Ultima 6: more than the step for this level).
-CheckLevel:
-        rts
 
 AvRec:    .ds 64
 AvDead:   .dw 0

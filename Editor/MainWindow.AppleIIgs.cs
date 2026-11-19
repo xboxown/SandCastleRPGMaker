@@ -806,6 +806,16 @@ public partial class MainWindow
                     {
                         if ((line + 1) * 10 > Math.Max(10, piece.Height)) break;
                         string value = player.StatValues.TryGetValue(stat.Id, out var v) && !string.IsNullOrWhiteSpace(v) ? v : "0";
+                        // The built-in stats change in play: the player writes their value now (~ and the stat's letter).
+                        int? live = stat.Kind switch
+                        {
+                            BuiltInStatKind.Hits => AppleIIgsGamePack.Stat.Hp, BuiltInStatKind.Strength => AppleIIgsGamePack.Stat.Str,
+                            BuiltInStatKind.Dexterity => AppleIIgsGamePack.Stat.Dex, BuiltInStatKind.Intelligence => AppleIIgsGamePack.Stat.Int,
+                            BuiltInStatKind.Combat => AppleIIgsGamePack.Stat.Combat, BuiltInStatKind.Magic => AppleIIgsGamePack.Stat.Magic,
+                            BuiltInStatKind.Mana => AppleIIgsGamePack.Stat.Mana, BuiltInStatKind.Level => AppleIIgsGamePack.Stat.Level,
+                            BuiltInStatKind.Exp => AppleIIgsGamePack.Stat.Exp, BuiltInStatKind.NextExp => 25, _ => null
+                        };
+                        if (live is int code) value = "~" + (char)('A' + code);
                         pack.PortraitLabels.Add((piece.X, piece.Y + line * 10, LabelColor(piece.TextColor), $"{stat.Name} {value}"));
                         line++;
                     }

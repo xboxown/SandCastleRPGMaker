@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 14 (b633): stats that change (stats.s): the portrait view's stats live, levels from experience, R Rest.
 ; Version 13 (b632): the clock and schedules (schedule.s): a game minute every 5 seconds (Exult), each character's
 ;   activity for the 3-hour period (stand, wander, sleep, pace, loiter) at its spot; asleep: "No response."
 ; Version 12 (b631): combat (combat.s): characters 64 bytes with their stats, the Avatar's stats, A Attack, B combat
@@ -226,7 +227,12 @@ MainLoop:
         bne .not7
         jsr DeadKey             ; the Avatar dead: a key (combat.s)
         brl MainLoop
-.not7:  cmp #2
+.not7:  cmp #8
+        bne .not8
+        lda Key                 ; Rest's hours (stats.s)
+        jsr RestKey
+        brl MainLoop
+.not8:  cmp #2
         bne MainLoop            ; the talk is running
         lda Key
         jsr TalkKey
@@ -291,7 +297,11 @@ MainLoop:
         bne .notb
         jsr ToggleCombat
         brl MainLoop
-.notb:
+.notb:  cmp #'r'
+        bne .notrr
+        jsr StartRest
+        brl MainLoop
+.notrr:
         cmp #'d'
         beq .drop
         lda Key
@@ -495,7 +505,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #13
+        cmp #14
         beq .known
 .bad:   sec
         rts
@@ -1171,12 +1181,7 @@ DrawLabels:
 
 ; The portrait view's words (the stats).
 DrawStats:
-        lda StatPtr
-        sta ItemPtr
-        lda StatPtr+2
-        sta ItemPtr+2
-        lda StatCount
-        sta Item
+        jmp DrawLiveStats       ; (stats.s)
 
 ; Item words from ItemPtr: x, y, colour, length, the words, 0.
 LabelList:
@@ -1895,6 +1900,7 @@ TryMove:
         .include "save.s"
         .include "combat.s"
         .include "schedule.s"
+        .include "stats.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
