@@ -40,7 +40,104 @@ ParseLook:
         inx
         cpx #2048
         bcc .r
+        lda AnimPtr             ; mark the animated tiles
+        sta Src
+        lda AnimPtr+2
+        sta Src+2
+        ldx AnimCount
+        beq .md
+.mk:    ldy #2
+        lda [Src],y
+        cmp #1024
+        bcs .mn
+        phx
+        tax
+        sep #$20
+        .a8
+        lda #1
+        sta AnimMark,x
+        rep #$20
+        .a16
+        plx
+.mn:    lda Src
+        clc
+        adc #10
+        sta Src
+        dex
+        bne .mk
+.md:    rts
+
+; A = a tile from MapTile (kept): an animated one notes AnimVisible.
+NoteAnim:
+        pha
+        cmp #1024
+        bcs .o
+        tax
+        lda AnimMark,x
+        and #$00FF
+        beq .o
+        sta AnimVisible
+.o:     pla
         rts
+
+; The view (VIEWBUF, bank $01) copied onto the screen, a row at a time; the pointer hidden meanwhile.
+BlitView:
+        jsr CurOff
+        lda VRows               ; lines: rows x 16
+        asl a
+        asl a
+        asl a
+        asl a
+        sta T5
+        lda ViewOff             ; offset of the view's top left in the screen
+        sta T4
+.l:     lda T4
+        clc
+        adc #$2000
+        tax
+        tay
+        lda VCols               ; bytes: columns x 8
+        asl a
+        asl a
+        asl a
+        dec a
+        phb
+        mvn $01,$E1
+        plb
+        lda T4
+        clc
+        adc #160
+        sta T4
+        dec T5
+        bne .l
+        rts
+
+; Bank $01's screen-sized memory ($012000) asked of the Memory Manager (QuickDraw may hold it as its shadow - then it is
+; free for this too), and Super Hi-Res shadowing off, so drawing there doesn't show until it is copied.
+ViewBuffer:
+        pha
+        pha
+        pea $0000
+        pea $8000
+        lda UserId
+        pha
+        pea $C002               ; locked, fixed, at this address
+        pea $0001
+        pea $2000
+        tool $0902              ; NewHandle (whether it is had or not, the place is used)
+        pla
+        pla
+        sep #$20
+        .a8
+        lda >$E0C035
+        sta Shadow
+        ora #$08                ; no Super Hi-Res shadowing
+        sta >$E0C035
+        rep #$20
+        .a16
+        rts
+
+Shadow:   .dw 0
 
 ; The animated tiles' next frame every 20 ticks (3 a second): the view drawn again.
 AnimRun:
@@ -97,6 +194,8 @@ AnimRun:
         sta Src+2
         dex
         bne .l
+        lda AnimVisible         ; none in sight: nothing to draw
+        beq .out
         lda Mode                ; (not over a question's cursor or a screen of its own)
         cmp #7
         bcs .out
@@ -195,10 +294,10 @@ DrawDark:
         lda #16
         sta T5
 .blk:   lda #0
-        sta >SCREEN,x
-        sta >SCREEN+2,x
-        sta >SCREEN+4,x
-        sta >SCREEN+6,x
+        sta >VIEWBUF,x
+        sta >VIEWBUF+2,x
+        sta >VIEWBUF+4,x
+        sta >VIEWBUF+6,x
         txa
         clc
         adc #160
@@ -468,6 +567,8 @@ LY:       .ds 32
 LR:       .ds 32
 RN:       .dw 0
 AnimCount: .dw 0
+AnimVisible: .dw 0
+AnimMark: .ds 1024              ; 1: an animated tile
 AnimPtr:  .dd 0
 AnimTick: .dw 0
 AnimFrame: .dw 0

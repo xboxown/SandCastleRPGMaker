@@ -162,7 +162,7 @@ class Machine:
             self.wr16(handle, ptr); self.wr16(handle + 2, ptr >> 16)
             res = handle
         elif n == 0x1002: pb, rb = 4, 0                                    # DisposeHandle
-        elif n in (0x9004, 0x9104): pb, rb = 0, 0                          # HideCursor / ShowCursor
+        elif n in (0x9004, 0x9104, 0xCA04): pb, rb = 0, 0                  # HideCursor / ShowCursor / InitCursor
         elif n == 0x590E:                                                  # AlertWindow
             pb, rb = 10, 2
             ptr = long(0); s = b''

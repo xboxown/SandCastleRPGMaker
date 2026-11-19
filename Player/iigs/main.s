@@ -143,6 +143,7 @@ SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs ma
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
 VIEW_Y    = 20
 SCREEN    = $E12000       ; Super Hi-Res pixels
+VIEWBUF   = $012000       ; the view drawn here first (bank $01, shadowing off), then copied to the screen at once
 SCB       = $E19D00
 PALETTE   = $E19E00
 
@@ -193,6 +194,8 @@ start:
         jsr Alert
         jmp Quit
 .fast:
+        tool $CA04              ; InitCursor: the arrow, not the watch
+        jsr ViewBuffer          ; bank $01's screen-sized memory for the view, shadowing off
         jsr LoadData
         bcc .loaded
         lda #AlertNoData
@@ -415,7 +418,18 @@ ArrowDelta:
         rts
 
 ; ---- leaving ----
+; Shadowing as it was before the game.
+ShadowBack:
+        sep #$20
+        .a8
+        lda Shadow
+        sta >$E0C035
+        rep #$20
+        .a16
+        rts
+
 Quit:
+        jsr ShadowBack
         rep #$30
         lda Handle
         ora Handle+2
@@ -920,7 +934,7 @@ FindBright:
 
 ; The world around the Avatar: 10 x 10 tiles, the Avatar in the middle.
 DrawView:
-        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
+        stz AnimVisible
         stz Row
 .row:   stz Col
 .col:   lda PX
@@ -936,6 +950,7 @@ DrawView:
         sbc HalfR
         tay
         jsr MapTile
+        jsr NoteAnim            ; an animated tile in sight (look.s)
         pha
         lda Row                 ; screen offset: ViewOff + row * 2560 (16 lines of 160) + col * 8
         xba
@@ -974,6 +989,7 @@ DrawView:
         jsr DrawAvatar
         jsr DrawRoofs           ; (look.s)
         jsr DrawDark
+        jsr BlitView            ; the finished view onto the screen at once
         lda Mode
         cmp #4
         bne .nocur
@@ -1705,7 +1721,7 @@ DrawSprite:
         clc
         adc #$2000
         sta Scr
-        lda #$00E1
+        lda #$0001  ; the view is drawn off the screen (VIEWBUF)
         sta Scr+2
         lda R1
         sec
@@ -1805,19 +1821,19 @@ DrawTile:
         sta Count
         ldy #0
 .r:     lda [Src],y
-        sta >SCREEN,x
+        sta >VIEWBUF,x
         iny
         iny
         lda [Src],y
-        sta >SCREEN+2,x
+        sta >VIEWBUF+2,x
         iny
         iny
         lda [Src],y
-        sta >SCREEN+4,x
+        sta >VIEWBUF+4,x
         iny
         iny
         lda [Src],y
-        sta >SCREEN+6,x
+        sta >VIEWBUF+6,x
         iny
         iny
         txa
@@ -1830,10 +1846,10 @@ DrawTile:
 .blank: lda #16
         sta Count
         lda #0
-.b:     sta >SCREEN,x
-        sta >SCREEN+2,x
-        sta >SCREEN+4,x
-        sta >SCREEN+6,x
+.b:     sta >VIEWBUF,x
+        sta >VIEWBUF+2,x
+        sta >VIEWBUF+4,x
+        sta >VIEWBUF+6,x
         txa
         clc
         adc #160
@@ -1874,7 +1890,7 @@ DrawAvatar:
         clc
         adc #$2000
         sta Scr
-        lda #$00E1
+        lda #$0001  ; the view is drawn off the screen (VIEWBUF)
         sta Scr+2
         lda #16
         sta Count
