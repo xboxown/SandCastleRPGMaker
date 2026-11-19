@@ -550,6 +550,7 @@ NumName:
 ; ---- the Disk Swap screen ----
 ; Asks for disk WantDisk until FileName can be loaded from it (a key: look again; Esc: give up - carry set).
 SwapFor:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda SwapHasPic          ; the screen: its picture (or black)
         beq .black
         lda SwapPic
@@ -637,7 +638,7 @@ SwapFor:
         stz SwapTick
 .loop:  jsr SwapAnimate
         pha
-        pea $0028
+        pea $002A
         pea #bank(EvRec)
         pea #EvRec
         tool $0A06              ; GetNextEvent

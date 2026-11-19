@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 24 (b643): the mouse (mouse.s): the pointer shown; a click on the map looks (a double click talks / uses),
+;   picks the cursor's square or the grid's cell, presses the HUD's command buttons, picks the title menu's choice.
 ; Version 23 (b642): the title menu (title.s): its picture, Introduction, Create New Character, Acknowledgments,
 ;   Journey Onward (the saved game); the Avatar's death and a new game come back to it.
 ; Version 22 (b641): the world's look (look.s): night and light (darkness beyond the light), animated tiles, roofs
@@ -217,9 +219,11 @@ start:
         jsr PreloadSwapSound
         tool $9004              ; HideCursor
         jsr ShowTitle           ; the title menu first (title.s)
+        tool $9104              ; ShowCursor: the mouse's pointer (mouse.s)
 MainLoop:
+        jsr CurOn               ; the pointer back after drawing
         pha
-        pea $0028               ; key down, auto-key
+        pea $002A               ; mouse down, key down, auto-key
         pea #bank(EvRec)
         pea #EvRec
         tool $0A06              ; GetNextEvent
@@ -228,9 +232,18 @@ MainLoop:
         jsr IdleTurn            ; nothing pressed: the world goes on (combat.s)
         bra MainLoop
 .ev:
-        lda EvMsg
+        lda EvRec               ; a click: as a key, or done (mouse.s)
+        cmp #1
+        bne .keyev
+        jsr MouseDown
+        bcs .mkey
+        brl MainLoop
+.mkey:  sta Key
+        bra .disp
+.keyev: lda EvMsg
         and #$007F
         sta Key
+.disp:
         lda Mode
         bne .modes
         brl .walk
@@ -557,7 +570,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #23
+        cmp #24
         beq .known
 .bad:   sec
         rts
@@ -820,6 +833,7 @@ Mul16:
 
 ; ---- the screen ----
 SetupScreen:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         ldx #0                  ; the palette: palette 0 of Super Hi-Res
         ldy #8
 .pal:   lda [DataPtr],y
@@ -906,6 +920,7 @@ FindBright:
 
 ; The world around the Avatar: 10 x 10 tiles, the Avatar in the middle.
 DrawView:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         stz Row
 .row:   stz Col
 .col:   lda PX
@@ -1982,6 +1997,7 @@ TryMove:
         .include "read.s"
         .include "look.s"
         .include "title.s"
+        .include "mouse.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

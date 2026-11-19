@@ -6,7 +6,7 @@ Loads an S16 (OMF 2) as the System Loader would (relocating cRELOC / RELOC recor
 toolbox (JSL $E10000) and GS/OS (JSL $E100A8) calls it uses answered by simple stand-ins, feeds it keys, and saves the
 Super Hi-Res screen as a PNG. It tests the player's own logic - the real toolbox and GS/OS are tested in KEGS.
 Usage: sim816.py SANDCASTLE folder-with-GAME.DAT out.png [--keys "RRDDL q"] [--slow] [--trace]
-Keys: U D L R = arrows, ` Tab, { Ctrl+S, } Ctrl+R, | Ctrl+Q, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
+Keys: U D L R = arrows, @x,y; a mouse click, ` Tab, { Ctrl+S, } Ctrl+R, | Ctrl+Q, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
 """
 import struct, sys, zlib, os
 
@@ -17,7 +17,17 @@ class Machine:
     def __init__(self, folder, keys, accelerated=True, trace=False):
         self.mem = bytearray(1 << 24)
         self.folder = folder
-        self.keys = list(keys)
+        self.keys = []                      # keys, and mouse clicks written @x,y;
+        i = 0
+        while i < len(keys):
+            if keys[i] == '@' and ';' in keys[i:]:
+                j = keys.index(';', i)
+                x, y = keys[i + 1:j].split(',')
+                self.keys.append(('click', int(x), int(y)))
+                i = j + 1
+            else:
+                self.keys.append(keys[i])
+                i += 1
         self.accelerated = accelerated
         self.trace = trace
         self.a = self.x = self.y = 0
@@ -164,7 +174,10 @@ class Machine:
             self.key_waits += 1
             if self.keys and self.key_waits % 3 == 0:
                 k = self.keys.pop(0)
-                if k == '!':  # the other disks go in (no key event)
+                if isinstance(k, tuple):  # a mouse click: mouseDown at (x, y)
+                    self.wr16(rec, 1); self.wr16(rec + 2, 0); self.wr16(rec + 4, 0)
+                    self.wr16(rec + 10, k[2]); self.wr16(rec + 12, k[1]); res = 0xFFFF
+                elif k == '!':  # the other disks go in (no key event)
                     self.inserted = True
                     res = 0
                 else:
@@ -199,7 +212,7 @@ class Machine:
                                     doc=self.rd16(blk + 8), size=self.rd16(blk + 10), vol=self.rd16(blk + 16),
                                     first=bytes(self.mem[self.rd24(blk):self.rd24(blk) + 4]).hex()))
         elif n == 0x0F08: pb, rb = 2, 0                                    # FFStopSound
-        elif n == 0x2503: pb, rb = 0, 4; res = self.steps // 2000          # GetTick
+        elif n == 0x2503: pb, rb = 0, 4; res = self.steps // int(os.environ.get("SIM_TICK", "2000"))  # GetTick
         elif n == 0xA404:                                                  # DrawChar
             pb, rb = 2, 0
             self.typed.append(chr(word(0) & 0xFF))

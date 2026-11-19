@@ -58,6 +58,7 @@ NewLine:
 
 ; The text area's pixels up by a line; the last line cleared (the HUD's own picture back there).
 ScrollText:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda TextY
         sta RY
         lda TextH
@@ -121,6 +122,7 @@ RowOffset:
 
 ; The HUD's own picture back in RX, RY, RW, RH (x even): from its background, or black without a HUD.
 RestoreRect:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda RW
         beq .done
         lda RH
@@ -949,6 +951,7 @@ Submit:
 
 ; Draws sprite SprId as it is (a portrait) at CellX, CellY (x even), colour 0 see-through.
 DrawPic:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda SprId
         asl a
         asl a

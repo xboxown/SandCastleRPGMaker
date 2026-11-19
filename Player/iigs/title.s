@@ -45,7 +45,8 @@ ParseTitle:
         lda Ptr+2
         sta IntroPtr+2
         lda IntroLen
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseButtons        ; the HUD's command buttons (mouse.s)
 
 ; The title menu (Mode 12).
 ShowTitle:
@@ -90,6 +91,7 @@ Offered:
 
 ; The picture, then the choices (the picked one bright).
 DrawTitle:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda TitleHasPic
         beq .black
         lda TitlePic

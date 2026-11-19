@@ -7,6 +7,7 @@ VERB_DROP = 5
 
 ; The grid again: its cells as the HUD has them, a carried thing's icon in each, in order.
 RefreshInventory:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         jsr RecalcGear          ; what is worn: the Avatar's weapon and armour (wear.s)
         lda PanelView           ; the portrait view: counted, not drawn
         bne .count
@@ -244,6 +245,7 @@ ToggleView:
 ; The panel as its view is: the inventory (the HUD's own picture, the words, the grid) or the portrait view (its
 ; picture with the member's portrait, the words, the stats).
 DrawPanel:
+        jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda PanW
         bne .some
         jmp RefreshInventory

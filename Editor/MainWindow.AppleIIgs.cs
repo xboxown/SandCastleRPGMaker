@@ -973,6 +973,13 @@ public partial class MainWindow
         var u6 = _systemSettings.Ultima6;
         if (SpriteOfLink(u6.TitleSprite)?.Frames.FirstOrDefault()?.FilePath is { } titleFile && File.Exists(titleFile)) titlePicture = FitPicture(titleFile, 320, 200);
         pack.Acknowledgments = u6.Acknowledgments;
+        // The HUD's command buttons: a click is its verb's key (Ultima 6's: A C T L G D M U R B).
+        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CommandButton))
+            pack.Buttons.Add((button.Verb switch
+            {
+                HudVerb.Attack => 'a', HudVerb.Cast => 'c', HudVerb.Talk => 't', HudVerb.Look => 'l', HudVerb.Get => 'g', HudVerb.Drop => 'd',
+                HudVerb.Move => 'm', HudVerb.Use => 'u', HudVerb.Rest => 'r', _ => 'b'
+            }, button.X, button.Y, button.Width, button.Height));
         if (u6.Hud.IntroCommands.Count > 0)
         {
             AppleIIgsTalk.Compile(u6.Hud.IntroCommands, VariableOf, out var intro, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
