@@ -525,8 +525,25 @@ RunTalk:
         bne .n4
         brl .setv
 .n4:    cmp #5
-        bne .end
+        bne .n5
         brl .ifv
+.n5:    cmp #6
+        bne .end
+        iny                     ; PLAY: a sound, its volume
+        lda [TalkPtr],y
+        pha
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        tax
+        pla
+        jsr PlaySound
+        lda TPC
+        clc
+        adc #4
+        sta TPC
+        brl RunTalk
 .end:   jmp EndTalk
 .say:   iny
         lda [TalkPtr],y
@@ -545,7 +562,7 @@ RunTalk:
         clc
         adc #4
         sta TPC
-        bra RunTalk
+        brl RunTalk
 .ask:   sty AskPC
         lda #0
         jsr PrintSaid           ; you say:
@@ -556,7 +573,7 @@ RunTalk:
 .jump:  iny
         lda [TalkPtr],y
         sta TPC
-        bra RunTalk
+        brl RunTalk
 .setv:  iny
         lda [TalkPtr],y         ; the variable
         asl a

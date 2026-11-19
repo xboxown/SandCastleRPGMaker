@@ -121,8 +121,8 @@ public partial class MainWindow
         // Talk: the commands the IIgs player doesn't do yet are left out of it.
         var leftOut = new SortedSet<string>();
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
-            foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _).Unsupported) leftOut.Add(type);
-        if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. Show Text with replies, Set / Conditional Branch on variables and switches, Labels and Stop Conversation work.");
+            foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, id => _resourceDatabase.Entries.Any(r => r.Id == id && r.Kind is ResourceKind.Sound or ResourceKind.Music) ? 0 : -1).Unsupported) leftOut.Add(type);
+        if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound and Stop Conversation work.");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -313,6 +313,9 @@ public partial class MainWindow
     private AppleIIgsGamePack MakeAppleIIgsPack()
     {
         var pack = new AppleIIgsGamePack { Title = _currentProjectName ?? "Game" };
+        var soundIndex = new Dictionary<int, int>(); // Sound Editor id -> its number in GAME.DAT
+        // The sounds first: the talks' Play Sound needs their numbers.
+        // (filled in below, before the characters' talks are made)
         var start = _worlds.FirstOrDefault() ?? _map ?? throw new InvalidOperationException("There is no map.");
         var layers = start.Layers.Where(l => l.Floor <= 1).ToList();
         // Every different cell picture, composed from its layers.
@@ -364,6 +367,25 @@ public partial class MainWindow
             spritePixels.Add(FitSprite(file));
             return spriteIndex[file] = spritePixels.Count - 1;
         }
+        foreach (var r in _resourceDatabase.Entries.Where(r => r.Kind is ResourceKind.Sound or ResourceKind.Music).Take(AppleIIgsLimits.MaxSounds))
+        {
+            if (!IIgsSoundOk(r).Ok && !File.Exists(r.FilePath)) continue;
+            try
+            {
+                using var reader = new NAudio.Wave.WaveFileReader(r.FilePath);
+                var bytes = new byte[Math.Min(reader.Length, AppleIIgsLimits.MaxSoundBytes)];
+                int read = reader.Read(bytes, 0, bytes.Length);
+                soundIndex[r.Id] = pack.Sounds.Count;
+                pack.Sounds.Add((r.Name, reader.WaveFormat.SampleRate, AppleIIgsGamePack.DocSafe(bytes[..read])));
+                pack.SoundVolumes.Add((int)Math.Clamp(r.Volume * 255, 0, 255));
+            }
+            catch { /* the check already said so */ }
+        }
+        // The Disk Swap screen (HUD Editor): its picture, its animation's frames, its words and sound.
+        var swap = _systemSettings.Ultima6.Hud.DiskSwap;
+        pack.SwapMessage = swap.Message;
+        pack.SwapAnimation = (swap.AnimationX, swap.AnimationY);
+        if (soundIndex.TryGetValue(swap.SoundId, out int swapSound)) pack.SwapSound = swapSound;
         var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)>();
         // The inventory's cells (HUD Editor > Carried Items): every object gets its look fitted into one, once.
         var carriedPiece = _systemSettings.Ultima6.Hud.First(HudPieceKind.CarriedItems);
@@ -435,7 +457,7 @@ public partial class MainWindow
                 talk = -1;
                 if (who.TalkCommands.Count > 0)
                 {
-                    AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code);
+                    AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1);
                     talk = pack.Talks.Count;
                     pack.Talks.Add((who.Name, code));
                 }
@@ -456,8 +478,25 @@ public partial class MainWindow
             characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
         }
         if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
+        // The Disk Swap screen's picture (the whole screen) and its animation's frames (each as a sprite of its own size).
+        uint[]? swapPicture = null;
+        SpriteEntry? SpriteOfLink(SpriteLink link) => !link.IsSet ? null :
+            _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(sp => sp.Name == link.SpriteName)
+            ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(sp => sp.Name == link.SpriteName);
+        if (SpriteOfLink(swap.Picture)?.Frames.FirstOrDefault()?.FilePath is { } swapFile && File.Exists(swapFile)) swapPicture = FitPicture(swapFile, 320, 200);
+        foreach (var frame in SpriteOfLink(swap.Animation)?.Frames.Take(16) ?? Enumerable.Empty<SpriteFrame>())
+        {
+            if (!File.Exists(frame.FilePath)) continue;
+            var img = new BitmapImage();
+            img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(frame.FilePath)); img.EndInit();
+            int fw = Math.Min(320, (img.PixelWidth + 3) / 4 * 4), fh = Math.Min(200, img.PixelHeight);
+            pack.SwapFrames.Add(spritePixels.Count);
+            spritePixels.Add((FitPicture(frame.FilePath, fw, fh), fw, fh));
+        }
         var hud = ComposeHud(pack, out var portraitPanel);
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()));
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()));
+        if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
+        pack.SwapText = (swap.TextX, swap.TextY, swap.TextColor.Length > 0 && ColorConverter.ConvertFromString(swap.TextColor) is Color sc ? SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(sc.R << 16 | sc.G << 8 | sc.B), false) : 0xFFFF);
         if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);
         for (int i = 0; i < pack.PortraitLabels.Count; i++)
@@ -491,18 +530,6 @@ public partial class MainWindow
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;
         pack.StartX = start.StartX >= 0 && start.StartX < start.Width ? start.StartX : start.Width / 2;
         pack.StartY = start.StartY >= 0 && start.StartY < start.Height ? start.StartY : start.Height / 2;
-        foreach (var r in _resourceDatabase.Entries.Where(r => r.Kind is ResourceKind.Sound or ResourceKind.Music).Take(AppleIIgsLimits.MaxSounds))
-        {
-            if (!IIgsSoundOk(r).Ok && !File.Exists(r.FilePath)) continue;
-            try
-            {
-                using var reader = new NAudio.Wave.WaveFileReader(r.FilePath);
-                var bytes = new byte[Math.Min(reader.Length, AppleIIgsLimits.MaxSoundBytes)];
-                int read = reader.Read(bytes, 0, bytes.Length);
-                pack.Sounds.Add((r.Name, reader.WaveFormat.SampleRate, AppleIIgsGamePack.DocSafe(bytes[..read])));
-            }
-            catch { /* the check already said so */ }
-        }
         return pack;
     }
 
@@ -666,7 +693,7 @@ public partial class MainWindow
             pack = MakeAppleIIgsPack();
             player = IIgsPlayerFile();
             var files = pack.Files();
-            try { floppies = AppleIIgsFloppies.Spread(new() { player, files[0] }, files.Skip(1).ToList()); }
+            try { floppies = AppleIIgsFloppies.Spread(new() { player, files[0], ("DISKS.DAT", 0x06, 0x0000, new byte[4096]) }, files.Skip(1).ToList()); } // DISKS.DAT: room kept, written once the disks are named
             catch { floppies = new(); }
         }
         catch (Exception ex) { MessageBox.Show(this, $"The game could not be made: {ex.Message}", "Build", MessageBoxButton.OK, MessageBoxImage.Error); return; }
@@ -685,13 +712,22 @@ public partial class MainWindow
                 Mouse.OverrideCursor = Cursors.Wait;
                 var written = new List<string>();
                 var volumeNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                var diskList = new List<(string Volume, string Shown)>();
                 for (int d = 0; d < floppies.Count; d++)
                 {
                     string name = swap.NameOf(d + 1, game);
                     string volumeName = ProDosVolume.CleanName(name, $"DISK{d + 1}");
                     for (int k = 2; !volumeNames.Add(volumeName); k++) volumeName = ProDosVolume.CleanName(name, "DISK")[..Math.Min(13, ProDosVolume.CleanName(name, "DISK").Length)] + k;
+                    diskList.Add((volumeName, name));
+                }
+                // Which file is on which disk: DISKS.DAT, on disk 1 in the room kept for it.
+                var where = floppies.SelectMany((files, d) => files.Select(f => (File: f.Name, Disk: d + 1))).Where(f => f.File != "DISKS.DAT").ToList();
+                var disksDat = AppleIIgsDisks.Write(diskList, where);
+                for (int d = 0; d < floppies.Count; d++)
+                {
+                    string name = diskList[d].Shown, volumeName = diskList[d].Volume;
                     var volume = new ProDosVolume(volumeName);
-                    foreach (var f in floppies[d]) volume.Add(f.Name, f.FileType, f.AuxType, f.Data);
+                    foreach (var f in floppies[d]) volume.Add(f.Name, f.FileType, f.AuxType, f.Name == "DISKS.DAT" ? disksDat : f.Data);
                     string file = Path.Combine(folderPick.SelectedPath, string.Concat(name.Select(c => Path.GetInvalidFileNameChars().Contains(c) ? '_' : c)) + ".2mg");
                     File.WriteAllBytes(file, ProDosVolume.Wrap2mg(volume.Build(AppleIIgsFloppies.Blocks)));
                     written.Add($"{Path.GetFileName(file)}  (disk \"{volumeName}\": {string.Join(", ", floppies[d].Select(f => f.Name))})");

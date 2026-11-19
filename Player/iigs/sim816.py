@@ -6,7 +6,7 @@ Loads an S16 (OMF 2) as the System Loader would (relocating cRELOC / RELOC recor
 toolbox (JSL $E10000) and GS/OS (JSL $E100A8) calls it uses answered by simple stand-ins, feeds it keys, and saves the
 Super Hi-Res screen as a PNG. It tests the player's own logic - the real toolbox and GS/OS are tested in KEGS.
 Usage: sim816.py SANDCASTLE folder-with-GAME.DAT out.png [--keys "RRDDL q"] [--slow] [--trace]
-Keys: U D L R = arrows, ~ Enter, ^ Esc, < Delete, other letters as typed.
+Keys: U D L R = arrows, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
 """
 import struct, sys, zlib, os
 
@@ -37,6 +37,9 @@ class Machine:
         self.steps = 0
         self.key_waits = 0
         self.typed = []
+        self.sounds = []
+        self.opened = []
+        self.inserted = False
 
     # ---- memory ----
     def rd(self, a):
@@ -158,8 +161,12 @@ class Machine:
             self.key_waits += 1
             if self.keys and self.key_waits % 3 == 0:
                 k = self.keys.pop(0)
-                code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F}.get(k, ord(k))
-                self.wr16(rec, 3); self.wr16(rec + 2, code); self.wr16(rec + 4, 0); res = 0xFFFF
+                if k == '!':  # the other disks go in (no key event)
+                    self.inserted = True
+                    res = 0
+                else:
+                    code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F}.get(k, ord(k))
+                    self.wr16(rec, 3); self.wr16(rec + 2, code); self.wr16(rec + 4, 0); res = 0xFFFF
             elif not self.keys and self.key_waits > 10:
                 self.wr16(rec, 3); self.wr16(rec + 2, ord('q')); self.wr16(rec + 4, 0); res = 0xFFFF
             else:
@@ -181,6 +188,14 @@ class Machine:
             ptr = long(0); k = 0
             while self.mem[ptr + k]: k += 1
             res = 6 * k
+        elif n == 0x0E08:                                                  # FFStartSound
+            pb, rb = 6, 0
+            blk = long(0)
+            self.sounds.append(dict(gen=word(4), wave=self.rd24(blk), pages=self.rd16(blk + 4), freq=self.rd16(blk + 6),
+                                    doc=self.rd16(blk + 8), size=self.rd16(blk + 10), vol=self.rd16(blk + 16),
+                                    first=bytes(self.mem[self.rd24(blk):self.rd24(blk) + 4]).hex()))
+        elif n == 0x0F08: pb, rb = 2, 0                                    # FFStopSound
+        elif n == 0x2503: pb, rb = 0, 4; res = self.steps // 2000          # GetTick
         elif n == 0xA404:                                                  # DrawChar
             pb, rb = 2, 0
             self.typed.append(chr(word(0) & 0xFF))
@@ -220,6 +235,10 @@ class Machine:
             path = bytes(self.mem[pathp + 2: pathp + 2 + n]).decode()
             name = path.split(':')[-1]
             full = os.path.join(self.folder, name)
+            if path.startswith(':'):  # a disk by its name: there only once "put in" (the key !)
+                vol = path.split(':')[1]
+                full = os.path.join(self.folder, vol, name) if self.inserted else ''
+            self.opened.append((path, os.path.exists(full)))
             if os.path.exists(full):
                 self.files[self.next_ref] = open(full, 'rb').read()
                 # pCount, refNum, pathname: refNum is at +2
@@ -481,6 +500,8 @@ def main(argv):
     print('texts:')
     for (pos, colour, text) in m.texts: print(f'   {pos} colour {colour}: {text}')
     print('typed letters echoed:', ''.join(m.typed))
+    print('files opened:', m.opened)
+    print('sounds started:', m.sounds)
     print('quit to the desktop:', m.quit)
     return 0
 

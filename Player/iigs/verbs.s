@@ -409,6 +409,16 @@ Format:
         sta SayP
         lda WordTab+2,x
         sta SayP+2
+        jsr FillFmt
+        lda #FmtBuf
+        sta SayP
+        lda MyBank
+        sta SayP+2
+        ldy #0
+        jmp SayText
+
+; FmtBuf = the C string at SayP with {0} = FmtName and {1} = the Avatar's name.
+FillFmt:
         ldx #0                  ; FmtBuf <- the word, the names put in
         ldy #0
 .c:     lda [SayP],y
@@ -469,9 +479,4 @@ Format:
         sta FmtBuf,x
         rep #$20
         .a16
-        lda #FmtBuf
-        sta SayP
-        lda MyBank
-        sta SayP+2
-        ldy #0
-        jmp SayText
+        rts

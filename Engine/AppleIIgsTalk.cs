@@ -14,21 +14,23 @@ namespace SandcastleRpgMaker.Engine;
 ///   $03 JUMP u16 place
 ///   $04 SETV u16 variable, u8 op (0 set, 1 add, 2 subtract), i16 value
 ///   $05 IFV  u16 variable, u8 test (0 ==, 1 !=, 2 &gt;, 3 &lt;, 4 &gt;=, 5 &lt;=), i16 value, u16 place if not
+///   $06 PLAY u16 sound (its number in GAME.DAT), u8 volume (0-255)
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
 /// </summary>
 public sealed class AppleIIgsTalk
 {
-    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5;
+    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6;
     private readonly List<byte> _code = new();
     private readonly Func<string, int> _variable;
+    private readonly Func<int, int>? _sound;
     public HashSet<string> Unsupported { get; } = new();
 
-    private AppleIIgsTalk(Func<string, int> variable) => _variable = variable;
+    private AppleIIgsTalk(Func<string, int> variable, Func<int, int>? sound) { _variable = variable; _sound = sound; }
 
-    /// <summary>The code for a list of commands; variable(name) gives a variable's or switch's number.</summary>
-    public static AppleIIgsTalk Compile(List<EventCommand> commands, Func<string, int> variable, out byte[] code)
+    /// <summary>The code for a list of commands; variable(name) gives a variable's or switch's number, sound(id) a Sound Editor sound's number in GAME.DAT (-1: not there).</summary>
+    public static AppleIIgsTalk Compile(List<EventCommand> commands, Func<string, int> variable, out byte[] code, Func<int, int>? sound = null)
     {
-        var talk = new AppleIIgsTalk(variable);
+        var talk = new AppleIIgsTalk(variable, sound);
         talk.Run(commands);
         code = talk._code.ToArray();
         return talk;
@@ -136,6 +138,14 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.GoToLabel:
                     B(Jump); gotos.Add((Hole(), cmd.Get("LabelName")));
                     break;
+                case EventCommandType.PlaySound:
+                {
+                    int n = int.TryParse(cmd.Get("SoundResourceId"), out int id) && _sound is not null ? _sound(id) : -1;
+                    if (n < 0) { Unsupported.Add("Play Sound (a sound that isn't in the game)"); break; }
+                    double volume = double.TryParse(cmd.Get("Volume"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 1.0;
+                    B(Play); W(n); B((int)Math.Clamp(volume * 255, 0, 255));
+                    break;
+                }
                 case EventCommandType.StopConversation or EventCommandType.End:
                     B(End);
                     break;

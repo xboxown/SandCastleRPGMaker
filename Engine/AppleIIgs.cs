@@ -333,13 +333,16 @@ public static class SuperHiRes
 ///   variables: u16 count, i16 each (their starting values; switches are variables 0 / 1)
 ///   talks: u16 count, count x u32 offset, u32 all their bytes, then each: u8 length, the speaker's name, 0, its code
 ///          (Engine/AppleIIgsTalk.cs)
-///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length (sound n's bytes are the file SND.n, from 1)
+///   sounds: u16 count, then each: u8 name length + name, u16 rate, u32 length, u16 the Sound Tool Set's frequency offset
+///           (rate x 32 / 1645), u8 volume (0-255) - sound n's bytes are the file SND.n, from 1
+///   the Disk Swap screen: u16 1 = a picture (then 32000 bytes) / 0; u16 animation frames, x, y, then a sprite each;
+///           u16 words x, y, colour; u8 length, the words ({0}: the disk's name), 0; u16 its sound ($FFFF none)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 7: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
+/// Version 8: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 7;
+    public const ushort Version = 8;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -351,6 +354,14 @@ public sealed class AppleIIgsGamePack
     public ushort[] Map { get; set; } = Array.Empty<ushort>();
     public List<byte[]> AvatarFrames { get; } = new();
     public List<(string Name, int Rate, byte[] Data)> Sounds { get; } = new();
+    /// <summary>Each sound's volume, 0-255 (255 when not given).</summary>
+    public List<int> SoundVolumes { get; } = new();
+    public byte[]? SwapPicture { get; set; }
+    public List<int> SwapFrames { get; } = new();
+    public (int X, int Y) SwapAnimation { get; set; }
+    public (int X, int Y, int Color) SwapText { get; set; } = (16, 120, 0xFFFF);
+    public string SwapMessage { get; set; } = "Please insert the disk \"{0}\" and press a key.";
+    public int SwapSound { get; set; } = 0xFFFF;
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
     public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)> Objects { get; } = new();
     /// <summary>The HUD's Carried Items grid (Columns 0: none).</summary>
@@ -461,7 +472,18 @@ public sealed class AppleIIgsGamePack
         {
             var n = Encoding.ASCII.GetBytes(new string(name.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(31).ToArray()));
             w.Write((byte)n.Length); w.Write(n); w.Write((ushort)rate); w.Write(data.Length);
+            w.Write((ushort)Math.Clamp(rate * 32 / 1645, 1, 0xFFFF));
+            int index = Sounds.FindIndex(x => ReferenceEquals(x.Data, data));
+            w.Write((byte)(index >= 0 && index < SoundVolumes.Count ? SoundVolumes[index] : 255));
         }
+        w.Write((ushort)(SwapPicture is null ? 0 : 1));
+        if (SwapPicture is not null) w.Write(SwapPicture);
+        w.Write((ushort)SwapFrames.Count); w.Write((ushort)(SwapAnimation.X & ~1)); w.Write((ushort)SwapAnimation.Y);
+        foreach (int f in SwapFrames) w.Write((ushort)f);
+        w.Write((ushort)SwapText.X); w.Write((ushort)SwapText.Y); w.Write((ushort)SwapText.Color);
+        var m = Ascii(SwapMessage, 100);
+        w.Write((byte)m.Length); w.Write(m); w.Write((byte)0);
+        w.Write((ushort)SwapSound);
         return ms.ToArray();
     }
 
@@ -523,5 +545,31 @@ public static class AppleIIgsFloppies
             free[at] -= need;
         }
         return disks;
+    }
+}
+
+/// <summary>
+/// DISKS.DAT, on disk 1 of a game built as floppies: the disks (ProDOS name, the name shown) and which disk each file is on.
+/// The player looks for a file in its own folder first, then on its disk ":NAME:FILE", then asks for that disk (the Disk
+/// Swap screen). "SCDK", u16 disks, each: u8 length, ProDOS name, 0, u8 length, shown name, 0; u16 files, each:
+/// u8 length, name, 0, u8 its disk (1 = the first).
+/// </summary>
+public static class AppleIIgsDisks
+{
+    public static byte[] Write(List<(string Volume, string Shown)> disks, List<(string File, int Disk)> files)
+    {
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(Encoding.ASCII.GetBytes("SCDK"));
+        w.Write((ushort)disks.Count);
+        foreach (var (vol, shown) in disks) { Str(vol, 15); Str(shown, 40); }
+        w.Write((ushort)files.Count);
+        foreach (var (file, disk) in files) { Str(file, 15); w.Write((byte)disk); }
+        return ms.ToArray();
+        void Str(string text, int max)
+        {
+            var t = Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(max).ToArray()));
+            w.Write((byte)t.Length); w.Write(t); w.Write((byte)0);
+        }
     }
 }

@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 8 (b627): sounds (sound.s: Play Sound in talks, through the Sound Tool Set), files found on other disks
+;   (DISKS.DAT) and the Disk Swap screen asking for them.
 ; Version 7 (b625): the panel's two views (*): the inventory, or the portrait and the stats.
 ; Version 6 (b624): the inventory (inventory.s): the HUD's Carried Items grid, Get into it, Drop out of it.
 ; Version 5 (b623): the verbs (verbs.s): Look, Get, Use (doors), Talk with Ultima 6's cursor.
@@ -173,6 +175,8 @@ start:
         jsr Alert
         jmp Quit
 .occ:
+        jsr LoadDisks           ; a game on floppies: which file is on which disk
+        jsr PreloadSwapSound
         tool $9004              ; HideCursor
         jsr SetupScreen
         jsr DrawPanel
@@ -432,7 +436,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #7
+        cmp #8
         beq .known
 .bad:   sec
         rts
@@ -1008,13 +1012,18 @@ ParseTalk:
         lda Ptr+2
         sta TalkTab+2
         jsr AddPtrLong
+        lda [Ptr]               ; all the talks' bytes (to step past them)
+        sta TalkTotal
+        ldy #2
+        lda [Ptr],y
+        sta TalkTotal+2
         lda #4
         jsr AddPtr
         lda Ptr
         sta TalkBank
         lda Ptr+2
         sta TalkBank+2
-        rts
+        jmp ParseSounds
 
 ; ---- the Game View ----
 ; From VX, VY, VCols, VRows: the Avatar's cell, the view's first byte on the screen, its edges (+ 64).
@@ -1805,6 +1814,28 @@ TryMove:
         .include "talk.s"
         .include "verbs.s"
         .include "inventory.s"
+        .include "sound.s"
+
+; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
+PreloadSwapSound:
+        lda SwapSnd
+        cmp SndCount
+        bcs .out
+        sta SndNow
+        jsr SoundName
+        lda #FileName
+        jsr LocalPath
+        jsr LoadFile
+        bcs .out
+        lda SndNow
+        asl a
+        asl a
+        tax
+        lda LoadAddr
+        sta SndAddr,x
+        lda LoadAddr+2
+        sta SndAddr+2,x
+.out:   rts
 
 ; ---- data ----
 StartStop:
@@ -1812,7 +1843,7 @@ StartStop:
         .dw $0000               ; 320 mode
         .dw 0                   ; no resource file
         .dd 0                   ; direct page: StartUpTools gets it
-        .dw 10                  ; tools:
+        .dw 11                  ; tools:
         .dw $03,$0000           ; Miscellaneous Tool Set
         .dw $04,$0000           ; QuickDraw II
         .dw $06,$0000           ; Event Manager
@@ -1823,11 +1854,13 @@ StartStop:
         .dw $14,$0000           ; LineEdit
         .dw $15,$0000           ; Dialog Manager
         .dw $16,$0000           ; Scrap Manager
+        .dw $08,$0000           ; Sound Tool Set
 
 OpenParms:
         .dw 2
 OpenRef:
         .dw 0
+OpenPath:
         .dd DataName
 EofParms:
         .dw 2
@@ -1932,6 +1965,41 @@ PanPix:   .dd 0
 StatPtr:  .dd 0
 StatCount: .dw 0
 PanelView: .dw 0                ; 0 the inventory, 1 the portrait and the stats
+TalkTotal: .dd 0
+SndCount: .dw 0
+SndNow:   .dw 0
+SndVolNow: .dw 0
+Gen:      .dw 0
+SndLen:   .ds 1024              ; 256 sounds: their lengths (4 bytes)
+SndAddr:  .ds 1024              ;   where they are once loaded (0: not yet)
+SndFreq:  .ds 512               ;   the Sound Tool Set's frequency offset
+SndVol:   .ds 512               ;   their volume
+SndBlock: .ds 18                ; FFStartSound's parameters: waveStart, waveSize, freqOffset, docBuffer, bufferSize, nextWavePtr, volSetting
+SwapHasPic: .dw 0
+SwapPic:  .dd 0
+SwapFrames: .dw 0
+SwapFrameTab: .dd 0
+SwapAX:   .dw 0
+SwapAY:   .dw 0
+SwapTX:   .dw 0
+SwapTY:   .dw 0
+SwapTC:   .dw 0
+SwapMsg:  .dd 0
+SwapSnd:  .dw 0
+SwapFrame: .dw 0
+SwapTick: .dw 0
+WantDisk: .dw 0
+DiskCount: .dw 0
+DiskTab:  .ds 256               ; 32 disks: their ProDOS name, their name shown (4 bytes each)
+FileCount: .dw 0
+FileTab:  .dd 0
+FileName: .ds 20
+PathBuf:  .ds 66                ; a GS/OS path: its length, then its letters
+LoadHandle: .dd 0
+LoadAddr: .dd 0
+LoadSize: .dd 0
+DisksName:
+        .cstr "DISKS.DAT"
 AvatarW:  .dw 0
 WordTab:  .ds 128                ; up to 32 words
 NameTab:  .ds 2048
