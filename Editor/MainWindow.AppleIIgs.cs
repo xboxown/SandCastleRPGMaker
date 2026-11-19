@@ -125,7 +125,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time) and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -850,6 +850,7 @@ public partial class MainWindow
             },
             ItemName = (cat, id) => DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase),
             Common = id => _systemSettings.CommonEvents.FirstOrDefault(c => c.Id == id)?.Commands,
+            WhoName = who => who is "" or "Activator" or "Player" ? PlayerCharacter()?.Name : int.TryParse(who, out int wid) ? _characterDatabase.Characters.FirstOrDefault(c => c.Id == wid)?.Name : null,
             Stat = id => _statDatabase.Stats.FirstOrDefault(st => st.Id.ToString() == id)?.Kind switch
             {
                 BuiltInStatKind.Hits => AppleIIgsGamePack.Stat.Hp, BuiltInStatKind.Strength => AppleIIgsGamePack.Stat.Str, BuiltInStatKind.Dexterity => AppleIIgsGamePack.Stat.Dex,
@@ -861,7 +862,22 @@ public partial class MainWindow
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
         var dn = _systemSettings.DayNight;
         pack.DayNight = (dn.Enabled, dn.DawnStartHour, dn.DayStartHour, dn.DuskStartHour, dn.NightStartHour);
-        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules, int floor = 1)
+        // A character's or thing's own event pages as code (in Codes), once each.
+        var ownCode = new Dictionary<string, int?>();
+        int? OwnEvents(List<BookEventPage> pages, string key)
+        {
+            if (ownCode.TryGetValue(key, out var known)) return known;
+            var ps = IIgsPages(pages, true, out _);
+            int? result = null;
+            if (ps.Count > 0)
+            {
+                AppleIIgsTalk.CompileEvent(ps, VariableOf, out var code, out _, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+                result = pack.Codes.Count;
+                pack.Codes.Add(code);
+            }
+            return ownCode[key] = result;
+        }
+        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules, int floor = 1, int mapNo = 0)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
             foreach (var placed in world.Characters.Where(c => !c.Dead && c.Floor == floor))
@@ -914,6 +930,7 @@ public partial class MainWindow
             }
             stats[AppleIIgsGamePack.Stat.Behaviour] = who.Schedules.Count > 0 ? 2 : Hostile(who) ? 1 : 0;
             list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
+                if (OwnEvents(who.EventPages, "c" + who.Id) is int ownCode) pack.CharEvents.Add((mapNo, list.Count - 1, ownCode));
             }
             if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
             return list;
@@ -948,11 +965,13 @@ public partial class MainWindow
             }
             return list;
         }
-        List<AppleIIgsTalk.EventPage> IIgsEventPages(GameEvent ev, out List<string> leftOut)
+        List<AppleIIgsTalk.EventPage> IIgsEventPages(GameEvent ev, out List<string> leftOut) => IIgsPages(ev.EventPages, false, out leftOut);
+        // A character's, object's or map event's pages (owner: a character's or a thing's own - hit, killed, Used...).
+        List<AppleIIgsTalk.EventPage> IIgsPages(List<BookEventPage> ownPages, bool owner, out List<string> leftOut)
         {
             leftOut = new List<string>();
             var pages = new List<AppleIIgsTalk.EventPage>();
-            foreach (var page in ev.EventPages.Where(pg => pg.Commands.Count > 0))
+            foreach (var page in ownPages.Where(pg => pg.Commands.Count > 0))
             {
                 var c = page.Conditions;
                 int item = c.TriggerItemReference is { } r ? pack.NameOf(DollLook.ItemName(r, _objectDatabase, _bookDatabase, _containerDatabase)) : -1;
@@ -961,7 +980,11 @@ public partial class MainWindow
                     BookTriggerConditionBased.ByEnter => (1, 2),
                     BookTriggerConditionBased.ByStay => (2, 2),
                     BookTriggerConditionBased.ByExit => (3, 2),
-                    BookTriggerConditionBased.ByUseItem when item < 0 => (4, 2),
+                    BookTriggerConditionBased.ByUseItem when item < 0 => owner ? (12, 2) : (4, 2),
+                    BookTriggerConditionBased.ByUseItem => (13, 2),
+                    BookTriggerConditionBased.ByHit when owner => (9, 2),
+                    BookTriggerConditionBased.ByDeath when owner => (10, 2),
+                    BookTriggerConditionBased.ByAilmentEffect when owner => (11, 2),
                     BookTriggerConditionBased.Always => (5, 2),
                     BookTriggerConditionBased.ByHavingAnItem => (6, 0),
                     BookTriggerConditionBased.ByNotHavingAnItem => (6, 1),
@@ -987,11 +1010,16 @@ public partial class MainWindow
                     }
                 if (c.ConditionStatCondition || c.ConditionEventTriggerCompleted || c.ConditionComplex || c.ConditionDistance || c.ConditionJoinedParty)
                     leftOut.Add("conditions other than variables and switches");
-                pages.Add(new AppleIIgsTalk.EventPage(t.Trigger, t.Kind == 2 && t.Trigger is 1 or 2 or 3 or 4 or 5 ? -1 : item, t.Kind, conds, page.Commands));
+                pages.Add(new AppleIIgsTalk.EventPage(t.Trigger, t.Kind == 2 && t.Trigger is 1 or 2 or 3 or 4 or 5 or 9 or 10 or 11 or 12 ? -1 : item, t.Kind, conds, page.Commands));
             }
             return pages;
         }
         pack.Events.AddRange(MapEvents(start, pack.EventMasks));
+        // Objects' and containers' own events: by the thing's name.
+        foreach (var od in _objectDatabase.Objects.Where(o => o.EventPages.Any(pg => pg.Commands.Count > 0)))
+            if (OwnEvents(od.EventPages, "o" + od.Id) is int oc) pack.ObjEvents.Add((pack.NameOf(od.Name), oc));
+        foreach (var cd in _containerDatabase.Containers.Where(c => c.EventPages.Any(pg => pg.Commands.Count > 0)))
+            if (OwnEvents(cd.EventPages, "k" + cd.Id) is int kc) pack.ObjEvents.Add((pack.NameOf(cd.Name), kc));
         // The other maps: their cells, objects, characters and events (each map its own file, MAP.n).
         for (int mi = 1; mi < worldList.Count; mi++)
         {
@@ -1000,7 +1028,7 @@ public partial class MainWindow
                 StartX = world.StartX >= 0 && world.StartX < world.Width ? world.StartX : world.Width / 2,
                 StartY = world.StartY >= 0 && world.StartY < world.Height ? world.StartY : world.Height / 2 };
             AddMapObjects(world, mi << 12);
-            other.Characters.AddRange(MapCharacters(world, other.Schedules));
+            other.Characters.AddRange(MapCharacters(world, other.Schedules, 1, mi));
             other.Events.AddRange(MapEvents(world, other.EventMasks));
             pack.OtherMaps.Add(other);
         }
@@ -1009,7 +1037,7 @@ public partial class MainWindow
             var world = worldList[wi];
             var other = new AppleIIgsMap { Width = world.Width, Height = world.Height, Map = Grid(world, f, StairTops(world, f)), StartX = world.StartX, StartY = world.StartY };
             AddMapObjects(world, mi << 12, f);
-            other.Characters.AddRange(MapCharacters(world, other.Schedules, f));
+            other.Characters.AddRange(MapCharacters(world, other.Schedules, f, mi));
             other.Events.AddRange(MapEvents(world, other.EventMasks, f));
             pack.OtherMaps.Add(other);
         }

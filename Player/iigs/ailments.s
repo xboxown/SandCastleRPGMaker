@@ -143,7 +143,13 @@ AilOn:
         tay
         pla
         sta AilTab,y
-.eff:   lda ABit                ; asleep / paralyzed: still; charmed: not hostile now
+.eff:   lda ABit                ; its own By Ailment event (not invisible, protected, withstand death - ownev.s)
+        and #A_INVIS+A_PROT+A_WD
+        bne .eff2
+        lda #11
+        jsr FireWP
+        ldy AY
+.eff2:  lda ABit                ; asleep / paralyzed: still; charmed: not hostile now
         and #A_SLEEP+A_PARA
         beq .ch
         jsr WPIsAvatar

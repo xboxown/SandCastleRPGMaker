@@ -151,7 +151,11 @@ RunQueue:
 .next:  lda QN
         bne .scan
 .out:   rts
-.scan:  lda EvScan
+.scan:  lda QX                  ; a character's or thing's own event (ownev.s): its code at once
+        cmp #$FFFE
+        bne .map
+        jmp RunOwn
+.map:   lda EvScan
         bne .w
         lda EvPtr
         sta EvWalk
@@ -376,4 +380,4 @@ EvNext:   .dw 0
 JustMoved: .dw 0
 StayX:    .dw 0
 StayY:    .dw 0
-BitTab:   .dw 1,2,4,8,16,32,64,128,256
+BitTab:   .dw 1,2,4,8,16,32,64,128,256,512,1024,2048,4096,8192

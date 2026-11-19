@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 30;
+    public const ushort Version = 31;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -465,8 +465,12 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Sprite, int Icon, int Flags, int Other)> Items { get; } = new();
     /// <summary>Kinds spells summon (Summon): a character's 64 bytes (its sprite, name, stats).</summary>
     public List<(int Sprite, int Name, int[] Stats)> Summons { get; } = new();
-    /// <summary>Common events spells run: their commands as talk code.</summary>
+    /// <summary>Common events spells run, characters' and objects' own events: their commands as talk code.</summary>
     public List<byte[]> Codes { get; } = new();
+    /// <summary>Characters' own events (Character Editor > Event): the character's map and place, its code in Codes.</summary>
+    public List<(int Map, int Index, int Code)> CharEvents { get; } = new();
+    /// <summary>Objects' and containers' own events (Object / Container Editor > Event): the thing's name, its code in Codes.</summary>
+    public List<(int Name, int Code)> ObjEvents { get; } = new();
     /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
     public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
@@ -625,8 +629,12 @@ public sealed class AppleIIgsGamePack
             w.Write((ushort)0); w.Write((ushort)0); w.Write((ushort)sprite); w.Write((ushort)1); w.Write((ushort)0); w.Write((ushort)0xFFFF); w.Write((ushort)0xFFFF); w.Write((ushort)name);
             WriteStats(w, st);
         }
-        w.Write((ushort)Math.Min(Codes.Count, 64));
-        foreach (var code in Codes.Take(64)) { w.Write((ushort)code.Length); w.Write(code); }
+        w.Write((ushort)Math.Min(Codes.Count, 255));
+        foreach (var code in Codes.Take(255)) { w.Write((ushort)code.Length); w.Write(code); }
+        w.Write((ushort)Math.Min(CharEvents.Count, 256));
+        foreach (var (cm, ci, cc) in CharEvents.Take(256)) { w.Write((ushort)cm); w.Write((ushort)ci); w.Write((ushort)cc); }
+        w.Write((ushort)Math.Min(ObjEvents.Count, 128));
+        foreach (var (n, c) in ObjEvents.Take(128)) { w.Write((ushort)n); w.Write((ushort)c); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

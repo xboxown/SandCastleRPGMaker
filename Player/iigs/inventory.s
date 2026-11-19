@@ -521,6 +521,10 @@ DropHere:
         ldy CurY
         jsr DroppedEvents
         pla
+        pha
+        ldx #7                  ; its own By Drop event (ownev.s)
+        jsr ObjEvQueue
+        pla
         jsr NameNumber
         lda #17                 ; {1} drops {0}.
         jsr Format

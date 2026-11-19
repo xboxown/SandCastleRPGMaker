@@ -687,6 +687,8 @@ Strike:
         lda #0
 .hp:    sta [DefP],y
         jsr TellWound
+        lda #9                  ; its own By Hit event (ownev.s)
+        jsr FireDef
         ldy #C_HP
         lda [DefP],y
         bne .alive
@@ -755,7 +757,9 @@ Dies:
         lda #7
         sta Mode
         rts
-.npc:   ldy #C_FLAGS
+.npc:   lda #10                 ; its own By Death event (ownev.s)
+        jsr FireDef
+        ldy #C_FLAGS
         lda [DefP],y
         ora #4
         sta [DefP],y

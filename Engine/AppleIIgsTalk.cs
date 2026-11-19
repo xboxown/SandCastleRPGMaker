@@ -23,7 +23,8 @@ namespace SandcastleRpgMaker.Engine;
 ///   (IFVs for its variable conditions, jumping to the next page if they fail)
 ///   $0B HIT                                   the page runs: its commands, then END
 /// Triggers: 1 stepped on, 2 stood on, 3 stepped off, 4 Use on it (the action button), 5 arriving on the map (Always),
-/// 6 having / not having an item, 7 a thing dropped on it, 8 a thing picked up from it.
+/// 6 having / not having an item, 7 a thing dropped on it, 8 a thing picked up from it; a character's or an object's own:
+/// 9 hit, 10 killed, 11 an ailment, 12 Used, 13 an item used on it (ITEM kind 2: that item).
 /// More commands (b636; "who" = u16 map, u16 place in its list; $FFFF $FFFF the Avatar):
 ///   $0C GIVE u16 name, u16 sprite, u16 icon, u16 flags, u16 other   a thing to the Avatar (into a spare object)
 ///   $0D TAKE u16 name, u16 how many                         Remove Item from the Avatar's things
@@ -62,6 +63,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? Picture;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
+        /// <summary>A Who's name (Show Bark).</summary>
+        public Func<string, string?>? WhoName;
         /// <summary>A Common Event's commands (Call Common Event).</summary>
         public Func<int, List<EventCommand>?>? Common;
         /// <summary>An item's name as shown (a shop's {item} / {money}).</summary>
@@ -661,6 +664,12 @@ public sealed class AppleIIgsTalk
                     if (depth < 4 && int.TryParse(cmd.Get("CommonEventId"), out int ceId) && Extra?.Common?.Invoke(ceId) is { } ceCommands) Run(ceCommands, depth + 1);
                     else Unsupported.Add("Call Common Event (a common event not there)");
                     break;
+                case EventCommandType.ShowBark:
+                {
+                    string who = Extra?.WhoName?.Invoke(cmd.Get("Who")) ?? "";
+                    SayLine(who.Length > 0 ? $"{who}: \"{cmd.Get("Value")}\"" : cmd.Get("Value"));
+                    break;
+                }
                 case EventCommandType.Comment or EventCommandType.ReturnFromCommon:
                     break;
                 case EventCommandType.StopConversation or EventCommandType.End:

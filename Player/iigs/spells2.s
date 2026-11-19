@@ -54,7 +54,7 @@ ParseSpellThings:
         jsr AddPtr
         dex
         bra .c
-.d:     rts
+.d:     jmp ParseOwnEvents      ; (ownev.s)
 
 ; Carry set if the spell (SpBuf) works on a square: teleport, a field, a door, lights, telekinesis, resurrect, dispel.
 CellSpell:

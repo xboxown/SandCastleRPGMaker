@@ -14,6 +14,7 @@ VERB_MOVE = 6
 VERB_ATTACK = 7
 VERB_KEY  = 8
 VERB_CAST = 9
+VERB_USEON = 10
 
 ; A = the verb: its word and "-", the cursor on the Avatar.
 StartVerb:
@@ -305,7 +306,10 @@ PickCell:
         cmp #VERB_DROP
         bne .mv
         jmp DropHere            ; Drop's "Where?" (inventory.s)
-.mv:    cmp #VERB_KEY
+.mv:    cmp #VERB_USEON
+        bne .mv0
+        jmp UseOnCell           ; (ownev.s)
+.mv0:   cmp #VERB_KEY
         bne .mv1
         jmp KeyOn               ; (keys.s)
 .mv1:   cmp #VERB_CAST
@@ -377,9 +381,13 @@ PickCell:
         jsr ObjFlags            ; picked up from here; what is carried changed (events.s)
         ldy #8
         lda [ItemPtr],y
+        pha
         ldx CurX
         ldy CurY
         jsr PickedEvents
+        pla                     ; its own By Pickup event (ownev.s)
+        ldx #8
+        jsr ObjEvQueue
         lda #8                  ; {1} gets {0}.
         jsr Format
         jsr DrawView
@@ -393,8 +401,23 @@ PickCell:
         bcc .nuse
         rts
 .nuse:  lda Kind
-        cmp #3
-        bne .np
+        cmp #2                  ; someone: its own Use event (ownev.s)
+        bne .nchr
+        jmp UseChar
+.nchr:  cmp #3
+        beq .isth
+        brl .notpossible
+.isth:  jsr NextToCursor          ; (things are used from beside them)
+        bcs .nearev
+        brl .range
+.nearev: jsr ObjFlags           ; a thing with its own Use event (ownev.s)
+        ldy #8
+        lda [ItemPtr],y
+        ldx #12
+        jsr ObjEvent
+        bcc .noev
+        rts
+.noev:  lda Kind
         jsr ObjFlags
         and #128                ; a container: what is in it spills out
         beq .rd
@@ -959,7 +982,9 @@ GridVerb:
 .bag:   ldy #6
         lda [ItemPtr],y
         and #128                ; a bag: open (or shut) in the grid
-        beq .np
+        bne .isbag
+        jmp StartUseOn          ; anything else: used on something - "On what?" (ownev.s)
+.isbag:
         lda [ItemPtr],y
         and #8
         bne .locked

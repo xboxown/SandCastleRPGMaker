@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 31 (b651): characters' and objects' own events (ownev.s): hit, killed, an ailment, Used, an item used on
+;   them; picked up / dropped; Use with an item on something ("On what?"); Show Bark.
 ; Version 30 (b650): formulas (expr.s): Calculate, While, Repeat, Select Case, Wait Until, Call Common Event, Advance
 ;   IF - a formula's stack code (numbers, variables, + - * / %, comparisons, and / or / not, random, chance, min, max...).
 ; Version 29 (b649): every spell effect (spells2.s): teleport, mark / recall, summon, clone, create item / field,
@@ -597,7 +599,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #30
+        cmp #31
         beq .known
 .bad:   sec
         rts
@@ -2038,6 +2040,7 @@ TryMove:
         .include "missile.s"
         .include "spells2.s"
         .include "expr.s"
+        .include "ownev.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
