@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 9;
+    public const ushort Version = 10;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -395,6 +395,10 @@ public sealed class AppleIIgsGamePack
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing" };
     public List<short> Variables { get; } = new();
+    /// <summary>The first map's events: stepped on, their code runs (the talk code: AppleIIgsTalk).</summary>
+    public List<(int X, int Y, byte[] Code)> Events { get; } = new();
+    /// <summary>Maps 1, 2...: each its own file MAP.n, loaded when the game goes there (their objects are in Objects, flags' top 4 bits = the map).</summary>
+    public List<AppleIIgsMap> OtherMaps { get; } = new();
     public List<(string Name, byte[] Code)> Talks { get; } = new();
     /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
     public byte[]? HudBackground { get; set; }
@@ -496,6 +500,8 @@ public sealed class AppleIIgsGamePack
         var m = Ascii(before.Replace("{0}", "{2}").Replace("{$}", "{0}"), 100);
         w.Write((byte)m.Length); w.Write(m); w.Write((byte)0);
         w.Write((ushort)SwapSound);
+        w.Write((ushort)(1 + OtherMaps.Count));
+        AppleIIgsMap.WriteEvents(w, Events);
         return ms.ToArray();
     }
 
@@ -506,6 +512,7 @@ public sealed class AppleIIgsGamePack
     {
         var files = new List<(string, byte, ushort, byte[])> { ("GAME.DAT", 0x06, 0x0000, Write()) };
         for (int i = 0; i < Sounds.Count; i++) files.Add(($"SND.{i + 1}", 0xD8, 0x0000, Sounds[i].Data));
+        for (int i = 0; i < OtherMaps.Count; i++) files.Add(($"MAP.{i + 1}", 0x06, 0x0000, OtherMaps[i].Write()));
         return files;
     }
 
@@ -515,6 +522,44 @@ public sealed class AppleIIgsGamePack
         var s = (byte[])samples.Clone();
         for (int i = 0; i < s.Length; i++) if (s[i] == 0) s[i] = 1;
         return s;
+    }
+}
+
+/// <summary>
+/// One of the game's other maps, as its file MAP.n: "SCMP", its size, its start, its cells (tile numbers), its characters
+/// (16 bytes each, as GAME.DAT's), its events (x, y, the code's length, the code).
+/// </summary>
+public sealed class AppleIIgsMap
+{
+    public int Width { get; set; }
+    public int Height { get; set; }
+    public int StartX { get; set; }
+    public int StartY { get; set; }
+    public ushort[] Map { get; set; } = Array.Empty<ushort>();
+    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)> Characters { get; } = new();
+    public List<(int X, int Y, byte[] Code)> Events { get; } = new();
+
+    public byte[] Write()
+    {
+        var ms = new MemoryStream();
+        var w = new BinaryWriter(ms);
+        w.Write(Encoding.ASCII.GetBytes("SCMP"));
+        w.Write((ushort)Width); w.Write((ushort)Height); w.Write((ushort)StartX); w.Write((ushort)StartY);
+        foreach (ushort t in Map) w.Write(t);
+        w.Write((ushort)Characters.Count);
+        foreach (var c in Characters)
+        {
+            w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing);
+            w.Write((ushort)c.Talk); w.Write((ushort)c.Portrait); w.Write((ushort)c.Name);
+        }
+        WriteEvents(w, Events);
+        return ms.ToArray();
+    }
+
+    public static void WriteEvents(BinaryWriter w, List<(int X, int Y, byte[] Code)> events)
+    {
+        w.Write((ushort)events.Count);
+        foreach (var (x, y, code) in events) { w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)code.Length); w.Write(code); }
     }
 }
 

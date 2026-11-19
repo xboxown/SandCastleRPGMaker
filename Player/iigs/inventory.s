@@ -488,7 +488,8 @@ DropHere:
         sta [ItemPtr],y
         ldy #6
         lda [ItemPtr],y
-        and #$FEBF              ; carried no more, in no bag
+        and #$0EBF              ; carried no more, in no bag, on this map
+        ora CurBits
         sta [ItemPtr],y
         and #1
         beq .free

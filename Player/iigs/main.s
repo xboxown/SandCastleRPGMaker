@@ -1,6 +1,9 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 10 (b629): more maps (maps.s): map 0 in GAME.DAT, the others each their own file MAP.n, loaded when the game
+;   goes there (and kept as they are); the objects of all of them in GAME.DAT (flags' top 4 bits: the map); map events
+;   stepped on run their code (the talk code), Change Map among it.
 ; Version 9 (b628): Move (M: push a thing one square, put it in a container, give it to the Avatar), containers (Use on a
 ;   chest spills what is in it; a carried bag opens in the grid), Tab between the map's cursor and the grid's.
 ; Version 8 (b627): sounds (sound.s: Play Sound in talks, through the Sound Tool Set), files found on other disks
@@ -441,7 +444,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #9
+        cmp #10
         beq .known
 .bad:   sec
         rts
@@ -1218,8 +1221,8 @@ MakeOcc:
         beq .chars
         ldy #6
         lda [ItemPtr],y
-        and #96+256+1
-        cmp #1                  ; solid, on the map
+        and #$F000+96+256+1
+        cmp CurBits1            ; solid, on this map
         bne .on
         lda [ItemPtr]
         tax
@@ -1317,9 +1320,10 @@ DrawObjects:
         ldy #2
         lda [ItemPtr],y
         tay
-        ldy #6                  ; carried, gone or inside something: not on the map
+        ldy #6                  ; carried, gone, inside something or on another map: not here
         lda [ItemPtr],y
-        and #96+256
+        and #$F000+96+256
+        cmp CurBits
         bne .n
         lda [ItemPtr]
         tax
@@ -1813,6 +1817,8 @@ TryMove:
         sta PX
         lda NY
         sta PY
+        jsr DrawView
+        jmp StepEvent           ; an event here? (maps.s)
 .stay:  jsr DrawView
         rts
 
@@ -1820,6 +1826,7 @@ TryMove:
         .include "verbs.s"
         .include "inventory.s"
         .include "sound.s"
+        .include "maps.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
@@ -1970,6 +1977,16 @@ PanPix:   .dd 0
 StatPtr:  .dd 0
 StatCount: .dw 0
 PanelView: .dw 0                ; 0 the inventory, 1 the portrait and the stats
+CurMap:   .dw 0                 ; the map the Avatar is on
+CurBits:  .dw 0                 ;   its number in an object's flags (the top 4 bits)
+CurBits1: .dw 1                 ;   and solid
+MapCount: .dw 1
+MapTab:   .ds 512               ; 16 maps, 32 bytes each: width, height, start x, y, cells, characters, events, loaded
+EvCount:  .dw 0
+EvPtr:    .dd 0
+GoMap:    .dw 0
+GoX:      .dw 0
+GoY:      .dw 0
 OpenBag:  .dw $FFFF             ; the bag open in the grid (its object number; $FFFF none)
 MoveIdx:  .dw $FFFF             ; Move: the thing picked first ($FFFF: none yet)
 Into:     .dw 0

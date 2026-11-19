@@ -381,7 +381,16 @@ TalkAt:
         lda [ItemPtr],y
         cmp #$FFFF
         bne .talks
-        lda #3                  ; funny, no response
+        ldy #14                 ; Talk-Name, then: funny, no response
+        lda [ItemPtr],y
+        jsr NameNumber
+        lda FmtName
+        sta TP
+        lda FmtName+2
+        sta TP+2
+        lda TxtColor
+        jsr SetColor
+        jsr PrintWord
         jsr NewLine
         lda #3
         jsr PrintSaid
@@ -528,7 +537,11 @@ RunTalk:
         bne .n5
         brl .ifv
 .n5:    cmp #6
+        beq .play
+        cmp #7
         bne .end
+        jmp TalkMap
+.play:
         iny                     ; PLAY: a sound, its volume
         lda [TalkPtr],y
         pha
@@ -658,6 +671,35 @@ RunTalk:
         adc #8
         sta TPC
         brl RunTalk
+
+; MAP in the code (Y on it): to that map and spot (Change Map).
+TalkMap:
+        iny                     ; MAP: a map, x, y
+        lda [TalkPtr],y
+        sta GoMap
+        iny
+        iny
+        lda [TalkPtr],y
+        sta GoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta GoY
+        lda TPC
+        clc
+        adc #7
+        sta TPC
+        lda GoMap
+        cmp #$FFFF
+        beq .same
+        cmp CurMap
+        beq .same
+        jsr ChangeMap           ; another map: what comes after doesn't run (as Windows)
+        jsr DrawView
+        jmp EndTalk
+.same:  jsr ChangeMap
+        jsr DrawView
+        jmp RunTalk
 
 ; T3 = how T4 stands to T2 (signed): 1 equal, 2 less, 0 more.
 Compare:

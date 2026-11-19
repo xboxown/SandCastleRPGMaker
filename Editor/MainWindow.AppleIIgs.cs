@@ -120,9 +120,25 @@ public partial class MainWindow
         problems.AddRange(PictureSizeProblems());
         // Talk: the commands the IIgs player doesn't do yet are left out of it.
         var leftOut = new SortedSet<string>();
+        int SoundOk(int id) => _resourceDatabase.Entries.Any(r => r.Id == id && r.Kind is ResourceKind.Sound or ResourceKind.Music) ? 0 : -1;
+        var gameMaps = maps.Take(AppleIIgsLimits.MaxMaps).ToList();
+        int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
-            foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, id => _resourceDatabase.Entries.Any(r => r.Id == id && r.Kind is ResourceKind.Sound or ResourceKind.Music) ? 0 : -1).Unsupported) leftOut.Add(type);
-        if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound and Stop Conversation work.");
+            foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map and Stop Conversation work";
+        if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
+        // Map events: those stepped on (By Enter) run on the Apple IIgs, their first such page; the others don't yet.
+        var eventsLeftOut = new SortedSet<string>();
+        int otherTriggers = 0;
+        foreach (var m in gameMaps)
+            foreach (var ev in m.Events)
+            {
+                var page = ev.EventPages.FirstOrDefault(pg => pg.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByEnter && pg.Commands.Count > 0);
+                if (page is null) { if (ev.EventPages.Any(pg => pg.Commands.Count > 0)) otherTriggers++; continue; }
+                foreach (var type in AppleIIgsTalk.Compile(page.Commands, _ => 0, out _, SoundOk, MapOk).Unsupported) eventsLeftOut.Add(type);
+            }
+        if (eventsLeftOut.Count > 0) problems.Add($"Note: in the map events, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", eventsLeftOut)}. {works}.");
+        if (otherTriggers > 0) problems.Add($"Note: {otherTriggers} map event(s) start some other way than being stepped on (By Enter): on the Apple IIgs only stepped-on events run yet.");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -317,44 +333,53 @@ public partial class MainWindow
         // The sounds first: the talks' Play Sound needs their numbers.
         // (filled in below, before the characters' talks are made)
         var start = _worlds.FirstOrDefault() ?? _map ?? throw new InvalidOperationException("There is no map.");
-        var layers = start.Layers.Where(l => l.Floor <= 1).ToList();
+        // The maps (Maps tab, the first one first): map n of the game; Change Map goes by these numbers.
+        var worldList = (_worlds.Count > 0 ? _worlds : new List<MapData> { start }).Take(AppleIIgsLimits.MaxMaps).ToList();
+        int WorldIndex(int id) => worldList.FindIndex(m => m.Id == id);
         // Every different cell picture, composed from its layers.
         var keys = new Dictionary<string, int>();
         var tilePixels = new List<uint[]>();
         var flags = new List<byte>();
         var tileNames = new List<string>();
-        var map = new ushort[start.Width * start.Height];
-        for (int y = 0; y < start.Height; y++)
-            for (int x = 0; x < start.Width; x++)
-            {
-                string key = CellKey(start, layers, x, y);
-                if (!keys.TryGetValue(key, out int n))
+        // A map's cells: each different cell picture once, composed from its layers (shared by all the maps).
+        ushort[] Grid(MapData world)
+        {
+            var worldLayers = world.Layers.Where(l => l.Floor <= 1).ToList();
+            var grid = new ushort[world.Width * world.Height];
+            for (int y = 0; y < world.Height; y++)
+                for (int x = 0; x < world.Width; x++)
                 {
-                    if (keys.Count >= AppleIIgsLimits.MaxTiles) throw new InvalidOperationException($"More than {AppleIIgsLimits.MaxTiles} different tiles.");
-                    var px = new uint[256];
-                    bool walkable = true, water = false;
-                    foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
+                    string key = CellKey(world, worldLayers, x, y);
+                    if (!keys.TryGetValue(key, out int n))
                     {
-                        int colon = part.LastIndexOf(':');
-                        string sheet = part[..colon];
-                        int local = int.Parse(part[(colon + 1)..]);
-                        if (TilePixels(sheet, local) is { } top)
-                            for (int i = 0; i < 256; i++) if ((top[i] >> 24) >= 128) px[i] = top[i];
-                        if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{sheet}:{local}", out var props)) { walkable &= props.Walkable; water |= props.IsWater; }
+                        if (keys.Count >= AppleIIgsLimits.MaxTiles) throw new InvalidOperationException($"More than {AppleIIgsLimits.MaxTiles} different tiles.");
+                        var px = new uint[256];
+                        bool walkable = true, water = false;
+                        foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
+                        {
+                            int colon = part.LastIndexOf(':');
+                            string sheet = part[..colon];
+                            int local = int.Parse(part[(colon + 1)..]);
+                            if (TilePixels(sheet, local) is { } top)
+                                for (int i = 0; i < 256; i++) if ((top[i] >> 24) >= 128) px[i] = top[i];
+                            if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{sheet}:{local}", out var props)) { walkable &= props.Walkable; water |= props.IsWater; }
+                        }
+                        n = keys[key] = tilePixels.Count;
+                        tilePixels.Add(px);
+                        string tileName = "";
+                        foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
+                        {
+                            int colon = part.LastIndexOf(':');
+                            if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{part[..colon]}:{part[(colon + 1)..]}", out var named) && named.TerrainLabel.Length > 0) tileName = named.TerrainLabel;
+                        }
+                        tileNames.Add(tileName);
+                        flags.Add((byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
                     }
-                    n = keys[key] = tilePixels.Count;
-                    tilePixels.Add(px);
-                    string tileName = "";
-                    foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
-                    {
-                        int colon = part.LastIndexOf(':');
-                        if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{part[..colon]}:{part[(colon + 1)..]}", out var named) && named.TerrainLabel.Length > 0) tileName = named.TerrainLabel;
-                    }
-                    tileNames.Add(tileName);
-                    flags.Add((byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
+                    grid[y * world.Width + x] = (ushort)n;
                 }
-                map[y * start.Width + x] = (ushort)n;
-            }
+            return grid;
+        }
+        var map = Grid(start);
         var avatar = AvatarPictures();
         while (avatar.Count < 4) avatar.Add(new uint[256]);
         // Objects and characters on the starting map, each picture once (Engine/AppleIIgs.cs: sprites).
@@ -398,28 +423,6 @@ public partial class MainWindow
             spritePixels.Add((FitPicture(file, cell, cell), cell, cell));
             return iconOf[file] = spritePixels.Count - 1;
         }
-        foreach (var instance in start.Objects.Where(o => o.ContainerInstanceId < 0))
-        {
-            var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-            if (def is null || def.Type == ObjectType.Roof || instance.Z >= MapFloors.BaseLift(2)) continue; // Ultima 6: no roofs, no upper floors
-            var state = new ObjectState(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime,
-                Math.Max(1, instance.Quantity), instance.Facing, Stage: instance.FrameRuntime, LiquidId: instance.LiquidIdRuntime ?? -1);
-            var sprite = ObjectLooks.SpriteFor(def, state, _spriteDatabase);
-            string? file = sprite?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
-            int n = SpriteOf(file);
-            if (n < 0 || instance.X < 0 || instance.Y < 0 || instance.X >= start.Width || instance.Y >= start.Height) continue;
-            int objFlags = (def.IsSolid ? 1 : 0) | (def.IsPortable && def.Type != ObjectType.Door ? 2 : 0), other = 0xFFFF;
-            if (def.Type == ObjectType.Door)
-            {
-                // A door: its other look (open while closed, closed while open); closed it stops walkers, open it doesn't.
-                bool open = instance.IsOpenRuntime ?? def.Door.StartsOpen, locked = instance.IsLockedRuntime ?? def.Door.StartsLocked;
-                var otherState = state with { Open = !open, Locked = false };
-                string? otherFile = ObjectLooks.SpriteFor(def, otherState, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
-                other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
-                objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
-            }
-            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other, IconOf(file), -1));
-        }
         // Containers (chests, bags, barrels...) and what is in them - off the map, inside (256), until Use spills them out
         // (Ultima 6's Search) or a bag is opened in the inventory. Their contents as the Game Test seeds them: the map's own, else the Starting Contents.
         void AddContents(IEnumerable<InventoryItemInstance> things, int container, int depth)
@@ -442,17 +445,44 @@ public partial class MainWindow
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
-        foreach (var placed in start.Items.Where(i => i.Category == ReferencedItemCategory.Container))
+        // A map's objects and containers (on the map: their flags' top 4 bits are its number).
+        void AddMapObjects(MapData world, int bits)
         {
-            if (_containerDatabase.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is not { } data) continue;
-            if (placed.X < 0 || placed.Y < 0 || placed.X >= start.Width || placed.Y >= start.Height) continue;
-            int n = SpriteOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath);
-            if (n < 0) continue;
-            int f = 128 | (data.IsSolid ? 1 : 0) | (data.CanBePicked && !data.IsBodyContainer ? 2 : 0) | ((placed.IsLockedRuntime ?? data.IsLocked) ? 8 : 0);
-            objects.Add((placed.X, placed.Y, n, f, pack.NameOf(data.Name), 0xFFFF, IconOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath), -1));
-            var contents = placed.InstanceId != 0 ? placed.Contents : placed.OwnContents ?? data.StartingContents;
-            AddContents(contents, objects.Count - 1, 0);
+            foreach (var instance in world.Objects.Where(o => o.ContainerInstanceId < 0))
+            {
+                var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
+                if (def is null || def.Type == ObjectType.Roof || instance.Z >= MapFloors.BaseLift(2)) continue; // Ultima 6: no roofs, no upper floors
+                var state = new ObjectState(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime,
+                    Math.Max(1, instance.Quantity), instance.Facing, Stage: instance.FrameRuntime, LiquidId: instance.LiquidIdRuntime ?? -1);
+                var sprite = ObjectLooks.SpriteFor(def, state, _spriteDatabase);
+                string? file = sprite?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
+                int n = SpriteOf(file);
+                if (n < 0 || instance.X < 0 || instance.Y < 0 || instance.X >= world.Width || instance.Y >= world.Height) continue;
+                int objFlags = (def.IsSolid ? 1 : 0) | (def.IsPortable && def.Type != ObjectType.Door ? 2 : 0), other = 0xFFFF;
+                if (def.Type == ObjectType.Door)
+                {
+                    // A door: its other look (open while closed, closed while open); closed it stops walkers, open it doesn't.
+                    bool open = instance.IsOpenRuntime ?? def.Door.StartsOpen, locked = instance.IsLockedRuntime ?? def.Door.StartsLocked;
+                    var otherState = state with { Open = !open, Locked = false };
+                    string? otherFile = ObjectLooks.SpriteFor(def, otherState, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                    other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
+                    objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
+                }
+                objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
+            }
+            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
+            {
+                if (_containerDatabase.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is not { } data) continue;
+                if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
+                int n = SpriteOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath);
+                if (n < 0) continue;
+                int f = 128 | (data.IsSolid ? 1 : 0) | (data.CanBePicked && !data.IsBodyContainer ? 2 : 0) | ((placed.IsLockedRuntime ?? data.IsLocked) ? 8 : 0);
+                objects.Add((placed.X, placed.Y, n, f | bits, pack.NameOf(data.Name), 0xFFFF, IconOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath), -1));
+                var contents = placed.InstanceId != 0 ? placed.Contents : placed.OwnContents ?? data.StartingContents;
+                AddContents(contents, objects.Count - 1, 0);
+            }
         }
+        AddMapObjects(start, 0);
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
         if (PlayerCharacter() is { } avatarWho)
             foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container && !avatarWho.EquippedSlots.ContainsValue(i.InstanceId)))
@@ -487,41 +517,73 @@ public partial class MainWindow
         var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
             : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
         var portraitOf = new Dictionary<int, int>();
-        foreach (var placed in start.Characters.Where(c => !c.Dead))
+        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)> MapCharacters(MapData world)
         {
-            var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
-            if (who is null || who.IsTestPlayer) continue;
-            if (placed.X < 0 || placed.Y < 0 || placed.X >= start.Width || placed.Y >= start.Height) continue;
-            var files = LookFiles(who);
-            int first = spritePixels.Count;
-            foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
-            int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
-            if (!talkOf.TryGetValue(who.Id, out int talk))
+            var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
+            foreach (var placed in world.Characters.Where(c => !c.Dead))
             {
-                talk = -1;
-                if (who.TalkCommands.Count > 0)
+                var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
+                if (who is null || who.IsTestPlayer) continue;
+                if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
+                var files = LookFiles(who);
+                int first = spritePixels.Count;
+                foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
+                int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
+                if (!talkOf.TryGetValue(who.Id, out int talk))
                 {
-                    AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1);
-                    talk = pack.Talks.Count;
-                    pack.Talks.Add((who.Name, code));
+                    talk = -1;
+                    if (who.TalkCommands.Count > 0)
+                    {
+                        AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex);
+                        talk = pack.Talks.Count;
+                        pack.Talks.Add((who.Name, code));
+                    }
+                    talkOf[who.Id] = talk;
                 }
-                talkOf[who.Id] = talk;
-            }
-            if (!portraitOf.TryGetValue(who.Id, out int portrait))
-            {
-                portrait = -1;
-                var face = who.FaceSpriteName.Length == 0 ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == who.FaceSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == who.FaceSpriteName)
-                    ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == who.FaceSpriteName);
-                if (portraitRect.Width > 0 && face?.Frames.FirstOrDefault()?.FilePath is { } faceFile && File.Exists(faceFile))
+                if (!portraitOf.TryGetValue(who.Id, out int portrait))
                 {
-                    portrait = spritePixels.Count;
-                    spritePixels.Add((FitPicture(faceFile, portraitRect.Width, portraitRect.Height), portraitRect.Width, portraitRect.Height));
+                    portrait = -1;
+                    var face = who.FaceSpriteName.Length == 0 ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == who.FaceSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == who.FaceSpriteName)
+                        ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == who.FaceSpriteName);
+                    if (portraitRect.Width > 0 && face?.Frames.FirstOrDefault()?.FilePath is { } faceFile && File.Exists(faceFile))
+                    {
+                        portrait = spritePixels.Count;
+                        spritePixels.Add((FitPicture(faceFile, portraitRect.Width, portraitRect.Height), portraitRect.Width, portraitRect.Height));
+                    }
+                    portraitOf[who.Id] = portrait;
                 }
-                portraitOf[who.Id] = portrait;
+                list.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
             }
-            characters.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
+            if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
+            return list;
         }
-        if (characters.Count > AppleIIgsLimits.MaxCharactersPerMap) characters.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, characters.Count - AppleIIgsLimits.MaxCharactersPerMap);
+        characters.AddRange(MapCharacters(start));
+        // A map's events: stepped on (By Enter), their first such page's commands run - made into the talk code.
+        List<(int X, int Y, byte[] Code)> MapEvents(MapData world)
+        {
+            var list = new List<(int X, int Y, byte[] Code)>();
+            foreach (var ev in world.Events.Where(e => e.Floor <= 1 && e.X >= 0 && e.Y >= 0 && e.X < world.Width && e.Y < world.Height))
+            {
+                var page = ev.EventPages.FirstOrDefault(pg => pg.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByEnter && pg.Commands.Count > 0);
+                if (page is null) continue;
+                AppleIIgsTalk.Compile(page.Commands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex);
+                list.Add((ev.X, ev.Y, code));
+            }
+            return list;
+        }
+        pack.Events.AddRange(MapEvents(start));
+        // The other maps: their cells, objects, characters and events (each map its own file, MAP.n).
+        for (int mi = 1; mi < worldList.Count; mi++)
+        {
+            var world = worldList[mi];
+            var other = new AppleIIgsMap { Width = world.Width, Height = world.Height, Map = Grid(world),
+                StartX = world.StartX >= 0 && world.StartX < world.Width ? world.StartX : world.Width / 2,
+                StartY = world.StartY >= 0 && world.StartY < world.Height ? world.StartY : world.Height / 2 };
+            AddMapObjects(world, mi << 12);
+            other.Characters.AddRange(MapCharacters(world));
+            other.Events.AddRange(MapEvents(world));
+            pack.OtherMaps.Add(other);
+        }
         // The Disk Swap screen's picture (the whole screen) and its animation's frames (each as a sprite of its own size).
         uint[]? swapPicture = null;
         SpriteEntry? SpriteOfLink(SpriteLink link) => !link.IsSet ? null :

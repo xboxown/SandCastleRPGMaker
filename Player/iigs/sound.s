@@ -105,7 +105,9 @@ ParseSounds:
         jsr AddPtr
         lda [Ptr]
         sta SwapSnd
-        rts
+        lda #2
+        jsr AddPtr
+        jmp ParseMaps           ; the maps, map 0's events (maps.s)
 
 ; ---- DISKS.DAT ----
 ; Read once at the start, if the game came on floppies: the disks' names, which file is on which.
@@ -488,9 +490,20 @@ SoundName:
         sta FileName
         lda #$2E44              ; "D."
         sta FileName+2
-        ldx #4
         lda SndNow
         inc a
+        bra NumName
+
+; FileName = "MAP." and WantMap in figures.
+MapName:
+        lda #$414D              ; "MA"
+        sta FileName
+        lda #$2E50              ; "P."
+        sta FileName+2
+        lda WantMap
+; FileName + 4 = A in figures.
+NumName:
+        ldx #4
         sta T4
         stz T5                  ; a figure written yet
         ldy #100

@@ -198,7 +198,8 @@ WhatIsThere:
         beq .found
         ldy #6
         lda [ItemPtr],y
-        and #96+256             ; carried, gone or inside something
+        and #$F000+96+256       ; carried, gone, inside something or on another map
+        cmp CurBits
         bne .on
         lda [ItemPtr]
         cmp CurX
@@ -736,7 +737,8 @@ MapTarget:
         sta [ItemPtr],y
         ldy #6
         lda [ItemPtr],y
-        and #$FEBF              ; on the map: neither carried nor inside
+        and #$0EBF              ; on this map: neither carried nor inside
+        ora CurBits
         sta [ItemPtr],y
         and #1
         beq .free
@@ -1043,7 +1045,8 @@ UseContainer:
         bne .n
         ldy #6
         lda [ItemPtr],y
-        and #$FEBF              ; out, on the map
+        and #$0EBF              ; out, on this map
+        ora CurBits
         sta [ItemPtr],y
         lda SpX
         sta [ItemPtr]
