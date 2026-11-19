@@ -21,7 +21,7 @@ public partial class MainWindow
     private string _projectMachine = GameMachine.Any;
     private bool IsAppleIIgs => IsUltima6 && _projectMachine == GameMachine.AppleIIgs;
     private readonly Dictionary<string, Button> _toolButtons = new();
-    private MenuItem? _convertAudioMenuItem, _iigsCheckMenuItem, _iigsEmulatorMenuItem;
+    private MenuItem? _convertAudioMenuItem, _iigsCheckMenuItem, _iigsEmulatorMenuItem, _iigsPreviewMenuItem;
     private Separator? _iigsSeparator;
     private Button? _convertAudioToolButton;
 
@@ -44,10 +44,13 @@ public partial class MainWindow
             _iigsSeparator = new Separator();
             _iigsCheckMenuItem = new MenuItem { Header = "Apple IIgs Check...", ToolTip = "Everything in the project the Apple IIgs can't hold: map sizes, colours, sprite sizes, sounds" };
             _iigsCheckMenuItem.Click += (_, _) => ShowAppleIIgsCheck(onlyIfProblems: false);
+            _iigsPreviewMenuItem = new MenuItem { Header = "Apple IIgs Colour Preview...", ToolTip = "What the Apple IIgs will really show: every colour in 12 bits and the game's 16-colour palette, beside your 24-bit art" };
+            _iigsPreviewMenuItem.Click += (_, _) => ShowAppleIIgsColourPreview();
             _iigsEmulatorMenuItem = new MenuItem { Header = "Apple IIgs Emulator...", ToolTip = "The emulator Test the Engine runs the game in (KEGS), the GS/OS disk it starts from, and the IIgs ROM" };
             _iigsEmulatorMenuItem.Click += (_, _) => new AppleIIgsEmulatorWindow { Owner = this }.ShowDialog();
             GameMenu.Items.Add(_iigsSeparator);
             GameMenu.Items.Add(_iigsCheckMenuItem);
+            GameMenu.Items.Add(_iigsPreviewMenuItem);
             GameMenu.Items.Add(_iigsEmulatorMenuItem);
             if (_toolButtons.TryGetValue("Sound Mixer", out var mixerButton))
             {
@@ -60,11 +63,31 @@ public partial class MainWindow
             }
         }
         var shown = iigs ? Visibility.Visible : Visibility.Collapsed;
-        _convertAudioMenuItem.Visibility = _iigsCheckMenuItem!.Visibility = _iigsEmulatorMenuItem!.Visibility = _iigsSeparator!.Visibility = shown;
+        _convertAudioMenuItem.Visibility = _iigsCheckMenuItem!.Visibility = _iigsEmulatorMenuItem!.Visibility = _iigsPreviewMenuItem!.Visibility = _iigsSeparator!.Visibility = shown;
         if (_convertAudioToolButton is not null) _convertAudioToolButton.Visibility = shown;
         BuildGameMenuItem.ToolTip = iigs ? "Build the game as an Apple IIgs hard disk image (.2mg) with GS/OS's ProDOS inside" : "Build a standalone game: choose the platform and where";
         TestEngineMenuItem.Header = iigs ? "Test the Engine (Apple IIgs emulator)" : "Test the Engine";
         TestTitleScreenMenuItem.Visibility = iigs ? Visibility.Collapsed : Visibility.Visible;
+    }
+
+    /// <summary>Game > Apple IIgs Colour Preview: the game made as Build makes it, its pictures shown both ways.</summary>
+    private void ShowAppleIIgsColourPreview()
+    {
+        AppleIIgsGamePack pack;
+        try { System.Windows.Input.Mouse.OverrideCursor = System.Windows.Input.Cursors.Wait; pack = MakeAppleIIgsPack(); }
+        catch (Exception ex) { MessageBox.Show(this, "The game couldn't be made for the preview: " + ex.Message, "Apple IIgs Colour Preview", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+        finally { System.Windows.Input.Mouse.OverrideCursor = null; }
+        new AppleIIgsColourPreviewWindow(pack, IIgsColourNotes(pack)) { Owner = this }.Show();
+    }
+
+    /// <summary>The colour notes for a game made (its pictures against its 16 colours).</summary>
+    private static List<string> IIgsColourNotes(AppleIIgsGamePack pack)
+    {
+        if (pack.Preview is not { } p) return new();
+        var pics = p.Tiles.Select(t => (t, 16, 16)).Concat(p.Sprites).Concat(p.Avatar.Select(a => (a, 16, 16)));
+        if (p.Hud is not null) pics = pics.Append((p.Hud, 320, 200));
+        if (p.Title is not null) pics = pics.Append((p.Title, 320, 200));
+        return SuperHiRes.ColourNotes(pack.Palette, pics);
     }
 
     private void OpenConvertAudio() => new ConvertAudioWindow(_resourceDatabase) { Owner = this }.ShowDialog();
@@ -125,7 +148,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather, Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel Vehicle and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -150,6 +173,12 @@ public partial class MainWindow
                 foreach (var e in sp.Effects.Where(e => !IIgsEffect(e.Kind)))
                     effectsLeftOut.Add(e.Kind.ToString());
         if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (every other effect works; traps aren't on the Apple IIgs, so Reveal / Destroy Traps do nothing there).");
+        // Vehicles: their dashboards (paperdolls) aren't on the Apple IIgs.
+        foreach (var h in ProjectSession.Houses.Where(h => h.Vehicle is { DashboardDollId: >= 0 }))
+            problems.Add($"Note: vehicle \"{h.Name}\" has a dashboard paperdoll: the Apple IIgs has no paperdolls - use its controls or driver's seat (and the vehicle commands in events).");
+        // The colours as the build reduces them: what is lost (the whole game made as Build makes it).
+        try { problems.AddRange(IIgsColourNotes(MakeAppleIIgsPack())); }
+        catch { }
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -359,9 +388,18 @@ public partial class MainWindow
         var soundIndex = new Dictionary<int, int>(); // Sound Editor id -> its number in GAME.DAT
         // The sounds first: the talks' Play Sound needs their numbers.
         // (filled in below, before the characters' talks are made)
-        var start = _worlds.FirstOrDefault() ?? _map ?? throw new InvalidOperationException("There is no map.");
-        // The maps (Maps tab, the first one first): map n of the game; Change Map goes by these numbers.
-        var worldList = (_worlds.Count > 0 ? _worlds : new List<MapData> { start }).Take(AppleIIgsLimits.MaxMaps).ToList();
+        var first = _worlds.FirstOrDefault() ?? _map ?? throw new InvalidOperationException("There is no map.");
+        // The maps (Maps tab, the first one first): map n of the game; Change Map goes by these numbers. Each a copy with its
+        // houses and vehicles built in (as the Windows engines do as a game starts: HouseBuilder), the project's maps untouched.
+        var worldList = (_worlds.Count > 0 ? _worlds : new List<MapData> { first }).Take(AppleIIgsLimits.MaxMaps)
+            .Select(m =>
+            {
+                if (m.Houses.Count == 0) return m;
+                var copy = System.Text.Json.JsonSerializer.Deserialize<MapData>(System.Text.Json.JsonSerializer.Serialize(m))!;
+                HouseBuilder.BuildInto(copy, ProjectSession.Houses);
+                return copy;
+            }).ToList();
+        var start = worldList[0];
         int WorldIndex(int id) => worldList.FindIndex(m => m.Id == id);
         // Upper floors (Map Editor > floors): each its own map after the worlds; stairs and ladders take the Avatar between them.
         var floorMap = new Dictionary<(int World, int Floor), int>();
@@ -629,10 +667,44 @@ public partial class MainWindow
             }
         }
         // A map's objects and containers (on the map: their flags' top 4 bits are its number).
+        var vehicleIndex = new Dictionary<(int Map, int State), int>();
+        void VehiclePiece(MapData world, ObjectInstance instance, int objIndex, int mapNo)
+        {
+            if (world.VehicleStates.FirstOrDefault(v => v.Id == instance.VehicleStateId) is not { } vs) return;
+            if (ProjectSession.Houses.FirstOrDefault(h => h.Id == vs.TemplateId) is not { Vehicle: { } settings }) return;
+            if (!vehicleIndex.TryGetValue((mapNo, vs.Id), out int vi))
+            {
+                int ux = Math.Max(1, world.Tileset.TileWidth / 8), uy = Math.Max(1, world.Tileset.TileHeight / 8);
+                int Snd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int sn) ? sn : 0xFFFF;
+                string deedName = settings.DeedObjectId >= 0 ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == settings.DeedObjectId)?.Name ?? "" : "";
+                vi = vehicleIndex[(mapNo, vs.Id)] = pack.Vehicles.Count;
+                pack.Vehicles.Add((mapNo, vs.TemplateId, vs.Left / ux, vs.Top / uy, Math.Max(1, vs.Width / ux), Math.Max(1, vs.Depth / uy),
+                    settings.Movement switch { MovementKind.Sea => 1, MovementKind.Air => 2, _ => 0 },
+                    (int)Math.Clamp(Math.Round(60 / Math.Max(0.1, settings.CellsPerSecond)), 1, 600),
+                    deedName.Length > 0 ? pack.NameOf(deedName) : 0xFFFF, settings.NeedDeedText, Snd(settings.StartSoundResourceId), Snd(settings.MovingSoundResourceId), Snd(settings.StopSoundResourceId)));
+            }
+            var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
+            if (def is null) return;
+            var looks = new int[4];
+            for (int q = 0; q < 4; q++)
+            {
+                var state = ObjectLooks.StartState(def, instance) with { Facing = (SpriteDirection)(((int)instance.Facing + q * 2) % 8) };
+                string? f = ObjectLooks.SpriteFor(def, state, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                looks[q] = SpriteOf(f) is int sn2 and >= 0 ? sn2 : objects[objIndex].Sprite;
+            }
+            int moving = 0xFFFF;
+            if (def.VehicleRole == VehiclePartRole.Wheel && def.MovingLook.IsSet && ObjectLooks.Find(_spriteDatabase, def.MovingLook.SpriteGroup, def.MovingLook.SpriteName)?.Frames.FirstOrDefault()?.FilePath is { } mf)
+                moving = SpriteOf(mf) is int ms and >= 0 ? ms : 0xFFFF;
+            int role = def.VehicleRole switch { VehiclePartRole.DriverSeat => 1, VehiclePartRole.Controls => 2, VehiclePartRole.Wheel => 3, _ => 0 };
+            pack.VehicleParts.Add((vi, objIndex, role, looks, moving));
+        }
         void AddMapObjects(MapData world, int bits, int floor = 1)
         {
             foreach (var instance in world.Objects.Where(o => o.ContainerInstanceId < 0))
             {
+              int objAt = objects.Count;
+              try
+              {
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
                 if (def is null) continue;
                 if (def.Type == ObjectType.Roof ? floor != 1 : MapFloors.FloorOfLift(instance.Z) != floor) continue; // this floor's things; roofs over the ground floor
@@ -663,6 +735,12 @@ public partial class MainWindow
                 if (def.Type == ObjectType.Ammo) other = AmmoCode(def);
                 if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
+              }
+              finally
+              {
+                // A piece of a vehicle: the vehicle (its footprint, settings), the piece's role and its turned looks.
+                if (instance.VehicleStateId != 0 && objects.Count > objAt) VehiclePiece(world, instance, objAt, bits >> 12);
+              }
             }
             foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Book && MapFloors.FloorOfLift(i.Z) == floor))
             {
@@ -1184,6 +1262,13 @@ public partial class MainWindow
             var v = _variableDatabase.Variables.FirstOrDefault(x => string.Equals(x.Name, name, StringComparison.OrdinalIgnoreCase));
             pack.Variables.Add(0);
         }
+        // Kept for the Colour Preview and the check (the 24-bit pictures; GAME.DAT gets only the 16-colour ones).
+        pack.Preview = new AppleIIgsPreviewData { Hud = hud, Title = titlePicture };
+        pack.Preview.Tiles.AddRange(tilePixels);
+        pack.Preview.Sprites.AddRange(spritePixels.Select(sp => (sp.Px, sp.W, sp.H)));
+        pack.Preview.Avatar.AddRange(avatar);
+        pack.Preview.MapNames.AddRange(worldList.Select(m => m.MapName));
+        foreach (var ((wi, f), _) in floorMap.OrderBy(kv => kv.Value)) pack.Preview.MapNames.Add($"{worldList[wi].MapName}, floor {f}");
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;
         pack.StartX = start.StartX >= 0 && start.StartX < start.Width ? start.StartX : start.Width / 2;
         pack.StartY = start.StartY >= 0 && start.StartY < start.Height ? start.StartY : start.Height / 2;

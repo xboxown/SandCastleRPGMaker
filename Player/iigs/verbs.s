@@ -410,7 +410,10 @@ PickCell:
 .isth:  jsr NextToCursor          ; (things are used from beside them)
         bcs .nearev
         brl .range
-.nearev: jsr ObjFlags           ; a thing with its own Use event (ownev.s)
+.nearev: jsr VehUse            ; a vehicle's controls or driver's seat (vehicles.s)
+        bcc .nveh
+        rts
+.nveh:  jsr ObjFlags            ; a thing with its own Use event (ownev.s)
         ldy #8
         lda [ItemPtr],y
         ldx #12

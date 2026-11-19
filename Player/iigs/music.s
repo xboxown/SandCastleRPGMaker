@@ -985,7 +985,7 @@ MVol2:    .dw 0
 MusVol:   .dw 100
 SndPct:   .dw 100
 MBOff:    .dw 0
-MBlk:     .ds 100
+MBlk:     .ds 120
 MT:       .dw 0
 MN:       .dw 0
 MNow:     .dw 0

@@ -41,7 +41,7 @@ EvalExpr:
         bne .op
         jsr Pop
         rts
-.op:    cmp #28
+.op:    cmp #29
         bcs .l
         asl a
         tax
@@ -49,7 +49,7 @@ EvalExpr:
         bra .l
 
 ExJump:   .dw ExEnd,ExPush,ExVar,ExAdd,ExSub,ExMul,ExDiv,ExMod,ExNeg,ExEq,ExNe,ExLt,ExGt,ExLe,ExGe,ExAnd,ExOr,ExNot
-          .dw ExRand,ExChance,ExMin,ExMax,ExAbs,ExClamp,ExStat,ExHour,ExHave,ExMinute
+          .dw ExRand,ExChance,ExMin,ExMax,ExAbs,ExClamp,ExStat,ExHour,ExHave,ExMinute,ExVBusy
 ExEnd:  rts
 
 ; the stack (32 numbers)

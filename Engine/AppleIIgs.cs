@@ -216,8 +216,84 @@ public sealed class ProDosVolume
 }
 
 /// <summary>Super Hi-Res pictures: 12-bit colours, one 16-colour palette, 4 bits a pixel (two pixels a byte, the left one in the high half).</summary>
+/// <summary>Ultima 6 Apple IIgs mode: the 24-bit pictures Build reduced (kept for the Colour Preview, never written to GAME.DAT).</summary>
+public sealed class AppleIIgsPreviewData
+{
+    public List<uint[]> Tiles { get; } = new();
+    public List<(uint[] Px, int W, int H)> Sprites { get; } = new();
+    public List<uint[]> Avatar { get; } = new();
+    public uint[]? Hud { get; set; }
+    public uint[]? Title { get; set; }
+    public List<string> MapNames { get; } = new();
+}
+
 public static class SuperHiRes
 {
+    /// <summary>
+    /// What the reduction to the IIgs's 16 colours (of 4096) costs pictures: colours that are clearly different becoming
+    /// the same, the edges between different colours that vanish, smooth steps (gradients) turning into bands, and how far
+    /// the colours move on average. Notes for the Apple IIgs Check; none if the colours come through well.
+    /// </summary>
+    public static List<string> ColourNotes(ushort[] palette, IEnumerable<(uint[] Px, int W, int H)> pictures)
+    {
+        var notes = new List<string>();
+        var index = new Dictionary<uint, int>();
+        var uses = new Dictionary<uint, long>();
+        long pairs = 0, lost = 0, smooth = 0, bands = 0, n = 0;
+        double err = 0;
+        int Idx(uint c) { if (!index.TryGetValue(c, out int i)) index[c] = i = Nearest(palette, c | 0xFF000000u, false); return i; }
+        static double Dist(uint a, uint b)
+        {
+            int dr = (int)(a >> 16 & 255) - (int)(b >> 16 & 255), dg = (int)(a >> 8 & 255) - (int)(b >> 8 & 255), db = (int)(a & 255) - (int)(b & 255);
+            return Math.Sqrt(dr * dr + dg * dg + db * db);
+        }
+        uint Shown(int i) => FromRgb12(palette[i]) & 0xFFFFFF;
+        foreach (var (px, w, h) in pictures)
+            for (int y = 0; y < h; y++)
+                for (int x = 0; x < w; x++)
+                {
+                    uint a = px[y * w + x];
+                    if ((a >> 24) < 128) continue;
+                    a &= 0xFFFFFF;
+                    int ia = Idx(a);
+                    uses[a] = uses.GetValueOrDefault(a) + 1;
+                    err += Dist(a, Shown(ia));
+                    n++;
+                    for (int k = 0; k < 2; k++)
+                    {
+                        int nx = k == 0 ? x + 1 : x, ny = k == 0 ? y : y + 1;
+                        if (nx >= w || ny >= h) continue;
+                        uint b = px[ny * w + nx];
+                        if ((b >> 24) < 128) continue;
+                        b &= 0xFFFFFF;
+                        double d = Dist(a, b);
+                        if (d == 0) continue;
+                        pairs++;
+                        int ib = Idx(b);
+                        if (ia == ib && d >= 24) lost++;
+                        if (d <= 32) { smooth++; double sd = Dist(Shown(ia), Shown(ib)); if (sd >= 24 && sd >= 4 * d) bands++; }
+                    }
+                }
+        if (n == 0) return notes;
+        // Clearly different colours, much used, that become one.
+        var common = uses.OrderByDescending(kv => kv.Value).Take(200).Select(kv => kv.Key).ToList();
+        var merged = new List<string>();
+        for (int i = 0; i < common.Count && merged.Count < 4; i++)
+            for (int j = i + 1; j < common.Count && merged.Count < 4; j++)
+                if (Idx(common[i]) == Idx(common[j]) && Dist(common[i], common[j]) >= 48)
+                    merged.Add($"#{common[i]:X6} and #{common[j]:X6} both show as ${palette[Idx(common[i])]:X3}");
+        int groups = uses.Keys.Select(Idx).Distinct().Count();
+        if (merged.Count > 0)
+            notes.Add($"Note: colours that look clearly different become the same on the Apple IIgs ({string.Join("; ", merged)}). Your {uses.Count} colours become {groups} of the 16 - see Game > Apple IIgs Colour Preview.");
+        if (pairs > 0 && lost * 100 / pairs >= 5)
+            notes.Add($"Note: {lost * 100 / pairs}% of the edges between different colours vanish on the Apple IIgs (both sides become the same colour): details are lost - see Game > Apple IIgs Colour Preview.");
+        if (smooth > 200 && bands * 100 / smooth >= 2)
+            notes.Add($"Note: smooth shading (gradients) turns into bands on the Apple IIgs: {bands * 100 / smooth}% of the gentle steps between colours become hard jumps - fewer, flatter shades will look better - see Game > Apple IIgs Colour Preview.");
+        if (err / n >= 30)
+            notes.Add($"Note: on average the colours move {(int)(err / n)} (of 441) on the Apple IIgs - they will look noticeably different - see Game > Apple IIgs Colour Preview.");
+        return notes;
+    }
+
     /// <summary>An ARGB colour to the IIgs's $0RGB.</summary>
     public static ushort To12Bit(uint argb) => (ushort)((((argb >> 16) & 0xFF) * 15 + 127) / 255 << 8 | (((argb >> 8) & 0xFF) * 15 + 127) / 255 << 4 | ((argb & 0xFF) * 15 + 127) / 255);
 
@@ -355,8 +431,10 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 34;
+    public const ushort Version = 35;
     public ushort[] Palette { get; set; } = new ushort[16];
+    /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
+    public AppleIIgsPreviewData? Preview { get; set; }
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
     public List<byte> TileFlags { get; } = new();
@@ -491,6 +569,12 @@ public sealed class AppleIIgsGamePack
     /// <summary>Each map's weather (Edit > Map Weather): kind (0 clear, 1 rain, 2 snow, 3 hail, 4 storm), intensity, clouds,
     /// cloud cover, the wind (x, y: -1, 0, 1), changes by itself, its chance an hour, the rain and thunder sounds ($FFFF none).</summary>
     public List<int[]> Weather { get; } = new();
+    /// <summary>Vehicles (Map Editor > Vehicles), built: map, vehicle (template) id, footprint in cells, movement (0 land,
+    /// 1 sea, 2 air), ticks a cell, deed's name ($FFFF none), its words, start / moving / stop sounds.</summary>
+    public List<(int Map, int Template, int Left, int Top, int W, int D, int Move, int Ticks, int Deed, string DeedText, int SndStart, int SndMove, int SndStop)> Vehicles { get; } = new();
+    /// <summary>Their pieces: vehicle, object (its number), role (0 none, 1 driver's seat, 2 controls, 3 wheel), its look
+    /// built (south) and turned 1, 2, 3 quarters clockwise, a wheel's moving look ($FFFF none).</summary>
+    public List<(int Vehicle, int Object, int Role, int[] Looks, int Moving)> VehicleParts { get; } = new();
     /// <summary>Day & Night's overcast strength in 16ths.</summary>
     public int Overcast16 { get; set; } = 4;
     /// <summary>System Settings > Combat's music: danger, battle, battle 2, run away, escaped, victory, battle over, near death, death.</summary>
@@ -676,6 +760,22 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)SuperHiRes.NearestColour(Palette, 0xF, 0xF, 0xF));   // snow, hail
         w.Write((ushort)SuperHiRes.NearestColour(Palette, 0x0, 0x0, 0x0));   // cloud shadows
         w.Write((ushort)Math.Clamp(Overcast16, 0, 16));
+        // Vehicles, their pieces, their deeds' words.
+        var vtext = new List<byte>();
+        w.Write((ushort)Math.Min(Vehicles.Count, 16));
+        foreach (var v in Vehicles.Take(16))
+        {
+            int vat = vtext.Count;
+            vtext.AddRange(System.Text.Encoding.ASCII.GetBytes(new string(v.DeedText.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(100).ToArray())));
+            vtext.Add(0);
+            foreach (int n in new[] { v.Map, v.Template, v.Left, v.Top, v.W, v.D, v.Move, v.Ticks, v.Deed, vat, v.SndStart, v.SndMove, v.SndStop }) w.Write((ushort)n);
+        }
+        var parts = VehicleParts.Where(p => p.Vehicle < 16).Take(128).ToList();
+        w.Write((ushort)parts.Count);
+        foreach (var p in parts) { w.Write((ushort)p.Vehicle); w.Write((ushort)(p.Object < newPlace.Length ? newPlace[p.Object] : 0)); w.Write((ushort)p.Role); foreach (int l in p.Looks) w.Write((ushort)l); w.Write((ushort)p.Moving); }
+        if (vtext.Count % 2 == 1) vtext.Add(0);
+        w.Write((ushort)vtext.Count);
+        w.Write(vtext.ToArray());
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

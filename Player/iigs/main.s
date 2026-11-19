@@ -1,6 +1,9 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 35 (b655): vehicles (vehicles.s): ships, carts, flying carpets - their pieces move and turn together with
+;   all aboard; the controls or driver's seat (a deed if asked), Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel
+;   Vehicle. Houses plotted on maps are built into the game.
 ; Version 34 (b654): weather (weather.s): rain, snow, hail, storms (lightning, thunder), cloud shadows, the overcast,
 ;   the rain sound, changing by the hour, Change Weather; not under a roof, nothing at all in a Cave.
 ; Version 33 (b653): music (music.s): the map's ambient sounds by the time of day and zone, the combat music (danger,
@@ -403,7 +406,7 @@ MainLoop:
         lda Key
         jsr ArrowDelta
         bcc .none
-        jsr TryMove
+        jsr StepOrDrive         ; a step, or the vehicle at whose controls the Avatar is (vehicles.s)
         jsr AfterTurn
 .none:  brl MainLoop
 .verb:  txa
@@ -612,7 +615,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #34
+        cmp #35
         beq .known
 .bad:   sec
         rts
@@ -2058,6 +2061,7 @@ TryMove:
         .include "haggle.s"
         .include "music.s"
         .include "weather.s"
+        .include "vehicles.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

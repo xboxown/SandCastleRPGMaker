@@ -266,6 +266,7 @@ IdleTurn:
         jsr AnimRun             ; animated tiles (look.s)
         jsr MusicRun            ; the music (music.s)
         jsr WeatherRun          ; the weather (weather.s)
+        jsr VehicleRun          ; vehicles (vehicles.s)
         lda Mode
         bne .out
         lda CombatOn

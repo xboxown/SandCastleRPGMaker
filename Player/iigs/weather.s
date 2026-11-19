@@ -44,7 +44,8 @@ ParseWeather:
         lda [Ptr],y
         sta Over16
         lda #8
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseVehicles       ; (vehicles.s)
 
 ; ---- the map's weather, on arrival ----
 WeatherStart:

@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 4
+SAVE_VERSION = 5
 
 ; Ctrl+S
 SaveGame:
@@ -83,6 +83,13 @@ SaveGame:
         bcc .k5
         brl .close
 .k5:
+        lda #VL                 ; the vehicles: where, how big, which way, speed, flying (vehicles.s)
+        ldx MyBank
+        ldy #VSTATE
+        jsr WriteBlock
+        bcc .k5v
+        brl .close
+.k5v:
         stz SvMap               ; every map: visited, its characters
 .m:     lda SvMap
         cmp MapCount
@@ -239,6 +246,15 @@ LoadGame:
         sta Dst+2
         lda #2+512
         jsr SvCopy
+        lda #VL                 ; the vehicles
+        sta Dst
+        lda MyBank
+        sta Dst+2
+        lda #VSTATE
+        jsr SvCopy
+        lda #$FFFF
+        sta DrvV
+        sta VAuto
         stz ViewIdx
         stz SvMap               ; the maps' characters (a map visited: loaded again if need be)
 .m:     lda SvMap
