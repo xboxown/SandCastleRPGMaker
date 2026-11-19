@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 32 (b652): haggling in shops (haggle.s, ShopHaggle's rules).
 ; Version 31 (b651): characters' and objects' own events (ownev.s): hit, killed, an ailment, Used, an item used on
 ;   them; picked up / dropped; Use with an item on something ("On what?"); Show Bark.
 ; Version 30 (b650): formulas (expr.s): Calculate, While, Repeat, Select Case, Wait Until, Call Common Event, Advance
@@ -298,10 +299,17 @@ MainLoop:
         brl MainLoop
 .not10: cmp #12
         bcc .not12
+        cmp #14
+        bcs .not12
         lda Key                 ; the title menu, its Acknowledgments (title.s)
         jsr TitleKey
         brl MainLoop
-.not12: cmp #2
+.not12: cmp #14
+        bne .not14
+        lda Key                 ; a haggling offer typed (haggle.s)
+        jsr HaggleKey
+        brl MainLoop
+.not14: cmp #2
         beq .typing
         brl MainLoop            ; the talk is running
 .typing: lda Key
@@ -599,7 +607,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #31
+        cmp #32
         beq .known
 .bad:   sec
         rts
@@ -2041,6 +2049,7 @@ TryMove:
         .include "spells2.s"
         .include "expr.s"
         .include "ownev.s"
+        .include "haggle.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

@@ -44,6 +44,9 @@ namespace SandcastleRpgMaker.Engine;
 ///   $1B MORE                                                "<more>": a key goes on, Escape ends (a book's next page)
 ///   $1D CALC u16 variable, a formula (ScriptExpression.CompileIIgs: stack code ending 0)   Calculate, loops' counters
 ///   $1E IFX  a formula, u16 the place if it is 0 (false)         While, Repeat, Select Case, Wait Until, Advance IF
+///   $1F HAGGLE u16 the price's variable, u16 asking, u16 lowest, u8 tries, u16 accepted, u16 gave up, u16 declined, then
+///        C strings: the question, too low, counter, accepted, gives up ({0}: a price)   (ShopHaggle's rules)
+///   $20 PAYV u16 variable, u16 the place if the gold is short   (the variable's price paid)
 ///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
 ///   $1C AIL  who, u8 the ailment's bit (1 poisoned, 2 asleep, 4 paralyzed, 8 charmed, 16 cursed, 32 invisible, 64 protected), u8 1 on / 0 off
 /// The Shop command is made into Ultima 6 keyword talk: the merchant's line, what can be asked (the stock, the shop's
@@ -53,7 +56,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -170,6 +173,9 @@ public sealed class AppleIIgsTalk
         B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
     }
 
+    /// <summary>A haggling line with {price} as {0} (the player writes the price in).</summary>
+    private static string HagglePrice(string text, string item, string money) => text.Replace("{item}", item).Replace("{money}", money).Replace("{price}", "{0}");
+
     /// <summary>The Shop command as keyword talk (Engine/ShopModel.cs; the Windows engine's U6GameWindow.Shop.cs, without haggling).</summary>
     private void CompileShop(ShopDefinition shop)
     {
@@ -212,10 +218,13 @@ public sealed class AppleIIgsTalk
                 var it = Extra!.Item!.Invoke(item.Category.ToString(), item.ItemId.ToString())!.Value;
                 string name = Extra.ItemName?.Invoke(item.Category, item.ItemId) ?? "thing";
                 SayLine(ShopTexts.Fill(item.PriceLine.Length > 0 ? item.PriceLine : t.PriceLine, name, item.Price, money));
-                int yes = -1, no = -1;
-                AskOp(new() { ("yes", h => yes = h), ("no", h => no = h) });
+                int yes = -1, no = -1, haggle = -1;
+                var answers = new List<(string, Action<int>)> { ("yes", h => yes = h), ("no", h => no = h) };
+                if (shop.Haggle) answers.Add((Key(t.HaggleChoice), h => haggle = h));
+                AskOp(answers);
                 Fill(yes, Here);
                 B(Pay); W(item.Price); int poor = Hole();
+                int give = Here;
                 B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other);
                 SayLine(ShopTexts.Fill(t.Agreed, name, item.Price, money));
                 B(Jump); jumps.Add((Hole(), node));
@@ -223,8 +232,36 @@ public sealed class AppleIIgsTalk
                 SayLine(ShopTexts.Fill(t.NotEnoughMoney, name, item.Price, money));
                 B(Jump); jumps.Add((Hole(), node));
                 Fill(no, Here);
+                int declined = Here;
                 SayLine(ShopTexts.Fill(t.Declined, name, item.Price, money));
                 B(Jump); jumps.Add((Hole(), node));
+                if (haggle >= 0)
+                {
+                    // Haggling (ShopHaggle.Offer): the price agreed into a variable, then paid from it.
+                    int priceVar = _variable($"__iigs_haggle_{_hidden++}");
+                    Fill(haggle, Here);
+                    int lowest = Math.Max(1, (int)Math.Ceiling(item.Price * Math.Clamp(shop.LowestPercent, 1, 100) / 100.0));
+                    B(Haggle); W(priceVar); W(item.Price); W(lowest); B(Math.Clamp(shop.HaggleTries, 1, 20));
+                    int accepted = Hole(), gaveUp = Hole(); W(declined);
+                    string P(string text) => ShopTexts.Fill(text, name, 0, money).Replace(" 0 ", " {0} ").Replace("0 " + money, "{0} " + money);
+                    foreach (var text in new[] { ShopTexts.Fill(t.HagglePrompt, name, item.Price, money), HagglePrice(t.HaggleTooLow, name, money), HagglePrice(t.HaggleCounter, name, money),
+                        HagglePrice(t.HaggleAccept, name, money), HagglePrice(t.HaggleGiveUp, name, money) })
+                    {
+                        var bytes = Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(120).ToArray()));
+                        _code.AddRange(bytes); B(0);
+                    }
+                    Fill(accepted, Here);
+                    B(PayV); W(priceVar); int poor2 = Hole();
+                    B(Jump); W(give + 0); // (given; the Agreed words)
+                    Fill(poor2, Here);
+                    SayLine(ShopTexts.Fill(t.NotEnoughMoney, name, item.Price, money));
+                    B(Jump); jumps.Add((Hole(), node));
+                    Fill(gaveUp, Here); // his last price: yes or no
+                    int y2 = -1, n2 = -1;
+                    AskOp(new() { ("yes", h => y2 = h), ("no", h => n2 = h) });
+                    Fill(y2, accepted);
+                    Fill(n2, declined);
+                }
             }
             foreach (var c in node.Children) Node(c, node);
         }
@@ -544,7 +581,6 @@ public sealed class AppleIIgsTalk
                     ShopDefinition? shop;
                     try { shop = System.Text.Json.JsonSerializer.Deserialize<ShopDefinition>(cmd.Get("Shop")); } catch (System.Text.Json.JsonException) { shop = null; }
                     if (shop is null || Extra?.Item is null) { Unsupported.Add("Shop (no shop)"); break; }
-                    if (shop.Haggle) Unsupported.Add("Shop haggling (the Apple IIgs asks the price)");
                     CompileShop(shop);
                     break;
                 }
