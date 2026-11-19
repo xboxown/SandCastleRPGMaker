@@ -666,7 +666,9 @@ public partial class MainWindow
         AddMapObjects(start, 0);
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
         int avatarGold = 0;
-        if (PlayerCharacter() is { } avatarWho)
+        // What someone carries and wears (owner: -1 the Avatar, else $8000 + map x 64 + place - a character who may join the party).
+        void AddCarried(CharacterDefinition avatarWho, int owner)
+        {
             foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container))
             {
                 if (item.Category == ReferencedItemCategory.Container)
@@ -676,13 +678,13 @@ public partial class MainWindow
                     string? bagFile = DollLook.ItemSprite(ReferencedItemCategory.Container, bag.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
                     int b = SpriteOf(bagFile);
                     if (b < 0) continue;
-                    objects.Add((0xFFFF, 0xFFFF, b, 64 | 128 | 2 | (bag.IsSolid ? 1 : 0) | ((item.IsLockedRuntime ?? bag.IsLocked) ? 8 : 0), pack.NameOf(bag.Name), 0xFFFF, IconOf(bagFile), -1));
+                    objects.Add((0xFFFF, 0xFFFF, b, 64 | 128 | 2 | (bag.IsSolid ? 1 : 0) | ((item.IsLockedRuntime ?? bag.IsLocked) ? 8 : 0), pack.NameOf(bag.Name), 0xFFFF, IconOf(bagFile), owner));
                     AddContents(item.Contents.Count > 0 ? item.Contents : bag.StartingContents, objects.Count - 1, 0);
                     continue;
                 }
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
                 if (def is null) continue;
-                if (def.Type == ObjectType.Money) { avatarGold += Math.Max(1, item.Quantity); continue; }
+                if (def.Type == ObjectType.Money) { if (owner < 0) avatarGold += Math.Max(1, item.Quantity); continue; }
                 var look = ObjectLooks.SpriteFor(def, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), SpriteDirection.South), _spriteDatabase);
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
@@ -690,8 +692,10 @@ public partial class MainWindow
                 int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
                 if (wornSlot > 15) wornSlot = 0;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : 0xFFFF, IconOf(file), -1));
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : 0xFFFF, IconOf(file), owner));
             }
+        }
+        if (PlayerCharacter() is { } theAvatar) AddCarried(theAvatar, -1);
         // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
         U6Leveling.Use(_systemSettings.Ultima6);
         bool u6Levels = !_systemSettings.Ultima6.UseUltima7Leveling;
@@ -760,6 +764,19 @@ public partial class MainWindow
             }
         }
         (int Map, int Index)? WhereIs(string id) => whereIs.TryGetValue(id, out var at) ? at : null;
+        // Who may join the party (a Join Party in any talk or map event): their things come with them.
+        var joiners = new HashSet<int>();
+        void Joins(IEnumerable<EventCommand> cmds, int self)
+        {
+            foreach (var c in cmds.Where(c => c.Type == EventCommandType.JoinParty && c.Get("Value") != "Leave the party"))
+                if (c.Get("Who") is "" or "Activator") { if (self >= 0) joiners.Add(self); }
+                else if (int.TryParse(c.Get("Who"), out int id)) joiners.Add(id);
+        }
+        foreach (var ch in _characterDatabase.Characters) Joins(ch.TalkCommands, ch.Id);
+        foreach (var w in worldList) foreach (var ev in w.Events) foreach (var pg in ev.EventPages) Joins(pg.Commands, -1);
+        foreach (int id in joiners)
+            if (_characterDatabase.Characters.FirstOrDefault(c => c.Id == id) is { } joiner && !joiner.IsTestPlayer && whereIs.TryGetValue(id.ToString(), out var at))
+                AddCarried(joiner, 0x8000 | (at.Map << 6) | at.Index);
         // Give Item / Remove Item / Show Picture / Change Stat: what the commands need (Engine/AppleIIgsTalk.cs Env).
         var pictureOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var talkEnv = new AppleIIgsTalk.Env

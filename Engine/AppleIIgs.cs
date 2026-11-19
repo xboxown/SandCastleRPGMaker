@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 24;
+    public const ushort Version = 25;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -400,12 +400,13 @@ public sealed class AppleIIgsGamePack
         "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "{1} readies {0}.", "{1} puts away {0}.",
         "Cast", "No spellbook is readied.", "No spells in the spellbook.", "That spell is not in thy spellbook!", "Your level is not high enough.",
         "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.",
-        "Introduction", "Create New Character", "Acknowledgments", "Journey Onward", "Avatar" };
+        "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
+        "To whom? ", "{1} gets {0}.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
-        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney" };
+        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -514,7 +515,8 @@ public sealed class AppleIIgsGamePack
         {
             var o = Objects[i];
             w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); w.Write((ushort)o.Name); w.Write((ushort)o.Other);
-            w.Write((ushort)o.Icon); w.Write((ushort)((o.Flags & 4) != 0 ? o.In : o.In >= 0 && o.In < Objects.Count ? newPlace[o.In] : 0xFFFF));
+            // In: a door's key, a carried thing's owner ($FFFF the Avatar, $8000 + map x 64 + place: a character), a thing inside: its container.
+            w.Write((ushort)o.Icon); w.Write((ushort)((o.Flags & 4) != 0 || o.In >= 0x8000 ? o.In : o.In >= 0 && o.In < Objects.Count ? newPlace[o.In] : 0xFFFF));
         }
         w.Write((ushort)Characters.Count);
         foreach (var c in Characters)

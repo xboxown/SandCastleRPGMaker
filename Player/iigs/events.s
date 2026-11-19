@@ -323,8 +323,11 @@ HasItem:
         lda [ItemPtr],y
         and #64+256
         cmp #64
-        beq .yes
-        and #256
+        bne .ins
+        jsr PartyOwns           ; carried by the party (owner.s)
+        bcs .yes
+        bra .n
+.ins:   and #256
         beq .n
         ldy #14                 ; inside: is its container carried?
         lda [ItemPtr],y

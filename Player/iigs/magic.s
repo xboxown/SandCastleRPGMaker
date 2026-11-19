@@ -592,6 +592,8 @@ CountItem:
         and #96+256
         cmp #64
         bne .n
+        jsr PartyOwns           ; (owner.s)
+        bcc .n
         inc CCount
 .n:     lda #16
         jsr NextItem
@@ -620,6 +622,9 @@ TakeItems:
         and #96+256
         cmp #64
         bne .n
+        jsr PartyOwns
+        bcc .n
+        ldy #6
         lda [ItemPtr],y
         ora #32
         sta [ItemPtr],y

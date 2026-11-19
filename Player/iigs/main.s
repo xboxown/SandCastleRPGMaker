@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 25 (b645): each party member's own things (owner.s): a carried thing's owner (+14), the panel shows the
+;   shown member's things and gear, Move gives to a member (a digit or a click on them), members fight with their gear.
 ; Version 24 (b643): the mouse (mouse.s): the pointer shown; a click on the map looks (a double click talks / uses),
 ;   picks the cursor's square or the grid's cell, presses the HUD's command buttons, picks the title menu's choice.
 ; Version 23 (b642): the title menu (title.s): its picture, Introduction, Create New Character, Acknowledgments,
@@ -584,7 +586,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #24
+        cmp #25
         beq .known
 .bad:   sec
         rts
@@ -2014,6 +2016,7 @@ TryMove:
         .include "look.s"
         .include "title.s"
         .include "mouse.s"
+        .include "owner.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

@@ -120,6 +120,10 @@ CursorKey:
         beq .pick
         cmp #' '
         beq .pick
+        jsr GiveDigit           ; Move: a member's number gives it to them (owner.s)
+        bcc .ndig
+        rts
+.ndig:  lda Key
         jsr ArrowDelta
         bcc .out
         lda CurX                ; moved, as far as the view
@@ -365,6 +369,9 @@ PickCell:
 .notgold:
         jsr ObjFlags            ; carried now: off the map (no longer in the way), in the grid
         ora #64
+        sta [ItemPtr],y
+        ldy #14                 ; the Avatar's
+        lda #$FFFF
         sta [ItemPtr],y
         jsr FreeCell
         jsr ObjFlags            ; picked up from here; what is carried changed (events.s)
@@ -777,7 +784,9 @@ MapTarget:
         bne .k2
         brl ToPack              ; onto the Avatar: carried
 .k2:    cmp #2
-        beq .np
+        bne .k3
+        jmp GiveToChr           ; a party member: theirs (owner.s)
+.k3:
         cmp #3
         bne .ground
         jsr ObjFlags
@@ -1065,8 +1074,11 @@ ToPack:
         jsr ObjAt
         ldy #6
         lda [ItemPtr],y
-        and #$FEFF
+        and #$0EFF              ; carried (not worn, not in a bag), the Avatar's
         ora #64
+        sta [ItemPtr],y
+        ldy #14
+        lda #$FFFF
         sta [ItemPtr],y
         jsr MoveName
         lda #8

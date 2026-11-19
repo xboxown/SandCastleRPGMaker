@@ -58,7 +58,12 @@ WornIn:
         lda [ItemPtr],y
         and #$F000+96+256
         cmp WSlot
+        bne .nw
+        ldy #14                 ; the shown member's (owner.s)
+        lda [ItemPtr],y
+        cmp CurOwner
         beq .yes
+.nw:
         lda #16
         jsr NextItem
         dec WN
@@ -192,6 +197,19 @@ WearUse:
 
 ; The Avatar's weapon damage, reach and armour from what it wears.
 RecalcGear:
+        lda #$FFFF
+        sta GearOwner
+        jsr GearOf
+        lda GWeapon
+        sta AvRec+C_WEAPON
+        lda GReach
+        sta AvRec+C_REACH
+        lda GArmour
+        sta AvRec+C_ARMOUR
+        jmp MembersGear         ; (owner.s)
+
+; GWeapon, GReach, GArmour: what GearOwner wears.
+GearOf:
         stz GWeapon
         lda #1
         sta GReach
@@ -210,6 +228,10 @@ RecalcGear:
         bcc .n
         and #$0FFF
         cmp #64
+        bne .n
+        ldy #14
+        lda [ItemPtr],y
+        cmp GearOwner
         bne .n
         ldy #10
         lda [ItemPtr],y
@@ -240,13 +262,7 @@ RecalcGear:
         jsr NextItem
         dec WN
         bne .l
-.d:     lda GWeapon
-        sta AvRec+C_WEAPON
-        lda GReach
-        sta AvRec+C_REACH
-        lda GArmour
-        sta AvRec+C_ARMOUR
-        rts
+.d:     rts
 
 SlotCount: .dw 0
 SlotTab:  .ds 96
@@ -255,6 +271,7 @@ WSlot:    .dw 0
 WN:       .dw 0
 WK:       .dw 0
 GWeapon:  .dw 0
+GearOwner: .dw $FFFF
 GReach:   .dw 1
 GArmour:  .dw 0
 ReachTab: .dw 1,2,4,8

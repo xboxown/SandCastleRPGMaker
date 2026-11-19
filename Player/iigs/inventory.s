@@ -8,6 +8,7 @@ VERB_DROP = 5
 ; The grid again: its cells as the HUD has them, a carried thing's icon in each, in order.
 RefreshInventory:
         jsr CurOff              ; the pointer hidden while drawing (mouse.s)
+        jsr SetOwner            ; whose things the panel shows (owner.s)
         jsr RecalcGear          ; what is worn: the Avatar's weapon and armour (wear.s)
         lda PanelView           ; the portrait view: counted, not drawn
         bne .count
@@ -79,6 +80,10 @@ Listed:
         lda [ItemPtr],y
         and #$F000+96+256
         cmp #64                 ; carried, not gone, not in a bag, not worn
+        bne .no
+        ldy #14                 ; the shown member's (owner.s)
+        lda [ItemPtr],y
+        cmp CurOwner
         bne .no
         sec
         rts
@@ -497,6 +502,9 @@ DropHere:
         sta [ItemPtr]
         ldy #2
         lda CurY
+        sta [ItemPtr],y
+        ldy #14                 ; no one's now
+        lda #$FFFF
         sta [ItemPtr],y
         ldy #6
         lda [ItemPtr],y
