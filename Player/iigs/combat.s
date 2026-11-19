@@ -231,11 +231,11 @@ AfterTurn:
         lda TurnUsed
         bne .t
         jmp RunQueue            ; events waiting (events.s)
-.t:     stz TurnUsed
-        lda Mode                ; a verb still asking: not yet
+.t:     lda Mode                ; a verb still asking: not yet (the turn kept for when it is answered)
         beq .m
         jmp RunQueue
-.m:     jsr StayEvents          ; still on the same cell: its Stay events (events.s)
+.m:     stz TurnUsed
+        jsr StayEvents          ; still on the same cell: its Stay events (events.s)
         lda Told                ; the Avatar's own blow told: the others' words follow it at once
         beq .lead
         stz WTLead
@@ -323,6 +323,10 @@ WorldTurn:
         beq .alv
         brl .n
 .alv:   lda [CP],y
+        and #16                 ; asleep (a spell, its bed): does nothing
+        beq .awk
+        brl .n
+.awk:   lda [CP],y
         and #2
         beq .calm
         jsr NearestFoe          ; the Avatar or the nearest member: DefP, distance T4 (party.s)
@@ -673,8 +677,9 @@ Strike:
 FightBack:
         jsr DefIsAvatar
         bcs .out
-        ldy #C_FLAGS
+        ldy #C_FLAGS            ; awake now, and hostile
         lda [DefP],y
+        and #$FFEF
         ora #2
         sta [DefP],y
 .out:   rts

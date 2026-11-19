@@ -25,7 +25,7 @@ namespace SandcastleRpgMaker.Engine;
 /// Triggers: 1 stepped on, 2 stood on, 3 stepped off, 4 Use on it (the action button), 5 arriving on the map (Always),
 /// 6 having / not having an item, 7 a thing dropped on it, 8 a thing picked up from it.
 /// More commands (b636; "who" = u16 map, u16 place in its list; $FFFF $FFFF the Avatar):
-///   $0C GIVE u16 name, u16 sprite, u16 icon, u16 flags      a thing to the Avatar (into a spare object)
+///   $0C GIVE u16 name, u16 sprite, u16 icon, u16 flags, u16 other   a thing to the Avatar (into a spare object)
 ///   $0D TAKE u16 name, u16 how many                         Remove Item from the Avatar's things
 ///   $0E HP   who, u8 op (0 add 1 subtract 2 set), i16 amount, u8 can kill
 ///   $0F STAT who, u8 the stat's word (0 hit points ... 10 experience), u8 op, i16 value
@@ -48,7 +48,7 @@ public sealed class AppleIIgsTalk
     public sealed class Env
     {
         /// <summary>An item (Category, ItemId) -> its name, sprite, icon and object flags in the game.</summary>
-        public Func<string, string, (int Name, int Sprite, int Icon, int Flags)?>? Item;
+        public Func<string, string, (int Name, int Sprite, int Icon, int Flags, int Other)?>? Item;
         /// <summary>A sprite (group, name) -> its picture's sprite number.</summary>
         public Func<string, string, int>? Picture;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
@@ -258,7 +258,7 @@ public sealed class AppleIIgsTalk
                     if (cmd.Get("Receiver") is not ("" or "Player" or "Activator") || Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it)
                     { Unsupported.Add("Give Item (to someone but the Avatar, or an item not on the IIgs)"); break; }
                     int count = Math.Clamp(Number(cmd.Get("Quantity")), 1, 8);
-                    for (int i = 0; i < count; i++) { B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); }
+                    for (int i = 0; i < count; i++) { B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); }
                     break;
                 }
                 case EventCommandType.RemoveItem:

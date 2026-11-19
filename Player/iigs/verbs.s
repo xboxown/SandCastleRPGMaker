@@ -13,6 +13,7 @@ VERB_TALK = 4
 VERB_MOVE = 6
 VERB_ATTACK = 7
 VERB_KEY  = 8
+VERB_CAST = 9
 
 ; A = the verb: its word and "-", the cursor on the Avatar.
 StartVerb:
@@ -301,8 +302,11 @@ PickCell:
         bne .mv
         jmp DropHere            ; Drop's "Where?" (inventory.s)
 .mv:    cmp #VERB_KEY
-        bne .mv2
+        bne .mv1
         jmp KeyOn               ; (keys.s)
+.mv1:   cmp #VERB_CAST
+        bne .mv2
+        jmp CastAt              ; (magic.s)
 .mv2:   cmp #VERB_MOVE
         bne .what
         lda MoveIdx

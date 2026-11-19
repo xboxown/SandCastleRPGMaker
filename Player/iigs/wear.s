@@ -34,7 +34,8 @@ ParseSlots:
         inx
         bra .l
 .d:     tya
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseSpells         ; (magic.s)
 
 ; ItemPtr = the thing worn in slot A (carry set), else carry clear.
 WornIn:

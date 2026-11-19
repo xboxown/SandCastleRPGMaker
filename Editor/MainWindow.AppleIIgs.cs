@@ -143,6 +143,14 @@ public partial class MainWindow
                 }
         if (eventsLeftOut.Count > 0) problems.Add($"Note: in the map events, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", eventsLeftOut)}. {works}.");
         if (triggersLeftOut.Count > 0) problems.Add($"Note: map event pages started by {string.Join(", ", triggersLeftOut)} don't run on the Apple IIgs yet (By Enter, Stay, Exit, Use (the action button), Always, Having / Not Having an Item, Drop and Pickup Item do).");
+        // Spells: the effects the Apple IIgs does.
+        var effectsLeftOut = new SortedSet<string>();
+        foreach (var book in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Spellbook))
+            foreach (var sp in book.Spellbook.Spells)
+                foreach (var e in sp.Effects.Where(e => e.Kind is not (MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
+                    or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light)))
+                    effectsLeftOut.Add(e.Kind.ToString());
+        if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (Heal, Restore Mana, Damage, Sleep, Awaken, Paralyze, Cure Paralysis and Light work).");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -428,7 +436,39 @@ public partial class MainWindow
                     def.Weapon.Use == WeaponUse.Melee ? 1 : Math.Max(2, def.Weapon.RangeTiles / 2), def.Weapon.Damage);
             if (def.Type == ObjectType.Armor && def.Armor.EquipSlot is { } slot)
                 return AppleIIgsGamePack.GearCode(false, (int)slot + 1, 1, def.Armor.ArmorPoints);
+            if (def.Type == ObjectType.Spellbook && !def.Spellbook.U8Focus) return 0xC000 | (((int)EquipmentSlot.RightHand + 1) << 10) | BookOf(def);
             return 0xFFFF;
+        }
+        // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
+        var bookIndex = new Dictionary<int, int>();
+        var spellIndex = new Dictionary<SpellDefinition, int>();
+        int BookOf(WorldObject book)
+        {
+            if (bookIndex.TryGetValue(book.Id, out int known)) return known;
+            var list = new List<int>();
+            foreach (var sp in book.Spellbook.Spells)
+            {
+                if (!spellIndex.TryGetValue(sp, out int si))
+                {
+                    var spell = new AppleIIgsGamePack.Spell
+                    {
+                        Name = pack.NameOf(sp.Name), Words = pack.NameOf(sp.Words.Length > 0 ? sp.Words : sp.Name), Circle = Math.Max(1, sp.Circle), Mana = sp.EffectiveManaCost,
+                        Target = sp.NeedsTarget, Radius = Math.Max(0, sp.RadiusTiles / 2),
+                        Letters = string.Concat(sp.Words.Split(' ', StringSplitOptions.RemoveEmptyEntries).Select(w => char.ToUpperInvariant(w[0])))
+                    };
+                    foreach (var r in sp.AllReagents().Take(4))
+                        if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == r.ObjectId) is { } rd) spell.Reagents.Add((pack.NameOf(rd.Name), Math.Max(1, r.Quantity)));
+                    foreach (var e in sp.Effects.Where(e => e.Kind is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
+                        or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light).Take(2))
+                        spell.Effects.Add(((int)e.Kind, Math.Max(0, e.Min), Math.Max(e.Min, e.Max)));
+                    si = spellIndex[sp] = pack.Spells.Count;
+                    pack.Spells.Add(spell);
+                }
+                list.Add(si);
+            }
+            bookIndex[book.Id] = pack.Books.Count;
+            pack.Books.Add(list);
+            return pack.Books.Count - 1;
         }
         var iconOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int IconOf(string? file)
@@ -463,7 +503,7 @@ public partial class MainWindow
                 }
                 bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
                 var thingDef = thing.Category == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) : null;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor ? GearOf(thingDef) : 0xFFFF, IconOf(file), container));
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
@@ -494,7 +534,7 @@ public partial class MainWindow
                 }
                 if (def.Type == ObjectType.Key) { objFlags |= 512; other = def.Id; }
                 if (def.Type == ObjectType.Lockpick) objFlags |= 1024;
-                if (def.Type is ObjectType.Weapon or ObjectType.Armor) other = GearOf(def);
+                if (def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook) other = GearOf(def);
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
             foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
@@ -535,7 +575,7 @@ public partial class MainWindow
                 int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
                 if (wornSlot > 15) wornSlot = 0;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor ? GearOf(def) : 0xFFFF, IconOf(file), -1));
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : 0xFFFF, IconOf(file), -1));
             }
         // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
         U6Leveling.Use(_systemSettings.Ultima6);
@@ -618,7 +658,8 @@ public partial class MainWindow
                 string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
                 var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
                 int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
-                return (pack.NameOf(name), sprite, IconOf(file), flags);
+                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : 0xFFFF;
+                return (pack.NameOf(name), sprite, IconOf(file), flags, other);
             },
             Picture = (group, name) =>
             {

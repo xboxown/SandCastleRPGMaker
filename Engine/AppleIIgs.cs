@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 19;
+    public const ushort Version = 20;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -397,11 +397,14 @@ public sealed class AppleIIgsGamePack
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
         "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.",
         "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.",
-        "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "{1} readies {0}.", "{1} puts away {0}.", "Avatar" };
+        "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "{1} readies {0}.", "{1} puts away {0}.",
+        "Cast", "No spellbook is readied.", "No spells in the spellbook.", "That spell is not in thy spellbook!", "Your level is not high enough.",
+        "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
-        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies" };
+        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
+        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -422,6 +425,19 @@ public sealed class AppleIIgsGamePack
     /// <summary>A weapon's or armour's Other: 1 weapon / 2 armour (bits 14-15), its slot (bits 10-13), reach 1, 2, 4, 8 (bits 8-9), damage or armour points (0-255).</summary>
     public static int GearCode(bool weapon, int slot, int reach, int value) =>
         ((weapon ? 1 : 2) << 14) | ((slot & 15) << 10) | ((reach >= 8 ? 3 : reach >= 4 ? 2 : reach >= 2 ? 1 : 0) << 8) | Math.Clamp(value, 0, 255);
+    /// <summary>Spells (Object Editor > Spellbook): name, words (a name's number), the syllables' first letters ("IL" for In Lor),
+    /// circle, magic points, needs a target, up to 4 reagents (name, how many), up to 2 effects (kind, min, max), radius.</summary>
+    public List<Spell> Spells { get; } = new();
+    public sealed class Spell
+    {
+        public int Name, Words, Circle, Mana, Radius;
+        public string Letters = "";
+        public bool Target;
+        public List<(int Name, int Count)> Reagents { get; } = new();
+        public List<(int Kind, int Min, int Max)> Effects { get; } = new();
+    }
+    /// <summary>Spellbooks: the spells each knows (their places in Spells). A spellbook's Other: 3 (bits 14-15), its slot (a hand), its place here.</summary>
+    public List<List<int>> Books { get; } = new();
     /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
     public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
@@ -557,6 +573,19 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Clamp(PartySize, 1, 9));
         w.Write((ushort)Math.Min(BodySlots.Count, 16));
         foreach (var (slot, x, y) in BodySlots.Take(16)) { w.Write((ushort)slot); w.Write((ushort)(x & ~1)); w.Write((ushort)y); }
+        w.Write((ushort)Math.Min(Spells.Count, 128));
+        foreach (var sp in Spells.Take(128))
+        {
+            w.Write((ushort)sp.Name); w.Write((ushort)sp.Words);
+            var letters = Encoding.ASCII.GetBytes(new string(sp.Letters.ToUpperInvariant().Where(char.IsLetter).Take(7).ToArray()));
+            w.Write(letters); for (int i = letters.Length; i < 8; i++) w.Write((byte)0);
+            w.Write((ushort)sp.Circle); w.Write((ushort)sp.Mana); w.Write((ushort)(sp.Target ? 1 : 0));
+            for (int i = 0; i < 4; i++) { var r = i < sp.Reagents.Count ? sp.Reagents[i] : (0xFFFF, 0); w.Write((ushort)r.Item1); w.Write((ushort)r.Item2); }
+            for (int i = 0; i < 2; i++) { var e = i < sp.Effects.Count ? sp.Effects[i] : (0xFFFF, 0, 0); w.Write((ushort)e.Item1); w.Write((ushort)e.Item2); w.Write((ushort)e.Item3); }
+            w.Write((ushort)sp.Radius);
+        }
+        w.Write((ushort)Math.Min(Books.Count, 64));
+        foreach (var book in Books.Take(64)) { w.Write((ushort)Math.Min(book.Count, 64)); foreach (int i in book.Take(64)) w.Write((ushort)i); }
         return ms.ToArray();
     }
 

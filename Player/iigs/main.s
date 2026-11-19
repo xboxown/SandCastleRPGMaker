@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 20 (b639): magic (magic.s): C Cast with a readied spellbook - the syllables typed, the book, level, magic
+;   points and reagents checked, "On whom?" for a target; heal, mana, damage (an area without a target), sleep, awaken.
 ; Version 19 (b638): wearing (wear.s): weapons and armour worn in the HUD's body slots, Use readies / puts away,
 ;   the Avatar's weapon, reach and armour from what it wears.
 ; Version 18 (b637): keys and lockpicks (keys.s): Use a carried key or lockpick (Tab, the grid), "On what?", a door
@@ -246,7 +248,13 @@ MainLoop:
         lda Key                 ; Rest's hours (stats.s)
         jsr RestKey
         brl MainLoop
-.not8:  cmp #2
+.not8:  cmp #9
+        bne .not9
+        lda Key                 ; Cast's syllables (magic.s)
+        jsr CastKey
+        jsr AfterTurn
+        brl MainLoop
+.not9:  cmp #2
         bne MainLoop            ; the talk is running
         lda Key
         jsr TalkKey
@@ -320,7 +328,11 @@ MainLoop:
         brl MainLoop
 .notd:  lda Key
         ora #$20
-        cmp #'r'
+        cmp #'c'
+        bne .notc
+        jsr StartCast           ; (magic.s)
+        brl MainLoop
+.notc:  cmp #'r'
         bne .notrr
         jsr StartRest
         brl MainLoop
@@ -528,7 +540,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #19
+        cmp #20
         beq .known
 .bad:   sec
         rts
@@ -1936,6 +1948,7 @@ TryMove:
         .include "cmds.s"
         .include "keys.s"
         .include "wear.s"
+        .include "magic.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

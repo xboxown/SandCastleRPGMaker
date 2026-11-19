@@ -93,6 +93,10 @@ OpGive:
         iny
         lda [TalkPtr],y
         sta GFlags
+        iny
+        iny
+        lda [TalkPtr],y
+        sta GOther
         lda ObjPtr
         sta ItemPtr
         lda ObjPtr+2
@@ -123,7 +127,7 @@ OpGive:
         lda GName
         sta [ItemPtr],y
         ldy #10
-        lda #$FFFF
+        lda GOther
         sta [ItemPtr],y
         ldy #12
         lda GIcon
@@ -138,7 +142,7 @@ OpGive:
         jsr NextItem
         dec T4
         bne .l
-.done:  lda #9
+.done:  lda #11
         jmp Next
 
 ; TAKE name count: that many of the Avatar's things of that name are gone.
@@ -670,6 +674,7 @@ GName:    .dw 0
 GSprite:  .dw 0
 GIcon:    .dw 0
 GFlags:   .dw 0
+GOther:   .dw 0
 GCount:   .dw 0
 GOp:      .dw 0
 GVal:     .dw 0
