@@ -16,6 +16,8 @@ MT_CP  = 14
 MT_EC  = 18
 MT_EP  = 20
 MT_IN  = 24
+MT_SC  = 26                     ; the schedules: where (4), how many (2)
+MT_SN  = 30
 
 ; GAME.DAT after the Disk Swap screen: how many maps, map 0's events. Map 0 as ParseData found it.
 ParseMaps:
@@ -79,6 +81,12 @@ KeepMap:
         sta MapTab+MT_EP,x
         lda EvPtr+2
         sta MapTab+MT_EP+2,x
+        lda SchPtr
+        sta MapTab+MT_SC,x
+        lda SchPtr+2
+        sta MapTab+MT_SC+2,x
+        lda SchCount
+        sta MapTab+MT_SN,x
         rts
 
 ; X = map A's place in MapTab
@@ -137,6 +145,12 @@ ChangeMap:
         sta EvPtr
         lda MapTab+MT_EP+2,x
         sta EvPtr+2
+        lda MapTab+MT_SC,x
+        sta SchPtr
+        lda MapTab+MT_SC+2,x
+        sta SchPtr+2
+        lda MapTab+MT_SN,x
+        sta SchCount
         lda CurMap              ; its objects: flags' top 4 bits
         asl a
         asl a
@@ -153,6 +167,7 @@ ChangeMap:
         pha
         tool $1002              ; DisposeHandle
         jsr MakeOcc
+        jsr ApplySchedules      ; there: everyone to this period's activity
 .place: lda GoX                 ; where: the spot, else the map's start
         cmp #$FFFF
         bne .spot
@@ -245,6 +260,27 @@ LoadMap:
         sta MapTab+MT_EP,x
         lda Ptr+2
         sta MapTab+MT_EP+2,x
+        lda MapTab+MT_EC,x      ; past the events: the schedules
+        sta Item
+.ev:    lda Item
+        beq .evd
+        ldy #4
+        lda [Ptr],y
+        clc
+        adc #6
+        jsr AddPtr
+        dec Item
+        bra .ev
+.evd:   lda WantMap
+        jsr MapOff
+        lda [Ptr]
+        sta MapTab+MT_SN,x
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta MapTab+MT_SC,x
+        lda Ptr+2
+        sta MapTab+MT_SC+2,x
         lda #1
         sta MapTab+MT_IN,x
         clc

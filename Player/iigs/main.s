@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 13 (b632): the clock and schedules (schedule.s): a game minute every 5 seconds (Exult), each character's
+;   activity for the 3-hour period (stand, wander, sleep, pace, loiter) at its spot; asleep: "No response."
 ; Version 12 (b631): combat (combat.s): characters 64 bytes with their stats, the Avatar's stats, A Attack, B combat
 ;   mode, Space Pass; Ultima 6's to-hit and damage; foes chase and strike; death; experience for a kill.
 ; Version 11 (b630): save and load (save.s: Ctrl+S, Ctrl+R; SAVE.DAT), the quit question (Ctrl+Q, Esc, q).
@@ -188,6 +190,7 @@ start:
         jsr Alert
         jmp Quit
 .occ:
+        jsr ApplySchedules      ; everyone to their period's activity (schedule.s)
         jsr LoadDisks           ; a game on floppies: which file is on which disk
         jsr PreloadSwapSound
         tool $9004              ; HideCursor
@@ -492,7 +495,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #12
+        cmp #13
         beq .known
 .bad:   sec
         rts
@@ -1891,6 +1894,7 @@ TryMove:
         .include "maps.s"
         .include "save.s"
         .include "combat.s"
+        .include "schedule.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

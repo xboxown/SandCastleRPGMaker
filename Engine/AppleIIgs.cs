@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 12;
+    public const ushort Version = 13;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -393,10 +393,10 @@ public sealed class AppleIIgsGamePack
         "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.",
         "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.",
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
-        "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "Avatar" };
+        "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
-        "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut" };
+        "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -408,6 +408,15 @@ public sealed class AppleIIgsGamePack
             Armour = 11, Weapon = 12, Reach = 13, Behaviour = 14, HomeX = 15, HomeY = 16;
     }
     public int[] AvatarStats { get; set; } = new int[StatWords];
+    /// <summary>Schedules (Character Editor > Schedule), as Exult's: (the character's place in its map's list, the 3-hour
+    /// period 0-7, the activity: 0 stand, 1 wander, 2 sleep, 3 pace east-west, 4 pace north-south, 5 loiter; the spot).</summary>
+    public List<(int Character, int Period, int Activity, int X, int Y)> Schedules { get; } = new();
+    public int StartHour { get; set; } = 6;
+    public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
+    {
+        w.Write((ushort)list.Count);
+        foreach (var e in list) { w.Write((ushort)e.Character); w.Write((ushort)e.Period); w.Write((ushort)e.Activity); w.Write((ushort)e.X); w.Write((ushort)e.Y); }
+    }
     /// <summary>Ultima 6 levels (Leveling Editor): the experience each next level needs, hit points a level, most hit points; Off: Ultima 7's (most hit points = strength).</summary>
     public List<int> LevelNeeds { get; } = new();
     public int HitsPerLevel { get; set; } = 30;
@@ -529,6 +538,8 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)(U6Levels ? 1 : 0)); w.Write((ushort)HitsPerLevel); w.Write((ushort)MostHits);
         w.Write((ushort)Math.Min(LevelNeeds.Count, 16));
         foreach (int need in LevelNeeds.Take(16)) w.Write((ushort)Math.Clamp(need, 0, 65535));
+        WriteSchedules(w, Schedules);
+        w.Write((ushort)Math.Clamp(StartHour, 0, 23));
         return ms.ToArray();
     }
 
@@ -565,6 +576,7 @@ public sealed class AppleIIgsMap
     public ushort[] Map { get; set; } = Array.Empty<ushort>();
     public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> Characters { get; } = new();
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();
+    public List<(int Character, int Period, int Activity, int X, int Y)> Schedules { get; } = new();
 
     public byte[] Write()
     {
@@ -581,6 +593,7 @@ public sealed class AppleIIgsMap
             AppleIIgsGamePack.WriteStats(w, c.Stats);
         }
         WriteEvents(w, Events);
+        AppleIIgsGamePack.WriteSchedules(w, Schedules);
         return ms.ToArray();
     }
 

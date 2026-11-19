@@ -378,7 +378,25 @@ TalkAt:
         lda #5                  ; nothing
         jsr PrintSaid
         jmp PromptLine
-.found: ldy #12
+.found: ldy #6                  ; asleep or hostile: no response (Windows)
+        lda [ItemPtr],y
+        and #16+2
+        beq .awake
+        ldy #14
+        lda [ItemPtr],y
+        jsr NameNumber
+        lda FmtName
+        sta TP
+        lda FmtName+2
+        sta TP+2
+        lda TxtColor
+        jsr SetColor
+        jsr PrintWord
+        jsr NewLine
+        lda #39                 ; No response.
+        jsr PrintSaid
+        jmp PromptLine
+.awake: ldy #12
         lda [ItemPtr],y
         sta TalkPortrait
         ldy #10

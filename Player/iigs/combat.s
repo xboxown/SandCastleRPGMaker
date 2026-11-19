@@ -71,6 +71,26 @@ ParseAvatar:
 .nd:    lda LvlCount
         asl a
         jsr AddPtr
+        lda [Ptr]               ; map 0's schedules, the hour the game starts
+        sta SchCount
+        lda #2
+        jsr AddPtr
+        lda Ptr
+        sta SchPtr
+        lda Ptr+2
+        sta SchPtr+2
+        lda SchCount
+        asl a
+        sta T4
+        asl a
+        asl a
+        clc
+        adc T4                  ; 10 bytes each
+        jsr AddPtr
+        lda [Ptr]
+        sta Hour
+        lda #2
+        jsr AddPtr
         lda PX
         sta AvRec
         lda PY
@@ -230,6 +250,7 @@ AfterTurn:
 
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:
+        jsr ClockRun            ; the clock (schedule.s)
         lda Mode
         bne .out
         lda CombatOn
@@ -328,8 +349,20 @@ WorldTurn:
         bra .n
 .calm:  ldy #C_BEHAV
         lda [CP],y
-        cmp #1
+        cmp #2
+        bne .nsch
+        jsr ScheduleStep        ; its schedule (schedule.s)
+        bcc .n
+        inc Moved
+        bra .n
+.nsch:  cmp #1
         bne .n
+        ldy #C_HOMEX
+        lda [CP],y
+        sta GX
+        ldy #C_HOMEY
+        lda [CP],y
+        sta GY
         lda #4                  ; wanders: a step one turn in four, near home
         jsr Random
         bne .n
@@ -341,7 +374,8 @@ WorldTurn:
         sta SDX
         lda DirY,x
         sta SDY
-        jsr NearHome
+        lda #4
+        jsr NearSpot
         bcc .n
         jsr TryCharStep
         bcc .n
@@ -377,42 +411,48 @@ DistCP:
         lda T5
 .d:     rts
 
-; Carry set if CP's step SDX, SDY keeps it within 4 of its home.
-NearHome:
+; Carry set if CP's step SDX, SDY keeps it within A of GX, GY.
+NearSpot:
+        inc a
+        sta Radius
         lda [CP]
         clc
         adc SDX
         sec
-        ldy #C_HOMEX
-        sbc [CP],y
+        sbc GX
         jsr Abs
-        cmp #5
+        cmp Radius
         bcs .no
         ldy #2
         lda [CP],y
         clc
         adc SDY
         sec
-        ldy #C_HOMEY
-        sbc [CP],y
+        sbc GY
         jsr Abs
-        cmp #5
+        cmp Radius
         bcs .no
         sec
         rts
 .no:    clc
         rts
 
-; CP steps toward the Avatar: straight at it, else along one axis. Carry set if it moved.
+; CP steps toward the Avatar: straight at it, else along one axis, else round. Carry set if it moved.
 StepToward:
         lda PX
+        sta GX
+        lda PY
+        sta GY
+; ... toward GX, GY
+StepToGoal:
+        lda GX
         sec
         sbc [CP]
         jsr Sign
         sta SDX
         sta TDX
         ldy #2
-        lda PY
+        lda GY
         sec
         sbc [CP],y
         jsr Sign
@@ -799,6 +839,9 @@ LastTick: .dw 0
 Seed:     .dw 1
 RndN:     .dw 0
 Dmg:      .dw 0
+GX:       .dw 0
+GY:       .dw 0
+Radius:   .dw 0
 SDX:      .dw 0
 SDY:      .dw 0
 TDX:      .dw 0

@@ -558,7 +558,7 @@ public partial class MainWindow
         var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
             : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
         var portraitOf = new Dictionary<int, int>();
-        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world)
+        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
             foreach (var placed in world.Characters.Where(c => !c.Dead))
@@ -593,12 +593,30 @@ public partial class MainWindow
                     }
                     portraitOf[who.Id] = portrait;
                 }
-                list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), StatsOf(who, placed.X, placed.Y)));
+                var stats = StatsOf(who, placed.X, placed.Y);
+            // Its schedule (Exult's 3-hour periods): the activities the Apple IIgs does; work ones loiter at their spot.
+            foreach (var entry in who.Schedules.Where(e => e.Period is >= 0 and <= 7))
+            {
+                int activity = entry.Type switch
+                {
+                    ScheduleType.Stand or ScheduleType.Wait or ScheduleType.Sit => 0,
+                    ScheduleType.Wander => 1,
+                    ScheduleType.Sleep => 2,
+                    ScheduleType.HorizPace => 3,
+                    ScheduleType.VertPace => 4,
+                    _ => 5
+                };
+                int sx = entry.X >= 0 && entry.X < world.Width ? entry.X : placed.X, sy = entry.Y >= 0 && entry.Y < world.Height ? entry.Y : placed.Y;
+                schedules.Add((list.Count, entry.Period, activity, sx, sy));
+            }
+            stats[AppleIIgsGamePack.Stat.Behaviour] = who.Schedules.Count > 0 ? 2 : Hostile(who) ? 1 : 0;
+            list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
             }
             if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
             return list;
         }
-        characters.AddRange(MapCharacters(start));
+        characters.AddRange(MapCharacters(start, pack.Schedules));
+        pack.StartHour = _systemSettings.Clock.StartHour;
         // A map's events: stepped on (By Enter), their first such page's commands run - made into the talk code.
         List<(int X, int Y, byte[] Code)> MapEvents(MapData world)
         {
@@ -621,7 +639,7 @@ public partial class MainWindow
                 StartX = world.StartX >= 0 && world.StartX < world.Width ? world.StartX : world.Width / 2,
                 StartY = world.StartY >= 0 && world.StartY < world.Height ? world.StartY : world.Height / 2 };
             AddMapObjects(world, mi << 12);
-            other.Characters.AddRange(MapCharacters(world));
+            other.Characters.AddRange(MapCharacters(world, other.Schedules));
             other.Events.AddRange(MapEvents(world));
             pack.OtherMaps.Add(other);
         }

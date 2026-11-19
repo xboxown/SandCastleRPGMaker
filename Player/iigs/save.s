@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 2
+SAVE_VERSION = 3
 
 ; Ctrl+S
 SaveGame:
@@ -67,6 +67,12 @@ SaveGame:
         lda #AvRec
         ldx MyBank
         ldy #64
+        jsr WriteBlock
+        bcc .kc
+        brl .close
+.kc:    lda #Day                ; the clock
+        ldx MyBank
+        ldy #6
         jsr WriteBlock
         bcc .k5
         brl .close
@@ -214,6 +220,12 @@ LoadGame:
         lda MyBank
         sta Dst+2
         lda #64
+        jsr SvCopy
+        lda #Day                ; the clock
+        sta Dst
+        lda MyBank
+        sta Dst+2
+        lda #6
         jsr SvCopy
         stz SvMap               ; the maps' characters (a map visited: loaded again if need be)
 .m:     lda SvMap
