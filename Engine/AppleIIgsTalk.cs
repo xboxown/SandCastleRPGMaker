@@ -16,24 +16,28 @@ namespace SandcastleRpgMaker.Engine;
 ///   $05 IFV  u16 variable, u8 test (0 ==, 1 !=, 2 &gt;, 3 &lt;, 4 &gt;=, 5 &lt;=), i16 value, u16 place if not
 ///   $06 PLAY u16 sound (its number in GAME.DAT), u8 volume (0-255)
 ///   $07 MAP  u16 map (its number in the game; $FFFF this one), u16 x, u16 y ($FFFF: the map's start)   Change Map
+///   $08 PARTY u16 map, u16 character (its place in that map's list; $FFFF $FFFF: the one talked to), u8 1 join / 0 leave
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
 /// </summary>
 public sealed class AppleIIgsTalk
 {
-    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7;
+    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8;
     private readonly List<byte> _code = new();
     private readonly Func<string, int> _variable;
     private readonly Func<int, int>? _sound;
     private readonly Func<int, int>? _world;
+    private readonly Func<string, (int Map, int Index)?>? _who;
     public HashSet<string> Unsupported { get; } = new();
 
-    private AppleIIgsTalk(Func<string, int> variable, Func<int, int>? sound, Func<int, int>? world) { _variable = variable; _sound = sound; _world = world; }
+    private AppleIIgsTalk(Func<string, int> variable, Func<int, int>? sound, Func<int, int>? world, Func<string, (int Map, int Index)?>? who) { _variable = variable; _sound = sound; _world = world; _who = who; }
 
     /// <summary>The code for a list of commands; variable(name) gives a variable's or switch's number, sound(id) a Sound Editor sound's number in GAME.DAT (-1: not there).</summary>
     /// <param name="world">a Maps-tab world's id -> its map number in the game (-1: not in it).</param>
-    public static AppleIIgsTalk Compile(List<EventCommand> commands, Func<string, int> variable, out byte[] code, Func<int, int>? sound = null, Func<int, int>? world = null)
+    /// <param name="who">a Who (a character's id) -> where it is in the game (its map, its place in that map's characters).</param>
+    public static AppleIIgsTalk Compile(List<EventCommand> commands, Func<string, int> variable, out byte[] code, Func<int, int>? sound = null, Func<int, int>? world = null,
+        Func<string, (int Map, int Index)?>? who = null)
     {
-        var talk = new AppleIIgsTalk(variable, sound, world);
+        var talk = new AppleIIgsTalk(variable, sound, world, who);
         talk.Run(commands);
         code = talk._code.ToArray();
         return talk;
@@ -160,6 +164,14 @@ public sealed class AppleIIgsTalk
                     }
                     bool spot = int.TryParse(cmd.Get("X"), out int x) & int.TryParse(cmd.Get("Y"), out int y);
                     B(Map); W(map); W(spot ? x : 0xFFFF); W(spot ? y : 0xFFFF);
+                    break;
+                }
+                case EventCommandType.JoinParty:
+                {
+                    string w = cmd.Get("Who");
+                    (int Map, int Index)? at = w is "" or "Activator" ? (0xFFFF, 0xFFFF) : _who?.Invoke(w);
+                    if (at is not { } place) { Unsupported.Add("Join / Leave Party (someone not on a map of the game)"); break; }
+                    B(Party); W(place.Map); W(place.Index); B(cmd.Get("Value") == "Leave the party" ? 0 : 1);
                     break;
                 }
                 case EventCommandType.StopConversation or EventCommandType.End:

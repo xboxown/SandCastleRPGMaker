@@ -177,12 +177,14 @@ ChangeMap:
         sta PX
         lda MapTab+MT_SY,x
         sta PY
+        jsr PlaceParty          ; the members round the Avatar (party.s)
         clc
         rts
 .spot:  lda GoX
         sta PX
         lda GoY
         sta PY
+        jsr PlaceParty
         clc
         rts
 

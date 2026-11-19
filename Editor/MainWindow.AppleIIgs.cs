@@ -558,6 +558,22 @@ public partial class MainWindow
         var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
             : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
         var portraitOf = new Dictionary<int, int>();
+        // Where each character stands in the game (its map, its place in that map's list) - for Join / Leave Party.
+        var whereIs = new Dictionary<string, (int Map, int Index)>();
+        for (int wi = 0; wi < worldList.Count; wi++)
+        {
+            int index = 0;
+            foreach (var placed in worldList[wi].Characters.Where(c => !c.Dead))
+            {
+                var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
+                if (who is null || who.IsTestPlayer || placed.X < 0 || placed.Y < 0 || placed.X >= worldList[wi].Width || placed.Y >= worldList[wi].Height) continue;
+                if (index >= AppleIIgsLimits.MaxCharactersPerMap) break;
+                whereIs.TryAdd(who.Id.ToString(), (wi, index));
+                index++;
+            }
+        }
+        (int Map, int Index)? WhereIs(string id) => whereIs.TryGetValue(id, out var at) ? at : null;
+        pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
         List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
@@ -575,7 +591,7 @@ public partial class MainWindow
                     talk = -1;
                     if (who.TalkCommands.Count > 0)
                     {
-                        AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex);
+                        AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
                         talk = pack.Talks.Count;
                         pack.Talks.Add((who.Name, code));
                     }
@@ -625,7 +641,7 @@ public partial class MainWindow
             {
                 var page = ev.EventPages.FirstOrDefault(pg => pg.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByEnter && pg.Commands.Count > 0);
                 if (page is null) continue;
-                AppleIIgsTalk.Compile(page.Commands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex);
+                AppleIIgsTalk.Compile(page.Commands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
                 list.Add((ev.X, ev.Y, code));
             }
             return list;

@@ -182,7 +182,7 @@ WhatIsThere:
         lda ChrCount
         sta Item
 .c:     lda Item
-        beq .objs
+        beq .party
         ldy #6                  ; dead: not there
         lda [ItemPtr],y
         and #4
@@ -207,6 +207,19 @@ WhatIsThere:
         jsr NextItem
         dec Item
         bra .c
+.party: ldx CurX                ; a party member there?
+        ldy CurY
+        jsr PartyAt
+        bcc .objs
+        lda #2
+        sta Kind
+        lda ItemPtr
+        sta ChrRec
+        lda ItemPtr+2
+        sta ChrRec+2
+        ldy #14
+        lda [ItemPtr],y
+        jmp NameNumber
 .objs:  stz Kind                ; the topmost: the last one there
         lda ObjPtr
         sta ItemPtr

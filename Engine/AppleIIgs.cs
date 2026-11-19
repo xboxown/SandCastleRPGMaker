@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 14;
+    public const ushort Version = 15;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -394,11 +394,11 @@ public sealed class AppleIIgsGamePack
         "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.",
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
         "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.",
-        "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "Avatar" };
+        "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
-        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours" };
+        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -414,6 +414,8 @@ public sealed class AppleIIgsGamePack
     /// period 0-7, the activity: 0 stand, 1 wander, 2 sleep, 3 pace east-west, 4 pace north-south, 5 loiter; the spot).</summary>
     public List<(int Character, int Period, int Activity, int X, int Y)> Schedules { get; } = new();
     public int StartHour { get; set; } = 6;
+    /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
+    public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
     {
         w.Write((ushort)list.Count);
@@ -542,6 +544,7 @@ public sealed class AppleIIgsGamePack
         foreach (int need in LevelNeeds.Take(16)) w.Write((ushort)Math.Clamp(need, 0, 65535));
         WriteSchedules(w, Schedules);
         w.Write((ushort)Math.Clamp(StartHour, 0, 23));
+        w.Write((ushort)Math.Clamp(PartySize, 1, 9));
         return ms.ToArray();
     }
 

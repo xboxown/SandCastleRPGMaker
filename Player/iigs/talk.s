@@ -375,6 +375,10 @@ TalkAt:
         dec Item
         bra .l
 .nobody:
+        ldx NX                  ; a party member?
+        ldy NY
+        jsr PartyAt
+        bcs .found
         lda #5                  ; nothing
         jsr PrintSaid
         jmp PromptLine
@@ -396,7 +400,11 @@ TalkAt:
         lda #39                 ; No response.
         jsr PrintSaid
         jmp PromptLine
-.awake: ldy #12
+.awake: lda ItemPtr             ; who is talked to (Join / Leave Party)
+        sta TalkRec
+        lda ItemPtr+2
+        sta TalkRec+2
+        ldy #12
         lda [ItemPtr],y
         sta TalkPortrait
         ldy #10
@@ -561,8 +569,11 @@ RunTalk:
 .n5:    cmp #6
         beq .play
         cmp #7
-        bne .end
+        bne .n7
         jmp TalkMap
+.n7:    cmp #8
+        bne .end
+        jmp TalkParty
 .play:
         iny                     ; PLAY: a sound, its volume
         lda [TalkPtr],y

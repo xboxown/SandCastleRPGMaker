@@ -22,6 +22,7 @@ HpChanged:
 
 ; The portrait view's stats: each line written with its live value.
 DrawLiveStats:
+        jsr ViewPtr             ; whose (party.s)
         lda StatPtr
         sta ItemPtr
         lda StatPtr+2
@@ -61,7 +62,9 @@ DrawLiveStats:
         sec
         sbc #'A'
         phx
+        phy
         jsr LiveValue
+        ply
         plx
         jsr Decimal             ; into StatBuf at X
         ply
@@ -100,14 +103,17 @@ LiveValue:
         cmp #24
         bcs .z
         asl a
-        tax
-        lda AvRec+16,x
+        clc
+        adc #16
+        tay
+        lda [ViewP],y
         rts
 .z:     lda #0
         rts
 .next:  lda LvlOn
         beq .z
-        lda AvRec+C_LEVEL
+        ldy #C_LEVEL
+        lda [ViewP],y
         beq .z
         cmp LvlCount
         beq .n

@@ -306,6 +306,7 @@ DrawPanel:
         dec RH
         bne .row
         jsr DrawLabels
+        jsr MemberOver          ; a member shown: its portrait and name (party.s)
         jsr DrawStats
         jmp RefreshInventory
 

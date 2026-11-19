@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 15 (b634): the party (party.s): Join / Leave Party, members follow, fight, go along to other maps,
+;   0-9 show a member in the portrait view; saved.
 ; Version 14 (b633): stats that change (stats.s): the portrait view's stats live, levels from experience, R Rest.
 ; Version 13 (b632): the clock and schedules (schedule.s): a game minute every 5 seconds (Exult), each character's
 ;   activity for the 3-hour period (stand, wander, sleep, pace, loiter) at its spot; asleep: "No response."
@@ -115,6 +117,8 @@ SvPtr     = $E2   ; 4: a saved game being read
 AtkP      = $E6   ; 4: who strikes (combat.s)
 DefP      = $EA   ; 4: who is struck
 CP        = $EE   ; 4: the character whose turn it is
+ViewP     = $F2   ; 4: whose stats the portrait view shows (the Avatar or a member)
+MP        = $F6   ; 4: a party member
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -297,7 +301,16 @@ MainLoop:
         bne .notb
         jsr ToggleCombat
         brl MainLoop
-.notb:  cmp #'r'
+.notb:  lda Key                 ; 0-9 (as typed): whose portrait view
+        cmp #'0'
+        bcc .notd
+        cmp #'9'+1
+        bcs .notd
+        jsr ViewMember
+        brl MainLoop
+.notd:  lda Key
+        ora #$20
+        cmp #'r'
         bne .notrr
         jsr StartRest
         brl MainLoop
@@ -505,7 +518,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #14
+        cmp #15
         beq .known
 .bad:   sec
         rts
@@ -1328,7 +1341,8 @@ MakeOcc:
         jsr NextItem
         dec Item
         bra .c
-.done:  clc
+.done:  jsr OccParty            ; the members' cells (party.s)
+        clc
         rts
 
 ; ItemPtr += A
@@ -1436,7 +1450,7 @@ DrawCharacters:
         jsr NextItem
         dec Item
         bra .l
-.end:   rts
+.end:   jmp DrawParty           ; the members too (party.s)
 
 ; ViewX0, ViewY0: the map cell at the view's top left.
 ViewCorner:
@@ -1875,14 +1889,20 @@ TryMove:
         lda [FlagsPtr],y
         and #$0001
         beq .stay
-        ldx NX                  ; a solid object or a character there stops it too
+        ldx NX                  ; a solid object or a character there stops it too (not a member: they follow)
         ldy NY
         jsr OccAt
+        and #3
         bne .stay
+        lda PX
+        sta OldX
+        lda PY
+        sta OldY
         lda NX
         sta PX
         lda NY
         sta PY
+        jsr FollowParty         ; (party.s)
         lda #1                  ; a step: a turn
         sta TurnUsed
         jsr DrawView
@@ -1901,6 +1921,7 @@ TryMove:
         .include "combat.s"
         .include "schedule.s"
         .include "stats.s"
+        .include "party.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

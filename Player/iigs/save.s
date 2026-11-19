@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 3
+SAVE_VERSION = 4
 
 ; Ctrl+S
 SaveGame:
@@ -73,6 +73,12 @@ SaveGame:
 .kc:    lda #Day                ; the clock
         ldx MyBank
         ldy #6
+        jsr WriteBlock
+        bcc .kp
+        brl .close
+.kp:    lda #PartyN             ; the party
+        ldx MyBank
+        ldy #2+512
         jsr WriteBlock
         bcc .k5
         brl .close
@@ -227,6 +233,13 @@ LoadGame:
         sta Dst+2
         lda #6
         jsr SvCopy
+        lda #PartyN             ; the party
+        sta Dst
+        lda MyBank
+        sta Dst+2
+        lda #2+512
+        jsr SvCopy
+        stz ViewIdx
         stz SvMap               ; the maps' characters (a map visited: loaded again if need be)
 .m:     lda SvMap
         cmp MapCount

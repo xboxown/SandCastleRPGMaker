@@ -89,7 +89,10 @@ ParseAvatar:
         jsr AddPtr
         lda [Ptr]
         sta Hour
-        lda #2
+        ldy #2
+        lda [Ptr],y
+        sta PartyMax
+        lda #4
         jsr AddPtr
         lda PX
         sta AvRec
@@ -318,8 +321,7 @@ WorldTurn:
 .alv:   lda [CP],y
         and #2
         beq .calm
-        jsr DistCP
-        sta T4
+        jsr NearestFoe          ; the Avatar or the nearest member: DefP, distance T4 (party.s)
         ldy #C_REACH
         lda [CP],y
         bne .rc
@@ -330,10 +332,6 @@ WorldTurn:
         sta AtkP
         lda CP+2
         sta AtkP+2
-        lda #AvRec
-        sta DefP
-        lda MyBank
-        sta DefP+2
         jsr Strike
         lda AvDead
         beq .n
@@ -387,7 +385,11 @@ WorldTurn:
         sta CP+2
         dec TurnN
         brl .l
-.done:  lda Moved
+.done:  lda AvDead
+        bne .dd
+        jsr PartyTurn           ; the members strike foes in reach (party.s)
+.dd:    jsr PruneParty
+        lda Moved
         beq .out
         jsr DrawView
 .out:   rts
@@ -734,25 +736,24 @@ Dies:
         sep #$20
         .a8
         lda [Ptr]
-        and #$FD
+        and #$F9                ; neither a character's nor a member's
         sta [Ptr]
         rep #$20
         .a16
         lda #1
         sta Moved
-        lda AtkP                ; Exult: the killer gets the victim's experience
-        cmp #AvRec
-        bne .out
-        ldy #C_EXP
+        ldy #C_EXP              ; Exult: the killer gets the victim's experience
         lda [DefP],y
         clc
-        adc AvRec+C_EXP
+        adc [AtkP],y
         bcc .e
         lda #$FFFF
-.e:     sta AvRec+C_EXP
+.e:     sta [AtkP],y
+        lda AtkP
+        cmp #AvRec
+        bne .out
         jsr CheckLevel
-        jsr DrawView
-.out:   rts
+.out:   jmp DrawView
 
 ; Carry set if DefP is the Avatar.
 DefIsAvatar:
