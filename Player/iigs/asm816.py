@@ -207,6 +207,8 @@ class Assembler:
 
     def define(self, name, val):
         old = self.symbols.get(name)
+        if self.pass_no == 1 and old is not None:
+            raise AsmError(f'{name} defined twice')
         if old is None or old.v != val.v or old.reloc != val.reloc:
             self.changed = True
         self.symbols[name] = val

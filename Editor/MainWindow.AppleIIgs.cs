@@ -476,6 +476,17 @@ public partial class MainWindow
                     }
                     grid[y * world.Width + x] = (ushort)n;
                 }
+            // Line of sight (U6GameWindow.U6Sight.cs): walls and what Occludes stop sight; walls, doors and windows always show.
+            foreach (var inst in world.Objects.Where(o => o.ContainerInstanceId < 0 && MapFloors.FloorOfLift(o.Z) == floor))
+            {
+                if (inst.X < 0 || inst.Y < 0 || inst.X >= world.Width || inst.Y >= world.Height) continue;
+                if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == inst.ObjectId) is not { } sd) continue;
+                int at = inst.Y * world.Width + inst.X;
+                bool wallish = sd.Type is ObjectType.Wall or ObjectType.Door or ObjectType.Window;
+                bool blocks = sd.Type == ObjectType.Wall || (sd.Occludes && sd.Type is not (ObjectType.Window or ObjectType.Door));
+                if (wallish) grid[at] |= 0x4000;
+                if (blocks) grid[at] |= 0x8000;
+            }
             return grid;
         }
         var map = Grid(start);
@@ -997,6 +1008,7 @@ public partial class MainWindow
         var u6 = _systemSettings.Ultima6;
         if (SpriteOfLink(u6.TitleSprite)?.Frames.FirstOrDefault()?.FilePath is { } titleFile && File.Exists(titleFile)) titlePicture = FitPicture(titleFile, 320, 200);
         pack.Acknowledgments = u6.Acknowledgments;
+        pack.LineOfSight = u6.LineOfSight;
         // The HUD's command buttons: a click is its verb's key (Ultima 6's: A C T L G D M U R B).
         foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CommandButton))
             pack.Buttons.Add((button.Verb switch

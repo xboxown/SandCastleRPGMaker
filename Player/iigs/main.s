@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 27 (b647): line of sight (sight.s): what the Avatar can't see is black (walls, closed doors, Occludes,
+;   ground that can't be walked on and isn't water stop sight); a cell's tile number's top 2 bits its sight marks.
 ; Version 26 (b646): ailments and hunger (ailments.s): poisoned, asleep, paralyzed, charmed, cursed, invisible,
 ;   protected - their times as Exult's; food used by the hour, starving; Use eats food.
 ; Version 25 (b645): each party member's own things (owner.s): a carried thing's owner (+14), the panel shows the
@@ -588,7 +590,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #26
+        cmp #27
         beq .known
 .bad:   sec
         rts
@@ -992,6 +994,7 @@ DrawView:
         jsr DrawCharacters
         jsr DrawAvatar
         jsr DrawRoofs           ; (look.s)
+        jsr DrawSight           ; what can't be seen: black (sight.s)
         jsr DrawDark
         jsr BlitView            ; the finished view onto the screen at once
         lda Mode
@@ -1794,6 +1797,7 @@ MapTile:
         adc MulR+2
         sta Ptr+2
         lda [Ptr]
+        and #$3FFF              ; (bits 14-15: sight marks - sight.s)
         rts
 .off:   lda #$FFFF
         rts
@@ -2020,6 +2024,7 @@ TryMove:
         .include "mouse.s"
         .include "owner.s"
         .include "ailments.s"
+        .include "sight.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

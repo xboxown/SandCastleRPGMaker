@@ -7,6 +7,10 @@
 ; main loop (CurOn).
 
 ParseButtons:
+        lda [Ptr]               ; line of sight on (sight.s)
+        sta SightOn
+        lda #2
+        jsr AddPtr
         lda [Ptr]
         sta BtnCount
         lda #2

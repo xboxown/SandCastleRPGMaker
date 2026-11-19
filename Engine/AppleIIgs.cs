@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 26;
+    public const ushort Version = 27;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -445,6 +445,9 @@ public sealed class AppleIIgsGamePack
     public byte[] IntroCode { get; set; } = Array.Empty<byte>();
     /// <summary>The HUD's command buttons (a click = its verb's key): the key, where (x, y, width, height).</summary>
     public List<(char Key, int X, int Y, int W, int H)> Buttons { get; } = new();
+    /// <summary>Line of sight (System Settings > Ultima 6 > World view). A cell's tile number's bit 15: a wall or something that
+    /// Occludes stands there (it stops sight); bit 14: a wall, door or window's square (always shown).</summary>
+    public bool LineOfSight { get; set; } = true;
     /// <summary>Animated tiles (Tile Properties > animation): a tile and its frames' tiles (the first is itself), up to 4.</summary>
     public List<List<int>> AnimTiles { get; } = new();
     /// <summary>Day and night (System Settings > Day / Night): on, dawn, day, dusk and night's hours.</summary>
@@ -610,6 +613,7 @@ public sealed class AppleIIgsGamePack
         var acks = Ascii(Acknowledgments.Replace("\r", "").Replace('\n', ' '), 200);
         w.Write((byte)acks.Length); w.Write(acks); w.Write((byte)0);
         w.Write((ushort)IntroCode.Length); w.Write(IntroCode);
+        w.Write((ushort)(LineOfSight ? 1 : 0));
         w.Write((ushort)Math.Min(Buttons.Count, 16));
         foreach (var (key, x, y, bw, bh) in Buttons.Take(16)) { w.Write((ushort)key); w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)bw); w.Write((ushort)bh); }
         w.Write((ushort)Math.Min(AnimTiles.Count, 128));
