@@ -12,6 +12,7 @@ VERB_USE  = 3
 VERB_TALK = 4
 VERB_MOVE = 6
 VERB_ATTACK = 7
+VERB_KEY  = 8
 
 ; A = the verb: its word and "-", the cursor on the Avatar.
 StartVerb:
@@ -299,7 +300,10 @@ PickCell:
         cmp #VERB_DROP
         bne .mv
         jmp DropHere            ; Drop's "Where?" (inventory.s)
-.mv:    cmp #VERB_MOVE
+.mv:    cmp #VERB_KEY
+        bne .mv2
+        jmp KeyOn               ; (keys.s)
+.mv2:   cmp #VERB_MOVE
         bne .what
         lda MoveIdx
         cmp #$FFFF
@@ -869,6 +873,10 @@ GridVerb:
         sta ItemPtr+2
         ldy #6
         lda [ItemPtr],y
+        and #512+1024           ; a key or a lockpick: "On what?" (keys.s)
+        beq .nkey
+        jmp KeyPicked
+.nkey:  lda [ItemPtr],y
         and #128                ; a bag: open (or shut) in the grid
         beq .np
         lda [ItemPtr],y

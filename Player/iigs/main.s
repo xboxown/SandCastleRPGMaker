@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 18 (b637): keys and lockpicks (keys.s): Use a carried key or lockpick (Tab, the grid), "On what?", a door
+;   or chest next to the Avatar: the key that fits locks / unlocks it, a lockpick tries (Dexterity against the lock).
 ; Version 17 (b636): more commands (cmds.s): Give / Remove Item, Change HP / Stat, Wait, Teleport, Place / Remove,
 ;   Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit, Save, Load.
 ; Version 16 (b635): map events' triggers and pages (events.s): stepped on / stood on / stepped off, Use on it,
@@ -524,7 +526,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #17
+        cmp #18
         beq .known
 .bad:   sec
         rts
@@ -1930,6 +1932,7 @@ TryMove:
         .include "party.s"
         .include "events.s"
         .include "cmds.s"
+        .include "keys.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

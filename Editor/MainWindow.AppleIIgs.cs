@@ -444,8 +444,14 @@ public partial class MainWindow
                 int f = 256 | 2;
                 if (thing.Category == ReferencedItemCategory.Container && _containerDatabase.Containers.FirstOrDefault(c => c.Id == thing.ItemId) is { } bag)
                     f |= 128 | (bag.IsSolid ? 1 : 0) | ((thing.IsLockedRuntime ?? bag.IsLocked) ? 8 : 0);
-                else if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) is { } od && od.IsSolid) f |= 1;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), 0xFFFF, IconOf(file), container));
+                else if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) is { } od)
+                {
+                    if (od.IsSolid) f |= 1;
+                    if (od.Type == ObjectType.Key) f |= 512;
+                    if (od.Type == ObjectType.Lockpick) f |= 1024;
+                }
+                bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
@@ -470,8 +476,12 @@ public partial class MainWindow
                     var otherState = state with { Open = !open, Locked = false };
                     string? otherFile = ObjectLooks.SpriteFor(def, otherState, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
                     other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
-                    objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
+                    objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0) | (def.Door.MagicallyLocked ? 2048 : 0);
+                    objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, Math.Clamp(def.Door.PickLockDifficulty, 0, 255), def.Door.RequiredKeyItemId >= 0 ? def.Door.RequiredKeyItemId : 0xFFFF));
+                    continue;
                 }
+                if (def.Type == ObjectType.Key) { objFlags |= 512; other = def.Id; }
+                if (def.Type == ObjectType.Lockpick) objFlags |= 1024;
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
             foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
@@ -481,7 +491,8 @@ public partial class MainWindow
                 int n = SpriteOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath);
                 if (n < 0) continue;
                 int f = 128 | (data.IsSolid ? 1 : 0) | (data.CanBePicked && !data.IsBodyContainer ? 2 : 0) | ((placed.IsLockedRuntime ?? data.IsLocked) ? 8 : 0);
-                objects.Add((placed.X, placed.Y, n, f | bits, pack.NameOf(data.Name), 0xFFFF, IconOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath), -1));
+                int keyCode = data.RequiredKeyCategory == ReferencedItemCategory.Object && data.RequiredKeyItemId >= 0 ? data.RequiredKeyItemId : 0xFFFF;
+                objects.Add((placed.X, placed.Y, n, f | bits, pack.NameOf(data.Name), keyCode, IconOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath), -1));
                 var contents = placed.InstanceId != 0 ? placed.Contents : placed.OwnContents ?? data.StartingContents;
                 AddContents(contents, objects.Count - 1, 0);
             }
@@ -508,7 +519,8 @@ public partial class MainWindow
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
                 if (n < 0) continue;
-                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0), pack.NameOf(def.Name), 0xFFFF, IconOf(file), -1));
+                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0),
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : 0xFFFF, IconOf(file), -1));
             }
         // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
         U6Leveling.Use(_systemSettings.Ultima6);
@@ -589,7 +601,8 @@ public partial class MainWindow
                 int sprite = SpriteOf(file);
                 if (sprite < 0) return null;
                 string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
-                int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0);
+                var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
+                int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
                 return (pack.NameOf(name), sprite, IconOf(file), flags);
             },
             Picture = (group, name) =>

@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 17;
+    public const ushort Version = 18;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -365,7 +365,9 @@ public sealed class AppleIIgsGamePack
     public int SwapSound { get; set; } = 0xFFFF;
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
     /// <summary>Flags: 1 solid, 2 can be taken, 4 a door, 8 locked, 16 open, 32 gone, 64 carried, 128 a container, 256 inside a
-    /// container (In: that container's place in this list).</summary>
+    /// container (In: that container's place in this list), 512 a key, 1024 a lockpick, 2048 magically locked; the top 4 bits
+    /// its map. A key: Other = its key code (its Object Editor id). A door: Icon = its pick-lock difficulty, In = the key
+    /// code that fits it ($FFFF none). A container: Other = the key code that fits it, Icon its look carried.</summary>
     public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon, int In)> Objects { get; } = new();
     /// <summary>The HUD's Carried Items grid (Columns 0: none).</summary>
     public (int X, int Y, int Columns, int Rows, int Cell) CarriedGrid { get; set; }
@@ -394,11 +396,12 @@ public sealed class AppleIIgsGamePack
         "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.",
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
         "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.",
-        "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.", "Avatar" };
+        "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.",
+        "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
-        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull" };
+        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -476,7 +479,7 @@ public sealed class AppleIIgsGamePack
         {
             var o = Objects[i];
             w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); w.Write((ushort)o.Name); w.Write((ushort)o.Other);
-            w.Write((ushort)o.Icon); w.Write((ushort)(o.In >= 0 && o.In < Objects.Count ? newPlace[o.In] : 0xFFFF));
+            w.Write((ushort)o.Icon); w.Write((ushort)((o.Flags & 4) != 0 ? o.In : o.In >= 0 && o.In < Objects.Count ? newPlace[o.In] : 0xFFFF));
         }
         w.Write((ushort)Characters.Count);
         foreach (var c in Characters)
