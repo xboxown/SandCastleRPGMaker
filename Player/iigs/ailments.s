@@ -14,6 +14,8 @@ A_CURSE  = 16
 A_INVIS  = 32
 A_PROT   = 64
 A_WASFOE = 128                  ; charmed: it was hostile
+A_FEAR   = 256                  ; runs from the Avatar (its time +22)
+A_WD     = 512                  ; withstand death: the next killing blow heals instead
 W_EATS   = 70
 FOOD     = 50
 
@@ -91,7 +93,19 @@ AilOn:
         lda #10
         sta AilTab+8,y
         bra .eff
-.s:     cmp #A_SLEEP
+.s:     cmp #A_FEAR
+        bne .s2
+        lda ESecs               ; its seconds (else 30)
+        bne .fs
+        lda #30
+.fs:    asl a
+        ldy AY
+        sta AilTab+22,y
+        brl .eff
+.s2:    cmp #A_WD
+        bne .s3
+        brl .eff
+.s3:    cmp #A_SLEEP
         bne .p
         lda #10
         ldx #10
@@ -240,6 +254,7 @@ AilRun:
         rts
 .go:    lda T4
         sta AilTick
+        jsr SpellTimes          ; time stop, summons, fields (spells2.s)
         stz AY
 .l:     ldy AY
         cpy #24*16
@@ -294,7 +309,10 @@ AilRun:
 .tn:    asl ABit
         inx
         inx
-        cpx #16
+        lda ABit
+        cmp #A_WASFOE           ; (not a time)
+        beq .tn
+        cpx #20
         bcc .t
 .n:     lda AY
         clc
@@ -432,7 +450,37 @@ AilEffect:
         jsr AilOff
         sec
         rts
-.k7:    cmp #7
+.k7:    cmp #29                 ; Charm
+        bne .k30
+        lda #A_CHARM
+        jsr AilOn
+        sec
+        rts
+.k30:   cmp #30                 ; Fear
+        bne .k31
+        lda #A_FEAR
+        jsr AilOn
+        sec
+        rts
+.k31:   cmp #31                 ; Dance: still, a while
+        bne .k42
+        lda #A_PARA
+        jsr AilOn
+        sec
+        rts
+.k42:   cmp #42                 ; Feign Death: as unseen
+        bne .k43
+        lda #A_INVIS
+        jsr AilOn
+        sec
+        rts
+.k43:   cmp #43                 ; Withstand Death
+        bne .k7b
+        lda #A_WD
+        jsr AilOn
+        sec
+        rts
+.k7b:   cmp #7
         bne .no
         lda #A_PARA
         jsr AilOff
@@ -610,10 +658,10 @@ EatIt:
         sta TurnUsed
         rts
 
-AilTab:   .ds 24*16
+AilTab:   .ds 24*16+2
 AilTick:  .dw 0
 AFlo:     .dw 0
 AFhi:     .dw 0
 ABit:     .dw 0
 AY:       .dw 0
-TimeOf:   .dw 0,6,10,12,14,16,18,20
+TimeOf:   .dw 0,6,10,12,14,16,18,20,0,22

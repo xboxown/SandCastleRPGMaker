@@ -35,15 +35,13 @@ ParseSpells:
         sta SpellPtr
         lda Ptr+2
         sta SpellPtr+2
-        lda SpellCount          ; 48 bytes each
+        lda SpellCount          ; 64 bytes each
         asl a
         asl a
         asl a
         asl a
-        sta T4
         asl a
-        clc
-        adc T4
+        asl a
         jsr AddPtr
         lda [Ptr]
         sta BookCount
@@ -63,7 +61,8 @@ ParseSpells:
         jsr AddPtr
         dex
         bra .b
-.bd:    jmp ParseTexts
+.bd:    jsr ParseSpellThings    ; what spells make and summon (spells2.s)
+        jmp ParseTexts
 
 ; C: "Cast-", the readied spellbook, the syllables asked for.
 StartCast:
@@ -205,7 +204,7 @@ CastIt:
         sta SpBuf,y
         iny
         iny
-        cpy #48
+        cpy #64
         bcc .cp
         lda AvRec+C_LEVEL       ; its circle: the caster's level at least
         cmp SpBuf+12
@@ -278,7 +277,11 @@ CastIt:
         lda #4
         sta Mode
         jmp DrawView
-.self:  jsr HasDamage           ; no target: damage hits the foes round the Avatar, anything else the caster
+.self:  lda PX
+        sta CastX
+        lda PY
+        sta CastY
+        jsr HasDamage           ; no target: damage hits the foes round the Avatar, anything else the caster
         bcc .me
         jsr AreaDamage
         jsr HpChanged
@@ -302,10 +305,8 @@ SpellAt:
         asl a
         asl a
         asl a
-        sta T4
         asl a
-        clc
-        adc T4                  ; x 48
+        asl a                   ; x 64
         clc
         adc SpellPtr
         sta ItemPtr
@@ -350,6 +351,10 @@ AvatarWP:
 
 ; The target picked ("On whom?"): the Avatar, a member or a character there.
 CastAt:
+        lda CurX
+        sta CastX
+        lda CurY
+        sta CastY
         jsr WhatIsThere
         lda FmtName
         sta TP
@@ -366,7 +371,11 @@ CastAt:
         bra .go
 .c2:    cmp #2
         beq .chr
-        lda #9                  ; Not possible.
+        jsr CellSpell           ; a spell on a square (teleport, a field, a door...): on it (spells2.s)
+        bcc .np
+        jsr AvatarWP
+        bra .go
+.np:    lda #9                  ; Not possible.
         jsr Format
         jmp PromptLine
 .chr:   lda ChrRec
@@ -381,7 +390,7 @@ HasDamage:
         lda SpBuf+34
         cmp #E_DAMAGE
         beq .y
-        lda SpBuf+40
+        lda SpBuf+44
         cmp #E_DAMAGE
         beq .y
         clc
@@ -391,7 +400,7 @@ HasDamage:
 
 ; Damage spells without a target: every hostile character within the radius (3 if none) of the Avatar.
 AreaDamage:
-        lda SpBuf+46
+        lda SpBuf+54
         bne .r
         lda #3
 .r:     sta ARad
@@ -440,13 +449,17 @@ ApplySpell:
         sta EMin
         lda SpBuf+38,x
         sta EMax
+        lda SpBuf+40,x
+        sta EThing
+        lda SpBuf+42,x
+        sta ESecs
         jsr Effect
         plx
         txa
         clc
-        adc #6
+        adc #10
         tax
-        cpx #12
+        cpx #20
         bcc .e
         jmp HpChanged
 
@@ -544,7 +557,9 @@ Effect:
         rts
 .k6:    lda EKind
         cmp #E_LIGHT
-        bne .out
+        beq .lt
+        jmp MoreEffect          ; (spells2.s)
+.lt:
         lda EAmt                ; light: as many turns x 20
         asl a
         asl a
@@ -647,7 +662,11 @@ CastBook: .dw 0
 CastLen:  .dw 0
 CastCh:   .dw 0
 CastBuf:  .ds 10
-SpBuf:    .ds 48
+SpBuf:    .ds 64
+EThing:   .dw 0
+ESecs:    .dw 0
+CastX:    .dw 0
+CastY:    .dw 0
 EKind:    .dw 0
 EMin:     .dw 0
 EMax:     .dw 0

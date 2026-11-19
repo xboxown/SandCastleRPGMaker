@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 28;
+    public const ushort Version = 29;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -401,12 +401,12 @@ public sealed class AppleIIgsGamePack
         "Cast", "No spellbook is readied.", "No spells in the spellbook.", "That spell is not in thy spellbook!", "Your level is not high enough.",
         "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.",
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
-        "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "Avatar" };
+        "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
-        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats" };
+        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -436,7 +436,9 @@ public sealed class AppleIIgsGamePack
         public string Letters = "";
         public bool Target;
         public List<(int Name, int Count)> Reagents { get; } = new();
-        public List<(int Kind, int Min, int Max)> Effects { get; } = new();
+        /// <summary>Its effects: kind (MagicEffectKind), min, max, its thing (a summoned kind / an item / a common event's code: their
+        /// place in Summons / Items / Codes; $FFFF none), seconds.</summary>
+        public List<(int Kind, int Min, int Max, int Thing, int Seconds)> Effects { get; } = new();
     }
     /// <summary>The title menu (System Settings > Ultima 6 > Title): its picture (320 x 200, packed; null: black), the Acknowledgments' words,
     /// the Introduction (the intro commands as talk code; empty: no Introduction).</summary>
@@ -459,6 +461,12 @@ public sealed class AppleIIgsGamePack
     public List<byte[]> Texts { get; } = new();
     /// <summary>Spellbooks: the spells each knows (their places in Spells). A spellbook's Other: 3 (bits 14-15), its slot (a hand), its place here.</summary>
     public List<List<int>> Books { get; } = new();
+    /// <summary>Things spells make (Create Item / Field): name, sprite, icon, flags, other.</summary>
+    public List<(int Name, int Sprite, int Icon, int Flags, int Other)> Items { get; } = new();
+    /// <summary>Kinds spells summon (Summon): a character's 64 bytes (its sprite, name, stats).</summary>
+    public List<(int Sprite, int Name, int[] Stats)> Summons { get; } = new();
+    /// <summary>Common events spells run: their commands as talk code.</summary>
+    public List<byte[]> Codes { get; } = new();
     /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
     public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
@@ -603,11 +611,22 @@ public sealed class AppleIIgsGamePack
             w.Write(letters); for (int i = letters.Length; i < 8; i++) w.Write((byte)0);
             w.Write((ushort)sp.Circle); w.Write((ushort)sp.Mana); w.Write((ushort)(sp.Target ? 1 : 0));
             for (int i = 0; i < 4; i++) { var r = i < sp.Reagents.Count ? sp.Reagents[i] : (0xFFFF, 0); w.Write((ushort)r.Item1); w.Write((ushort)r.Item2); }
-            for (int i = 0; i < 2; i++) { var e = i < sp.Effects.Count ? sp.Effects[i] : (0xFFFF, 0, 0); w.Write((ushort)e.Item1); w.Write((ushort)e.Item2); w.Write((ushort)e.Item3); }
+            for (int i = 0; i < 2; i++) { var e = i < sp.Effects.Count ? sp.Effects[i] : (0xFFFF, 0, 0, 0xFFFF, 0); w.Write((ushort)e.Item1); w.Write((ushort)e.Item2); w.Write((ushort)e.Item3); w.Write((ushort)e.Item4); w.Write((ushort)e.Item5); }
             w.Write((ushort)sp.Radius);
+            for (int i = 0; i < 4; i++) w.Write((ushort)0); // 64 bytes
         }
         w.Write((ushort)Math.Min(Books.Count, 64));
         foreach (var book in Books.Take(64)) { w.Write((ushort)Math.Min(book.Count, 64)); foreach (int i in book.Take(64)) w.Write((ushort)i); }
+        w.Write((ushort)Math.Min(Items.Count, 64));
+        foreach (var it in Items.Take(64)) { w.Write((ushort)it.Name); w.Write((ushort)it.Sprite); w.Write((ushort)it.Icon); w.Write((ushort)it.Flags); w.Write((ushort)it.Other); }
+        w.Write((ushort)Math.Min(Summons.Count, 32));
+        foreach (var (sprite, name, st) in Summons.Take(32))
+        {
+            w.Write((ushort)0); w.Write((ushort)0); w.Write((ushort)sprite); w.Write((ushort)1); w.Write((ushort)0); w.Write((ushort)0xFFFF); w.Write((ushort)0xFFFF); w.Write((ushort)name);
+            WriteStats(w, st);
+        }
+        w.Write((ushort)Math.Min(Codes.Count, 64));
+        foreach (var code in Codes.Take(64)) { w.Write((ushort)code.Length); w.Write(code); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

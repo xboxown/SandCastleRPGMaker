@@ -149,7 +149,7 @@ public partial class MainWindow
             foreach (var sp in book.Spellbook.Spells)
                 foreach (var e in sp.Effects.Where(e => !IIgsEffect(e.Kind)))
                     effectsLeftOut.Add(e.Kind.ToString());
-        if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (Heal, Restore Mana, Damage, Poison, Cure Poison, Sleep, Awaken, Paralyze, Cure Paralysis, Curse, Remove Curse, Protection, Invisibility, Light and Nourish work).");
+        if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (every other effect works; traps aren't on the Apple IIgs, so Reveal / Destroy Traps do nothing there).");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -351,9 +351,7 @@ public partial class MainWindow
     }
 
     /// <summary>The spell effects the Apple IIgs player does (Player/iigs/magic.s, ailments.s).</summary>
-    private static bool IIgsEffect(MagicEffectKind k) => k is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
-        or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light or MagicEffectKind.Poison or MagicEffectKind.CurePoison
-        or MagicEffectKind.Curse or MagicEffectKind.RemoveCurse or MagicEffectKind.Protection or MagicEffectKind.Invisibility or MagicEffectKind.Nourish;
+    private static bool IIgsEffect(MagicEffectKind k) => k is not (MagicEffectKind.Custom or MagicEffectKind.Levitate or MagicEffectKind.Translate);
 
     private AppleIIgsGamePack MakeAppleIIgsPack()
     {
@@ -559,6 +557,7 @@ public partial class MainWindow
         int FamilyOf(string family) { int i = families.FindIndex(f => string.Equals(f, family, StringComparison.OrdinalIgnoreCase)); if (i < 0) { families.Add(family); i = families.Count - 1; } return Math.Min(i, 1023); }
         int AmmoCode(WorldObject def) => 0xC800 | FamilyOf(def.Ammo.Family);
         int LightCode(WorldObject def, bool lit) => 0xF000 | (lit ? 0x100 : 0) | Math.Clamp(1 + def.Light.Brightness / 2, 1, 7);
+        var pendingThings = new List<(AppleIIgsGamePack.Spell Spell, int Index, MagicEffect Effect)>();
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
         var spellIndex = new Dictionary<SpellDefinition, int>();
@@ -579,7 +578,10 @@ public partial class MainWindow
                     foreach (var r in sp.AllReagents().Take(4))
                         if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == r.ObjectId) is { } rd) spell.Reagents.Add((pack.NameOf(rd.Name), Math.Max(1, r.Quantity)));
                     foreach (var e in sp.Effects.Where(e => IIgsEffect(e.Kind)).Take(2))
-                        spell.Effects.Add(((int)e.Kind, Math.Max(0, e.Min), Math.Max(e.Min, e.Max)));
+                    {
+                        pendingThings.Add((spell, spell.Effects.Count, e)); // its thing: filled in at the end (SpellThing)
+                        spell.Effects.Add(((int)e.Kind, Math.Max(0, e.Min), Math.Max(e.Min, e.Max), 0xFFFF, (int)Math.Clamp(e.Seconds, 0, 3000)));
+                    }
                     si = spellIndex[sp] = pack.Spells.Count;
                     pack.Spells.Add(spell);
                 }
@@ -1043,6 +1045,49 @@ public partial class MainWindow
             AppleIIgsTalk.Compile(u6.Hud.IntroCommands, VariableOf, out var intro, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
             pack.IntroCode = intro;
         }
+        // A spell effect's thing: a summoned kind, a made item, a common event's code (their places in the pack).
+        var spellItemOf = new Dictionary<int, int>();
+        var summonOf = new Dictionary<int, int>();
+        var codeOf = new Dictionary<int, int>();
+        int SpellThing(MagicEffect e)
+        {
+            switch (e.Kind)
+            {
+                case MagicEffectKind.Summon when _characterDatabase.Characters.FirstOrDefault(c => c.Id == e.ThingId) is { } kind:
+                    if (!summonOf.TryGetValue(kind.Id, out int si))
+                    {
+                        int first = spritePixels.Count;
+                        foreach (var f in LookFiles(kind)) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
+                        var st = StatsOf(kind, 0, 0);
+                        st[AppleIIgsGamePack.Stat.Food] = 0xFFFF;
+                        summonOf[kind.Id] = si = pack.Summons.Count;
+                        pack.Summons.Add((first, pack.NameOf(kind.Name), st));
+                    }
+                    return si;
+                case MagicEffectKind.CreateItem or MagicEffectKind.CreateField or MagicEffectKind.DestroyField when _objectDatabase.Objects.FirstOrDefault(o => o.Id == e.ThingId) is { } od:
+                    if (!spellItemOf.TryGetValue(od.Id, out int ii))
+                    {
+                        string? file = ObjectLooks.SpriteFor(od, new ObjectState(false, false, false, false, 1, SpriteDirection.South), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? od.IconPath;
+                        int sp = SpriteOf(file);
+                        int flags = (od.IsPortable ? 2 : 0) | (od.IsSolid ? 1 : 0);
+                        int other = od.Type == ObjectType.Food ? FoodCode(od) : od.Type == ObjectType.Ammo ? AmmoCode(od) : od.Type is ObjectType.Weapon or ObjectType.Armor ? GearOf(od) : 0xFFFF;
+                        spellItemOf[od.Id] = ii = pack.Items.Count;
+                        pack.Items.Add((pack.NameOf(od.Name), sp < 0 ? 0 : sp, IconOf(file), flags, other));
+                    }
+                    return ii;
+                case MagicEffectKind.CommonEvent when _systemSettings.CommonEvents.FirstOrDefault(c => c.Id == e.CommonEventId) is { } ce:
+                    if (!codeOf.TryGetValue(ce.Id, out int ci))
+                    {
+                        AppleIIgsTalk.Compile(ce.Commands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+                        codeOf[ce.Id] = ci = pack.Codes.Count;
+                        pack.Codes.Add(code);
+                    }
+                    return ci;
+                default:
+                    return 0xFFFF;
+            }
+        }
+        foreach (var (spell, index, effect) in pendingThings) spell.Effects[index] = spell.Effects[index] with { Item4 = SpellThing(effect) };
         var hud = ComposeHud(pack, out var portraitPanel);
         pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
         if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);

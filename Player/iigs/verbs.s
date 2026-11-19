@@ -480,7 +480,11 @@ ObjFlags:
 
 ; Carry set if the cursor's cell is next to the Avatar (or its own).
 NextToCursor:
-        lda CurX
+        lda FarUse              ; Telekinesis: from afar (spells2.s)
+        beq .near
+        sec
+        rts
+.near:  lda CurX
         sec
         sbc PX
         jsr Abs

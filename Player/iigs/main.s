@@ -1,6 +1,9 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 29 (b649): every spell effect (spells2.s): teleport, mark / recall, summon, clone, create item / field,
+;   dispel field, magic (un)lock, douse / ignite, telekinesis, charm, fear, dance, resurrect, reveal, time stop, locate,
+;   a common event, withstand death; spells 64 bytes.
 ; Version 28 (b648): shooting and throwing (missile.s): a strike from afar flies its missile; bows use ammo of
 ;   their family from the party's things, thrown weapons land by the target; monsters shoot from their reach.
 ; Version 27 (b647): line of sight (sight.s): what the Avatar can't see is black (walls, closed doors, Occludes,
@@ -592,7 +595,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #28
+        cmp #29
         beq .known
 .bad:   sec
         rts
@@ -2031,6 +2034,7 @@ TryMove:
         .include "ailments.s"
         .include "sight.s"
         .include "missile.s"
+        .include "spells2.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

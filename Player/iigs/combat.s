@@ -318,7 +318,10 @@ WorldTurn:
 .l:     lda TurnN
         bne .one
         brl .done
-.one:   ldy #C_FLAGS
+.one:   lda TimeStop            ; time stopped (spells2.s): they stand
+        beq .ts
+        brl .n
+.ts:    ldy #C_FLAGS
         lda [CP],y
         and #4
         beq .alv
@@ -327,7 +330,17 @@ WorldTurn:
         and #16                 ; asleep (a spell, its bed): does nothing
         beq .awk
         brl .n
-.awk:   lda [CP],y
+.awk:   lda CP                  ; afraid: runs from the Avatar (spells2.s)
+        ldx CP+2
+        jsr AilsOf
+        and #A_FEAR
+        beq .naf
+        jsr RunAway
+        bcc .afn
+        inc Moved
+.afn:   brl .n
+.naf:   ldy #C_FLAGS
+        lda [CP],y
         and #2
         beq .calm
         jsr NearestFoe          ; the Avatar or the nearest member: DefP, distance T4 (party.s)
@@ -730,7 +743,10 @@ TellWound:
 
 ; DefP is dead: off the map (its cell free); the Avatar who killed it gets its experience. The Avatar dead: Press a key.
 Dies:
-        jsr DefIsAvatar
+        jsr Withstands          ; withstand death: healed instead (spells2.s)
+        bcc .dies
+        rts
+.dies:  jsr DefIsAvatar
         bcc .npc
         lda #1
         sta AvDead

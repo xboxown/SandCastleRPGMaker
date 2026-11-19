@@ -77,6 +77,13 @@ MembersGear:
         cmp PartyN
         bcs .d
         jsr MemberAt
+        ldy #P_MAP              ; summoned: their own stats
+        lda [MP],y
+        cmp #$FFFF
+        bne .own
+        inc POK
+        bra .l
+.own:
         jsr MPCode
         sta GearOwner
         lda MP
