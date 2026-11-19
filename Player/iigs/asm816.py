@@ -2,8 +2,11 @@
 """
 asm816 - Sandcastle RPG Maker's own 65816 assembler for the Apple IIgs player.
 
-Writes a GS/OS S16 application (OMF 2: one code segment, relocated by the System Loader with cRELOC records, and a
-direct page / stack segment). Written for this project so the IIgs player builds with nothing but Python.
+Writes a GS/OS S16 application (OMF 2): a code segment, a data segment (its own bank: every .db .dw .ds... goes there,
+except tables that jmp (t,x) / jsr (t,x) read - the 65816 reads those from the code's bank), relocated by the System
+Loader (cRELOC within a segment, cINTERSEG between them), and a direct page / stack segment. The program sets its data
+bank register to the data segment's bank (bank(a data label)). Written for this project so the IIgs player builds with
+nothing but Python.
 
 Source syntax:
   label:            a label (a name starting with '.' is local to the last label without one)
@@ -97,7 +100,8 @@ class Val:
     def __sub__(self, o):
         o = self._c(o)
         if o.reloc and not self.reloc: raise AsmError('constant minus a program address')
-        return Val(self.v - o.v, self.reloc and not o.reloc)
+        if self.reloc and o.reloc and self.reloc != o.reloc: raise AsmError('a code address minus a data address')
+        return Val(self.v - o.v, self.reloc if not o.reloc else 0)
     def __rsub__(self, o):
         return self._c(o).__sub__(self)
     def _const(self, o, f):
@@ -121,15 +125,15 @@ class Val:
 
 def f_lo(x):
     x = x if isinstance(x, Val) else Val(x)
-    if x.reloc: return Val(x.v, True, 'lo')
+    if x.reloc: return Val(x.v, x.reloc, 'lo')
     return Val(x.v & 0xFF)
 def f_hi(x):
     x = x if isinstance(x, Val) else Val(x)
-    if x.reloc: return Val(x.v, True, 'hi')
+    if x.reloc: return Val(x.v, x.reloc, 'hi')
     return Val((x.v >> 8) & 0xFF)
 def f_bank(x):
     x = x if isinstance(x, Val) else Val(x)
-    if x.reloc: return Val(x.v, True, 'bank')
+    if x.reloc: return Val(x.v, x.reloc, 'bank')
     return Val((x.v >> 16) & 0xFF)
 
 TOKEN = re.compile(r"\s*(\$[0-9A-Fa-f]+|%[01]+|\d+|'(?:[^'\\]|\\.)'|[A-Za-z_.][A-Za-z0-9_.]*|<<|>>|[-+*/&|^()~,])")
@@ -139,6 +143,7 @@ class Assembler:
         self.symbols = {}
         self.pass_no = 0
         self.changed = False
+        self.code_tables = set()   # tables jmp (t,x) / jsr (t,x) read: they stay with the code
 
     def expr(self, text, scope, line):
         out = []
@@ -162,7 +167,7 @@ class Assembler:
                     out.append(f'_s[{name!r}]')
                 elif self.pass_no == 1:
                     self.changed = True
-                    out.append('Val(0, True)')
+                    out.append('Val(0, 1)')
                 else:
                     raise AsmError(f'unknown name "{t}"')
             elif t == '/': out.append('//')
@@ -194,16 +199,22 @@ class Assembler:
 
     def assemble(self, path):
         lines = self.read(path)
-        for self.pass_no in range(1, 8):
+        for self.pass_no in range(1, 10):
             self.changed = False
-            self.out = bytearray()
-            self.relocs = []
+            self.outs = {1: bytearray(), 2: bytearray()}
+            self.rels = {1: [], 2: []}
+            self.section(1)
             self.listing = []
             self.run(lines)
             if self.pass_no > 1 and not self.changed: break
         else:
             raise AsmError('sizes never settled')
-        return bytes(self.out), self.relocs
+        return {k: bytes(v) for k, v in self.outs.items()}, self.rels
+
+    def section(self, sec):
+        self.sec = sec
+        self.out = self.outs[sec]
+        self.relocs = self.rels[sec]
 
     def define(self, name, val):
         old = self.symbols.get(name)
@@ -213,10 +224,14 @@ class Assembler:
             self.changed = True
         self.symbols[name] = val
 
+    DATA = ('.db', '.dw', '.dl', '.dd', '.ascii', '.cstr', '.pstr', '.gsstr', '.ds', '.align')
+
     def run(self, lines):
         self.m16 = True
         self.x16 = True
         scope = ''
+        pending = []          # labels waiting for what follows them: code, or data (and which)
+        table = False         # data that follows a jump table's label: with the code
         for path, n, code in lines:
             try:
                 if not code.strip(): continue
@@ -231,12 +246,26 @@ class Assembler:
                         scope = name
                     else:
                         name = scope + name
-                    self.define(name, Val(len(self.out), True))
+                    pending.append(name)
                     code = m.group(2)
                     if not code.strip(): continue
+                op = code.strip().split(None, 1)[0].lower()
+                if op in ('.a8', '.a16', '.i8', '.i16'):
+                    self.statement(code.strip(), scope, n)
+                    continue
+                if op in self.DATA:
+                    if pending: table = any(p in self.code_tables for p in pending)
+                    self.section(1 if table else 2)
+                else:
+                    self.section(1)
+                    table = False
+                for name in pending: self.define(name, Val(len(self.out), self.sec))
+                pending = []
                 self.statement(code.strip(), scope, n)
             except AsmError as e:
                 raise AsmError(f'{os.path.basename(path)}:{n}: {e}\n    {code.strip()}')
+        self.section(1)
+        for name in pending: self.define(name, Val(len(self.out), 1))
 
     def emit(self, *bs):
         self.out += bytes(b & 0xFF for b in bs)
@@ -247,17 +276,17 @@ class Assembler:
         if v.reloc:
             if v.fn == 'bank':
                 if size != 1 and size != 2: raise AsmError('bank() is one or two bytes')
-                self.relocs.append((at, 1, -16, v.v))
+                self.relocs.append((at, 1, -16, v.v, v.reloc))
                 self.emit(0, *([0] * (size - 1)))
             elif v.fn == 'hi':
-                self.relocs.append((at, 1, -8, v.v))
+                self.relocs.append((at, 1, -8, v.v, v.reloc))
                 self.emit(0, *([0] * (size - 1)))
             elif v.fn == 'lo':
-                self.relocs.append((at, 1, 0, v.v))
+                self.relocs.append((at, 1, 0, v.v, v.reloc))
                 self.emit(0, *([0] * (size - 1)))
             else:
                 if size not in (2, 3, 4): raise AsmError('a program address needs 2, 3 or 4 bytes')
-                self.relocs.append((at, min(size, 3), 0, v.v))
+                self.relocs.append((at, min(size, 3), 0, v.v, v.reloc))
                 for i in range(size): self.emit(v.v >> (8 * i) if i < 2 else 0)
         else:
             x = v.v
@@ -320,6 +349,7 @@ class Assembler:
                 if v.v & 0x20: self.m16 = not on
                 if v.v & 0x10: self.x16 = not on
         elif mode == 'rel':
+            if v.reloc == 2: raise AsmError('a branch to data')
             if v.reloc:
                 d = v.v - (len(self.out) + 1)
                 if not -128 <= d <= 127:
@@ -371,7 +401,10 @@ class Assembler:
         m = re.match(r'^\((.+),\s*x\)$', a, re.I)
         if m:
             v = self.expr(m.group(1), scope, n)
-            if 'absindx' in modes: return 'absindx', v, None
+            if 'absindx' in modes:
+                t = m.group(1).strip()
+                if t not in self.code_tables: self.code_tables.add(t); self.changed = True
+                return 'absindx', v, None
             return 'indx', v, None
         m = re.match(r'^\((.+)\)$', a)
         if m and not re.search(r'[-+*/&|^]\s*\(|\)\s*[-+*/&|^]', a):
@@ -453,18 +486,25 @@ def omf_segment(segnum, kind, name, body, length, banksize=0x10000, align=0):
     head[disp_name + 11:disp_data] = segname
     return bytes(head) + body
 
-def omf_file(code, relocs, stack_size=0x1000):
+def omf_body(segnum, data, relocs):
     body = bytearray()
-    body += bytes([0xF2]) + struct.pack('<I', len(code)) + code
-    for at, size, shift, ref in relocs:
-        if at > 0xFFFF or ref > 0xFFFF: raise AsmError('the program is bigger than 64 KB')
-        body += bytes([0xF5, size, shift & 0xFF]) + struct.pack('<HH', at, ref)
+    body += bytes([0xF2]) + struct.pack('<I', len(data)) + data
+    for at, size, shift, ref, refseg in relocs:
+        if at > 0xFFFF or ref > 0xFFFF: raise AsmError('a segment is bigger than 64 KB')
+        if refseg == segnum:
+            body += bytes([0xF5, size, shift & 0xFF]) + struct.pack('<HH', at, ref)
+        else:  # cINTERSEG: count, shift, offset, segment, offset in it
+            body += bytes([0xF6, size, shift & 0xFF]) + struct.pack('<HBH', at, refseg, ref)
     body += b'\0'
-    seg1 = omf_segment(1, 0x0000, 'main', bytes(body), len(code))
+    return bytes(body)
+
+def omf_file(outs, rels, stack_size=0x1000):
+    seg1 = omf_segment(1, 0x0000, 'main', omf_body(1, outs[1], rels[1]), len(outs[1]))
+    seg2 = omf_segment(2, 0x0001, 'data', omf_body(2, outs[2], rels[2]), len(outs[2]))
     # The direct page / stack segment (KIND $12): zeroes, a page-aligned bank-0 block the loader gives the program.
     ds = bytes([0xF1]) + struct.pack('<I', stack_size) + b'\0'
-    seg2 = omf_segment(2, 0x0012, '~Direct', ds, stack_size, banksize=0, align=0)
-    return seg1 + seg2
+    seg3 = omf_segment(3, 0x0012, '~Direct', ds, stack_size, banksize=0, align=0)
+    return seg1 + seg2 + seg3
 
 def main(argv):
     src, out, lst = None, None, None
@@ -477,18 +517,23 @@ def main(argv):
         print(__doc__); return 2
     asm = Assembler()
     try:
-        code, relocs = asm.assemble(src)
+        outs, rels = asm.assemble(src)
     except AsmError as e:
         print('error:', e); return 1
-    if len(code) > 0xFFFF:
-        print(f'error: the program is {len(code)} bytes - one segment holds 64 KB'); return 1
+    for k, what in ((1, 'code'), (2, 'data')):
+        if len(outs[k]) > 0xFFFF:
+            print(f'error: the program\'s {what} is {len(outs[k])} bytes - a segment holds 64 KB'); return 1
+    try:
+        image = omf_file(outs, rels)
+    except AsmError as e:
+        print('error:', e); return 1
     with open(out, 'wb') as f:
-        f.write(omf_file(code, relocs))
+        f.write(image)
     if lst:
         with open(lst, 'w') as f:
-            for name, v in sorted(asm.symbols.items(), key=lambda kv: kv[1].v):
-                f.write(f'{v.v:06X} {"R" if v.reloc else " "} {name}\n')
-    print(f'{out}: {len(code)} bytes of code, {len(relocs)} relocations')
+            for name, v in sorted(asm.symbols.items(), key=lambda kv: (kv[1].reloc, kv[1].v)):
+                f.write(f'{v.v:06X} {"R" if v.reloc == 1 else "D" if v.reloc == 2 else " "} {name}\n')
+    print(f'{out}: {len(outs[1])} bytes of code, {len(outs[2])} of data, {len(rels[1]) + len(rels[2])} relocations')
     return 0
 
 if __name__ == '__main__':

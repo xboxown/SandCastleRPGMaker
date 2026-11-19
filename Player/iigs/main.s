@@ -172,12 +172,17 @@ SCB       = $E19D00
 PALETTE   = $E19E00
 
 start:
-        phk
-        plb
         rep #$30
         .a16
         .i16
-        sta UserId
+        sta UserId              ; (direct page)
+        sep #$20                ; the data bank: the data segment's (asm816 puts the program's data there)
+        .a8
+        lda #bank(MyBank)
+        pha
+        plb
+        rep #$20
+        .a16
         tool $0201              ; TLStartUp
         pha
         tool $0202              ; MMStartUp
@@ -185,7 +190,7 @@ start:
         sta UserId
         sep #$20
         .a8
-        phk
+        phb                     ; MyBank: the data's bank (pointers to the program's own data use it)
         pla
         sta MyBank
         stz MyBank+1
@@ -317,7 +322,12 @@ MainLoop:
         lda Key                 ; a haggling offer typed (haggle.s)
         jsr HaggleKey
         brl MainLoop
-.not14: cmp #2
+.not14: cmp #15
+        bne .not15
+        lda Key                 ; who guards while the party rests (stats.s)
+        jsr GuardKey
+        brl MainLoop
+.not15: cmp #2
         beq .typing
         brl MainLoop            ; the talk is running
 .typing: lda Key

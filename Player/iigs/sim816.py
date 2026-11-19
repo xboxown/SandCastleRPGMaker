@@ -96,11 +96,17 @@ class Machine:
         data = open(path, 'rb').read()
         pos, segs = 0, []
         place = at
-        while pos < len(data):
+        found = []
+        while pos < len(data):   # where each segment goes
             (bytecnt, resspc, length, _, lablen, numlen, version, banksize, kind, _, org, align, numsex, _, segnum, entry,
              dispname, dispdata) = struct.unpack_from('<IIIBBBBIHHIIBBHIHH', data, pos)
-            body = data[pos + dispdata: pos + bytecnt]
             base = 0x000800 if (kind & 0x1F) == 0x12 else place
+            if (kind & 0x1F) != 0x12: place += (length + 0xFFFF) & ~0xFFFF
+            found.append((pos, bytecnt, length, kind, segnum, dispdata, base))
+            pos += bytecnt
+        bases = {f[4]: f[6] for f in found}
+        for pos, bytecnt, length, kind, segnum, dispdata, base in found:
+            body = data[pos + dispdata: pos + bytecnt]
             i, lc = 0, 0
             while i < len(body):
                 op = body[i]
@@ -118,6 +124,13 @@ class Machine:
                     v = v >> -shift if shift < 0 else v << shift
                     for k in range(cnt): self.mem[base + off + k] = (v >> (8 * k)) & 0xFF
                     i += 7
+                elif op == 0xF6:     # cINTERSEG: another segment's address
+                    cnt, shift = body[i + 1], struct.unpack('b', body[i + 2:i + 3])[0]
+                    off, seg, ref = struct.unpack_from('<HBH', body, i + 3)
+                    v = bases[seg] + ref
+                    v = v >> -shift if shift < 0 else v << shift
+                    for k in range(cnt): self.mem[base + off + k] = (v >> (8 * k)) & 0xFF
+                    i += 8
                 elif op == 0xE2:
                     cnt, shift = body[i + 1], struct.unpack('b', body[i + 2:i + 3])[0]
                     off, ref = struct.unpack_from('<II', body, i + 3)
@@ -128,9 +141,9 @@ class Machine:
                 else:
                     raise Stop(f'OMF record ${op:02X} not handled')
             segs.append((kind, base, length))
-            if (kind & 0x1F) != 0x12: place += (length + 0xFFFF) & ~0xFFFF
-            pos += bytecnt
-        code = [s for s in segs if (s[0] & 0x1F) != 0x12][0]
+        code = [s for s in segs if (s[0] & 0x1F) == 0x00][0]
+        datas = [s for s in segs if (s[0] & 0x1F) == 0x01]
+        self.data_base = datas[0][1] if datas else code[1]
         dp = [s for s in segs if (s[0] & 0x1F) == 0x12]
         self.pb = code[1] >> 16
         self.pc = code[1] & 0xFFFF

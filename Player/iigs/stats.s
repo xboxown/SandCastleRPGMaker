@@ -10,6 +10,13 @@ W_REST     = 41
 W_NOTCOMBAT = 42
 W_FOESNEAR = 43
 W_HOURS    = 44
+W_OTHERSNEAR = 72
+W_WHOGUARDS = 73
+W_NOONE    = 74
+W_MEALTIME = 75
+W_HASFOOD  = 76
+W_NOFOOD   = 77
+W_STANDS   = 78
 
 ; The panel's stats again if they show (hit points, experience, a level changed).
 HpChanged:
@@ -225,8 +232,13 @@ StartRest:
         jsr PrintSaid
         jmp PromptLine
 .nc:    jsr FoesNear
-        bcc .ask
+        bcc .others
         lda #W_FOESNEAR
+        jsr PrintSaid
+        jmp PromptLine
+.others: jsr OthersNear         ; someone not in the party within 5
+        bcc .ask
+        lda #W_OTHERSNEAR
         jsr PrintSaid
         jmp PromptLine
 .ask:   lda #W_HOURS
@@ -261,7 +273,32 @@ FoesNear:
 .yes:   sec
         rts
 
-; Rest's hours: a figure 0-9 (Esc: none).
+; Carry set if anyone living (not in the party) is within 5 of the Avatar.
+OthersNear:
+        lda ChrPtr
+        sta CP
+        lda ChrPtr+2
+        sta CP+2
+        lda ChrCount
+        sta TurnN
+.l:     lda TurnN
+        beq .no
+        ldy #C_FLAGS
+        lda [CP],y
+        and #4+8
+        bne .n
+        jsr DistCP
+        cmp #6
+        bcc .yes
+.n:     jsr NextCP
+        dec TurnN
+        bra .l
+.no:    clc
+        rts
+.yes:   sec
+        rts
+
+; Rest's hours: a figure 0-9 (Esc: none). With a party: who guards?
 RestKey:
         cmp #$1B
         beq .stop
@@ -278,38 +315,326 @@ RestKey:
         sbc #'0'
         sta RestH
         beq .stop
-        lda AvRec+C_MAXHP       ; an eighth of the most an hour
-        lsr a
-        lsr a
-        lsr a
-        bne .p
-        lda #1
-.p:     sta T4
-.hr:    lda AvRec+C_HP
-        clc
-        adc T4
-        cmp AvRec+C_MAXHP
-        bcc .hp
-        lda AvRec+C_MAXHP
-.hp:    sta AvRec+C_HP
-        lda AvRec+C_MANA
-        cmp AvRec+C_MAXMANA
-        bcs .mn
+        lda #$FFFF
+        sta RGuard
+        lda PartyN
+        beq .alone
+        jsr NewLine
+        lda #W_WHOGUARDS
+        jsr PrintSaid
+        lda #15
+        sta Mode
+        rts
+.alone: jmp DoRest
+.stop:  stz Mode
+        jmp PromptLine
+.out:   rts
+
+; Who guards: 0 no one, 1 the Avatar, 2... the members.
+GuardKey:
+        cmp #$1B
+        beq .none
+        cmp #'0'
+        bcc .out
+        sta RestCh
+        sec
+        sbc #'0'
+        sta T4
+        lda PartyN
         inc a
-        sta AvRec+C_MANA
-.mn:    inc Hour
+        cmp T4
+        bcc .out                ; more than there are
+        lda #RestCh
+        jsr PrintMine
+        lda T4
+        beq .none
+        dec a
+        sta RGuard              ; its place: 0 the Avatar
+        jsr SlotWP
+        jsr WPName
+        lda WhoName
+        sta TP
+        lda WhoName+2
+        sta TP+2
+        bra .say
+.none:  lda #$FFFF
+        sta RGuard
+        lda #W_NOONE
+        asl a
+        asl a
+        tax
+        lda WordTab,x
+        sta TP
+        lda WordTab+2,x
+        sta TP+2
+.say:   lda PenX
+        clc
+        adc SpaceW
+        sta PenX
+        lda TxtColor
+        jsr SetColor
+        jsr PrintWord
+        jmp DoRest
+.out:   rts
+
+; WP = the party's member A (0 the Avatar, 1... PartyTab's).
+SlotWP:
+        cmp #0
+        bne .m
+        lda #AvRec
+        sta WP
+        lda MyBank
+        sta WP+2
+        rts
+.m:     dec a
+        jsr MemberAt
+        lda MP
+        sta WP
+        lda MP+2
+        sta WP+2
+        rts
+
+; The rest itself (U6GameWindow.U6Levels.cs Sleep, Nuvie's TimedRest): mealtime - each eats one food, theirs or
+; anyone's in the party; the guard; the hours go by; those fed (not the guard) heal - once every 12 hours.
+DoRest:
+        stz Mode
+        jsr NewLine
+        lda #W_MEALTIME
+        jsr PrintSaid
+        jsr NewLine
+        stz RFed
+        stz RSlot
+.eat:   lda RSlot
+        cmp PartyN
+        beq .e1
+        bcs .guard
+.e1:    jsr EatOne
+        bcc .hungry
+        lda RSlot               ; (BitTab: words)
+        asl a
+        tax
+        lda BitTab,x
+        tsb RFed
+        lda RSlot
+        jsr SlotWP
+        jsr WPName
+        lda #W_HASFOOD
+        jsr Tell
+        bra .next
+.hungry: lda RSlot
+        jsr SlotWP
+        jsr WPName
+        lda #W_NOFOOD
+        jsr Tell
+.next:  inc RSlot
+        bra .eat
+.guard: lda RGuard
+        cmp #$FFFF
+        beq .time
+        jsr SlotWP
+        jsr WPName
+        lda #W_STANDS
+        jsr Tell
+.time:  lda RestH               ; the hours go by
+        sta T5
+.hr:    inc Hour
         lda Hour
         cmp #24
         bcc .nd
         stz Hour
         inc Day
-.nd:    dec RestH
+.nd:    jsr EatHour             ; (ailments.s)
+        dec T5
         bne .hr
         jsr ApplySchedules
-        jsr HpChanged
-.stop:  stz Mode
+        lda Day                 ; now in hours: healing once every 12
+        asl a
+        sta T5
+        asl a
+        clc
+        adc T5
+        asl a
+        asl a
+        clc
+        adc Hour
+        sta T5
+        cmp RHealAt
+        bcc .done
+        clc
+        adc #12
+        sta RHealAt
+        stz RSlot
+.heal:  lda RSlot
+        cmp PartyN
+        beq .h1
+        bcs .done
+.h1:    cmp RGuard
+        beq .hn
+        asl a
+        tax
+        lda BitTab,x
+        and RFed
+        beq .hn
+        lda RSlot
+        jsr SlotWP
+        ldy #C_MAXHP            ; the missing hit points: half of them and up to half again
+        lda [WP],y
+        ldy #C_HP
+        sec
+        sbc [WP],y
+        beq .hn
+        bmi .hn
+        cmp #1
+        bne .d
+        inc a
+.d:     lsr a
+        sta T4
+        bne .r
+        lda #1
+.r:     jsr Random
+        clc
+        adc T4
+        ldy #C_HP
+        clc
+        adc [WP],y
+        ldy #C_MAXHP
+        cmp [WP],y
+        bcc .set
+        lda [WP],y
+.set:   ldy #C_HP
+        sta [WP],y
+        jsr WPName
+        lda #W_HEALED
+        jsr Tell
+.hn:    inc RSlot
+        bra .heal
+.done:  jsr HpChanged
+        jsr DrawView
         jmp PromptLine
-.out:   rts
+
+; Carry set if member RSlot ate one food: theirs first, then anyone's in the party (in their bags too).
+EatOne:
+        lda RSlot
+        jsr OwnerCode
+        sta ROwn
+        stz RPass
+.pass:  stz RI
+.l:     lda RI
+        cmp ObjCount
+        bcc .l1
+        brl .np
+.l1:    jsr ObjAddr
+        ldy #6
+        lda [ItemPtr],y
+        and #32+64+256
+        cmp #64
+        beq .carried
+        cmp #256
+        bne .n
+        lda RPass               ; in a bag: the second time round, if the bag is the party's
+        beq .n
+        ldy #10
+        lda [ItemPtr],y
+        and #$FC00
+        cmp #$C400
+        bne .n
+        lda ItemPtr
+        pha
+        lda ItemPtr+2
+        pha
+        ldy #14
+        lda [ItemPtr],y
+        jsr ObjAddr
+        ldy #6
+        lda [ItemPtr],y
+        and #32+64
+        cmp #64
+        bne .nb
+        ldy #14
+        lda [ItemPtr],y
+        jsr PartyCode
+        bcc .nb
+        pla
+        sta ItemPtr+2
+        pla
+        sta ItemPtr
+        bra .eat
+.nb:    pla
+        sta ItemPtr+2
+        pla
+        sta ItemPtr
+        bra .n
+.carried:
+        ldy #10                 ; food?
+        lda [ItemPtr],y
+        and #$FC00
+        cmp #$C400
+        bne .n
+        ldy #14
+        lda [ItemPtr],y
+        ldx RPass
+        bne .any
+        cmp ROwn
+        beq .eat
+        bra .n
+.any:   jsr PartyCode
+        bcs .eat
+.n:     inc RI
+        brl .l
+.np:    lda RPass
+        bne .no
+        inc RPass
+        brl .pass
+.no:    clc
+        rts
+.eat:   ldy #6                  ; eaten: gone
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+        jsr RefreshInventory
+        sec
+        rts
+
+; A = the owner code of the party's member A ($FFFF the Avatar, $8000 | map << 6 | place a member).
+OwnerCode:
+        cmp #0
+        bne .m
+        lda #$FFFF
+        rts
+.m:     dec a
+        jsr MemberAt
+        ldy #P_MAP
+        lda [MP],y
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        ldy #P_IDX
+        ora [MP],y
+        ora #$8000
+        rts
+
+; Carry set if owner code A is the party's.
+PartyCode:
+        cmp #$FFFF
+        beq .yes
+        sta RCode
+        stz PK
+.l:     lda PK
+        cmp PartyN
+        bcs .no
+        inc a
+        jsr OwnerCode
+        cmp RCode
+        beq .yes
+        inc PK
+        bra .l
+.no:    clc
+        rts
+.yes:   sec
+        rts
 
 StatBuf:  .ds 72
 DecN:     .dw 0
@@ -319,3 +644,11 @@ DecGo:    .dw 0
 DecPow:   .dw 10000,1000,100,10,1
 RestCh:   .dw 0
 RestH:    .dw 0
+RGuard:   .dw $FFFF
+RFed:     .dw 0
+RSlot:    .dw 0
+RHealAt:  .dw 0
+ROwn:     .dw 0
+RPass:    .dw 0
+RI:       .dw 0
+RCode:    .dw 0
