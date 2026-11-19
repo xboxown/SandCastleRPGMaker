@@ -37,7 +37,8 @@ ParseOwnEvents:
         lda OEvCount
         asl a
         asl a
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseMusic          ; (music.s)
 
 ; TalkPtr = code A (Codes)
 CodeAt:

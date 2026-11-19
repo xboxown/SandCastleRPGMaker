@@ -50,6 +50,7 @@ ParseTitle:
 
 ; The title menu (Mode 12).
 ShowTitle:
+        jsr MusicOff            ; (music.s)
         lda #12
         sta Mode
         stz IntroOn

@@ -182,6 +182,7 @@ AttackPicked:
         bne .on
         lda #1
         sta CombatOn
+        jsr CombatChanged       ; (music.s)
 .on:    jsr AvatarAtk
         lda ChrRec
         sta DefP
@@ -210,6 +211,8 @@ ToggleCombat:
         lda CombatOn
         eor #1
         sta CombatOn
+        jsr CombatChanged       ; (music.s)
+        lda CombatOn
         beq .off
         lda #W_BEGIN
         bra .say
@@ -261,6 +264,7 @@ IdleTurn:
         jsr ClockRun            ; the clock (schedule.s)
         jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
+        jsr MusicRun            ; the music (music.s)
         lda Mode
         bne .out
         lda CombatOn
@@ -687,6 +691,7 @@ Strike:
         lda #0
 .hp:    sta [DefP],y
         jsr TellWound
+        jsr PartyHitMus         ; (music.s)
         lda #9                  ; its own By Hit event (ownev.s)
         jsr FireDef
         ldy #C_HP
@@ -750,6 +755,7 @@ Dies:
         rts
 .dies:  jsr DefIsAvatar
         bcc .npc
+        jsr DeathMus            ; (music.s)
         lda #1
         sta AvDead
         lda #W_PRESSKEY
@@ -763,6 +769,7 @@ Dies:
         lda [DefP],y
         ora #4
         sta [DefP],y
+        jsr KilledMus           ; victory? (music.s)
         lda [DefP]
         tax
         ldy #2

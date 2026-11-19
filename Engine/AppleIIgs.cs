@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 32;
+    public const ushort Version = 33;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -471,6 +471,15 @@ public sealed class AppleIIgsGamePack
     public List<(int Map, int Index, int Code)> CharEvents { get; } = new();
     /// <summary>Objects' and containers' own events (Object / Container Editor > Event): the thing's name, its code in Codes.</summary>
     public List<(int Name, int Code)> ObjEvents { get; } = new();
+    /// <summary>Each map's ambient sounds (Edit > Map Ambient Sounds): dawn, day, dusk, night - a sound's number or $FFFF.</summary>
+    public List<(int Dawn, int Day, int Dusk, int Night)> Ambient { get; } = new();
+    /// <summary>Zones with a sound of their own, or Caves (silence: $FFFF): map, x, y, width, height, sound - the one to use first first.</summary>
+    public List<(int Map, int X, int Y, int W, int H, int Sound)> MusicZones { get; } = new();
+    /// <summary>System Settings > Combat's music: danger, battle, battle 2, run away, escaped, victory, battle over, near death, death.</summary>
+    public List<(int Sound, bool Loop)> CombatCues { get; } = new();
+    /// <summary>Ultima 6's conversation music ($FFFF none); after a talk a random song of the map's.</summary>
+    public int TalkMusic { get; set; } = 0xFFFF;
+    public bool AfterTalkRandom { get; set; }
     /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
     public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
@@ -635,6 +644,13 @@ public sealed class AppleIIgsGamePack
         foreach (var (cm, ci, cc) in CharEvents.Take(256)) { w.Write((ushort)cm); w.Write((ushort)ci); w.Write((ushort)cc); }
         w.Write((ushort)Math.Min(ObjEvents.Count, 128));
         foreach (var (n, c) in ObjEvents.Take(128)) { w.Write((ushort)n); w.Write((ushort)c); }
+        w.Write((ushort)Ambient.Count);
+        foreach (var (a, b, c, d) in Ambient) { w.Write((ushort)a); w.Write((ushort)b); w.Write((ushort)c); w.Write((ushort)d); }
+        w.Write((ushort)Math.Min(MusicZones.Count, 256));
+        foreach (var z in MusicZones.Take(256)) { w.Write((ushort)z.Map); w.Write((ushort)z.X); w.Write((ushort)z.Y); w.Write((ushort)z.W); w.Write((ushort)z.H); w.Write((ushort)z.Sound); }
+        for (int i = 0; i < 9; i++) { var (snd, loop) = i < CombatCues.Count ? CombatCues[i] : (0xFFFF, false); w.Write((ushort)snd); w.Write((ushort)(loop ? 1 : 0)); }
+        w.Write((ushort)TalkMusic);
+        w.Write((ushort)(AfterTalkRandom ? 1 : 0));
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

@@ -1,6 +1,9 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 33 (b653): music (music.s): the map's ambient sounds by the time of day and zone, the combat music (danger,
+;   battle, run away, escaped, victory, battle over, near death, death), the talk music, Play / Fade / Stop Music,
+;   Set Volume, Resume Map Music - each on a DOC generator of its own (4-7), looping.
 ; Version 32 (b652): haggling in shops (haggle.s, ShopHaggle's rules).
 ; Version 31 (b651): characters' and objects' own events (ownev.s): hit, killed, an ailment, Used, an item used on
 ;   them; picked up / dropped; Use with an item on something ("On what?"); Show Bark.
@@ -607,7 +610,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #32
+        cmp #33
         beq .known
 .bad:   sec
         rts
@@ -2050,6 +2053,7 @@ TryMove:
         .include "expr.s"
         .include "ownev.s"
         .include "haggle.s"
+        .include "music.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

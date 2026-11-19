@@ -47,6 +47,9 @@ namespace SandcastleRpgMaker.Engine;
 ///   $1F HAGGLE u16 the price's variable, u16 asking, u16 lowest, u8 tries, u16 accepted, u16 gave up, u16 declined, then
 ///        C strings: the question, too low, counter, accepted, gives up ({0}: a price)   (ShopHaggle's rules)
 ///   $20 PAYV u16 variable, u16 the place if the gold is short   (the variable's price paid)
+///   $21 MUSIC u16 sound ($FFFF stop), u8 loop, u8 volume, u16 fade ticks   Play / Fade In / Stop Music (event music)
+///   $22 VOLUME a formula (music 0-100), a formula (sounds 0-100)              Set Volume
+///   $23 RESUME                                                             Resume Map Music
 ///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
 ///   $1C AIL  who, u8 the ailment's bit (1 poisoned, 2 asleep, 4 paralyzed, 8 charmed, 16 cursed, 32 invisible, 64 protected), u8 1 on / 0 off
 /// The Shop command is made into Ultima 6 keyword talk: the merchant's line, what can be asked (the stock, the shop's
@@ -56,7 +59,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -367,6 +370,15 @@ public sealed class AppleIIgsTalk
         }
         if (c.Not) B(17);
         B(0);
+    }
+
+    /// <summary>A fade's seconds in ticks (60 a second, at most a minute).</summary>
+    private int FadeTicks(EventCommand cmd, double least)
+    {
+        var code = ScriptExpression.CompileIIgs(cmd.Get("Seconds").Trim().Length == 0 ? "0" : cmd.Get("Seconds"), _variable, out _);
+        double s = double.TryParse(cmd.Get("Seconds"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0;
+        if (code is null || (s == 0 && cmd.Get("Seconds").Trim() is { Length: > 0 } t && t != "0")) Unsupported.Add(cmd.Type + " (a fade time that's a formula: a number of seconds only)");
+        return (int)Math.Clamp(Math.Max(least, s) * 60, 0, 3600);
     }
 
     private int Hidden(string name) => _variable($"__iigs_{name}_{_hidden++}");
@@ -699,6 +711,24 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.CallCommonEvent:
                     if (depth < 4 && int.TryParse(cmd.Get("CommonEventId"), out int ceId) && Extra?.Common?.Invoke(ceId) is { } ceCommands) Run(ceCommands, depth + 1);
                     else Unsupported.Add("Call Common Event (a common event not there)");
+                    break;
+                case EventCommandType.PlayMusic or EventCommandType.FadeMusicIn:
+                {
+                    bool fade = cmd.Type == EventCommandType.FadeMusicIn;
+                    int n = int.TryParse(cmd.Get(fade ? "SoundId" : "MusicResourceId"), out int mid) && _sound is not null ? _sound(mid) : -1;
+                    if (n < 0) { Unsupported.Add(cmd.Type + " (music that isn't in the game)"); break; }
+                    double volume = !fade && double.TryParse(cmd.Get("Volume"), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double mv) ? mv : 1.0;
+                    B(Music); W(n); B(cmd.Get("Loop") == "True" ? 1 : 0); B((int)Math.Clamp(volume * 255, 0, 255)); W(fade ? FadeTicks(cmd, 0.05) : 0);
+                    break;
+                }
+                case EventCommandType.StopMusic:
+                    B(Music); W(0xFFFF); B(0); B(0); W(FadeTicks(cmd, 0));
+                    break;
+                case EventCommandType.SetVolume:
+                    B(Volume); Formula(cmd.Get("Music"), "Set Volume"); Formula(cmd.Get("Sounds"), "Set Volume");
+                    break;
+                case EventCommandType.ResumeMapMusic:
+                    B(Resume);
                     break;
                 case EventCommandType.ShowBark:
                 {

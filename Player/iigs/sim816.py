@@ -210,8 +210,11 @@ class Machine:
             blk = long(0)
             self.sounds.append(dict(gen=word(4), wave=self.rd24(blk), pages=self.rd16(blk + 4), freq=self.rd16(blk + 6),
                                     doc=self.rd16(blk + 8), size=self.rd16(blk + 10), vol=self.rd16(blk + 16),
-                                    first=bytes(self.mem[self.rd24(blk):self.rd24(blk) + 4]).hex()))
-        elif n == 0x0F08: pb, rb = 2, 0                                    # FFStopSound
+                                    first=bytes(self.mem[self.rd24(blk):self.rd24(blk) + 4]).hex(), loop=self.rd24(blk + 12) == blk))
+            self.playing = getattr(self, 'playing', 0) | (1 << (word(4) >> 8))
+        elif n == 0x0F08: pb, rb = 2, 0; self.playing = getattr(self, 'playing', 0) & ~word(0)   # FFStopSound
+        elif n == 0x1008: pb, rb = 0, 2; res = getattr(self, 'playing', 0)                       # FFSoundStatus (they never end here)
+        elif n == 0x0D08: pb, rb = 4, 0; self.volumes = getattr(self, 'volumes', []) + [(word(0), word(2))]  # SetSoundVolume
         elif n == 0x2503: pb, rb = 0, 4; res = self.steps // int(os.environ.get("SIM_TICK", "2000"))  # GetTick
         elif n == 0xA404:                                                  # DrawChar
             pb, rb = 2, 0
@@ -548,6 +551,7 @@ def main(argv):
     print('typed letters echoed:', ''.join(m.typed))
     print('files opened:', m.opened)
     print('sounds started:', m.sounds)
+    print('volumes set:', getattr(m, 'volumes', [])[-12:])
     print('files written:', m.written)
     print('quit to the desktop:', m.quit)
     return 0

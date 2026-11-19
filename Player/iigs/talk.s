@@ -468,6 +468,7 @@ TalkAt:
         lda TalkPtr+2
         adc #0
         sta TalkPtr+2
+        jsr TalkMusicOn         ; the conversation music (music.s)
         jsr ShowTalker
         stz TPC
         lda #3
@@ -528,7 +529,7 @@ EndTalk:
         lda EvRunning           ; an event's code: its own end (events.s)
         beq .talk
         jmp EndEvent
-.talk:
+.talk:  jsr TalkMusicOff        ; (music.s)
         lda PortW
         beq .n
         lda PortX
@@ -589,7 +590,7 @@ RunTalk:
         cmp #12
         bcs .more
         jmp EventOp
-.more:  cmp #33
+.more:  cmp #36
         bcs .end
         jmp MoreOps             ; (cmds.s)             ; TRIG, ITEM, HIT (events.s)
 .play:

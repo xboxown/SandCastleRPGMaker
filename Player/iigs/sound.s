@@ -407,6 +407,8 @@ PlaySound:
         rts
 .ok:    sta SndNow
         stx SndVolNow
+        jsr VolScale            ; Set Volume's share (music.s)
+        lda SndNow
         asl a
         asl a
         tax
@@ -463,7 +465,10 @@ PlaySound:
         lda SndVolNow
         and #$00FF
         sta SndBlock+16         ; volSetting
-        lda #1                  ; stop what this generator plays
+        lda PlayGen             ; music: a generator of its own, maybe looping (music.s)
+        bmi .rot
+        jmp MusStart
+.rot:   lda #1                  ; stop what this generator plays
         ldx Gen
         beq .m
 .sh:    asl a
