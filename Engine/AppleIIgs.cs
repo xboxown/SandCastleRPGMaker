@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 27;
+    public const ushort Version = 28;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -448,6 +448,9 @@ public sealed class AppleIIgsGamePack
     /// <summary>Line of sight (System Settings > Ultima 6 > World view). A cell's tile number's bit 15: a wall or something that
     /// Occludes stands there (it stops sight); bit 14: a wall, door or window's square (always shown).</summary>
     public bool LineOfSight { get; set; } = true;
+    /// <summary>Weapons that shoot or are thrown (Object Editor > Weapon): its name, 0 nothing used / 1 ammo of a family / 2 it is
+    /// thrown itself, the family's number, what flies (a sprite; $FFFF none). Ammo carries $C800 + its family in Other.</summary>
+    public List<(int Name, int Uses, int Family, int Missile)> Weapons { get; } = new();
     /// <summary>Animated tiles (Tile Properties > animation): a tile and its frames' tiles (the first is itself), up to 4.</summary>
     public List<List<int>> AnimTiles { get; } = new();
     /// <summary>Day and night (System Settings > Day / Night): on, dawn, day, dusk and night's hours.</summary>
@@ -614,6 +617,8 @@ public sealed class AppleIIgsGamePack
         w.Write((byte)acks.Length); w.Write(acks); w.Write((byte)0);
         w.Write((ushort)IntroCode.Length); w.Write(IntroCode);
         w.Write((ushort)(LineOfSight ? 1 : 0));
+        w.Write((ushort)Math.Min(Weapons.Count, 64));
+        foreach (var (wn, uses, fam, missile) in Weapons.Take(64)) { w.Write((ushort)wn); w.Write((ushort)uses); w.Write((ushort)fam); w.Write((ushort)missile); }
         w.Write((ushort)Math.Min(Buttons.Count, 16));
         foreach (var (key, x, y, bw, bh) in Buttons.Take(16)) { w.Write((ushort)key); w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)bw); w.Write((ushort)bh); }
         w.Write((ushort)Math.Min(AnimTiles.Count, 128));

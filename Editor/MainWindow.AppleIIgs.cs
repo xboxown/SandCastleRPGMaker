@@ -554,6 +554,10 @@ public partial class MainWindow
         // A light source's Other: $F000, lit (bit 8), how far it lights (1-7, from its Brightness: a candle 1, a lamp 7).
         // Food: $C400 + how much it feeds (Object Editor > Food: Nutrition).
         int FoodCode(WorldObject def) => 0xC400 | Math.Clamp(def.Food.Nutrition, 1, 255);
+        // Ammo: $C800 + its family's number (arrows, bolts...).
+        var families = new List<string>();
+        int FamilyOf(string family) { int i = families.FindIndex(f => string.Equals(f, family, StringComparison.OrdinalIgnoreCase)); if (i < 0) { families.Add(family); i = families.Count - 1; } return Math.Min(i, 1023); }
+        int AmmoCode(WorldObject def) => 0xC800 | FamilyOf(def.Ammo.Family);
         int LightCode(WorldObject def, bool lit) => 0xF000 | (lit ? 0x100 : 0) | Math.Clamp(1 + def.Light.Brightness / 2, 1, 7);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
@@ -618,7 +622,7 @@ public partial class MainWindow
                 }
                 bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
                 var thingDef = thing.Category == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) : null;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : thingDef?.Type == ObjectType.LightSource ? LightCode(thingDef, false) : thingDef?.Type == ObjectType.Food ? FoodCode(thingDef) : 0xFFFF, IconOf(file), container));
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : thingDef?.Type == ObjectType.LightSource ? LightCode(thingDef, false) : thingDef?.Type == ObjectType.Food ? FoodCode(thingDef) : thingDef?.Type == ObjectType.Ammo ? AmmoCode(thingDef) : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
@@ -654,6 +658,7 @@ public partial class MainWindow
                 if (def.Type == ObjectType.Roof) { objects.Add((instance.X, instance.Y, n, bits, pack.NameOf(def.Name), 0xFFFD, 0xFFFF, -1)); continue; } // a roof: hidden while the Avatar is under it
                 if (def.Type == ObjectType.LightSource) other = LightCode(def, instance.IsLitRuntime ?? def.Light.StartsLit);
                 if (def.Type == ObjectType.Food && !def.Food.IsLiquid) other = FoodCode(def);
+                if (def.Type == ObjectType.Ammo) other = AmmoCode(def);
                 if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
@@ -709,7 +714,7 @@ public partial class MainWindow
                 int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
                 if (wornSlot > 15) wornSlot = 0;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : def.Type == ObjectType.Food ? FoodCode(def) : 0xFFFF, IconOf(file), owner));
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : def.Type == ObjectType.Food ? FoodCode(def) : def.Type == ObjectType.Ammo ? AmmoCode(def) : 0xFFFF, IconOf(file), owner));
             }
         }
         if (PlayerCharacter() is { } theAvatar) AddCarried(theAvatar, -1);
@@ -732,6 +737,19 @@ public partial class MainWindow
             }
             return (weapon, reach, armour);
         }
+        // What flies when a weapon is used from afar: its projectile, else its family's ammo, else itself (thrown).
+        int MissileOf(WorldObject wd)
+        {
+            string? f = null;
+            if (wd.Weapon.ProjectileObjectId >= 0 && _objectDatabase.Objects.FirstOrDefault(o => o.Id == wd.Weapon.ProjectileObjectId) is { } pd) f = ObjectLooks.SpriteFor(pd, new ObjectState(false, false, false, false, 1, SpriteDirection.South), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? pd.IconPath;
+            else if (wd.Weapon.Ammo == WeaponAmmo.Ammo && _objectDatabase.Objects.FirstOrDefault(o => o.Type == ObjectType.Ammo && string.Equals(o.Ammo.Family, wd.Weapon.AmmoFamily, StringComparison.OrdinalIgnoreCase)) is { } ad) f = ObjectLooks.SpriteFor(ad, new ObjectState(false, false, false, false, 1, SpriteDirection.South), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? ad.IconPath;
+            else if (wd.Weapon.Use != WeaponUse.Melee) f = ObjectLooks.SpriteFor(wd, new ObjectState(false, false, false, false, 1, SpriteDirection.South), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? wd.IconPath;
+            int sp = SpriteOf(f);
+            return sp < 0 ? 0xFFFF : sp;
+        }
+        foreach (var wd in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.Use != WeaponUse.Melee).Take(64))
+            pack.Weapons.Add((pack.NameOf(wd.Name), wd.Weapon.Ammo == WeaponAmmo.Ammo ? 1 : wd.Weapon.Ammo == WeaponAmmo.ThrowsItself ? 2 : 0,
+                wd.Weapon.Ammo == WeaponAmmo.Ammo ? FamilyOf(wd.Weapon.AmmoFamily) : 0, MissileOf(wd)));
         int[] StatsOf(CharacterDefinition c, int homeX, int homeY)
         {
             var (weapon, reach, armour) = Gear(c);
@@ -749,6 +767,10 @@ public partial class MainWindow
             st[AppleIIgsGamePack.Stat.Armour] = armour; st[AppleIIgsGamePack.Stat.Weapon] = weapon; st[AppleIIgsGamePack.Stat.Reach] = reach;
             st[AppleIIgsGamePack.Stat.HomeX] = homeX; st[AppleIIgsGamePack.Stat.HomeY] = homeY;
             st[AppleIIgsGamePack.Stat.Food] = c.Survival.CanGetHungry ? Math.Clamp(c.Survival.StartingFood, 0, 31) : 0xFFFF;
+            st[23] = 0xFFFF; // what flies when it strikes from afar (its equipped ranged weapon's)
+            foreach (int eid in c.EquippedSlots.Values)
+                if (c.Inventory.FirstOrDefault(i => i.InstanceId == eid) is { Category: ReferencedItemCategory.Object } ei && _objectDatabase.Objects.FirstOrDefault(o => o.Id == ei.ItemId) is { Type: ObjectType.Weapon } ewd && ewd.Weapon.Use != WeaponUse.Melee)
+                    st[23] = MissileOf(ewd);
             return st;
         }
         bool Hostile(CharacterDefinition c) => avatarDef is not null && c != avatarDef && _factionDatabase.BehaviorToward(c.FactionId, avatarDef.FactionId) == FactionBehavior.Attack;
@@ -809,7 +831,7 @@ public partial class MainWindow
                 string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
                 var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
                 int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
-                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : giveDef?.Type == ObjectType.Food ? FoodCode(giveDef) : 0xFFFF;
+                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : giveDef?.Type == ObjectType.Food ? FoodCode(giveDef) : giveDef?.Type == ObjectType.Ammo ? AmmoCode(giveDef) : 0xFFFF;
                 return (pack.NameOf(name), sprite, IconOf(file), flags, other);
             },
             Picture = (group, name) =>

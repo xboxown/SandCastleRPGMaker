@@ -601,7 +601,10 @@ TryCharStep:
 
 ; AtkP strikes DefP: told, the die, the damage, the wound told, death.
 Strike:
-        jsr AtkName
+        jsr Shoot               ; from afar: ammo, the missile's flight (missile.s); carry set: can't
+        bcc .go
+        rts
+.go:    jsr AtkName
         jsr DefName
         lda #W_ATTACKS          ; {1} attacks {0}.
         jsr Tell

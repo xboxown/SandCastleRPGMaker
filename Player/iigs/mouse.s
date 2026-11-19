@@ -11,6 +11,7 @@ ParseButtons:
         sta SightOn
         lda #2
         jsr AddPtr
+        jsr ParseWeapons        ; (missile.s)
         lda [Ptr]
         sta BtnCount
         lda #2

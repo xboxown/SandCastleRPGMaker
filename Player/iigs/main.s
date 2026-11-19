@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 28 (b648): shooting and throwing (missile.s): a strike from afar flies its missile; bows use ammo of
+;   their family from the party's things, thrown weapons land by the target; monsters shoot from their reach.
 ; Version 27 (b647): line of sight (sight.s): what the Avatar can't see is black (walls, closed doors, Occludes,
 ;   ground that can't be walked on and isn't water stop sight); a cell's tile number's top 2 bits its sight marks.
 ; Version 26 (b646): ailments and hunger (ailments.s): poisoned, asleep, paralyzed, charmed, cursed, invisible,
@@ -590,7 +592,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #27
+        cmp #28
         beq .known
 .bad:   sec
         rts
@@ -996,7 +998,10 @@ DrawView:
         jsr DrawRoofs           ; (look.s)
         jsr DrawSight           ; what can't be seen: black (sight.s)
         jsr DrawDark
+        lda NoBlit              ; (a missile's flight draws over it first - missile.s)
+        bne .nb
         jsr BlitView            ; the finished view onto the screen at once
+.nb:
         lda Mode
         cmp #4
         bne .nocur
@@ -2025,6 +2030,7 @@ TryMove:
         .include "owner.s"
         .include "ailments.s"
         .include "sight.s"
+        .include "missile.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
