@@ -11,6 +11,7 @@ VERB_GET  = 2
 VERB_USE  = 3
 VERB_TALK = 4
 VERB_MOVE = 6
+VERB_ATTACK = 7
 
 ; A = the verb: its word and "-", the cursor on the Avatar.
 StartVerb:
@@ -19,6 +20,13 @@ StartVerb:
         sta MoveIdx
         pla
         sta Verb
+        cmp #VERB_LOOK          ; the others take a turn
+        beq .free
+        cmp #VERB_TALK
+        beq .free
+        lda #1
+        sta TurnUsed
+.free:  lda Verb
         cmp #VERB_LOOK
         bne .v2
         lda #11
@@ -32,8 +40,12 @@ StartVerb:
         lda #13
         bra .say
 .v4:    cmp #VERB_MOVE
-        bne .v5
+        bne .v4a
         lda #18
+        bra .say
+.v4a:   cmp #VERB_ATTACK
+        bne .v5
+        lda #25
         bra .say
 .v5:    lda #4
 .say:   jsr PrintSaid
@@ -171,6 +183,10 @@ WhatIsThere:
         sta Item
 .c:     lda Item
         beq .objs
+        ldy #6                  ; dead: not there
+        lda [ItemPtr],y
+        and #4
+        bne .cn
         lda [ItemPtr]
         cmp CurX
         bne .cn
@@ -180,10 +196,14 @@ WhatIsThere:
         bne .cn
         lda #2
         sta Kind
+        lda ItemPtr             ; (kept: Attack strikes it)
+        sta ChrRec
+        lda ItemPtr+2
+        sta ChrRec+2
         ldy #14
         lda [ItemPtr],y
         jmp NameNumber
-.cn:    lda #16
+.cn:    lda #64
         jsr NextItem
         dec Item
         bra .c
@@ -294,6 +314,10 @@ PickCell:
         jsr PrintWord
         jsr NewLine
         lda Verb
+        cmp #VERB_ATTACK
+        bne .nat
+        jmp AttackPicked        ; (combat.s)
+.nat:   lda Verb
         cmp #VERB_LOOK
         bne .get
         lda #7                  ; You see {0}.
@@ -452,8 +476,9 @@ FillFmt:
         ldy #0
 .c:     lda [SayP],y
         and #$00FF
-        beq .end
-        cmp #'{'
+        bne .ch
+        brl .end
+.ch:    cmp #'{'
         bne .put
         iny
         lda [SayP],y
@@ -478,7 +503,15 @@ FillFmt:
         bra .name
 .avatar:
         phx
-        ldx AvatarW
+        lda UseWho              ; {1}: who does it (a blow), else the Avatar
+        beq .av
+        lda WhoName
+        sta TP
+        lda WhoName+2
+        sta TP+2
+        plx
+        bra .name
+.av:    ldx AvatarW
         lda WordTab,x
         sta TP
         lda WordTab+2,x
@@ -499,7 +532,7 @@ FillFmt:
         iny
         bra .nc
 .named: ply
-        bra .c
+        brl .c
 .put:   cpx #120
         bcs .skip
         sep #$20
@@ -509,7 +542,7 @@ FillFmt:
         .a16
         inx
 .skip:  iny
-        bra .c
+        brl .c
 .end:   sep #$20
         .a8
         lda #0

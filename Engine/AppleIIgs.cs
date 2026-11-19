@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 11;
+    public const ushort Version = 12;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -383,7 +383,7 @@ public sealed class AppleIIgsGamePack
         if (at < 0) { at = Names.Count; Names.Add(name); }
         return at;
     }
-    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)> Characters { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> Characters { get; } = new();
     public (int X, int Y, int Width, int Height) PortraitRect { get; set; }
     public (int X, int Y, int Width, int Height) NameRect { get; set; }
     public int TextColor { get; set; } = 0xFFFF;
@@ -391,10 +391,32 @@ public sealed class AppleIIgsGamePack
     /// <summary>you say, bye, no help, funny no response, talk, nothing, talking to yourself.</summary>
     public List<string> Words { get; } = new() { "you say: ", "bye", "\"I cannot help thee with that.\"", "Funny, no response.", "Talk", "nothing", "Talking to yourself?",
         "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.",
-        "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.", "Avatar" };
+        "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.",
+        "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
+        "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
-        "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave" };
+        "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
+        "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut" };
     public List<short> Variables { get; } = new();
+    /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
+    /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
+    /// reach, behaviour (0 stays, 1 wanders, 2 its schedule), home x, home y, then free.</summary>
+    public const int StatWords = 24;
+    public static class Stat
+    {
+        public const int Hp = 0, MaxHp = 1, Str = 2, Dex = 3, Int = 4, Combat = 5, Magic = 6, Mana = 7, MaxMana = 8, Level = 9, Exp = 10,
+            Armour = 11, Weapon = 12, Reach = 13, Behaviour = 14, HomeX = 15, HomeY = 16;
+    }
+    public int[] AvatarStats { get; set; } = new int[StatWords];
+    /// <summary>Ultima 6 levels (Leveling Editor): the experience each next level needs, hit points a level, most hit points; Off: Ultima 7's (most hit points = strength).</summary>
+    public List<int> LevelNeeds { get; } = new();
+    public int HitsPerLevel { get; set; } = 30;
+    public int MostHits { get; set; } = 240;
+    public bool U6Levels { get; set; } = true;
+    public static void WriteStats(BinaryWriter w, int[]? stats)
+    {
+        for (int i = 0; i < StatWords; i++) w.Write((ushort)(stats is not null && i < stats.Length ? Math.Clamp(stats[i], -32768, 65535) : 0));
+    }
     /// <summary>The first map's events: stepped on, their code runs (the talk code: AppleIIgsTalk).</summary>
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();
     /// <summary>Maps 1, 2...: each its own file MAP.n, loaded when the game goes there (their objects are in Objects, flags' top 4 bits = the map).</summary>
@@ -446,6 +468,7 @@ public sealed class AppleIIgsGamePack
         {
             w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing);
             w.Write((ushort)c.Talk); w.Write((ushort)c.Portrait); w.Write((ushort)c.Name);
+            AppleIIgsGamePack.WriteStats(w, c.Stats);
         }
         w.Write((ushort)(HudBackground is null ? 0 : 1));
         if (HudBackground is not null) w.Write(HudBackground);
@@ -502,6 +525,10 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)SwapSound);
         w.Write((ushort)(1 + OtherMaps.Count));
         AppleIIgsMap.WriteEvents(w, Events);
+        WriteStats(w, AvatarStats);
+        w.Write((ushort)(U6Levels ? 1 : 0)); w.Write((ushort)HitsPerLevel); w.Write((ushort)MostHits);
+        w.Write((ushort)Math.Min(LevelNeeds.Count, 16));
+        foreach (int need in LevelNeeds.Take(16)) w.Write((ushort)Math.Clamp(need, 0, 65535));
         return ms.ToArray();
     }
 
@@ -536,7 +563,7 @@ public sealed class AppleIIgsMap
     public int StartX { get; set; }
     public int StartY { get; set; }
     public ushort[] Map { get; set; } = Array.Empty<ushort>();
-    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)> Characters { get; } = new();
+    public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> Characters { get; } = new();
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();
 
     public byte[] Write()
@@ -551,6 +578,7 @@ public sealed class AppleIIgsMap
         {
             w.Write((ushort)c.X); w.Write((ushort)c.Y); w.Write((ushort)c.Sprite); w.Write((ushort)c.Flags); w.Write((ushort)c.Facing);
             w.Write((ushort)c.Talk); w.Write((ushort)c.Portrait); w.Write((ushort)c.Name);
+            AppleIIgsGamePack.WriteStats(w, c.Stats);
         }
         WriteEvents(w, Events);
         return ms.ToArray();

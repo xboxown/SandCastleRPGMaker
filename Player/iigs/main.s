@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 12 (b631): combat (combat.s): characters 64 bytes with their stats, the Avatar's stats, A Attack, B combat
+;   mode, Space Pass; Ultima 6's to-hit and damage; foes chase and strike; death; experience for a kill.
 ; Version 11 (b630): save and load (save.s: Ctrl+S, Ctrl+R; SAVE.DAT), the quit question (Ctrl+Q, Esc, q).
 ; Version 10 (b629): more maps (maps.s): map 0 in GAME.DAT, the others each their own file MAP.n, loaded when the game
 ;   goes there (and kept as they are); the objects of all of them in GAME.DAT (flags' top 4 bits: the map); map events
@@ -107,6 +109,9 @@ SayP      = $D6   ; 4: words being written
 TNamePtr  = $DA   ; 4: the tiles' names
 Dst       = $DE   ; 4: copying to
 SvPtr     = $E2   ; 4: a saved game being read
+AtkP      = $E6   ; 4: who strikes (combat.s)
+DefP      = $EA   ; 4: who is struck
+CP        = $EE   ; 4: the character whose turn it is
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -196,7 +201,10 @@ MainLoop:
         pea #EvRec
         tool $0A06              ; GetNextEvent
         pla
-        beq MainLoop
+        bne .ev
+        jsr IdleTurn            ; nothing pressed: the world goes on (combat.s)
+        bra MainLoop
+.ev:
         lda EvMsg
         and #$007F
         sta Key
@@ -211,24 +219,32 @@ MainLoop:
         lda Key                 ; the quit question
         jsr QuitKey
         brl MainLoop
-.not6:  cmp #2
+.not6:  cmp #7
+        bne .not7
+        jsr DeadKey             ; the Avatar dead: a key (combat.s)
+        brl MainLoop
+.not7:  cmp #2
         bne MainLoop            ; the talk is running
         lda Key
         jsr TalkKey
         bra MainLoop
 .cur:   lda Key                 ; the verb's cursor
         jsr CursorKey
+        jsr AfterTurn
         brl MainLoop
 .inv:   lda Key                 ; the grid's cursor (Drop)
         jsr InvKey
+        jsr AfterTurn
         brl MainLoop
 .walk:  lda Key
         cmp #$1B
-        beq .quit
+        beq .qj
         cmp #'q'
-        beq .quit
+        beq .qj
         cmp #'Q'
-        beq .quit
+        bne .nq
+.qj:    brl .quit
+.nq:
         cmp #'*'
         bne .notstar
         jsr ToggleView
@@ -245,7 +261,11 @@ MainLoop:
 .notr:  cmp #$11                ; Ctrl+Q: quit?
         bne .notq
         brl .quit
-.notq:  ora #$20                ; the verbs' letters, either case
+.notq:  cmp #' '                ; Space: pass a turn
+        bne .notsp
+        jsr PassTurn
+        brl MainLoop
+.notsp:  ora #$20                ; the verbs' letters, either case
         ldx #VERB_TALK
         cmp #'t'
         beq .verb
@@ -261,12 +281,21 @@ MainLoop:
         ldx #VERB_MOVE
         cmp #'m'
         beq .verb
+        ldx #VERB_ATTACK
+        cmp #'a'
+        beq .verb
+        cmp #'b'
+        bne .notb
+        jsr ToggleCombat
+        brl MainLoop
+.notb:
         cmp #'d'
         beq .drop
         lda Key
         jsr ArrowDelta
         bcc .none
         jsr TryMove
+        jsr AfterTurn
 .none:  brl MainLoop
 .verb:  txa
         jsr StartVerb
@@ -463,7 +492,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #11
+        cmp #12
         beq .known
 .bad:   sec
         rts
@@ -612,7 +641,9 @@ ParseData:
         sta ChrPtr
         lda Ptr+2
         sta ChrPtr+2
-        lda ChrCount            ; 16 bytes each
+        lda ChrCount            ; 64 bytes each
+        asl a
+        asl a
         asl a
         asl a
         asl a
@@ -957,7 +988,7 @@ ParseTalk:
         ldx #0
 .w:     lda Count
         beq .wdone
-        cpx #128                ; room for 32
+        cpx #256                ; room for 64
         bcs .wdone
         lda Ptr
         clc
@@ -1268,6 +1299,10 @@ MakeOcc:
         sta Item
 .c:     lda Item
         beq .done
+        ldy #6                  ; dead: not there
+        lda [ItemPtr],y
+        and #4
+        bne .cn
         lda [ItemPtr]
         tax
         ldy #2
@@ -1281,7 +1316,7 @@ MakeOcc:
         sta [Ptr]
         rep #$20
         .a16
-        lda #16
+.cn:    lda #64
         jsr NextItem
         dec Item
         bra .c
@@ -1371,6 +1406,10 @@ DrawCharacters:
         sta Item
 .l:     lda Item
         beq .end
+        ldy #6                  ; dead: not there
+        lda [ItemPtr],y
+        and #4
+        bne .n
         lda [ItemPtr]
         tax
         ldy #2
@@ -1385,7 +1424,7 @@ DrawCharacters:
         adc [ItemPtr],y         ; + its first (south) sprite
         sta SprId
         jsr DrawSprite
-.n:     lda #16
+.n:     lda #64
         jsr NextItem
         dec Item
         bra .l
@@ -1836,9 +1875,13 @@ TryMove:
         sta PX
         lda NY
         sta PY
+        lda #1                  ; a step: a turn
+        sta TurnUsed
         jsr DrawView
         jmp StepEvent           ; an event here? (maps.s)
-.stay:  jsr DrawView
+.stay:  lda #1
+        sta TurnUsed
+        jsr DrawView
         rts
 
         .include "talk.s"
@@ -1847,6 +1890,7 @@ TryMove:
         .include "sound.s"
         .include "maps.s"
         .include "save.s"
+        .include "combat.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
@@ -2054,7 +2098,7 @@ LoadSize: .dd 0
 DisksName:
         .cstr "DISKS.DAT"
 AvatarW:  .dw 0
-WordTab:  .ds 128                ; up to 32 words
+WordTab:  .ds 256                ; up to 64 words
 NameTab:  .ds 2048
 Verb:     .dw 0
 Kind:     .dw 0

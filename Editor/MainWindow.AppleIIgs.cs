@@ -506,7 +506,48 @@ public partial class MainWindow
                 if (n < 0) continue;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0), pack.NameOf(def.Name), 0xFFFF, IconOf(file), -1));
             }
-        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
+        // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
+        U6Leveling.Use(_systemSettings.Ultima6);
+        bool u6Levels = !_systemSettings.Ultima6.UseUltima7Leveling;
+        var avatarDef = PlayerCharacter();
+        int StatOf(CharacterDefinition c, BuiltInStatKind kind, int fallback) =>
+            _statDatabase.Stats.FirstOrDefault(st => st.Kind == kind) is { } stat && c.StatValues.TryGetValue(stat.Id, out var text) && int.TryParse(text, out int value) ? value : fallback;
+        (int Weapon, int Reach, int Armour) Gear(CharacterDefinition c)
+        {
+            int weapon = 0, reach = 1, armour = 0;
+            foreach (int id in c.EquippedSlots.Values)
+            {
+                var item = c.Inventory.FirstOrDefault(i => i.InstanceId == id);
+                var def = item is null || item.Category != ReferencedItemCategory.Object ? null : _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
+                if (def is null) continue;
+                if (def.Type == ObjectType.Weapon) { weapon = Math.Max(weapon, def.Weapon.Damage); reach = Math.Max(reach, def.Weapon.Use == WeaponUse.Melee ? 1 : Math.Max(2, def.Weapon.RangeTiles / 2)); }
+                else if (def.Type == ObjectType.Armor) armour += Math.Max(0, def.Armor.ArmorPoints);
+            }
+            return (weapon, reach, armour);
+        }
+        int[] StatsOf(CharacterDefinition c, int homeX, int homeY)
+        {
+            var (weapon, reach, armour) = Gear(c);
+            int level = Math.Max(1, StatOf(c, BuiltInStatKind.Level, 1));
+            int str = StatOf(c, BuiltInStatKind.Strength, 10);
+            int maxHp = u6Levels ? U6Leveling.MaxHits(level) : Math.Max(1, str);
+            int hp = Math.Clamp(StatOf(c, BuiltInStatKind.Hits, maxHp), 1, Math.Max(maxHp, 1));
+            var st = new int[AppleIIgsGamePack.StatWords];
+            st[AppleIIgsGamePack.Stat.Hp] = hp; st[AppleIIgsGamePack.Stat.MaxHp] = Math.Max(maxHp, hp);
+            st[AppleIIgsGamePack.Stat.Str] = str; st[AppleIIgsGamePack.Stat.Dex] = StatOf(c, BuiltInStatKind.Dexterity, 10);
+            st[AppleIIgsGamePack.Stat.Int] = StatOf(c, BuiltInStatKind.Intelligence, 10); st[AppleIIgsGamePack.Stat.Combat] = StatOf(c, BuiltInStatKind.Combat, 10);
+            st[AppleIIgsGamePack.Stat.Magic] = StatOf(c, BuiltInStatKind.Magic, 0);
+            st[AppleIIgsGamePack.Stat.Mana] = StatOf(c, BuiltInStatKind.Mana, st[AppleIIgsGamePack.Stat.Magic]); st[AppleIIgsGamePack.Stat.MaxMana] = Math.Max(st[AppleIIgsGamePack.Stat.Magic], st[AppleIIgsGamePack.Stat.Mana]);
+            st[AppleIIgsGamePack.Stat.Level] = level; st[AppleIIgsGamePack.Stat.Exp] = StatOf(c, BuiltInStatKind.Exp, 0);
+            st[AppleIIgsGamePack.Stat.Armour] = armour; st[AppleIIgsGamePack.Stat.Weapon] = weapon; st[AppleIIgsGamePack.Stat.Reach] = reach;
+            st[AppleIIgsGamePack.Stat.HomeX] = homeX; st[AppleIIgsGamePack.Stat.HomeY] = homeY;
+            return st;
+        }
+        bool Hostile(CharacterDefinition c) => avatarDef is not null && c != avatarDef && _factionDatabase.BehaviorToward(c.FactionId, avatarDef.FactionId) == FactionBehavior.Attack;
+        if (avatarDef is not null) pack.AvatarStats = StatsOf(avatarDef, 0, 0);
+        pack.U6Levels = u6Levels; pack.HitsPerLevel = U6Leveling.HitsPerLevel; pack.MostHits = U6Leveling.Table.MostHits;
+        for (int lv = 1; lv < Math.Min(U6Leveling.MaxLevel, 17); lv++) pack.LevelNeeds.Add(U6Leveling.Needs(lv));
+        var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
         // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.
         var variableIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         foreach (var v in _variableDatabase.Variables) variableIndex.TryAdd(v.Name, variableIndex.Count);
@@ -517,9 +558,9 @@ public partial class MainWindow
         var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
             : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
         var portraitOf = new Dictionary<int, int>();
-        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)> MapCharacters(MapData world)
+        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world)
         {
-            var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
+            var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
             foreach (var placed in world.Characters.Where(c => !c.Dead))
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
@@ -552,7 +593,7 @@ public partial class MainWindow
                     }
                     portraitOf[who.Id] = portrait;
                 }
-                list.Add((placed.X, placed.Y, first, 1, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name)));
+                list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), StatsOf(who, placed.X, placed.Y)));
             }
             if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
             return list;

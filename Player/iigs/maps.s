@@ -35,6 +35,18 @@ ParseMaps:
         sta EvPtr
         lda Ptr+2
         sta EvPtr+2
+        lda EvCount             ; past them: the Avatar's stats, the levels (combat.s)
+        sta Item
+.ev:    lda Item
+        beq .evd
+        ldy #4
+        lda [Ptr],y
+        clc
+        adc #6
+        jsr AddPtr
+        dec Item
+        bra .ev
+.evd:   jsr ParseAvatar
         ldx #0                  ; map 0: as it is now
         lda MapW
         sta MapTab+MT_W,x
@@ -215,7 +227,9 @@ LoadMap:
         sta MapTab+MT_CP,x
         lda Ptr+2
         sta MapTab+MT_CP+2,x
-        lda MapTab+MT_CC,x      ; 16 bytes each
+        lda MapTab+MT_CC,x      ; 64 bytes each
+        asl a
+        asl a
         asl a
         asl a
         asl a

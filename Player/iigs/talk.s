@@ -359,6 +359,10 @@ TalkAt:
         sta Item
 .l:     lda Item
         beq .nobody
+        ldy #6                  ; dead: not there
+        lda [ItemPtr],y
+        and #4
+        bne .n
         lda [ItemPtr]
         cmp NX
         bne .n
@@ -366,7 +370,7 @@ TalkAt:
         lda [ItemPtr],y
         cmp NY
         beq .found
-.n:     lda #16
+.n:     lda #64
         jsr NextItem
         dec Item
         bra .l

@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 1
+SAVE_VERSION = 2
 
 ; Ctrl+S
 SaveGame:
@@ -58,6 +58,16 @@ SaveGame:
         ldx MyBank
         ldy #512
         jsr WriteBlock
+        bcc .k0
+        brl .close
+.k0:    lda PX                  ; the Avatar: its stats
+        sta AvRec
+        lda PY
+        sta AvRec+2
+        lda #AvRec
+        ldx MyBank
+        ldy #64
+        jsr WriteBlock
         bcc .k5
         brl .close
 .k5:
@@ -82,6 +92,8 @@ SaveGame:
         lda SvMap
         jsr MapOff
         lda MapTab+MT_CC,x
+        asl a
+        asl a
         asl a
         asl a
         asl a
@@ -126,6 +138,7 @@ WriteBlock:
 
 ; Ctrl+R: the saved game back.
 LoadGame:
+        stz LoadedOk
         lda #SaveName
         jsr LocalPath
         jsr LoadFile
@@ -196,6 +209,12 @@ LoadGame:
         sta Dst+2
         lda #512
         jsr SvCopy
+        lda #AvRec              ; the Avatar's stats
+        sta Dst
+        lda MyBank
+        sta Dst+2
+        lda #64
+        jsr SvCopy
         stz SvMap               ; the maps' characters (a map visited: loaded again if need be)
 .m:     lda SvMap
         cmp MapCount
@@ -230,9 +249,13 @@ LoadGame:
         asl a
         asl a
         asl a
+        asl a
+        asl a
         jsr SvCopy
         bra .nm
 .skip:  lda SvRec+2
+        asl a
+        asl a
         asl a
         asl a
         asl a
@@ -241,6 +264,10 @@ LoadGame:
 .nm:    inc SvMap
         bra .m
 .done:  jsr FreeSave
+        lda #1
+        sta LoadedOk
+        stz AvDead
+        stz Mode
         lda #$FFFF              ; that map, as if arriving: its cells, the cell map again
         sta CurMap
         lda GoMap
@@ -303,6 +330,7 @@ QuitKey:
         jmp PromptLine
 
 SvMap:    .dw 0
+LoadedOk: .dw 0
 SvRec:    .dw 0,0
 SvHandle: .dd 0
 SvHead:   .dw $4353,$5653        ; "SCSV"
