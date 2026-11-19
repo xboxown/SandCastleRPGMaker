@@ -585,8 +585,11 @@ RunTalk:
 .n8:    cmp #9
         bcc .end
         cmp #12
+        bcs .more
+        jmp EventOp
+.more:  cmp #25
         bcs .end
-        jmp EventOp             ; TRIG, ITEM, HIT (events.s)
+        jmp MoreOps             ; (cmds.s)             ; TRIG, ITEM, HIT (events.s)
 .play:
         iny                     ; PLAY: a sound, its volume
         lda [TalkPtr],y

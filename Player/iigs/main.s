@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 17 (b636): more commands (cmds.s): Give / Remove Item, Change HP / Stat, Wait, Teleport, Place / Remove,
+;   Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit, Save, Load.
 ; Version 16 (b635): map events' triggers and pages (events.s): stepped on / stood on / stepped off, Use on it,
 ;   arriving (Always), having or not having an item, a thing dropped on it / picked up from it; variable conditions.
 ; Version 15 (b634): the party (party.s): Join / Leave Party, members follow, fight, go along to other maps,
@@ -121,6 +123,7 @@ DefP      = $EA   ; 4: who is struck
 CP        = $EE   ; 4: the character whose turn it is
 ViewP     = $F2   ; 4: whose stats the portrait view shows (the Avatar or a member)
 MP        = $F6   ; 4: a party member
+WP        = $FA   ; 4: whom a command is about (cmds.s)
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -521,7 +524,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #16
+        cmp #17
         beq .known
 .bad:   sec
         rts
@@ -1926,6 +1929,7 @@ TryMove:
         .include "stats.s"
         .include "party.s"
         .include "events.s"
+        .include "cmds.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

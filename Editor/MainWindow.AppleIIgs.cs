@@ -125,7 +125,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -577,6 +577,41 @@ public partial class MainWindow
             }
         }
         (int Map, int Index)? WhereIs(string id) => whereIs.TryGetValue(id, out var at) ? at : null;
+        // Give Item / Remove Item / Show Picture / Change Stat: what the commands need (Engine/AppleIIgsTalk.cs Env).
+        var pictureOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var talkEnv = new AppleIIgsTalk.Env
+        {
+            Item = (category, itemId) =>
+            {
+                if (!Enum.TryParse<ReferencedItemCategory>(category, out var cat) || !int.TryParse(itemId, out int id)) return null;
+                string? file = DollLook.ItemSprite(cat, id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                if (cat == ReferencedItemCategory.Object && file is null) file = _objectDatabase.Objects.FirstOrDefault(o => o.Id == id)?.IconPath;
+                int sprite = SpriteOf(file);
+                if (sprite < 0) return null;
+                string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
+                int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0);
+                return (pack.NameOf(name), sprite, IconOf(file), flags);
+            },
+            Picture = (group, name) =>
+            {
+                var sp = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(x => x.Name == name)
+                    ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(x => x.Name == name);
+                if (sp?.Frames.FirstOrDefault()?.FilePath is not { } f || !File.Exists(f)) return -1;
+                if (pictureOf.TryGetValue(f, out int known)) return known;
+                var img = new BitmapImage();
+                img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(f)); img.EndInit();
+                int pw = Math.Min(320, (img.PixelWidth + 3) / 4 * 4), ph = Math.Min(200, img.PixelHeight);
+                spritePixels.Add((FitPicture(f, pw, ph), pw, ph));
+                return pictureOf[f] = spritePixels.Count - 1;
+            },
+            Stat = id => _statDatabase.Stats.FirstOrDefault(st => st.Id.ToString() == id)?.Kind switch
+            {
+                BuiltInStatKind.Hits => AppleIIgsGamePack.Stat.Hp, BuiltInStatKind.Strength => AppleIIgsGamePack.Stat.Str, BuiltInStatKind.Dexterity => AppleIIgsGamePack.Stat.Dex,
+                BuiltInStatKind.Intelligence => AppleIIgsGamePack.Stat.Int, BuiltInStatKind.Combat => AppleIIgsGamePack.Stat.Combat, BuiltInStatKind.Magic => AppleIIgsGamePack.Stat.Magic,
+                BuiltInStatKind.Mana => AppleIIgsGamePack.Stat.Mana, BuiltInStatKind.Level => AppleIIgsGamePack.Stat.Level, BuiltInStatKind.Exp => AppleIIgsGamePack.Stat.Exp, _ => -1
+            }
+        };
+
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
         List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules)
         {
@@ -595,7 +630,7 @@ public partial class MainWindow
                     talk = -1;
                     if (who.TalkCommands.Count > 0)
                     {
-                        AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
+                        AppleIIgsTalk.Compile(who.TalkCommands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs, talkEnv);
                         talk = pack.Talks.Count;
                         pack.Talks.Add((who.Name, code));
                     }
@@ -645,7 +680,7 @@ public partial class MainWindow
             {
                 var pages = IIgsEventPages(ev, out _);
                 if (pages.Count == 0) continue;
-                AppleIIgsTalk.CompileEvent(pages, VariableOf, out var code, out int mask, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
+                AppleIIgsTalk.CompileEvent(pages, VariableOf, out var code, out int mask, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs, talkEnv);
                 list.Add((ev.X, ev.Y, code));
                 masks.Add(mask);
             }
@@ -737,6 +772,8 @@ public partial class MainWindow
         pack.TileNames.AddRange(tileNames.Select(pack.NameOf));
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
+        // Spare objects (gone, no name) that Give Item fills in at play.
+        for (int i = 0; i < 48; i++) objects.Add((0xFFFF, 0xFFFF, 0, 32, 0xFFFF, 0xFFFF, 0xFFFF, -1));
         pack.Objects.AddRange(objects);
         pack.Characters.AddRange(characters);
         pack.PortraitRect = portraitRect;

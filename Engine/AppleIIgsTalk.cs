@@ -24,11 +24,37 @@ namespace SandcastleRpgMaker.Engine;
 ///   $0B HIT                                   the page runs: its commands, then END
 /// Triggers: 1 stepped on, 2 stood on, 3 stepped off, 4 Use on it (the action button), 5 arriving on the map (Always),
 /// 6 having / not having an item, 7 a thing dropped on it, 8 a thing picked up from it.
+/// More commands (b636; "who" = u16 map, u16 place in its list; $FFFF $FFFF the Avatar):
+///   $0C GIVE u16 name, u16 sprite, u16 icon, u16 flags      a thing to the Avatar (into a spare object)
+///   $0D TAKE u16 name, u16 how many                         Remove Item from the Avatar's things
+///   $0E HP   who, u8 op (0 add 1 subtract 2 set), i16 amount, u8 can kill
+///   $0F STAT who, u8 the stat's word (0 hit points ... 10 experience), u8 op, i16 value
+///   $10 WAIT u16 ticks (60 a second)
+///   $11 PLACE who, u8 1 place / 0 remove, u16 x, u16 y
+///   $12 KILL who
+///   $13 SCHED who, u8 activity (as the schedules; $FF back to its schedule)
+///   $14 TIME u8 0 set / 1 advance minutes / 2 advance hours, u16 hour or how many, u16 minute
+///   $15 DOOR u16 x, u16 y, u8 0 locked / 1 unlocked / 2 closed / 3 open
+///   $16 PIC  u16 sprite, u16 x, u16 y                       Show Picture (over the game until Erase Picture)
+///   $17 ERASE                                               Erase Picture (the game drawn again)
+///   $18 GAME u8 0 game over / 1 quit / 2 save / 3 load
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
 /// </summary>
 public sealed class AppleIIgsTalk
 {
-    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11;
+    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24;
+    /// <summary>What the commands need from the game being built (all optional).</summary>
+    public sealed class Env
+    {
+        /// <summary>An item (Category, ItemId) -> its name, sprite, icon and object flags in the game.</summary>
+        public Func<string, string, (int Name, int Sprite, int Icon, int Flags)?>? Item;
+        /// <summary>A sprite (group, name) -> its picture's sprite number.</summary>
+        public Func<string, string, int>? Picture;
+        /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
+        public Func<string, int>? Stat;
+    }
+    public Env? Extra { get; set; }
     private readonly List<byte> _code = new();
     private readonly Func<string, int> _variable;
     private readonly Func<int, int>? _sound;
@@ -42,9 +68,9 @@ public sealed class AppleIIgsTalk
     /// <param name="world">a Maps-tab world's id -> its map number in the game (-1: not in it).</param>
     /// <param name="who">a Who (a character's id) -> where it is in the game (its map, its place in that map's characters).</param>
     public static AppleIIgsTalk Compile(List<EventCommand> commands, Func<string, int> variable, out byte[] code, Func<int, int>? sound = null, Func<int, int>? world = null,
-        Func<string, (int Map, int Index)?>? who = null)
+        Func<string, (int Map, int Index)?>? who = null, Env? env = null)
     {
-        var talk = new AppleIIgsTalk(variable, sound, world, who);
+        var talk = new AppleIIgsTalk(variable, sound, world, who) { Extra = env };
         talk.Run(commands);
         code = talk._code.ToArray();
         return talk;
@@ -56,9 +82,9 @@ public sealed class AppleIIgsTalk
 
     /// <summary>A map event's code: its pages in order (the first one whose trigger and conditions hold runs); mask: a bit for each trigger it has.</summary>
     public static AppleIIgsTalk CompileEvent(List<EventPage> pages, Func<string, int> variable, out byte[] code, out int mask, Func<int, int>? sound = null,
-        Func<int, int>? world = null, Func<string, (int Map, int Index)?>? who = null)
+        Func<int, int>? world = null, Func<string, (int Map, int Index)?>? who = null, Env? env = null)
     {
-        var talk = new AppleIIgsTalk(variable, sound, world, who);
+        var talk = new AppleIIgsTalk(variable, sound, world, who) { Extra = env };
         mask = 0;
         foreach (var page in pages)
         {
@@ -227,6 +253,104 @@ public sealed class AppleIIgsTalk
                     B(Party); W(place.Map); W(place.Index); B(cmd.Get("Value") == "Leave the party" ? 0 : 1);
                     break;
                 }
+                case EventCommandType.GiveItem:
+                {
+                    if (cmd.Get("Receiver") is not ("" or "Player" or "Activator") || Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it)
+                    { Unsupported.Add("Give Item (to someone but the Avatar, or an item not on the IIgs)"); break; }
+                    int count = Math.Clamp(Number(cmd.Get("Quantity")), 1, 8);
+                    for (int i = 0; i < count; i++) { B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); }
+                    break;
+                }
+                case EventCommandType.RemoveItem:
+                {
+                    if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it) { Unsupported.Add("Remove Item (an item not on the IIgs)"); break; }
+                    B(Take); W(it.Name); W(Math.Clamp(Number(cmd.Get("Quantity")), 1, 255));
+                    break;
+                }
+                case EventCommandType.ChangeHp:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Change HP (someone not on a map)"); break; }
+                    B(Hp); W(m); W(x); B(cmd.Get("Operation") switch { "Subtract" => 1, "Set" => 2, _ => 0 }); W(Number(cmd.Get("Amount"))); B(cmd.Get("CanKill") == "True" ? 1 : 0);
+                    break;
+                }
+                case EventCommandType.ChangeStat:
+                {
+                    int word = Extra?.Stat?.Invoke(cmd.Get("StatId")) ?? -1;
+                    if (word < 0 || !WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Change Stat (a custom stat, or someone not on a map)"); break; }
+                    B(StatOp); W(m); W(x); B(word); B(cmd.Get("Operation") switch { "Subtract" => 1, "Set" => 2, _ => 0 }); W(Number(cmd.Get("Value")));
+                    break;
+                }
+                case EventCommandType.Wait:
+                {
+                    double secs = Seconds(cmd.Get("Duration") is { Length: > 0 } d ? d : cmd.Get("Seconds"));
+                    if (cmd.Get("Unit") is "Minutes") secs *= 60;
+                    B(WaitOp); W((int)Math.Clamp(secs * 60, 0, 60000));
+                    break;
+                }
+                case EventCommandType.Teleport:
+                {
+                    if (cmd.Get("Who") is not ("" or "Activator" or "Player")) { Unsupported.Add("Teleport (someone but the Avatar)"); break; }
+                    int map = 0xFFFF;
+                    if (int.TryParse(cmd.Get("World"), out int worldId) && worldId > 0)
+                    {
+                        int n = _world?.Invoke(worldId) ?? -1;
+                        if (n < 0) { Unsupported.Add("Teleport (to a map not in the game)"); break; }
+                        map = n;
+                    }
+                    if (!int.TryParse(cmd.Get("X"), out int tx) || !int.TryParse(cmd.Get("Y"), out int ty)) break;
+                    B(Map); W(map); W(tx); W(ty);
+                    break;
+                }
+                case EventCommandType.PlaceCharacter:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || m == 0xFFFF) { Unsupported.Add("Place / Remove Character (someone not on a map)"); break; }
+                    bool place = cmd.Get("Value") != "Remove it from the map";
+                    int.TryParse(cmd.Get("X"), out int px); int.TryParse(cmd.Get("Y"), out int py);
+                    B(Place); W(m); W(x); B(place ? 1 : 0); W(px); W(py);
+                    break;
+                }
+                case EventCommandType.KillCharacter:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Kill Character (someone not on a map)"); break; }
+                    B(Kill); W(m); W(x);
+                    break;
+                }
+                case EventCommandType.ChangeSchedule:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || m == 0xFFFF) { Unsupported.Add("Change Schedule (someone not on a map)"); break; }
+                    int act = cmd.Get("Activity") switch
+                    {
+                        "Stand" or "Wait" or "Sit" => 0, "Wander" => 1, "Sleep" => 2, "Pace east-west" => 3, "Pace north-south" => 4, "Back to its schedule" => 0xFF, _ => 5
+                    };
+                    B(Sched); W(m); W(x); B(act);
+                    break;
+                }
+                case EventCommandType.SetTime:
+                {
+                    int mode = cmd.Get("Value") switch { "Advance by minutes" => 1, "Advance by hours" => 2, _ => 0 };
+                    B(Time); B(mode); W(Math.Clamp(Number(cmd.Get("Hour")), 0, 9999)); W(Math.Clamp(Number(cmd.Get("Minute")), 0, 59));
+                    break;
+                }
+                case EventCommandType.SetDoorState:
+                {
+                    if (!int.TryParse(cmd.Get("X"), out int dx) || !int.TryParse(cmd.Get("Y"), out int dy)) { Unsupported.Add("Set Door State (no place)"); break; }
+                    B(Door); W(dx); W(dy); B(cmd.Get("Value") switch { "Locked" => 0, "Unlocked" => 1, "Closed" => 2, _ => 3 });
+                    break;
+                }
+                case EventCommandType.ShowPicture:
+                {
+                    int sprite = Extra?.Picture?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName")) ?? -1;
+                    if (sprite < 0) { Unsupported.Add("Show Picture (no sprite)"); break; }
+                    B(Pic); W(sprite); W(Math.Clamp(Number(cmd.Get("X")), 0, 319) & ~1); W(Math.Clamp(Number(cmd.Get("Y")), 0, 199));
+                    break;
+                }
+                case EventCommandType.ErasePicture:
+                    B(Erase);
+                    break;
+                case EventCommandType.GameOver: B(GameOp); B(0); break;
+                case EventCommandType.QuitGame: B(GameOp); B(1); break;
+                case EventCommandType.SaveGame: B(GameOp); B(2); break;
+                case EventCommandType.LoadGame: B(GameOp); B(3); break;
                 case EventCommandType.StopConversation or EventCommandType.End:
                     B(End);
                     break;
@@ -246,6 +370,18 @@ public sealed class AppleIIgsTalk
     }
 
     /// <summary>The end of a reply's branch: back to its question (a pinned reply), or on after the replies.</summary>
+    /// <summary>A Who as the IIgs player finds it: the Avatar ($FFFF $FFFF) or a character by map and place.</summary>
+    private bool WhoCode(string who, out int map, out int index)
+    {
+        map = index = 0xFFFF;
+        if (who is "" or "Activator" or "Player") return true;
+        if (_who?.Invoke(who) is not { } at) return false;
+        (map, index) = at;
+        return true;
+    }
+
+    private static double Seconds(string s) => double.TryParse(s, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out double v) ? v : 0;
+
     private void LeaveBranch(Frame f)
     {
         if (f.Current is not int id) return;
