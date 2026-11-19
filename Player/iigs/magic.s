@@ -53,7 +53,17 @@ ParseSpells:
         sta BookPtr
         lda Ptr+2
         sta BookPtr+2
-        rts
+        ldx BookCount           ; past them: the texts (read.s)
+.b:     cpx #0
+        beq .bd
+        lda [Ptr]
+        asl a
+        clc
+        adc #2
+        jsr AddPtr
+        dex
+        bra .b
+.bd:    jmp ParseTexts
 
 ; C: "Cast-", the readied spellbook, the syllables asked for.
 StartCast:

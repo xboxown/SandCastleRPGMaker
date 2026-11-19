@@ -356,6 +356,13 @@ PickCell:
         beq .np
         jsr NextToCursor
         bcc .rg
+        jsr ObjFlags            ; money: into the Avatar's gold (read.s)
+        ldy #10
+        lda [ItemPtr],y
+        cmp #$FFFE
+        bne .notgold
+        jmp GetGold
+.notgold:
         jsr ObjFlags            ; carried now: off the map (no longer in the way), in the grid
         ora #64
         sta [ItemPtr],y
@@ -372,7 +379,9 @@ PickCell:
         jsr RefreshInventory
         jmp PromptLine
 .use:   cmp #VERB_USE
-        bne .talk
+        beq .usego
+        brl .talk
+.usego:
         jsr UseEvent            ; an event there with a Use page: it, not the thing (events.s)
         bcc .nuse
         rts
@@ -381,13 +390,28 @@ PickCell:
         bne .np
         jsr ObjFlags
         and #128                ; a container: what is in it spills out
-        beq .door
+        beq .rd
         jmp UseContainer
+.rd:    jsr ObjFlags            ; a book or sign: read (read.s)
+        ldy #10
+        lda [ItemPtr],y
+        jsr IsText
+        bcc .door
+        jsr NextToCursor
+        bcs .readit
+        brl .range
+.readit: jsr ObjFlags
+        ldy #10
+        lda [ItemPtr],y
+        and #$03FF
+        jmp ReadText
+.np2:   brl .notpossible
+.rg2:   brl .range
 .door:  jsr ObjFlags
         and #4                  ; a door
-        beq .np
+        beq .np2
         jsr NextToCursor
-        bcc .rg
+        bcc .rg2
         jsr ObjFlags
         and #8
         beq .open
@@ -889,7 +913,15 @@ GridVerb:
         beq .bag
         and #$C000
         beq .bag
-        jmp WearUse
+        lda [ItemPtr],y         ; a book: read it (read.s)
+        jsr IsText
+        bcc .wear
+        and #$03FF
+        jsr NewLine
+        stz Mode
+        jsr RefreshInventory
+        jmp ReadText
+.wear:  jmp WearUse
 .bag:   ldy #6
         lda [ItemPtr],y
         and #128                ; a bag: open (or shut) in the grid

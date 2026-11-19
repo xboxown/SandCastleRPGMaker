@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 21 (b640): reading and shops (read.s): books and signs read in the text area (<more>), the Avatar's gold,
+;   money picked up, the Shop command as keyword talk (PAY, SELL).
 ; Version 20 (b639): magic (magic.s): C Cast with a readied spellbook - the syllables typed, the book, level, magic
 ;   points and reagents checked, "On whom?" for a target; heal, mana, damage (an area without a target), sleep, awaken.
 ; Version 19 (b638): wearing (wear.s): weapons and armour worn in the HUD's body slots, Use readies / puts away,
@@ -254,11 +256,17 @@ MainLoop:
         jsr CastKey
         jsr AfterTurn
         brl MainLoop
-.not9:  cmp #2
-        bne MainLoop            ; the talk is running
-        lda Key
+.not9:  cmp #10
+        bne .not10
+        lda Key                 ; <more> (read.s)
+        jsr MoreKey
+        brl MainLoop
+.not10: cmp #2
+        beq .typing
+        brl MainLoop            ; the talk is running
+.typing: lda Key
         jsr TalkKey
-        bra MainLoop
+        brl MainLoop
 .cur:   lda Key                 ; the verb's cursor
         jsr CursorKey
         jsr AfterTurn
@@ -540,7 +548,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #20
+        cmp #21
         beq .known
 .bad:   sec
         rts
@@ -1036,8 +1044,8 @@ ParseTalk:
         ldx #0
 .w:     lda Count
         beq .wdone
-        cpx #256                ; room for 64
-        bcs .wdone
+        cpx #512                ; room for 128 (more: skipped, but stepped past)
+        bcs .skipw
         lda Ptr
         clc
         adc #1
@@ -1045,17 +1053,19 @@ ParseTalk:
         lda Ptr+2
         adc #0
         sta WordTab+2,x
-        lda [Ptr]
+.skipw: lda [Ptr]
         and #$00FF
         clc
         adc #2
         jsr AddPtr
+        cpx #512
+        bcs .nw
         stx AvatarW             ; the last word is the Avatar's name
         inx
         inx
         inx
         inx
-        dec Count
+.nw:    dec Count
         bra .w
 .wdone: lda [Ptr]               ; the names
         sta Count
@@ -1949,6 +1959,7 @@ TryMove:
         .include "keys.s"
         .include "wear.s"
         .include "magic.s"
+        .include "read.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
@@ -2156,7 +2167,7 @@ LoadSize: .dd 0
 DisksName:
         .cstr "DISKS.DAT"
 AvatarW:  .dw 0
-WordTab:  .ds 256                ; up to 64 words
+WordTab:  .ds 512                ; up to 128 words
 NameTab:  .ds 2048
 Verb:     .dw 0
 Kind:     .dw 0

@@ -338,6 +338,19 @@ public partial class MainWindow
         return dst;
     }
 
+    /// <summary>A Book Editor frame's formatted words as plain text.</summary>
+    private static string IIgsPlainText(string data)
+    {
+        if (data.Length == 0) return string.Empty;
+        try
+        {
+            var box = new System.Windows.Controls.RichTextBox();
+            RichTextXamlHelper.Load(box, data);
+            return new System.Windows.Documents.TextRange(box.Document.ContentStart, box.Document.ContentEnd).Text.Replace("\r\n", "\n").Trim();
+        }
+        catch { return System.Text.RegularExpressions.Regex.Replace(data, "<[^>]+>", string.Empty).Trim(); }
+    }
+
     private AppleIIgsGamePack MakeAppleIIgsPack()
     {
         var pack = new AppleIIgsGamePack { Title = _currentProjectName ?? "Game" };
@@ -439,6 +452,20 @@ public partial class MainWindow
             if (def.Type == ObjectType.Spellbook && !def.Spellbook.U8Focus) return 0xC000 | (((int)EquipmentSlot.RightHand + 1) << 10) | BookOf(def);
             return 0xFFFF;
         }
+        // Books and signs (Book Editor): their words read in the text area (Ultima 6's notepad text, else the pages' frames).
+        var textOf = new Dictionary<int, int>();
+        var textArea = _systemSettings.Ultima6.Hud.First(HudPieceKind.TextArea);
+        int TextOf(int bookId)
+        {
+            if (textOf.TryGetValue(bookId, out int known)) return known;
+            var book = _bookDatabase.Books.FirstOrDefault(b => b.Id == bookId);
+            string text = book is null ? "" : book.U6Text.Trim().Length > 0 ? book.U6Text
+                : string.Join("\n", book.Pages.SelectMany(pg => book.Frames.Select(f => pg.FrameTexts.TryGetValue(f.Id, out var x) ? IIgsPlainText(x) : "")).Where(x => x.Length > 0));
+            int chars = Math.Max(10, (textArea?.Width ?? 300) / 6), lines = Math.Max(2, (textArea?.Height ?? 70) / 10 - 1);
+            textOf[bookId] = pack.Texts.Count;
+            pack.Texts.Add(AppleIIgsTalk.CompileText(text, chars, lines));
+            return pack.Texts.Count - 1;
+        }
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
         var spellIndex = new Dictionary<SpellDefinition, int>();
@@ -535,7 +562,18 @@ public partial class MainWindow
                 if (def.Type == ObjectType.Key) { objFlags |= 512; other = def.Id; }
                 if (def.Type == ObjectType.Lockpick) objFlags |= 1024;
                 if (def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook) other = GearOf(def);
+                if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
+            }
+            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Book))
+            {
+                if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
+                string? bookFile = DollLook.ItemSprite(ReferencedItemCategory.Book, placed.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                int bn = SpriteOf(bookFile);
+                if (bn < 0) continue;
+                var bookDef = _bookDatabase.Books.FirstOrDefault(b => b.Id == placed.ItemId);
+                objects.Add((placed.X, placed.Y, bn, ((bookDef?.CanBePicked ?? true) ? 2 : 0) | ((bookDef?.IsSolid ?? false) ? 1 : 0) | bits,
+                    pack.NameOf(bookDef?.Name ?? "book"), 0xC000 | Math.Min(TextOf(placed.ItemId), 1023), IconOf(bookFile), -1));
             }
             foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
             {
@@ -552,6 +590,7 @@ public partial class MainWindow
         }
         AddMapObjects(start, 0);
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
+        int avatarGold = 0;
         if (PlayerCharacter() is { } avatarWho)
             foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container))
             {
@@ -568,6 +607,7 @@ public partial class MainWindow
                 }
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
                 if (def is null) continue;
+                if (def.Type == ObjectType.Money) { avatarGold += Math.Max(1, item.Quantity); continue; }
                 var look = ObjectLooks.SpriteFor(def, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), SpriteDirection.South), _spriteDatabase);
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
@@ -615,9 +655,10 @@ public partial class MainWindow
             return st;
         }
         bool Hostile(CharacterDefinition c) => avatarDef is not null && c != avatarDef && _factionDatabase.BehaviorToward(c.FactionId, avatarDef.FactionId) == FactionBehavior.Attack;
-        if (avatarDef is not null) pack.AvatarStats = StatsOf(avatarDef, 0, 0);
+        if (avatarDef is not null) { int gold = pack.AvatarStats[23]; pack.AvatarStats = StatsOf(avatarDef, 0, 0); pack.AvatarStats[23] = gold; }
         pack.U6Levels = u6Levels; pack.HitsPerLevel = U6Leveling.HitsPerLevel; pack.MostHits = U6Leveling.Table.MostHits;
         for (int lv = 1; lv < Math.Min(U6Leveling.MaxLevel, 17); lv++) pack.LevelNeeds.Add(U6Leveling.Needs(lv));
+        if (avatarGold > 0) pack.AvatarStats[23] = Math.Min(avatarGold, 65535);
         var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
         // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.
         var variableIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -673,6 +714,7 @@ public partial class MainWindow
                 spritePixels.Add((FitPicture(f, pw, ph), pw, ph));
                 return pictureOf[f] = spritePixels.Count - 1;
             },
+            ItemName = (cat, id) => DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase),
             Stat = id => _statDatabase.Stats.FirstOrDefault(st => st.Id.ToString() == id)?.Kind switch
             {
                 BuiltInStatKind.Hits => AppleIIgsGamePack.Stat.Hp, BuiltInStatKind.Strength => AppleIIgsGamePack.Stat.Str, BuiltInStatKind.Dexterity => AppleIIgsGamePack.Stat.Dex,

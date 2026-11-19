@@ -38,12 +38,17 @@ namespace SandcastleRpgMaker.Engine;
 ///   $16 PIC  u16 sprite, u16 x, u16 y                       Show Picture (over the game until Erase Picture)
 ///   $17 ERASE                                               Erase Picture (the game drawn again)
 ///   $18 GAME u8 0 game over / 1 quit / 2 save / 3 load
+///   $19 PAY  u16 price, u16 place if the Avatar's gold is short    (gold taken)
+///   $1A SELL u16 name, u16 price, u16 place if the Avatar has none  (one taken, gold given)
+///   $1B MORE                                                "<more>": a key goes on, Escape ends (a book's next page)
+/// The Shop command is made into Ultima 6 keyword talk: the merchant's line, what can be asked (the stock, the shop's
+/// parts, sell, bye); a thing asked for: its price, yes / no; bought: paid, given.
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
 /// </summary>
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -53,6 +58,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? Picture;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
+        /// <summary>An item's name as shown (a shop's {item} / {money}).</summary>
+        public Func<ReferencedItemCategory, int, string>? ItemName;
     }
     public Env? Extra { get; set; }
     private readonly List<byte> _code = new();
@@ -120,6 +127,125 @@ public sealed class AppleIIgsTalk
         talk.B(End);
         code = talk._code.ToArray();
         return talk;
+    }
+
+    /// <summary>A book's words read in the text area (Ultima 6): a screenful (lines of about chars letters) at a time, "<more>" between.</summary>
+    public static byte[] CompileText(string text, int chars, int lines)
+    {
+        var talk = new AppleIIgsTalk(_ => 0, null, null, null);
+        var all = new List<string>();
+        foreach (var paragraph in text.Replace("\r", "").TrimEnd().Split('\n'))
+        {
+            var line = "";
+            foreach (var word in paragraph.Split(' '))
+            {
+                if (line.Length > 0 && line.Length + 1 + word.Length > chars) { all.Add(line); line = ""; }
+                line = line.Length == 0 ? word : line + " " + word;
+            }
+            all.Add(line);
+        }
+        for (int i = 0; i < all.Count; i += Math.Max(1, lines))
+        {
+            if (i > 0) talk.B(More);
+            talk.SayLine(string.Join("\n", all.Skip(i).Take(Math.Max(1, lines))));
+        }
+        talk.B(End);
+        return talk._code.ToArray();
+    }
+
+    /// <summary>SAY the words (printable letters only).</summary>
+    private void SayLine(string text)
+    {
+        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(1000).ToArray()));
+        if (bytes.Length == 0) return;
+        B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
+    }
+
+    /// <summary>The Shop command as keyword talk (Engine/ShopModel.cs; the Windows engine's U6GameWindow.Shop.cs, without haggling).</summary>
+    private void CompileShop(ShopDefinition shop)
+    {
+        string money = Extra?.ItemName?.Invoke(ReferencedItemCategory.Object, shop.CurrencyObjectId) is { Length: > 0 } m ? m : "gold";
+        var t = shop.Texts;
+        var nodeAt = new Dictionary<ShopNode, int>();
+        var jumps = new List<(int Hole, ShopNode Node)>();
+        var leave = new List<int>();
+        int sellAt = -1;
+        var sellHoles = new List<int>();
+        string Key(string s) => new string(s.Trim().ToLowerInvariant().Where(ch => ch is >= ' ' and <= '~').TakeWhile(ch => ch != ' ').Take(20).ToArray());
+        void AskOp(List<(string Word, Action<int> Fill)> replies)
+        {
+            B(AppleIIgsTalk.Ask); B(replies.Count);
+            foreach (var (word, fill) in replies)
+            {
+                var w = Encoding.ASCII.GetBytes(word);
+                B(w.Length); _code.AddRange(w);
+                fill(Hole());
+            }
+        }
+        void Node(ShopNode node, ShopNode? parent)
+        {
+            nodeAt[node] = Here;
+            var items = node.Items.Where(i => Extra?.Item?.Invoke(i.Category.ToString(), i.ItemId.ToString()) is not null).ToList();
+            var words = node.Children.Select(c => Key(c.Label)).Concat(items.Select(i => Key(Extra!.ItemName?.Invoke(i.Category, i.ItemId) ?? "thing")))
+                .Concat(parent is null ? (shop.Buys.Count > 0 ? new[] { "sell" } : Array.Empty<string>()).Append("bye") : new[] { "back", "bye" }).ToList();
+            SayLine(Marked(node.Line, words) + "\n" + string.Join(", ", words.Select(w => "\u0001" + w + "\u0002")));
+            var replies = new List<(string, Action<int>)>();
+            var itemHoles = new List<(int Hole, ShopItem Item)>();
+            foreach (var c in node.Children) replies.Add((Key(c.Label), h => jumps.Add((h, c))));
+            foreach (var i in items) replies.Add((Key(Extra!.ItemName?.Invoke(i.Category, i.ItemId) ?? "thing"), h => itemHoles.Add((h, i))));
+            if (parent is null && shop.Buys.Count > 0) replies.Add(("sell", h => sellHoles.Add(h)));
+            if (parent is not null) replies.Add(("back", h => jumps.Add((h, parent))));
+            replies.Add(("bye", h => leave.Add(h)));
+            AskOp(replies);
+            foreach (var (hole, item) in itemHoles)
+            {
+                Fill(hole, Here);
+                var it = Extra!.Item!.Invoke(item.Category.ToString(), item.ItemId.ToString())!.Value;
+                string name = Extra.ItemName?.Invoke(item.Category, item.ItemId) ?? "thing";
+                SayLine(ShopTexts.Fill(item.PriceLine.Length > 0 ? item.PriceLine : t.PriceLine, name, item.Price, money));
+                int yes = -1, no = -1;
+                AskOp(new() { ("yes", h => yes = h), ("no", h => no = h) });
+                Fill(yes, Here);
+                B(Pay); W(item.Price); int poor = Hole();
+                B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other);
+                SayLine(ShopTexts.Fill(t.Agreed, name, item.Price, money));
+                B(Jump); jumps.Add((Hole(), node));
+                Fill(poor, Here);
+                SayLine(ShopTexts.Fill(t.NotEnoughMoney, name, item.Price, money));
+                B(Jump); jumps.Add((Hole(), node));
+                Fill(no, Here);
+                SayLine(ShopTexts.Fill(t.Declined, name, item.Price, money));
+                B(Jump); jumps.Add((Hole(), node));
+            }
+            foreach (var c in node.Children) Node(c, node);
+        }
+        Node(shop.Root, null);
+        if (shop.Buys.Count > 0)
+        {
+            sellAt = Here;
+            var buys = shop.Buys.Where(b => Extra?.Item?.Invoke(b.Category.ToString(), b.ItemId.ToString()) is not null).ToList();
+            SayLine(t.SellLine + "\n" + string.Join(", ", buys.Select(b => "\u0001" + Key(Extra!.ItemName?.Invoke(b.Category, b.ItemId) ?? "thing") + "\u0002").Append("\u0001back\u0002")));
+            var holes = new List<(int Hole, ShopBuy Buy)>();
+            var replies = buys.Select(b => (Key(Extra!.ItemName?.Invoke(b.Category, b.ItemId) ?? "thing"), (Action<int>)(h => holes.Add((h, b))))).ToList();
+            replies.Add(("back", h => jumps.Add((h, shop.Root))));
+            AskOp(replies);
+            foreach (var (hole, b) in holes)
+            {
+                Fill(hole, Here);
+                var it = Extra!.Item!.Invoke(b.Category.ToString(), b.ItemId.ToString())!.Value;
+                string name = Extra.ItemName?.Invoke(b.Category, b.ItemId) ?? "thing";
+                B(Sell); W(it.Name); W(b.Price); int none = Hole();
+                SayLine(ShopTexts.Fill(t.SellAgreed, name, b.Price, money));
+                B(Jump); jumps.Add((Hole(), shop.Root));
+                Fill(none, Here);
+                SayLine(ShopTexts.Fill(t.NothingToSell, name, b.Price, money));
+                B(Jump); jumps.Add((Hole(), shop.Root));
+            }
+        }
+        foreach (int h in sellHoles) Fill(h, sellAt);
+        foreach (var (h, n) in jumps) Fill(h, nodeAt[n]);
+        foreach (int h in leave) Fill(h, Here);
+        SayLine(t.Farewell);
     }
 
     private sealed class Frame
@@ -347,6 +473,15 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.ErasePicture:
                     B(Erase);
                     break;
+                case EventCommandType.Shop:
+                {
+                    ShopDefinition? shop;
+                    try { shop = System.Text.Json.JsonSerializer.Deserialize<ShopDefinition>(cmd.Get("Shop")); } catch (System.Text.Json.JsonException) { shop = null; }
+                    if (shop is null || Extra?.Item is null) { Unsupported.Add("Shop (no shop)"); break; }
+                    if (shop.Haggle) Unsupported.Add("Shop haggling (the Apple IIgs asks the price)");
+                    CompileShop(shop);
+                    break;
+                }
                 case EventCommandType.GameOver: B(GameOp); B(0); break;
                 case EventCommandType.QuitGame: B(GameOp); B(1); break;
                 case EventCommandType.SaveGame: B(GameOp); B(2); break;
