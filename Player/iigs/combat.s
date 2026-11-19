@@ -259,6 +259,7 @@ AfterTurn:
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:
         jsr ClockRun            ; the clock (schedule.s)
+        jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
         lda Mode
         bne .out
@@ -615,6 +616,9 @@ Strike:
         adc [AtkP],y
         sec
         sbc [DefP],y
+        sta RollV
+        jsr BlowAils            ; protected: +3 defence; cursed: -3 (ailments.s)
+        lda RollV
         sec
         sbc #14
         bpl .hit
@@ -840,6 +844,7 @@ LastTick: .dw 0
 Seed:     .dw 1
 RndN:     .dw 0
 Dmg:      .dw 0
+RollV:    .dw 0
 GX:       .dw 0
 GY:       .dw 0
 Radius:   .dw 0

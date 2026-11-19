@@ -539,7 +539,11 @@ Effect:
         and #$FFEF
         sta [WP],y
         rts
-.k5:    cmp #E_LIGHT
+.k5:    jsr AilEffect           ; poison, curse, protection, invisibility, nourish (ailments.s)
+        bcc .k6
+        rts
+.k6:    lda EKind
+        cmp #E_LIGHT
         bne .out
         lda EAmt                ; light: as many turns x 20
         asl a

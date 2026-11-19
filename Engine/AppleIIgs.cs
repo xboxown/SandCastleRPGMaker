@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 25;
+    public const ushort Version = 26;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -401,12 +401,12 @@ public sealed class AppleIIgsGamePack
         "Cast", "No spellbook is readied.", "No spells in the spellbook.", "That spell is not in thy spellbook!", "Your level is not high enough.",
         "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.",
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
-        "To whom? ", "{1} gets {0}.", "Avatar" };
+        "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
-        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives" };
+        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -415,7 +415,7 @@ public sealed class AppleIIgsGamePack
     public static class Stat
     {
         public const int Hp = 0, MaxHp = 1, Str = 2, Dex = 3, Int = 4, Combat = 5, Magic = 6, Mana = 7, MaxMana = 8, Level = 9, Exp = 10,
-            Armour = 11, Weapon = 12, Reach = 13, Behaviour = 14, HomeX = 15, HomeY = 16;
+            Armour = 11, Weapon = 12, Reach = 13, Behaviour = 14, HomeX = 15, HomeY = 16, Food = 17;
     }
     public int[] AvatarStats { get; set; } = new int[StatWords];
     /// <summary>Schedules (Character Editor > Schedule), as Exult's: (the character's place in its map's list, the 3-hour

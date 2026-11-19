@@ -246,6 +246,14 @@ NearestFoe:
         sta DefP+2
         jsr DistCP
         sta T4
+        lda DefP                ; invisible: not seen (ailments.s)
+        ldx DefP+2
+        jsr AilsOf
+        and #32
+        beq .seen
+        lda #99
+        sta T4
+.seen:
         stz PK
 .l:     lda PK
         cmp PartyN
@@ -264,7 +272,12 @@ NearestFoe:
         cmp T5
         bcc .m
         sta T5
-.m:     lda T5
+.m:     lda MP                  ; an invisible member: not seen
+        ldx MP+2
+        jsr AilsOf
+        and #32
+        bne .n
+        lda T5
         cmp T4
         bcs .n
         sta T4
@@ -385,7 +398,7 @@ DropMember:
         bra .m
 .d:     dec PartyN
         stz ViewIdx
-        rts
+        jmp AilForget           ; their ailments' places moved (ailments.s)
 
 ; PARTY in the code: map, character ($FFFF: the one talked to), join or leave.
 TalkParty:
@@ -532,6 +545,9 @@ Join:
         sta [MP],y
         ldy #P_IDX
         lda JIdx
+        sta [MP],y
+        ldy #50                 ; its food (its schedule's place, unused in the party)
+        lda #24
         sta [MP],y
         ldy #C_FLAGS            ; its map's record: gone (in the party)
         lda [Src],y

@@ -931,7 +931,14 @@ GridVerb:
         beq .bag
         and #$C000
         beq .bag
-        lda [ItemPtr],y         ; a light carried: lit / put out (look.s)
+        lda [ItemPtr],y         ; food: eaten (ailments.s)
+        jsr IsFood
+        bcc .nfood
+        stz Mode
+        jsr NewLine
+        jsr RefreshInventory
+        jmp EatIt
+.nfood: lda [ItemPtr],y         ; a light carried: lit / put out (look.s)
         jsr IsLight
         bcc .ntl
         stz Mode

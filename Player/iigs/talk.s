@@ -589,7 +589,7 @@ RunTalk:
         cmp #12
         bcs .more
         jmp EventOp
-.more:  cmp #28
+.more:  cmp #29
         bcs .end
         jmp MoreOps             ; (cmds.s)             ; TRIG, ITEM, HIT (events.s)
 .play:

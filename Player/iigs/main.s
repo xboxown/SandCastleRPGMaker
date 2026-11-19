@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 26 (b646): ailments and hunger (ailments.s): poisoned, asleep, paralyzed, charmed, cursed, invisible,
+;   protected - their times as Exult's; food used by the hour, starving; Use eats food.
 ; Version 25 (b645): each party member's own things (owner.s): a carried thing's owner (+14), the panel shows the
 ;   shown member's things and gear, Move gives to a member (a digit or a click on them), members fight with their gear.
 ; Version 24 (b643): the mouse (mouse.s): the pointer shown; a click on the map looks (a double click talks / uses),
@@ -586,7 +588,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #25
+        cmp #26
         beq .known
 .bad:   sec
         rts
@@ -2017,6 +2019,7 @@ TryMove:
         .include "title.s"
         .include "mouse.s"
         .include "owner.s"
+        .include "ailments.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

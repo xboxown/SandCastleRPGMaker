@@ -147,10 +147,9 @@ public partial class MainWindow
         var effectsLeftOut = new SortedSet<string>();
         foreach (var book in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Spellbook))
             foreach (var sp in book.Spellbook.Spells)
-                foreach (var e in sp.Effects.Where(e => e.Kind is not (MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
-                    or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light)))
+                foreach (var e in sp.Effects.Where(e => !IIgsEffect(e.Kind)))
                     effectsLeftOut.Add(e.Kind.ToString());
-        if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (Heal, Restore Mana, Damage, Sleep, Awaken, Paralyze, Cure Paralysis and Light work).");
+        if (effectsLeftOut.Count > 0) problems.Add($"Note: these spell effects aren't on the Apple IIgs yet and do nothing there: {string.Join(", ", effectsLeftOut)} (Heal, Restore Mana, Damage, Poison, Cure Poison, Sleep, Awaken, Paralyze, Cure Paralysis, Curse, Remove Curse, Protection, Invisibility, Light and Nourish work).");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -351,6 +350,11 @@ public partial class MainWindow
         catch { return System.Text.RegularExpressions.Regex.Replace(data, "<[^>]+>", string.Empty).Trim(); }
     }
 
+    /// <summary>The spell effects the Apple IIgs player does (Player/iigs/magic.s, ailments.s).</summary>
+    private static bool IIgsEffect(MagicEffectKind k) => k is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
+        or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light or MagicEffectKind.Poison or MagicEffectKind.CurePoison
+        or MagicEffectKind.Curse or MagicEffectKind.RemoveCurse or MagicEffectKind.Protection or MagicEffectKind.Invisibility or MagicEffectKind.Nourish;
+
     private AppleIIgsGamePack MakeAppleIIgsPack()
     {
         var pack = new AppleIIgsGamePack { Title = _currentProjectName ?? "Game" };
@@ -537,6 +541,8 @@ public partial class MainWindow
             return pack.Texts.Count - 1;
         }
         // A light source's Other: $F000, lit (bit 8), how far it lights (1-7, from its Brightness: a candle 1, a lamp 7).
+        // Food: $C400 + how much it feeds (Object Editor > Food: Nutrition).
+        int FoodCode(WorldObject def) => 0xC400 | Math.Clamp(def.Food.Nutrition, 1, 255);
         int LightCode(WorldObject def, bool lit) => 0xF000 | (lit ? 0x100 : 0) | Math.Clamp(1 + def.Light.Brightness / 2, 1, 7);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
@@ -557,8 +563,7 @@ public partial class MainWindow
                     };
                     foreach (var r in sp.AllReagents().Take(4))
                         if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == r.ObjectId) is { } rd) spell.Reagents.Add((pack.NameOf(rd.Name), Math.Max(1, r.Quantity)));
-                    foreach (var e in sp.Effects.Where(e => e.Kind is MagicEffectKind.Heal or MagicEffectKind.RestoreMana or MagicEffectKind.Damage or MagicEffectKind.Sleep
-                        or MagicEffectKind.Awaken or MagicEffectKind.Paralyze or MagicEffectKind.CureParalysis or MagicEffectKind.Light).Take(2))
+                    foreach (var e in sp.Effects.Where(e => IIgsEffect(e.Kind)).Take(2))
                         spell.Effects.Add(((int)e.Kind, Math.Max(0, e.Min), Math.Max(e.Min, e.Max)));
                     si = spellIndex[sp] = pack.Spells.Count;
                     pack.Spells.Add(spell);
@@ -602,7 +607,7 @@ public partial class MainWindow
                 }
                 bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
                 var thingDef = thing.Category == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) : null;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : thingDef?.Type == ObjectType.LightSource ? LightCode(thingDef, false) : 0xFFFF, IconOf(file), container));
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : thingDef?.Type == ObjectType.LightSource ? LightCode(thingDef, false) : thingDef?.Type == ObjectType.Food ? FoodCode(thingDef) : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
@@ -637,6 +642,7 @@ public partial class MainWindow
                 if (def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook) other = GearOf(def);
                 if (def.Type == ObjectType.Roof) { objects.Add((instance.X, instance.Y, n, bits, pack.NameOf(def.Name), 0xFFFD, 0xFFFF, -1)); continue; } // a roof: hidden while the Avatar is under it
                 if (def.Type == ObjectType.LightSource) other = LightCode(def, instance.IsLitRuntime ?? def.Light.StartsLit);
+                if (def.Type == ObjectType.Food && !def.Food.IsLiquid) other = FoodCode(def);
                 if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
@@ -692,7 +698,7 @@ public partial class MainWindow
                 int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
                 if (wornSlot > 15) wornSlot = 0;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : 0xFFFF, IconOf(file), owner));
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : def.Type == ObjectType.Food ? FoodCode(def) : 0xFFFF, IconOf(file), owner));
             }
         }
         if (PlayerCharacter() is { } theAvatar) AddCarried(theAvatar, -1);
@@ -731,6 +737,7 @@ public partial class MainWindow
             st[AppleIIgsGamePack.Stat.Level] = level; st[AppleIIgsGamePack.Stat.Exp] = StatOf(c, BuiltInStatKind.Exp, 0);
             st[AppleIIgsGamePack.Stat.Armour] = armour; st[AppleIIgsGamePack.Stat.Weapon] = weapon; st[AppleIIgsGamePack.Stat.Reach] = reach;
             st[AppleIIgsGamePack.Stat.HomeX] = homeX; st[AppleIIgsGamePack.Stat.HomeY] = homeY;
+            st[AppleIIgsGamePack.Stat.Food] = c.Survival.CanGetHungry ? Math.Clamp(c.Survival.StartingFood, 0, 31) : 0xFFFF;
             return st;
         }
         bool Hostile(CharacterDefinition c) => avatarDef is not null && c != avatarDef && _factionDatabase.BehaviorToward(c.FactionId, avatarDef.FactionId) == FactionBehavior.Attack;
@@ -791,7 +798,7 @@ public partial class MainWindow
                 string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
                 var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
                 int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
-                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : 0xFFFF;
+                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : giveDef?.Type == ObjectType.Food ? FoodCode(giveDef) : 0xFFFF;
                 return (pack.NameOf(name), sprite, IconOf(file), flags, other);
             },
             Picture = (group, name) =>

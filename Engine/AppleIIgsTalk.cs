@@ -41,6 +41,7 @@ namespace SandcastleRpgMaker.Engine;
 ///   $19 PAY  u16 price, u16 place if the Avatar's gold is short    (gold taken)
 ///   $1A SELL u16 name, u16 price, u16 place if the Avatar has none  (one taken, gold given)
 ///   $1B MORE                                                "<more>": a key goes on, Escape ends (a book's next page)
+///   $1C AIL  who, u8 the ailment's bit (1 poisoned, 2 asleep, 4 paralyzed, 8 charmed, 16 cursed, 32 invisible, 64 protected), u8 1 on / 0 off
 /// The Shop command is made into Ultima 6 keyword talk: the merchant's line, what can be asked (the stock, the shop's
 /// parts, sell, bye); a thing asked for: its price, yes / no; bought: paid, given.
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
@@ -48,7 +49,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -480,6 +481,22 @@ public sealed class AppleIIgsTalk
                     if (shop is null || Extra?.Item is null) { Unsupported.Add("Shop (no shop)"); break; }
                     if (shop.Haggle) Unsupported.Add("Shop haggling (the Apple IIgs asks the price)");
                     CompileShop(shop);
+                    break;
+                }
+                case EventCommandType.ChangeState or EventCommandType.ModifyAilments:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Change State (someone not on a map)"); break; }
+                    string state = cmd.Type == EventCommandType.ChangeState ? cmd.Get("State") : cmd.Get("Ailment");
+                    int bit = state switch { "Poisoned" => 1, "Asleep" => 2, "Paralyzed" => 4, "Charmed" => 8, "Cursed" => 16, "Invisible" => 32, "Protected" => 64, _ => 0 };
+                    if (bit == 0) break;
+                    bool on = cmd.Type == EventCommandType.ChangeState ? cmd.Get("Value") != "Off" : cmd.Get("Action") != "Cure";
+                    B(Ail); W(m); W(x); B(bit); B(on ? 1 : 0);
+                    break;
+                }
+                case EventCommandType.ChangeFoodLevel:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Change Food Level (someone not on a map)"); break; }
+                    B(StatOp); W(m); W(x); B(17); B(cmd.Get("Operation") switch { "Subtract" => 1, "Set" => 2, _ => 0 }); W(Math.Clamp(Number(cmd.Get("Value")), 0, 31));
                     break;
                 }
                 case EventCommandType.GameOver: B(GameOp); B(0); break;
