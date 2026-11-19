@@ -227,6 +227,19 @@ public static class SuperHiRes
     /// The 16 colours that best show every pixel given (median cut on their 12-bit colours, most-used first). Colour 0 is
     /// black: in a sprite it is see-through (the IIgs player draws colour 0 of a sprite as nothing).
     /// </summary>
+    /// <summary>The palette entry nearest a colour (4 bits each).</summary>
+    public static int NearestColour(ushort[] Palette, int r, int g, int b)
+    {
+        int best = 0, bestD = int.MaxValue;
+        for (int i = 0; i < Palette.Length; i++)
+        {
+            int c = Palette[i], d = Sq(((c >> 8) & 15) - r) + Sq(((c >> 4) & 15) - g) + Sq((c & 15) - b);
+            if (d < bestD) { bestD = d; best = i; }
+        }
+        return best;
+        static int Sq(int v) => v * v;
+    }
+
     public static ushort[] MakePalette(IEnumerable<uint> pixels)
     {
         var counts = new Dictionary<ushort, int>();
@@ -342,7 +355,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 33;
+    public const ushort Version = 34;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -474,7 +487,12 @@ public sealed class AppleIIgsGamePack
     /// <summary>Each map's ambient sounds (Edit > Map Ambient Sounds): dawn, day, dusk, night - a sound's number or $FFFF.</summary>
     public List<(int Dawn, int Day, int Dusk, int Night)> Ambient { get; } = new();
     /// <summary>Zones with a sound of their own, or Caves (silence: $FFFF): map, x, y, width, height, sound - the one to use first first.</summary>
-    public List<(int Map, int X, int Y, int W, int H, int Sound)> MusicZones { get; } = new();
+    public List<(int Map, int X, int Y, int W, int H, int Sound, bool Cave)> MusicZones { get; } = new();
+    /// <summary>Each map's weather (Edit > Map Weather): kind (0 clear, 1 rain, 2 snow, 3 hail, 4 storm), intensity, clouds,
+    /// cloud cover, the wind (x, y: -1, 0, 1), changes by itself, its chance an hour, the rain and thunder sounds ($FFFF none).</summary>
+    public List<int[]> Weather { get; } = new();
+    /// <summary>Day & Night's overcast strength in 16ths.</summary>
+    public int Overcast16 { get; set; } = 4;
     /// <summary>System Settings > Combat's music: danger, battle, battle 2, run away, escaped, victory, battle over, near death, death.</summary>
     public List<(int Sound, bool Loop)> CombatCues { get; } = new();
     /// <summary>Ultima 6's conversation music ($FFFF none); after a talk a random song of the map's.</summary>
@@ -647,10 +665,17 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Ambient.Count);
         foreach (var (a, b, c, d) in Ambient) { w.Write((ushort)a); w.Write((ushort)b); w.Write((ushort)c); w.Write((ushort)d); }
         w.Write((ushort)Math.Min(MusicZones.Count, 256));
-        foreach (var z in MusicZones.Take(256)) { w.Write((ushort)z.Map); w.Write((ushort)z.X); w.Write((ushort)z.Y); w.Write((ushort)z.W); w.Write((ushort)z.H); w.Write((ushort)z.Sound); }
+        foreach (var z in MusicZones.Take(256)) { w.Write((ushort)z.Map); w.Write((ushort)z.X); w.Write((ushort)z.Y); w.Write((ushort)z.W); w.Write((ushort)z.H); w.Write((ushort)z.Sound); w.Write((ushort)(z.Cave ? 1 : 0)); }
         for (int i = 0; i < 9; i++) { var (snd, loop) = i < CombatCues.Count ? CombatCues[i] : (0xFFFF, false); w.Write((ushort)snd); w.Write((ushort)(loop ? 1 : 0)); }
         w.Write((ushort)TalkMusic);
         w.Write((ushort)(AfterTalkRandom ? 1 : 0));
+        // The weather: each map's, then the colours drops are drawn in (the palette's nearest) and the overcast strength.
+        w.Write((ushort)Weather.Count);
+        foreach (var wt in Weather) for (int i = 0; i < 10; i++) w.Write((ushort)(i < wt.Length ? wt[i] : 0));
+        w.Write((ushort)SuperHiRes.NearestColour(Palette, 0xA, 0xB, 0xD));   // rain
+        w.Write((ushort)SuperHiRes.NearestColour(Palette, 0xF, 0xF, 0xF));   // snow, hail
+        w.Write((ushort)SuperHiRes.NearestColour(Palette, 0x0, 0x0, 0x0));   // cloud shadows
+        w.Write((ushort)Math.Clamp(Overcast16, 0, 16));
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

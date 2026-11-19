@@ -49,6 +49,7 @@ namespace SandcastleRpgMaker.Engine;
 ///   $20 PAYV u16 variable, u16 the place if the gold is short   (the variable's price paid)
 ///   $21 MUSIC u16 sound ($FFFF stop), u8 loop, u8 volume, u16 fade ticks   Play / Fade In / Stop Music (event music)
 ///   $22 VOLUME a formula (music 0-100), a formula (sounds 0-100)              Set Volume
+///   $24 WEATHER u8 kind (0 clear 1 rain 2 snow 3 hail 4 storm), u8 intensity, u8 clouds (0 off, 1 on, 2 as they are)
 ///   $23 RESUME                                                             Resume Map Music
 ///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
 ///   $1C AIL  who, u8 the ailment's bit (1 poisoned, 2 asleep, 4 paralyzed, 8 charmed, 16 cursed, 32 invisible, 64 protected), u8 1 on / 0 off
@@ -59,7 +60,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -730,6 +731,13 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.ResumeMapMusic:
                     B(Resume);
                     break;
+                case EventCommandType.ChangeWeather:
+                {
+                    if (!Enum.TryParse<WeatherKind>(cmd.Get("Kind"), out var wk)) { Unsupported.Add("Change Weather (no kind)"); break; }
+                    if (!int.TryParse(cmd.Get("Intensity"), out int wi)) { wi = 50; if (cmd.Get("Intensity").Trim().Length > 0) Unsupported.Add("Change Weather (an intensity that's a formula: a number only)"); }
+                    B(Weather); B((int)wk); B(Math.Clamp(wi, 1, 100)); B(cmd.Get("Clouds") switch { "True" => 1, "False" => 0, _ => 2 });
+                    break;
+                }
                 case EventCommandType.ShowBark:
                 {
                     string who = Extra?.WhoName?.Invoke(cmd.Get("Who")) ?? "";

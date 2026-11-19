@@ -125,7 +125,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -1045,6 +1045,7 @@ public partial class MainWindow
         {
             int Snd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int sn) ? sn : 0xFFFF;
             var ambient = Enumerable.Repeat((0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF), 1 + pack.OtherMaps.Count).ToArray();
+            var weather = Enumerable.Range(0, ambient.Length).Select(_ => new[] { 0, 50, 0, 0, 0, 0, 0, 0, 0xFFFF, 0xFFFF }).ToArray();
             void MusicOf(MapData world, int mapNo, int floor)
             {
                 if (mapNo >= ambient.Length) return;
@@ -1052,11 +1053,18 @@ public partial class MainWindow
                 ambient[mapNo] = (Snd(a.DawnSoundId), Snd(a.DaySoundId), Snd(a.DuskSoundId), Snd(a.NightSoundId));
                 foreach (var z in world.Zones.Where(z => z.Floor == floor && (SandcastleRpgMaker.Engine.Zones.IsCave(z) || z.AmbientSoundId >= 0))
                              .OrderBy(z => z.AmbientSoundId >= 0 ? 0 : 1).ThenBy(z => z.Width * z.Height))
-                    pack.MusicZones.Add((mapNo, z.X, z.Y, z.Width, z.Height, z.AmbientSoundId >= 0 ? Snd(z.AmbientSoundId) : 0xFFFF));
+                    pack.MusicZones.Add((mapNo, z.X, z.Y, z.Width, z.Height, z.AmbientSoundId >= 0 ? Snd(z.AmbientSoundId) : 0xFFFF, SandcastleRpgMaker.Engine.Zones.IsCave(z)));
+                var wt = world.Weather;
+                int wx = wt.Wind is SpriteDirection.East or SpriteDirection.NorthEast or SpriteDirection.SouthEast ? 1 : wt.Wind is SpriteDirection.West or SpriteDirection.NorthWest or SpriteDirection.SouthWest ? -1 : 0;
+                int wy = wt.Wind is SpriteDirection.South or SpriteDirection.SouthEast or SpriteDirection.SouthWest ? 1 : wt.Wind is SpriteDirection.North or SpriteDirection.NorthEast or SpriteDirection.NorthWest ? -1 : 0;
+                weather[mapNo] = new[] { (int)wt.Kind, Math.Clamp(wt.Intensity, 1, 100), wt.Clouds ? 1 : 0, Math.Clamp(wt.CloudCover, 0, 100), wx & 0xFFFF, wy & 0xFFFF,
+                    wt.Changes ? 1 : 0, Math.Clamp(wt.ChangeChancePercent, 0, 100), Snd(wt.RainSoundResourceId), Snd(wt.ThunderSoundResourceId) };
             }
             for (int wi = 0; wi < worldList.Count; wi++) MusicOf(worldList[wi], wi, 1);
             foreach (var ((wi, f), mi) in floorMap) MusicOf(worldList[wi], mi, f);
             pack.Ambient.AddRange(ambient);
+            pack.Weather.AddRange(weather);
+            pack.Overcast16 = (int)Math.Round(Math.Clamp(_systemSettings.DayNight.OvercastStrength, 0, 1) * 16);
             var cm = _systemSettings.Combat.Music;
             foreach (var cue in new[] { cm.Danger, cm.Battle, cm.Battle2, cm.RunAway, cm.Escaped, cm.Victory, cm.BattleOver, cm.NearDeath, cm.Death })
                 pack.CombatCues.Add((Snd(cue.MusicId), cue.Loop));

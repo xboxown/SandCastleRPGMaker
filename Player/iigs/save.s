@@ -295,6 +295,7 @@ LoadGame:
         stz Mode
         lda #$FFFF              ; that map, as if arriving: its cells, the cell map again
         sta CurMap
+        sta WMap                ; (its weather again too - weather.s)
         lda GoMap
         jsr ChangeMap
         jsr Redraw

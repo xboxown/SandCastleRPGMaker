@@ -265,6 +265,7 @@ IdleTurn:
         jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
         jsr MusicRun            ; the music (music.s)
+        jsr WeatherRun          ; the weather (weather.s)
         lda Mode
         bne .out
         lda CombatOn

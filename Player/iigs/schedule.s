@@ -32,6 +32,7 @@ ClockRun:
         stz Minute
         jsr Starving            ; a minute: the starving lose a hit point now and then (ailments.s)
         inc Hour
+        jsr WeatherHour         ; (weather.s)
         jsr EatHour             ; an hour: food used (ailments.s)
         lda Hour
         cmp #24

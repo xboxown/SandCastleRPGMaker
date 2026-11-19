@@ -235,7 +235,12 @@ ToggleLight:
 
 ; The view's cells outside every light: black.
 DrawDark:
-        lda DNOn
+        lda WCave               ; a Cave: dark, day or night - only lights lift it (weather.s keeps WCave)
+        beq .nc
+        lda #1
+        sta AvLight
+        bra .night
+.nc:    lda DNOn
         bne .on
         rts
 .on:    lda Hour                ; day: no darkness

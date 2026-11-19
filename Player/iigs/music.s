@@ -44,11 +44,12 @@ ParseMusic:
         sta ZnPtr+2
         lda ZnCount
         asl a
-        asl a
         sta MT
         asl a
-        clc
-        adc MT                  ; 12 bytes each
+        asl a
+        asl a
+        sec
+        sbc MT                  ; 14 bytes each
         jsr AddPtr
         ldy #0                  ; the combat music: 9 x sound, loop
 .c:     lda [Ptr],y
@@ -65,7 +66,8 @@ ParseMusic:
         lda [Ptr],y
         sta AfterRnd
         lda #4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseWeather        ; (weather.s)
 
 ; ---- generators ----
 
@@ -111,7 +113,9 @@ MusStart:
         asl a
         clc
         adc #$8000
-        sta MBlk+8,x
+        bne .db
+        lda #$7000              ; (generator 8, the rain: below the others)
+.db:    sta MBlk+8,x
         stz MBlk+12,x
         stz MBlk+14,x
         lda PlayLoop
@@ -723,7 +727,7 @@ ZoneSong0:
         tay
 .n:     tya
         clc
-        adc #12
+        adc #14
         tay
         dec MN
         bne .l
@@ -805,7 +809,7 @@ MusicOff:
         stz Started
         stz Raging
         stz MHold
-        rts
+        jmp WeatherOff          ; (weather.s)
 
 ; ---- events' music ----
 ; MUSIC sound loop volume fade
@@ -981,7 +985,7 @@ MVol2:    .dw 0
 MusVol:   .dw 100
 SndPct:   .dw 100
 MBOff:    .dw 0
-MBlk:     .ds 80
+MBlk:     .ds 100
 MT:       .dw 0
 MN:       .dw 0
 MNow:     .dw 0
