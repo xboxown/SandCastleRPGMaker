@@ -293,11 +293,7 @@ IdleTurn:
 
 ; The Avatar dead: a key loads the saved game, else the game ends.
 DeadKey:
-        jsr LoadGame
-        lda LoadedOk
-        bne .back
-        jmp Quit
-.back:  rts
+        jmp ShowTitle           ; the title menu: Journey Onward (the saved game) or a new one (title.s)
 
 ; ---- the world's turn ----
 

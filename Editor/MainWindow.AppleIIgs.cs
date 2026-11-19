@@ -968,9 +968,20 @@ public partial class MainWindow
             pack.SwapFrames.Add(spritePixels.Count);
             spritePixels.Add((FitPicture(frame.FilePath, fw, fh), fw, fh));
         }
+        // The title menu's picture, its Acknowledgments, its Introduction (the intro commands).
+        uint[]? titlePicture = null;
+        var u6 = _systemSettings.Ultima6;
+        if (SpriteOfLink(u6.TitleSprite)?.Frames.FirstOrDefault()?.FilePath is { } titleFile && File.Exists(titleFile)) titlePicture = FitPicture(titleFile, 320, 200);
+        pack.Acknowledgments = u6.Acknowledgments;
+        if (u6.Hud.IntroCommands.Count > 0)
+        {
+            AppleIIgsTalk.Compile(u6.Hud.IntroCommands, VariableOf, out var intro, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+            pack.IntroCode = intro;
+        }
         var hud = ComposeHud(pack, out var portraitPanel);
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()));
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
         if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
+        if (titlePicture is not null) pack.TitlePicture = SuperHiRes.Pack(titlePicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         pack.SwapText = (swap.TextX, swap.TextY, swap.TextColor.Length > 0 && ColorConverter.ConvertFromString(swap.TextColor) is Color sc ? SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(sc.R << 16 | sc.G << 8 | sc.B), false) : 0xFFFF);
         if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);

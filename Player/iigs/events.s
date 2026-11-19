@@ -233,7 +233,12 @@ Advance:
 
 ; An event's code is over: the prompt if it did something, then the queue goes on.
 EndEvent:
+        lda IntroOn             ; the Introduction over: the title menu again (title.s)
+        beq .ev
+        stz IntroOn
         stz EvRunning
+        jmp ShowTitle
+.ev:    stz EvRunning
         stz Mode
         lda EvHit
         beq .q

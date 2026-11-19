@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 22;
+    public const ushort Version = 23;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -399,12 +399,13 @@ public sealed class AppleIIgsGamePack
         "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.",
         "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "{1} readies {0}.", "{1} puts away {0}.",
         "Cast", "No spellbook is readied.", "No spells in the spellbook.", "That spell is not in thy spellbook!", "Your level is not high enough.",
-        "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.", "Avatar" };
+        "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.",
+        "Introduction", "Create New Character", "Acknowledgments", "Journey Onward", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
-        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten" };
+        "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -436,6 +437,11 @@ public sealed class AppleIIgsGamePack
         public List<(int Name, int Count)> Reagents { get; } = new();
         public List<(int Kind, int Min, int Max)> Effects { get; } = new();
     }
+    /// <summary>The title menu (System Settings > Ultima 6 > Title): its picture (320 x 200, packed; null: black), the Acknowledgments' words,
+    /// the Introduction (the intro commands as talk code; empty: no Introduction).</summary>
+    public byte[]? TitlePicture { get; set; }
+    public string Acknowledgments { get; set; } = "Made with Sandcastle RPG Maker.";
+    public byte[] IntroCode { get; set; } = Array.Empty<byte>();
     /// <summary>Animated tiles (Tile Properties > animation): a tile and its frames' tiles (the first is itself), up to 4.</summary>
     public List<List<int>> AnimTiles { get; } = new();
     /// <summary>Day and night (System Settings > Day / Night): on, dawn, day, dusk and night's hours.</summary>
@@ -595,6 +601,11 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);
+        w.Write((ushort)(TitlePicture is null ? 0 : 1));
+        if (TitlePicture is not null) w.Write(TitlePicture);
+        var acks = Ascii(Acknowledgments.Replace("\r", "").Replace('\n', ' '), 200);
+        w.Write((byte)acks.Length); w.Write(acks); w.Write((byte)0);
+        w.Write((ushort)IntroCode.Length); w.Write(IntroCode);
         w.Write((ushort)Math.Min(AnimTiles.Count, 128));
         foreach (var frames in AnimTiles.Take(128)) { w.Write((ushort)Math.Min(frames.Count, 4)); foreach (int f in frames.Take(4)) w.Write((ushort)f); for (int i = frames.Count; i < 4; i++) w.Write((ushort)frames[0]); }
         return ms.ToArray();

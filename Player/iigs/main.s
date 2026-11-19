@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 23 (b642): the title menu (title.s): its picture, Introduction, Create New Character, Acknowledgments,
+;   Journey Onward (the saved game); the Avatar's death and a new game come back to it.
 ; Version 22 (b641): the world's look (look.s): night and light (darkness beyond the light), animated tiles, roofs
 ;   hidden while the Avatar is under them; upper floors are maps of their own (the editor), stairs and ladders events.
 ; Version 21 (b640): reading and shops (read.s): books and signs read in the text area (<more>), the Avatar's gold,
@@ -214,10 +216,7 @@ start:
         jsr LoadDisks           ; a game on floppies: which file is on which disk
         jsr PreloadSwapSound
         tool $9004              ; HideCursor
-        jsr SetupScreen
-        jsr DrawPanel
-        jsr DrawView
-        jsr ArriveEvents        ; the first map's Always events (events.s)
+        jsr ShowTitle           ; the title menu first (title.s)
 MainLoop:
         pha
         pea $0028               ; key down, auto-key
@@ -233,12 +232,15 @@ MainLoop:
         and #$007F
         sta Key
         lda Mode
-        beq .walk
-        cmp #4
-        beq .cur
-        cmp #5
-        beq .inv
-        cmp #6
+        bne .modes
+        brl .walk
+.modes: cmp #4
+        bne .m5
+        brl .cur
+.m5:    cmp #5
+        bne .m6
+        brl .inv
+.m6:    cmp #6
         bne .not6
         lda Key                 ; the quit question
         jsr QuitKey
@@ -263,7 +265,12 @@ MainLoop:
         lda Key                 ; <more> (read.s)
         jsr MoreKey
         brl MainLoop
-.not10: cmp #2
+.not10: cmp #12
+        bcc .not12
+        lda Key                 ; the title menu, its Acknowledgments (title.s)
+        jsr TitleKey
+        brl MainLoop
+.not12: cmp #2
         beq .typing
         brl MainLoop            ; the talk is running
 .typing: lda Key
@@ -550,7 +557,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #22
+        cmp #23
         beq .known
 .bad:   sec
         rts
@@ -1974,6 +1981,7 @@ TryMove:
         .include "magic.s"
         .include "read.s"
         .include "look.s"
+        .include "title.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

@@ -23,6 +23,7 @@ ParseLook:
         sta DNNight
         lda #10
         jsr AddPtr
+        jsr ParseTitle          ; the title menu's picture, words, introduction (title.s)
         lda [Ptr]
         sta AnimCount
         lda #2

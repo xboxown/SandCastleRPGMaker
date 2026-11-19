@@ -351,7 +351,11 @@ QuitKey:
         cmp #'y'
         bne .no
         jmp Quit
-.no:    stz Mode
+.no:    lda QuitFromTitle       ; asked at the title menu: back to it
+        beq .game
+        stz QuitFromTitle
+        jmp ShowTitle
+.game:  stz Mode
         jmp PromptLine
 
 SvMap:    .dw 0

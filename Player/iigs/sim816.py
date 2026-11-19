@@ -277,6 +277,11 @@ class Machine:
             req = self.rd16(parm + 8) | self.rd16(parm + 10) << 16
             if ref in self.wfiles: self.wfiles[ref][1].extend(self.mem[buf: buf + req])
             self.wr16(parm + 12, req); self.wr16(parm + 14, req >> 16)
+        elif call == 0x2006:  # GetFileInfo: there or not
+            pathp = self.rd24(parm + 2)
+            n = self.rd16(pathp)
+            name = bytes(self.mem[pathp + 2: pathp + 2 + n]).decode().split(':')[-1]
+            if not os.path.exists(os.path.join(self.folder, name)): err = 0x46
         elif call in (0x2001, 0x2002):  # Create, Destroy (in the game's folder)
             pathp = self.rd24(parm + 2)
             n = self.rd16(pathp)
