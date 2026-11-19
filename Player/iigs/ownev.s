@@ -73,7 +73,10 @@ CodeAt:
 RunOwn:
         lda QT
         sta CurTrig
-        lda QY
+        cmp #21                 ; a leveling event: its variables (levels.s)
+        bcc .nl
+        jsr LevelVarsNow
+.nl:    lda QY
         pha
         ldx #0                  ; the entry off the queue
 .sh:    cpx #14
@@ -84,6 +87,12 @@ RunOwn:
         sta QX,x
         lda QY+2,x
         sta QY,x
+        lda QA+2,x
+        sta QA,x
+        lda QB+2,x
+        sta QB,x
+        lda QC+2,x
+        sta QC,x
         inx
         inx
         bra .sh

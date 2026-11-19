@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 35;
+    public const ushort Version = 36;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -493,13 +493,15 @@ public sealed class AppleIIgsGamePack
         "Not enough magic points.", "No Reagents.", "On whom? ", "{1} has healed.", "<more>", "There is nothing written.",
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
-        "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.", "Avatar" };
+        "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
+        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
-        "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard" };
+        "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
+        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -577,6 +579,17 @@ public sealed class AppleIIgsGamePack
     /// <summary>Their pieces: vehicle, object (its number), role (0 none, 1 driver's seat, 2 controls, 3 wheel), its look
     /// built (south) and turned 1, 2, 3 quarters clockwise, a wheel's moving look ($FFFF none).</summary>
     public List<(int Vehicle, int Object, int Role, int[] Looks, int Moving)> VehicleParts { get; } = new();
+    /// <summary>Ultima 6 leveling (Leveling Editor): levels rise by themselves, or are only earned (shrines, dreams).</summary>
+    public bool RiseByThemselves { get; set; } = true;
+    public int StatCap { get; set; } = 30;
+    /// <summary>The leveling events: 21 when someone earns a level, 22 when the party wakes from Rest, 23 the same once for
+    /// each member who has earned a level - their code in Codes.</summary>
+    public List<(int Trigger, int Code)> LevelEvents { get; } = new();
+    /// <summary>The variables the leveling events read: LevelWhoId, LevelNow, LevelEarned, LevelRose, RestHours.</summary>
+    public int[] LevelVars { get; set; } = { 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF };
+    /// <summary>Characters' ids by their names (LevelWhoId); the Avatar's.</summary>
+    public List<(int Name, int Id)> CharIds { get; } = new();
+    public int AvatarId { get; set; }
     /// <summary>Day & Night's overcast strength in 16ths.</summary>
     public int Overcast16 { get; set; } = 4;
     /// <summary>System Settings > Combat's music: danger, battle, battle 2, run away, escaped, victory, battle over, near death, death.</summary>
@@ -778,6 +791,15 @@ public sealed class AppleIIgsGamePack
         if (vtext.Count % 2 == 1) vtext.Add(0);
         w.Write((ushort)vtext.Count);
         w.Write(vtext.ToArray());
+        // Ultima 6 leveling.
+        w.Write((ushort)(RiseByThemselves ? 1 : 0));
+        w.Write((ushort)Math.Clamp(StatCap, 1, 255));
+        foreach (int v in LevelVars) w.Write((ushort)v);
+        w.Write((ushort)AvatarId);
+        w.Write((ushort)Math.Min(LevelEvents.Count, 32));
+        foreach (var (t, c) in LevelEvents.Take(32)) { w.Write((ushort)t); w.Write((ushort)c); }
+        w.Write((ushort)Math.Min(CharIds.Count, 256));
+        foreach (var (n, i) in CharIds.Take(256)) { w.Write((ushort)n); w.Write((ushort)i); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

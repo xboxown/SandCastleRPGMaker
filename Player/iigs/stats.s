@@ -171,6 +171,12 @@ Decimal:
 
 ; The Avatar's experience: levels earned (Ultima 6: more than the step for its level).
 CheckLevel:
+        lda #AvRec              ; the Avatar's experience: as levels.s's ExpGained
+        sta WP
+        lda MyBank
+        sta WP+2
+        jmp ExpGained
+OldCheckLevel:
         lda LvlOn
         bne .again
         jmp HpChanged
@@ -325,7 +331,15 @@ RestKey:
         lda #15
         sta Mode
         rts
-.alone: jmp DoRest
+.alone: lda #W_NOONE            ; no guard: {RestGuard} none
+        asl a
+        asl a
+        tax
+        lda WordTab,x
+        sta RGName
+        lda WordTab+2,x
+        sta RGName+2
+        jmp DoRest
 .stop:  stz Mode
         jmp PromptLine
 .out:   rts
@@ -367,7 +381,11 @@ GuardKey:
         sta TP
         lda WordTab+2,x
         sta TP+2
-.say:   lda PenX
+.say:   lda TP                  ; (the guard's name, {RestGuard} - levels.s)
+        sta RGName
+        lda TP+2
+        sta RGName+2
+        lda PenX
         clc
         adc SpaceW
         sta PenX
@@ -508,9 +526,11 @@ DoRest:
         jsr Tell
 .hn:    inc RSlot
         bra .heal
-.done:  jsr HpChanged
+.done:  jsr RestLevelEvents      ; the leveling system's rest events (levels.s)
+        jsr HpChanged
         jsr DrawView
-        jmp PromptLine
+        jsr PromptLine
+        jmp RunQueue
 
 ; Carry set if member RSlot ate one food: theirs first, then anyone's in the party (in their bags too).
 EatOne:

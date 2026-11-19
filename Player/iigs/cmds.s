@@ -9,7 +9,7 @@ MoreOps:
         tax
         jmp (OpJump,x)
 
-OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh
+OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick
 
 ; TPC += A, on with the code.
 Next:
@@ -269,9 +269,9 @@ OpStat:
         lda GWord
         cmp #10                 ; experience: a level?
         bne .h
-        jsr WPIsAvatar
+        jsr WPInParty
         bcc .h
-        jsr CheckLevel
+        jsr ExpGained           ; (levels.s)
 .h:     jsr HpChanged
 .skip:  lda #9
         jmp Next

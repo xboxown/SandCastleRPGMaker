@@ -794,10 +794,13 @@ Dies:
         bcc .e
         lda #$FFFF
 .e:     sta [AtkP],y
-        lda AtkP
-        cmp #AvRec
-        bne .out
-        jsr CheckLevel
+        lda AtkP                ; the Avatar or a member: a level earned? (levels.s)
+        sta WP
+        lda AtkP+2
+        sta WP+2
+        jsr WPInParty
+        bcc .out
+        jsr ExpGained
 .out:   jmp DrawView
 
 ; Carry set if DefP is the Avatar.

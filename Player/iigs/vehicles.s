@@ -134,7 +134,8 @@ ParseVehicles:
         sta VAuto
         stz VMoving
         lda VT0
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseLevels         ; (levels.s)
 
 ; ---- objects ----
 ; ItemPtr = object A's record.

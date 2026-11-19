@@ -148,7 +148,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather, Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel Vehicle and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather, Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel Vehicle, Rise A Level, Meditate At Shrine, Run Leveling Event, Scene Text and Scene Choice (in the text area, with {formulas}, {LevelWho}, {RestGuard}) and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -928,6 +928,7 @@ public partial class MainWindow
             },
             ItemName = (cat, id) => DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase),
             Common = id => _systemSettings.CommonEvents.FirstOrDefault(c => c.Id == id)?.Commands,
+            LevelEvent = name => _systemSettings.Ultima6.Active?.Events.FirstOrDefault(e => string.Equals(e.Name, name.Trim(), StringComparison.OrdinalIgnoreCase))?.Commands,
             WhoName = who => who is "" or "Activator" or "Player" ? PlayerCharacter()?.Name : int.TryParse(who, out int wid) ? _characterDatabase.Characters.FirstOrDefault(c => c.Id == wid)?.Name : null,
             Stat = id => _statDatabase.Stats.FirstOrDefault(st => st.Id.ToString() == id)?.Kind switch
             {
@@ -1093,6 +1094,31 @@ public partial class MainWindow
             return pages;
         }
         pack.Events.AddRange(MapEvents(start, pack.EventMasks));
+        // Ultima 6 leveling (Leveling Editor): rising by themselves or only earned; its events (When Run Leveling Event
+        // calls one: built into the caller); the variables they read; characters' ids by name.
+        if (!_systemSettings.Ultima6.UseUltima7Leveling)
+        {
+            U6Leveling.Use(_systemSettings.Ultima6);
+            var system = _systemSettings.Ultima6.Active;
+            pack.RiseByThemselves = system?.RiseByThemselves ?? true;
+            pack.StatCap = U6Leveling.StatCap;
+            pack.LevelVars = new[] { VariableOf("LevelWhoId"), VariableOf("LevelNow"), VariableOf("LevelEarned"), VariableOf("LevelRose"), VariableOf("RestHours") };
+            foreach (var e in system?.Events ?? new List<U6LevelEvent>())
+            {
+                int trig = e.Trigger switch { U6LevelEvent.WhenEarned => 21, U6LevelEvent.WhenRested => 22, U6LevelEvent.WhenRestedEach => 23, _ => 0 };
+                if (trig == 0 || e.Commands.Count == 0) continue;
+                AppleIIgsTalk.CompileEvent(new() { new AppleIIgsTalk.EventPage(trig, -1, 2, new(), e.Commands) }, VariableOf, out var lcode, out _,
+                    id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+                pack.LevelEvents.Add((trig, pack.Codes.Count));
+                pack.Codes.Add(lcode);
+            }
+            pack.AvatarId = PlayerCharacter()?.Id ?? 0;
+            foreach (var world in worldList)
+                foreach (var placed in world.Characters)
+                    if (_characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId) is { } cd && !pack.CharIds.Any(ci => ci.Id == cd.Id))
+                        pack.CharIds.Add((pack.NameOf(cd.Name), cd.Id));
+        }
+        else pack.RiseByThemselves = true;
         // Objects' and containers' own events: by the thing's name.
         foreach (var od in _objectDatabase.Objects.Where(o => o.EventPages.Any(pg => pg.Commands.Count > 0)))
             if (OwnEvents(od.EventPages, "o" + od.Id) is int oc) pack.ObjEvents.Add((pack.NameOf(od.Name), oc));

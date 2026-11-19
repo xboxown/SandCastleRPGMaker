@@ -32,8 +32,17 @@ QueueEvent:
         sta QX,x
         lda QTY
         sta QY,x
+        lda QNA                 ; (a leveling event's someone and level - levels.s)
+        sta QA,x
+        lda QNB
+        sta QB,x
+        lda QNC
+        sta QC,x
         inc QN
-.out:   rts
+.out:   stz QNA
+        stz QNB
+        stz QNC
+        rts
 
 ; The Avatar stepped from OldX, OldY onto PX, PY.
 SteppedEvents:
@@ -365,6 +374,12 @@ QN:       .dw 0
 QT:       .ds 16
 QX:       .ds 16
 QY:       .ds 16
+QA:       .ds 16
+QB:       .ds 16
+QC:       .ds 16
+QNA:      .dw 0
+QNB:      .dw 0
+QNC:      .dw 0
 QTT:      .dw 0
 QTX:      .dw 0
 QTY:      .dw 0

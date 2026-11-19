@@ -51,6 +51,10 @@ namespace SandcastleRpgMaker.Engine;
 ///   $22 VOLUME a formula (music 0-100), a formula (sounds 0-100)              Set Volume
 ///   $25 VEHICLE u8 0 drive / 1 stop driving / 2 speed (a formula follows, cells a second) / 3 travel (u16 x, u16 y),
 ///        u16 the vehicle (template) - the copy nearest the Avatar   (expression op 28 u16: that vehicle travelling)
+///   $26 SAYF parts (1 a C string, 2 a formula, 3 u8 a name: 1 the leveling event's someone, 2 the guard), 0 - then a new line
+///   $27 RISE who, u8 flags (1 the party, 2 only if earned, 4 tell, 8 a level's hit points, 16 a shrine: Not Ready word),
+///        formulas strength, dexterity, intelligence, hit points; a C string (no one ready)            Rise A Level, Meditate
+///   $28 PICK u16 variable, u8 how many, their first letters                                          Scene Choice
 ///   $24 WEATHER u8 kind (0 clear 1 rain 2 snow 3 hail 4 storm), u8 intensity, u8 clouds (0 off, 1 on, 2 as they are)
 ///   $23 RESUME                                                             Resume Map Music
 ///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
@@ -62,7 +66,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -74,6 +78,8 @@ public sealed class AppleIIgsTalk
         public Func<string, int>? Stat;
         /// <summary>A Who's name (Show Bark).</summary>
         public Func<string, string?>? WhoName;
+        /// <summary>A leveling event's commands by its name (Run Leveling Event).</summary>
+        public Func<string, List<EventCommand>?>? LevelEvent;
         /// <summary>A Common Event's commands (Call Common Event).</summary>
         public Func<int, List<EventCommand>?>? Common;
         /// <summary>An item's name as shown (a shop's {item} / {money}).</summary>
@@ -373,6 +379,37 @@ public sealed class AppleIIgsTalk
         }
         if (c.Not) B(17);
         B(0);
+    }
+
+    /// <summary>
+    /// Words with {formulas} in them (Windows' SceneWords): the words, each {formula}'s value, {LevelWho} / {RestGuard}
+    /// (names), then a new line. Without any: a plain line.
+    /// </summary>
+    private void SayWords(string text)
+    {
+        text = text.Replace("\r", "").Trim();
+        if (text.Length == 0) return;
+        if (!text.Contains('{')) { SayLine(text); return; }
+        B(SayF);
+        int at = 0;
+        foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(text, @"\{([^{}]+)\}"))
+        {
+            if (m.Index > at) SayPart(text[at..m.Index]);
+            string inner = m.Groups[1].Value.Trim();
+            if (inner.Equals("LevelWho", StringComparison.OrdinalIgnoreCase)) { B(3); B(1); }
+            else if (inner.Equals("RestGuard", StringComparison.OrdinalIgnoreCase)) { B(3); B(2); }
+            else if (ScriptExpression.CompileIIgs(inner, _variable, out _) is { } code) { B(2); _code.AddRange(code); }
+            else { Unsupported.Add("words with a {text formula} (only numbers, LevelWho and RestGuard on the Apple IIgs)"); SayPart(m.Value); }
+            at = m.Index + m.Length;
+        }
+        if (at < text.Length) SayPart(text[at..]);
+        B(0);
+    }
+    private void SayPart(string part)
+    {
+        var bytes = Encoding.Latin1.GetBytes(new string(part.Select(ch => ch == '\n' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(400).ToArray()));
+        if (bytes.Length == 0) return;
+        B(1); _code.AddRange(bytes); B(0);
     }
 
     /// <summary>A fade's seconds in ticks (60 a second, at most a minute).</summary>
@@ -759,6 +796,41 @@ public sealed class AppleIIgsTalk
                     }
                     break;
                 }
+                case EventCommandType.U6SceneText:
+                    // On the Apple IIgs there is no scene: in the text area (as Windows with no scene up), {formulas} filled in.
+                    SayWords(cmd.Get("Text"));
+                    break;
+                case EventCommandType.U6SceneChoice:
+                {
+                    var answers = cmd.Get("Choices").Replace("\r", "").Split('\n').Select(a => a.Trim()).Where(a => a.Length > 0).Take(9).ToList();
+                    if (answers.Count == 0) break;
+                    if (cmd.Get("Question").Trim().Length > 0) SayWords(cmd.Get("Question"));
+                    for (int i = 0; i < answers.Count; i++) SayWords($"{i + 1}. {answers[i]}");
+                    B(Pick); W(_variable(cmd.Get("Variable"))); B(answers.Count);
+                    foreach (var a in answers) B(char.ToUpperInvariant(a[0]) is char ch and >= ' ' and <= '~' ? ch : '?');
+                    break;
+                }
+                case EventCommandType.U6RiseLevel or EventCommandType.U6Meditate:
+                {
+                    bool shrine = cmd.Type == EventCommandType.U6Meditate;
+                    int m = 0xFFFF, x = 0xFFFF;
+                    bool party = shrine || cmd.Get("Party") == "True";
+                    if (!party && !WhoCode(cmd.Get("Who"), out m, out x)) { Unsupported.Add("Rise A Level (someone not on a map)"); break; }
+                    bool hitsDefault = shrine || cmd.Get("Hits").Trim().Length == 0;
+                    int flags = (party ? 1 : 0) | (shrine || cmd.Get("OnlyIfEarned") != "False" ? 2 : 0) | (shrine || cmd.Get("Tell") != "False" ? 4 : 0) | (hitsDefault ? 8 : 0) | (shrine ? 16 : 0);
+                    B(Rise); W(m); W(x); B(flags);
+                    var virtue = shrine ? U6Leveling.Shrines.FirstOrDefault(s => s.Virtue == cmd.Get("Virtue")) : default;
+                    if (virtue.Virtue is not null) { foreach (int n in new[] { virtue.Str, virtue.Dex, virtue.Int }) { B(1); W(n); B(0); } }
+                    else { Formula(cmd.Get("Str"), "Rise A Level"); Formula(cmd.Get("Dex"), "Rise A Level"); Formula(cmd.Get("Int"), "Rise A Level"); }
+                    if (hitsDefault) { B(1); W(0); B(0); } else Formula(cmd.Get("Hits"), "Rise A Level");
+                    string notReady = shrine ? "" : cmd.Get("NotReady").Trim();
+                    _code.AddRange(Encoding.ASCII.GetBytes(new string(notReady.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(120).ToArray()))); B(0);
+                    break;
+                }
+                case EventCommandType.U6RunLevelEvent:
+                    if (depth < 4 && Extra?.LevelEvent?.Invoke(cmd.Get("Name")) is { } levelCommands) Run(levelCommands, depth + 1);
+                    else Unsupported.Add("Run Leveling Event (no leveling event of that name)");
+                    break;
                 case EventCommandType.ShowBark:
                 {
                     string who = Extra?.WhoName?.Invoke(cmd.Get("Who")) ?? "";
