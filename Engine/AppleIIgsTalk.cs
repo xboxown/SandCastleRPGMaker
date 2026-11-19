@@ -41,6 +41,9 @@ namespace SandcastleRpgMaker.Engine;
 ///   $19 PAY  u16 price, u16 place if the Avatar's gold is short    (gold taken)
 ///   $1A SELL u16 name, u16 price, u16 place if the Avatar has none  (one taken, gold given)
 ///   $1B MORE                                                "<more>": a key goes on, Escape ends (a book's next page)
+///   $1D CALC u16 variable, a formula (ScriptExpression.CompileIIgs: stack code ending 0)   Calculate, loops' counters
+///   $1E IFX  a formula, u16 the place if it is 0 (false)         While, Repeat, Select Case, Wait Until, Advance IF
+///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
 ///   $1C AIL  who, u8 the ailment's bit (1 poisoned, 2 asleep, 4 paralyzed, 8 charmed, 16 cursed, 32 invisible, 64 protected), u8 1 on / 0 off
 /// The Shop command is made into Ultima 6 keyword talk: the merchant's line, what can be asked (the stock, the shop's
 /// parts, sell, bye); a thing asked for: its price, yes / no; bought: paid, given.
@@ -49,7 +52,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -59,6 +62,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? Picture;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
+        /// <summary>A Common Event's commands (Call Common Event).</summary>
+        public Func<int, List<EventCommand>?>? Common;
         /// <summary>An item's name as shown (a shop's {item} / {money}).</summary>
         public Func<ReferencedItemCategory, int, string>? ItemName;
     }
@@ -269,7 +274,64 @@ public sealed class AppleIIgsTalk
     private int Hole() { int at = Here; W(0); return at; }
     private void Fill(int at, int value) { _code[at] = (byte)value; _code[at + 1] = (byte)(value >> 8); }
 
-    private void Run(List<EventCommand> commands)
+    private sealed class Loop
+    {
+        public EventCommandType Kind;
+        public int Top, Continue = -1, NextCase = -1, Select = -1;
+        public List<int> Ends = new();
+    }
+    private readonly Stack<Loop> _loops = new();
+    private int _hidden;
+
+    /// <summary>A formula into the code (its stack code); false if the Apple IIgs can't do it.</summary>
+    private bool Formula(string formula, string what)
+    {
+        var code = ScriptExpression.CompileIIgs(formula.Trim().Length == 0 ? "0" : formula, _variable, out _);
+        if (code is null) { Unsupported.Add(what + " (a formula with texts, lists or game functions)"); B(1); W(0); B(0); return false; }
+        _code.AddRange(code);
+        return true;
+    }
+
+    /// <summary>A While / Wait Until's condition: its formula, or its game condition (Advance IF).</summary>
+    private void Condition(EventCommand cmd, string what)
+    {
+        if (cmd.Get("Mode") == "Game") GameCondition(GameConditions.FromCommand(cmd), what);
+        else Formula(cmd.Get("Formula"), what);
+    }
+
+    /// <summary>An Advance IF game condition as a formula: variables, having or not having an item, the Avatar's stats, the time.</summary>
+    private void GameCondition(GameCondition? c, string what)
+    {
+        int Cmp(ConditionComparisonOperator op) => op switch { ConditionComparisonOperator.NotEqual => 10, ConditionComparisonOperator.LessThan => 11, ConditionComparisonOperator.GreaterThan => 12,
+            ConditionComparisonOperator.LessOrEqual => 13, ConditionComparisonOperator.GreaterOrEqual => 14, _ => 9 };
+        if (c is null) { B(1); W(0); B(0); return; }
+        switch (c.Kind)
+        {
+            case GameConditionKind.Variable:
+                B(2); W(_variable(c.VariableName)); B(1); W(int.TryParse(c.Value, out int v) ? v : bool.TryParse(c.Value, out bool bv) && bv ? 1 : 0); B(Cmp(c.Comparison));
+                break;
+            case GameConditionKind.HavingItem or GameConditionKind.NotHavingItem when c.Item is { } it && Extra?.Item?.Invoke(it.Category.ToString(), it.ItemId.ToString()) is { } info:
+                B(26); W(info.Name);
+                if (c.Kind == GameConditionKind.NotHavingItem) B(17);
+                break;
+            case GameConditionKind.Stat when Extra?.Stat?.Invoke(c.StatId.ToString()) is int word and >= 0:
+                B(24); B(word); B(1); W(int.TryParse(c.Value, out int sv) ? sv : 0); B(Cmp(c.Comparison));
+                break;
+            case GameConditionKind.TimeDate:
+                B(25); B(1); W(c.Number); B(14); B(25); B(1); W(c.Number2 >= c.Number ? c.Number2 : 23); B(13); B(15);
+                break;
+            default:
+                Unsupported.Add($"{what} ({c.Kind} game condition)");
+                B(1); W(0);
+                break;
+        }
+        if (c.Not) B(17);
+        B(0);
+    }
+
+    private int Hidden(string name) => _variable($"__iigs_{name}_{_hidden++}");
+
+    private void Run(List<EventCommand> commands, int depth = 0)
     {
         var frames = new Stack<Frame>();
         var labels = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
@@ -503,6 +565,104 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.QuitGame: B(GameOp); B(1); break;
                 case EventCommandType.SaveGame: B(GameOp); B(2); break;
                 case EventCommandType.LoadGame: B(GameOp); B(3); break;
+                case EventCommandType.Calculate:
+                    B(Calc); W(_variable(cmd.Get("Variable"))); Formula(cmd.Get("Formula"), "Calculate");
+                    break;
+                case EventCommandType.AdvancedIf:
+                    B(IfX); GameCondition(GameConditions.FromCommand(cmd), "Advance IF");
+                    frames.Push(new Frame { Indent = cmd.IndentLevel, ElseAt = Hole() });
+                    break;
+                case EventCommandType.While:
+                {
+                    var loop = new Loop { Kind = cmd.Type, Top = Here };
+                    loop.Continue = loop.Top;
+                    B(IfX); Condition(cmd, "While"); loop.Ends.Add(Hole());
+                    _loops.Push(loop);
+                    break;
+                }
+                case EventCommandType.RepeatTimes:
+                {
+                    int count = Hidden("count"), i = Hidden("i");
+                    B(Calc); W(count); Formula(cmd.Get("Count"), "Repeat");
+                    B(Calc); W(i); B(1); W(0); B(0);
+                    var loop = new Loop { Kind = cmd.Type, Top = Here };
+                    loop.Continue = loop.Top;
+                    B(IfX); B(2); W(i); B(2); W(count); B(11); B(0); loop.Ends.Add(Hole());
+                    B(Calc); W(i); B(2); W(i); B(1); W(1); B(3); B(0);
+                    if (cmd.Get("Variable").Trim().Length > 0) { B(Calc); W(_variable(cmd.Get("Variable"))); B(2); W(i); B(0); }
+                    _loops.Push(loop);
+                    break;
+                }
+                case EventCommandType.EndWhile or EventCommandType.EndRepeat when _loops.Count > 0:
+                {
+                    var loop = _loops.Pop();
+                    B(Jump); W(loop.Top);
+                    foreach (int at in loop.Ends) Fill(at, Here);
+                    break;
+                }
+                case EventCommandType.SelectCase:
+                {
+                    int sel = Hidden("select");
+                    B(Calc); W(sel); Formula(cmd.Get("Formula"), "Select Case");
+                    _loops.Push(new Loop { Kind = cmd.Type, Select = sel });
+                    break;
+                }
+                case EventCommandType.Case or EventCommandType.CaseElse when _loops.Count > 0 && _loops.Peek().Kind == EventCommandType.SelectCase:
+                {
+                    var loop = _loops.Peek();
+                    if (loop.NextCase >= 0 || loop.Ends.Count > 0 || loop.Top > 0) { B(Jump); loop.Ends.Add(Hole()); } // the case before: to the end
+                    if (loop.NextCase >= 0) Fill(loop.NextCase, Here);
+                    loop.NextCase = -1;
+                    loop.Top = 1;
+                    if (cmd.Type == EventCommandType.Case)
+                    {
+                        var values = ScriptRuntime.SplitList(cmd.Get("Formula"));
+                        B(IfX);
+                        for (int k = 0; k < values.Count; k++)
+                        {
+                            B(2); W(loop.Select);
+                            var code = ScriptExpression.CompileIIgs(values[k], _variable, out _);
+                            if (code is null) { Unsupported.Add("Case (a formula with texts)"); B(1); W(0); } else _code.AddRange(code.Take(code.Count - 1));
+                            B(9);
+                            if (k > 0) B(16);
+                        }
+                        if (values.Count == 0) { B(1); W(0); }
+                        B(0);
+                        loop.NextCase = Hole();
+                    }
+                    break;
+                }
+                case EventCommandType.EndSelect when _loops.Count > 0 && _loops.Peek().Kind == EventCommandType.SelectCase:
+                {
+                    var loop = _loops.Pop();
+                    if (loop.NextCase >= 0) Fill(loop.NextCase, Here);
+                    foreach (int at in loop.Ends) Fill(at, Here);
+                    break;
+                }
+                case EventCommandType.BreakLoop or EventCommandType.NextLoop:
+                {
+                    var loop = _loops.FirstOrDefault(l => l.Kind is EventCommandType.While or EventCommandType.RepeatTimes);
+                    if (loop is null) break;
+                    B(Jump);
+                    if (cmd.Type == EventCommandType.BreakLoop) loop.Ends.Add(Hole()); else W(loop.Continue);
+                    break;
+                }
+                case EventCommandType.WaitUntil:
+                {
+                    int top = Here;
+                    B(IfX); Condition(cmd, "Wait Until"); int wait = Hole();
+                    B(Jump); int done = Hole();
+                    Fill(wait, Here);
+                    B(WaitOp); W(10); B(Jump); W(top);
+                    Fill(done, Here);
+                    break;
+                }
+                case EventCommandType.CallCommonEvent:
+                    if (depth < 4 && int.TryParse(cmd.Get("CommonEventId"), out int ceId) && Extra?.Common?.Invoke(ceId) is { } ceCommands) Run(ceCommands, depth + 1);
+                    else Unsupported.Add("Call Common Event (a common event not there)");
+                    break;
+                case EventCommandType.Comment or EventCommandType.ReturnFromCommon:
+                    break;
                 case EventCommandType.StopConversation or EventCommandType.End:
                     B(End);
                     break;
@@ -517,6 +677,7 @@ public sealed class AppleIIgsTalk
             if (f.IsChoices) { LeaveBranch(f); foreach (int at in f.EndAt.Concat(f.TargetAt.Values)) Fill(at, Here); }
             else { if (f.ElseAt >= 0) Fill(f.ElseAt, Here); foreach (int at in f.EndAt) Fill(at, Here); }
         }
+        if (depth > 0) { foreach (var (at, label) in gotos) Fill(at, labels.TryGetValue(label, out int to) ? to : Here); return; }
         B(End);
         foreach (var (at, label) in gotos) Fill(at, labels.TryGetValue(label, out int to) ? to : Here - 1);
     }

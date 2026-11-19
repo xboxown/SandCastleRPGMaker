@@ -91,6 +91,7 @@ public static class ScriptExpression
     private sealed class Literal : Node
     {
         private readonly object _value;
+        public object Value => _value;
         public Literal(object value) => _value = value;
         public override object Eval(Env env) => _value;
     }
@@ -132,6 +133,7 @@ public static class ScriptExpression
     private sealed class Unary : Node
     {
         private readonly string _op; private readonly Node _a;
+        public string Op => _op; public Node Operand => _a;
         public Unary(string op, Node a) { _op = op; _a = a; }
         public override object Eval(Env env) => _op == "-" ? -ScriptValues.Number(_a.Eval(env)) : (ScriptValues.Truth(_a.Eval(env)) ? 0.0 : 1.0);
     }
@@ -139,6 +141,7 @@ public static class ScriptExpression
     private sealed class Binary : Node
     {
         private readonly string _op; private readonly Node _a, _b;
+        public string Op => _op; public Node Left => _a; public Node Right => _b;
         public Binary(string op, Node a, Node b) { _op = op; _a = a; _b = b; }
         public override object Eval(Env env)
         {
@@ -168,6 +171,7 @@ public static class ScriptExpression
     private sealed class Call : Node
     {
         private readonly string _name; private readonly List<Node> _args;
+        public string FunctionName => _name; public List<Node> Arguments => _args;
         public Call(string name, List<Node> args) { _name = name.ToLowerInvariant(); _args = args; }
         public override object Eval(Env env)
         {
@@ -365,6 +369,68 @@ public static class ScriptExpression
         {
             if (!IsOp(op)) throw new ScriptException($"a \"{op}\" is missing");
             _at++;
+        }
+    }
+
+    // ---------- The Apple IIgs player's formulas (Player/iigs/expr.s): whole numbers on a stack ----------
+
+    /// <summary>The formula as the Apple IIgs player's stack code (ops: 1 number, 2 variable, 3 + 4 - 5 * 6 / 7 %, 8 negate,
+    /// 9 = 10 != 11 &lt; 12 &gt; 13 &lt;= 14 &gt;=, 15 and 16 or 17 not, 18 random(a, b) 19 chance(n) 20 min 21 max 22 abs 23 clamp,
+    /// 0 the end). Null (and why): something the Apple IIgs can't do - texts, lists, grids, the game's own functions.</summary>
+    public static List<byte>? CompileIIgs(string formula, Func<string, int> variable, out string? why)
+    {
+        why = null;
+        try
+        {
+            var code = new List<byte>();
+            Emit(Parse(formula), code, variable);
+            code.Add(0);
+            return code;
+        }
+        catch (ScriptException e) { why = e.Message; return null; }
+    }
+
+    private static void Word(List<byte> code, int v) { code.Add((byte)v); code.Add((byte)(v >> 8)); }
+
+    private static void Emit(Node node, List<byte> code, Func<string, int> variable)
+    {
+        switch (node)
+        {
+            case Literal l when l.Value is double d:
+                code.Add(1); Word(code, (int)Math.Clamp(Math.Round(d), -32768, 32767)); break;
+            case Literal:
+                throw new ScriptException("texts aren't on the Apple IIgs");
+            case Name n:
+                code.Add(2); Word(code, variable(n.Text)); break;
+            case Unary u:
+                Emit(u.Operand, code, variable); code.Add(u.Op == "-" ? (byte)8 : (byte)17); break;
+            case Index:
+                throw new ScriptException("lists and grids aren't on the Apple IIgs");
+            case Binary b:
+                Emit(b.Left, code, variable); Emit(b.Right, code, variable);
+                code.Add(b.Op switch { "+" => 3, "-" => 4, "*" => 5, "/" => 6, "%" => 7, "=" => 9, "!=" => 10, "<" => 11, ">" => 12, "<=" => 13, ">=" => 14, "and" => 15, "or" => 16,
+                    _ => throw new ScriptException($"\"{b.Op}\" isn't on the Apple IIgs") });
+                break;
+            case Call c:
+            {
+                string f = c.FunctionName.ToLowerInvariant();
+                if (f is "round" or "floor" or "ceil" && c.Arguments.Count >= 1) { Emit(c.Arguments[0], code, variable); break; } // whole numbers already
+                (int ops, byte op) = f switch { "random" => (2, (byte)18), "chance" => (1, (byte)19), "abs" => (1, (byte)22), "clamp" => (3, (byte)23), "min" => (-1, (byte)20), "max" => (-1, (byte)21),
+                    _ => throw new ScriptException($"{f}() isn't on the Apple IIgs") };
+                if (ops < 0)
+                {
+                    if (c.Arguments.Count == 0) { code.Add(1); Word(code, 0); break; }
+                    Emit(c.Arguments[0], code, variable);
+                    foreach (var a in c.Arguments.Skip(1)) { Emit(a, code, variable); code.Add(op); }
+                    break;
+                }
+                if (c.Arguments.Count < ops) throw new ScriptException($"{f}() needs {ops} values");
+                foreach (var a in c.Arguments.Take(ops)) Emit(a, code, variable);
+                code.Add(op);
+                break;
+            }
+            default:
+                throw new ScriptException("lists and grids aren't on the Apple IIgs");
         }
     }
 
