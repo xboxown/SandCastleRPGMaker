@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 9 (b628): Move (M: push a thing one square, put it in a container, give it to the Avatar), containers (Use on a
+;   chest spills what is in it; a carried bag opens in the grid), Tab between the map's cursor and the grid's.
 ; Version 8 (b627): sounds (sound.s: Play Sound in talks, through the Sound Tool Set), files found on other disks
 ;   (DISKS.DAT) and the Disk Swap screen asking for them.
 ; Version 7 (b625): the panel's two views (*): the inventory, or the portrait and the stats.
@@ -234,6 +236,9 @@ MainLoop:
         ldx #VERB_USE
         cmp #'u'
         beq .verb
+        ldx #VERB_MOVE
+        cmp #'m'
+        beq .verb
         cmp #'d'
         beq .drop
         lda Key
@@ -436,7 +441,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #8
+        cmp #9
         beq .known
 .bad:   sec
         rts
@@ -1213,7 +1218,7 @@ MakeOcc:
         beq .chars
         ldy #6
         lda [ItemPtr],y
-        and #96+1
+        and #96+256+1
         cmp #1                  ; solid, on the map
         bne .on
         lda [ItemPtr]
@@ -1312,9 +1317,9 @@ DrawObjects:
         ldy #2
         lda [ItemPtr],y
         tay
-        ldy #6                  ; carried or gone: not on the map
+        ldy #6                  ; carried, gone or inside something: not on the map
         lda [ItemPtr],y
-        and #96
+        and #96+256
         bne .n
         lda [ItemPtr]
         tax
@@ -1965,6 +1970,17 @@ PanPix:   .dd 0
 StatPtr:  .dd 0
 StatCount: .dw 0
 PanelView: .dw 0                ; 0 the inventory, 1 the portrait and the stats
+OpenBag:  .dw $FFFF             ; the bag open in the grid (its object number; $FFFF none)
+MoveIdx:  .dw $FFFF             ; Move: the thing picked first ($FFFF: none yet)
+Into:     .dw 0
+GridHas:  .dw 0                 ; the grid's pick: something there, and what
+GridRec:  .dd 0
+WasIn:    .dw 0
+SpX:      .dw 0
+SpY:      .dw 0
+ListLen:  .dw 0
+ListBuf:  .ds 104               ; what spilled out of a container: names, ", " between
+NumBuf:   .ds 4                 ; the disk's number in figures (the Disk Swap screen's {0})
 TalkTotal: .dd 0
 SndCount: .dw 0
 SndNow:   .dw 0

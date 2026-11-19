@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - Apple IIgs player: the inventory (the HUD's Carried Items grid) and Drop.
 ; What the Avatar carries is in the objects list, marked carried (64) and off the map. Drop: D, a cursor in the grid
 ; (the arrows, Enter), "Where?" and the map's cursor: within 5 of the Avatar, on ground that can be walked, free.
+; A bag open (Use on it): the grid shows the bag first, then what is in it (inside, 256, In = the bag).
 
 VERB_DROP = 5
 
@@ -10,8 +11,7 @@ RefreshInventory:
         bne .count
         lda GridCols
         bne .grid
-.count: stz InvCount
-        jmp CountCarried
+.count: jmp CountCarried
 .grid:  lda GridX
         sta RX
         lda GridY
@@ -29,7 +29,12 @@ RefreshInventory:
         sta CellX
         lda GridY
         sta CellY
-        lda ObjPtr
+        lda OpenBag             ; a bag open: it first
+        cmp #$FFFF
+        beq .list
+        jsr ObjAt
+        jsr ShowOne
+.list:  lda ObjPtr
         sta ItemPtr
         lda ObjPtr+2
         sta ItemPtr+2
@@ -38,14 +43,52 @@ RefreshInventory:
 .l:     lda Item
         bne .one
         brl .done
-.one:   ldy #6
+.one:   jsr Listed
+        bcc .n
+        jsr ShowOne
+.n:     lda #16
+        jsr NextItem
+        dec Item
+        brl .l
+.done:  lda Mode
+        cmp #5
+        bne .out
+        jmp DrawInvCursor
+.out:   rts
+
+; Carry set if the object at ItemPtr is in the grid: what is in the open bag, else what is carried.
+Listed:
+        lda OpenBag
+        cmp #$FFFF
+        beq .pack
+        ldy #6
         lda [ItemPtr],y
-        and #96
-        cmp #64                 ; carried, not gone
-        bne .n
+        and #256+32
+        cmp #256
+        bne .no
+        ldy #14
+        lda [ItemPtr],y
+        cmp OpenBag
+        bne .no
+        sec
+        rts
+.pack:  ldy #6
+        lda [ItemPtr],y
+        and #96+256
+        cmp #64                 ; carried, not gone, not in a bag
+        bne .no
+        sec
+        rts
+.no:    clc
+        rts
+
+; The object at ItemPtr in the grid's next cell (its icon), and in InvList.
+ShowOne:
         lda InvCount            ; full grid: no more shown
         cmp InvMax
-        bcs .n
+        bcs .out
+        cmp #64
+        bcs .out
         asl a
         asl a
         tax
@@ -87,19 +130,18 @@ RefreshInventory:
         clc
         adc GridCell
         sta CellY
-.n:     lda #16
-        jsr NextItem
-        dec Item
-        brl .l
-.done:  lda Mode
-        cmp #5
-        bne .out
-        jmp DrawInvCursor
+.n:
 .out:   rts
 
 ; No grid: how many things are carried (InvList filled all the same).
 CountCarried:
-        lda ObjPtr
+        stz InvCount
+        lda OpenBag
+        cmp #$FFFF
+        beq .list
+        jsr ObjAt
+        jsr CountOne
+.list:  lda ObjPtr
         sta ItemPtr
         lda ObjPtr+2
         sta ItemPtr+2
@@ -107,14 +149,18 @@ CountCarried:
         sta Item
 .l:     lda Item
         beq .done
-        ldy #6
-        lda [ItemPtr],y
-        and #96
-        cmp #64
-        bne .n
+        jsr Listed
+        bcc .n
+        jsr CountOne
+.n:     lda #16
+        jsr NextItem
+        dec Item
+        bra .l
+.done:  rts
+CountOne:
         lda InvCount
         cmp #64
-        bcs .n
+        bcs .out
         asl a
         asl a
         tax
@@ -123,11 +169,7 @@ CountCarried:
         lda ItemPtr+2
         sta InvList+2,x
         inc InvCount
-.n:     lda #16
-        jsr NextItem
-        dec Item
-        bra .l
-.done:  rts
+.out:   rts
 
 ; A = A * GridCell
 TimesCell:
@@ -274,6 +316,10 @@ StartDrop:
         stz PanelView
         jsr DrawPanel
 .inv:
+        lda #VERB_DROP
+        sta Verb
+        lda #$FFFF
+        sta MoveIdx
         lda #15
         jsr PrintSaid
         lda #Dash
@@ -292,10 +338,25 @@ StartDrop:
 ; A key while the grid's cursor is up.
 InvKey:
         cmp #$1B
-        bne .k1
+        bne .k0
+        lda #$FFFF
+        sta MoveIdx
         stz Mode
         jsr RefreshInventory
         jmp PromptLine
+.k0:    cmp #$09                ; Tab: the map's cursor (not for Drop's first pick)
+        bne .k1
+        lda Verb
+        cmp #VERB_DROP
+        beq .out
+        lda PX
+        sta CurX
+        lda PY
+        sta CurY
+        lda #4
+        sta Mode
+        jsr RefreshInventory
+        jmp DrawView
 .k1:    cmp #$0D
         beq .pick
         cmp #' '
@@ -321,13 +382,28 @@ InvKey:
         sta InvSel
         jmp RefreshInventory
 .out:   rts
-.pick:  lda InvSel              ; the thing: its name, "Where?", the map's cursor
+.pick:  stz GridHas              ; what is in the picked cell
+        lda InvSel
+        cmp InvCount
+        bcs .none
         asl a
         asl a
         tax
         lda InvList,x
-        sta DropRec
+        sta GridRec
         lda InvList+2,x
+        sta GridRec+2
+        lda #1
+        sta GridHas
+.none:  lda Verb
+        cmp #VERB_DROP
+        beq .drop
+        jmp GridVerb            ; Look, Use, Move (verbs.s)
+.drop:  lda GridHas
+        beq .out
+        lda GridRec             ; the thing: its name, "Where?", the map's cursor
+        sta DropRec
+        lda GridRec+2
         sta DropRec+2
         lda DropRec
         sta ItemPtr
@@ -363,31 +439,44 @@ InvKey:
 ; The place picked for Drop: within 5, walkable ground, nothing solid and no one there.
 DropHere:
         jsr NewLine
+        bra .go
+.fr:    brl .far
+.nn:    brl .no
+.go:
         lda CurX
         sec
         sbc PX
         jsr Abs
         cmp #6
-        bcs .far
+        bcs .fr
         lda CurY
         sec
         sbc PY
         jsr Abs
         cmp #6
-        bcs .far
+        bcs .fr
         ldx CurX
         ldy CurY
         jsr MapTile
         cmp #$FFFF
-        beq .no
+        beq .nn
         tay
         lda [FlagsPtr],y
         and #$0001
-        beq .no
+        beq .nn
         ldx CurX
         ldy CurY
         jsr OccAt
-        bne .no
+        bne .nn
+        lda DropRec             ; the open bag shut if it goes
+        sta ItemPtr
+        lda DropRec+2
+        sta ItemPtr+2
+        jsr IndexOf
+        sta MoveIdx
+        jsr CloseIfOpen
+        lda #$FFFF
+        sta MoveIdx
         lda DropRec             ; on the map again, here
         sta ItemPtr
         lda DropRec+2
@@ -399,7 +488,7 @@ DropHere:
         sta [ItemPtr],y
         ldy #6
         lda [ItemPtr],y
-        and #$FFBF              ; carried no more
+        and #$FEBF              ; carried no more, in no bag
         sta [ItemPtr],y
         and #1
         beq .free

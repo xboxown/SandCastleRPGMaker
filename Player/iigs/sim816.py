@@ -6,7 +6,7 @@ Loads an S16 (OMF 2) as the System Loader would (relocating cRELOC / RELOC recor
 toolbox (JSL $E10000) and GS/OS (JSL $E100A8) calls it uses answered by simple stand-ins, feeds it keys, and saves the
 Super Hi-Res screen as a PNG. It tests the player's own logic - the real toolbox and GS/OS are tested in KEGS.
 Usage: sim816.py SANDCASTLE folder-with-GAME.DAT out.png [--keys "RRDDL q"] [--slow] [--trace]
-Keys: U D L R = arrows, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
+Keys: U D L R = arrows, ` Tab, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
 """
 import struct, sys, zlib, os
 
@@ -165,7 +165,7 @@ class Machine:
                     self.inserted = True
                     res = 0
                 else:
-                    code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F}.get(k, ord(k))
+                    code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F, '`': 0x09}.get(k, ord(k))
                     self.wr16(rec, 3); self.wr16(rec + 2, code); self.wr16(rec + 4, 0); res = 0xFFFF
             elif not self.keys and self.key_waits > 10:
                 self.wr16(rec, 3); self.wr16(rec + 2, ord('q')); self.wr16(rec + 4, 0); res = 0xFFFF

@@ -65,7 +65,7 @@ internal sealed class AppleIIgsBuildWindow : Window
 
 /// <summary>
 /// HUD Editor > Disk Swap screen (Ultima 6 Apple IIgs mode): what the game shows when it needs another floppy - a picture
-/// over the whole screen, an animation on it, a sound, the words ({0}: the disk's name) - and the disks' names.
+/// over the whole screen, an animation on it, a sound, the words ({0}: the disk's number, {$}: its name) - and the disks' names.
 /// </summary>
 internal sealed class DiskSwapScreenWindow : Window
 {
@@ -80,7 +80,7 @@ internal sealed class DiskSwapScreenWindow : Window
         var rows = new StackPanel { Margin = new Thickness(14) };
         rows.Children.Add(new TextBlock
         {
-            Text = "A game built as 3.5-inch floppies shows this when it needs a file on another disk, until that disk is in and a key is pressed. Make it as you like: a picture, an animation (a sprite with frames), a sound, your own words - {0} is the disk's name (\"Town A\", \"Dungeon\", \"12\"...).",
+            Text = "A game built as 3.5-inch floppies shows this when it needs a file on another disk, until that disk is in and a key is pressed. Make it as you like: a picture, an animation (a sprite with frames), a sound, your own words - {0} is the disk's number (1, 2, 3...) and {$} its name from the build's list of disk names (\"Disk A\", \"Town A\", \"Dungeon\"...): \"Please insert disk {$}\".",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 10)
         });
         var all = sprites.Groups.SelectMany(g => g.Sprites.Select(s => (Group: g.Name, Sprite: s.Name))).ToList();
@@ -109,7 +109,7 @@ internal sealed class DiskSwapScreenWindow : Window
         var ax = Number(screen.AnimationX); var ay = Number(screen.AnimationY);
         place.Children.Add(ax); place.Children.Add(new TextBlock { Text = " , ", VerticalAlignment = VerticalAlignment.Center }); place.Children.Add(ay);
         rows.Children.Add(place);
-        Label("The words ({0} = the disk's name):");
+        Label("The words ({0} = the disk's number, {$} = its name):");
         var message = new TextBox { Text = screen.Message };
         rows.Children.Add(message);
         Label("Where the words go (x, y) and their colour (#RRGGBB; empty: the brightest):");

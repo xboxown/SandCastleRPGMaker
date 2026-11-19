@@ -370,7 +370,8 @@ public class DiskSwapScreen
     public SpriteLink Animation { get; set; } = new();
     public int AnimationX { get; set; } = 144;
     public int AnimationY { get; set; } = 60;
-    public string Message { get; set; } = "Please insert the disk \"{0}\" and press a key.";
+    /// <summary>The words: {0} = the disk's number, {$} = its name (the build's list of disk names).</summary>
+    public string Message { get; set; } = "Please insert the disk \"{$}\" and press a key.";
     public int TextX { get; set; } = 16;
     public int TextY { get; set; } = 120;
     public string TextColor { get; set; } = string.Empty;

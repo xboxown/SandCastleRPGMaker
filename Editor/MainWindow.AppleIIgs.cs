@@ -386,7 +386,7 @@ public partial class MainWindow
         pack.SwapMessage = swap.Message;
         pack.SwapAnimation = (swap.AnimationX, swap.AnimationY);
         if (soundIndex.TryGetValue(swap.SoundId, out int swapSound)) pack.SwapSound = swapSound;
-        var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)>();
+        var objects = new List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon, int In)>();
         // The inventory's cells (HUD Editor > Carried Items): every object gets its look fitted into one, once.
         var carriedPiece = _systemSettings.Ultima6.Hud.First(HudPieceKind.CarriedItems);
         int cell = carriedPiece is null ? 0 : Math.Clamp(carriedPiece.CellSize / 4 * 4, 4, 32);
@@ -418,19 +418,63 @@ public partial class MainWindow
                 other = SpriteOf(otherFile) is int o and >= 0 ? o : n;
                 objFlags = 4 | (open ? 16 : 1) | (locked ? 8 : 0);
             }
-            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other, IconOf(file)));
+            objects.Add((instance.X, instance.Y, n, objFlags, pack.NameOf(def.Name), other, IconOf(file), -1));
+        }
+        // Containers (chests, bags, barrels...) and what is in them - off the map, inside (256), until Use spills them out
+        // (Ultima 6's Search) or a bag is opened in the inventory. Their contents as the Game Test seeds them: the map's own, else the Starting Contents.
+        void AddContents(IEnumerable<InventoryItemInstance> things, int container, int depth)
+        {
+            if (depth > 4) return;
+            foreach (var thing in things)
+            {
+                if (thing.Category is not (ReferencedItemCategory.Object or ReferencedItemCategory.Container)) continue;
+                var look = DollLook.ItemSprite(thing.Category, thing.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase);
+                string? file = look?.Frames.FirstOrDefault()?.FilePath;
+                if (thing.Category == ReferencedItemCategory.Object && file is null) file = _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.IconPath;
+                int n = SpriteOf(file);
+                if (n < 0) continue;
+                string name = DollLook.ItemName(new ItemReference { Category = thing.Category, ItemId = thing.ItemId }, _objectDatabase, _bookDatabase, _containerDatabase);
+                int f = 256 | 2;
+                if (thing.Category == ReferencedItemCategory.Container && _containerDatabase.Containers.FirstOrDefault(c => c.Id == thing.ItemId) is { } bag)
+                    f |= 128 | (bag.IsSolid ? 1 : 0) | ((thing.IsLockedRuntime ?? bag.IsLocked) ? 8 : 0);
+                else if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) is { } od && od.IsSolid) f |= 1;
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), 0xFFFF, IconOf(file), container));
+                if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
+            }
+        }
+        foreach (var placed in start.Items.Where(i => i.Category == ReferencedItemCategory.Container))
+        {
+            if (_containerDatabase.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is not { } data) continue;
+            if (placed.X < 0 || placed.Y < 0 || placed.X >= start.Width || placed.Y >= start.Height) continue;
+            int n = SpriteOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath);
+            if (n < 0) continue;
+            int f = 128 | (data.IsSolid ? 1 : 0) | (data.CanBePicked && !data.IsBodyContainer ? 2 : 0) | ((placed.IsLockedRuntime ?? data.IsLocked) ? 8 : 0);
+            objects.Add((placed.X, placed.Y, n, f, pack.NameOf(data.Name), 0xFFFF, IconOf(DollLook.ItemSprite(ReferencedItemCategory.Container, data.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath), -1));
+            var contents = placed.InstanceId != 0 ? placed.Contents : placed.OwnContents ?? data.StartingContents;
+            AddContents(contents, objects.Count - 1, 0);
         }
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
         if (PlayerCharacter() is { } avatarWho)
-            foreach (var item in avatarWho.Inventory.Where(i => i.Category == ReferencedItemCategory.Object && !avatarWho.EquippedSlots.ContainsValue(i.InstanceId)))
+            foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container && !avatarWho.EquippedSlots.ContainsValue(i.InstanceId)))
             {
+                if (item.Category == ReferencedItemCategory.Container)
+                {
+                    // a bag carried, with what is in it
+                    if (_containerDatabase.Containers.FirstOrDefault(c => c.Id == item.ItemId) is not { } bag) continue;
+                    string? bagFile = DollLook.ItemSprite(ReferencedItemCategory.Container, bag.Id, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                    int b = SpriteOf(bagFile);
+                    if (b < 0) continue;
+                    objects.Add((0xFFFF, 0xFFFF, b, 64 | 128 | 2 | (bag.IsSolid ? 1 : 0) | ((item.IsLockedRuntime ?? bag.IsLocked) ? 8 : 0), pack.NameOf(bag.Name), 0xFFFF, IconOf(bagFile), -1));
+                    AddContents(item.Contents.Count > 0 ? item.Contents : bag.StartingContents, objects.Count - 1, 0);
+                    continue;
+                }
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
                 if (def is null) continue;
                 var look = ObjectLooks.SpriteFor(def, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), SpriteDirection.South), _spriteDatabase);
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
                 if (n < 0) continue;
-                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0), pack.NameOf(def.Name), 0xFFFF, IconOf(file)));
+                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0), pack.NameOf(def.Name), 0xFFFF, IconOf(file), -1));
             }
         var characters = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name)>();
         // Talk: each character's Talk commands made into the IIgs's talk code once (Engine/AppleIIgsTalk.cs); variables and switches by name.

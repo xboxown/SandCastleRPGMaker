@@ -1,15 +1,23 @@
 ; Sandcastle RPG Maker - Apple IIgs player: Ultima 6's verbs (as the Windows Ultima 6 engine, U6GameWindow.U6Verbs.cs).
 ; L Look, G Get, U Use, T Talk: "Look-" and a cursor on the Avatar; the arrows move it (as far as the view), Enter or
 ; Space picks the cell, Esc gives up. Look: "You see {0}." Get: something that can be taken, next to the Avatar - "{1}
-; gets {0}." Use: a door next to the Avatar opens or shuts ("Locked." if it is). Talk: the one there talks (talk.s).
+; gets {0}." Use: a door next to the Avatar opens or shuts ("Locked." if it is); a container spills what is in it
+; ("Searching here, you find ..."). Talk: the one there talks (talk.s). Move: a thing next to the Avatar, "Where?", one
+; square on from it - or into a container there, or onto the Avatar (carried). Tab: the grid's cursor instead (a carried
+; thing; Use on a bag opens it in the grid, Use on it again shuts it) and back.
 
 VERB_LOOK = 1
 VERB_GET  = 2
 VERB_USE  = 3
 VERB_TALK = 4
+VERB_MOVE = 6
 
 ; A = the verb: its word and "-", the cursor on the Avatar.
 StartVerb:
+        pha
+        lda #$FFFF              ; nothing picked for Move yet
+        sta MoveIdx
+        pla
         sta Verb
         cmp #VERB_LOOK
         bne .v2
@@ -23,7 +31,11 @@ StartVerb:
         bne .v4
         lda #13
         bra .say
-.v4:    lda #4
+.v4:    cmp #VERB_MOVE
+        bne .v5
+        lda #18
+        bra .say
+.v5:    lda #4
 .say:   jsr PrintSaid
         lda #Dash
         jsr PrintMine
@@ -80,8 +92,13 @@ DrawCursor:
 
 ; A key while the cursor is up.
 CursorKey:
-        cmp #$1B
+        cmp #$09
+        bne .k0
+        jmp CursorToGrid
+.k0:    cmp #$1B
         bne .k1
+        lda #$FFFF
+        sta MoveIdx
         stz Mode                ; given up
         jsr DrawView
         jmp PromptLine
@@ -181,7 +198,7 @@ WhatIsThere:
         beq .found
         ldy #6
         lda [ItemPtr],y
-        and #96                 ; carried or gone
+        and #96+256             ; carried, gone or inside something
         bne .on
         lda [ItemPtr]
         cmp CurX
@@ -246,8 +263,15 @@ NameNumber:
 PickCell:
         lda Verb
         cmp #VERB_DROP
-        bne .what
+        bne .mv
         jmp DropHere            ; Drop's "Where?" (inventory.s)
+.mv:    cmp #VERB_MOVE
+        bne .what
+        lda MoveIdx
+        cmp #$FFFF
+        bne .second
+        jmp MapFirst
+.second: jmp MapTarget
 .what:  jsr WhatIsThere
         lda Verb
         cmp #VERB_TALK
@@ -301,6 +325,10 @@ PickCell:
         cmp #3
         bne .np
         jsr ObjFlags
+        and #128                ; a container: what is in it spills out
+        beq .door
+        jmp UseContainer
+.door:  jsr ObjFlags
         and #4                  ; a door
         beq .np
         jsr NextToCursor
@@ -434,9 +462,17 @@ FillFmt:
         phy
         cmp #'1'
         beq .avatar
+        cmp #'2'
+        beq .number
         lda FmtName
         sta TP
         lda FmtName+2
+        sta TP+2
+        bra .name
+.number:
+        lda #NumBuf             ; {2}: a number written in NumBuf
+        sta TP
+        lda MyBank
         sta TP+2
         bra .name
 .avatar:
@@ -480,3 +516,592 @@ FillFmt:
         rep #$20
         .a16
         rts
+
+; ---------------- Move and containers (as U6GameWindow.U6Verbs.cs / U6Things.cs) ----------------
+
+; ItemPtr = object number A
+ObjAt:
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        adc #0
+        sta ItemPtr+2
+        rts
+
+; A = the number of the object at ItemPtr
+IndexOf:
+        lda ItemPtr
+        sec
+        sbc ObjPtr
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        rts
+
+; The object at ItemPtr: its name (FmtName) written in the text colour.
+PrintThing:
+        ldy #8
+        lda [ItemPtr],y
+        jsr NameNumber
+        lda FmtName
+        sta TP
+        lda FmtName+2
+        sta TP+2
+        lda TxtColor
+        jsr SetColor
+        jmp PrintWord
+
+; FmtName = the name of the thing being moved
+MoveName:
+        lda MoveIdx
+        jsr ObjAt
+        ldy #8
+        lda [ItemPtr],y
+        jmp NameNumber
+
+; Move is over: the cursors gone, the map and the grid as they are now.
+MoveDone:
+        lda #$FFFF
+        sta MoveIdx
+        stz Mode
+        jsr DrawView
+        jsr RefreshInventory
+        jmp PromptLine
+
+; Tab with the map's cursor up: the grid's cursor instead (Look, Use, Move).
+CursorToGrid:
+        lda Verb
+        cmp #VERB_LOOK
+        beq .ok
+        cmp #VERB_USE
+        beq .ok
+        cmp #VERB_MOVE
+        bne .out
+.ok:    lda GridCols
+        beq .out
+        lda PanelView           ; the inventory view for it
+        beq .inv
+        stz PanelView
+        jsr DrawPanel
+.inv:   stz InvSel
+        lda #5
+        sta Mode
+        jsr DrawView            ; the map's cursor gone
+        jmp RefreshInventory
+.out:   rts
+
+; Move's first pick on the map: a thing that can be taken, next to the Avatar - "Where?".
+MapFirst:
+        jsr WhatIsThere
+        lda FmtName
+        sta TP
+        lda FmtName+2
+        sta TP+2
+        lda TxtColor
+        jsr SetColor
+        jsr PrintWord
+        lda Kind
+        cmp #3
+        bne .np
+        jsr ObjFlags
+        and #2
+        beq .np
+        jsr NextToCursor
+        bcc .far
+        lda ObjRec
+        sta ItemPtr
+        lda ObjRec+2
+        sta ItemPtr+2
+        jsr IndexOf
+        sta MoveIdx
+        lda PenX
+        clc
+        adc SpaceW
+        sta PenX
+        lda #16                 ; Where?
+        jsr PrintSaid
+        lda #4
+        sta Mode
+        jmp DrawView
+.np:    jsr NewLine
+        lda #9
+        jsr Format
+        jmp PromptLine
+.far:   jsr NewLine
+        lda #10
+        jsr Format
+        jmp PromptLine
+
+; Move's second pick on the map: one square on from where the thing is (a carried thing: within 5 of the Avatar).
+MapTarget:
+        jsr NewLine
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #64+256
+        bne .carried
+        lda [ItemPtr]
+        sec
+        sbc CurX
+        jsr Abs
+        cmp #2
+        bcs .far
+        ldy #2
+        lda [ItemPtr],y
+        sec
+        sbc CurY
+        jsr Abs
+        cmp #2
+        bcs .far
+        bra .near
+.carried:
+        lda CurX
+        sec
+        sbc PX
+        jsr Abs
+        cmp #6
+        bcs .far
+        lda CurY
+        sec
+        sbc PY
+        jsr Abs
+        cmp #6
+        bcs .far
+.near:  jsr WhatIsThere
+        lda Kind
+        cmp #1
+        bne .k2
+        brl ToPack              ; onto the Avatar: carried
+.k2:    cmp #2
+        beq .np
+        cmp #3
+        bne .ground
+        jsr ObjFlags
+        and #128
+        beq .ground
+        jsr IndexOf
+        cmp MoveIdx
+        beq .ground
+        brl IntoContainer       ; into the container there
+.far:   lda #10
+        jsr Format
+        brl MoveDone
+.np:    lda #9
+        jsr Format
+        brl MoveDone
+.ground:
+        ldx CurX                ; ground that can be walked, nothing solid and no one there
+        ldy CurY
+        jsr MapTile
+        cmp #$FFFF
+        beq .np
+        tay
+        lda [FlagsPtr],y
+        and #$0001
+        beq .np
+        ldx CurX
+        ldy CurY
+        jsr OccAt
+        bne .np
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #1
+        beq .put
+        lda CurX                ; something solid: not onto the Avatar
+        cmp PX
+        bne .put
+        lda CurY
+        cmp PY
+        beq .np
+.put:   ldy #6
+        lda [ItemPtr],y
+        and #64+256
+        sta WasIn
+        jsr LeaveMap
+        lda MoveIdx
+        jsr ObjAt
+        lda CurX
+        sta [ItemPtr]
+        ldy #2
+        lda CurY
+        sta [ItemPtr],y
+        ldy #6
+        lda [ItemPtr],y
+        and #$FEBF              ; on the map: neither carried nor inside
+        sta [ItemPtr],y
+        and #1
+        beq .free
+        jsr TakeCell
+.free:  jsr CloseIfOpen
+        lda WasIn
+        beq .quiet
+        jsr MoveName            ; {1} drops {0}.
+        lda #17
+        jsr Format
+.quiet: brl MoveDone
+
+; The grid's pick for Look, Use, Move (InvKey: GridHas, GridRec).
+GridVerb:
+        lda Verb
+        cmp #VERB_MOVE
+        bne .first
+        lda MoveIdx
+        cmp #$FFFF
+        beq .first
+        jsr NewLine
+        brl GridTarget
+.first: lda GridHas
+        bne .has
+        stz Mode
+        jsr RefreshInventory
+        lda #5                  ; nothing
+        jsr PrintSaid
+        jsr NewLine
+        lda #9
+        jsr Format
+        jmp PromptLine
+.has:   lda GridRec
+        sta ItemPtr
+        lda GridRec+2
+        sta ItemPtr+2
+        jsr PrintThing
+        lda Verb
+        cmp #VERB_MOVE
+        bne .look
+        lda GridRec             ; Move: "Where?" - the map's cursor (Tab: the grid's)
+        sta ItemPtr
+        lda GridRec+2
+        sta ItemPtr+2
+        jsr IndexOf
+        sta MoveIdx
+        lda PenX
+        clc
+        adc SpaceW
+        sta PenX
+        lda #16
+        jsr PrintSaid
+        lda PX
+        sta CurX
+        lda PY
+        sta CurY
+        lda #4
+        sta Mode
+        jsr RefreshInventory
+        jmp DrawView
+.look:  stz Mode
+        lda Verb
+        cmp #VERB_LOOK
+        bne .use
+        jsr NewLine
+        jsr RefreshInventory
+        lda #7                  ; You see {0}.
+        jsr Format
+        jmp PromptLine
+.use:   lda GridRec
+        sta ItemPtr
+        lda GridRec+2
+        sta ItemPtr+2
+        ldy #6
+        lda [ItemPtr],y
+        and #128                ; a bag: open (or shut) in the grid
+        beq .np
+        lda [ItemPtr],y
+        and #8
+        bne .locked
+        jsr IndexOf
+        cmp OpenBag
+        bne .open
+        lda #$FFFF
+.open:  sta OpenBag
+        stz InvSel
+        jsr RefreshInventory
+        jmp PromptLine
+.locked:
+        jsr NewLine
+        jsr RefreshInventory
+        lda #14
+        jsr Format
+        jmp PromptLine
+.np:    jsr NewLine
+        jsr RefreshInventory
+        lda #9
+        jsr Format
+        jmp PromptLine
+
+; Move's second pick in the grid: into the open bag (out of it if it is in it already), into a bag picked, else carried.
+GridTarget:
+        lda OpenBag
+        cmp #$FFFF
+        beq .closed
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256
+        beq .bag
+        ldy #14
+        lda [ItemPtr],y
+        cmp OpenBag
+        beq .pack               ; in the open bag: out of it
+.bag:   lda OpenBag
+        brl IntoContainer
+.closed:
+        lda GridHas
+        beq .pack
+        lda GridRec
+        sta ItemPtr
+        lda GridRec+2
+        sta ItemPtr+2
+        ldy #6
+        lda [ItemPtr],y
+        and #128
+        beq .pack
+        jsr IndexOf
+        cmp MoveIdx
+        beq .pack
+        brl IntoContainer
+.pack:  brl ToPack
+
+; The thing being moved goes into container A (not locked, not into itself or what it holds).
+IntoContainer:
+        sta Into
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #8
+        beq .ok
+        lda #14                 ; Locked.
+        jsr Format
+        brl MoveDone
+.ok:    lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256
+        beq .notin
+        ldy #14
+        lda [ItemPtr],y
+        cmp Into
+        beq .np                 ; in it already
+.notin: lda Into                ; the container, what holds it, ... : never the thing itself
+        sta T5
+        ldx #16
+.up:    lda T5
+        cmp MoveIdx
+        beq .np
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256
+        beq .fine
+        ldy #14
+        lda [ItemPtr],y
+        sta T5
+        dex
+        bne .up
+.fine:  jsr LeaveMap
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$FFBF
+        ora #256
+        sta [ItemPtr],y
+        ldy #14
+        lda Into
+        sta [ItemPtr],y
+        jsr CloseIfOpen
+        brl MoveDone
+.np:    lda #9
+        jsr Format
+        brl MoveDone
+
+; Onto the Avatar: carried ("{1} gets {0}.").
+ToPack:
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #64+256
+        cmp #64
+        beq .np                 ; carried already
+        jsr LeaveMap
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$FEFF
+        ora #64
+        sta [ItemPtr],y
+        jsr MoveName
+        lda #8
+        jsr Format
+        brl MoveDone
+.np:    lda #9
+        jsr Format
+        brl MoveDone
+
+; The thing being moved off its cell on the map (if it is on the map and solid).
+LeaveMap:
+        lda MoveIdx
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #96+256+1
+        cmp #1
+        bne .out
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr OccAt
+        sep #$20
+        .a8
+        lda [Ptr]
+        and #$FE
+        sta [Ptr]
+        rep #$20
+        .a16
+.out:   rts
+
+; The open bag shut if the thing being moved is it or holds it.
+CloseIfOpen:
+        lda OpenBag
+        ldx #16
+.up:    cmp #$FFFF
+        beq .out
+        cmp MoveIdx
+        beq .close
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256
+        beq .out
+        ldy #14
+        lda [ItemPtr],y
+        dex
+        bne .up
+        bra .out
+.close: lda #$FFFF
+        sta OpenBag
+.out:   rts
+
+; Use on a container next to the Avatar: everything in it spills out onto its cell (Ultima 6's Search).
+UseContainer:
+        jsr NextToCursor
+        bcs .near
+        lda #10
+        jsr Format
+        jmp PromptLine
+.near:  jsr ObjFlags
+        and #8
+        beq .open
+        lda #14                 ; Locked.
+        jsr Format
+        jmp PromptLine
+.open:  jsr ObjFlags
+        jsr IndexOf
+        sta Into
+        lda [ItemPtr]
+        sta SpX
+        ldy #2
+        lda [ItemPtr],y
+        sta SpY
+        stz ListLen
+        sep #$20
+        .a8
+        stz ListBuf
+        rep #$20
+        .a16
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta Item
+.l:     lda Item
+        bne .one
+        brl .done
+.one:   ldy #6
+        lda [ItemPtr],y
+        and #256+32
+        cmp #256
+        bne .n
+        ldy #14
+        lda [ItemPtr],y
+        cmp Into
+        bne .n
+        ldy #6
+        lda [ItemPtr],y
+        and #$FEBF              ; out, on the map
+        sta [ItemPtr],y
+        lda SpX
+        sta [ItemPtr]
+        ldy #2
+        lda SpY
+        sta [ItemPtr],y
+        ldy #6
+        lda [ItemPtr],y
+        and #1
+        beq .nm
+        jsr TakeCell            ; (the cursor is on the container's cell)
+.nm:    ldy #8
+        lda [ItemPtr],y
+        jsr NameNumber
+        jsr AddToList
+.n:     lda #16
+        jsr NextItem
+        dec Item
+        brl .l
+.done:  lda ListLen
+        bne .some
+        lda #20                 ; Searching here, you find nothing.
+        jsr Format
+        bra .shown
+.some:  lda #ListBuf
+        sta FmtName
+        lda MyBank
+        sta FmtName+2
+        lda #19                 ; Searching here, you find {0}.
+        jsr Format
+.shown: jsr DrawView
+        jmp PromptLine
+
+; FmtName's name added to ListBuf (", " between), up to 100 letters.
+AddToList:
+        lda FmtName
+        sta TP
+        lda FmtName+2
+        sta TP+2
+        ldx ListLen
+        beq .first
+        cpx #96
+        bcs .full
+        lda #$202C              ; ", "
+        sta ListBuf,x
+        inx
+        inx
+.first: ldy #0
+.c:     lda [TP],y
+        and #$00FF
+        beq .end
+        cpx #100
+        bcs .end
+        sta ListBuf,x           ; (its 0 after it too)
+        inx
+        iny
+        bra .c
+.end:   stx ListLen
+        lda #0
+        sta ListBuf,x
+.full:  rts

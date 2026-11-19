@@ -561,7 +561,27 @@ SwapFor:
         inx
         cpx #32000
         bne .bk
-.words: lda WantDisk            ; the words, the disk's name for {0}
+.words: lda WantDisk            ; its number in figures (the words' {2})
+        ldx #0
+        cmp #10
+        bcc .units
+        ldy #0
+.tens:  cmp #10
+        bcc .tdone
+        sbc #10
+        iny
+        bra .tens
+.tdone: pha
+        tya
+        clc
+        adc #'0'
+        sta NumBuf              ; (and a 0 after it)
+        inx
+        pla
+.units: clc
+        adc #'0'
+        sta NumBuf,x
+        lda WantDisk            ; the words, the disk's name for {0}
         dec a
         asl a
         asl a

@@ -338,11 +338,11 @@ public static class SuperHiRes
 ///   the Disk Swap screen: u16 1 = a picture (then 32000 bytes) / 0; u16 animation frames, x, y, then a sprite each;
 ///           u16 words x, y, colour; u8 length, the words ({0}: the disk's name), 0; u16 its sound ($FFFF none)
 /// A sprite stands on the bottom middle of its cell, as in the Windows Ultima 6 engine.
-/// Version 8: the map, its tiles, the Avatar, objects, characters, the HUD, talk, the verbs, the inventory and the sounds.
+/// Version 9: the map, its tiles, the Avatar, objects (containers and what is in them), characters, the HUD, talk, the verbs, the inventory and the sounds.
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 8;
+    public const ushort Version = 9;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -360,10 +360,13 @@ public sealed class AppleIIgsGamePack
     public List<int> SwapFrames { get; } = new();
     public (int X, int Y) SwapAnimation { get; set; }
     public (int X, int Y, int Color) SwapText { get; set; } = (16, 120, 0xFFFF);
-    public string SwapMessage { get; set; } = "Please insert the disk \"{0}\" and press a key.";
+    /// <summary>The Disk Swap screen's words as the HUD Editor has them: {0} the disk's number, {$} its name.</summary>
+    public string SwapMessage { get; set; } = "Please insert the disk \"{$}\" and press a key.";
     public int SwapSound { get; set; } = 0xFFFF;
     public List<(int Width, int Height, byte[] Data)> Sprites { get; } = new();
-    public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon)> Objects { get; } = new();
+    /// <summary>Flags: 1 solid, 2 can be taken, 4 a door, 8 locked, 16 open, 32 gone, 64 carried, 128 a container, 256 inside a
+    /// container (In: that container's place in this list).</summary>
+    public List<(int X, int Y, int Sprite, int Flags, int Name, int Other, int Icon, int In)> Objects { get; } = new();
     /// <summary>The HUD's Carried Items grid (Columns 0: none).</summary>
     public (int X, int Y, int Columns, int Rows, int Cell) CarriedGrid { get; set; }
     /// <summary>The HUD's panel (Width 0: none) and its portrait view: the pixels there (width/2 x height bytes) and its words (the stats).</summary>
@@ -387,8 +390,10 @@ public sealed class AppleIIgsGamePack
     public int KeywordColor { get; set; } = 0xFFFF;
     /// <summary>you say, bye, no help, funny no response, talk, nothing, talking to yourself.</summary>
     public List<string> Words { get; } = new() { "you say: ", "bye", "\"I cannot help thee with that.\"", "Funny, no response.", "Talk", "nothing", "Talking to yourself?",
-        "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.", "Avatar" };
-    public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops" };
+        "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.",
+        "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Avatar" };
+    public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
+        "Move", "Searching", "SearchNothing" };
     public List<short> Variables { get; } = new();
     public List<(string Name, byte[] Code)> Talks { get; } = new();
     /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
@@ -422,10 +427,15 @@ public sealed class AppleIIgsGamePack
         w.Write(offset);
         foreach (var sp in Sprites) { w.Write((ushort)sp.Width); w.Write((ushort)sp.Height); w.Write(sp.Data); }
         w.Write((ushort)Objects.Count);
-        foreach (var o in Objects.OrderBy(o => (o.Flags & 64) != 0 ? 1 : 0).ThenBy(o => o.Y).ThenBy(o => o.X))
+        // On the map top to bottom (then carried, then inside things); In follows its container to its new place.
+        var order = Enumerable.Range(0, Objects.Count).OrderBy(i => (Objects[i].Flags & (64 | 256)) != 0 ? 1 : 0).ThenBy(i => Objects[i].Y).ThenBy(i => Objects[i].X).ToList();
+        var newPlace = new int[Objects.Count];
+        for (int i = 0; i < order.Count; i++) newPlace[order[i]] = i;
+        foreach (int i in order)
         {
+            var o = Objects[i];
             w.Write((ushort)o.X); w.Write((ushort)o.Y); w.Write((ushort)o.Sprite); w.Write((ushort)o.Flags); w.Write((ushort)o.Name); w.Write((ushort)o.Other);
-            w.Write((ushort)o.Icon); w.Write((ushort)0);
+            w.Write((ushort)o.Icon); w.Write((ushort)(o.In >= 0 && o.In < Objects.Count ? newPlace[o.In] : 0xFFFF));
         }
         w.Write((ushort)Characters.Count);
         foreach (var c in Characters)
@@ -481,7 +491,9 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)SwapFrames.Count); w.Write((ushort)(SwapAnimation.X & ~1)); w.Write((ushort)SwapAnimation.Y);
         foreach (int f in SwapFrames) w.Write((ushort)f);
         w.Write((ushort)SwapText.X); w.Write((ushort)SwapText.Y); w.Write((ushort)SwapText.Color);
-        var m = Ascii(SwapMessage, 100);
+        // The player's own marks: {0} the name, {2} the number (FillFmt).
+        string before = SwapMessage == "Please insert the disk \"{0}\" and press a key." ? "Please insert the disk \"{$}\" and press a key." : SwapMessage; // the b626 words: {0} was the name then
+        var m = Ascii(before.Replace("{0}", "{2}").Replace("{$}", "{0}"), 100);
         w.Write((byte)m.Length); w.Write(m); w.Write((byte)0);
         w.Write((ushort)SwapSound);
         return ms.ToArray();
