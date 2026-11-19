@@ -6,7 +6,7 @@ Loads an S16 (OMF 2) as the System Loader would (relocating cRELOC / RELOC recor
 toolbox (JSL $E10000) and GS/OS (JSL $E100A8) calls it uses answered by simple stand-ins, feeds it keys, and saves the
 Super Hi-Res screen as a PNG. It tests the player's own logic - the real toolbox and GS/OS are tested in KEGS.
 Usage: sim816.py SANDCASTLE folder-with-GAME.DAT out.png [--keys "RRDDL q"] [--slow] [--trace]
-Keys: U D L R = arrows, ` Tab, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
+Keys: U D L R = arrows, ` Tab, { Ctrl+S, } Ctrl+R, | Ctrl+Q, ~ Enter, ^ Esc, < Delete, ! the other disks go in, other letters as typed.
 """
 import struct, sys, zlib, os
 
@@ -31,6 +31,9 @@ class Machine:
         self.alerts = []
         self.heap = 0x040000
         self.files = {}
+        self.wfiles = {}
+        self.written = []
+        self.quit_keys = 0
         self.next_ref = 1
         self.pen = 0
         self.quit = False
@@ -165,10 +168,11 @@ class Machine:
                     self.inserted = True
                     res = 0
                 else:
-                    code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F, '`': 0x09}.get(k, ord(k))
+                    code = {'U': 0x0B, 'D': 0x0A, 'L': 0x08, 'R': 0x15, '~': 0x0D, '^': 0x1B, '<': 0x7F, '`': 0x09, '{': 0x13, '}': 0x12, '|': 0x11}.get(k, ord(k))
                     self.wr16(rec, 3); self.wr16(rec + 2, code); self.wr16(rec + 4, 0); res = 0xFFFF
-            elif not self.keys and self.key_waits > 10:
-                self.wr16(rec, 3); self.wr16(rec + 2, ord('q')); self.wr16(rec + 4, 0); res = 0xFFFF
+            elif not self.keys and self.key_waits > 10:  # the end: q (the quit question), then y
+                self.quit_keys += 1
+                self.wr16(rec, 3); self.wr16(rec + 2, ord('q') if self.quit_keys % 2 else ord('y')); self.wr16(rec + 4, 0); res = 0xFFFF
             else:
                 res = 0
         elif n == 0x3704: pb, rb = 2, 0; self.pen = word(0)                # SetSolidPenPat
@@ -239,7 +243,11 @@ class Machine:
                 vol = path.split(':')[1]
                 full = os.path.join(self.folder, vol, name) if self.inserted else ''
             self.opened.append((path, os.path.exists(full)))
-            if os.path.exists(full):
+            if os.path.exists(full) and self.rd16(parm) >= 3 and self.rd16(parm + 8) & 2:  # opened to write
+                self.wfiles[self.next_ref] = (full, bytearray())
+                self.wr16(parm + 2, self.next_ref)
+                self.next_ref += 1
+            elif os.path.exists(full):
                 self.files[self.next_ref] = open(full, 'rb').read()
                 # pCount, refNum, pathname: refNum is at +2
                 self.wr16(parm + 2, self.next_ref)
@@ -257,8 +265,28 @@ class Machine:
             d = self.files.get(ref, b'')[:req]
             self.mem[buf: buf + len(d)] = d
             self.wr16(parm + 12, len(d)); self.wr16(parm + 14, len(d) >> 16)
-        elif call == 0x2014:  # Close
-            pass
+        elif call == 0x2014:  # Close: a file written is saved
+            ref = self.rd16(parm + 2)
+            if ref in self.wfiles:
+                full, data = self.wfiles.pop(ref)
+                open(full, 'wb').write(bytes(data))
+                self.written.append((os.path.basename(full), len(data)))
+        elif call == 0x2013:  # Write
+            ref = self.rd16(parm + 2)
+            buf = self.rd24(parm + 4)
+            req = self.rd16(parm + 8) | self.rd16(parm + 10) << 16
+            if ref in self.wfiles: self.wfiles[ref][1].extend(self.mem[buf: buf + req])
+            self.wr16(parm + 12, req); self.wr16(parm + 14, req >> 16)
+        elif call in (0x2001, 0x2002):  # Create, Destroy (in the game's folder)
+            pathp = self.rd24(parm + 2)
+            n = self.rd16(pathp)
+            name = bytes(self.mem[pathp + 2: pathp + 2 + n]).decode().split(':')[-1]
+            full = os.path.join(self.folder, name)
+            if call == 0x2001:
+                if os.path.exists(full): err = 0x47
+                else: open(full, 'wb').close()
+            elif os.path.exists(full): os.remove(full)
+            else: err = 0x46
         elif call == 0x2029:  # Quit
             self.quit = True
             raise Stop('quit')
@@ -502,6 +530,7 @@ def main(argv):
     print('typed letters echoed:', ''.join(m.typed))
     print('files opened:', m.opened)
     print('sounds started:', m.sounds)
+    print('files written:', m.written)
     print('quit to the desktop:', m.quit)
     return 0
 

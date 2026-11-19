@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 10;
+    public const ushort Version = 11;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -391,9 +391,9 @@ public sealed class AppleIIgsGamePack
     /// <summary>you say, bye, no help, funny no response, talk, nothing, talking to yourself.</summary>
     public List<string> Words { get; } = new() { "you say: ", "bye", "\"I cannot help thee with that.\"", "Funny, no response.", "Talk", "nothing", "Talking to yourself?",
         "You see {0}.", "{1} gets {0}.", "Not possible.", "Out of range!", "Look", "Get", "Use", "Locked.", "Drop", "Where?", "{1} drops {0}.",
-        "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Avatar" };
+        "Move", "Searching here, you find {0}.", "Searching here, you find nothing.", "Quit the game? (Y/N) ", "Game saved.", "Game loaded.", "No saved game.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
-        "Move", "Searching", "SearchNothing" };
+        "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave" };
     public List<short> Variables { get; } = new();
     /// <summary>The first map's events: stepped on, their code runs (the talk code: AppleIIgsTalk).</summary>
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();

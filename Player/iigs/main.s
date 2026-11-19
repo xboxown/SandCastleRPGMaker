@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 11 (b630): save and load (save.s: Ctrl+S, Ctrl+R; SAVE.DAT), the quit question (Ctrl+Q, Esc, q).
 ; Version 10 (b629): more maps (maps.s): map 0 in GAME.DAT, the others each their own file MAP.n, loaded when the game
 ;   goes there (and kept as they are); the objects of all of them in GAME.DAT (flags' top 4 bits: the map); map events
 ;   stepped on run their code (the talk code), Change Map among it.
@@ -104,6 +105,8 @@ T4        = $D2
 T5        = $D4
 SayP      = $D6   ; 4: words being written
 TNamePtr  = $DA   ; 4: the tiles' names
+Dst       = $DE   ; 4: copying to
+SvPtr     = $E2   ; 4: a saved game being read
 
 SPEED_NEEDED = 560        ; loop counts in one screen refresh: a 2.8 MHz IIgs makes about 370
 VIEW_X    = 80            ; where the world shows: 160 x 160 in the middle of 320 x 200
@@ -203,7 +206,12 @@ MainLoop:
         beq .cur
         cmp #5
         beq .inv
-        cmp #2
+        cmp #6
+        bne .not6
+        lda Key                 ; the quit question
+        jsr QuitKey
+        brl MainLoop
+.not6:  cmp #2
         bne MainLoop            ; the talk is running
         lda Key
         jsr TalkKey
@@ -226,7 +234,18 @@ MainLoop:
         jsr ToggleView
         brl MainLoop
 .notstar:
-        ora #$20                ; the verbs' letters, either case
+        cmp #$13                ; Ctrl+S: save
+        bne .nots
+        jsr SaveGame
+        brl MainLoop
+.nots:  cmp #$12                ; Ctrl+R: load
+        bne .notr
+        jsr LoadGame
+        brl MainLoop
+.notr:  cmp #$11                ; Ctrl+Q: quit?
+        bne .notq
+        brl .quit
+.notq:  ora #$20                ; the verbs' letters, either case
         ldx #VERB_TALK
         cmp #'t'
         beq .verb
@@ -254,8 +273,8 @@ MainLoop:
         brl MainLoop
 .drop:  jsr StartDrop
         brl MainLoop
-.quit:
-        jmp Quit
+.quit:  jsr AskQuit
+        brl MainLoop
 
 ; A = a key: carry set if an arrow - T2 = dx, T3 = dy, A = the facing (0 south, 1 north, 2 east, 3 west).
 ArrowDelta:
@@ -444,7 +463,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #10
+        cmp #11
         beq .known
 .bad:   sec
         rts
@@ -1827,6 +1846,7 @@ TryMove:
         .include "inventory.s"
         .include "sound.s"
         .include "maps.s"
+        .include "save.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
