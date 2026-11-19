@@ -877,6 +877,17 @@ GridVerb:
         beq .nkey
         jmp KeyPicked
 .nkey:  lda [ItemPtr],y
+        and #128
+        bne .bag
+        ldy #10                 ; a weapon or armour: readied / put away (wear.s)
+        lda [ItemPtr],y
+        cmp #$FFFF
+        beq .bag
+        and #$C000
+        beq .bag
+        jmp WearUse
+.bag:   ldy #6
+        lda [ItemPtr],y
         and #128                ; a bag: open (or shut) in the grid
         beq .np
         lda [ItemPtr],y

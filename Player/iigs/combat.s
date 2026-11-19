@@ -94,6 +94,7 @@ ParseAvatar:
         sta PartyMax
         lda #4
         jsr AddPtr
+        jsr ParseSlots          ; the HUD's body slots (wear.s)
         lda PX
         sta AvRec
         lda PY

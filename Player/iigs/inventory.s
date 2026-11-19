@@ -7,6 +7,7 @@ VERB_DROP = 5
 
 ; The grid again: its cells as the HUD has them, a carried thing's icon in each, in order.
 RefreshInventory:
+        jsr RecalcGear          ; what is worn: the Avatar's weapon and armour (wear.s)
         lda PanelView           ; the portrait view: counted, not drawn
         bne .count
         lda GridCols
@@ -50,7 +51,8 @@ RefreshInventory:
         jsr NextItem
         dec Item
         brl .l
-.done:  lda Mode
+.done:  jsr ShowWorn            ; what is worn, in its slot (wear.s)
+        lda Mode
         cmp #5
         bne .out
         jmp DrawInvCursor
@@ -74,8 +76,8 @@ Listed:
         rts
 .pack:  ldy #6
         lda [ItemPtr],y
-        and #96+256
-        cmp #64                 ; carried, not gone, not in a bag
+        and #$F000+96+256
+        cmp #64                 ; carried, not gone, not in a bag, not worn
         bne .no
         sec
         rts
@@ -84,9 +86,12 @@ Listed:
 
 ; The object at ItemPtr in the grid's next cell (its icon), and in InvList.
 ShowOne:
+        lda WornMode            ; (a worn thing: its slot, not the grid's room)
+        bne .room
         lda InvCount            ; full grid: no more shown
         cmp InvMax
         bcs .out
+.room:  lda InvCount
         cmp #64
         bcs .out
         asl a
@@ -96,6 +101,13 @@ ShowOne:
         sta InvList,x
         lda ItemPtr+2
         sta InvList+2,x
+        lda InvCount            ; its cell (the cursor's place)
+        asl a
+        tax
+        lda CellX
+        sta InvRX,x
+        lda CellY
+        sta InvRY,x
         inc InvCount
         ldy #12                 ; its icon
         lda [ItemPtr],y
@@ -115,7 +127,9 @@ ShowOne:
         sta ItemPtr+2
         pla
         sta ItemPtr
-.next:  lda CellX               ; the next cell: right, then the next row
+.next:  lda WornMode            ; a worn thing: in its slot, the grid's place unchanged
+        bne .n
+        lda CellX               ; the next cell: right, then the next row
         clc
         adc GridCell
         sta CellX
@@ -156,7 +170,7 @@ CountCarried:
         jsr NextItem
         dec Item
         bra .l
-.done:  rts
+.done:  jmp CountWorn          ; (wear.s)
 CountOne:
         lda InvCount
         cmp #64
@@ -184,30 +198,25 @@ TimesCell:
 DrawInvCursor:
         lda GridCols
         beq .out
-        lda InvSel              ; its column and row
-        sta T4
-        stz T5
-.d:     lda T4
-        cmp GridCols
-        bcc .got
-        sec
-        sbc GridCols
-        sta T4
-        inc T5
-        bra .d
-.got:   lda T4
-        jsr TimesCell
-        clc
-        adc GridX
+        lda InvSel              ; its cell, as RefreshInventory put it
+        cmp InvCount
+        bcc .some
+        lda GridX               ; nothing there: the first cell
         sta CurRect+2
+        lda GridY
+        sta CurRect
+        bra .wh
+.some:  asl a
+        tax
+        lda InvRX,x
+        sta CurRect+2
+        lda InvRY,x
+        sta CurRect
+.wh:    lda CurRect+2
         clc
         adc GridCell
         sta CurRect+6
-        lda T5
-        jsr TimesCell
-        clc
-        adc GridY
-        sta CurRect
+        lda CurRect
         clc
         adc GridCell
         sta CurRect+4

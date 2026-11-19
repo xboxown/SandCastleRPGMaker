@@ -419,6 +419,17 @@ public partial class MainWindow
         // The inventory's cells (HUD Editor > Carried Items): every object gets its look fitted into one, once.
         var carriedPiece = _systemSettings.Ultima6.Hud.First(HudPieceKind.CarriedItems);
         int cell = carriedPiece is null ? 0 : Math.Clamp(carriedPiece.CellSize / 4 * 4, 4, 32);
+        // Weapons and armour: what they do worn (Engine/AppleIIgs.cs GearCode), in the object's Other.
+        int GearOf(WorldObject? def)
+        {
+            if (def is null) return 0xFFFF;
+            if (def.Type == ObjectType.Weapon)
+                return AppleIIgsGamePack.GearCode(true, (int)(def.Weapon.EquipSlot ?? EquipmentSlot.RightHand) + 1,
+                    def.Weapon.Use == WeaponUse.Melee ? 1 : Math.Max(2, def.Weapon.RangeTiles / 2), def.Weapon.Damage);
+            if (def.Type == ObjectType.Armor && def.Armor.EquipSlot is { } slot)
+                return AppleIIgsGamePack.GearCode(false, (int)slot + 1, 1, def.Armor.ArmorPoints);
+            return 0xFFFF;
+        }
         var iconOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         int IconOf(string? file)
         {
@@ -451,7 +462,8 @@ public partial class MainWindow
                     if (od.Type == ObjectType.Lockpick) f |= 1024;
                 }
                 bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : 0xFFFF, IconOf(file), container));
+                var thingDef = thing.Category == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) : null;
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor ? GearOf(thingDef) : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
@@ -482,6 +494,7 @@ public partial class MainWindow
                 }
                 if (def.Type == ObjectType.Key) { objFlags |= 512; other = def.Id; }
                 if (def.Type == ObjectType.Lockpick) objFlags |= 1024;
+                if (def.Type is ObjectType.Weapon or ObjectType.Armor) other = GearOf(def);
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
             foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
@@ -500,7 +513,7 @@ public partial class MainWindow
         AddMapObjects(start, 0);
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
         if (PlayerCharacter() is { } avatarWho)
-            foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container && !avatarWho.EquippedSlots.ContainsValue(i.InstanceId)))
+            foreach (var item in avatarWho.Inventory.Where(i => i.Category is ReferencedItemCategory.Object or ReferencedItemCategory.Container))
             {
                 if (item.Category == ReferencedItemCategory.Container)
                 {
@@ -519,8 +532,10 @@ public partial class MainWindow
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
                 if (n < 0) continue;
-                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : 0xFFFF, IconOf(file), -1));
+                int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
+                if (wornSlot > 15) wornSlot = 0;
+                objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor ? GearOf(def) : 0xFFFF, IconOf(file), -1));
             }
         // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
         U6Leveling.Use(_systemSettings.Ultima6);
@@ -890,9 +905,8 @@ public partial class MainWindow
                     break;
                 case HudPieceKind.BodySlot: // the inventory view: what the Avatar wears there, or the slot's own picture
                 {
-                    var worn = player is not null && player.EquippedSlots.TryGetValue(piece.Slot, out int id) ? player.Inventory.FirstOrDefault(i => i.InstanceId == id) : null;
-                    var sprite = worn is not null ? DollLook.ItemSprite(worn.Category, worn.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase) : Of(piece.Sprite);
-                    Draw(sprite, piece.X, piece.Y, piece.Width, piece.Height, fit: true);
+                    Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: true); // empty: the player draws what is worn there
+                    pack.BodySlots.Add(((int)piece.Slot + 1, piece.X, piece.Y));
                     break;
                 }
                 case HudPieceKind.CarriedItems: // its empty cells (the things carried are drawn by the player)

@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 19 (b638): wearing (wear.s): weapons and armour worn in the HUD's body slots, Use readies / puts away,
+;   the Avatar's weapon, reach and armour from what it wears.
 ; Version 18 (b637): keys and lockpicks (keys.s): Use a carried key or lockpick (Tab, the grid), "On what?", a door
 ;   or chest next to the Avatar: the key that fits locks / unlocks it, a lockpick tries (Dexterity against the lock).
 ; Version 17 (b636): more commands (cmds.s): Give / Remove Item, Change HP / Stat, Wait, Teleport, Place / Remove,
@@ -526,7 +528,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #18
+        cmp #19
         beq .known
 .bad:   sec
         rts
@@ -1933,6 +1935,7 @@ TryMove:
         .include "events.s"
         .include "cmds.s"
         .include "keys.s"
+        .include "wear.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 18;
+    public const ushort Version = 19;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -397,11 +397,11 @@ public sealed class AppleIIgsGamePack
         "Attack", "{1} attacks {0}.", "Missed!", "{0} barely wounded.", "{0} lightly wounded.", "{0} heavily wounded.", "{0} critically wounded!", "{0} killed!",
         "Begin combat!", "Break off combat!", "Pass", "Combat", "Press a key...", "{0} is knocked out!", "No response.",
         "{1} is now level {0}!", "Rest", "-Not while in Combat!", "-Not while foes are near!", "How many hours? ", "The party is full: {1} doesn't join.",
-        "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "Avatar" };
+        "On what? ", "Unlocked.", "The key doesn't fit.", "The lockpick broke!", "Locked.", "{1} readies {0}.", "{1} puts away {0}.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
-        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked" };
+        "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -417,6 +417,11 @@ public sealed class AppleIIgsGamePack
     /// period 0-7, the activity: 0 stand, 1 wander, 2 sleep, 3 pace east-west, 4 pace north-south, 5 loiter; the spot).</summary>
     public List<(int Character, int Period, int Activity, int X, int Y)> Schedules { get; } = new();
     public int StartHour { get; set; } = 6;
+    /// <summary>The HUD's Body Slot pieces: the slot (EquipmentSlot + 1), where (x, y). A worn thing: carried (64) with its slot in the flags' top 4 bits.</summary>
+    public List<(int Slot, int X, int Y)> BodySlots { get; } = new();
+    /// <summary>A weapon's or armour's Other: 1 weapon / 2 armour (bits 14-15), its slot (bits 10-13), reach 1, 2, 4, 8 (bits 8-9), damage or armour points (0-255).</summary>
+    public static int GearCode(bool weapon, int slot, int reach, int value) =>
+        ((weapon ? 1 : 2) << 14) | ((slot & 15) << 10) | ((reach >= 8 ? 3 : reach >= 4 ? 2 : reach >= 2 ? 1 : 0) << 8) | Math.Clamp(value, 0, 255);
     /// <summary>The party's most, the Avatar with them (System Settings > Ultima 6, Party Size).</summary>
     public int PartySize { get; set; } = 9;
     public static void WriteSchedules(BinaryWriter w, List<(int Character, int Period, int Activity, int X, int Y)> list)
@@ -550,6 +555,8 @@ public sealed class AppleIIgsGamePack
         WriteSchedules(w, Schedules);
         w.Write((ushort)Math.Clamp(StartHour, 0, 23));
         w.Write((ushort)Math.Clamp(PartySize, 1, 9));
+        w.Write((ushort)Math.Min(BodySlots.Count, 16));
+        foreach (var (slot, x, y) in BodySlots.Take(16)) { w.Write((ushort)slot); w.Write((ushort)(x & ~1)); w.Write((ushort)y); }
         return ms.ToArray();
     }
 
