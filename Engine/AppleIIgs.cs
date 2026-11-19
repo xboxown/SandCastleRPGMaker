@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 15;
+    public const ushort Version = 16;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -432,6 +432,8 @@ public sealed class AppleIIgsGamePack
     }
     /// <summary>The first map's events: stepped on, their code runs (the talk code: AppleIIgsTalk).</summary>
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();
+    /// <summary>Each event's triggers (a bit each: 1 stepped on ... 8 picked up), as Events.</summary>
+    public List<int> EventMasks { get; } = new();
     /// <summary>Maps 1, 2...: each its own file MAP.n, loaded when the game goes there (their objects are in Objects, flags' top 4 bits = the map).</summary>
     public List<AppleIIgsMap> OtherMaps { get; } = new();
     public List<(string Name, byte[] Code)> Talks { get; } = new();
@@ -537,7 +539,7 @@ public sealed class AppleIIgsGamePack
         w.Write((byte)m.Length); w.Write(m); w.Write((byte)0);
         w.Write((ushort)SwapSound);
         w.Write((ushort)(1 + OtherMaps.Count));
-        AppleIIgsMap.WriteEvents(w, Events);
+        AppleIIgsMap.WriteEvents(w, Events, EventMasks);
         WriteStats(w, AvatarStats);
         w.Write((ushort)(U6Levels ? 1 : 0)); w.Write((ushort)HitsPerLevel); w.Write((ushort)MostHits);
         w.Write((ushort)Math.Min(LevelNeeds.Count, 16));
@@ -581,6 +583,7 @@ public sealed class AppleIIgsMap
     public ushort[] Map { get; set; } = Array.Empty<ushort>();
     public List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> Characters { get; } = new();
     public List<(int X, int Y, byte[] Code)> Events { get; } = new();
+    public List<int> EventMasks { get; } = new();
     public List<(int Character, int Period, int Activity, int X, int Y)> Schedules { get; } = new();
 
     public byte[] Write()
@@ -597,15 +600,20 @@ public sealed class AppleIIgsMap
             w.Write((ushort)c.Talk); w.Write((ushort)c.Portrait); w.Write((ushort)c.Name);
             AppleIIgsGamePack.WriteStats(w, c.Stats);
         }
-        WriteEvents(w, Events);
+        WriteEvents(w, Events, EventMasks);
         AppleIIgsGamePack.WriteSchedules(w, Schedules);
         return ms.ToArray();
     }
 
-    public static void WriteEvents(BinaryWriter w, List<(int X, int Y, byte[] Code)> events)
+    /// <summary>Each event: x, y, its triggers (a bit each), its code's length, its code.</summary>
+    public static void WriteEvents(BinaryWriter w, List<(int X, int Y, byte[] Code)> events, List<int> masks)
     {
         w.Write((ushort)events.Count);
-        foreach (var (x, y, code) in events) { w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)code.Length); w.Write(code); }
+        for (int i = 0; i < events.Count; i++)
+        {
+            var (x, y, code) = events[i];
+            w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)(i < masks.Count ? masks[i] : 1 << 1)); w.Write((ushort)code.Length); w.Write(code);
+        }
     }
 }
 

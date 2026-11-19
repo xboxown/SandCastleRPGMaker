@@ -228,10 +228,13 @@ PassTurn:
 ; After a key: if it took a turn, the others have theirs.
 AfterTurn:
         lda TurnUsed
-        beq .out
-        stz TurnUsed
+        bne .t
+        jmp RunQueue            ; events waiting (events.s)
+.t:     stz TurnUsed
         lda Mode                ; a verb still asking: not yet
-        bne .out
+        beq .m
+        jmp RunQueue
+.m:     jsr StayEvents          ; still on the same cell: its Stay events (events.s)
         lda Told                ; the Avatar's own blow told: the others' words follow it at once
         beq .lead
         stz WTLead
@@ -247,7 +250,7 @@ AfterTurn:
         beq .out
         lda #Prompt             ; a fresh line: the prompt
         jsr PrintMine
-.out:   rts
+.out:   jmp RunQueue
 
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:

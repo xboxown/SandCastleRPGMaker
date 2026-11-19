@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 16 (b635): map events' triggers and pages (events.s): stepped on / stood on / stepped off, Use on it,
+;   arriving (Always), having or not having an item, a thing dropped on it / picked up from it; variable conditions.
 ; Version 15 (b634): the party (party.s): Join / Leave Party, members follow, fight, go along to other maps,
 ;   0-9 show a member in the portrait view; saved.
 ; Version 14 (b633): stats that change (stats.s): the portrait view's stats live, levels from experience, R Rest.
@@ -202,6 +204,7 @@ start:
         jsr SetupScreen
         jsr DrawPanel
         jsr DrawView
+        jsr ArriveEvents        ; the first map's Always events (events.s)
 MainLoop:
         pha
         pea $0028               ; key down, auto-key
@@ -518,7 +521,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #15
+        cmp #16
         beq .known
 .bad:   sec
         rts
@@ -1906,7 +1909,7 @@ TryMove:
         lda #1                  ; a step: a turn
         sta TurnUsed
         jsr DrawView
-        jmp StepEvent           ; an event here? (maps.s)
+        jmp SteppedEvents       ; off the old cell, onto the new one (events.s)
 .stay:  lda #1
         sta TurnUsed
         jsr DrawView
@@ -1922,6 +1925,7 @@ TryMove:
         .include "schedule.s"
         .include "stats.s"
         .include "party.s"
+        .include "events.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

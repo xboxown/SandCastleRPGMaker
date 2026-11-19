@@ -41,10 +41,10 @@ ParseMaps:
         sta Item
 .ev:    lda Item
         beq .evd
-        ldy #4
+        ldy #6
         lda [Ptr],y
         clc
-        adc #6
+        adc #8
         jsr AddPtr
         dec Item
         bra .ev
@@ -266,10 +266,10 @@ LoadMap:
         sta Item
 .ev:    lda Item
         beq .evd
-        ldy #4
+        ldy #6
         lda [Ptr],y
         clc
-        adc #6
+        adc #8
         jsr AddPtr
         dec Item
         bra .ev
@@ -287,42 +287,5 @@ LoadMap:
         sta MapTab+MT_IN,x
         clc
         rts
-
-; The Avatar has stepped onto PX, PY: an event there runs.
-StepEvent:
-        lda EvCount
-        beq .out
-        sta Item
-        lda EvPtr
-        sta ItemPtr
-        lda EvPtr+2
-        sta ItemPtr+2
-.l:     lda [ItemPtr]
-        cmp PX
-        bne .n
-        ldy #2
-        lda [ItemPtr],y
-        cmp PY
-        beq .found
-.n:     ldy #4                  ; past its code
-        lda [ItemPtr],y
-        clc
-        adc #6
-        jsr NextItem
-        dec Item
-        bne .l
-.out:   rts
-.found: lda ItemPtr             ; its code, from the start
-        clc
-        adc #6
-        sta TalkPtr
-        lda ItemPtr+2
-        adc #0
-        sta TalkPtr+2
-        stz TPC
-        lda #3
-        sta Mode
-        jsr NewLine
-        jmp RunTalk
 
 WantMap:  .dw 0

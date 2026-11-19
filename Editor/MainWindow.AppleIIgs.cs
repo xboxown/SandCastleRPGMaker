@@ -127,18 +127,22 @@ public partial class MainWindow
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
         const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
-        // Map events: those stepped on (By Enter) run on the Apple IIgs, their first such page; the others don't yet.
+        // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
-        int otherTriggers = 0;
+        var triggersLeftOut = new SortedSet<string>();
+        var iigsTriggers = new HashSet<BookTriggerConditionBased> { BookTriggerConditionBased.ByEnter, BookTriggerConditionBased.ByStay, BookTriggerConditionBased.ByExit,
+            BookTriggerConditionBased.Always, BookTriggerConditionBased.ByHavingAnItem, BookTriggerConditionBased.ByNotHavingAnItem, BookTriggerConditionBased.ByDropItem,
+            BookTriggerConditionBased.ByPickupItem, BookTriggerConditionBased.ByUseItem };
         foreach (var m in gameMaps)
             foreach (var ev in m.Events)
-            {
-                var page = ev.EventPages.FirstOrDefault(pg => pg.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByEnter && pg.Commands.Count > 0);
-                if (page is null) { if (ev.EventPages.Any(pg => pg.Commands.Count > 0)) otherTriggers++; continue; }
-                foreach (var type in AppleIIgsTalk.Compile(page.Commands, _ => 0, out _, SoundOk, MapOk).Unsupported) eventsLeftOut.Add(type);
-            }
+                foreach (var page in ev.EventPages.Where(pg => pg.Commands.Count > 0))
+                {
+                    var t = page.Conditions.TriggerConditionBased;
+                    if (!iigsTriggers.Contains(t) || (t == BookTriggerConditionBased.ByUseItem && page.Conditions.TriggerItemReference is not null)) { triggersLeftOut.Add(t.ToString()); continue; }
+                    foreach (var type in AppleIIgsTalk.Compile(page.Commands, _ => 0, out _, SoundOk, MapOk).Unsupported) eventsLeftOut.Add(type);
+                }
         if (eventsLeftOut.Count > 0) problems.Add($"Note: in the map events, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", eventsLeftOut)}. {works}.");
-        if (otherTriggers > 0) problems.Add($"Note: {otherTriggers} map event(s) start some other way than being stepped on (By Enter): on the Apple IIgs only stepped-on events run yet.");
+        if (triggersLeftOut.Count > 0) problems.Add($"Note: map event pages started by {string.Join(", ", triggersLeftOut)} don't run on the Apple IIgs yet (By Enter, Stay, Exit, Use (the action button), Always, Having / Not Having an Item, Drop and Pickup Item do).");
         var hudDesign = _systemSettings.Ultima6.Hud;
         if (hudDesign.First(HudPieceKind.GameView) is not null && (hudDesign.Width != AppleIIgsLimits.ScreenWidth || hudDesign.Height != AppleIIgsLimits.ScreenHeight))
             problems.Add($"The HUD is {hudDesign.Width} x {hudDesign.Height}: the Apple IIgs's screen is {AppleIIgsLimits.ScreenWidth} x {AppleIIgsLimits.ScreenHeight} (HUD Editor).");
@@ -634,19 +638,63 @@ public partial class MainWindow
         characters.AddRange(MapCharacters(start, pack.Schedules));
         pack.StartHour = _systemSettings.Clock.StartHour;
         // A map's events: stepped on (By Enter), their first such page's commands run - made into the talk code.
-        List<(int X, int Y, byte[] Code)> MapEvents(MapData world)
+        List<(int X, int Y, byte[] Code)> MapEvents(MapData world, List<int> masks)
         {
             var list = new List<(int X, int Y, byte[] Code)>();
             foreach (var ev in world.Events.Where(e => e.Floor <= 1 && e.X >= 0 && e.Y >= 0 && e.X < world.Width && e.Y < world.Height))
             {
-                var page = ev.EventPages.FirstOrDefault(pg => pg.Conditions.TriggerConditionBased == BookTriggerConditionBased.ByEnter && pg.Commands.Count > 0);
-                if (page is null) continue;
-                AppleIIgsTalk.Compile(page.Commands, VariableOf, out var code, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
+                var pages = IIgsEventPages(ev, out _);
+                if (pages.Count == 0) continue;
+                AppleIIgsTalk.CompileEvent(pages, VariableOf, out var code, out int mask, id => soundIndex.TryGetValue(id, out int n) ? n : -1, WorldIndex, WhereIs);
                 list.Add((ev.X, ev.Y, code));
+                masks.Add(mask);
             }
             return list;
         }
-        pack.Events.AddRange(MapEvents(start));
+        List<AppleIIgsTalk.EventPage> IIgsEventPages(GameEvent ev, out List<string> leftOut)
+        {
+            leftOut = new List<string>();
+            var pages = new List<AppleIIgsTalk.EventPage>();
+            foreach (var page in ev.EventPages.Where(pg => pg.Commands.Count > 0))
+            {
+                var c = page.Conditions;
+                int item = c.TriggerItemReference is { } r ? pack.NameOf(DollLook.ItemName(r, _objectDatabase, _bookDatabase, _containerDatabase)) : -1;
+                (int Trigger, int Kind) t = c.TriggerConditionBased switch
+                {
+                    BookTriggerConditionBased.ByEnter => (1, 2),
+                    BookTriggerConditionBased.ByStay => (2, 2),
+                    BookTriggerConditionBased.ByExit => (3, 2),
+                    BookTriggerConditionBased.ByUseItem when item < 0 => (4, 2),
+                    BookTriggerConditionBased.Always => (5, 2),
+                    BookTriggerConditionBased.ByHavingAnItem => (6, 0),
+                    BookTriggerConditionBased.ByNotHavingAnItem => (6, 1),
+                    BookTriggerConditionBased.ByDropItem => (7, 2),
+                    BookTriggerConditionBased.ByPickupItem => (8, 2),
+                    _ => (0, 0)
+                };
+                if (t.Trigger == 0) { leftOut.Add(c.TriggerConditionBased == BookTriggerConditionBased.ByUseItem ? "By Use Item (an item used on it)" : c.TriggerConditionBased.ToString()); continue; }
+                var conds = new List<(int Variable, int Test, int Value, bool Or)>();
+                if (c.ConditionInACondition)
+                    for (int i = 0; i < c.VariableConditions.Count; i++)
+                    {
+                        var e = c.VariableConditions[i];
+                        var v = _variableDatabase.Variables.FirstOrDefault(x => x.Id == e.VariableId);
+                        if (v is null || e.Mode == VariableConditionMode.String) { leftOut.Add("a text variable condition"); continue; }
+                        int test = e.Comparison switch
+                        {
+                            ConditionComparisonOperator.NotEqual => 1, ConditionComparisonOperator.GreaterThan => 2, ConditionComparisonOperator.LessThan => 3,
+                            ConditionComparisonOperator.GreaterOrEqual => 4, ConditionComparisonOperator.LessOrEqual => 5, _ => 0
+                        };
+                        int value = e.Mode == VariableConditionMode.Boolean ? (bool.TryParse(e.Value, out bool b) && b ? 1 : 0) : int.TryParse(e.Value, out int n) ? n : 0;
+                        conds.Add((VariableOf(v.Name), test, value, i > 0 && c.VariableConditions[i - 1].NextOperator == ConditionLogicOperator.Or));
+                    }
+                if (c.ConditionStatCondition || c.ConditionEventTriggerCompleted || c.ConditionComplex || c.ConditionDistance || c.ConditionJoinedParty)
+                    leftOut.Add("conditions other than variables and switches");
+                pages.Add(new AppleIIgsTalk.EventPage(t.Trigger, t.Kind == 2 && t.Trigger is 1 or 2 or 3 or 4 or 5 ? -1 : item, t.Kind, conds, page.Commands));
+            }
+            return pages;
+        }
+        pack.Events.AddRange(MapEvents(start, pack.EventMasks));
         // The other maps: their cells, objects, characters and events (each map its own file, MAP.n).
         for (int mi = 1; mi < worldList.Count; mi++)
         {
@@ -656,7 +704,7 @@ public partial class MainWindow
                 StartY = world.StartY >= 0 && world.StartY < world.Height ? world.StartY : world.Height / 2 };
             AddMapObjects(world, mi << 12);
             other.Characters.AddRange(MapCharacters(world, other.Schedules));
-            other.Events.AddRange(MapEvents(world));
+            other.Events.AddRange(MapEvents(world, other.EventMasks));
             pack.OtherMaps.Add(other);
         }
         // The Disk Swap screen's picture (the whole screen) and its animation's frames (each as a sprite of its own size).

@@ -352,6 +352,12 @@ PickCell:
         ora #64
         sta [ItemPtr],y
         jsr FreeCell
+        jsr ObjFlags            ; picked up from here; what is carried changed (events.s)
+        ldy #8
+        lda [ItemPtr],y
+        ldx CurX
+        ldy CurY
+        jsr PickedEvents
         lda #8                  ; {1} gets {0}.
         jsr Format
         jsr DrawView
@@ -359,7 +365,10 @@ PickCell:
         jmp PromptLine
 .use:   cmp #VERB_USE
         bne .talk
-        lda Kind
+        jsr UseEvent            ; an event there with a Use page: it, not the thing (events.s)
+        bcc .nuse
+        rts
+.nuse:  lda Kind
         cmp #3
         bne .np
         jsr ObjFlags

@@ -17,11 +17,18 @@ namespace SandcastleRpgMaker.Engine;
 ///   $06 PLAY u16 sound (its number in GAME.DAT), u8 volume (0-255)
 ///   $07 MAP  u16 map (its number in the game; $FFFF this one), u16 x, u16 y ($FFFF: the map's start)   Change Map
 ///   $08 PARTY u16 map, u16 character (its place in that map's list; $FFFF $FFFF: the one talked to), u8 1 join / 0 leave
+/// A map event's code (CompileEvent): its pages in order, each
+///   $09 TRIG u8 trigger, u16 the next page    the page answers this trigger only
+///   $0A ITEM u16 name, u8 0 carried / 1 not carried / 2 the thing dropped or picked up is it, u16 the next page
+///   (IFVs for its variable conditions, jumping to the next page if they fail)
+///   $0B HIT                                   the page runs: its commands, then END
+/// Triggers: 1 stepped on, 2 stood on, 3 stepped off, 4 Use on it (the action button), 5 arriving on the map (Always),
+/// 6 having / not having an item, 7 a thing dropped on it, 8 a thing picked up from it.
 /// Commands the IIgs player doesn't do yet are left out (Unsupported lists them).
 /// </summary>
 public sealed class AppleIIgsTalk
 {
-    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8;
+    public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11;
     private readonly List<byte> _code = new();
     private readonly Func<string, int> _variable;
     private readonly Func<int, int>? _sound;
@@ -39,6 +46,52 @@ public sealed class AppleIIgsTalk
     {
         var talk = new AppleIIgsTalk(variable, sound, world, who);
         talk.Run(commands);
+        code = talk._code.ToArray();
+        return talk;
+    }
+
+    /// <summary>One event page as the Apple IIgs runs it: its trigger (1-8), an item it waits for (a name's number, -1 none;
+    /// ItemKind 0 carried, 1 not carried, 2 the one dropped / picked up), its variable conditions (variable, test, value, Or with the one before).</summary>
+    public sealed record EventPage(int Trigger, int Item, int ItemKind, List<(int Variable, int Test, int Value, bool Or)> Conditions, List<EventCommand> Commands);
+
+    /// <summary>A map event's code: its pages in order (the first one whose trigger and conditions hold runs); mask: a bit for each trigger it has.</summary>
+    public static AppleIIgsTalk CompileEvent(List<EventPage> pages, Func<string, int> variable, out byte[] code, out int mask, Func<int, int>? sound = null,
+        Func<int, int>? world = null, Func<string, (int Map, int Index)?>? who = null)
+    {
+        var talk = new AppleIIgsTalk(variable, sound, world, who);
+        mask = 0;
+        foreach (var page in pages)
+        {
+            mask |= 1 << page.Trigger;
+            talk.B(Trig); talk.B(page.Trigger);
+            var next = new List<int> { talk.Hole() };
+            if (page.Item >= 0) { talk.B(ItemOp); talk.W(page.Item); talk.B(page.ItemKind); next.Add(talk.Hole()); }
+            // The conditions, left to right as the Windows evaluator: (((c0 op1 c1) op2 c2) ...)
+            var falseHoles = new List<int>();
+            var trueHoles = new List<int>();
+            for (int i = 0; i < page.Conditions.Count; i++)
+            {
+                var (v, test, value, or) = page.Conditions[i];
+                if (i > 0 && or)
+                {
+                    talk.B(Jump); trueHoles.Add(talk.Hole()); // true stays true
+                    foreach (int h in falseHoles) talk.Fill(h, talk.Here);
+                    falseHoles.Clear();
+                }
+                else
+                {
+                    foreach (int h in trueHoles) talk.Fill(h, talk.Here);
+                    trueHoles.Clear();
+                }
+                talk.B(IfV); talk.W(v); talk.B(test); talk.W(value); falseHoles.Add(talk.Hole());
+            }
+            foreach (int h in trueHoles) talk.Fill(h, talk.Here);
+            next.AddRange(falseHoles);
+            talk.B(Hit);
+            talk.Run(page.Commands);
+            foreach (int h in next) talk.Fill(h, talk.Here);
+        }
+        talk.B(End);
         code = talk._code.ToArray();
         return talk;
     }

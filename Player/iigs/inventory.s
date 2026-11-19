@@ -497,6 +497,11 @@ DropHere:
         jsr TakeCell
 .free:  ldy #8
         lda [ItemPtr],y
+        pha
+        ldx CurX                ; dropped here; what is carried changed (events.s)
+        ldy CurY
+        jsr DroppedEvents
+        pla
         jsr NameNumber
         lda #17                 ; {1} drops {0}.
         jsr Format

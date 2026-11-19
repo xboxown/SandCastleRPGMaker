@@ -523,6 +523,10 @@ ShowTalker:
 
 ; The talk is over: the panel as it was, the prompt.
 EndTalk:
+        lda EvRunning           ; an event's code: its own end (events.s)
+        beq .talk
+        jmp EndEvent
+.talk:
         lda PortW
         beq .n
         lda PortX
@@ -547,7 +551,8 @@ EndTalk:
         jsr RestoreRect
 .l:     jsr DrawPanel           ; the panel as its view is (inventory.s)
         stz Mode
-        jmp PromptLine
+        jsr PromptLine
+        jmp RunQueue            ; events waiting (events.s)
 
 ; Runs the talk's code from TPC until it asks or ends.
 RunTalk:
@@ -555,12 +560,15 @@ RunTalk:
         lda [TalkPtr],y
         and #$00FF
         cmp #1
-        beq .say
-        cmp #2
-        beq .ask
-        cmp #3
-        beq .jump
-        cmp #4
+        bne .d2
+        brl .say
+.d2:    cmp #2
+        bne .d3
+        brl .ask
+.d3:    cmp #3
+        bne .d4
+        brl .jump
+.d4:    cmp #4
         bne .n4
         brl .setv
 .n4:    cmp #5
@@ -572,8 +580,13 @@ RunTalk:
         bne .n7
         jmp TalkMap
 .n7:    cmp #8
-        bne .end
+        bne .n8
         jmp TalkParty
+.n8:    cmp #9
+        bcc .end
+        cmp #12
+        bcs .end
+        jmp EventOp             ; TRIG, ITEM, HIT (events.s)
 .play:
         iny                     ; PLAY: a sound, its volume
         lda [TalkPtr],y
@@ -729,6 +742,7 @@ TalkMap:
         beq .same
         jsr ChangeMap           ; another map: what comes after doesn't run (as Windows)
         jsr DrawView
+        jsr NewMapEvents        ; the old map's events forgotten, the new one's Always (events.s)
         jmp EndTalk
 .same:  jsr ChangeMap
         jsr DrawView
