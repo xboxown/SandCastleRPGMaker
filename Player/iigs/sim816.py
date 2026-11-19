@@ -335,7 +335,7 @@ class Machine:
         if not eight: self.wr(a + 1, v >> 8)
 
     # ---- run ----
-    def run(self, max_steps=20_000_000):
+    def run(self, max_steps=int(os.environ.get("SIM_STEPS", "20000000"))):
         sys.path.insert(0, os.path.dirname(__file__))
         from asm816 import OPS
         table = {}

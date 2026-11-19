@@ -342,7 +342,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 21;
+    public const ushort Version = 22;
     public ushort[] Palette { get; set; } = new ushort[16];
     public string Title { get; set; } = "";
     public List<byte[]> Tiles { get; } = new();
@@ -436,6 +436,10 @@ public sealed class AppleIIgsGamePack
         public List<(int Name, int Count)> Reagents { get; } = new();
         public List<(int Kind, int Min, int Max)> Effects { get; } = new();
     }
+    /// <summary>Animated tiles (Tile Properties > animation): a tile and its frames' tiles (the first is itself), up to 4.</summary>
+    public List<List<int>> AnimTiles { get; } = new();
+    /// <summary>Day and night (System Settings > Day / Night): on, dawn, day, dusk and night's hours.</summary>
+    public (bool On, int Dawn, int Day, int Dusk, int Night) DayNight { get; set; } = (true, 5, 7, 19, 21);
     /// <summary>Books and signs to read: each one's words as talk code (AppleIIgsTalk.CompileText). A book's Other: 3 (bits 14-15), slot 0, its place here.</summary>
     public List<byte[]> Texts { get; } = new();
     /// <summary>Spellbooks: the spells each knows (their places in Spells). A spellbook's Other: 3 (bits 14-15), its slot (a hand), its place here.</summary>
@@ -590,6 +594,9 @@ public sealed class AppleIIgsGamePack
         foreach (var book in Books.Take(64)) { w.Write((ushort)Math.Min(book.Count, 64)); foreach (int i in book.Take(64)) w.Write((ushort)i); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
+        w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);
+        w.Write((ushort)Math.Min(AnimTiles.Count, 128));
+        foreach (var frames in AnimTiles.Take(128)) { w.Write((ushort)Math.Min(frames.Count, 4)); foreach (int f in frames.Take(4)) w.Write((ushort)f); for (int i = frames.Count; i < 4; i++) w.Write((ushort)frames[0]); }
         return ms.ToArray();
     }
 

@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 22 (b641): the world's look (look.s): night and light (darkness beyond the light), animated tiles, roofs
+;   hidden while the Avatar is under them; upper floors are maps of their own (the editor), stairs and ladders events.
 ; Version 21 (b640): reading and shops (read.s): books and signs read in the text area (<more>), the Avatar's gold,
 ;   money picked up, the Shop command as keyword talk (PAY, SELL).
 ; Version 20 (b639): magic (magic.s): C Cast with a readied spellbook - the syllables typed, the book, level, magic
@@ -548,7 +550,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #21
+        cmp #22
         beq .known
 .bad:   sec
         rts
@@ -948,6 +950,8 @@ DrawView:
         jsr DrawObjects
         jsr DrawCharacters
         jsr DrawAvatar
+        jsr DrawRoofs           ; (look.s)
+        jsr DrawDark
         lda Mode
         cmp #4
         bne .nocur
@@ -1433,6 +1437,10 @@ DrawObjects:
         and #$F000+96+256
         cmp CurBits
         bne .n
+        ldy #10                 ; roofs: drawn last (look.s)
+        lda [ItemPtr],y
+        cmp #$FFFD
+        beq .n
         lda [ItemPtr]
         tax
         ldy #2
@@ -1752,6 +1760,11 @@ MapTile:
 DrawTile:
         cmp #$FFFF
         beq .blank
+        phx                     ; an animated tile: its frame now (look.s)
+        asl a
+        tax
+        lda RemapTab,x
+        plx
         sta T0                  ; Src = TilesPtr + tile * 128
         stz T1
         ldy #7
@@ -1960,6 +1973,7 @@ TryMove:
         .include "wear.s"
         .include "magic.s"
         .include "read.s"
+        .include "look.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

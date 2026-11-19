@@ -361,44 +361,114 @@ public partial class MainWindow
         // The maps (Maps tab, the first one first): map n of the game; Change Map goes by these numbers.
         var worldList = (_worlds.Count > 0 ? _worlds : new List<MapData> { start }).Take(AppleIIgsLimits.MaxMaps).ToList();
         int WorldIndex(int id) => worldList.FindIndex(m => m.Id == id);
+        // Upper floors (Map Editor > floors): each its own map after the worlds; stairs and ladders take the Avatar between them.
+        var floorMap = new Dictionary<(int World, int Floor), int>();
+        for (int wi = 0; wi < worldList.Count; wi++)
+        {
+            int top = Math.Max(worldList[wi].Layers.Select(l => l.Floor).DefaultIfEmpty(1).Max(), worldList[wi].Characters.Select(c => c.Floor).DefaultIfEmpty(1).Max());
+            for (int f = 2; f <= Math.Min(top, MapFloors.MaxFloors); f++)
+                if (worldList.Count + floorMap.Count < AppleIIgsLimits.MaxMaps) floorMap[(wi, f)] = worldList.Count + floorMap.Count;
+        }
+        int MapOfFloor(MapData world, int floor) => floor <= 1 ? worldList.IndexOf(world) : floorMap.TryGetValue((worldList.IndexOf(world), floor), out int m) ? m : -1;
+        // Stairs: stepped on, to the floor above at the cell past the stairs; the floor above's cell over the stairs: down, before them.
+        // Ladders: to their destination (its floor by its lift).
+        List<(int X, int Y, int Map, int TX, int TY)> FloorLinks(MapData world, int floor)
+        {
+            var links = new List<(int, int, int, int, int)>();
+            foreach (var inst in world.Objects.Where(o => o.ContainerInstanceId < 0))
+            {
+                var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == inst.ObjectId);
+                if (def is null || def.Type != ObjectType.Stairs) continue;
+                int of = MapFloors.FloorOfLift(inst.Z);
+                if (def.Stairs.Kind == StairsKind.Ladder)
+                {
+                    if (of == floor && inst.DestinationX >= 0 && inst.DestinationY >= 0 && MapOfFloor(world, MapFloors.FloorOfLift(inst.DestinationLift)) is int lm and >= 0)
+                        links.Add((inst.X, inst.Y, lm, inst.DestinationX, inst.DestinationY));
+                    continue;
+                }
+                var (dx, dy) = def.Stairs.RisesToward switch { SpriteDirection.North => (0, -1), SpriteDirection.South => (0, 1), SpriteDirection.East => (1, 0), _ => (-1, 0) };
+                if (of == floor && MapOfFloor(world, floor + 1) is int up and >= 0) links.Add((inst.X, inst.Y, up, inst.X + dx, inst.Y + dy));
+                if (of == floor - 1 && MapOfFloor(world, floor - 1) is int down and >= 0) links.Add((inst.X, inst.Y, down, inst.X - dx, inst.Y - dy));
+            }
+            return links;
+        }
+        HashSet<(int, int)> StairTops(MapData world, int floor) => FloorLinks(world, floor).Where(l => l.Map == MapOfFloor(world, floor - 1)).Select(l => (l.X, l.Y)).ToHashSet();
+
         // Every different cell picture, composed from its layers.
         var keys = new Dictionary<string, int>();
         var tilePixels = new List<uint[]>();
         var flags = new List<byte>();
         var tileNames = new List<string>();
         // A map's cells: each different cell picture once, composed from its layers (shared by all the maps).
-        ushort[] Grid(MapData world)
+        ushort[] Grid(MapData world, int floor = 1, HashSet<(int, int)>? stairTops = null)
         {
-            var worldLayers = world.Layers.Where(l => l.Floor <= 1).ToList();
+            var worldLayers = world.Layers.Where(l => l.Floor <= floor).ToList();
+            var slabs = world.Layers.Where(l => l.Floor == floor).ToList();
             var grid = new ushort[world.Width * world.Height];
             for (int y = 0; y < world.Height; y++)
                 for (int x = 0; x < world.Width; x++)
                 {
                     string key = CellKey(world, worldLayers, x, y);
+                    if (floor > 1 && !slabs.Any(l => l.GetTile(x, y, world.Width) >= 0))
+                        key += stairTops?.Contains((x, y)) == true ? "|#stair" : "|#air"; // an upper floor: over nothing, it can't be walked (but down the stairs)
                     if (!keys.TryGetValue(key, out int n))
                     {
                         if (keys.Count >= AppleIIgsLimits.MaxTiles) throw new InvalidOperationException($"More than {AppleIIgsLimits.MaxTiles} different tiles.");
                         var px = new uint[256];
                         bool walkable = true, water = false;
+                        var animParts = new List<(int Index, string Sprite)>();
+                        int partIndex = 0;
                         foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
                         {
+                            if (part == "#air") { walkable = false; continue; }
+                            if (part.StartsWith('#')) continue;
+                            partIndex++;
                             int colon = part.LastIndexOf(':');
                             string sheet = part[..colon];
                             int local = int.Parse(part[(colon + 1)..]);
                             if (TilePixels(sheet, local) is { } top)
                                 for (int i = 0; i < 256; i++) if ((top[i] >> 24) >= 128) px[i] = top[i];
-                            if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{sheet}:{local}", out var props)) { walkable &= props.Walkable; water |= props.IsWater; }
+                            if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{sheet}:{local}", out var props))
+                            {
+                                walkable &= props.Walkable; water |= props.IsWater;
+                                if (props.AnimationSpriteName.Length > 0) animParts.Add((partIndex, props.AnimationSpriteName));
+                            }
                         }
                         n = keys[key] = tilePixels.Count;
                         tilePixels.Add(px);
+                        // An animated tile: its frames composed the same way, the animated part's frame over the parts under it.
+                        if (animParts.Count > 0 && _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(sp => sp.Name == animParts[0].Sprite) is { } anim && anim.Frames.Count > 1)
+                        {
+                            var frameTiles = new List<int> { n };
+                            foreach (var frame in anim.Frames.Skip(1).Take(3))
+                            {
+                                if (!File.Exists(frame.FilePath)) continue;
+                                var fpx = new uint[256];
+                                int pi = 0;
+                                foreach (var part in key.Split('|'))
+                                {
+                                    if (part.StartsWith('#')) continue;
+                                    pi++;
+                                    int colon = part.LastIndexOf(':');
+                                    var top = pi == animParts[0].Index ? FitInto16(frame.FilePath) : TilePixels(part[..colon], int.Parse(part[(colon + 1)..]));
+                                    if (top is not null) for (int i = 0; i < 256; i++) if ((top[i] >> 24) >= 128) fpx[i] = top[i];
+                                }
+                                frameTiles.Add(tilePixels.Count);
+                                tilePixels.Add(fpx);
+                                tileNames.Add("");
+                                flags.Add((byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
+                            }
+                            pack.AnimTiles.Add(frameTiles);
+                        }
                         string tileName = "";
                         foreach (var part in key.Length == 0 ? Array.Empty<string>() : key.Split('|'))
                         {
+                            if (part.StartsWith('#')) continue;
                             int colon = part.LastIndexOf(':');
                             if (_tilePropertiesDatabase.ByTileKey.TryGetValue($"{part[..colon]}:{part[(colon + 1)..]}", out var named) && named.TerrainLabel.Length > 0) tileName = named.TerrainLabel;
                         }
-                        tileNames.Add(tileName);
-                        flags.Add((byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
+                        tileNames.Insert(n, tileName);
+                        flags.Insert(n, (byte)((walkable ? 1 : 0) | (water ? 2 : 0)));
                     }
                     grid[y * world.Width + x] = (ushort)n;
                 }
@@ -466,6 +536,8 @@ public partial class MainWindow
             pack.Texts.Add(AppleIIgsTalk.CompileText(text, chars, lines));
             return pack.Texts.Count - 1;
         }
+        // A light source's Other: $F000, lit (bit 8), how far it lights (1-7, from its Brightness: a candle 1, a lamp 7).
+        int LightCode(WorldObject def, bool lit) => 0xF000 | (lit ? 0x100 : 0) | Math.Clamp(1 + def.Light.Brightness / 2, 1, 7);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
         var spellIndex = new Dictionary<SpellDefinition, int>();
@@ -530,17 +602,18 @@ public partial class MainWindow
                 }
                 bool isKey = thing.Category == ReferencedItemCategory.Object && _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId)?.Type == ObjectType.Key;
                 var thingDef = thing.Category == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == thing.ItemId) : null;
-                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : 0xFFFF, IconOf(file), container));
+                objects.Add((0xFFFF, 0xFFFF, n, f, pack.NameOf(name), isKey ? thing.ItemId : thingDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(thingDef) : thingDef?.Type == ObjectType.LightSource ? LightCode(thingDef, false) : 0xFFFF, IconOf(file), container));
                 if (thing.Category == ReferencedItemCategory.Container) AddContents(thing.Contents, objects.Count - 1, depth + 1);
             }
         }
         // A map's objects and containers (on the map: their flags' top 4 bits are its number).
-        void AddMapObjects(MapData world, int bits)
+        void AddMapObjects(MapData world, int bits, int floor = 1)
         {
             foreach (var instance in world.Objects.Where(o => o.ContainerInstanceId < 0))
             {
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == instance.ObjectId);
-                if (def is null || def.Type == ObjectType.Roof || instance.Z >= MapFloors.BaseLift(2)) continue; // Ultima 6: no roofs, no upper floors
+                if (def is null) continue;
+                if (def.Type == ObjectType.Roof ? floor != 1 : MapFloors.FloorOfLift(instance.Z) != floor) continue; // this floor's things; roofs over the ground floor
                 var state = new ObjectState(instance.IsOpenRuntime ?? false, instance.IsLockedRuntime ?? false, instance.IsLitRuntime ?? false, instance.IsSpentRuntime,
                     Math.Max(1, instance.Quantity), instance.Facing, Stage: instance.FrameRuntime, LiquidId: instance.LiquidIdRuntime ?? -1);
                 var sprite = ObjectLooks.SpriteFor(def, state, _spriteDatabase);
@@ -562,10 +635,12 @@ public partial class MainWindow
                 if (def.Type == ObjectType.Key) { objFlags |= 512; other = def.Id; }
                 if (def.Type == ObjectType.Lockpick) objFlags |= 1024;
                 if (def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook) other = GearOf(def);
+                if (def.Type == ObjectType.Roof) { objects.Add((instance.X, instance.Y, n, bits, pack.NameOf(def.Name), 0xFFFD, 0xFFFF, -1)); continue; } // a roof: hidden while the Avatar is under it
+                if (def.Type == ObjectType.LightSource) other = LightCode(def, instance.IsLitRuntime ?? def.Light.StartsLit);
                 if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
             }
-            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Book))
+            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Book && MapFloors.FloorOfLift(i.Z) == floor))
             {
                 if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
                 string? bookFile = DollLook.ItemSprite(ReferencedItemCategory.Book, placed.ItemId, _objectDatabase, _bookDatabase, _containerDatabase, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
@@ -575,7 +650,7 @@ public partial class MainWindow
                 objects.Add((placed.X, placed.Y, bn, ((bookDef?.CanBePicked ?? true) ? 2 : 0) | ((bookDef?.IsSolid ?? false) ? 1 : 0) | bits,
                     pack.NameOf(bookDef?.Name ?? "book"), 0xC000 | Math.Min(TextOf(placed.ItemId), 1023), IconOf(bookFile), -1));
             }
-            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container))
+            foreach (var placed in world.Items.Where(i => i.Category == ReferencedItemCategory.Container && MapFloors.FloorOfLift(i.Z) == floor))
             {
                 if (_containerDatabase.Containers.FirstOrDefault(c => c.Id == placed.ItemId) is not { } data) continue;
                 if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
@@ -615,7 +690,7 @@ public partial class MainWindow
                 int wornSlot = avatarWho.EquippedSlots.FirstOrDefault(kv => kv.Value == item.InstanceId) is { Value: > 0 } kv2 && avatarWho.EquippedSlots.ContainsValue(item.InstanceId) ? (int)kv2.Key + 1 : 0;
                 if (wornSlot > 15) wornSlot = 0;
                 objects.Add((0xFFFF, 0xFFFF, n, 64 | 2 | (def.IsSolid ? 1 : 0) | (def.Type == ObjectType.Key ? 512 : 0) | (def.Type == ObjectType.Lockpick ? 1024 : 0) | (wornSlot << 12),
-                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : 0xFFFF, IconOf(file), -1));
+                    pack.NameOf(def.Name), def.Type == ObjectType.Key ? def.Id : def.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(def) : def.Type == ObjectType.LightSource ? LightCode(def, item.IsLitRuntime ?? false) : 0xFFFF, IconOf(file), -1));
             }
         // Combat and stats (as the Windows Ultima 6 engine: U6GameWindow.Combat.cs / Weapons.cs / Vitals.cs).
         U6Leveling.Use(_systemSettings.Ultima6);
@@ -675,7 +750,7 @@ public partial class MainWindow
         for (int wi = 0; wi < worldList.Count; wi++)
         {
             int index = 0;
-            foreach (var placed in worldList[wi].Characters.Where(c => !c.Dead))
+            foreach (var placed in worldList[wi].Characters.Where(c => !c.Dead && c.Floor == 1))
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
                 if (who is null || who.IsTestPlayer || placed.X < 0 || placed.Y < 0 || placed.X >= worldList[wi].Width || placed.Y >= worldList[wi].Height) continue;
@@ -699,7 +774,7 @@ public partial class MainWindow
                 string name = DollLook.ItemName(new ItemReference { Category = cat, ItemId = id }, _objectDatabase, _bookDatabase, _containerDatabase);
                 var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
                 int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
-                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : 0xFFFF;
+                int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : 0xFFFF;
                 return (pack.NameOf(name), sprite, IconOf(file), flags, other);
             },
             Picture = (group, name) =>
@@ -724,10 +799,12 @@ public partial class MainWindow
         };
 
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
-        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules)
+        var dn = _systemSettings.DayNight;
+        pack.DayNight = (dn.Enabled, dn.DawnStartHour, dn.DayStartHour, dn.DuskStartHour, dn.NightStartHour);
+        List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules, int floor = 1)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
-            foreach (var placed in world.Characters.Where(c => !c.Dead))
+            foreach (var placed in world.Characters.Where(c => !c.Dead && c.Floor == floor))
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
                 if (who is null || who.IsTestPlayer) continue;
@@ -784,10 +861,24 @@ public partial class MainWindow
         characters.AddRange(MapCharacters(start, pack.Schedules));
         pack.StartHour = _systemSettings.Clock.StartHour;
         // A map's events: stepped on (By Enter), their first such page's commands run - made into the talk code.
-        List<(int X, int Y, byte[] Code)> MapEvents(MapData world, List<int> masks)
+        List<(int X, int Y, byte[] Code)> MapEvents(MapData world, List<int> masks, int floor = 1)
         {
             var list = new List<(int X, int Y, byte[] Code)>();
-            foreach (var ev in world.Events.Where(e => e.Floor <= 1 && e.X >= 0 && e.Y >= 0 && e.X < world.Width && e.Y < world.Height))
+            // Stairs and ladders (Object Editor > Stairs / Ladder): stepped on, to the floor above / below, or the ladder's destination.
+            foreach (var (x, y, map, tx, ty) in FloorLinks(world, floor))
+            {
+                var code = new List<byte> { 9, 1 };
+                code.AddRange(new byte[] { 0, 0 });
+                code.Add(11);
+                code.Add(7); code.AddRange(BitConverter.GetBytes((ushort)map)); code.AddRange(BitConverter.GetBytes((ushort)tx)); code.AddRange(BitConverter.GetBytes((ushort)ty));
+                code.Add(0);
+                int next = code.Count;
+                code[2] = (byte)next; code[3] = (byte)(next >> 8);
+                code.Add(0);
+                list.Add((x, y, code.ToArray()));
+                masks.Add(1 << 1);
+            }
+            foreach (var ev in world.Events.Where(e => e.Floor == floor && e.X >= 0 && e.Y >= 0 && e.X < world.Width && e.Y < world.Height))
             {
                 var pages = IIgsEventPages(ev, out _);
                 if (pages.Count == 0) continue;
@@ -851,6 +942,15 @@ public partial class MainWindow
             AddMapObjects(world, mi << 12);
             other.Characters.AddRange(MapCharacters(world, other.Schedules));
             other.Events.AddRange(MapEvents(world, other.EventMasks));
+            pack.OtherMaps.Add(other);
+        }
+        foreach (var ((wi, f), mi) in floorMap.OrderBy(kv => kv.Value))
+        {
+            var world = worldList[wi];
+            var other = new AppleIIgsMap { Width = world.Width, Height = world.Height, Map = Grid(world, f, StairTops(world, f)), StartX = world.StartX, StartY = world.StartY };
+            AddMapObjects(world, mi << 12, f);
+            other.Characters.AddRange(MapCharacters(world, other.Schedules, f));
+            other.Events.AddRange(MapEvents(world, other.EventMasks, f));
             pack.OtherMaps.Add(other);
         }
         // The Disk Swap screen's picture (the whole screen) and its animation's frames (each as a sprite of its own size).

@@ -235,7 +235,10 @@ AfterTurn:
         beq .m
         jmp RunQueue
 .m:     stz TurnUsed
-        jsr StayEvents          ; still on the same cell: its Stay events (events.s)
+        lda LightLeft           ; a Light spell burns down a turn
+        beq .lt
+        dec LightLeft
+.lt:    jsr StayEvents          ; still on the same cell: its Stay events (events.s)
         lda Told                ; the Avatar's own blow told: the others' words follow it at once
         beq .lead
         stz WTLead
@@ -256,6 +259,7 @@ AfterTurn:
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:
         jsr ClockRun            ; the clock (schedule.s)
+        jsr AnimRun             ; animated tiles (look.s)
         lda Mode
         bne .out
         lda CombatOn

@@ -17,7 +17,16 @@ ParseTexts:
         sta TextPtr
         lda Ptr+2
         sta TextPtr+2
-        rts
+        ldx TextCount           ; past them: day and night, animated tiles (look.s)
+.t:     cpx #0
+        beq .td
+        lda [Ptr]
+        clc
+        adc #2
+        jsr AddPtr
+        dex
+        bra .t
+.td:    jmp ParseLook
 
 ; Carry set if Other (A) is a book's or sign's text.
 IsText:

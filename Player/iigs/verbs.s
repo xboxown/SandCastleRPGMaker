@@ -392,7 +392,16 @@ PickCell:
         and #128                ; a container: what is in it spills out
         beq .rd
         jmp UseContainer
-.rd:    jsr ObjFlags            ; a book or sign: read (read.s)
+.rd:    jsr ObjFlags            ; a light: lit / put out (look.s)
+        ldy #10
+        lda [ItemPtr],y
+        jsr IsLight
+        bcc .rd2
+        jsr NextToCursor
+        bcs .lt
+        brl .range
+.lt:    jmp ToggleLight
+.rd2:   jsr ObjFlags            ; a book or sign: read (read.s)
         ldy #10
         lda [ItemPtr],y
         jsr IsText
@@ -913,7 +922,12 @@ GridVerb:
         beq .bag
         and #$C000
         beq .bag
-        lda [ItemPtr],y         ; a book: read it (read.s)
+        lda [ItemPtr],y         ; a light carried: lit / put out (look.s)
+        jsr IsLight
+        bcc .ntl
+        stz Mode
+        jmp ToggleLight
+.ntl:   lda [ItemPtr],y         ; a book: read it (read.s)
         jsr IsText
         bcc .wear
         and #$03FF
