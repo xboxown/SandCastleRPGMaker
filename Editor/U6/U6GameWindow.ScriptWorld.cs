@@ -69,7 +69,10 @@ public partial class U6GameWindow
         h[EventCommandType.ShowBark] = c =>
         {
             if (CharacterDefinitionFor(c.Get("Who")) is not { } who) return false;
-            ShowFloatingText(who, ScriptValues.Text(Formula(c, "Value")), (int)(Math.Max(0.5, FormulaNumber(c, "Seconds")) * 1000));
+            // In a language: its font while no one in the party knows it.
+            _barkFont = LanguageFont(int.TryParse(c.Get("Language"), out int barkLanguage) ? barkLanguage : -1);
+            try { ShowFloatingText(who, ScriptValues.Text(Formula(c, "Value")), (int)(Math.Max(0.5, FormulaNumber(c, "Seconds")) * 1000)); }
+            finally { _barkFont = null; }
             return true;
         };
 

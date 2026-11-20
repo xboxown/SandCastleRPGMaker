@@ -121,15 +121,28 @@ public partial class MainWindow
             MapCanvas.UpdateLayout();
 
             var drawing = new DrawingVisual();
+            RenderOptions.SetBitmapScalingMode(drawing, BitmapScalingMode.NearestNeighbor);
             using (var dc = drawing.RenderOpen())
             {
-                // Through a VisualBrush, so the canvas's own position inside the window doesn't shift the picture.
-                var brush = new VisualBrush(MapCanvas)
-                {
-                    Viewbox = new Rect(0, 0, width, height), ViewboxUnits = BrushMappingMode.Absolute, Stretch = Stretch.None,
-                    AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top
-                };
-                dc.DrawRectangle(brush, null, new Rect(0, 0, width, height));
+                // Through VisualBrushes, so the canvas's own position inside the window doesn't shift the picture - a piece of
+                // 1024 x 1024 at a time: WPF draws a big brush smaller and stretches it back (a fuzzy picture of a big map).
+                const int piece = 1024;
+                for (int py = 0; py < height; py += piece)
+                    for (int px = 0; px < width; px += piece)
+                    {
+                        int pw = Math.Min(piece, width - px), ph = Math.Min(piece, height - py);
+                        var brush = new VisualBrush(MapCanvas)
+                        {
+                            Viewbox = new Rect(px, py, pw, ph), ViewboxUnits = BrushMappingMode.Absolute,
+                            Viewport = new Rect(px, py, pw, ph), ViewportUnits = BrushMappingMode.Absolute,
+                            Stretch = Stretch.Fill, AlignmentX = AlignmentX.Left, AlignmentY = AlignmentY.Top
+                        };
+                        RenderOptions.SetBitmapScalingMode(brush, BitmapScalingMode.NearestNeighbor);
+                        RenderOptions.SetCachingHint(brush, CachingHint.Cache);
+                        RenderOptions.SetCacheInvalidationThresholdMinimum(brush, 0.5);
+                        RenderOptions.SetCacheInvalidationThresholdMaximum(brush, 2.0);
+                        dc.DrawRectangle(brush, null, new Rect(px, py, pw, ph));
+                    }
             }
             var picture = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
             picture.Render(drawing);

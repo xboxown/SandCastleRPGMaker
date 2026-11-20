@@ -270,8 +270,8 @@ public static class ScriptCommands
                     Choice("Health", "Health (Resurrect)", "All of it", "This many hit points"), F("HP", "Hit points (formula)", def: "10") }, "{Who}: {Value}"),
         new(EventCommandType.LearnLanguage, "Learn / Forget Language", World, "Characters", "A character comes to know a language (System Settings > Languages) - or forgets it. While someone in the party knows it, words written in it (a Show Text, a book) read plainly; else they show in its font, as Serpent Isle's runes.",
             new[] { Who(), new("Language", "Language", ScriptFieldKind.Language), Choice("Value", "Do", "Learn", "Forget") }, "{Who}: {Value} {LanguageName}"),
-        new(EventCommandType.ShowBark, "Show Bark", World, "Characters", "Words floating over a character's head for a moment (Exult's item_say) - not a dialog box. The event doesn't wait.",
-            new[] { Who(), new("Value", "Words", ScriptFieldKind.Words, "Hello!"), F("Seconds", "For how many seconds", def: "3") }, "{Who}: {Value}"),
+        new(EventCommandType.ShowBark, "Show Bark", World, "Characters", "Words floating over a character's head for a moment (Exult's item_say) - not a dialog box. The event doesn't wait. Language: the words are in it - they show in its font (System Settings > Languages) unless someone in the party knows it (Learn / Forget Language).",
+            new[] { Who(), new("Value", "Words", ScriptFieldKind.Words, "Hello!"), F("Seconds", "For how many seconds", def: "3"), new("Language", "Language (optional)", ScriptFieldKind.Language) }, "{Who}: {Value}"),
 
         // ---- 8. Objects and the map ----
         new(EventCommandType.CreateObject, "Create Object", World, "Objects & Map", "Puts a new object (or item) on the map at a spot.",

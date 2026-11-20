@@ -104,6 +104,11 @@ internal sealed class MapCellField
     private readonly Window _owner;
     private readonly TextBlock _text = new() { Width = 150, VerticalAlignment = VerticalAlignment.Center };
     private readonly bool _withFloor;
+    private readonly ComboBox _map = new() { Width = 170, DisplayMemberPath = "Value", ToolTip = "The map Pick on Map shows, and the X, Y typed are checked against" };
+    private readonly TextBox _x = new() { Width = 46, Margin = new Thickness(4, 0, 0, 0), ToolTip = "X (column)" };
+    private readonly TextBox _y = new() { Width = 46, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Y (row)" };
+    private readonly TextBox _floor = new() { Width = 30, Margin = new Thickness(4, 0, 0, 0), ToolTip = "Floor (1 the ground)" };
+    private bool _typing;
     public (int X, int Y)? Cell { get; private set; }
     /// <summary>The floor it was picked on (saved only when the field keeps a floor).</summary>
     public int Floor { get; private set; } = 1;
@@ -119,6 +124,16 @@ internal sealed class MapCellField
         var pick = new Button { Content = "Pick on Map...", Padding = new Thickness(8, 1, 8, 1) };
         pick.Click += (_, _) =>
         {
+            var worldId = SelectedWorld();
+            MapPickerPicture? other = worldId is int wid ? ProjectSession.WorldFloorPictureProvider?.Invoke(wid, _withFloor && Cell is not null ? Floor : 1, false) : null;
+            if (worldId is int && other is not null)
+            {
+                int wid2 = worldId.Value;
+                var picker2 = new MapCellPickerWindow(other.Picture, other.TileWidth, other.TileHeight, other.Columns, other.Rows, Cell, null, startFloor: _withFloor && Cell is not null ? Floor : null,
+                    floorPictures: (f, inside) => ProjectSession.WorldFloorPictureProvider?.Invoke(wid2, f, inside)) { Owner = _owner };
+                if (picker2.ShowDialog() == true && picker2.Picked is { } cell2) { Cell = cell2; Floor = picker2.PickedFloor; Show(); }
+                return;
+            }
             if (ProjectSession.MapSnapshotProvider?.Invoke() is not { } map)
             {
                 MessageBox.Show(_owner, "Open or create a map in the Map Editor first.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
@@ -130,16 +145,70 @@ internal sealed class MapCellField
         Row.Children.Add(_text);
         Row.Children.Add(pick);
         rows.Children.Add(Row);
+
+        // Or typed: a map from the list (the one open in the Map Editor first), then X, Y (and the floor).
+        var typed = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 4, 0, 0) };
+        var worlds = ProjectSession.WorldsProvider?.Invoke() ?? new List<MapData>();
+        var choices = new List<KeyValuePair<int, string>> { new(-1, "(The map open in the Map Editor)") };
+        choices.AddRange(worlds.Select(w => new KeyValuePair<int, string>(w.Id, w.MapName)));
+        _map.ItemsSource = choices;
+        _map.SelectedIndex = 0;
+        typed.Children.Add(new TextBlock { Text = "Map:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
+        typed.Children.Add(_map);
+        typed.Children.Add(new TextBlock { Text = "X:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+        typed.Children.Add(_x);
+        typed.Children.Add(new TextBlock { Text = "Y:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+        typed.Children.Add(_y);
+        if (_withFloor)
+        {
+            typed.Children.Add(new TextBlock { Text = "Floor:", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 0, 0) });
+            typed.Children.Add(_floor);
+        }
+        foreach (var box in new[] { _x, _y, _floor }) box.TextChanged += (_, _) => Typed();
+        rows.Children.Add(typed);
         Show();
     }
 
-    private void Show() => _text.Text = Cell is not { } c ? "(no spot chosen)" : _withFloor ? $"floor {Floor}, cell ({c.X}, {c.Y})" : $"cell ({c.X}, {c.Y})";
+    private int? SelectedWorld() => _map.SelectedItem is KeyValuePair<int, string> w && w.Key >= 0 ? w.Key : null;
+
+    /// <summary>X, Y (and the floor) typed: the spot, when they are numbers.</summary>
+    private void Typed()
+    {
+        if (_typing) return;
+        if (int.TryParse(_x.Text.Trim(), out int x) && int.TryParse(_y.Text.Trim(), out int y) && x >= 0 && y >= 0)
+        {
+            Cell = (x, y);
+            if (_withFloor && int.TryParse(_floor.Text.Trim(), out int f)) Floor = Math.Clamp(f, 1, MapFloors.MaxFloors);
+            _text.Text = _withFloor ? $"floor {Floor}, cell ({x}, {y})" : $"cell ({x}, {y})";
+        }
+    }
+
+    private void Show()
+    {
+        _text.Text = Cell is not { } c ? "(no spot chosen)" : _withFloor ? $"floor {Floor}, cell ({c.X}, {c.Y})" : $"cell ({c.X}, {c.Y})";
+        _typing = true;
+        _x.Text = Cell is { } c2 ? c2.X.ToString() : "";
+        _y.Text = Cell is { } c3 ? c3.Y.ToString() : "";
+        _floor.Text = Floor.ToString();
+        _typing = false;
+    }
 
     public bool Validate()
     {
-        if (Cell is not null) return true;
-        MessageBox.Show(_owner, "Pick the spot on the map.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
-        return false;
+        if (Cell is not { } cell)
+        {
+            MessageBox.Show(_owner, "Pick the spot on the map, or type its X and Y.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        // Typed past the map's edge: said so (the map picked in the list, else the one open).
+        var size = SelectedWorld() is int wid && (ProjectSession.WorldsProvider?.Invoke() ?? new List<MapData>()).FirstOrDefault(w => w.Id == wid) is { } world
+            ? (world.Width, world.Height) : ProjectSession.MapSnapshotProvider?.Invoke() is { } open ? (open.Columns, open.Rows) : (int.MaxValue, int.MaxValue);
+        if (cell.X >= size.Item1 || cell.Y >= size.Item2)
+        {
+            MessageBox.Show(_owner, $"({cell.X}, {cell.Y}) is outside the map - it is {size.Item1} x {size.Item2} (X 0-{size.Item1 - 1}, Y 0-{size.Item2 - 1}).", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
+            return false;
+        }
+        return true;
     }
 
     public void Save(EventCommand command, string prefix = "")

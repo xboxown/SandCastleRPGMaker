@@ -53,6 +53,7 @@ int world_indoors(void);
 void world_camera_hold(int held, double x, double y);
 void world_camera_center(double *x, double *y);
 void world_camera_follow(int actor);
+void world_eye_cell(int *x, int *y, int *onFloor);
 int world_actor_gone(int actor);
 void world_actor_remove(int actor);
 void world_actor_place(int actor, int x, int y, int onFloor);
@@ -236,6 +237,7 @@ int world_pose_length(int actor, const char *pose);
 void world_face_cell(int actor, int x, int y, const char *pose);
 /* Words over someone's head for a while (Show Bark), drawn by world_draw_barks over everything. */
 void world_bark(int actor, const char *text, int ms);
+void world_bark_font(int actor, const char *text, int ms, const char *font);
 void world_draw_barks(uint32_t *pixels);
 /* The game (game.json) as read, kept while the game runs (a cJSON root). */
 void *world_json(void);

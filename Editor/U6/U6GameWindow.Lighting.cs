@@ -75,7 +75,8 @@ public partial class U6GameWindow
         if ((_lightCheckMs -= elapsedMs) > 0) return;
         _lightCheckMs = 250;
         var (sky, nightAmount) = SkyNow();
-        bool inCave = PlayerInCave;
+        var lightEye = LightEye();
+        bool inCave = Zones.IsInCave(_map.Zones, lightEye.X, lightEye.Y, lightEye.Floor);
         if (inCave) (sky, nightAmount) = ((Colors.Black, 1.0), 1.0); // a Cave: complete darkness, day or night - only a light source lifts it
 
         // Overcast: weather and clouds darken the day (and the night a little more).
@@ -120,10 +121,19 @@ public partial class U6GameWindow
         LightingOverlay.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(Math.Clamp(sky.Opacity, 0, 1), TimeSpan.FromSeconds(0.4)));
     }
 
+    /// <summary>
+    /// Where the light is judged from: whoever the view follows (Camera Follows someone else) - else the player. Without
+    /// it, the view following someone away from the player's lights (or out of the player's Cave) went dark.
+    /// </summary>
+    private (int X, int Y, int Floor, double PixelX, double PixelY) LightEye() =>
+        _cameraFollow is { } followed && MapCharacterOf(followed) is { } eye
+            ? (eye.Placement.X, eye.Placement.Y, MapFloors.FloorOfLift(eye.Lift), eye.PixelX, eye.PixelY)
+            : (_playerX, _playerY, MapFloors.FloorOfLift(_playerZ), _playerPixelX, _playerPixelY);
+
     /// <summary>Get_light_strength summed over the lights on screen and those the party holds, and the strongest kind of light among them.</summary>
     private (int Strength, LightGives Gives) LightAround()
     {
-        double ax = _playerPixelX, ay = _playerPixelY;
+        var (_, _, _, ax, ay) = LightEye();
         int Strength(double x, double y, int brightness)
         {
             int dx = (int)Math.Abs(Math.Round((x - ax) / SpriteSizing.BaseUnit));

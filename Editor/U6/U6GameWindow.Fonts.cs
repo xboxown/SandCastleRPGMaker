@@ -17,9 +17,13 @@ public partial class U6GameWindow
     private SpriteFont? InGameFont => SpriteFont.For(_sprites, SpriteDatabase.InGameFontName);
 
     /// <summary>A label element for in-game text: the InGameFont picture, or the old boxed system-font label as a fallback.</summary>
+    /// <summary>A bark's language font for the label being made (Show Bark's Language, not understood); null: the InGameFont.</summary>
+    private string? _barkFont;
+
     private FrameworkElement GameTextLabel(string text)
     {
-        if (InGameFont?.RenderText(text) is { } bitmap)
+        var font = _barkFont is { } bf ? SpriteFont.For(_sprites, bf) ?? InGameFont : InGameFont;
+        if (font?.RenderText(text) is { } bitmap)
         {
             var image = new Image { Source = bitmap, Width = bitmap.PixelWidth, Height = bitmap.PixelHeight, Stretch = Stretch.None, IsHitTestVisible = false, SnapsToDevicePixels = true };
             RenderOptions.SetBitmapScalingMode(image, BitmapScalingMode.NearestNeighbor);

@@ -1951,6 +1951,7 @@ static void sight_update(uint32_t ms)
 {
     int px, py, pf;
     world_player_cell(&px, &py, &pf);
+    if (cameraFollow > 0 && actor_of(cameraFollow)) world_actor_cell(cameraFollow, &px, &py, &pf); /* Camera Follows: seen from them */
     int l = (int)floor((cameraX + viewX) / tileW) - 1, t = (int)floor((cameraY + viewY) / tileH) - 1;
     int r = (int)ceil((cameraX + viewX + viewW) / tileW) + 1, b = (int)ceil((cameraY + viewY + viewH) / tileH) + 1;
     if (r - l >= SIGHT_MAX) r = l + SIGHT_MAX - 1;
@@ -2727,6 +2728,18 @@ int world_teleport(int actor, int x, int y)
 void world_player_cell(int *x, int *y, int *onFloor)
 {
     *x = (int)floor(player.px / tileW); *y = (int)floor(player.py / tileH); *onFloor = floor_of(player.lift);
+}
+
+/* Where the light is judged from: whoever the view follows (Camera Follows), else the player. */
+static const Actor *light_eye(void)
+{
+    const Actor *a = cameraFollow > 0 ? actor_of(cameraFollow) : NULL;
+    return a ? a : &player;
+}
+void world_eye_cell(int *x, int *y, int *onFloor)
+{
+    const Actor *a = light_eye();
+    *x = (int)floor(a->px / tileW); *y = (int)floor(a->py / tileH); *onFloor = floor_of(a->lift);
 }
 
 /* Stop and turn to the player for a conversation (GameTestWindow.TalkTo: Idle, facing the player). */
@@ -3679,10 +3692,13 @@ void world_face_cell(int actor, int x, int y, const char *pose)
 
 /* ---------------- Words over someone's head (Show Bark, ShowFloatingText) ---------------- */
 
-typedef struct Bark { int actor; char text[160]; uint32_t until; } Bark;
+typedef struct Bark { int actor; char text[160]; uint32_t until; char font[48]; } Bark;
 static Bark barks[16];
 
-void world_bark(int actor, const char *text, int ms)
+void world_bark_font(int actor, const char *text, int ms, const char *font);
+void world_bark(int actor, const char *text, int ms) { world_bark_font(actor, text, ms, NULL); }
+/* A bark in a font of its own (Show Bark's Language not understood: the language's font). */
+void world_bark_font(int actor, const char *text, int ms, const char *font)
 {
     int slot = -1;
     for (int i = 0; i < 16 && slot < 0; i++) if (barks[i].until > lastMs && barks[i].actor == actor) slot = i; /* Exult's add_text: their earlier words go */
@@ -3691,6 +3707,7 @@ void world_bark(int actor, const char *text, int ms)
     barks[slot].actor = actor;
     snprintf(barks[slot].text, sizeof barks[slot].text, "%s", text);
     barks[slot].until = lastMs + (uint32_t)(ms > 0 ? ms : 1000);
+    snprintf(barks[slot].font, sizeof barks[slot].font, "%s", font ? font : "");
 }
 
 static void draw_thing_barks(uint32_t *pixels);
@@ -3709,12 +3726,13 @@ void world_draw_barks(uint32_t *pixels)
     if (u8View) draw_splashes(pixels); /* Ultima 8: water and lava splashes */
     draw_hurled(pixels); /* things in the air (Burst) */
     draw_thing_barks(pixels);
-    const Font *f = font_get("InGameFont");
+    const Font *fIn = font_get("InGameFont");
     for (int i = 0; i < 16; i++)
     {
         if (barks[i].until <= lastMs || !barks[i].text[0]) continue;
         const Actor *a = actor_of(barks[i].actor);
         if (!a) continue;
+        const Font *f = barks[i].font[0] && font_get(barks[i].font) ? font_get(barks[i].font) : fIn;
         const Picture *pic = sprite_picture_at(a->idle[slot_of(a->facing)], 0);
         int h = pic ? (pic->height + UNIT - 1) / UNIT * UNIT : tileH;
         int w = font_text_width(f, barks[i].text);
@@ -3740,7 +3758,8 @@ int world_light_strength(int *gives)
         if (t->gone || !t->lit || !t->def || t->def->type != T_LIGHT) continue;
         double x = t->x * tileW + tileW / 2.0, y = t->y * tileH + tileH / 2.0;
         if (x < cameraX - margin || x > cameraX + SCREEN_W + margin || y < cameraY - margin || y > cameraY + SCREEN_H + margin) continue;
-        int dx = (int)fabs(floor((x - player.px) / UNIT + 0.5)), dy = (int)fabs(floor((y - player.py) / UNIT + 0.5));
+        const Actor *eye = light_eye();
+        int dx = (int)fabs(floor((x - eye->px) / UNIT + 0.5)), dy = (int)fabs(floor((y - eye->py) / UNIT + 0.5));
         int strength = 75 - 2 * dx - 3 * dy;
         if (strength <= 0) continue;
         total += strength * t->def->brightness;

@@ -71,19 +71,21 @@ public partial class U6GameWindow
         if (!on) { if (_sightShade is not null) _sightShade.Visibility = Visibility.Collapsed; return; }
         int left = (int)Math.Floor(_cameraX / _tileWidth) - 1, top = (int)Math.Floor(_cameraY / _tileHeight) - 1;
         int right = (int)Math.Ceiling((_cameraX + ViewportWidth) / _tileWidth) + 1, bottom = (int)Math.Ceiling((_cameraY + ViewportHeight) / _tileHeight) + 1;
-        var key = (_playerX, _playerY, _worldVersion, left, top, right, bottom);
+        // Seen from whoever the view follows (Camera Follows someone else: from them - else the view would be all black).
+        var (eyeX, eyeY) = _cameraFollow is { } followed && MapCharacterOf(followed) is { } eye ? (eye.Placement.X, eye.Placement.Y) : (_playerX, _playerY);
+        var key = (eyeX, eyeY, _worldVersion, left, top, right, bottom);
         if (_sightKey == key && _sightShade is { Visibility: Visibility.Visible }) return;
         _sightKey = key;
 
         var blockers = SightBlockers();
         var seen = new HashSet<(int, int)>();
         var queue = new Queue<(int, int)>();
-        seen.Add((_playerX, _playerY));
-        queue.Enqueue((_playerX, _playerY));
+        seen.Add((eyeX, eyeY));
+        queue.Enqueue((eyeX, eyeY));
         while (queue.Count > 0)
         {
             var (x, y) = queue.Dequeue();
-            if ((x, y) != (_playerX, _playerY) && BlocksSight(x, y, blockers)) continue; // a wall is seen, not seen through
+            if ((x, y) != (eyeX, eyeY) && BlocksSight(x, y, blockers)) continue; // a wall is seen, not seen through
             foreach (var (dx, dy) in new[] { (1, 0), (-1, 0), (0, 1), (0, -1) })
             {
                 int nx = x + dx, ny = y + dy;
@@ -94,7 +96,7 @@ public partial class U6GameWindow
         // Walls at a corner of what is seen show too (a room's corners).
         foreach (var (x, y) in seen.ToList())
         {
-            if (BlocksSight(x, y, blockers) && (x, y) != (_playerX, _playerY)) continue;
+            if (BlocksSight(x, y, blockers) && (x, y) != (eyeX, eyeY)) continue;
             foreach (var (dx, dy) in new[] { (1, 1), (1, -1), (-1, 1), (-1, -1) })
                 if (BlocksSight(x + dx, y + dy, blockers)) seen.Add((x + dx, y + dy));
         }

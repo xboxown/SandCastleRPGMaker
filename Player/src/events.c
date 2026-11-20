@@ -175,6 +175,14 @@ int events_player_in_cave(void)
     return events_zone_here("Cave", px, py, pf);
 }
 
+/* The light's Cave: where whoever the view follows is (Camera Follows), else the player. */
+int events_eye_in_cave(void)
+{
+    int px, py, pf;
+    world_eye_cell(&px, &py, &pf);
+    return events_zone_here("Cave", px, py, pf);
+}
+
 /* Zones.AmbientZoneAt: the zone the main character is in with a sound of its own, or a Cave - its ambient (-1 quiet); else the world's. Zones inside zones: the smallest, with a sound of its own before a silent one. */
 static int zone_ambient(int sound)
 {
@@ -1867,7 +1875,8 @@ static int execute(Run *r, const Cmd *c)
             int actor = actor_for(r, param(c, "Who"));
             const char *words = value_text_of(formula(c, "Value"));
             double seconds = formula_number(c, "Seconds");
-            if (actor >= 0) world_bark(actor, words, (int)((seconds > 0.5 ? seconds : 0.5) * 1000));
+            const char *barkFont = param(c, "Language")[0] ? magic_language_font(atoi(param(c, "Language"))) : NULL; /* in a language not understood: its font */
+            if (actor >= 0) world_bark_font(actor, words, (int)((seconds > 0.5 ? seconds : 0.5) * 1000), barkFont);
             return 1;
         }
         case C_ChangeDayNight: lighting_period(param(c, "Period")); return 1;

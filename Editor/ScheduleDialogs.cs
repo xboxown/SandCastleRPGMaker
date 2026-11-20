@@ -57,6 +57,9 @@ public class MapCellPickerWindow : Window
         ShowInTaskbar = false;
         ResizeMode = ResizeMode.CanResizeWithGrip;
         RenderOptions.SetBitmapScalingMode(_canvas, BitmapScalingMode.NearestNeighbor); // crisp pixels, like the Map Editor
+        RenderOptions.SetBitmapScalingMode(_picture, BitmapScalingMode.NearestNeighbor);
+        _picture.SnapsToDevicePixels = true;
+        UseLayoutRounding = true;
 
         _canvas.Children.Add(_picture);
         ShowPicture(map);
