@@ -595,8 +595,10 @@ public partial class MainWindow
         var specialDefs = new List<WorldObject>();
         int? SpecialOf(WorldObject def)
         {
-            if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument)) return null;
+            if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion)) return null;
             if (!specialOf.TryGetValue(def.Id, out int i)) { if (specialDefs.Count >= 256) return null; specialOf[def.Id] = i = specialDefs.Count; specialDefs.Add(def); }
+            if (def.Type == ObjectType.UseableObject) ItemSpell(def, def.Useable.Effects, def.Useable.AsksForTarget);
+            if (def.Type == ObjectType.Potion) ItemSpell(def, def.Potion.Effects, true);
             return 0xD000 | i;
         }
         // Ammo: $C800 + its family's number (arrows, bolts...).
@@ -605,6 +607,23 @@ public partial class MainWindow
         int AmmoCode(WorldObject def) => 0xC800 | FamilyOf(def.Ammo.Family);
         int LightCode(WorldObject def, bool lit) => 0xF000 | (lit ? 0x100 : 0) | Math.Clamp(1 + def.Light.Brightness / 2, 1, 7);
         var pendingThings = new List<(AppleIIgsGamePack.Spell Spell, int Index, MagicEffect Effect)>();
+        // A wand's, a scroll's or a potion's effects: a spell of its own (no words, no circle, no mana).
+        var itemSpell = new Dictionary<int, int>();
+        int ItemSpell(WorldObject def, List<MagicEffect> effects, bool target)
+        {
+            if (itemSpell.TryGetValue(def.Id, out int known)) return known;
+            var spell = new AppleIIgsGamePack.Spell { Name = pack.NameOf(def.Name), Words = pack.NameOf(def.Name), Circle = 0, Mana = 0, Target = target, Radius = 0, Letters = "" };
+            foreach (var e in effects.Where(e => IIgsEffect(e.Kind)).Take(2))
+            {
+                pendingThings.Add((spell, spell.Effects.Count, e));
+                spell.Effects.Add(((int)e.Kind, Math.Max(0, e.Min), Math.Max(e.Min, e.Max), 0xFFFF, (int)Math.Clamp(e.Seconds, 0, 3000)));
+            }
+            itemSpell[def.Id] = pack.Spells.Count;
+            pack.Spells.Add(spell);
+            return pack.Spells.Count - 1;
+        }
+        // Wands, scrolls and potions: known (their spells made) before the spells are finished.
+        foreach (var od in _objectDatabase.Objects.Where(o => o.Type is ObjectType.UseableObject or ObjectType.Potion)) SpecialOf(od);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
         var bookIndex = new Dictionary<int, int>();
         var spellIndex = new Dictionary<SpellDefinition, int>();
@@ -842,8 +861,8 @@ public partial class MainWindow
             return sp < 0 ? 0xFFFF : sp;
         }
         foreach (var wd in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.Use != WeaponUse.Melee).Take(64))
-            pack.Weapons.Add((pack.NameOf(wd.Name), wd.Weapon.Ammo == WeaponAmmo.Ammo ? 1 : wd.Weapon.Ammo == WeaponAmmo.ThrowsItself ? 2 : 0,
-                wd.Weapon.Ammo == WeaponAmmo.Ammo ? FamilyOf(wd.Weapon.AmmoFamily) : 0, MissileOf(wd)));
+            pack.Weapons.Add((pack.NameOf(wd.Name), wd.Weapon.Ammo == WeaponAmmo.Ammo ? 1 : wd.Weapon.Ammo == WeaponAmmo.ThrowsItself ? 2 : wd.Weapon.Ammo == WeaponAmmo.Charges ? 3 : 0,
+                wd.Weapon.Ammo == WeaponAmmo.Ammo ? FamilyOf(wd.Weapon.AmmoFamily) : wd.Weapon.Ammo == WeaponAmmo.Charges ? Math.Clamp(wd.Weapon.Charges, 0, 9999) | (wd.Weapon.GoneWhenEmpty ? 0x8000 : 0) : 0, MissileOf(wd)));
         int[] StatsOf(CharacterDefinition c, int homeX, int homeY)
         {
             var (weapon, reach, armour) = Gear(c);
@@ -1399,6 +1418,13 @@ public partial class MainWindow
                         }
                         break;
                     }
+                    case ObjectType.UseableObject:
+                        b.Add(5); W(b, itemSpell[d.Id]); W(b, Math.Clamp(d.Useable.Charges, 0, 9999)); b.Add((byte)(d.Useable.RemovedWhenUsedUp ? 1 : 0));
+                        b.Add((byte)(d.Useable.AsksForTarget ? 1 : 0)); W(b, LinkSprite(d.Useable.UsedUpSprite)); W(b, Snd(d.Useable.UseSoundResourceId));
+                        break;
+                    case ObjectType.Potion:
+                        b.Add(6); W(b, itemSpell[d.Id]); W(b, Snd(d.Potion.DrinkSoundResourceId)); ItemDef(b, d.Potion.EmptyObjectId);
+                        break;
                     case ObjectType.MusicalInstrument:
                     {
                         b.Add(4);
@@ -1412,7 +1438,7 @@ public partial class MainWindow
             }
             // Carried (or in things) tools and instruments: their code by their name.
             var byName = new Dictionary<int, int>();
-            foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
+            foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
             for (int oi = 0; oi < objects.Count; oi++)
                 if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
         }

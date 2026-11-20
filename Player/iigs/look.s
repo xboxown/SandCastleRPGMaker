@@ -204,21 +204,22 @@ AnimRun:
 
 ; Carry set if Other (A) is a light source's.
 IsLight:
-        sta T4
+        sta ILt                 ; (its own: callers count with T4)
         cmp #$FFFC
         bcs .no
         and #$F000
         cmp #$F000
         bne .no
-        lda T4
+        lda ILt
         and #$0E00
         bne .no
-        lda T4
+        lda ILt
         sec
         rts
-.no:    lda T4
+.no:    lda ILt
         clc
         rts
+ILt:    .dw 0
 
 ; Use on a light (ObjRec on the map, or GridRec carried): lit <-> out.
 ToggleLight:

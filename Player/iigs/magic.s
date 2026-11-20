@@ -177,6 +177,7 @@ CastKey:
 
 ; Enter: the spell typed, checked, cast.
 CastIt:
+        stz ItemCast            ; (a spell from the book: no item's)
         jsr NewLine
         stz Mode
         lda #1
@@ -375,7 +376,8 @@ CastAt:
         bcc .np
         jsr AvatarWP
         bra .go
-.np:    lda #9                  ; Not possible.
+.np:    jsr ItemCastOff         ; (a wand's / potion's target refused: not spent - items.s)
+        lda #9                  ; Not possible.
         jsr Format
         jmp PromptLine
 .chr:   lda ChrRec
@@ -383,6 +385,7 @@ CastAt:
         lda ChrRec+2
         sta WP+2
 .go:    jsr ApplySpell
+        jsr ItemCastDone        ; a wand, a scroll, a potion: spent (items.s)
         jmp SpellPrompt
 
 ; Carry set if the spell (SpBuf) does damage.

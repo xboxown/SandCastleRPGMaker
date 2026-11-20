@@ -2949,4 +2949,7 @@ GBase:    .ds 16
 GTop:     .dw 0
 CellV:    .ds CELLS*2
 CellT:    .ds CELLS*2
+ChgN:     .dw 0                 ; (items.s: the charges left of wands and weapons)
+ChgObj:   .ds 128
+ChgLeft:  .ds 128
 SCRIPTEND: .dw 0

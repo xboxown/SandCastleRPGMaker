@@ -54,7 +54,15 @@ Shoot:
         jsr AtkWeapon           ; the Avatar's or a member's: its worn weapon's entry
         bcc .chr
         lda MUses
-        cmp #1
+        cmp #3                  ; charges: one used (items.s); none left - no shot
+        bne .n3
+        jsr UseCharge
+        bcc .fly
+        lda #9
+        jsr Tell
+        sec
+        rts
+.n3:    cmp #1
         bne .fly
         jsr TakeAmmo            ; one of its family's ammo
         bcc .fly

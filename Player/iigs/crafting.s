@@ -134,12 +134,17 @@ SpecUse:
         bne .i
         jmp UseStation
 .i:     cmp #SP_INSTR
-        bne .no
+        bne .w
         jmp PlayInstr
+.w:     cmp #SP_USEABLE         ; a wand, a scroll, a potion (items.s)
+        beq .it
+        cmp #SP_POTION
+        bne .no
+.it:    jmp UseItem
 .no:    clc
         rts
 
-; Use on a carried thing (verbs.s): an instrument plays. Carry set if done.
+; Use on a carried thing (verbs.s): an instrument plays, a wand / scroll / potion is used. Carry set if done.
 InvSpecial:
         lda GridRec
         sta ItemPtr
@@ -148,8 +153,13 @@ InvSpecial:
         jsr IsSpecial
         bcc .no
         cmp #SP_INSTR
-        bne .no
+        bne .w
         jmp PlayInstr
+.w:     cmp #SP_USEABLE
+        beq .it
+        cmp #SP_POTION
+        bne .no
+.it:    jmp UseItem
 .no:    clc
         rts
 

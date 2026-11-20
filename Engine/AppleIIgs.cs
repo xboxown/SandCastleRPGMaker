@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 38;
+    public const ushort Version = 39;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -594,7 +594,8 @@ public sealed class AppleIIgsGamePack
     /// Plant: 1, stages (4 sprites), hours a stage, produce (name, sprite, icon, flags, other), how many, tool kind, only when
     /// ripe, stage after, taken whole, sound, soil left (an item). Tool: 2, kind, sound. Station: 3, working sprite, hint
     /// (a name), recipes (tool kind, ingredients (name, how many), output (an item), how many, ticks, sound). Instrument:
-    /// 4, tunes (sounds).</summary>
+    /// 4, tunes (sounds). Useable (a wand, a scroll): 5, its spell (Spells), charges (0 no limit), gone when used up, asks
+    /// for a target, its used-up look, sound. Potion: 6, its spell, sound, what is left (an item).</summary>
     public List<byte[]> Specials { get; } = new();
     /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
     public List<int> TextVariables { get; } = new();
