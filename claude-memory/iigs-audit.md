@@ -15,8 +15,13 @@ Done on the IIgs through b661: maps/floors/stairs, houses, vehicles, combat (tur
 sight, spells (all effects), wands/scrolls/potions, formulas/texts/arrays/grids, leveling (U6 system), rest, talk/shops/
 haggle, own events, music, weather, crafting/work, HUD dials/date/custom buttons, save/load, title, mouse.
 
+PAUSED 2026-11-19 after b662 (user: if usage limits are near, pause the IIgs and do issues.odt first; skip IIgs testing).
+Done since: b659 crafting/work, b660 wands/potions/charges, b661 HUD dials/date/custom buttons, b662 knocked out + bodies.
+Eggs (item 2) half done and PARKED: editor side saved in H:\_sandcastle_test_temp\eggs_AppleIIgs.cs / eggs_MainWindow.AppleIIgs.cs
+(and the script iigs_b663_cs.py); design: Eggs list (18 words each), EggChars absent copies, codes trigger 18; player eggs.s
+not written yet. Resume there after issues.odt.
 Missing or partial on the IIgs (from the file summaries), rough order to do:
-1. Bodies + Unconscious (dead bodies as containers with loot; knocked out at 0 hp) - Bodies.cs, Unconscious.cs
+1. (done b662) Bodies + Unconscious
 2. Spawns / eggs (monster, music, sound, weather, usecode, missile eggs) - Spawns.cs
 3. Weight (carry limit), Wrap (map wrap-around), MoveAside, Movement (sea / air characters)
 4. U6CombatModes (member modes), U6Solo (1-9 solo mode)
