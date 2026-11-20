@@ -227,12 +227,21 @@ DrawParty:
         tay
         jsr CellOnScreen
         bcc .n
-        ldy #8
+        ldy #C_FLAGS            ; knocked out: its body look (bodies.s)
+        lda [MP],y
+        and #32
+        beq .up
+        ldy #C_NAME
+        lda [MP],y
+        jsr BodySprite
+        cmp #$FFFF
+        bne .bs
+.up:    ldy #8
         lda [MP],y
         ldy #4
         clc
         adc [MP],y
-        sta SprId
+.bs:    sta SprId
         jsr DrawSprite
 .n:     inc PK
         bra .l
@@ -253,8 +262,11 @@ NearestFoe:
         beq .seen
         lda #99
         sta T4
-.seen:
-        stz PK
+.seen:  lda AvDown                ; knocked out: those awake first (bodies.s)
+        beq .s2
+        lda #99
+        sta T4
+.s2:    stz PK
 .l:     lda PK
         cmp PartyN
         bcs .d
@@ -272,7 +284,11 @@ NearestFoe:
         cmp T5
         bcc .m
         sta T5
-.m:     lda MP                  ; an invisible member: not seen
+.m:     ldy #C_FLAGS            ; a knocked-out member: those awake first
+        lda [MP],y
+        and #32
+        bne .n
+        lda MP                  ; an invisible member: not seen
         ldx MP+2
         jsr AilsOf
         and #32
@@ -287,7 +303,18 @@ NearestFoe:
         sta DefP+2
 .n:     inc PK
         bra .l
-.d:     rts
+.d:     lda T4                  ; no one awake: the knocked-out Avatar after all
+        cmp #99
+        bne .r
+        lda AvDown
+        beq .r
+        lda #AvRec
+        sta DefP
+        lda MyBank
+        sta DefP+2
+        jsr DistCP
+        sta T4
+.r:     rts
 
 ; Each member strikes a hostile character within its reach.
 PartyTurn:
@@ -299,7 +326,7 @@ PartyTurn:
 .one:   jsr MemberAt
         ldy #C_FLAGS
         lda [MP],y
-        and #4
+        and #4+32               ; dead or knocked out: no blow
         bne .n
         lda ChrPtr
         sta CP
@@ -311,7 +338,7 @@ PartyTurn:
         beq .n
         ldy #C_FLAGS
         lda [CP],y
-        and #2+4
+        and #2+4+32             ; (a knocked-out foe: left alone)
         cmp #2
         bne .cn
         lda [CP]                ; how far from the member

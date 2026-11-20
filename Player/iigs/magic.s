@@ -464,6 +464,7 @@ ApplySpell:
         tax
         cpx #20
         bcc .e
+        jsr UpCheck             ; healed: up again (bodies.s)
         jmp HpChanged
 
 ; One effect: EKind, EMin..EMax on WP.

@@ -320,6 +320,21 @@ public partial class MainWindow
         return list;
     }
 
+    /// <summary>A character's body picture: its Body pose (else Unconscious, else Dead), facing south, the first frame.</summary>
+    private string? BodyFile(CharacterDefinition who)
+    {
+        foreach (var name in new[] { "Body", "Unconscious", "Dead" })
+        {
+            var pose = _poseDatabase.Poses.FirstOrDefault(p => p.Name == name && who.PoseSprites.ContainsKey(p.Id));
+            if (pose is null) continue;
+            var link = who.PoseSprites[pose.Id].Resolve(SpriteDirection.South);
+            var sprite = link is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(x => x.Name == link.SpriteName)
+                                             ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(x => x.Name == link.SpriteName);
+            if (sprite?.Frames.FirstOrDefault()?.FilePath is { } f && File.Exists(f)) return f;
+        }
+        return null;
+    }
+
     /// <summary>A picture fitted into w x h (shrunk or grown keeping its shape, in the middle); the rest see-through.</summary>
     private static uint[] FitPicture(string file, int w, int h)
     {
@@ -1020,6 +1035,16 @@ public partial class MainWindow
         };
 
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
+        // Bodies: each placed character's (and the Avatar's) Body pose picture, whether it leaves one, whether it can be lifted.
+        {
+            var seenBody = new HashSet<int>();
+            foreach (var world in worldList)
+                foreach (var placed in world.Characters)
+                    if (_characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId) is { } bc && seenBody.Add(bc.Id))
+                        pack.CharBodies.Add((pack.NameOf(bc.Name), SpriteOf(BodyFile(bc)) is int bs and >= 0 ? bs : 0xFFFF, (bc.Body.NoBody ? 1 : 0) | (bc.Body.TooHeavy ? 2 : 0)));
+            if (PlayerCharacter() is { } av && SpriteOf(BodyFile(av)) is int avb and >= 0) pack.AvatarBody = avb;
+            pack.BodyName = pack.NameOf(_systemSettings.BodyContainer.Name.Trim().Length > 0 ? _systemSettings.BodyContainer.Name : "Body");
+        }
         // Text variables start empty; the maps' names (Get Game Data).
         foreach (var v in _variableDatabase.Variables.Where(v => v.Type == VariableValueType.String)) pack.TextVariables.Add(VariableOf(v.Name));
         foreach (var world in worldList) pack.MapNames.Add(pack.NameOf(world.MapName));

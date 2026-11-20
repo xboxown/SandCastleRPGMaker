@@ -2949,6 +2949,7 @@ GBase:    .ds 16
 GTop:     .dw 0
 CellV:    .ds CELLS*2
 CellT:    .ds CELLS*2
+AvDown:   .dw 0                 ; (bodies.s: the Avatar knocked out - saved)
 ChgN:     .dw 0                 ; (items.s: the charges left of wands and weapons)
 ChgObj:   .ds 128
 ChgLeft:  .ds 128

@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 41 (b662): knocked out and dead bodies (bodies.s).
 ; Version 40 (b661): the HUD's date-and-wind words, compass, sun and moons, custom buttons (hud.s).
 ; Version 39 (b660): wands, scrolls, potions, weapons with charges (items.s).
 ; Version 38 (b659/b660): plants, tools, crafting stations, musical instruments (crafting.s); the work schedules
@@ -367,7 +368,17 @@ MainLoop:
         jsr InvKey
         jsr AfterTurn
         brl MainLoop
-.walk:  lda Key
+.walk:  lda AvDown                ; knocked out: only quitting (bodies.s)
+        beq .wk
+        lda Key
+        cmp #$1B
+        beq .wk
+        cmp #'q'
+        beq .wk
+        cmp #$11
+        beq .wk
+        brl MainLoop
+.wk:    lda Key
         cmp #$1B
         beq .qj
         cmp #'q'
@@ -651,7 +662,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #40
+        cmp #41
         beq .known
 .bad:   sec
         rts
@@ -1589,12 +1600,21 @@ DrawCharacters:
         tay
         jsr CellOnScreen
         bcc .n
-        ldy #8
+        ldy #6                  ; knocked out: its body look (bodies.s)
+        lda [ItemPtr],y
+        and #32
+        beq .up
+        ldy #C_NAME
+        lda [ItemPtr],y
+        jsr BodySprite
+        cmp #$FFFF
+        bne .bs
+.up:    ldy #8
         lda [ItemPtr],y         ; its facing
         ldy #4
         clc
         adc [ItemPtr],y         ; + its first (south) sprite
-        sta SprId
+.bs:    sta SprId
         jsr DrawSprite
 .n:     lda #64
         jsr NextItem
@@ -1934,7 +1954,19 @@ DrawTile:
 
 ; The Avatar in the middle of the view (cell 5, 5), colour 0 see-through.
 DrawAvatar:
-        lda Facing              ; Src = AvatarPtr + facing * 128
+        lda AvDown              ; knocked out: its body look (bodies.s)
+        beq .norm
+        lda AvBody
+        cmp #$FFFF
+        beq .norm
+        sta SprId
+        ldx PX
+        ldy PY
+        jsr CellOnScreen
+        bcc .nv
+        jmp DrawSprite
+.nv:    rts
+.norm:  lda Facing              ; Src = AvatarPtr + facing * 128
         xba
         lsr a
         clc
@@ -2104,6 +2136,7 @@ TryMove:
         .include "work.s"
         .include "items.s"
         .include "hud.s"
+        .include "bodies.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

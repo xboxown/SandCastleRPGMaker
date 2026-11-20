@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 40;
+    public const ushort Version = 41;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -604,6 +604,11 @@ public sealed class AppleIIgsGamePack
     public List<(int Kind, int X, int Y, int W, int H, List<uint[]> Frames)> PendingDials { get; } = new();
     /// <summary>The HUD's date-and-wind words: place, colour.</summary>
     public List<(int X, int Y, int Color)> DateTexts { get; } = new();
+    /// <summary>Bodies (Character Editor > Health > Body): by a character's name its Body pose's picture ($FFFF none),
+    /// 1 leaves no body, 2 too heavy to pick up; the Avatar's picture; the bodies' name (System Settings > Body Container).</summary>
+    public List<(int Name, int Sprite, int Flags)> CharBodies { get; } = new();
+    public int AvatarBody { get; set; } = 0xFFFF;
+    public int BodyName { get; set; } = 0xFFFF;
     /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
     public List<int> TextVariables { get; } = new();
     /// <summary>Each map's name (Get Game Data's Map name).</summary>
@@ -835,6 +840,10 @@ public sealed class AppleIIgsGamePack
         foreach (var sp in specs) { w.Write((ushort)specAt); specAt += sp.Length + (sp.Length & 1); }
         w.Write((ushort)specAt);
         foreach (var sp in specs) { w.Write(sp); if ((sp.Length & 1) == 1) w.Write((byte)0); }
+        // Bodies.
+        w.Write((ushort)AvatarBody); w.Write((ushort)BodyName);
+        w.Write((ushort)Math.Min(CharBodies.Count, 128));
+        foreach (var (n, sp, f) in CharBodies.Take(128)) { w.Write((ushort)n); w.Write((ushort)sp); w.Write((ushort)f); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

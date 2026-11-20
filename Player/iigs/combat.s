@@ -264,15 +264,18 @@ IdleTurn:
         jsr ClockRun            ; the clock (schedule.s)
         jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
+        jsr MendRun             ; the knocked out mend (bodies.s)
         jsr MusicRun            ; the music (music.s)
         jsr WeatherRun          ; the weather (weather.s)
         jsr VehicleRun          ; vehicles (vehicles.s)
         jsr CraftRun            ; crafting stations at work (crafting.s)
         lda Mode
         bne .out
-        lda CombatOn
-        bne .out
-        pha
+        lda CombatOn            ; (the Avatar knocked out: the world goes on, in combat too - bodies.s)
+        beq .live
+        lda AvDown
+        beq .out
+.live:  pha
         pha
         tool $2503              ; GetTick
         pla
@@ -334,7 +337,7 @@ WorldTurn:
         beq .alv
         brl .n
 .alv:   lda [CP],y
-        and #16                 ; asleep (a spell, its bed): does nothing
+        and #16+32              ; asleep (a spell, its bed) or knocked out: does nothing
         beq .awk
         brl .n
 .awk:   lda CP                  ; afraid: runs from the Avatar (spells2.s)
@@ -686,20 +689,16 @@ Strike:
         lda Dmg
         bne .hurt
         rts                     ; no damage: nothing more told (as Windows)
-.hurt:  ldy #C_HP
+.hurt:  ldy #C_HP                ; (signed: 0 or below knocked out, below -(Str / 3) dead - bodies.s)
         lda [DefP],y
         sec
         sbc Dmg
-        bpl .hp
-        lda #0
-.hp:    sta [DefP],y
-        jsr TellWound
+        sta [DefP],y
         jsr PartyHitMus         ; (music.s)
         lda #9                  ; its own By Hit event (ownev.s)
         jsr FireDef
-        ldy #C_HP
-        lda [DefP],y
-        bne .alive
+        jsr DefState            ; told: wounded, knocked out, killed
+        bcc .alive
         jmp Dies
 .alive: jmp HpChanged
 
@@ -771,8 +770,10 @@ Dies:
         ldy #C_FLAGS
         lda [DefP],y
         ora #4
+        and #$FFFF-32
         sta [DefP],y
         jsr KilledMus           ; victory? (music.s)
+        jsr MakeBody            ; its body, all it carried in it (bodies.s)
         lda [DefP]
         tax
         ldy #2
