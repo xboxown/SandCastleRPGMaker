@@ -590,6 +590,15 @@ public partial class MainWindow
         // A light source's Other: $F000, lit (bit 8), how far it lights (1-7, from its Brightness: a candle 1, a lamp 7).
         // Food: $C400 + how much it feeds (Object Editor > Food: Nutrition).
         int FoodCode(WorldObject def) => 0xC400 | Math.Clamp(def.Food.Nutrition, 1, 255);
+        // Plants, tools, crafting stations, musical instruments: Other $D000 | their record's number (made at the end).
+        var specialOf = new Dictionary<int, int>();
+        var specialDefs = new List<WorldObject>();
+        int? SpecialOf(WorldObject def)
+        {
+            if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument)) return null;
+            if (!specialOf.TryGetValue(def.Id, out int i)) { if (specialDefs.Count >= 256) return null; specialOf[def.Id] = i = specialDefs.Count; specialDefs.Add(def); }
+            return 0xD000 | i;
+        }
         // Ammo: $C800 + its family's number (arrows, bolts...).
         var families = new List<string>();
         int FamilyOf(string family) { int i = families.FindIndex(f => string.Equals(f, family, StringComparison.OrdinalIgnoreCase)); if (i < 0) { families.Add(family); i = families.Count - 1; } return Math.Min(i, 1023); }
@@ -734,6 +743,11 @@ public partial class MainWindow
                 if (def.Type == ObjectType.Food && !def.Food.IsLiquid) other = FoodCode(def);
                 if (def.Type == ObjectType.Ammo) other = AmmoCode(def);
                 if (def.Type == ObjectType.Money) { objects.Add((instance.X, instance.Y, n, 2 | bits, pack.NameOf(def.Name), 0xFFFE, Math.Clamp(instance.Quantity, 1, 30000), -1)); continue; }
+                if (SpecialOf(def) is int spc)
+                {
+                    other = spc;
+                    if (def.Type == ObjectType.Plant) { objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, Math.Clamp(instance.FrameRuntime, 0, 3), -1)); continue; }
+                }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
               }
               finally
@@ -959,6 +973,7 @@ public partial class MainWindow
                 var giveDef = cat == ReferencedItemCategory.Object ? _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) : null;
                 int flags = 2 | (cat == ReferencedItemCategory.Container ? 128 : 0) | (giveDef?.Type == ObjectType.Key ? 512 : 0) | (giveDef?.Type == ObjectType.Lockpick ? 1024 : 0);
                 int other = giveDef?.Type == ObjectType.Key ? giveDef.Id : giveDef?.Type is ObjectType.Weapon or ObjectType.Armor or ObjectType.Spellbook ? GearOf(giveDef) : giveDef?.Type == ObjectType.LightSource ? LightCode(giveDef, false) : giveDef?.Type == ObjectType.Food ? FoodCode(giveDef) : giveDef?.Type == ObjectType.Ammo ? AmmoCode(giveDef) : 0xFFFF;
+                if (giveDef is not null && SpecialOf(giveDef) is int gsc) other = gsc;
                 return (pack.NameOf(name), sprite, IconOf(file), flags, other);
             },
             Picture = (group, name) =>
@@ -1052,6 +1067,8 @@ public partial class MainWindow
                     ScheduleType.Sleep => 2,
                     ScheduleType.HorizPace => 3,
                     ScheduleType.VertPace => 4,
+                    ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Blacksmith or ScheduleType.Lab => 6,
+                    ScheduleType.Farm or ScheduleType.Miner => 7,
                     _ => 5
                 };
                 int sx = entry.X >= 0 && entry.X < world.Width ? entry.X : placed.X, sy = entry.Y >= 0 && entry.Y < world.Height ? entry.Y : placed.Y;
@@ -1107,11 +1124,13 @@ public partial class MainWindow
                 (int Trigger, int Kind) t = c.TriggerConditionBased switch
                 {
                     BookTriggerConditionBased.ByEnter => (1, 2),
-                    BookTriggerConditionBased.ByStay => (2, 2),
+                    BookTriggerConditionBased.ByStay => owner ? (14, 2) : (2, 2),
                     BookTriggerConditionBased.ByExit => (3, 2),
                     BookTriggerConditionBased.ByUseItem when item < 0 => owner ? (12, 2) : (4, 2),
                     BookTriggerConditionBased.ByUseItem => (13, 2),
                     BookTriggerConditionBased.ByHit when owner => (9, 2),
+                    BookTriggerConditionBased.ByTradeItem when owner => (15, 2),
+                    BookTriggerConditionBased.ByAfterReadItem when owner => (16, 2),
                     BookTriggerConditionBased.ByDeath when owner => (10, 2),
                     BookTriggerConditionBased.ByAilmentEffect when owner => (11, 2),
                     BookTriggerConditionBased.Always => (5, 2),
@@ -1139,7 +1158,7 @@ public partial class MainWindow
                     }
                 if (c.ConditionStatCondition || c.ConditionEventTriggerCompleted || c.ConditionComplex || c.ConditionDistance || c.ConditionJoinedParty)
                     leftOut.Add("conditions other than variables and switches");
-                pages.Add(new AppleIIgsTalk.EventPage(t.Trigger, t.Kind == 2 && t.Trigger is 1 or 2 or 3 or 4 or 5 or 9 or 10 or 11 or 12 ? -1 : item, t.Kind, conds, page.Commands));
+                pages.Add(new AppleIIgsTalk.EventPage(t.Trigger, t.Kind == 2 && t.Trigger is 1 or 2 or 3 or 4 or 5 or 9 or 10 or 11 or 12 or 14 or 15 or 16 ? -1 : item, t.Kind, conds, page.Commands));
             }
             return pages;
         }
@@ -1317,6 +1336,86 @@ public partial class MainWindow
         pack.TileNames.AddRange(tileNames.Select(pack.NameOf));
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
+        // Plants', tools', stations' and instruments' records (Engine/AppleIIgs.cs Specials); carried ones get their code too.
+        {
+            var toolKinds = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            int Kind(string k) { k = k.Trim(); if (k.Length == 0) return 0; if (!toolKinds.TryGetValue(k, out int v)) toolKinds[k] = v = Math.Min(255, toolKinds.Count + 1); return v; }
+            int Snd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int sn) ? sn : 0xFFFF;
+            int LinkSprite(SpriteLink l) => l.IsSet && ObjectLooks.Find(_spriteDatabase, l.SpriteGroup, l.SpriteName)?.Frames.FirstOrDefault()?.FilePath is { } lf && SpriteOf(lf) is int ls and >= 0 ? ls : 0xFFFF;
+            void ItemDef(List<byte> b, int objectId)
+            {
+                var it = objectId >= 0 ? talkEnv.Item("Object", objectId.ToString()) : null;
+                foreach (int v in it is { } t ? new[] { t.Name, t.Sprite, t.Icon, t.Flags, t.Other } : new[] { 0xFFFF, 0, 0, 0, 0xFFFF }) { b.Add((byte)v); b.Add((byte)(v >> 8)); }
+            }
+            void W(List<byte> b, int v) { b.Add((byte)v); b.Add((byte)(v >> 8)); }
+            for (int si = 0; si < specialDefs.Count; si++)
+            {
+                var d = specialDefs[si];
+                var b = new List<byte>();
+                switch (d.Type)
+                {
+                    case ObjectType.Plant:
+                    {
+                        b.Add(1);
+                        var stages = d.Plant.Stages.Take(4).ToList();
+                        b.Add((byte)Math.Max(1, stages.Count));
+                        for (int k = 0; k < 4; k++)
+                        {
+                            var st = ObjectLooks.SpriteFor(d, ObjectLooks.DefaultState(d) with { Stage = Math.Min(k, Math.Max(0, stages.Count - 1)) }, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath;
+                            W(b, SpriteOf(st) is int ss and >= 0 ? ss : 0);
+                        }
+                        W(b, (int)Math.Clamp(Math.Round(d.Plant.HoursPerStage), 1, 255));
+                        ItemDef(b, d.Plant.ProduceObjectId);
+                        W(b, Math.Clamp(d.Plant.ProduceQuantity, 1, 20));
+                        b.Add((byte)Kind(d.Plant.HarvestToolKind)); b.Add((byte)(d.Plant.OnlyWhenRipe ? 1 : 0));
+                        b.Add((byte)Math.Clamp(d.Plant.StageAfterHarvest, 0, 3)); b.Add((byte)(d.Plant.RemovedWhenHarvested ? 1 : 0));
+                        W(b, Snd(d.Plant.HarvestSoundResourceId));
+                        ItemDef(b, d.Plant.SoilObjectId);
+                        // (sowing: the seed's name, the plant's own name)
+                        W(b, d.Plant.SeedObjectId >= 0 && _objectDatabase.Objects.FirstOrDefault(o => o.Id == d.Plant.SeedObjectId) is { } seed ? pack.NameOf(seed.Name) : 0xFFFF);
+                        W(b, pack.NameOf(d.Name));
+                        break;
+                    }
+                    case ObjectType.Tool:
+                        b.Add(2); b.Add((byte)Kind(d.Tool.ToolKind)); W(b, Snd(d.Tool.UseSoundResourceId));
+                        break;
+                    case ObjectType.CraftingStation:
+                    {
+                        b.Add(3);
+                        W(b, LinkSprite(d.Crafting.WorkingSprite));
+                        W(b, d.Crafting.Hint.Trim().Length > 0 ? pack.NameOf(d.Crafting.Hint.Trim()) : 0xFFFF);
+                        var recipes = d.Crafting.Recipes.Where(r => r.OutputObjectId >= 0).Take(8).ToList();
+                        b.Add((byte)recipes.Count);
+                        foreach (var r in recipes)
+                        {
+                            b.Add((byte)Kind(r.ToolKind));
+                            var ins = r.Inputs.Where(i => i.ObjectId >= 0).Take(4).ToList();
+                            b.Add((byte)ins.Count);
+                            foreach (var i in ins) { W(b, pack.NameOf(_objectDatabase.Objects.FirstOrDefault(o => o.Id == i.ObjectId)?.Name ?? "?")); b.Add((byte)Math.Clamp(i.Quantity, 1, 99)); }
+                            ItemDef(b, r.OutputObjectId);
+                            b.Add((byte)Math.Clamp(r.OutputQuantity, 1, 20));
+                            W(b, (int)Math.Clamp(Math.Round(r.WorkSeconds * 60), 1, 3600));
+                            W(b, Snd(r.WorkSoundResourceId));
+                        }
+                        break;
+                    }
+                    case ObjectType.MusicalInstrument:
+                    {
+                        b.Add(4);
+                        var songs = d.Instrument.SongSoundIds.Select(Snd).Where(n => n != 0xFFFF).Take(4).ToList();
+                        b.Add((byte)songs.Count);
+                        foreach (int n in songs) W(b, n);
+                        break;
+                    }
+                }
+                pack.Specials.Add(b.ToArray());
+            }
+            // Carried (or in things) tools and instruments: their code by their name.
+            var byName = new Dictionary<int, int>();
+            foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
+            for (int oi = 0; oi < objects.Count; oi++)
+                if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
+        }
         // Spare objects (gone, no name) that Give Item fills in at play.
         for (int i = 0; i < 48; i++) objects.Add((0xFFFF, 0xFFFF, 0, 32, 0xFFFF, 0xFFFF, 0xFFFF, -1));
         pack.Objects.AddRange(objects);

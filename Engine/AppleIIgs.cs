@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 37;
+    public const ushort Version = 38;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -590,6 +590,12 @@ public sealed class AppleIIgsGamePack
     /// <summary>Characters' ids by their names (LevelWhoId); the Avatar's.</summary>
     public List<(int Name, int Id)> CharIds { get; } = new();
     public int AvatarId { get; set; }
+    /// <summary>Plants, tools, crafting stations, musical instruments: their settings (an object's Other $D000 | its number).
+    /// Plant: 1, stages (4 sprites), hours a stage, produce (name, sprite, icon, flags, other), how many, tool kind, only when
+    /// ripe, stage after, taken whole, sound, soil left (an item). Tool: 2, kind, sound. Station: 3, working sprite, hint
+    /// (a name), recipes (tool kind, ingredients (name, how many), output (an item), how many, ticks, sound). Instrument:
+    /// 4, tunes (sounds).</summary>
+    public List<byte[]> Specials { get; } = new();
     /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
     public List<int> TextVariables { get; } = new();
     /// <summary>Each map's name (Get Game Data's Map name).</summary>
@@ -809,6 +815,13 @@ public sealed class AppleIIgsGamePack
         foreach (int v in TextVariables.Take(256)) w.Write((ushort)v);
         w.Write((ushort)Math.Min(MapNames.Count, 16));
         foreach (int n in MapNames.Take(16)) w.Write((ushort)n);
+        // Plants, tools, stations, instruments: their places, then their records.
+        var specs = Specials.Take(256).ToList();
+        w.Write((ushort)specs.Count);
+        int specAt = 0;
+        foreach (var sp in specs) { w.Write((ushort)specAt); specAt += sp.Length + (sp.Length & 1); }
+        w.Write((ushort)specAt);
+        foreach (var sp in specs) { w.Write(sp); if ((sp.Length & 1) == 1) w.Write((byte)0); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

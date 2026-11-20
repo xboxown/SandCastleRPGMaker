@@ -55,7 +55,8 @@ ParseScript:
         bra .m
 .md:    lda MapNameN
         asl a
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseSpecials       ; (crafting.s)
 
 ; ---- slots ----
 ; X = slot A's place in TextHeap.

@@ -293,7 +293,11 @@ UseOnCell:
         bra .sq
 .thing: cmp #3
         bne .sq
-        jsr ObjFlags
+        jsr ObjFlags            ; a tool on a plant, a station, a thing (crafting.s)
+        jsr ToolOnThing
+        bcc .tev
+        rts
+.tev:   jsr ObjFlags
         ldy #8
         lda [ItemPtr],y
         ldx #T_USEON

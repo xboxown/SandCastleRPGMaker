@@ -1,6 +1,10 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 38 (b659/b660): plants, tools, crafting stations, musical instruments (crafting.s); the work schedules
+;   (work.s): bakers, smiths, tailors, alchemists craft at stations with the chests' ingredients; farmers, miners harvest
+;   and sow.
+; Version 38 (b659): plants, tools, crafting stations, musical instruments (crafting.s).
 ; Version 37 (b658): texts, arrays and grids (texts.s): variables hold numbers or texts, formulas with texts, lists,
 ;   grids and the game's functions; Text Operation, Get Game Data, Swap, Input Text / Number, the array and grid
 ;   commands, For Each.
@@ -641,7 +645,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #37
+        cmp #38
         beq .known
 .bad:   sec
         rts
@@ -2090,6 +2094,8 @@ TryMove:
         .include "vehicles.s"
         .include "levels.s"
         .include "texts.s"
+        .include "crafting.s"
+        .include "work.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

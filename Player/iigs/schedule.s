@@ -33,6 +33,7 @@ ClockRun:
         jsr Starving            ; a minute: the starving lose a hit point now and then (ailments.s)
         inc Hour
         jsr WeatherHour         ; (weather.s)
+        jsr GrowPlants          ; (crafting.s)
         jsr EatHour             ; an hour: food used (ailments.s)
         lda Hour
         cmp #24
@@ -165,11 +166,17 @@ ScheduleStep:
         ldy #S_ACT
         lda [CP],y
         sta Act
-        stz Radius
+        cmp #6                  ; at work, on its way or working: its work (work.s)
+        bcc .nw
+        jsr WorkBusy
+        bcc .nw
+        jmp WorkTurn
+.nw:    stz Radius
+        lda Act
         cmp #1
         beq .wide
         cmp #5
-        bne .dist
+        bcc .dist
 .wide:  lda #3
         sta Radius
 .dist:  lda [CP]                ; how far from its spot
@@ -190,7 +197,10 @@ ScheduleStep:
         bcc .there
         jmp StepToGoal          ; on its way
 .there: lda Act
-        cmp #2
+        cmp #6                  ; work: crafting, the fields (work.s)
+        bcc .t2
+        jmp WorkTurn
+.t2:    cmp #2
         bne .nsl
         ldy #C_FLAGS            ; asleep
         lda [CP],y

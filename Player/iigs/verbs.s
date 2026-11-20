@@ -420,7 +420,10 @@ PickCell:
         jsr ObjEvent
         bcc .noev
         rts
-.noev:  lda Kind
+.noev:  jsr SpecUse             ; a plant, a crafting station, an instrument (crafting.s)
+        bcc .nsp
+        rts
+.nsp:   lda Kind
         jsr ObjFlags
         and #128                ; a container: what is in it spills out
         beq .rd
@@ -986,7 +989,10 @@ GridVerb:
         lda [ItemPtr],y
         and #128                ; a bag: open (or shut) in the grid
         bne .isbag
-        jmp StartUseOn          ; anything else: used on something - "On what?" (ownev.s)
+        jsr InvSpecial          ; an instrument plays (crafting.s)
+        bcc .su
+        rts
+.su:    jmp StartUseOn          ; anything else: used on something - "On what?" (ownev.s)
 .isbag:
         lda [ItemPtr],y
         and #8

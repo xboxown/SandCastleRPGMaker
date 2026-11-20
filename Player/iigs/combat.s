@@ -267,6 +267,7 @@ IdleTurn:
         jsr MusicRun            ; the music (music.s)
         jsr WeatherRun          ; the weather (weather.s)
         jsr VehicleRun          ; vehicles (vehicles.s)
+        jsr CraftRun            ; crafting stations at work (crafting.s)
         lda Mode
         bne .out
         lda CombatOn
