@@ -1,0 +1,37 @@
+---
+name: iigs-audit
+description: "2026-11-19 audit of the Windows U6 engine (Editor/U6, 111 files) vs the Apple IIgs player - what is still missing, in work order"
+metadata:
+  node_type: memory
+  type: project
+  originSessionId: e02e316e-a1c8-42c0-a7f7-69326088b5ec
+  modified: 2026-11-20T02:27:49.270Z
+---
+
+Goal (user, 2026-11-19): the Ultima 6 Apple IIgs mode must match the Windows U6 engine 100% (not original U6), then only
+testing; when 100% done, IMMEDIATELY read issues.odt (H:\SandcastleRpgMaker\issues.odt, updated 2026-11-19) and do it.
+
+Done on the IIgs through b661: maps/floors/stairs, houses, vehicles, combat (turn-based, ranged, charges), ailments, food,
+sight, spells (all effects), wands/scrolls/potions, formulas/texts/arrays/grids, leveling (U6 system), rest, talk/shops/
+haggle, own events, music, weather, crafting/work, HUD dials/date/custom buttons, save/load, title, mouse.
+
+Missing or partial on the IIgs (from the file summaries), rough order to do:
+1. Bodies + Unconscious (dead bodies as containers with loot; knocked out at 0 hp) - Bodies.cs, Unconscious.cs
+2. Spawns / eggs (monster, music, sound, weather, usecode, missile eggs) - Spawns.cs
+3. Weight (carry limit), Wrap (map wrap-around), MoveAside, Movement (sea / air characters)
+4. U6CombatModes (member modes), U6Solo (1-9 solo mode)
+5. ObjectsTick (lights burn down; tiles / traps step events), Projectiles (traps), Mechanisms (levers linked, windows,
+   shutters, glass), Doors (motion animations)
+6. Beds / bedrolls (sleep hours), Furniture (sit), Meals (NPC hunger, inns), Temperature (cold / hot zones)
+7. Toughness (damage types, get up, feign death), MagicItems (worn bonuses, immunities), Weapons in hand (drawing)
+8. AlwaysPages (character Always pages), Actions (character action chains), Pets, Combine (item onto object event),
+   Consumables liquids (bucket), food "who eats", Travel (keychain, sextant, map, clock), Money (exchange currency),
+   Factions commands
+9. U6Scene (scene pictures), U6Create (type text, pick picture...), U6TalkStyle, Cinema mode, Verbose (barks),
+   Overlay (map view), Kite, Joining (slimes), Blood, HitFlash / StatusOutline, Hearing, Fonts, Pointer sprite, WallSets
+Hardware-left-out (Check notes): paperdolls (Dolls, DollControls, DollLinks, PaperdollButtons, ScriptDolls, DiskProgress,
+save screen), Video, Scenarios (Game Test only). Engine-internal, no IIgs equivalent needed: Perf, Physics, Reach, Sweep,
+Walls order, UpperFloorOrder, Pause.
+
+How to apply: work down the list one build each (event commands where possible), sim816-test, release.py; keep this note
+and apple-iigs-modes.md updated; when the list is empty -> issues.odt. See [[apple-iigs-modes]].

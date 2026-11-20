@@ -271,6 +271,7 @@ GameScreen:
         stz Mode
         jsr SetupScreen
         jsr DrawPanel
+        jsr HudForce            ; (hud.s)
         jmp DrawView
 
 ; A fresh game: GAME.DAT again, everything as it starts.

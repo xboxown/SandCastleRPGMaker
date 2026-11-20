@@ -1291,6 +1291,13 @@ public partial class MainWindow
                 HudVerb.Attack => 'a', HudVerb.Cast => 'c', HudVerb.Talk => 't', HudVerb.Look => 'l', HudVerb.Get => 'g', HudVerb.Drop => 'd',
                 HudVerb.Move => 'm', HudVerb.Use => 'u', HudVerb.Rest => 'r', _ => 'b'
             }, button.X, button.Y, button.Width, button.Height));
+        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CustomButton && p.EventPages.Count > 0 && p.EventPages[0].Commands.Count > 0))
+        {
+            AppleIIgsTalk.CompileEvent(new() { new AppleIIgsTalk.EventPage(17, -1, 2, new(), button.EventPages[0].Commands) }, VariableOf, out var bcode, out _,
+                id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+            pack.Buttons.Add(((char)(0x100 + pack.Codes.Count), button.X, button.Y, button.Width, button.Height));
+            pack.Codes.Add(bcode);
+        }
         if (u6.Hud.IntroCommands.Count > 0)
         {
             AppleIIgsTalk.Compile(u6.Hud.IntroCommands, VariableOf, out var intro, id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
@@ -1340,6 +1347,12 @@ public partial class MainWindow
         }
         foreach (var (spell, index, effect) in pendingThings) spell.Effects[index] = spell.Effects[index] with { Item4 = SpellThing(effect) };
         var hud = ComposeHud(pack, out var portraitPanel);
+        foreach (var (dk, dx, dy, dw, dh, dframes) in pack.PendingDials)
+        {
+            int dfirst = spritePixels.Count;
+            foreach (var f in dframes) spritePixels.Add((f, dw, dh));
+            pack.Dials.Add((dk, dx, dy, dw, dh, dfirst, dframes.Count));
+        }
         pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
         if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (titlePicture is not null) pack.TitlePicture = SuperHiRes.Pack(titlePicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
@@ -1348,6 +1361,8 @@ public partial class MainWindow
         if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);
         for (int i = 0; i < pack.PortraitLabels.Count; i++)
             if (pack.PortraitLabels[i].Color < 0) pack.PortraitLabels[i] = pack.PortraitLabels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.PortraitLabels[i].Color - 1) | 0xFF000000u, false) };
+        for (int i = 0; i < pack.DateTexts.Count; i++)
+            if (pack.DateTexts[i].Color < 0) pack.DateTexts[i] = pack.DateTexts[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.DateTexts[i].Color - 1) | 0xFF000000u, false) };
         for (int i = 0; i < pack.Labels.Count; i++)
             if (pack.Labels[i].Color < 0) pack.Labels[i] = pack.Labels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.Labels[i].Color - 1) | 0xFF000000u, false) };
         foreach (var px in tilePixels) pack.Tiles.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: false));
@@ -1551,6 +1566,16 @@ public partial class MainWindow
                     break;
                 case HudPieceKind.CommandButton or HudPieceKind.CustomButton or HudPieceKind.Compass or HudPieceKind.SunMoon:
                     Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: false);
+                    if (piece.Kind is HudPieceKind.Compass or HudPieceKind.SunMoon && piece.Sprite.IsSet && ObjectLooks.Find(_spriteDatabase, piece.Sprite.SpriteGroup, piece.Sprite.SpriteName) is { Frames.Count: > 1 } dial)
+                    {
+                        // Its frames, turned by the player: the compass by the wind, the sun and moons by the hour.
+                        int dx = piece.X & ~1, dw = Math.Min(320 - dx, (piece.Width + 3) / 4 * 4), dh = Math.Min(200 - piece.Y, piece.Height);
+                        var frames = dial.Frames.Take(24).Where(f => File.Exists(f.FilePath)).Select(f => FitPicture(f.FilePath, dw, dh)).ToList();
+                        if (frames.Count > 1) pack.PendingDials.Add((piece.Kind == HudPieceKind.Compass ? 0 : 1, dx, piece.Y, dw, dh, frames));
+                    }
+                    break;
+                case HudPieceKind.DateText:
+                    pack.DateTexts.Add((piece.X, piece.Y, LabelColor(piece.TextColor)));
                     break;
                 case HudPieceKind.BodySlot: // the inventory view: what the Avatar wears there, or the slot's own picture
                 {

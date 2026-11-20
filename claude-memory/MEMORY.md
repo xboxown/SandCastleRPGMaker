@@ -52,3 +52,4 @@
 - [Commands first, push for it](commands-first-push.md) — check if commands can do it; push commands first; small editor change + LOTS of commands + CommandList tutorial
 - [Apple IIgs modes](apple-iigs-modes.md) — U6 Apple IIgs mode STARTED b618 (pulled forward); Player/iigs (asm816 + sim816), GS/OS + accelerator, editor limits, KEGS test; U5 IIgs later
 - [Mac CI + remote machines](mac-ci-and-remote-machines.md) — Apple silicon built/tested by GitHub Actions; PPC/Intel Mac/Ubuntu over SSH per mac instruction.txt; .gitattributes binary lesson
+- [IIgs vs Windows audit](iigs-audit.md) — 2026-11-19: ~40 Windows U6 parts still missing on the IIgs, in work order; then issues.odt at once

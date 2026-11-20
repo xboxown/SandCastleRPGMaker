@@ -669,6 +669,7 @@ SwapFor:
 Redraw:
         jsr SetupScreen
         jsr DrawPanel
+        jsr HudForce            ; (hud.s)
         jmp DrawView
 
 ; The Disk Swap screen's animation: the next frame every 8 ticks (60 a second).

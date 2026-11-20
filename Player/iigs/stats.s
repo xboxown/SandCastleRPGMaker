@@ -453,8 +453,8 @@ DoRest:
         jsr WPName
         lda #W_STANDS
         jsr Tell
-.time:  lda RestH               ; the hours go by
-        sta T5
+.time:  lda RestH               ; the hours go by (its own count: what runs each hour uses T5)
+        sta RHrs
 .hr:    inc Hour
         lda Hour
         cmp #24
@@ -462,7 +462,7 @@ DoRest:
         stz Hour
         inc Day
 .nd:    jsr EatHour             ; (ailments.s)
-        dec T5
+        dec RHrs
         bne .hr
         jsr ApplySchedules
         lda Day                 ; now in hours: healing once every 12
@@ -665,6 +665,7 @@ DecPow:   .dw 10000,1000,100,10,1
 RestCh:   .dw 0
 RestH:    .dw 0
 RGuard:   .dw $FFFF
+RHrs:     .dw 0
 RFed:     .dw 0
 RSlot:    .dw 0
 RHealAt:  .dw 0

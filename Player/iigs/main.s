@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 40 (b661): the HUD's date-and-wind words, compass, sun and moons, custom buttons (hud.s).
 ; Version 39 (b660): wands, scrolls, potions, weapons with charges (items.s).
 ; Version 38 (b659/b660): plants, tools, crafting stations, musical instruments (crafting.s); the work schedules
 ;   (work.s): bakers, smiths, tailors, alchemists craft at stations with the chests' ingredients; farmers, miners harvest
@@ -281,7 +282,11 @@ MainLoop:
         jsr MouseDown
         bcs .mkey
         brl MainLoop
-.mkey:  sta Key
+.mkey:  cmp #$100                ; a custom button: its event (hud.s)
+        bcc .mk2
+        jsr HudButton
+        brl MainLoop
+.mk2:   sta Key
         bra .disp
 .keyev: lda EvMsg
         and #$007F
@@ -646,7 +651,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #39
+        cmp #40
         beq .known
 .bad:   sec
         rts
@@ -2098,6 +2103,7 @@ TryMove:
         .include "crafting.s"
         .include "work.s"
         .include "items.s"
+        .include "hud.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

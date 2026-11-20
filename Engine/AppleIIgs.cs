@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 39;
+    public const ushort Version = 40;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -597,6 +597,13 @@ public sealed class AppleIIgsGamePack
     /// 4, tunes (sounds). Useable (a wand, a scroll): 5, its spell (Spells), charges (0 no limit), gone when used up, asks
     /// for a target, its used-up look, sound. Potion: 6, its spell, sound, what is left (an item).</summary>
     public List<byte[]> Specials { get; } = new();
+    /// <summary>The HUD's dials: 0 the compass (8 frames, by the wind), 1 the sun and moons (frames over the day) - place, size,
+    /// their first frame's sprite, how many.</summary>
+    public List<(int Kind, int X, int Y, int W, int H, int First, int Frames)> Dials { get; } = new();
+    /// <summary>(made by the HUD's composing: the dials' frames, before they are sprites)</summary>
+    public List<(int Kind, int X, int Y, int W, int H, List<uint[]> Frames)> PendingDials { get; } = new();
+    /// <summary>The HUD's date-and-wind words: place, colour.</summary>
+    public List<(int X, int Y, int Color)> DateTexts { get; } = new();
     /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
     public List<int> TextVariables { get; } = new();
     /// <summary>Each map's name (Get Game Data's Map name).</summary>
@@ -816,6 +823,11 @@ public sealed class AppleIIgsGamePack
         foreach (int v in TextVariables.Take(256)) w.Write((ushort)v);
         w.Write((ushort)Math.Min(MapNames.Count, 16));
         foreach (int n in MapNames.Take(16)) w.Write((ushort)n);
+        // The HUD's dials and date words.
+        w.Write((ushort)Math.Min(Dials.Count, 8));
+        foreach (var d in Dials.Take(8)) { w.Write((ushort)d.Kind); w.Write((ushort)d.X); w.Write((ushort)d.Y); w.Write((ushort)d.W); w.Write((ushort)d.H); w.Write((ushort)d.First); w.Write((ushort)d.Frames); }
+        w.Write((ushort)Math.Min(DateTexts.Count, 4));
+        foreach (var d in DateTexts.Take(4)) { w.Write((ushort)d.X); w.Write((ushort)d.Y); w.Write((ushort)d.Color); }
         // Plants, tools, stations, instruments: their places, then their records.
         var specs = Specials.Take(256).ToList();
         w.Write((ushort)specs.Count);
