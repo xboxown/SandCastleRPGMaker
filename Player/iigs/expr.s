@@ -1,7 +1,12 @@
-; Sandcastle RPG Maker - Apple IIgs player: formulas (Engine/ScriptExpression.cs CompileIIgs makes their stack code):
+; Sandcastle RPG Maker - Apple IIgs player: formulas (Engine/ScriptExpression.cs CompileIIgs makes their stack code).
+; Every value has a kind (tag): 0 a number (whole, -32768..32767), 1 a text (its slot, texts.s; 0 = ""), 2 an array,
+; 3 a grid. As Windows (ScriptExpression): + adds two numbers (a text that reads as one too), else joins as text;
+; - * / % numbers; comparisons numbers, else texts without case; a text is true if not empty.
 ; 1 n push, 2 v a variable, 3 + 4 - 5 * 6 / 7 %, 8 negate, 9 = 10 != 11 < 12 > 13 <= 14 >=, 15 and 16 or 17 not,
 ; 18 random(a, b) 19 chance(n) 20 min 21 max 22 abs 23 clamp(x, a, b), 24 the Avatar's stat (a byte: its word),
-; 25 the hour, 26 has a thing named (u16), 27 the minute; 0 the end. Whole numbers, -32768..32767.
+; 25 the hour, 26 has a thing named (u16), 27 the minute, 28 a vehicle travelling (u16), 29 a text (u8 length, its
+; letters), 30 an array (u8), 31 a grid (u8), 32 array[i], 33 grid[x, y], 34 a function (u8 which, u8 how many values),
+; 35 the game's (u8 which, u16 map, u16 place of whom: $FFFF the Avatar; stat: u8 its word; items: u16 a name); 0 the end.
 
 ; CALC variable formula
 OpCalc:
@@ -12,16 +17,17 @@ OpCalc:
         iny
         iny
         jsr EvalExpr
-        ldx CalcVar
-        sta VarTab,x
         sty TPC
+        ldx CalcVar
+        jsr StoreVar            ; (texts.s)
         jmp RunTalk
 
 ; IFX formula place: on if true, else to the place
 OpIfx:
         iny
         jsr EvalExpr
-        cmp #0
+        ldx PTag
+        jsr Truth
         bne .t
         lda [TalkPtr],y
         sta TPC
@@ -31,17 +37,22 @@ OpIfx:
         sty TPC
         jmp RunTalk
 
-; The formula at [TalkPtr],y: A = its value, Y past its end.
+; The formula at [TalkPtr],y: A = its value, PTag its kind, Y past its end.
 EvalExpr:
         stz ExSP
+        stz PTag                ; (a number pushed is a number)
 .l:     lda [TalkPtr],y
         and #$00FF
         iny
         cmp #0
         bne .op
-        jsr Pop
+        jsr Pop                 ; the value, its kind in PTag
+        pha
+        lda QTag
+        sta PTag
+        pla
         rts
-.op:    cmp #29
+.op:    cmp #36
         bcs .l
         asl a
         tax
@@ -50,33 +61,70 @@ EvalExpr:
 
 ExJump:   .dw ExEnd,ExPush,ExVar,ExAdd,ExSub,ExMul,ExDiv,ExMod,ExNeg,ExEq,ExNe,ExLt,ExGt,ExLe,ExGe,ExAnd,ExOr,ExNot
           .dw ExRand,ExChance,ExMin,ExMax,ExAbs,ExClamp,ExStat,ExHour,ExHave,ExMinute,ExVBusy
+          .dw ExText,ExList,ExGrid,ExIndex1,ExIndex2,ExFn,ExGame
 ExEnd:  rts
 
-; the stack (32 numbers)
+; the stack (32 values): A, its kind PTag
 Push:
         ldx ExSP
         cpx #64
         bcs .o
         sta ExStack,x
+        lda PTag
+        sta ExTags,x
         inx
         inx
         stx ExSP
-.o:     rts
+.o:     stz PTag
+        rts
 Pop:
         ldx ExSP
         beq .z
         dex
         dex
         stx ExSP
+        lda ExTags,x
+        sta QTag
         lda ExStack,x
         rts
-.z:     lda #0
+.z:     stz QTag
+        lda #0
         rts
-; B = the top, A = the one under it (both popped)
+; B (ExB, BTag) = the top, A (ATag) = the one under it (both popped)
 Pop2:
         jsr Pop
         sta ExB
-        jmp Pop
+        lda QTag
+        sta BTag
+        jsr Pop
+        sta ExA
+        lda QTag
+        sta ATag
+        lda ExA
+        rts
+; the two as numbers: A and ExB
+Nums2:
+        jsr Pop2
+        lda ExB
+        ldx BTag
+        jsr ValNum
+        sta ExB
+        lda ExA
+        ldx ATag
+        jmp ValNum
+; the top as a number
+Num1:
+        jsr Pop
+        ldx QTag
+        jmp ValNum
+
+; Z clear (A not 0) if the value A (kind X) is true.
+Truth:
+        cpx #1
+        bne .n
+        jsr TxtLen              ; a text: not empty
+.n:     cmp #0
+        rts
 
 ExPush: lda [TalkPtr],y
         iny
@@ -87,24 +135,49 @@ ExVar:  lda [TalkPtr],y
         iny
         asl a
         tax
+        lda VarTag,x
+        sta PTag
         lda VarTab,x
         jmp Push
-ExAdd:  jsr Pop2
+ExAdd:  jsr Pop2                ; two numbers (or texts that read as numbers): added; else joined
+        lda ATag
+        ora BTag
+        beq .num
+        lda ExA
+        ldx ATag
+        jsr IsNum
+        bcc .join
+        lda ExB
+        ldx BTag
+        jsr IsNum
+        bcc .join
+        lda ExB
+        ldx BTag
+        jsr ValNum
+        sta ExB
+        lda ExA
+        ldx ATag
+        jsr ValNum
+.num:   lda ExA
         clc
         adc ExB
         jmp Push
-ExSub:  jsr Pop2
+.join:  jsr JoinAB              ; (texts.s)
+        ldx #1
+        stx PTag
+        jmp Push
+ExSub:  jsr Nums2
         sec
         sbc ExB
         jmp Push
-ExMul:  jsr Pop2
+ExMul:  jsr Nums2
         jsr SMul
         jmp Push
-ExDiv:  jsr Pop2
+ExDiv:  jsr Nums2
         jsr SDiv
         lda ExQ
         jmp Push
-ExMod:  jsr Pop2
+ExMod:  jsr Nums2
         jsr SDiv
         lda ExR                 ; (as Windows: never below 0)
         bpl .p
@@ -115,34 +188,34 @@ ExMod:  jsr Pop2
 .bp:    clc
         adc ExR
 .p:     jmp Push
-ExNeg:  jsr Pop
+ExNeg:  jsr Num1
         eor #$FFFF
         inc a
         jmp Push
 ExEq:   jsr Pop2
-        cmp ExB
+        jsr CmpAB
         beq True
         bra False
 ExNe:   jsr Pop2
-        cmp ExB
+        jsr CmpAB
         bne True
         bra False
 ExLt:   jsr Pop2
-        jsr SCmp
+        jsr CmpAB
         bmi True
         bra False
 ExGt:   jsr Pop2
-        jsr SCmp
+        jsr CmpAB
         beq False
         bpl True
         bra False
 ExLe:   jsr Pop2
-        jsr SCmp
+        jsr CmpAB
         beq True
         bmi True
         bra False
 ExGe:   jsr Pop2
-        jsr SCmp
+        jsr CmpAB
         bpl True
         bra False
 True:   lda #1
@@ -150,22 +223,31 @@ True:   lda #1
 False:  lda #0
         jmp Push
 ExAnd:  jsr Pop2
-        cmp #0
+        lda ExA
+        ldx ATag
+        jsr Truth
         beq False
         lda ExB
+        ldx BTag
+        jsr Truth
         beq False
         bra True
 ExOr:   jsr Pop2
-        cmp #0
+        lda ExA
+        ldx ATag
+        jsr Truth
         bne True
         lda ExB
+        ldx BTag
+        jsr Truth
         bne True
         bra False
 ExNot:  jsr Pop
-        cmp #0
+        ldx QTag
+        jsr Truth
         beq True
         bra False
-ExRand: jsr Pop2                ; random(a, b): a..b
+ExRand: jsr Nums2               ; random(a, b): a..b
         sta ExA
         lda ExB
         sec
@@ -184,39 +266,41 @@ ExRand: jsr Pop2                ; random(a, b): a..b
         clc
         adc ExA
         jmp Push
-ExChance: jsr Pop               ; chance(n): n in 100
+ExChance: jsr Num1              ; chance(n): n in 100
         sta ExA
         lda #100
         phy
         jsr Random
         ply
         cmp ExA
-        bcc True
-        bra False
-ExMin:  jsr Pop2
+        bcs .bf1
+        jmp True
+.bf1:
+        brl False
+ExMin:  jsr Nums2
         jsr SCmp
         bmi .a
         lda ExB
         jmp Push
 .a:     lda ExA
         jmp Push
-ExMax:  jsr Pop2
+ExMax:  jsr Nums2
         jsr SCmp
         bpl .a
         lda ExB
         jmp Push
 .a:     lda ExA
         jmp Push
-ExAbs:  jsr Pop
+ExAbs:  jsr Num1
         bpl .p
         eor #$FFFF
         inc a
 .p:     jmp Push
-ExClamp: jsr Pop                ; clamp(x, a, b)
+ExClamp: jsr Num1               ; clamp(x, a, b)
         sta ExHi
-        jsr Pop
+        jsr Num1
         sta ExLo
-        jsr Pop
+        jsr Num1
         sta ExA
         sta ExB
         lda ExLo
@@ -339,6 +423,11 @@ SDiv:
 CalcVar:  .dw 0
 ExSP:     .dw 0
 ExStack:  .ds 64
+ExTags:   .ds 64
+PTag:     .dw 0
+QTag:     .dw 0
+ATag:     .dw 0
+BTag:     .dw 0
 ExA:      .dw 0
 ExB:      .dw 0
 ExQ:      .dw 0

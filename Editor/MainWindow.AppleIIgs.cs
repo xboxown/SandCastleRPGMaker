@@ -148,7 +148,7 @@ public partial class MainWindow
         int MapOk(int id) => gameMaps.FindIndex(m => m.Id == id);
         foreach (var who in _characterDatabase.Characters.Where(c => c.TalkCommands.Count > 0))
             foreach (var type in AppleIIgsTalk.Compile(who.TalkCommands, _ => 0, out _, SoundOk, MapOk).Unsupported) leftOut.Add(type);
-        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather, Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel Vehicle, Rise A Level, Meditate At Shrine, Run Leveling Event, Scene Text and Scene Choice (in the text area, with {formulas}, {LevelWho}, {RestGuard}) and Stop Conversation work";
+        const string works = "Show Text with replies, Set / Conditional Branch on variables and switches, Labels, Play Sound, Change Map, Teleport (the Avatar), Join / Leave Party, Give Item (to the Avatar), Remove Item, Change HP, Change Stat (built-in stats), Wait, Place / Remove Character, Kill Character, Change Schedule, Set Time, Set Door State, Show / Erase Picture, Game Over, Quit Game, Save / Load Game, Shop, Change State, Modify Ailments, Change Food Level, Calculate, While, Repeat, Select Case, Break / Next Loop, Wait Until, Call Common Event, Advance IF (variables, items, stats, time), Show Bark, Play / Fade In / Stop Music, Set Volume, Resume Map Music, Change Weather, Drive Vehicle, Stop Driving, Set Vehicle Speed, Travel Vehicle, Rise A Level, Meditate At Shrine, Run Leveling Event, Scene Text and Scene Choice (in the text area, with {formulas}, {LevelWho}, {RestGuard}), Text Operation, Get Game Data, Swap Variables, Input Text, Input Number, every array and grid command, For Each (formulas with texts, arrays, grids and the game's functions) and Stop Conversation work";
         if (leftOut.Count > 0) problems.Add($"Note: in the characters' talk, these commands aren't on the Apple IIgs yet and are left out there: {string.Join(", ", leftOut)}. {works}.");
         // Map events: their pages run on the Apple IIgs by these triggers (Player/iigs/events.s); others are left out.
         var eventsLeftOut = new SortedSet<string>();
@@ -899,8 +899,55 @@ public partial class MainWindow
                 AddCarried(joiner, 0x8000 | (at.Map << 6) | at.Index);
         // Give Item / Remove Item / Show Picture / Change Stat: what the commands need (Engine/AppleIIgsTalk.cs Env).
         var pictureOf = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        // Arrays and grids: every name the game's commands use, a number each (16 arrays, 8 grids on the Apple IIgs).
+        var arrayIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        var gridIndex = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+        void ScanNames(IEnumerable<EventCommand>? commands)
+        {
+            foreach (var c in commands ?? Enumerable.Empty<EventCommand>())
+            {
+                void Arr(string n) { n = n.Trim(); if (n.Length > 0 && !arrayIndex.ContainsKey(n) && arrayIndex.Count < 16) arrayIndex[n] = arrayIndex.Count; }
+                void Grd(string n) { n = n.Trim(); if (n.Length > 0 && !gridIndex.ContainsKey(n) && gridIndex.Count < 8) gridIndex[n] = gridIndex.Count; }
+                switch (c.Type)
+                {
+                    case EventCommandType.CreateArray or EventCommandType.SetElement or EventCommandType.GetElement or EventCommandType.AddToArray or EventCommandType.InsertAt
+                        or EventCommandType.RemoveAt or EventCommandType.ArrayLength or EventCommandType.FindInArray or EventCommandType.ReorderArray or EventCommandType.FillArray
+                        or EventCommandType.ClearArray or EventCommandType.ArrayStatistic:
+                        Arr(c.Get("Array")); break;
+                    case EventCommandType.CopyArray: Arr(c.Get("From")); Arr(c.Get("Array")); break;
+                    case EventCommandType.CreateGrid or EventCommandType.SetCell or EventCommandType.GetCell or EventCommandType.FillGrid or EventCommandType.GridSize
+                        or EventCommandType.ResizeGrid or EventCommandType.FindInGrid or EventCommandType.GridFromMap or EventCommandType.GridToMap:
+                        Grd(c.Get("Grid")); break;
+                    case EventCommandType.GridLineToArray or EventCommandType.ArrayToGridLine: Grd(c.Get("Grid")); Arr(c.Get("Array")); break;
+                    case EventCommandType.ForEach: if (c.Get("Of") == "Cell of a grid") Grd(c.Get("Array")); else Arr(c.Get("Array")); break;
+                }
+            }
+        }
+        foreach (var ce in _systemSettings.CommonEvents) ScanNames(ce.Commands);
+        foreach (var ch in _characterDatabase.Characters) { ScanNames(ch.TalkCommands); foreach (var pg in ch.EventPages) ScanNames(pg.Commands); }
+        foreach (var od in _objectDatabase.Objects) foreach (var pg in od.EventPages) ScanNames(pg.Commands);
+        foreach (var cd in _containerDatabase.Containers) foreach (var pg in cd.EventPages) ScanNames(pg.Commands);
+        foreach (var world in worldList) foreach (var ev in world.Events) foreach (var pg in ev.EventPages) ScanNames(pg.Commands);
+        foreach (var le in _systemSettings.Ultima6.Active?.Events ?? new List<U6LevelEvent>()) ScanNames(le.Commands);
+        int StatWord(BuiltInStatKind? kind) => kind switch
+        {
+            BuiltInStatKind.Hits => AppleIIgsGamePack.Stat.Hp, BuiltInStatKind.Strength => AppleIIgsGamePack.Stat.Str, BuiltInStatKind.Dexterity => AppleIIgsGamePack.Stat.Dex,
+            BuiltInStatKind.Intelligence => AppleIIgsGamePack.Stat.Int, BuiltInStatKind.Combat => AppleIIgsGamePack.Stat.Combat, BuiltInStatKind.Magic => AppleIIgsGamePack.Stat.Magic,
+            BuiltInStatKind.Mana => AppleIIgsGamePack.Stat.Mana, BuiltInStatKind.Level => AppleIIgsGamePack.Stat.Level, BuiltInStatKind.Exp => AppleIIgsGamePack.Stat.Exp, _ => -1
+        };
+        int StatNamed(string name) => StatWord(_statDatabase.Stats.FirstOrDefault(st => string.Equals(st.Name, name.Trim(), StringComparison.OrdinalIgnoreCase))?.Kind);
+        var formulaNames = new ScriptExpression.IIgsNames
+        {
+            Array = n => arrayIndex.TryGetValue(n.Trim(), out int i) ? i : -1,
+            Grid = n => gridIndex.TryGetValue(n.Trim(), out int i) ? i : -1,
+            Stat = StatNamed,
+            Item = n => pack.NameOf(n.Trim()),
+            Who = n => _characterDatabase.Characters.FirstOrDefault(c => string.Equals(c.Name, n.Trim(), StringComparison.OrdinalIgnoreCase)) is { } wc ? WhereIs(wc.Id.ToString()) : null
+        };
         var talkEnv = new AppleIIgsTalk.Env
         {
+            Names = formulaNames,
+            StatByName = StatNamed,
             Item = (category, itemId) =>
             {
                 if (!Enum.TryParse<ReferencedItemCategory>(category, out var cat) || !int.TryParse(itemId, out int id)) return null;
@@ -939,6 +986,9 @@ public partial class MainWindow
         };
 
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
+        // Text variables start empty; the maps' names (Get Game Data).
+        foreach (var v in _variableDatabase.Variables.Where(v => v.Type == VariableValueType.String)) pack.TextVariables.Add(VariableOf(v.Name));
+        foreach (var world in worldList) pack.MapNames.Add(pack.NameOf(world.MapName));
         var dn = _systemSettings.DayNight;
         pack.DayNight = (dn.Enabled, dn.DawnStartHour, dn.DayStartHour, dn.DuskStartHour, dn.NightStartHour);
         // A character's or thing's own event pages as code (in Codes), once each.

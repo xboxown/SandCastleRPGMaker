@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 36;
+    public const ushort Version = 37;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -590,6 +590,10 @@ public sealed class AppleIIgsGamePack
     /// <summary>Characters' ids by their names (LevelWhoId); the Avatar's.</summary>
     public List<(int Name, int Id)> CharIds { get; } = new();
     public int AvatarId { get; set; }
+    /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
+    public List<int> TextVariables { get; } = new();
+    /// <summary>Each map's name (Get Game Data's Map name).</summary>
+    public List<int> MapNames { get; } = new();
     /// <summary>Day & Night's overcast strength in 16ths.</summary>
     public int Overcast16 { get; set; } = 4;
     /// <summary>System Settings > Combat's music: danger, battle, battle 2, run away, escaped, victory, battle over, near death, death.</summary>
@@ -800,6 +804,11 @@ public sealed class AppleIIgsGamePack
         foreach (var (t, c) in LevelEvents.Take(32)) { w.Write((ushort)t); w.Write((ushort)c); }
         w.Write((ushort)Math.Min(CharIds.Count, 256));
         foreach (var (n, i) in CharIds.Take(256)) { w.Write((ushort)n); w.Write((ushort)i); }
+        // Texts and lists.
+        w.Write((ushort)Math.Min(TextVariables.Count, 256));
+        foreach (int v in TextVariables.Take(256)) w.Write((ushort)v);
+        w.Write((ushort)Math.Min(MapNames.Count, 16));
+        foreach (int n in MapNames.Take(16)) w.Write((ushort)n);
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

@@ -9,7 +9,7 @@ MoreOps:
         tax
         jmp (OpJump,x)
 
-OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick
+OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick,OpInput,OpList,OpGrid
 
 ; TPC += A, on with the code.
 Next:

@@ -1,6 +1,9 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 37 (b658): texts, arrays and grids (texts.s): variables hold numbers or texts, formulas with texts, lists,
+;   grids and the game's functions; Text Operation, Get Game Data, Swap, Input Text / Number, the array and grid
+;   commands, For Each.
 ; Version 36 (b656/b657): Ultima 6 leveling (levels.s): levels rise by themselves or are only earned (When someone
 ;   earns a level events), Rise A Level, Meditate At Shrine, Run Leveling Event, the rest's events; Scene Text and Scene
 ;   Choice in the text area; words with {formulas}, {LevelWho}, {RestGuard}.
@@ -335,7 +338,12 @@ MainLoop:
         lda Key                 ; a Scene Choice's answer (levels.s)
         jsr PickKey
         brl MainLoop
-.not16: cmp #2
+.not16: cmp #17
+        bne .not17
+        lda Key                 ; Input Text / Number (texts.s)
+        jsr InputKey
+        brl MainLoop
+.not17: cmp #2
         beq .typing
         brl MainLoop            ; the talk is running
 .typing: lda Key
@@ -633,7 +641,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #36
+        cmp #37
         beq .known
 .bad:   sec
         rts
@@ -1203,7 +1211,7 @@ ParseTalk:
         cpx #512
         bcs .vskip
         lda [Ptr],y
-        sta VarTab,x
+        jsr SetVarNum
 .vskip: iny
         iny
         inx
@@ -2081,6 +2089,7 @@ TryMove:
         .include "weather.s"
         .include "vehicles.s"
         .include "levels.s"
+        .include "texts.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

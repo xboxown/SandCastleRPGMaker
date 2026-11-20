@@ -55,6 +55,10 @@ namespace SandcastleRpgMaker.Engine;
 ///   $27 RISE who, u8 flags (1 the party, 2 only if earned, 4 tell, 8 a level's hit points, 16 a shrine: Not Ready word),
 ///        formulas strength, dexterity, intelligence, hit points; a C string (no one ready)            Rise A Level, Meditate
 ///   $28 PICK u16 variable, u8 how many, their first letters                                          Scene Choice
+///   $29 INPUT u8 0 text / 1 number, u16 variable, u8 longest, C string (the words above)          Input Text / Number
+///   $2A LIST u8 what, u8 the array, then its values (formulas) / variables                          the array commands
+///   $2B GRID u8 what, u8 the grid, then its values / variables                                      the grid commands
+///   (expression ops: 29 a text, 30 an array, 31 a grid, 32 array[i], 33 grid[x, y], 34 a function, 35 the game's)
 ///   $24 WEATHER u8 kind (0 clear 1 rain 2 snow 3 hail 4 storm), u8 intensity, u8 clouds (0 off, 1 on, 2 as they are)
 ///   $23 RESUME                                                             Resume Map Music
 ///   (a formula's extra ops for game conditions: 24 STAT u8 the Avatar's stat word, 25 HOUR, 26 HAVE u16 name, 27 MINUTE)
@@ -66,7 +70,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -78,6 +82,10 @@ public sealed class AppleIIgsTalk
         public Func<string, int>? Stat;
         /// <summary>A Who's name (Show Bark).</summary>
         public Func<string, string?>? WhoName;
+        /// <summary>Formulas' names: arrays, grids, characters, stats, things.</summary>
+        public ScriptExpression.IIgsNames? Names;
+        /// <summary>A stat's word by its name (Get Game Data's Stat).</summary>
+        public Func<string, int>? StatByName;
         /// <summary>A leveling event's commands by its name (Run Leveling Event).</summary>
         public Func<string, List<EventCommand>?>? LevelEvent;
         /// <summary>A Common Event's commands (Call Common Event).</summary>
@@ -329,8 +337,8 @@ public sealed class AppleIIgsTalk
     private sealed class Loop
     {
         public EventCommandType Kind;
-        public int Top, Continue = -1, NextCase = -1, Select = -1;
-        public List<int> Ends = new();
+        public int Top, Continue = -1, NextCase = -1, Select = -1, Step = -1;
+        public List<int> Ends = new(), Nexts = new();
     }
     private readonly Stack<Loop> _loops = new();
     private int _hidden;
@@ -338,7 +346,7 @@ public sealed class AppleIIgsTalk
     /// <summary>A formula into the code (its stack code); false if the Apple IIgs can't do it.</summary>
     private bool Formula(string formula, string what)
     {
-        var code = ScriptExpression.CompileIIgs(formula.Trim().Length == 0 ? "0" : formula, _variable, out _);
+        var code = ScriptExpression.CompileIIgs(formula.Trim().Length == 0 ? "0" : formula, _variable, out _, Extra?.Names);
         if (code is null) { Unsupported.Add(what + " (a formula with texts, lists or game functions)"); B(1); W(0); B(0); return false; }
         _code.AddRange(code);
         return true;
@@ -398,7 +406,7 @@ public sealed class AppleIIgsTalk
             string inner = m.Groups[1].Value.Trim();
             if (inner.Equals("LevelWho", StringComparison.OrdinalIgnoreCase)) { B(3); B(1); }
             else if (inner.Equals("RestGuard", StringComparison.OrdinalIgnoreCase)) { B(3); B(2); }
-            else if (ScriptExpression.CompileIIgs(inner, _variable, out _) is { } code) { B(2); _code.AddRange(code); }
+            else if (ScriptExpression.CompileIIgs(inner, _variable, out _, Extra?.Names) is { } code) { B(2); _code.AddRange(code); }
             else { Unsupported.Add("words with a {text formula} (only numbers, LevelWho and RestGuard on the Apple IIgs)"); SayPart(m.Value); }
             at = m.Index + m.Length;
         }
@@ -420,6 +428,8 @@ public sealed class AppleIIgsTalk
         if (code is null || (s == 0 && cmd.Get("Seconds").Trim() is { Length: > 0 } t && t != "0")) Unsupported.Add(cmd.Type + " (a fade time that's a formula: a number of seconds only)");
         return (int)Math.Clamp(Math.Max(least, s) * 60, 0, 3600);
     }
+
+    private static string Or0(string formula) => formula.Trim().Length == 0 ? "0" : formula;
 
     private int Hidden(string name) => _variable($"__iigs_{name}_{_hidden++}");
 
@@ -475,6 +485,17 @@ public sealed class AppleIIgsTalk
                     bool isSwitch = cmd.Type == EventCommandType.ConditionalBranchSwitch;
                     string name = isSwitch ? cmd.Get("SwitchName") : cmd.Get("VariableName");
                     int test = isSwitch ? 0 : cmd.Get("Comparison").Trim() switch { "!=" or "<>" => 1, ">" => 2, "<" => 3, ">=" => 4, "<=" => 5, _ => 0 };
+                    string raw = cmd.Get("Value").Trim();
+                    if (!isSwitch && raw.Length > 0 && !double.TryParse(raw, System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out _) && !bool.TryParse(raw, out _))
+                    {
+                        // A text: compared as Windows does (without case).
+                        string t = raw.Length >= 2 && raw[0] == '"' && raw[^1] == '"' ? raw[1..^1] : raw;
+                        var bytes = Encoding.ASCII.GetBytes(new string(t.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(47).ToArray()));
+                        B(IfX); B(2); W(_variable(name)); B(29); B(bytes.Length); _code.AddRange(bytes);
+                        B(test switch { 1 => 10, 2 => 12, 3 => 11, 4 => 14, 5 => 13, _ => 9 }); B(0);
+                        frames.Push(new Frame { Indent = cmd.IndentLevel, ElseAt = Hole() });
+                        break;
+                    }
                     int value = isSwitch ? (bool.TryParse(cmd.Get("Value"), out bool on) && on ? 1 : 0) : Number(cmd.Get("Value"));
                     B(IfV); W(_variable(name)); B(test); W(value);
                     frames.Push(new Frame { Indent = cmd.IndentLevel, ElseAt = Hole() });
@@ -684,6 +705,158 @@ public sealed class AppleIIgsTalk
                     _loops.Push(loop);
                     break;
                 }
+                case EventCommandType.ForEach:
+                {
+                    // For each element (or cell, row by row): a hidden counter; the value, its index (x, y) into the variables.
+                    bool grid = cmd.Get("Of") == "Cell of a grid";
+                    string name = cmd.Get("Array");
+                    int li = grid ? Extra?.Names?.Grid?.Invoke(name) ?? -1 : Extra?.Names?.Array?.Invoke(name) ?? -1;
+                    if (li < 0) { Unsupported.Add("For Each (an array or grid the game doesn't make)"); _loops.Push(new Loop { Kind = cmd.Type, Top = Here, Step = -2 }); break; }
+                    int k = Hidden("each");
+                    B(Calc); W(k); B(1); W(0); B(0);
+                    var loop = new Loop { Kind = cmd.Type, Top = Here };
+                    B(IfX); B(2); W(k);
+                    if (grid) { B(31); B(li); B(34); B(3); B(1); B(31); B(li); B(34); B(2); B(1); B(5); } else { B(30); B(li); B(34); B(1); B(1); }
+                    B(11); B(0); loop.Ends.Add(Hole());
+                    void Into(string field, Action value) { string v = cmd.Get(field).Trim(); if (v.Length == 0) return; B(Calc); W(_variable(v)); value(); B(0); }
+                    if (grid)
+                    {
+                        Into("Index", () => { B(2); W(k); B(31); B(li); B(34); B(3); B(1); B(7); });
+                        Into("Index2", () => { B(2); W(k); B(31); B(li); B(34); B(3); B(1); B(6); });
+                        Into("Variable", () => { B(31); B(li); B(2); W(k); B(31); B(li); B(34); B(3); B(1); B(7); B(2); W(k); B(31); B(li); B(34); B(3); B(1); B(6); B(33); });
+                    }
+                    else
+                    {
+                        Into("Index", () => { B(2); W(k); });
+                        Into("Variable", () => { B(30); B(li); B(2); W(k); B(32); });
+                    }
+                    loop.Step = k;
+                    _loops.Push(loop);
+                    break;
+                }
+                case EventCommandType.EndForEach when _loops.Count > 0:
+                {
+                    var loop = _loops.Pop();
+                    if (loop.Step == -2) break;
+                    foreach (int at in loop.Nexts) Fill(at, Here);
+                    B(Calc); W(loop.Step); B(2); W(loop.Step); B(1); W(1); B(3); B(0);
+                    B(Jump); W(loop.Top);
+                    foreach (int at in loop.Ends) Fill(at, Here);
+                    break;
+                }
+                case EventCommandType.TextOperation:
+                {
+                    string a = $"({Or0(cmd.Get("A"))})", b = $"({Or0(cmd.Get("B"))})", c = cmd.Get("C").Trim();
+                    string formula = cmd.Get("Operation") switch
+                    {
+                        "Join" => $"text{a} + text{b}", "Length" => $"length{a}", "Part" => c.Length > 0 ? $"part({a}, {b}, ({c}))" : $"part({a}, {b})",
+                        "Upper case" => $"upper{a}", "Lower case" => $"lower{a}", "Trim" => $"trim{a}", "Replace" => $"replace({a}, {b}, ({Or0(c)}))",
+                        "Contains" => $"contains({a}, {b})", "Find" => $"indexof({a}, {b})", "Number to text" => $"text{a}", "Text to number" => $"number{a}", _ => a
+                    };
+                    B(Calc); W(_variable(cmd.Get("Variable"))); Formula(formula, "Text Operation");
+                    break;
+                }
+                case EventCommandType.GetGameData:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Get Game Data (someone not on a map)"); break; }
+                    string what = cmd.Get("What");
+                    int fn = what switch
+                    {
+                        "X (cell)" => 3, "Y (cell)" => 4, "Floor" => 17, "HP" => 1, "Max HP" => 2, "Stat" => 15, "Gold (all money)" => 5, "Item count" => 16,
+                        "Food level" => 6, "Name" => 13, "Is dead" => 11, "Is in party" => 12, "Party size" => 10, "Hour" => 7, "Minute" => 8, "Day" => 9,
+                        "Map name" => 19, "Leader's name" => 13, "Facing" => 14, _ => 0
+                    };
+                    if (fn == 0) { Unsupported.Add($"Get Game Data ({what})"); break; }
+                    if (what == "Leader's name") m = x = 0xFFFF;
+                    B(Calc); W(_variable(cmd.Get("Variable"))); B(35); B(fn); W(m); W(x);
+                    if (fn == 15) B(Math.Max(0, Extra?.StatByName?.Invoke(cmd.Get("StatName")) ?? 0));
+                    if (fn == 16)
+                    {
+                        string cat = cmd.Get("Category"), id = cmd.Get("ItemId");
+                        W(Extra?.Item?.Invoke(cat, id) is { } it ? it.Name : 0xFFFF);
+                    }
+                    B(0);
+                    break;
+                }
+                case EventCommandType.SwapVariables:
+                {
+                    int t = Hidden("swap"), va = _variable(cmd.Get("A")), vb = _variable(cmd.Get("B"));
+                    B(Calc); W(t); B(2); W(va); B(0);
+                    B(Calc); W(va); B(2); W(vb); B(0);
+                    B(Calc); W(vb); B(2); W(t); B(0);
+                    break;
+                }
+                case EventCommandType.InputText or EventCommandType.InputNumber:
+                {
+                    bool number = cmd.Type == EventCommandType.InputNumber;
+                    B(Input); B(number ? 1 : 0); W(_variable(cmd.Get("Variable")));
+                    B(Math.Clamp((int)Seconds(cmd.Get(number ? "Digits" : "Letters")) is int n && n > 0 ? n : number ? 4 : 16, 1, number ? 5 : 40));
+                    var words = Encoding.ASCII.GetBytes(new string(cmd.Get("Prompt").Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(80).ToArray()));
+                    _code.AddRange(words); B(0);
+                    if (!number && cmd.Get("Start").Trim() is { Length: > 0 } start && start != "\"\"") { B(Calc); W(_variable(cmd.Get("Variable"))); Formula(start, "Input Text"); }
+                    break;
+                }
+                case EventCommandType.CreateArray or EventCommandType.SetElement or EventCommandType.GetElement or EventCommandType.AddToArray or EventCommandType.InsertAt
+                    or EventCommandType.RemoveAt or EventCommandType.ArrayLength or EventCommandType.FindInArray or EventCommandType.ReorderArray or EventCommandType.FillArray
+                    or EventCommandType.ClearArray or EventCommandType.CopyArray or EventCommandType.ArrayStatistic:
+                {
+                    int li = Extra?.Names?.Array?.Invoke(cmd.Get("Array")) ?? -1;
+                    if (li < 0) { Unsupported.Add($"{cmd.Type} (no array)"); break; }
+                    void F(string field) => Formula(cmd.Get(field), cmd.Type.ToString());
+                    int V(string field) => _variable(cmd.Get(field));
+                    switch (cmd.Type)
+                    {
+                        case EventCommandType.CreateArray: B(ListOp); B(0); B(li); F("Size"); F("Fill"); break;
+                        case EventCommandType.SetElement: B(ListOp); B(1); B(li); F("Index"); F("Value"); break;
+                        case EventCommandType.GetElement: B(ListOp); B(2); B(li); F("Index"); W(V("Variable")); break;
+                        case EventCommandType.AddToArray: B(ListOp); B(3); B(li); F("Value"); break;
+                        case EventCommandType.InsertAt: B(ListOp); B(4); B(li); F("Index"); F("Value"); break;
+                        case EventCommandType.RemoveAt: B(ListOp); B(cmd.Get("By") == "First equal to" ? 6 : 5); B(li); F("Index"); break;
+                        case EventCommandType.ArrayLength: B(ListOp); B(7); B(li); W(V("Variable")); break;
+                        case EventCommandType.FindInArray: B(ListOp); B(8); B(li); F("Value"); W(V("Variable")); break;
+                        case EventCommandType.ReorderArray: B(ListOp); B(9); B(li); B(cmd.Get("Order") switch { "Big to small" => 1, "Shuffle" => 2, "Reverse" => 3, _ => 0 }); break;
+                        case EventCommandType.FillArray: B(ListOp); B(10); B(li); F("Value"); break;
+                        case EventCommandType.ClearArray: B(ListOp); B(11); B(li); break;
+                        case EventCommandType.CopyArray:
+                        {
+                            int from = Extra?.Names?.Array?.Invoke(cmd.Get("From")) ?? -1;
+                            if (from < 0) { Unsupported.Add("Copy Array (no array)"); break; }
+                            B(ListOp); B(12); B(li); B(from); break;
+                        }
+                        case EventCommandType.ArrayStatistic: B(ListOp); B(13); B(li); B(cmd.Get("What") switch { "Smallest" => 1, "Biggest" => 2, "Average" => 3, _ => 0 }); W(V("Variable")); break;
+                    }
+                    break;
+                }
+                case EventCommandType.CreateGrid or EventCommandType.SetCell or EventCommandType.GetCell or EventCommandType.FillGrid or EventCommandType.GridSize
+                    or EventCommandType.ResizeGrid or EventCommandType.FindInGrid or EventCommandType.GridLineToArray or EventCommandType.ArrayToGridLine
+                    or EventCommandType.GridFromMap or EventCommandType.GridToMap:
+                {
+                    int gi = Extra?.Names?.Grid?.Invoke(cmd.Get("Grid")) ?? -1;
+                    if (gi < 0) { Unsupported.Add($"{cmd.Type} (no grid)"); break; }
+                    void F(string field) => Formula(cmd.Get(field), cmd.Type.ToString());
+                    int V(string field) => cmd.Get(field).Trim().Length == 0 ? 0xFFFF : _variable(cmd.Get(field));
+                    int arr = Extra?.Names?.Array?.Invoke(cmd.Get("Array")) ?? -1;
+                    switch (cmd.Type)
+                    {
+                        case EventCommandType.CreateGrid: B(GridOp); B(0); B(gi); F("Columns"); F("Rows"); F("Fill"); break;
+                        case EventCommandType.SetCell: B(GridOp); B(1); B(gi); F("X"); F("Y"); F("Value"); break;
+                        case EventCommandType.GetCell: B(GridOp); B(2); B(gi); F("X"); F("Y"); W(V("Variable")); break;
+                        case EventCommandType.FillGrid:
+                            B(GridOp); B(3); B(gi); F("Value"); B(cmd.Get("Area") == "True" ? 1 : 0);
+                            if (cmd.Get("Area") == "True") { F("X"); F("Y"); F("Width"); F("Height"); }
+                            break;
+                        case EventCommandType.GridSize: B(GridOp); B(4); B(gi); W(V("Variable")); W(V("Variable2")); break;
+                        case EventCommandType.ResizeGrid: B(GridOp); B(5); B(gi); F("Columns"); F("Rows"); F("Fill"); break;
+                        case EventCommandType.FindInGrid: B(GridOp); B(6); B(gi); F("Value"); W(V("Variable")); W(V("Variable2")); break;
+                        case EventCommandType.GridLineToArray or EventCommandType.ArrayToGridLine:
+                            if (arr < 0) { Unsupported.Add($"{cmd.Type} (no array)"); break; }
+                            B(GridOp); B(cmd.Type == EventCommandType.GridLineToArray ? 7 : 8); B(gi); B(cmd.Get("Line") == "Column" ? 1 : 0); F("Index"); B(arr);
+                            break;
+                        case EventCommandType.GridFromMap: B(GridOp); B(9); B(gi); F("X"); F("Y"); F("Width"); F("Height"); break;
+                        case EventCommandType.GridToMap: B(GridOp); B(10); B(gi); F("X"); F("Y"); break;
+                    }
+                    break;
+                }
                 case EventCommandType.EndWhile or EventCommandType.EndRepeat when _loops.Count > 0:
                 {
                     var loop = _loops.Pop();
@@ -712,7 +885,7 @@ public sealed class AppleIIgsTalk
                         for (int k = 0; k < values.Count; k++)
                         {
                             B(2); W(loop.Select);
-                            var code = ScriptExpression.CompileIIgs(values[k], _variable, out _);
+                            var code = ScriptExpression.CompileIIgs(values[k], _variable, out _, Extra?.Names);
                             if (code is null) { Unsupported.Add("Case (a formula with texts)"); B(1); W(0); } else _code.AddRange(code.Take(code.Count - 1));
                             B(9);
                             if (k > 0) B(16);
@@ -732,10 +905,12 @@ public sealed class AppleIIgsTalk
                 }
                 case EventCommandType.BreakLoop or EventCommandType.NextLoop:
                 {
-                    var loop = _loops.FirstOrDefault(l => l.Kind is EventCommandType.While or EventCommandType.RepeatTimes);
+                    var loop = _loops.FirstOrDefault(l => l.Kind is EventCommandType.While or EventCommandType.RepeatTimes or EventCommandType.ForEach);
                     if (loop is null) break;
                     B(Jump);
-                    if (cmd.Type == EventCommandType.BreakLoop) loop.Ends.Add(Hole()); else W(loop.Continue);
+                    if (cmd.Type == EventCommandType.BreakLoop) loop.Ends.Add(Hole());
+                    else if (loop.Kind == EventCommandType.ForEach) loop.Nexts.Add(Hole()); // to its step, at its end
+                    else W(loop.Continue);
                     break;
                 }
                 case EventCommandType.WaitUntil:

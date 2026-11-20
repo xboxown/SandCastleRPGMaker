@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 5
+SAVE_VERSION = 6
 
 ; Ctrl+S
 SaveGame:
@@ -89,7 +89,13 @@ SaveGame:
         jsr WriteBlock
         bcc .k5v
         brl .close
-.k5v:
+.k5v:   lda #SCRIPTDATA         ; texts, arrays, grids (texts.s)
+        ldx MyBank
+        ldy #SCRIPTEND-SCRIPTDATA
+        jsr WriteBlock
+        bcc .k5t
+        brl .close
+.k5t:
         stz SvMap               ; every map: visited, its characters
 .m:     lda SvMap
         cmp MapCount
@@ -251,6 +257,12 @@ LoadGame:
         lda MyBank
         sta Dst+2
         lda #VSTATE
+        jsr SvCopy
+        lda #SCRIPTDATA         ; texts, arrays, grids
+        sta Dst
+        lda MyBank
+        sta Dst+2
+        lda #SCRIPTEND-SCRIPTDATA
         jsr SvCopy
         lda #$FFFF
         sta DrvV

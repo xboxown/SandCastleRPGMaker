@@ -184,7 +184,7 @@ HaggleKey:
         lda HgIn                ; within one: the offer
 .accept: sta HgPrice
         ldx HgVar
-        sta VarTab,x
+        jsr SetVarNum
         lda #3
         jsr HgSay
         lda HgAcc
@@ -201,7 +201,7 @@ HaggleKey:
         jmp HgAsk2
 .giveup: lda HgPrice            ; his last price: yes or no
         ldx HgVar
-        sta VarTab,x
+        jsr SetVarNum
         lda #4
         jsr HgSay
         lda HgGive

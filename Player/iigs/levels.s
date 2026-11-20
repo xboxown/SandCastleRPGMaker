@@ -72,7 +72,7 @@ ParseLevels:
         asl a
         jsr AddPtr
         stz NotN
-        rts
+        jmp ParseScript         ; (texts.s)
 
 ; Carry set if WP is the Avatar or a member.
 WPInParty:
@@ -268,7 +268,7 @@ SetLvVar:
         asl a
         tax
         pla
-        sta VarTab,x
+        jsr SetVarNum
         rts
 .no:    pla
         rts
@@ -605,7 +605,18 @@ OpSayF:
         bra .l
 .num:   jsr EvalExpr
         sty SfY
-        ldx #0
+        ldx PTag                ; a text: as it is
+        cpx #1
+        bne .nn
+        jsr TxtAddr
+        txa
+        clc
+        adc #TextHeap
+        sta SayP
+        lda MyBank
+        sta SayP+2
+        brl .say
+.nn:    ldx #0
         cmp #$8000              ; below 0: a minus
         bcc .pos
         eor #$FFFF
@@ -807,7 +818,7 @@ PickKey:
         jsr NewLine
         lda PkNum
         ldx PkVar
-        sta VarTab,x
+        jsr SetVarNum
         lda #3
         sta Mode
         lda PkPC

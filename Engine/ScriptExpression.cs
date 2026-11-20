@@ -116,6 +116,7 @@ public static class ScriptExpression
         private readonly Node _first;
         private readonly Node? _second;
         public Index(string name, Node first, Node? second) { _name = name; _first = first; _second = second; }
+        public string ListName => _name; public Node First => _first; public Node? Second => _second;
         public override object Eval(Env env)
         {
             if (_second is null)
@@ -377,13 +378,26 @@ public static class ScriptExpression
     /// <summary>The formula as the Apple IIgs player's stack code (ops: 1 number, 2 variable, 3 + 4 - 5 * 6 / 7 %, 8 negate,
     /// 9 = 10 != 11 &lt; 12 &gt; 13 &lt;= 14 &gt;=, 15 and 16 or 17 not, 18 random(a, b) 19 chance(n) 20 min 21 max 22 abs 23 clamp,
     /// 0 the end). Null (and why): something the Apple IIgs can't do - texts, lists, grids, the game's own functions.</summary>
-    public static List<byte>? CompileIIgs(string formula, Func<string, int> variable, out string? why)
+    /// <summary>The Apple IIgs's names for a formula: arrays, grids (their numbers), characters (their map and place), stats
+    /// (their word), things (their name's number).</summary>
+    public sealed class IIgsNames
+    {
+        public Func<string, int>? Array, Grid, Stat, Item;
+        public Func<string, (int Map, int Index)?>? Who;
+    }
+
+    /// <summary>
+    /// A formula as the Apple IIgs player's stack code (Player/iigs/expr.s): numbers (whole), texts, variables (a number or
+    /// a text), lists and grids (list[i], grid[x, y]), + - * / %, comparisons (numbers, or texts without case), and / or /
+    /// not, the functions, and the game's (of the Avatar, or of a character named). Null (why) if the IIgs can't do it.
+    /// </summary>
+    public static List<byte>? CompileIIgs(string formula, Func<string, int> variable, out string? why, IIgsNames? names = null)
     {
         why = null;
         try
         {
             var code = new List<byte>();
-            Emit(Parse(formula), code, variable);
+            Emit(Parse(formula), code, variable, names);
             code.Add(0);
             return code;
         }
@@ -392,40 +406,106 @@ public static class ScriptExpression
 
     private static void Word(List<byte> code, int v) { code.Add((byte)v); code.Add((byte)(v >> 8)); }
 
-    private static void Emit(Node node, List<byte> code, Func<string, int> variable)
+    private static void TextOp(List<byte> code, string text)
+    {
+        var bytes = Encoding.ASCII.GetBytes(new string(text.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(47).ToArray()));
+        code.Add(29); code.Add((byte)bytes.Length); code.AddRange(bytes);
+    }
+
+    // The game's functions on the IIgs (expression op 35: function, who's map and place).
+    private static readonly Dictionary<string, int> IIgsGame = new()
+    {
+        ["hp"] = 1, ["maxhp"] = 2, ["x"] = 3, ["y"] = 4, ["gold"] = 5, ["food"] = 6, ["hour"] = 7, ["minute"] = 8, ["day"] = 9, ["partysize"] = 10,
+        ["isdead"] = 11, ["inparty"] = 12, ["name"] = 13, ["facing"] = 14, ["stat"] = 15, ["items"] = 16, ["floorof"] = 17, ["combat"] = 18
+    };
+    // Text and list functions (expression op 34: function, how many values).
+    private static readonly Dictionary<string, int> IIgsFns = new()
+    {
+        ["length"] = 1, ["count"] = 1, ["rows"] = 2, ["columns"] = 3, ["cols"] = 3, ["contains"] = 4, ["indexof"] = 5, ["upper"] = 6, ["lower"] = 7, ["trim"] = 8,
+        ["part"] = 9, ["sub"] = 9, ["left"] = 10, ["right"] = 11, ["replace"] = 12, ["join"] = 13, ["text"] = 14, ["number"] = 15, ["sum"] = 16, ["average"] = 17,
+        ["sqrt"] = 18, ["pow"] = 19
+    };
+
+    private static void Emit(Node node, List<byte> code, Func<string, int> variable, IIgsNames? names = null)
     {
         switch (node)
         {
             case Literal l when l.Value is double d:
                 code.Add(1); Word(code, (int)Math.Clamp(Math.Round(d), -32768, 32767)); break;
-            case Literal:
-                throw new ScriptException("texts aren't on the Apple IIgs");
+            case Literal l2:
+                TextOp(code, ScriptValues.Text(l2.Value)); break;
             case Name n:
+                if (names?.Array?.Invoke(n.Text) is int ai and >= 0) { code.Add(30); code.Add((byte)ai); break; }
+                if (names?.Grid?.Invoke(n.Text) is int gi and >= 0) { code.Add(31); code.Add((byte)gi); break; }
                 code.Add(2); Word(code, variable(n.Text)); break;
             case Unary u:
-                Emit(u.Operand, code, variable); code.Add(u.Op == "-" ? (byte)8 : (byte)17); break;
-            case Index:
-                throw new ScriptException("lists and grids aren't on the Apple IIgs");
+                Emit(u.Operand, code, variable, names); code.Add(u.Op == "-" ? (byte)8 : (byte)17); break;
+            case Index ix:
+            {
+                if (ix.Second is null)
+                {
+                    if (names?.Array?.Invoke(ix.ListName) is not int li || li < 0) throw new ScriptException($"{ix.ListName} isn't an array the game makes");
+                    code.Add(30); code.Add((byte)li); Emit(ix.First, code, variable, names); code.Add(32);
+                }
+                else
+                {
+                    if (names?.Grid?.Invoke(ix.ListName) is not int gi2 || gi2 < 0) throw new ScriptException($"{ix.ListName} isn't a grid the game makes");
+                    code.Add(31); code.Add((byte)gi2); Emit(ix.First, code, variable, names); Emit(ix.Second, code, variable, names); code.Add(33);
+                }
+                break;
+            }
             case Binary b:
-                Emit(b.Left, code, variable); Emit(b.Right, code, variable);
+                Emit(b.Left, code, variable, names); Emit(b.Right, code, variable, names);
                 code.Add(b.Op switch { "+" => 3, "-" => 4, "*" => 5, "/" => 6, "%" => 7, "=" => 9, "!=" => 10, "<" => 11, ">" => 12, "<=" => 13, ">=" => 14, "and" => 15, "or" => 16,
                     _ => throw new ScriptException($"\"{b.Op}\" isn't on the Apple IIgs") });
                 break;
             case Call c:
             {
                 string f = c.FunctionName.ToLowerInvariant();
-                if (f is "round" or "floor" or "ceil" && c.Arguments.Count >= 1) { Emit(c.Arguments[0], code, variable); break; } // whole numbers already
+                if (f is "round" or "floor" or "ceil" && c.Arguments.Count >= 1) { Emit(c.Arguments[0], code, variable, names); break; } // whole numbers already
+                if (IIgsGame.TryGetValue(f, out int gf) && !(f is "x" or "y" && names is null))
+                {
+                    // Of whom: the first value, a character's name ("Self" / "Player" / none: the Avatar).
+                    (int Map, int Index) who = (0xFFFF, 0xFFFF);
+                    int extra = -1;
+                    var rest = c.Arguments.ToList();
+                    if (gf is 15 or 16)
+                    {
+                        // stat(who, "name") / items("name") or items(who, "name"): the last value is what.
+                        if (rest.Count == 0 || rest[^1] is not Literal { Value: string what }) throw new ScriptException($"{f}() needs its name as a text");
+                        extra = gf == 15 ? names?.Stat?.Invoke(what) ?? -1 : names?.Item?.Invoke(what) ?? -1;
+                        if (extra < 0) throw new ScriptException($"{f}(\"{what}\") isn't on the Apple IIgs");
+                        rest.RemoveAt(rest.Count - 1);
+                    }
+                    if (rest.Count > 0)
+                    {
+                        if (rest[0] is not Literal { Value: string whoName }) throw new ScriptException($"{f}() of someone: their name as a text");
+                        if (whoName is not ("Self" or "Player" or "Activator" or ""))
+                            who = names?.Who?.Invoke(whoName) ?? throw new ScriptException($"{f}(\"{whoName}\"): no one of that name on a map");
+                    }
+                    code.Add(35); code.Add((byte)gf); Word(code, who.Map); Word(code, who.Index);
+                    if (gf == 15) code.Add((byte)extra);
+                    if (gf == 16) Word(code, extra);
+                    break;
+                }
+                if ((f is "min" or "max" && c.Arguments.Count == 1) || IIgsFns.ContainsKey(f))
+                {
+                    int fn = f == "min" ? 20 : f == "max" ? 21 : IIgsFns[f];
+                    foreach (var a in c.Arguments.Take(3)) Emit(a, code, variable, names);
+                    code.Add(34); code.Add((byte)fn); code.Add((byte)Math.Min(3, c.Arguments.Count));
+                    break;
+                }
                 (int ops, byte op) = f switch { "random" => (2, (byte)18), "chance" => (1, (byte)19), "abs" => (1, (byte)22), "clamp" => (3, (byte)23), "min" => (-1, (byte)20), "max" => (-1, (byte)21),
                     _ => throw new ScriptException($"{f}() isn't on the Apple IIgs") };
                 if (ops < 0)
                 {
                     if (c.Arguments.Count == 0) { code.Add(1); Word(code, 0); break; }
-                    Emit(c.Arguments[0], code, variable);
-                    foreach (var a in c.Arguments.Skip(1)) { Emit(a, code, variable); code.Add(op); }
+                    Emit(c.Arguments[0], code, variable, names);
+                    foreach (var a in c.Arguments.Skip(1)) { Emit(a, code, variable, names); code.Add(op); }
                     break;
                 }
                 if (c.Arguments.Count < ops) throw new ScriptException($"{f}() needs {ops} values");
-                foreach (var a in c.Arguments.Take(ops)) Emit(a, code, variable);
+                foreach (var a in c.Arguments.Take(ops)) Emit(a, code, variable, names);
                 code.Add(op);
                 break;
             }

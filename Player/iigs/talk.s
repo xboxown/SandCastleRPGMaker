@@ -590,7 +590,7 @@ RunTalk:
         cmp #12
         bcs .more
         jmp EventOp
-.more:  cmp #41
+.more:  cmp #44
         bcs .end
         jmp MoreOps             ; (cmds.s)             ; TRIG, ITEM, HIT (events.s)
 .play:
@@ -660,7 +660,7 @@ RunTalk:
 .sub:   eor #$FFFF
         sec
         adc VarTab,x
-.set:   sta VarTab,x
+.set:   jsr SetVarNum
         lda TPC
         clc
         adc #6
