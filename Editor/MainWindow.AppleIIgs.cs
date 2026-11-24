@@ -1652,6 +1652,21 @@ public partial class MainWindow
             pack.Weights.Add((n, (int)Math.Round(kg * 10), ItemWeights.WeighsOnlyItself(category, id, _containerDatabase)));
         }
         foreach (var o in _objectDatabase.Objects) Weigh(o.Name, ReferencedItemCategory.Object, o.Id);
+        // Cold and hot zones (each map's, its upper floors' too), worn gear's warmth and cooling, the immune (temp.s).
+        void TempZonesOf(MapData world, int mapNo, int floor)
+        {
+            foreach (var z in world.Zones.Where(z => z.Floor == floor))
+            {
+                int kind = SandcastleRpgMaker.Engine.Zones.IsCold(new[] { z }, z.X, z.Y, floor) ? 1 : SandcastleRpgMaker.Engine.Zones.IsHot(new[] { z }, z.X, z.Y, floor) ? 2 : 0;
+                if (kind > 0) pack.TempZones.Add((mapNo, z.X, z.Y, z.Width, z.Height, kind));
+            }
+        }
+        for (int wi = 0; wi < worldList.Count; wi++) TempZonesOf(worldList[wi], wi, 1);
+        foreach (var ((wi, f), mi) in floorMap) TempZonesOf(worldList[wi], mi, f);
+        foreach (var o in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Armor && (o.Armor.Warmth != 0 || o.Armor.Cooling != 0)))
+            if (pack.Names.IndexOf(o.Name) is int gn and >= 0 && pack.Gear.All(g => g.Name != gn)) pack.Gear.Add((gn, o.Armor.Warmth, o.Armor.Cooling));
+        foreach (var c in _characterDatabase.Characters.Where(c => c.Survival.ColdImmune || c.Survival.HeatImmune))
+            if (pack.Names.IndexOf(c.Name) is int cn and >= 0) pack.TempImmune.Add((cn, (c.Survival.ColdImmune ? 1 : 0) | (c.Survival.HeatImmune ? 2 : 0)));
         // Ground traps and lights that burn down or burn, by name (floor.s).
         foreach (var o in _objectDatabase.Objects)
         {

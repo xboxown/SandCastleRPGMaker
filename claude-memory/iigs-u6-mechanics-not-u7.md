@@ -17,3 +17,11 @@ must be true Ultima 6 / Savage Empire (Nuvie as the reference), not U7.
 (Nuvie source); if it's U7-only, leave it out and tell the user. b676 removed Show Bark from the IIgs; the audit item
 "Verbose (barks)" is dropped. Whether Windows U6 should also lose U7-only things: ask the user, don't assume.
 Related: [[iigs-audit]], [[apple-iigs-modes]], [[u6-mode-requirements]].
+
+User decisions 2026-11-24 (later the same day) - Ultima 6 mode, all platforms incl. IIgs:
+- KEEP / BRING to the IIgs: cinema mode (a cutscene tool, not a U7 thing), temperature zones (Martian Dreams oxygen, cold /
+  heat with protective gear, as U7's), door motion animations (Martian Dreams metal doors), shooting and exploding traps.
+- REMOVED in U6: hunger, starving, NPC meals (b681; food only heals the party at Rest); Ultima 7 bleeding / blood looks
+  (b677), hit flash (already the Hit Spark), status outlines (b681).
+- Kite: not important (skip). Party joining exists already everywhere (the user asked; "Joining" in the audit list meant
+  Exult's slimes merging - explain, don't change). Hearing = positional sound volume / panning (explained).

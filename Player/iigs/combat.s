@@ -854,7 +854,8 @@ DefIsAvatar:
 
 ; FmtName = the name of the one at DefP; WhoName = the one at AtkP.
 DefName:
-        jsr DefIsAvatar
+        lda DefP                ; (solo mode: the Avatar is in a party slot - solo.s)
+        jsr RecIsAvatar
         bcc .c
         ldx AvatarW
         lda WordTab,x
@@ -867,8 +868,8 @@ DefName:
         jmp NameNumber
 AtkName:
         lda AtkP
-        cmp #AvRec
-        bne .c
+        jsr RecIsAvatar
+        bcc .c
         ldx AvatarW
         lda WordTab,x
         sta WhoName

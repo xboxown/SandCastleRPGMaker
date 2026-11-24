@@ -27,6 +27,7 @@ ClockRun:
         sta ClockTick
         inc Minute
         jsr BurnMinute          ; lights burn down (floor.s)
+        jsr TempMinute          ; the cold and the heat (temp.s)
         jsr EggMinute           ; weather eggs' minutes (eggs.s)
         jsr HudClock            ; the HUD's date, compass, sun and moons (hud.s)
         lda Minute

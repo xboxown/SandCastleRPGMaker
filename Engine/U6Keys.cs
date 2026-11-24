@@ -240,6 +240,10 @@ public static class U6Words
         ("TooHeavy", "Too heavy!", "Apple IIgs: picking up or giving more than one can carry (2 x Strength)"),
         ("TrapOff", "{0} goes off!", "Apple IIgs: a trap stepped on"),
         ("BurntOut", "{0} has burnt out.", "Apple IIgs: a carried light spent"),
+        ("TempCold", "{1} is cold.", "Apple IIgs: in a Cold zone"),
+        ("TempFreezing", "{1} is freezing!", "Apple IIgs: badly cold"),
+        ("TempHot", "{1} is hot.", "Apple IIgs: in a Hot zone"),
+        ("TempBurning", "{1} is burning up!", "Apple IIgs: badly hot"),
     };
 
     public static string Of(Ultima6Settings settings, string id) =>

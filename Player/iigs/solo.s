@@ -480,6 +480,48 @@ MemberStep:
 .no:    clc
         rts
 
+; A = a record's address (in this bank or a map's): carry set if it is the Avatar - AvRec, or in solo mode the party
+; slot the Avatar was left in (AvRec then holds the member moved).
+RecIsAvatar:
+        sta SoRec
+        lda SoloCtl
+        bne .solo
+        lda SoRec
+        cmp #AvRec
+        beq .yes
+        clc
+        rts
+.solo:  dec a                   ; PartyTab + (SoloCtl - 1) * 64
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc #PartyTab
+        cmp SoRec
+        beq .yes
+        clc
+        rts
+.yes:   sec
+        rts
+
+; A = WP, a record's address: FmtName = its name (the Avatar's word for the Avatar).
+RecName:
+        sta SoRec
+        jsr RecIsAvatar
+        bcc .c
+        ldx AvatarW
+        lda WordTab,x
+        sta FmtName
+        lda WordTab+2,x
+        sta FmtName+2
+        rts
+.c:     ldy #C_NAME             ; (the record is the caller's WP)
+        lda [WP],y
+        jmp NameNumber
+
 ; A = a name: A = its combat mode (ModeTab; 0 FRONT when not set).
 ModeOfName:
         sta SoNm
@@ -558,11 +600,13 @@ ParseModes:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseTemp           ; cold and hot zones (temp.s)
 
 ModeN:    .dw 0
 ModeTab:  .ds 4*64
 SoNm:     .dw 0
+SoRec:    .dw 0
 SoloOn:   .dw 0                 ; solo mode (1-9) on
 SoloCtl:  .dw 0                 ; the member moved (1-9; its slot holds the Avatar), 0 the Avatar
 SoKey:    .dw 0

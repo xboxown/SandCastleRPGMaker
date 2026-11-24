@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 48;
+    public const ushort Version = 49;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -494,14 +494,14 @@ public sealed class AppleIIgsGamePack
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
         "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
-        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "Avatar" };
+        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "{1} is cold.", "{1} is freezing!", "{1} is hot.", "{1} is burning up!", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
         "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
-        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut" };
+        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut", "TempCold", "TempFreezing", "TempHot", "TempBurning" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -626,6 +626,11 @@ public sealed class AppleIIgsGamePack
     public List<(int Obj, int Kind, int Other, int OnSnd, int OffSnd, int Reset, bool On, int[] Links)> Levers { get; } = new();
     /// <summary>Characters' combat modes by name (CombatModeCode; Front not listed) - solo.s's ModeTab.</summary>
     public List<(int Name, int Mode)> Modes { get; } = new();
+    /// <summary>Cold (1) and hot (2) zones (Map Editor > Zones): map, x, y, width, height, kind; worn gear's warmth and cooling by name;
+    /// characters immune (1 cold, 2 heat) by name - temp.s.</summary>
+    public List<(int Map, int X, int Y, int W, int H, int Kind)> TempZones { get; } = new();
+    public List<(int Name, int Warmth, int Cooling)> Gear { get; } = new();
+    public List<(int Name, int Flags)> TempImmune { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -900,6 +905,12 @@ public sealed class AppleIIgsGamePack
         }
         w.Write((ushort)Math.Min(Modes.Count, 64));
         foreach (var (mn, mm) in Modes.Take(64)) { w.Write((ushort)mn); w.Write((ushort)mm); }
+        w.Write((ushort)Math.Min(TempZones.Count, 32));
+        foreach (var z in TempZones.Take(32)) { w.Write((ushort)z.Map); w.Write((ushort)z.X); w.Write((ushort)z.Y); w.Write((ushort)z.W); w.Write((ushort)z.H); w.Write((ushort)z.Kind); }
+        w.Write((ushort)Math.Min(Gear.Count, 64));
+        foreach (var g in Gear.Take(64)) { w.Write((ushort)g.Name); w.Write((short)Math.Clamp(g.Warmth, -999, 999)); w.Write((short)Math.Clamp(g.Cooling, -999, 999)); }
+        w.Write((ushort)Math.Min(TempImmune.Count, 32));
+        foreach (var t in TempImmune.Take(32)) { w.Write((ushort)t.Name); w.Write((ushort)t.Flags); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);
