@@ -1515,7 +1515,7 @@ static void camera_update(void)
 
 static uint32_t *screen;
 
-typedef struct Puddle { int ux, uy, lift, frame, mirrored, hurts, madeBy; const Sprite *blood; } Puddle; /* hurts, madeBy: a trail's HP on stepping in, and the kind it spares */
+typedef struct Puddle { int ux, uy, lift, frame, mirrored, hurts, madeBy; const Sprite *blood; int death; } Puddle; /* death: Ultima 6's blood under a body - gone out of view */ /* hurts, madeBy: a trail's HP on stepping in, and the kind it spares */
 #define PUDDLE_MAX 512 /* every machine the same (b579: the Amiga 68k had 128); Windows keeps them all - 512 is more than a fight leaves */
 static Puddle puddles[PUDDLE_MAX]; static int puddleCount, puddleOldest;
 typedef struct Bleeding { int actor, lastHp; double left, next; } Bleeding;
@@ -4779,7 +4779,8 @@ static const Sprite *body_look(int characterId, int *sizeX, int *sizeY)
     memset(&made, 0, sizeof made);
     read_actor_poses(ch, get(project, "Poses"), &made);
     const Sprite *body = NULL;
-    for (int i = 0; i < made.poseCount; i++) if (!strcmp(made.poses[i].name, "Body")) body = made.poses[i].dirs[slot_of(DIR_S)];
+    if (is_u6()) for (int i = 0; i < made.poseCount; i++) if (!strcmp(made.poses[i].name, "Sleeping")) body = made.poses[i].dirs[slot_of(DIR_S)]; /* Ultima 6: its sleeping look */
+    if (!body) for (int i = 0; i < made.poseCount; i++) if (!strcmp(made.poses[i].name, "Body")) body = made.poses[i].dirs[slot_of(DIR_S)];
     if (!body) body = made.idle[slot_of(DIR_S)];
     remember_body_look(characterId, body, made.sizeX > 0 ? made.sizeX : 1, made.sizeY > 0 ? made.sizeY : 1);
     if (sizeX) *sizeX = made.sizeX > 0 ? made.sizeX : 1;
@@ -4798,7 +4799,8 @@ int world_put_body(int actor, int x, int y, int onFloor)
     t->uid = nextUid++; t->category = 5; t->itemId = -1000 - a->characterId; t->quantity = 1; t->burnLeft = -1;
     t->x = x; t->y = y; t->facing = a->facing;
     const Sprite *body = NULL;
-    for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Body")) body = a->poses[i].dirs[slot_of(a->facing)];
+    if (is_u6()) for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Sleeping")) body = a->poses[i].dirs[slot_of(a->facing)]; /* Ultima 6: its sleeping look */
+    if (!body) for (int i = 0; i < a->poseCount; i++) if (!strcmp(a->poses[i].name, "Body")) body = a->poses[i].dirs[slot_of(a->facing)];
     t->sprite = body ? body : a->idle[slot_of(a->facing)];
     t->sizeX = a->sizeX; t->sizeY = a->sizeY; t->sizeZ = 1;
     remember_body_look(a->characterId, t->sprite, a->sizeX, a->sizeY); /* picked up and put down again: the same look */
@@ -6083,6 +6085,30 @@ static void drop_puddle(const Sprite *blood, int ux, int uy, int lift, int hurts
     puddles[at] = (Puddle){ ux, uy, lift, blood_rnd(last + 1 < 2 ? last + 1 : 2), blood_rnd(2), hurts, madeBy, blood }; /* "Lets start with a smaller pool." */
 }
 
+/* Ultima 6 / Savage Empire / Martian Dreams: blood where someone died, under the body - a random frame of the Blood folder's one
+   sprite (U6GameWindow.U6Blood.cs). It can be looked at, not taken or moved; gone once out of view. */
+void world_death_blood(int actor)
+{
+    Actor *a = actor_of(actor);
+    if (!is_u6() || !a) return;
+    const Sprite *blood = sprite_find("Blood", "Blood");
+    if (!blood || !blood->frameCount) return;
+    int ux, uy;
+    feet_unit(a, &ux, &uy);
+    int at = puddleCount;
+    if (puddleCount >= PUDDLE_MAX) { at = puddleOldest; puddleOldest = (puddleOldest + 1) % PUDDLE_MAX; }
+    else puddleCount++;
+    puddles[at] = (Puddle){ ux, uy, a->lift, blood_rnd(blood->frameCount), 0, 0, -1, blood, 1 };
+}
+
+/* A death's blood on this cell (Look). */
+int world_death_blood_at(int cx, int cy)
+{
+    for (int i = 0; i < puddleCount; i++)
+        if (puddles[i].death && (int)floor((puddles[i].ux * 8 + 4.0) / tileW) == cx && (int)floor((puddles[i].uy * 8 + 4.0) / tileH) == cy) return 1;
+    return 0;
+}
+
 static void bleed(int actor)
 {
     Actor *a = actor_of(actor);
@@ -6154,6 +6180,7 @@ static void update_trails(double ms)
 /* reduce_health: a blow of this much may start the character bleeding (rand() % 10 < damage, not with 2 puddles round it already). */
 void world_maybe_bleed(int actor, int damage)
 {
+    if (is_u6()) return; /* Ultima 6 / Savage Empire / Martian Dreams: no bleeding from blows - only a death's blood (world_death_blood) */
     Actor *a = actor_of(actor);
     if (!a || !blood_of(actor) || vitals_dead(a->characterId)) return;
     int ux, uy, nearby = 0;
@@ -6188,6 +6215,8 @@ void world_update_bleeding(double ms)
     if ((puddleSweepMs -= ms) > 0) return;
     puddleSweepMs = 2000;
     double cx = cameraX + viewX + viewW / 2.0, cy = cameraY + viewY + viewH / 2.0;
+    for (int i = 0; i < puddleCount; i++) /* Ultima 6: a death's blood is gone once out of view */
+        if (puddles[i].death && (fabs(puddles[i].ux * 8.0 - cx) > viewW / 2.0 + tileW || fabs(puddles[i].uy * 8.0 - cy) > viewH / 2.0 + tileH)) { puddles[i--] = puddles[--puddleCount]; puddleOldest = 0; }
     for (int i = 0; i < puddleCount; i++)
         if (fabs(puddles[i].ux * 8.0 - cx) > 2.5 * SCREEN_W || fabs(puddles[i].uy * 8.0 - cy) > 2.5 * SCREEN_H) { puddles[i--] = puddles[--puddleCount]; puddleOldest = 0; }
 }

@@ -289,7 +289,7 @@ public partial class U6GameWindow
                 int gx = (int)Math.Floor(spot.X / _tileWidth), gy = (int)Math.Floor(spot.Y / _tileHeight);
                 if (_letterAsk is null && _currentMessage is null)
                 {
-                    string ground = SquareSeen(gx, gy) && TileNameAt(gx, gy) is { } tile ? tile : W("Nothing");
+                    string ground = SquareSeen(gx, gy) && DeathBloodAt(gx, gy) ? W("Blood") : SquareSeen(gx, gy) && TileNameAt(gx, gy) is { } tile ? tile : W("Nothing");
                     U6Say(W("Look") + "-" + ground);
                     U6Say(W("YouSee", ground));
                 }
@@ -339,7 +339,8 @@ public partial class U6GameWindow
         switch (verb)
         {
             case HudVerb.Look:
-                if (thing is null && SquareSeen(cx, cy) && TileNameAt(cx, cy) is { } ground) name = ground; // the ground: its tile's name (Tile Properties)
+                if (thing is null && SquareSeen(cx, cy) && DeathBloodAt(cx, cy)) name = W("Blood"); // blood a death left (.U6Blood.cs)
+                else if (thing is null && SquareSeen(cx, cy) && TileNameAt(cx, cy) is { } ground) name = ground; // the ground: its tile's name (Tile Properties)
                 FinishHudVerb(name, W("YouSee", name));
                 ShowLooked(thing); // a person: their portrait
                 break;

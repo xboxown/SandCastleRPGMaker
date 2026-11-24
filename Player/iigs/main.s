@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 46 (b677): Ultima 6's death - the body in its sleeping look, blood under it (looked at, never taken, gone out of
+;   view) - floor.s.
 ; Version 45 (b675): tiles' step events, ground traps, fires that burn, lights that burn down - floor.s.
 ; Version 44 (b674): solo mode (1-9, 0 party mode, Option + digit the portrait view) and the members' combat modes,
 ;   Command members moved in turn in combat mode - solo.s.
@@ -669,7 +671,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #45
+        cmp #46
         beq .known
 .bad:   sec
         rts
@@ -1069,6 +1071,7 @@ DrawView:
         beq .rowsdone
         jmp .row
 .rowsdone:
+        jsr DrawBlood           ; a death's blood, under everything (floor.s)
         jsr DrawObjects
         jsr DrawCharacters
         jsr DrawAvatar

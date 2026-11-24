@@ -640,7 +640,7 @@ static void hud_compose(uint32_t ms)
 /* ---- Ultima 6's words (Engine/U6Keys.cs U6Words), under the maker's (System Settings > Ultima 6 > Words) ---- */
 static const char *WORDS[][2] = {
     { "Attack", "Attack" }, { "Cast", "Cast" }, { "Talk", "Talk" }, { "Look", "Look" }, { "Get", "Get" }, { "Drop", "Drop" },
-    { "Move", "Move" }, { "Use", "Use" }, { "Rest", "Rest" }, { "Combat", "Combat" }, { "YouSee", "You see {0}." }, { "Nothing", "nothing" },
+    { "Move", "Move" }, { "Use", "Use" }, { "Rest", "Rest" }, { "Combat", "Combat" }, { "YouSee", "You see {0}." }, { "Nothing", "nothing" }, { "Blood", "blood" },
     { "OutOfRange", "Out of range!" }, { "NotPossible", "Not possible." }, { "WhatPlace", "Where?" }, { "ToWhom", "To whom?" },
     { "Gives", "{1} gets {0}." }, { "Readies", "{1} readies {0}." }, { "Unreadies", "{1} puts away {0}." }, { "Gets", "{1} gets {0}." },
     { "Drops", "{1} drops {0}." }, { "Solo", "Solo mode: {1}." }, { "PartyMode", "Party mode." }, { "NotInSolo", "Not in solo mode." },
@@ -1225,7 +1225,8 @@ static void pick_map_cell(int cx, int cy, int givenActor, int givenUid)
     switch (verb)
     {
         case 3: /* Look */
-            if (actor < 0 && !uid) tile_name(cx, cy, name, sizeof name);
+            if (actor < 0 && !uid && world_death_blood_at(cx, cy)) snprintf(name, sizeof name, "%s", word("Blood")); /* a death's blood */
+            else if (actor < 0 && !uid) tile_name(cx, cy, name, sizeof name);
             finish(name, wordf("YouSee", name, ""), NULL);
             if (actor > 0) looked = world_actor_character(actor);
             break;
@@ -1558,7 +1559,8 @@ int u6_mouse_down(int x, int y)
     if (actor < 0 && !uid)
     {
         char ground[128];
-        if (!tile_name(cx, cy, ground, sizeof ground)) snprintf(ground, sizeof ground, "%s", word("Nothing"));
+        if (world_death_blood_at(cx, cy)) snprintf(ground, sizeof ground, "%s", word("Blood")); /* a death's blood */
+        else if (!tile_name(cx, cy, ground, sizeof ground)) snprintf(ground, sizeof ground, "%s", word("Nothing"));
         say_look(ground);
     }
     return 0; /* the engine's own clicks (things: look, use; walking) */

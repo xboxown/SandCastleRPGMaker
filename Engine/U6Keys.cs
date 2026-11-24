@@ -236,6 +236,7 @@ public static class U6Words
         ("Strength", "strength", "A stat's name"),
         ("Dexterity", "dexterity", "A stat's name"),
         ("Intelligence", "intelligence", "A stat's name"),
+        ("Blood", "blood", "Look at the blood a death leaves"),
         ("TooHeavy", "Too heavy!", "Apple IIgs: picking up or giving more than one can carry (2 x Strength)"),
         ("TrapOff", "{0} goes off!", "Apple IIgs: a trap stepped on"),
         ("BurntOut", "{0} has burnt out.", "Apple IIgs: a carried light spent"),

@@ -39,6 +39,8 @@ public partial class U6GameWindow
         public int Frame;
         public bool Mirrored;
         public required Image Visual;
+        /// <summary>Death's blood (Ultima 6): a random frame, gone once out of view (U6GameWindow.U6Blood.cs).</summary>
+        public bool Death;
         /// <summary>A trail's: HP it takes from whoever steps on it (0: none), and the kind it never hurts.</summary>
         public int Hurts;
         public int MadeByKind = -1;
@@ -62,10 +64,13 @@ public partial class U6GameWindow
     /// <summary>reduce_health: a blow of <paramref name="damage"/> may start the character bleeding.</summary>
     private void MaybeStartBleeding(CharacterDefinition character, int damage)
     {
+        return; // Ultima 6 / Savage Empire / Martian Dreams: no bleeding from blows (Ultima 7's) - only the blood a death leaves (.U6Blood.cs)
+#pragma warning disable CS0162
         if (BloodOf(character) is null || IsDead(character)) return;
         var (ux, uy) = FeetUnit(character);
         int nearby = _puddles.Count(p => Math.Abs(p.UnitX - ux) <= 1 && Math.Abs(p.UnitY - uy) <= 1);
         if (Rng.Next(10) < damage && nearby < 2) StartBleeding(character);
+#pragma warning restore CS0162
     }
 
     /// <summary>Npc_timer_list::start_bleeding: drips now, then for 1-3 minutes.</summary>
@@ -97,6 +102,7 @@ public partial class U6GameWindow
 
         if ((_puddleSweepMs -= elapsedMs) > 0) return;
         _puddleSweepMs = 2000;
+        SweepDeathBlood(); // death's blood: gone once out of view (.U6Blood.cs)
         double cx = _cameraX + ViewportWidth / 2.0, cy = _cameraY + ViewportHeight / 2.0;
         foreach (var puddle in _puddles.Where(p => Math.Abs(p.UnitX * SpriteSizing.BaseUnit - cx) > 2.5 * ViewportWidth
                                                 || Math.Abs(p.UnitY * SpriteSizing.BaseUnit - cy) > 2.5 * ViewportHeight).ToList())

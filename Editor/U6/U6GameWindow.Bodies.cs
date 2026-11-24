@@ -42,6 +42,7 @@ public partial class U6GameWindow
     {
         var character = mapCharacter.Character;
         var (cellX, cellY, lift) = (mapCharacter.Placement.X, mapCharacter.Placement.Y, IsFlier(mapCharacter) ? GroundBelow(mapCharacter) : mapCharacter.Lift); // a flier falls
+        DropDeathBlood(cellX, cellY, lift); // Ultima 6: blood where it fell (.U6Blood.cs)
         if (character.Body.NoBody) { LeaveNoBody(mapCharacter, lift); return; }
 
         // The body's container: the Body Container template, looking like this character's Body pose, weighing what its settings say.
@@ -61,7 +62,7 @@ public partial class U6GameWindow
         data.IsStackable = false;
         data.BelongToId = -1; // taking from the dead isn't theft
         data.FactionId = -1;
-        ResolveCharacterSprite(character, PoseByName("Body"), mapCharacter.Facing, out _, out string? spriteKey);
+        string? spriteKey = U6BodySpriteKey(character, mapCharacter.Facing); // Ultima 6: its sleeping look (.U6Blood.cs)
         if (spriteKey?.Split('/', 2) is [var group, var name]) { data.SpriteGroup = group; data.SpriteName = name; }
         if (data.MaxVolume <= 0) data.MaxVolume = 9999;
         _containers.Containers.Add(data);

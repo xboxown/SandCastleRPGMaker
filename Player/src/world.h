@@ -81,6 +81,8 @@ int world_thing_facing(int uid);
 void world_thing_set_facing(int uid, int facing);
 void world_camera(double *x, double *y);
 void world_maybe_bleed(int actor, int damage);
+void world_death_blood(int actor);          /* Ultima 6: blood under a body where it died */
+int world_death_blood_at(int cx, int cy);   /* Ultima 6: a death's blood on this cell (Look) */
 /* A map that wraps around: distances the short way round (pixels, cells). */
 double world_wrap_dx(double dx);
 double world_wrap_dy(double dy);

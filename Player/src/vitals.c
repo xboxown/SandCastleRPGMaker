@@ -296,6 +296,7 @@ static void die(int characterId, const char *cause)
     Item *belongings = items_death_drops(characterId, items_strip(characterId), rnd); /* not human: what may be found in it */
     int x, y, f;
     world_actor_cell(actor, &x, &y, &f);
+    world_death_blood(actor); /* Ultima 6: blood where it fell */
     if (flag(get(character_json(characterId), "Body"), "NoBody"))
     {
         /* Exult's has_no_body: what it carried falls on the ground, each on the nearest free spot within 5 tiles */

@@ -320,10 +320,10 @@ public partial class MainWindow
         return list;
     }
 
-    /// <summary>A character's body picture: its Body pose (else Unconscious, else Dead), facing south, the first frame.</summary>
+    /// <summary>A character's body picture: Ultima 6's sleeping look (else its Body pose, Unconscious, Dead), facing south, the first frame.</summary>
     private string? BodyFile(CharacterDefinition who)
     {
-        foreach (var name in new[] { "Body", "Unconscious", "Dead" })
+        foreach (var name in new[] { "Sleeping", "Body", "Unconscious", "Dead" })
         {
             var pose = _poseDatabase.Poses.FirstOrDefault(p => p.Name == name && who.PoseSprites.ContainsKey(p.Id));
             if (pose is null) continue;
@@ -1472,6 +1472,13 @@ public partial class MainWindow
         pack.TileFlags.AddRange(flags);
         pack.TileNames.AddRange(tileNames.Select(pack.NameOf));
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
+        // Ultima 6's blood under a body: the Blood folder's one sprite, each frame a sprite (floor.s).
+        if (_spriteDatabase.Groups.FirstOrDefault(g => g.Name == SpriteDatabase.BloodGroupName)?.Sprites.FirstOrDefault(s => s.Name == SpriteDatabase.U6BloodSpriteName) is { Frames.Count: > 0 } bloodSprite)
+        {
+            int firstBlood = spritePixels.Count;
+            foreach (var frame in bloodSprite.Frames.Take(8)) if (File.Exists(frame.FilePath)) spritePixels.Add(FitSprite(frame.FilePath));
+            if (spritePixels.Count > firstBlood) pack.Blood = (firstBlood, spritePixels.Count - firstBlood, pack.NameOf(U6Words.Of(_systemSettings.Ultima6, "Blood")));
+        }
         pack.AvatarSprite = spritePixels.Count; // the Avatar's looks as sprites too (solo mode)
         foreach (var px in avatar.Take(4)) spritePixels.Add((px, 16, 16));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));

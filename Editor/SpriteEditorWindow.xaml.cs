@@ -26,7 +26,7 @@ public partial class SpriteEditorWindow : Window
         {
             bool ctrl = System.Windows.Input.Keyboard.Modifiers.HasFlag(System.Windows.Input.ModifierKeys.Control);
             var selected = SelectedSprites();
-            bool locked = _currentGroup is not null && selected.Any(s => SpriteDatabase.IsFontSprite(_currentGroup.Name, s.Name));
+            bool locked = _currentGroup is not null && (selected.Any(s => SpriteDatabase.IsFontSprite(_currentGroup.Name, s.Name)) || U6BloodFolder);
             if (ctrl && e.Key == System.Windows.Input.Key.X && !locked) { ToClipboard(selected, cutting: true); e.Handled = true; }
             else if (ctrl && e.Key == System.Windows.Input.Key.C) { ToClipboard(selected, cutting: false); e.Handled = true; }
             else if (ctrl && e.Key == System.Windows.Input.Key.V) { Paste(); e.Handled = true; }
@@ -156,7 +156,7 @@ public partial class SpriteEditorWindow : Window
     {
         if (_currentGroup is null) return;
         var selected = SelectedSprites();
-        bool any = selected.Count > 0, locked = selected.Any(s => SpriteDatabase.IsFontSprite(_currentGroup.Name, s.Name));
+        bool any = selected.Count > 0, locked = selected.Any(s => SpriteDatabase.IsFontSprite(_currentGroup.Name, s.Name)) || U6BloodFolder;
         var menu = new ContextMenu { PlacementTarget = SpriteListView };
         var cut = new MenuItem { Header = "Cut", IsEnabled = any && !locked, InputGestureText = "Ctrl+X" };
         cut.Click += (_, _) => ToClipboard(selected, cutting: true);
@@ -219,9 +219,19 @@ public partial class SpriteEditorWindow : Window
         }
     }
 
+    /// <summary>Ultima 6 projects: the Blood folder has its one sprite only - nothing added, renamed or deleted there (frames may be).</summary>
+    private bool U6BloodFolder => ProjectSession.IsUltima6 && _currentGroup?.Name == SpriteDatabase.BloodGroupName;
+
+    private bool RefuseU6Blood()
+    {
+        if (!U6BloodFolder) return false;
+        MessageBox.Show(this, "Ultima 6: the Blood folder has one sprite, Blood - the blood a death leaves under the body. It can't be renamed or deleted, and no other sprite can be added; give it as many frames as you like (each death picks one).", "Blood", MessageBoxButton.OK, MessageBoxImage.Information);
+        return true;
+    }
+
     private void RenameSprite(SpriteEntry sprite)
     {
-        if (_currentGroup is not { } folder) return;
+        if (_currentGroup is not { } folder || RefuseU6Blood()) return;
         var name = SimpleInputWindow.Show(this, "The sprite's new name:", "Rename Sprite", sprite.Name)?.Trim();
         if (string.IsNullOrEmpty(name) || name == sprite.Name) return;
         if (folder.Sprites.Any(s => s != sprite && s.Name == name))
@@ -237,7 +247,7 @@ public partial class SpriteEditorWindow : Window
 
     private void DeleteSprites(List<SpriteEntry> sprites)
     {
-        if (_currentGroup is not { } folder || sprites.Count == 0) return;
+        if (_currentGroup is not { } folder || sprites.Count == 0 || RefuseU6Blood()) return;
         string what = sprites.Count == 1 ? $"the sprite \"{sprites[0].Name}\"" : $"these {sprites.Count} sprites";
         if (MessageBox.Show($"Delete {what} from \"{folder.Name}\"? Anything that uses it loses its look. This can't be undone.", "Delete Sprite",
                 MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return;
@@ -348,6 +358,7 @@ public partial class SpriteEditorWindow : Window
             MessageBox.Show(this, "A sprite here is one kind of puddle a monster leaves as it walks, as in Ultima 7.\n\nGive it up to 4 frames, small to large: they are sizes, not an animation. New puddles start at frame 1 or 2 and grow if it drips on the same spot.\n\nThen Character Editor > the monster > Health > Joining > Trail: pick this sprite, and tick whether its puddles hurt.", "Slime Trail", MessageBoxButton.OK, MessageBoxImage.Information);
         if (_currentGroup.Name == SpriteDatabase.WeaponInHandGroupName)
             new FrameStatesGuideWindow(null, FrameStatesGuideWindow.WeaponInHand(ProjectSession.SettingsProvider?.Invoke()?.WeaponInHand ?? new WeaponInHandSettings())) { Owner = this }.ShowDialog();
+        if (RefuseU6Blood()) return;
         var name = SimpleInputWindow.Show(this, "Sprite name:", "New Sprite", "New Sprite");
         if (string.IsNullOrWhiteSpace(name)) return;
 
@@ -373,6 +384,7 @@ public partial class SpriteEditorWindow : Window
             return;
         }
 
+        if (RefuseU6Blood()) return;
         var dialog = new OpenFileDialog { Filter = "Image files (*.png;*.jpg;*.bmp)|*.png;*.jpg;*.jpeg;*.bmp", Multiselect = true };
         if (dialog.ShowDialog() != true) return;
 

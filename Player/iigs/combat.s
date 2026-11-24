@@ -783,7 +783,8 @@ Dies:
         jsr Withstands          ; withstand death: healed instead (spells2.s)
         bcc .dies
         rts
-.dies:  jsr DefIsAvatar
+.dies:  jsr DeathBlood          ; Ultima 6: blood where it fell (floor.s)
+        jsr DefIsAvatar
         bcc .npc
         lda SoloCtl             ; a member moved: the Avatar back first, the member dies (solo.s)
         beq .av

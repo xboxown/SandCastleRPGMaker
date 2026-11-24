@@ -56,7 +56,7 @@ ParseFloor:
         jsr AddPtr
         stz TrSN
         stz BnN
-        rts
+        jmp ParseBlood          ; a death's blood (below)
 
 ; A = a name: carry set and X = its place in TrTab if it is a trap.
 TrapNamed:
@@ -599,3 +599,154 @@ FzMax:    .dw 0
 FzAil:    .dw 0
 FzSvI:    .dd 0
 FzSvW:    .dd 0
+
+; ---- a death's blood (Ultima 6 / Savage Empire / Martian Dreams) ----
+; Where someone dies: blood under the body - a random frame of the Blood folder's sprite. Look names it ("blood"); it
+; can't be taken or moved; once out of view it is gone. GAME.DAT (after the lights): u16 its first sprite ($FFFF none),
+; frames, its name. BlTab: 16 of x, y, map bits, frame.
+
+ParseBlood:
+        lda [Ptr]
+        sta BlFirst
+        ldy #2
+        lda [Ptr],y
+        sta BlFrames
+        ldy #4
+        lda [Ptr],y
+        sta BlName
+        stz BlN
+        lda #6
+        jmp AddPtr
+
+; Dies: blood where DefP fell.
+DeathBlood:
+        lda BlFirst
+        cmp #$FFFF
+        beq .o
+        lda BlFrames
+        beq .o
+        jsr DefIsAvatar
+        bcc .chr
+        lda PX
+        sta BlX
+        lda PY
+        sta BlY
+        bra .put
+.chr:   lda [DefP]
+        sta BlX
+        ldy #2
+        lda [DefP],y
+        sta BlY
+.put:   lda BlN                 ; full: the first goes
+        cmp #16
+        bcc .room
+        ldx #0
+.sh:    lda BlTab+8,x
+        sta BlTab,x
+        inx
+        inx
+        cpx #15*8
+        bcc .sh
+        dec BlN
+.room:  lda BlN
+        asl a
+        asl a
+        asl a
+        tax
+        lda BlX
+        sta BlTab,x
+        lda BlY
+        sta BlTab+2,x
+        lda CurBits
+        sta BlTab+4,x
+        phx
+        lda BlFrames
+        jsr Random
+        plx
+        sta BlTab+6,x
+        inc BlN
+.o:     rts
+
+; DrawView, before the objects: the blood in view; what is out of view is gone.
+DrawBlood:
+        lda BlN
+        beq .o
+        jsr ViewCorner
+        ldx #0
+.l:     txa
+        lsr a
+        lsr a
+        lsr a
+        cmp BlN
+        bcs .o
+        lda BlTab+4,x
+        cmp CurBits
+        bne .gone
+        phx
+        lda BlTab+2,x
+        tay
+        lda BlTab,x
+        tax
+        jsr CellOnScreen
+        plx
+        bcc .gone
+        lda BlTab+6,x
+        clc
+        adc BlFirst
+        sta SprId
+        phx
+        jsr DrawSprite
+        plx
+        txa
+        clc
+        adc #8
+        tax
+        bra .l
+.gone:  phx                     ; out of view (or another map): gone
+.m:     lda BlTab+8,x
+        sta BlTab,x
+        inx
+        inx
+        cpx #15*8
+        bcc .m
+        plx
+        dec BlN
+        bra .l
+.o:     rts
+
+; Look at CurX, CurY with nothing else there: carry set (A = its name) if blood lies there.
+BloodHere:
+        ldx #0
+.l:     txa
+        lsr a
+        lsr a
+        lsr a
+        cmp BlN
+        bcs .no
+        lda BlTab,x
+        cmp CurX
+        bne .n
+        lda BlTab+2,x
+        cmp CurY
+        bne .n
+        lda BlTab+4,x
+        cmp CurBits
+        bne .n
+        lda BlName
+        sec
+        rts
+.n:     txa
+        clc
+        adc #8
+        tax
+        bra .l
+.no:    clc
+        rts
+
+BlFirst:  .dw $FFFF
+BlFrames: .dw 0
+BlName:   .dw $FFFF
+BlN:      .dw 0
+BlX:      .dw 0
+BlY:      .dw 0
+BlTab:    .ds 16*8+8

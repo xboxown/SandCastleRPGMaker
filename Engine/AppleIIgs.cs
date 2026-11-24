@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 45;
+    public const ushort Version = 46;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -619,6 +619,8 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Min, int Max, int Ailment, int Flags, int Rearm, int Sound)> Traps { get; } = new();
     /// <summary>Light sources that burn down or burn (Object Editor > Light Source): name, burn minutes (0 never), fire damage min, max (max 0: not a fire).</summary>
     public List<(int Name, int Minutes, int FireMin, int FireMax)> Lights { get; } = new();
+    /// <summary>Ultima 6's blood under a body: the Blood sprite's frames as sprites (first, how many; $FFFF none) and its name ("blood").</summary>
+    public (int First, int Frames, int Name) Blood { get; set; } = (0xFFFF, 0, 0xFFFF);
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -881,6 +883,7 @@ public sealed class AppleIIgsGamePack
         foreach (var t in Traps.Take(64)) { w.Write((ushort)t.Name); w.Write((ushort)t.Min); w.Write((ushort)t.Max); w.Write((ushort)t.Ailment); w.Write((ushort)t.Flags); w.Write((ushort)t.Rearm); w.Write((ushort)t.Sound); w.Write((ushort)0); }
         w.Write((ushort)Math.Min(Lights.Count, 64));
         foreach (var l in Lights.Take(64)) { w.Write((ushort)l.Name); w.Write((ushort)l.Minutes); w.Write((ushort)l.FireMin); w.Write((ushort)l.FireMax); }
+        w.Write((ushort)Blood.First); w.Write((ushort)Blood.Frames); w.Write((ushort)Blood.Name);
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

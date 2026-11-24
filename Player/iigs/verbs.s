@@ -274,7 +274,10 @@ WhatIsThere:
         lda [ItemPtr],y
         jmp NameNumber
 .ground:
-        ldx CurX                ; the tile's own name, or "nothing"
+        jsr BloodHere           ; a death's blood there (floor.s)
+        bcc .tile
+        jmp NameNumber
+.tile:  ldx CurX                ; the tile's own name, or "nothing"
         ldy CurY
         jsr MapTile
         cmp #$FFFF

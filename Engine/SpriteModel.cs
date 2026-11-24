@@ -211,6 +211,8 @@ public class SpriteDatabase
     /// next one bigger, up to BloodSizes. No sound, no animation.
     /// </summary>
     public const string BloodGroupName = "Blood";
+    /// <summary>Ultima 6 projects: the Blood folder's one sprite - the blood a death leaves under the body (its frames: a random one each time).</summary>
+    public const string U6BloodSpriteName = "Blood";
     /// <summary>Exult's blood frames 0-3: four sizes, small to large.</summary>
     public const int BloodSizes = 4;
 
@@ -318,7 +320,13 @@ public class SpriteDatabase
 
     /// <summary>Ultima 8 projects: their own locked groups as well (never made in an Ultima 7 project).</summary>
     /// <summary>Ultima 6 projects: the Hit Spark group.</summary>
-    public void EnsureUltima6Groups() => GetOrCreateGroup(HitSparkGroupName);
+    public void EnsureUltima6Groups()
+    {
+        GetOrCreateGroup(HitSparkGroupName);
+        // Ultima 6: the Blood folder holds one sprite, made here, never renamed or deleted - the blood a death leaves.
+        var blood = GetOrCreateGroup(BloodGroupName);
+        if (blood.Sprites.All(s => s.Name != U6BloodSpriteName)) blood.Sprites.Insert(0, new SpriteEntry { Name = U6BloodSpriteName, Loop = false });
+    }
 
     public void EnsureUltima8Groups()
     {
