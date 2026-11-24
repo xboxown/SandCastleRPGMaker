@@ -53,3 +53,4 @@
 - [Apple IIgs modes](apple-iigs-modes.md) — U6 Apple IIgs mode STARTED b618 (pulled forward); Player/iigs (asm816 + sim816), GS/OS + accelerator, editor limits, KEGS test; U5 IIgs later
 - [Mac CI + remote machines](mac-ci-and-remote-machines.md) — Apple silicon built/tested by GitHub Actions; PPC/Intel Mac/Ubuntu over SSH per mac instruction.txt; .gitattributes binary lesson
 - [IIgs vs Windows audit](iigs-audit.md) — 2026-11-19: ~40 Windows U6 parts still missing on the IIgs, in work order; then issues.odt at once
+- [issues.odt #4](issues-odt-2026-11-23.md) — b665 done; PERMISSIONS.txt awaits the user's yes/no before filters, pickers, runtime things, wall plot, sprite generator
