@@ -78,6 +78,7 @@ public partial class MainWindow
         BuildHousesTab(); // the House Editor's tab, last (MainWindow.Houses.cs)
         BuildOnThisMapTab(); // everything placed on the map, to go to it (MainWindow.OnThisMap.cs)
         AddSpawnMode(); // Mode > Spawn (MainWindow.Spawns.cs)
+        AddWallPlotMode(); // Mode > Wall Plot, the Wall Kits tab (MainWindow.WallPlot.cs)
     }
 
     private sealed record WorldRow(MapData Map, bool Starting)

@@ -101,7 +101,7 @@ My idea - the same, with what is missing added (like RPG Maker's auto-tiles):
  - Ultima 6 (square walls), Ultima 7 and Ultima 8 (their own angles: the kit's pieces are drawn in the game's
    view, the kit only says which piece goes where).
  A 128 x 128 cave's walls: minutes.
-     Answer (GO / change this / let's talk): GO - the wall kit with T-joins (user, 2026-11-24)
+     Answer (GO / change this / let's talk): GO - the wall kit with T-joins (user, 2026-11-24) - DONE b666
 
 =====================================================================================================
 6. THE SPRITE GENERATOR (you asked to discuss it first) - my honest view

@@ -63,7 +63,7 @@ public partial class MainWindow : Window
     private StatDatabase _statDatabase = StatDatabase.CreateDefault();
     private PoseDatabase _poseDatabase = PoseDatabase.CreateDefault();
 
-    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone, House, Spawn }
+    private enum EditMode { Map, Event, StartPosition, Item, Character, Object, Free, Zone, House, Spawn, WallPlot }
     private EditMode _editMode = EditMode.Map;
 
     private enum DrawShape { Single, Line, Rectangle, Circle }
@@ -1195,6 +1195,10 @@ public partial class MainWindow : Window
         if (_houseModeItem is not null) _houseModeItem.IsChecked = false; // MainWindow.Houses.cs
         if (_vehicleModeItem is not null) _vehicleModeItem.IsChecked = false;
         if (_spawnModeItem is not null) _spawnModeItem.IsChecked = false; // MainWindow.Spawns.cs
+        if (_wallPlotModeItem is not null) _wallPlotModeItem.IsChecked = false; // MainWindow.WallPlot.cs
+        HideWallRect();
+        _wallRectStart = null;
+        EndWallStroke();
         HideHouseGhost();
         _selectedZone = null;
         DrawZones(); // zones show only in Zones mode
@@ -1785,6 +1789,7 @@ public partial class MainWindow : Window
         }
 
         if (_editMode == EditMode.Spawn) { SpawnMode_Click(x, y, e.ClickCount); return; } // MainWindow.Spawns.cs
+        if (_editMode == EditMode.WallPlot) { WallPlot_MouseLeftButtonDown(x, y); return; } // MainWindow.WallPlot.cs
 
         if (_editMode == EditMode.Zone)
         {
@@ -1942,6 +1947,7 @@ public partial class MainWindow : Window
         }
 
         if (_editMode == EditMode.Object) { ObjectMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
+        if (_editMode == EditMode.WallPlot) { WallPlot_MouseMove(hoverX, hoverY, e); return; } // MainWindow.WallPlot.cs
         if (_editMode == EditMode.Free) { FreeMode_MouseMove(rawPoint, e.LeftButton); return; }
         if (_editMode == EditMode.Zone) { ZoneMode_MouseMove(hoverX, hoverY, e.LeftButton); return; }
 
@@ -1975,6 +1981,7 @@ public partial class MainWindow : Window
 
         var (x, y) = CellFromPoint(e.GetPosition(MapCanvas));
 
+        if (WallPlot_MouseLeftButtonUp(x, y)) return; // MainWindow.WallPlot.cs
         if (ZoneMode_MouseLeftButtonUp(x, y)) return;
         if (FreeMode_MouseLeftButtonUp(e.GetPosition(MapCanvas))) return;
         if (CharacterMode_MouseLeftButtonUp(x, y)) return;
@@ -2028,6 +2035,7 @@ public partial class MainWindow : Window
         }
 
         if (_editMode == EditMode.Spawn) { SpawnMode_RightClick(x, y); return; } // MainWindow.Spawns.cs
+        if (_editMode == EditMode.WallPlot) { WallPlot_MouseRightButtonDown(x, y); return; } // MainWindow.WallPlot.cs
 
         if (_editMode == EditMode.Event)
         {

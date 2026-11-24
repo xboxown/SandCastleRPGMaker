@@ -273,6 +273,13 @@ public class ObjectInstance : IHasDollState
     /// <summary>A piece of a wall set (Wall Designer), split from it when the game starts: it stays at the height it was designed at (never falls), and is otherwise its own object - a wall, a window, a door.</summary>
     public bool WallSetPiece { get; set; }
 
+    /// <summary>Map Editor only: the wall kit (Mode > Wall Plot) this piece was drawn with - 0 = none. In play it is an ordinary object.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public int WallKitId { get; set; }
+    /// <summary>Map Editor only: a door, window or wall set put into a drawn wall (Wall Plot) - it stays when the pieces round it change.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool WallKitFixed { get; set; }
+
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
     /// <summary>In play: the vehicle (VehicleState.Id) this is a piece of; 0 = none.</summary>
@@ -359,6 +366,9 @@ public class ObjectDatabase
     /// <summary>Wall sets made in the Wall Designer (a wall with a window, a doorway); a Wall object links to one.</summary>
     public List<WallDesign> WallDesigns { get; set; } = new();
     public int NextWallDesignId() => WallDesigns.Count == 0 ? 1 : WallDesigns.Max(s => s.Id) + 1;
+    /// <summary>Wall kits (Tools > Wall Kits): which piece goes where when walls are drawn in the Map Editor (Mode > Wall Plot).</summary>
+    public List<WallKit> WallKits { get; set; } = new();
+    public int NextWallKitId() => WallKits.Count == 0 ? 1 : WallKits.Max(k => k.Id) + 1;
     /// <summary>Circles added after Exult's nine (Linear, First to Eighth - fixed): Ninth, Necromancy... numbered 9 and up.</summary>
     public List<SpellCircle> CustomCircles { get; set; } = new();
 
