@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- The editor's AI artist (sprite generator B): Stable Diffusion 1.5 run locally on the graphics card through
+       ONNX Runtime + DirectML (any DirectX 12 card - the user's RTX 3050; no CUDA install). The model files are not
+       in the repo: they live in a folder the editor points at (default H:\SandcastleAI\sd15-fp16). -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>SandcastleRpgMaker.AI</RootNamespace>
+    <AssemblyName>SandcastleRpgMaker.AI</AssemblyName>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.ML.OnnxRuntime.DirectML" Version="1.24.4" />
+  </ItemGroup>
+
+</Project>
