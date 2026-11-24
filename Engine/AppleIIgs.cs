@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 41;
+    public const ushort Version = 42;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -609,6 +609,14 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Sprite, int Flags)> CharBodies { get; } = new();
     public int AvatarBody { get; set; } = 0xFFFF;
     public int BodyName { get; set; } = 0xFFFF;
+    /// <summary>Spawn points (eggs, Map Editor > Spawn): map, x, y, kind (0 monster, 1 music, 2 sound, 3 usecode, 4 missile,
+    /// 5 teleport, 6 weather, 7 path, 8 button), when (0 map entered, 1 party near, 2 avatar near, 3 avatar far, 4 avatar on it,
+    /// 5 party on it, 6 something put down, 7 a button), distance, chance, flags (1 nocturnal, 2 once, 4 auto-reset,
+    /// 8 continuous), its code (Codes; $FFFF none), its stop code, missile sprite, damage min / max, direction ($FFFF at the
+    /// party, else 0-7 N..NW), delay (ticks), range, weather minutes.</summary>
+    public List<int[]> Eggs { get; } = new();
+    /// <summary>Monster eggs' characters: map, place in its list (absent till hatched), egg, chance.</summary>
+    public List<(int Map, int Index, int Egg, int Percent)> EggChars { get; } = new();
     /// <summary>Variables that hold a text from the start (Variable type Text: empty).</summary>
     public List<int> TextVariables { get; } = new();
     /// <summary>Each map's name (Get Game Data's Map name).</summary>
@@ -840,6 +848,11 @@ public sealed class AppleIIgsGamePack
         foreach (var sp in specs) { w.Write((ushort)specAt); specAt += sp.Length + (sp.Length & 1); }
         w.Write((ushort)specAt);
         foreach (var sp in specs) { w.Write(sp); if ((sp.Length & 1) == 1) w.Write((byte)0); }
+        // Eggs and their characters.
+        w.Write((ushort)Math.Min(Eggs.Count, 64));
+        foreach (var e in Eggs.Take(64)) for (int i = 0; i < 18; i++) w.Write((ushort)(i < e.Length ? e[i] : 0));
+        w.Write((ushort)Math.Min(EggChars.Count, 128));
+        foreach (var (em, ix, eg, pc) in EggChars.Take(128)) { w.Write((ushort)em); w.Write((ushort)ix); w.Write((ushort)eg); w.Write((ushort)pc); }
         // Bodies.
         w.Write((ushort)AvatarBody); w.Write((ushort)BodyName);
         w.Write((ushort)Math.Min(CharBodies.Count, 128));

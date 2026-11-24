@@ -2953,4 +2953,6 @@ AvDown:   .dw 0                 ; (bodies.s: the Avatar knocked out - saved)
 ChgN:     .dw 0                 ; (items.s: the charges left of wands and weapons)
 ChgObj:   .ds 128
 ChgLeft:  .ds 128
+EggSt:    .ds 128               ; (eggs.s: each egg's state and weather minutes left - saved)
+EggWM:    .ds 128
 SCRIPTEND: .dw 0

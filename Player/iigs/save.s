@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 6
+SAVE_VERSION = 7
 
 ; Ctrl+S
 SaveGame:

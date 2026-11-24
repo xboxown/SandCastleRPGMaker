@@ -20,13 +20,7 @@ Done since: b659 crafting/work, b660 wands/potions/charges, b661 HUD dials/date/
 Eggs (item 2) half done and PARKED: editor side saved in H:\_sandcastle_test_temp\eggs_AppleIIgs.cs / eggs_MainWindow.AppleIIgs.cs
 (and the script iigs_b663_cs.py); design: Eggs list (18 words each), EggChars absent copies, codes trigger 18; player eggs.s
 not written yet.
-RESUME HERE (user 2026-11-20: "resume apple //gs"; usage limit hit, back 2026-11-24). issues.odt done in b663
-(Camera Follows light, Show Bark Language, Pick on Map). Repo clean at b663 (+ Ubuntu player commit).
-Next: 1) python H:\_sandcastle_test_temp\iigs_b663_cs.py, then in Engine/AppleIIgs.cs rename the EggChars write's tuple
-var m -> em (CS0136); build. 2) write Player/iigs/eggs.s (EggRun from IdleTurn every 15 ticks: criteria transitions, hatch,
-unhatch, launchers, weather minutes; monster: absent copies (flag 4) placed on a free cell near the egg; codes queued with
-QT 18, QX $FFFE; SomethingOn from DroppedEvents; egg states saved in texts.s SCRIPTDATA), GAME.DAT 42, main.s version 42.
-3) sim816 test, release.py as b664. Then continue the list below (item 3 onward).
+EGGS DONE in b664 (eggs.s; GAME.DAT 42, SAVE 7; harness IIGS_EGGS / IIGS_MISSILE in iigspack). Next: the user's updated issues.odt (2026-11-23), then continue the list below from item 3.
 Missing or partial on the IIgs (from the file summaries), rough order to do:
 1. (done b662) Bodies + Unconscious
 2. Spawns / eggs (monster, music, sound, weather, usecode, missile eggs) - Spawns.cs

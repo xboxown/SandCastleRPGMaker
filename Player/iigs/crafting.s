@@ -38,7 +38,7 @@ ParseSpecials:
         stz JobN
         lda T4
         jsr AddPtr
-        jmp ParseBodies         ; (bodies.s)
+        jmp ParseEggs           ; (eggs.s)
 
 ; Special A's record copied into SpRec (256 bytes at most).
 CopySpec:

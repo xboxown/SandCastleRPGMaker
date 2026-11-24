@@ -86,6 +86,7 @@ StayEvents:
 
 ; On a map (the game starting, Change Map): the queue of the map left forgotten, this one's Always events.
 NewMapEvents:
+        jsr EggsArrive          ; its eggs looked at afresh (eggs.s)
         stz QN
         stz EvScan
 ArriveEvents:
@@ -107,6 +108,7 @@ PickedEvents:
 ; A thing (A = its name) dropped on X, Y.
 DroppedEvents:
         sta EvItem
+        jsr EggDropped          ; (eggs.s)
         lda #T_DROP
         jsr QueueEvent
 Having:

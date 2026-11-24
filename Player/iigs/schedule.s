@@ -26,6 +26,7 @@ ClockRun:
         lda T4
         sta ClockTick
         inc Minute
+        jsr EggMinute           ; weather eggs' minutes (eggs.s)
         jsr HudClock            ; the HUD's date, compass, sun and moons (hud.s)
         lda Minute
         cmp #60

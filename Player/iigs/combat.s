@@ -269,6 +269,7 @@ IdleTurn:
         jsr WeatherRun          ; the weather (weather.s)
         jsr VehicleRun          ; vehicles (vehicles.s)
         jsr CraftRun            ; crafting stations at work (crafting.s)
+        jsr EggRun              ; spawn points (eggs.s)
         lda Mode
         bne .out
         lda CombatOn            ; (the Avatar knocked out: the world goes on, in combat too - bodies.s)

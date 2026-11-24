@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 42 (b664): spawn points - eggs (eggs.s): monsters, music, sounds, common events, missiles, teleports,
+; weather, buttons; map entered / party or Avatar near / far / on it / something put down.
 ; Version 41 (b662): knocked out and dead bodies (bodies.s).
 ; Version 40 (b661): the HUD's date-and-wind words, compass, sun and moons, custom buttons (hud.s).
 ; Version 39 (b660): wands, scrolls, potions, weapons with charges (items.s).
@@ -662,7 +664,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #41
+        cmp #42
         beq .known
 .bad:   sec
         rts
@@ -2137,6 +2139,7 @@ TryMove:
         .include "items.s"
         .include "hud.s"
         .include "bodies.s"
+        .include "eggs.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

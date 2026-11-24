@@ -409,7 +409,7 @@ public partial class MainWindow
         var worldList = (_worlds.Count > 0 ? _worlds : new List<MapData> { first }).Take(AppleIIgsLimits.MaxMaps)
             .Select(m =>
             {
-                if (m.Houses.Count == 0) return m;
+                if (m.Houses.Count == 0 && m.SpawnPoints.Count == 0) return m;
                 var copy = System.Text.Json.JsonSerializer.Deserialize<MapData>(System.Text.Json.JsonSerializer.Serialize(m))!;
                 HouseBuilder.BuildInto(copy, ProjectSession.Houses);
                 return copy;
@@ -1065,10 +1065,74 @@ public partial class MainWindow
             }
             return ownCode[key] = result;
         }
+        // Spawn points: each map's eggs (their commands as code), monster eggs' characters as absent copies (MapCharacters).
+        var eggPlacements = new Dictionary<(MapData, int), List<PlacedCharacter>>();
+        var eggCopy = new Dictionary<PlacedCharacter, (int Egg, int Percent, int X, int Y)>();
+        void MapEggs(MapData world, int floor, int mapNo)
+        {
+            foreach (var egg in world.SpawnPoints.Where(e => e.Floor == floor))
+            {
+                if (pack.Eggs.Count >= 64) break;
+                int eggNo = pack.Eggs.Count;
+                int Code(params EventCommand[] cmds)
+                {
+                    AppleIIgsTalk.CompileEvent(new() { new AppleIIgsTalk.EventPage(18, -1, 2, new(), cmds.ToList()) }, VariableOf, out var c, out _,
+                        id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+                    pack.Codes.Add(c);
+                    return pack.Codes.Count - 1;
+                }
+                EventCommand Cmd(EventCommandType t, params (string K, string V)[] ps) { var c = new EventCommand { Type = t }; foreach (var (k, v) in ps) c.Parameters[k] = v; return c; }
+                int code = 0xFFFF, stop = 0xFFFF;
+                switch (egg.Kind)
+                {
+                    case EggKind.Music:
+                        code = Code(Cmd(EventCommandType.PlayMusic, ("MusicResourceId", egg.SoundId.ToString()), ("Loop", egg.Continuous ? "True" : "False")));
+                        if (egg.Continuous) stop = Code(Cmd(EventCommandType.StopMusic, ("Seconds", "0")));
+                        break;
+                    case EggKind.Sound:
+                        code = Code(Cmd(EventCommandType.PlaySound, ("SoundResourceId", egg.SoundId.ToString())));
+                        break;
+                    case EggKind.Usecode when egg.CommonEventId >= 0:
+                        code = Code(Cmd(EventCommandType.CallCommonEvent, ("CommonEventId", egg.CommonEventId.ToString())));
+                        break;
+                    case EggKind.Teleport:
+                    {
+                        int tw = egg.TeleportWorld, tx = egg.TeleportX, ty = egg.TeleportY;
+                        if (egg.TeleportPath >= 0 && world.SpawnPoints.FirstOrDefault(pp => pp.Kind == EggKind.Path && pp.PathNumber == egg.TeleportPath) is { } path) (tw, tx, ty) = (-1, path.X, path.Y);
+                        if (tx >= 0 && ty >= 0)
+                            code = Code(Cmd(EventCommandType.ChangeMap, ("World", tw > 0 ? tw.ToString() : ""), ("X", tx.ToString()), ("Y", ty.ToString()), ("Floor", egg.TeleportFloor.ToString()), ("Fade", "False")));
+                        break;
+                    }
+                    case EggKind.Weather:
+                        code = Code(Cmd(EventCommandType.ChangeWeather, ("Kind", egg.WeatherKind), ("Intensity", egg.WeatherIntensity.ToString()), ("Clouds", "")));
+                        break;
+                }
+                int sprite = 0xFFFF, dmin = 0, dmax = 0, launch = 0xFFFF;
+                if (egg.Kind == EggKind.Missile && _objectDatabase.Objects.FirstOrDefault(o => o.Id == egg.ProjectileId && o.Type == ObjectType.Projectile) is { } proj)
+                {
+                    var pf = ObjectLooks.SpriteFor(proj, ObjectLooks.DefaultState(proj), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? proj.IconPath;
+                    sprite = SpriteOf(pf) is int ps and >= 0 ? ps : 0xFFFF;
+                    (dmin, dmax) = (Math.Max(0, proj.Projectile.DamageMin), Math.Max(proj.Projectile.DamageMin, proj.Projectile.DamageMax));
+                }
+                int dir = egg.Direction < 0 ? 0xFFFF : egg.Direction & 7;
+                pack.Eggs.Add(new[] { mapNo, egg.X, egg.Y, (int)egg.Kind, (int)egg.Criteria, Math.Clamp(egg.Distance, 0, 63), Math.Clamp(egg.Probability, 1, 100),
+                    (egg.Nocturnal ? 1 : 0) | (egg.Once ? 2 : 0) | (egg.AutoReset ? 4 : 0) | (egg.Continuous ? 8 : 0), code, stop, sprite, dmin, dmax, dir,
+                    (int)Math.Clamp(Math.Round(egg.DelaySeconds * 60), 12, 3600), Math.Clamp(egg.RangeTiles, 1, 63), Math.Clamp(egg.WeatherMinutes, 0, 30000), launch });
+                if (egg.Kind != EggKind.Monster) continue;
+                if (!eggPlacements.TryGetValue((world, floor), out var pl)) eggPlacements[(world, floor)] = pl = new List<PlacedCharacter>();
+                foreach (var entry in egg.Entries.Where(en => en.CharacterId >= 0))
+                    for (int k = 0; k < Math.Clamp(entry.Count, 1, 8); k++)
+                    {
+                        var copy = new PlacedCharacter { Id = 900000 + eggNo * 64 + pl.Count, CharacterId = entry.CharacterId, X = egg.X, Y = egg.Y, Floor = floor };
+                        pl.Add(copy);
+                        eggCopy[copy] = (eggNo, Math.Clamp(entry.Percent, 0, 100), egg.X, egg.Y);
+                    }
+            }
+        }
         List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules, int floor = 1, int mapNo = 0)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
-            foreach (var placed in world.Characters.Where(c => !c.Dead && c.Floor == floor))
+            foreach (var placed in world.Characters.Where(c => !c.Dead && c.Floor == floor).Concat(eggPlacements.TryGetValue((world, floor), out var eggPl) ? eggPl : new List<PlacedCharacter>()))
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Id == placed.CharacterId);
                 if (who is null || who.IsTestPlayer) continue;
@@ -1121,10 +1185,20 @@ public partial class MainWindow
             stats[AppleIIgsGamePack.Stat.Behaviour] = who.Schedules.Count > 0 ? 2 : Hostile(who) ? 1 : 0;
             list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
                 if (OwnEvents(who.EventPages, "c" + who.Id) is int ownCode) pack.CharEvents.Add((mapNo, list.Count - 1, ownCode));
+                if (eggCopy.TryGetValue(placed, out var ec))
+                {
+                    // An egg's monster: not there till the egg hatches; it roams round the egg (free: anywhere).
+                    var last = list[^1];
+                    last.Stats[AppleIIgsGamePack.Stat.Behaviour] = 1;
+                    last.Stats[AppleIIgsGamePack.Stat.HomeX] = ec.X; last.Stats[AppleIIgsGamePack.Stat.HomeY] = ec.Y;
+                    list[^1] = last with { Flags = last.Flags | 4 };
+                    pack.EggChars.Add((mapNo, list.Count - 1, ec.Egg, ec.Percent));
+                }
             }
             if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
             return list;
         }
+        MapEggs(start, 1, 0);
         characters.AddRange(MapCharacters(start, pack.Schedules));
         pack.StartHour = _systemSettings.Clock.StartHour;
         // A map's events: stepped on (By Enter), their first such page's commands run - made into the talk code.
@@ -1245,6 +1319,7 @@ public partial class MainWindow
                 StartX = world.StartX >= 0 && world.StartX < world.Width ? world.StartX : world.Width / 2,
                 StartY = world.StartY >= 0 && world.StartY < world.Height ? world.StartY : world.Height / 2 };
             AddMapObjects(world, mi << 12);
+            MapEggs(world, 1, mi);
             other.Characters.AddRange(MapCharacters(world, other.Schedules, 1, mi));
             other.Events.AddRange(MapEvents(world, other.EventMasks));
             pack.OtherMaps.Add(other);
@@ -1254,6 +1329,7 @@ public partial class MainWindow
             var world = worldList[wi];
             var other = new AppleIIgsMap { Width = world.Width, Height = world.Height, Map = Grid(world, f, StairTops(world, f)), StartX = world.StartX, StartY = world.StartY };
             AddMapObjects(world, mi << 12, f);
+            MapEggs(world, f, mi);
             other.Characters.AddRange(MapCharacters(world, other.Schedules, f, mi));
             other.Events.AddRange(MapEvents(world, other.EventMasks, f));
             pack.OtherMaps.Add(other);
