@@ -741,6 +741,9 @@ public partial class MainWindow
             int role = def.VehicleRole switch { VehiclePartRole.DriverSeat => 1, VehiclePartRole.Controls => 2, VehiclePartRole.Wheel => 3, _ => 0 };
             pack.VehicleParts.Add((vi, objIndex, role, looks, moving));
         }
+        // Levers, switches, buttons: their links (Map Editor > Link) become objects' numbers once every map's objects are in (lever.s).
+        var instanceAt = new Dictionary<(MapData, int), int>();
+        var pendingLevers = new List<(MapData World, ObjectInstance Instance, WorldObject Def, int At, int Other, bool On)>();
         void AddMapObjects(MapData world, int bits, int floor = 1)
         {
             foreach (var instance in world.Objects.Where(o => o.ContainerInstanceId < 0))
@@ -782,10 +785,21 @@ public partial class MainWindow
                     other = spc;
                     if (def.Type == ObjectType.Plant) { objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, Math.Clamp(instance.FrameRuntime, 0, 3), -1)); continue; }
                 }
+                if (def.Type == ObjectType.Lever)
+                {
+                    // A lever, switch or button: its off look (its own) and on look (Lever > On sprite) - the one not shown kept in its record.
+                    bool on = instance.IsOpenRuntime ?? def.Lever.StartsOn;
+                    int offLook = SpriteOf(ObjectLooks.SpriteFor(def, state with { Open = false }, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath) is int ol and >= 0 ? ol : n;
+                    int onLook = def.Lever.OnSprite.IsSet && ObjectLooks.Find(_spriteDatabase, def.Lever.OnSprite.SpriteGroup, def.Lever.OnSprite.SpriteName)?.Frames.FirstOrDefault()?.FilePath is { } onFile && SpriteOf(onFile) is int nl and >= 0 ? nl : offLook;
+                    pendingLevers.Add((world, instance, def, objects.Count, on ? offLook : onLook, on));
+                    objects.Add((instance.X, instance.Y, on ? onLook : offLook, objFlags | bits, pack.NameOf(def.Name), 0xFFFB, IconOf(file), -1));
+                    continue;
+                }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
               }
               finally
               {
+                if (objects.Count > objAt && instance.InstanceId > 0) instanceAt[(world, instance.InstanceId)] = objAt;
                 // A piece of a vehicle: the vehicle (its footprint, settings), the piece's role and its turned looks.
                 if (instance.VehicleStateId != 0 && objects.Count > objAt) VehiclePiece(world, instance, objAt, bits >> 12);
               }
@@ -1568,6 +1582,13 @@ public partial class MainWindow
             foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
             for (int oi = 0; oi < objects.Count; oi++)
                 if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
+        }
+        foreach (var (lw, li, ld, lat, lother, lon) in pendingLevers)
+        {
+            int Snd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int s) ? s : 0xFFFF;
+            var links = li.LinkedInstanceIds.Select(id => instanceAt.TryGetValue((lw, id), out int at) ? at : -1).Where(at => at >= 0).Take(4).ToArray();
+            pack.Levers.Add((lat, (int)ld.Lever.Kind, lother, Snd(ld.Lever.OnSoundResourceId), Snd(ld.Lever.OffSoundResourceId),
+                (int)Math.Ceiling(Math.Max(0, ld.Lever.ButtonResetSeconds) * 2), lon, links));
         }
         // Spare objects (gone, no name) that Give Item fills in at play.
         for (int i = 0; i < 48; i++) objects.Add((0xFFFF, 0xFFFF, 0, 32, 0xFFFF, 0xFFFF, 0xFFFF, -1));

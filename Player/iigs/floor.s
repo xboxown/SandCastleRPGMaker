@@ -200,6 +200,7 @@ FloorCharStep:
 
 ; Each turn: traps re-arm, the Avatar's Stand On tiles, everyone standing in a lit fire is burnt.
 FloorTurn:
+        jsr LeverTurn           ; pressed buttons spring back (lever.s)
         ldx #0                  ; re-arming
         ldy TrSN
 .r:     cpy #0
@@ -616,7 +617,8 @@ ParseBlood:
         sta BlName
         stz BlN
         lda #6
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseLevers         ; (lever.s)
 
 ; Dies: blood where DefP fell.
 DeathBlood:

@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 46;
+    public const ushort Version = 47;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -621,6 +621,9 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Minutes, int FireMin, int FireMax)> Lights { get; } = new();
     /// <summary>Ultima 6's blood under a body: the Blood sprite's frames as sprites (first, how many; $FFFF none) and its name ("blood").</summary>
     public (int First, int Frames, int Name) Blood { get; set; } = (0xFFFF, 0, 0xFFFF);
+    /// <summary>Levers, switches, buttons (an object's Other $FFFB): object, kind (0 lever, 1 switch, 2 button), its other look,
+    /// on / off sounds, reset turns, on, the objects it is linked to (4 at most) - lever.s.</summary>
+    public List<(int Obj, int Kind, int Other, int OnSnd, int OffSnd, int Reset, bool On, int[] Links)> Levers { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -884,6 +887,15 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Min(Lights.Count, 64));
         foreach (var l in Lights.Take(64)) { w.Write((ushort)l.Name); w.Write((ushort)l.Minutes); w.Write((ushort)l.FireMin); w.Write((ushort)l.FireMax); }
         w.Write((ushort)Blood.First); w.Write((ushort)Blood.Frames); w.Write((ushort)Blood.Name);
+        w.Write((ushort)Math.Min(Levers.Count, 32));
+        foreach (var l in Levers.Take(32))
+        {
+            int Place(int i) => i >= 0 && i < newPlace.Length ? newPlace[i] : 0xFFFF; // the objects were written top to bottom
+            w.Write((ushort)Place(l.Obj)); w.Write((ushort)l.Kind); w.Write((ushort)l.Other); w.Write((ushort)l.OnSnd); w.Write((ushort)l.OffSnd); w.Write((ushort)l.Reset);
+            w.Write((ushort)(l.On ? 1 : 0)); w.Write((ushort)Math.Min(l.Links.Length, 4));
+            for (int i = 0; i < 4; i++) w.Write((ushort)(i < l.Links.Length ? Place(l.Links[i]) : 0));
+            for (int i = 0; i < 4; i++) w.Write((ushort)0);
+        }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

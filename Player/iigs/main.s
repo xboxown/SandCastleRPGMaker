@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 47 (b679): levers, switches and buttons working what they are linked to - lever.s.
 ; Version 46 (b677): Ultima 6's death - the body in its sleeping look, blood under it (looked at, never taken, gone out of
 ;   view) - floor.s.
 ; Version 45 (b675): tiles' step events, ground traps, fires that burn, lights that burn down - floor.s.
@@ -671,7 +672,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #46
+        cmp #47
         beq .known
 .bad:   sec
         rts
@@ -2182,6 +2183,7 @@ TryMove:
         .include "moves.s"
         .include "solo.s"
         .include "floor.s"
+        .include "lever.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

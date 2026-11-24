@@ -437,7 +437,10 @@ PickCell:
         jsr ObjEvent
         bcc .noev
         rts
-.noev:  jsr SpecUse             ; a plant, a crafting station, an instrument (crafting.s)
+.noev:  jsr LeverUse            ; a lever, switch or button (lever.s)
+        bcc .nlv
+        rts
+.nlv:   jsr SpecUse             ; a plant, a crafting station, an instrument (crafting.s)
         bcc .nsp
         rts
 .nsp:   lda Kind
