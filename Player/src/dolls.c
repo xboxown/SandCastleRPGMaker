@@ -132,6 +132,8 @@ cJSON *dolls_design(int id)
 }
 
 static cJSON *parts_of(cJSON *design) { return get(design, "Parts"); }
+/* Every window closed or brought to the front changes the windows' numbers: a press held from before is no longer good. */
+static unsigned dollGeneration;
 static cJSON *part_at(cJSON *design, int i) { return cJSON_GetArrayItem(parts_of(design), i); }
 static int part_count(cJSON *design) { return cJSON_GetArraySize(parts_of(design)); }
 static int kind_of(cJSON *part) { return num(part, "Kind", 0); }
@@ -1125,6 +1127,7 @@ int dolls_window_y(int i) { return wins[i]->y; }
 void dolls_move_window(int i, int x, int y) { if (!wins[i]->title) { wins[i]->x = x; wins[i]->y = y; } }
 int dolls_to_front(int i)
 {
+    dollGeneration++;
     if (wins[winCount - 1]->modal && !wins[i]->modal) return i; /* a modal one stays on top */
     DollWin *w = wins[i];
     memmove(&wins[i], &wins[i + 1], sizeof(DollWin *) * (size_t)(winCount - i - 1));
@@ -1156,6 +1159,8 @@ static DollWin *open_window(DollState *state, cJSON *design, int modal, int titl
 
 void dolls_close_window(int i)
 {
+    if (i < 0 || i >= winCount) return;
+    dollGeneration++;
     DollWin *w = wins[i];
     memmove(&wins[i], &wins[i + 1], sizeof(DollWin *) * (size_t)(winCount - i - 1));
     winCount--;
@@ -1693,8 +1698,10 @@ void dolls_restore_item(DollState *s, int part, Item *it, int index)
 
 void dolls_item_taken(DollState *s, int part, Item *it) { fire(s, part, TR_PICKUP, items_category(it), items_item_id(it), -1); }
 DollState *dolls_window_state(int wi) { return wins[wi]->state; }
-int dolls_part_draggable(int wi, int i) { return flag(part_at(wins[wi]->design, i), "Draggable") && !closed_lid_over(wins[wi]->state, part_at(wins[wi]->design, i)); }
-const Sprite *dolls_part_look(int wi, int i) { PartState *r = &wins[wi]->state->parts[i]; const Sprite *s = look_sprite(part_at(wins[wi]->design, i), r->look); return s ? s : look_sprite(part_at(wins[wi]->design, i), 0); }
+unsigned dolls_generation(void) { return dollGeneration; }
+static int part_ok(int wi, int i) { return wi >= 0 && wi < winCount && i >= 0 && i < part_count(wins[wi]->design); }
+int dolls_part_draggable(int wi, int i) { if (!part_ok(wi, i)) return 0; return flag(part_at(wins[wi]->design, i), "Draggable") && !closed_lid_over(wins[wi]->state, part_at(wins[wi]->design, i)); }
+const Sprite *dolls_part_look(int wi, int i) { if (!part_ok(wi, i)) return NULL; PartState *r = &wins[wi]->state->parts[i]; const Sprite *s = look_sprite(part_at(wins[wi]->design, i), r->look); return s ? s : look_sprite(part_at(wins[wi]->design, i), 0); }
 int dolls_is_reachable_window(int wi) { (void)wi; return 1; }
 DollState *dolls_state_of(void *item) { return (DollState *)items_doll((Item *)item); }
 

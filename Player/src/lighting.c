@@ -133,7 +133,7 @@ void lighting_update(double ms)
     double nightAmount;
     Sky sky = sky_now(&nightAmount);
     int inCave = events_eye_in_cave();
-    if (inCave) { sky.rgb = 0; sky.opacity = 1; nightAmount = 1; } /* a Cave: complete darkness, day or night - only a light source lifts it */
+    if (inCave) { double dark = events_eye_cave_darkness(); sky.rgb = 0; sky.opacity = dark; nightAmount = dark; } /* a Cave: its darkness (Zones > Darkness), day or night - only a light source lifts it */
     /* Overcast: weather and clouds darken the day (and the night a little more). */
     double gloom = (weatherKind == 0 ? 0 : weatherIntensity / 100.0) + (weatherClouds ? weatherCover / 200.0 : 0);
     gloom = inCave ? 0 : clamp01(gloom) * overcastStrength;

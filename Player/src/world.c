@@ -222,6 +222,12 @@ static void four_directions(const Sprite **dirs)
     dirs[1] = dirs[3] = dirs[2]; /* NE, SE: east */
     dirs[7] = dirs[5] = dirs[6]; /* NW, SW: west */
 }
+/* Ultima 7 draws four directions too (Exult's get_dir_framenum: the direction / 2): NE north, SE east, SW south, NW west. */
+static void four_directions_u7(const Sprite **dirs)
+{
+    dirs[1] = dirs[0]; dirs[3] = dirs[2]; dirs[5] = dirs[4]; dirs[7] = dirs[6];
+}
+static int is_u8_style(void) { return !strcmp(str(get(get(gameJson, "Project"), "Manifest"), "Style"), "Ultima8"); }
 static int dir_of(const char *name) { for (int i = 0; i < 8; i++) if (strcmp(DIR_NAMES[i], name) == 0) return i; return DIR_S; }
 
 static const ObjectDef *def_of(int id) { for (int i = 0; i < defCount; i++) if (defs[i].id == id) return &defs[i]; return NULL; }
@@ -412,6 +418,7 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
         }
         for (int i = 0; i < 8; i++) if (!pose->dirs[i]) pose->dirs[i] = south ? south : any;
         if (is_u6()) four_directions(pose->dirs);
+        else if (!is_u8_style()) four_directions_u7(pose->dirs);
     }
     cJSON_ArrayForEach(p, get(poses, "Poses"))
     {
@@ -435,6 +442,7 @@ static void read_actor_poses(cJSON *character, cJSON *poses, Actor *a)
         }
         for (int i = 0; i < 8; i++) if (!into[i]) into[i] = south ? south : any; /* PoseAssignment.Resolve */
         if (is_u6()) four_directions(into);
+        else if (!is_u8_style()) four_directions_u7(into);
     }
     /* ActorSizing: its own size, else from its idle picture (footprint = width / 16, height = what's left / 4). */
     a->sizeX = num(character, "SizeX", 0); a->sizeY = num(character, "SizeY", 0); a->sizeZ = num(character, "SizeZ", 0);
@@ -1914,6 +1922,12 @@ static int hidden_above(int z, int solid, int ceiling)
     return z > ceiling || (z == ceiling && solid);
 }
 
+/* Under a roof: a thing (not an object) or blood lying on a floor above the player's goes with that floor (UpdateRoofs). */
+static int above_players_floor(int z, int ceiling)
+{
+    return ceiling < (1 << 30) && floor_of(z) > floor_of(player.lift);
+}
+
 static void draw_world_once(uint32_t *pixels, uint32_t ms);
 
 /* The world - and on a map that wraps around, the land beyond an edge drawn in the gap, one map-width (or height) along. */
@@ -2383,7 +2397,8 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     {
         const Thing *t = &things[i];
         if (t->gone) continue;
-        if (hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling))
+        if (hidden_above(t->z, t->solid || (t->def && t->def->type == T_TILE && t->def->floorTile), ceiling)
+            || (t->category != 4 && above_players_floor(t->z, ceiling))) /* a body, a bag on a floor above: it goes with that floor */
         {
             if (t->def && t->def->type == T_TILE && (t->def->solid || t->def->floorTile) && t->z >= base_lift(2) && t->z == base_lift(floor_of(t->z)))
             {
@@ -2510,7 +2525,7 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms)
     {
         Puddle *pd = &puddles[i];
         const Picture *pic = pd->blood && pd->frame < pd->blood->frameCount ? frame_picture(&pd->blood->frames[pd->frame]) : NULL;
-        if (!pic || hidden_above(pd->lift, 0, ceiling)) continue;
+        if (!pic || hidden_above(pd->lift, 0, ceiling) || above_players_floor(pd->lift, ceiling)) continue;
         double px = pd->ux * 8 + 4.0, py = pd->uy * 8 + 4.0;
         Drawn *d = add_drawn(floor_of(pd->lift) - 1, (px / tileW + py / tileH) * 100.0 + pd->lift - 50, pic, (int)(px - pic->width / 2.0) - pd->lift * LIFT_SHIFT - cx, (int)(py - pic->height / 2.0) - pd->lift * LIFT_SHIFT - cy, pic->width, pic->height, &count);
         if (d) { d->mirror = pd->mirrored; if (u8View) d->place = P_CENTER; }
@@ -3765,12 +3780,14 @@ int world_light_strength(int *gives)
         total += strength * t->def->brightness;
         if (strength * t->def->brightness > 0 && t->def->gives > *gives) *gives = t->def->gives;
     }
-    /* every lit light a party member holds in a hand */
+    /* every lit light a party member - or whoever the view follows - holds in a hand */
+    const Actor *heldEye = light_eye();
     for (int a = 0; a <= npcCount; a++)
     {
         Actor *who = actor_of(a);
-        if (!items_in_party(who->characterId)) continue;
-        int dx = (int)fabs(floor((who->px - player.px) / UNIT + 0.5)), dy = (int)fabs(floor((who->py - player.py) / UNIT + 0.5));
+        if (!who) continue;
+        if (!items_in_party(who->characterId) && !(cameraFollow > 0 && a == cameraFollow)) continue;
+        int dx = (int)fabs(floor((who->px - heldEye->px) / UNIT + 0.5)), dy = (int)fabs(floor((who->py - heldEye->py) / UNIT + 0.5));
         int strength = 75 - 2 * dx - 3 * dy;
         if (strength <= 0) continue;
         int brightness[3], lightGives[3], n = items_hand_lights(who->characterId, brightness, lightGives); /* two hands and Magic light */

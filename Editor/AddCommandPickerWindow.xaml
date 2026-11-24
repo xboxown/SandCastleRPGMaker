@@ -9,6 +9,12 @@
             <Button Content="Cancel" Width="80" Margin="4" Click="CancelButton_Click" IsCancel="True"/>
         </StackPanel>
 
+        <DockPanel DockPanel.Dock="Top" Margin="0,0,0,8">
+            <TextBlock Text="Search:" VerticalAlignment="Center" Margin="0,0,6,0"/>
+            <TextBox x:Name="SearchBox" ToolTip="Words of a command's name, group, tab or description - &quot;light torch&quot; shows every command with light or torch in it"/>
+        </DockPanel>
+        <Grid>
+        <ListBox x:Name="SearchResults" Visibility="Collapsed"/>
         <TabControl x:Name="Tabs">
             <TabItem Header="Page 1">
                 <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -138,5 +144,6 @@
                 </ScrollViewer>
             </TabItem>
         </TabControl>
+        </Grid>
     </DockPanel>
 </Window>

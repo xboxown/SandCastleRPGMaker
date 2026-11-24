@@ -168,6 +168,25 @@ int events_zone_here(const char *purpose, int x, int y, int onFloor)
     return 0;
 }
 
+/* The darkness of the Cave where the light is judged (the darkest there, 0-1; Map Editor > Zones > Darkness, 1 when not set). */
+double events_eye_cave_darkness(void)
+{
+    int px, py, pf;
+    world_eye_cell(&px, &py, &pf);
+    double dark = -1;
+    cJSON *zone;
+    cJSON_ArrayForEach(zone, get(get(get((cJSON *)world_json(), "Project"), "Map"), "Zones"))
+        if (zone_covers(zone, px, py, pf) && zone_is(zone, "Cave"))
+        {
+            cJSON *d = get(zone, "Darkness");
+            double v = cJSON_IsNumber(d) ? d->valuedouble : 1.0;
+            if (v < 0) v = 0;
+            if (v > 1) v = 1;
+            if (v > dark) dark = v;
+        }
+    return dark < 0 ? 1.0 : dark;
+}
+
 int events_player_in_cave(void)
 {
     int px, py, pf;
@@ -553,6 +572,7 @@ static Run runs[MAX_RUNS];
 /* Who hears a paperdoll's answer: a run waiting for it, and / or a variable for it. */
 typedef struct Answer { int used; Run *run; char variable[64]; } Answer;
 static Answer answers[64];
+static int executingDepth; /* a command being carried out now (an event set off from inside another) */
 static void *dollContext, *lastDoll; /* the paperdoll events started now belong to; the last one (commands after a box is read) */
 static int new_answer(Run *r, const char *variable)
 {
@@ -3787,7 +3807,9 @@ static void continue_run(Run *r)
                 functionRun = r;
                 if (script_data_command(c->type, c->params)) continue; /* variables, texts, arrays, grids, the debug log */
                 {
+                    executingDepth++;
                     int goesOn = execute(r, c);
+                    executingDepth--;
                     script_arena_reset();
                     if (!goesOn) return;
                 }
@@ -3887,6 +3909,9 @@ static int fire_pages_core(Owner *o, int just, int activator, int byStepping)
             else if (fireCopy) snprintf(key, sizeof key, "obj:%d", world_thing_instance(fireCopy));
             else if (o->itemCategory) snprintf(key, sizeof key, "itemdef:%d:%d", o->itemCategory, o->itemId);
             else snprintf(key, sizeof key, "char:%d", o->characterId);
+            /* Nothing open covers the scene (GameTestWindow.CloseGumpsForEvent): not for a paperdoll's own events, not from
+               inside another event, not for a container's "closed" event. */
+            if (!world_u8() && !u6_on() && !dollContext && !executingDepth && !(just == 9 && gumps_box_open()) /* 9: By Enter - a container's "closed" */) gumps_close_for_event(); /* Ultima 7 only */
             start_run_as(&p->list, activator, byStepping, key);
             return 1;
         }

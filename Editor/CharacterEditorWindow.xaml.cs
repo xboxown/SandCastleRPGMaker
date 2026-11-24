@@ -440,7 +440,7 @@ public partial class CharacterEditorWindow : Window
 
         foreach (SpriteDirection direction in Enum.GetValues<SpriteDirection>())
         {
-            if (ProjectSession.IsUltima6 && direction is SpriteDirection.NorthEast or SpriteDirection.SouthEast or SpriteDirection.SouthWest or SpriteDirection.NorthWest) continue; // Ultima 6: four directions
+            if (!ProjectSession.IsUltima8 && direction is SpriteDirection.NorthEast or SpriteDirection.SouthEast or SpriteDirection.SouthWest or SpriteDirection.NorthWest) continue; // Ultima 6 and 7: four directions (only Ultima 8 has eight)
             var (x, y) = PointFor(direction);
             bool hasSprite = assignment.Directions.ContainsKey(direction);
             bool isSelected = direction == selectedDirection;

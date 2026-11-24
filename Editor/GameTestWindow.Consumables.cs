@@ -158,6 +158,11 @@ public partial class GameTestWindow
         BeginChoosingTarget($"Use \"{u.Obj.Name}\" on what?", target =>
         {
             if (!ToolStillThere(u.Source)) return;
+            // Out of reach (behind walls - Exult's is_grabable): nothing happens, nothing is poured away.
+            if (ObjectTargeted(target) is { } far && !ReferenceEquals(far.Instance, u.Placed) && _map.Objects.Contains(far.Instance) && !IsReachable(far.Instance))
+            { Refuse(MousePointerKind.Blocked, CantReachMessage); return; }
+            if (CharacterTargeted(target) is { } farNpc && farNpc != _player && MapCharacterOf(farNpc) is { } farMc && !IsSpotReachable(farMc.Placement.X * UnitsPerTileX + UnitsPerTileX / 2, farMc.Placement.Y * UnitsPerTileY + UnitsPerTileY / 2, farMc.Lift))
+            { Refuse(MousePointerKind.Blocked, CantReachMessage); return; }
             if (ThingTargeted(target) is { } other && !IsSameThing(other, u) && PourBetween(u, other)) return; // another container, a bottle of water
             int liquidId = LiquidOf(u);
             var liquid = LiquidFood(liquidId);

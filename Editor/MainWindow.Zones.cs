@@ -210,6 +210,15 @@ public partial class MainWindow
         ambientRow.Children.Add(hush); ambientRow.Children.Add(listen); ambientRow.Children.Add(ambient);
         rows.Children.Add(Label("Ambient sound inside it (a Cave: instead of the world's - none keeps a cave quiet)"));
         rows.Children.Add(ambientRow);
+        // A Cave's darkness: 0 none - 1 complete.
+        var darkValue = new TextBlock { Width = 40, Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+        var dark = new Slider { Minimum = 0, Maximum = 1, Value = Math.Clamp(zone.Darkness, 0, 1), TickFrequency = 0.05, IsSnapToTickEnabled = true, Width = 260 };
+        darkValue.Text = dark.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        dark.ValueChanged += (_, _) => darkValue.Text = dark.Value.ToString("0.00", System.Globalization.CultureInfo.InvariantCulture);
+        var darkRow = new StackPanel { Orientation = Orientation.Horizontal };
+        darkRow.Children.Add(dark); darkRow.Children.Add(darkValue);
+        rows.Children.Add(Label("Darkness (a Cave only): 0 none - 1 complete darkness only a light source lifts, day or night"));
+        rows.Children.Add(darkRow);
         rows.Children.Add(Label($"Cells (floor {zone.Floor})"));
         rows.Children.Add(cells);
         var buttons = new StackPanel { Orientation = Orientation.Horizontal, HorizontalAlignment = HorizontalAlignment.Right, Margin = new Thickness(0, 12, 0, 0) };
@@ -223,6 +232,7 @@ public partial class MainWindow
             zone.Name = name.Text.Trim();
             zone.Purpose = purpose.Text.Trim();
             zone.AmbientSoundId = ambient.SelectedItem is ResourceEntry picked ? picked.Id : -1;
+            zone.Darkness = Math.Round(dark.Value, 2);
             zone.Color = color.SelectedItem as string ?? zone.Color;
             zone.X = Math.Clamp(x, 0, _map.Width - 1);
             zone.Y = Math.Clamp(y, 0, _map.Height - 1);

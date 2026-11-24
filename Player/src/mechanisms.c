@@ -1139,6 +1139,14 @@ static void liquid_target(void *context, const GumpsPick *pick)
 {
     Used *u = (Used *)context;
     if (!still_there(u)) return;
+    /* out of reach (behind walls - Exult's is_grabable): nothing happens, nothing is poured away */
+    if (pick->actor < 0 && pick->uid > 0 && pick->uid != u->uid && !world_reachable_thing(pick->uid)) { say("You can't reach that from here."); return; }
+    if (pick->actor > 0)
+    {
+        int ax, ay, af;
+        world_actor_cell(pick->actor, &ax, &ay, &af);
+        if (!world_reachable(ax, ay, world_actor_lift(pick->actor))) { say("You can't reach that from here."); return; }
+    }
     char name[96], line[240];
     snprintf(name, sizeof name, "%s", str(u->def, "Name")); lower(name);
     Used other;

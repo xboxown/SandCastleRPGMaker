@@ -18,6 +18,7 @@ void events_load(void);
 int events_zone_here(const char *purpose, int x, int y, int onFloor);
 int events_player_in_cave(void);
 int events_eye_in_cave(void);
+double events_eye_cave_darkness(void);
 
 /* Each frame: ms passed; paused while a dialog box is up. */
 void events_update(double ms, int paused);

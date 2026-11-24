@@ -34,6 +34,8 @@ int gumps_choosing_for(const void *context);
 void gumps_cancel_choosing(void);
 int gumps_turn_into(const void *state, int objectId);
 void gumps_close_container(const Item *box);
+void gumps_close_for_event(void);  /* an event starting: every paperdoll, backpack, container and stats window closes */
+int gumps_box_open(void);
 void gumps_next_stats(void);       /* Z */
 void gumps_next_inventory(void);   /* I */
 int gumps_save_screen_wanted(void); /* the disk button was clicked */

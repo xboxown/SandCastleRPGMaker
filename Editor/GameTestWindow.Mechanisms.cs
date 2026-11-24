@@ -237,8 +237,13 @@ public partial class GameTestWindow
             // A Floor tile is the floor itself: it goes with its floor (gamerend.cc: nothing at skip_lift or above is painted).
             foreach (var instance in _map.Objects.Where(o => o.ContainerInstanceId < 0 && (o.Z > lift || (o.Z == lift && (underFloor || IsSolidAt(null, o) || DefinitionOf(o) is { Type: ObjectType.Tile, IsFloorTile: true })))))
                 if (_objectVisuals.GetValueOrDefault(instance) is UIElement v) hide.Add(v);
-            foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && (underFloor || IsSolidAt(i, null)))))
+            // Things lying on a floor above the player's (a body, a bag) go with that floor - not only by the ceiling's lift.
+            int playerFloor = MapFloors.FloorOfLift(_playerZ);
+            foreach (var item in _map.Items.Where(i => i.Z > lift || (i.Z == lift && (underFloor || IsSolidAt(i, null))) || MapFloors.FloorOfLift(i.Z) > playerFloor))
                 if (_itemVisuals.GetValueOrDefault(item) is UIElement v) hide.Add(v);
+            // Blood on a floor above goes with it too.
+            foreach (var puddle in _puddles.Where(p => p.Lift > lift || (p.Lift == lift && underFloor) || MapFloors.FloorOfLift(p.Lift) > playerFloor))
+                hide.Add(puddle.Visual);
             foreach (var (slabLift, v) in _floorTileVisuals.Where(t => t.SlabLift + 1 >= lift)) hide.Add(v); // the floors overhead: a floor whose height (its slab's top) is at the ceiling's lift or above - under a wall of floor 2, floor 2 goes too
             foreach (var mapCharacter in _mapCharacters.Where(mc => mc.Lift >= lift))
                 if (mapCharacter.Visual is { } v) hide.Add(v);

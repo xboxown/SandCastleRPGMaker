@@ -12,6 +12,78 @@ public partial class AddCommandPickerWindow : Window
         InitializeComponent();
         AddScriptTabs();
         if (ProjectSession.IsAppleIIgs) Loaded += (_, _) => HideForAppleIIgs(this); // Ultima 6 Apple IIgs mode: no videos on the IIgs
+        Loaded += (_, _) => { CollectCommands(); SearchBox.Focus(); };
+        SearchBox.TextChanged += (_, _) => Search();
+        SearchBox.PreviewKeyDown += (_, e) =>
+        {
+            if (e.Key == System.Windows.Input.Key.Down && SearchResults.Items.Count > 0) { SearchResults.SelectedIndex = Math.Min(SearchResults.SelectedIndex + 1, SearchResults.Items.Count - 1); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Up && SearchResults.Items.Count > 0) { SearchResults.SelectedIndex = Math.Max(SearchResults.SelectedIndex - 1, 0); e.Handled = true; }
+            else if (e.Key == System.Windows.Input.Key.Enter && SearchResults.Visibility == Visibility.Visible) { PickResult(); e.Handled = true; }
+        };
+        SearchResults.MouseDoubleClick += (_, _) => PickResult();
+        SearchResults.KeyDown += (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) PickResult(); };
+    }
+
+    /// <summary>A command offered: its button (clicked when picked), name, tab, group and description.</summary>
+    private sealed record CommandEntry(System.Windows.Controls.Button Button, string Name, string Tab, string Group, string Help)
+    {
+        public override string ToString() => $"{Name}    ({Tab} > {Group})";
+    }
+
+    private readonly List<CommandEntry> _commands = new();
+
+    /// <summary>Every command button on every tab (not those hidden in this mode), with its tab and group heading.</summary>
+    private void CollectCommands()
+    {
+        _commands.Clear();
+        foreach (var tab in Tabs.Items.OfType<System.Windows.Controls.TabItem>())
+        {
+            string group = "";
+            void Walk(DependencyObject node)
+            {
+                foreach (var child in LogicalTreeHelper.GetChildren(node).OfType<DependencyObject>())
+                {
+                    if (child is System.Windows.Controls.TextBlock { FontWeight: var fw } heading && fw == FontWeights.Bold) group = heading.Text;
+                    else if (child is System.Windows.Controls.Button { Visibility: Visibility.Visible } b && b.Content is string text)
+                    {
+                        string help = b.ToolTip switch { string t => t, System.Windows.Controls.TextBlock tb => tb.Text, _ => "" };
+                        _commands.Add(new CommandEntry(b, text.TrimEnd('.'), tab.Header?.ToString() ?? "", group, help));
+                        continue;
+                    }
+                    Walk(child);
+                }
+            }
+            Walk(tab);
+        }
+    }
+
+    /// <summary>The commands with any of the words typed - in the name first, then the group or tab, then the description.</summary>
+    private void Search()
+    {
+        var words = SearchBox.Text.Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries).Select(w => w.ToLowerInvariant()).ToList();
+        if (words.Count == 0) { SearchResults.Visibility = Visibility.Collapsed; Tabs.Visibility = Visibility.Visible; return; }
+        int Score(CommandEntry c)
+        {
+            int score = 0;
+            string name = c.Name.ToLowerInvariant(), place = (c.Tab + " " + c.Group).ToLowerInvariant(), help = c.Help.ToLowerInvariant();
+            foreach (var w in words)
+            {
+                if (name.Contains(w)) score += name.StartsWith(w) ? 120 : 100;
+                else if (place.Contains(w)) score += 30;
+                else if (help.Contains(w)) score += 10;
+            }
+            return score;
+        }
+        var found = _commands.Select(c => (c, s: Score(c))).Where(x => x.s > 0).OrderByDescending(x => x.s).ThenBy(x => x.c.Name).Select(x => x.c).ToList();
+        SearchResults.ItemsSource = found;
+        if (found.Count > 0) SearchResults.SelectedIndex = 0;
+        SearchResults.Visibility = Visibility.Visible;
+        Tabs.Visibility = Visibility.Collapsed;
+    }
+
+    private void PickResult()
+    {
+        if (SearchResults.SelectedItem is CommandEntry c) c.Button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent, c.Button));
     }
 
     /// <summary>Ultima 6 Apple IIgs mode: the IIgs plays no video - Play Video isn't offered.</summary>

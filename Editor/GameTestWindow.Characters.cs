@@ -104,11 +104,17 @@ public partial class GameTestWindow
     private PoseDefinition? PoseById(int poseId) => _poseDatabase.Poses.FirstOrDefault(p => p.Id == poseId);
     private PoseDefinition? PoseByName(string name) => _poseDatabase.Poses.FirstOrDefault(p => p.Name == name);
 
+    /// <summary>
+    /// Ultima 7 draws four directions (Exult's get_dir_framenum: the direction / 2) - a diagonal shows the way one step
+    /// round anticlockwise: north-east north, south-east east, south-west south, north-west west.
+    /// </summary>
+    private static SpriteDirection FourWay(SpriteDirection facing) => (SpriteDirection)((int)facing / 2 * 2);
+
     private SpriteEntry? ResolveCharacterSprite(CharacterDefinition character, PoseDefinition? pose, SpriteDirection facing, out double volume, out string? key)
     {
         volume = 0;
         key = null;
-        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(facing) is not { } link) return null;
+        if (pose is null || !character.PoseSprites.TryGetValue(pose.Id, out var assignment) || assignment.Resolve(FourWay(facing)) is not { } link) return null; // four directions (Ultima 7)
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
         key = link.SpriteGroup + "/" + link.SpriteName;
         return _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);

@@ -5,3 +5,8 @@ backup/
 *.user
 Player/iigs/main.lst
 __pycache__/
+
+# Word / LibreOffice temp files
+~*.tmp
+~$*
+.~lock.*

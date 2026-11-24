@@ -508,7 +508,7 @@ public partial class GameTestWindow : Window
         if (_player is null || pose is null) return null;
         if (!_player.PoseSprites.TryGetValue(pose.Id, out var assignment)) return null;
         volume = assignment.Muted ? 0 : assignment.Volume / 100.0;
-        var link = assignment.Resolve(_playerFacing);
+        var link = assignment.Resolve(FourWay(_playerFacing)); // four directions (Ultima 7)
         return link is null ? null : _sprites.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName);
     }
 
@@ -2130,6 +2130,29 @@ public partial class GameTestWindow : Window
         };
     }
 
+    /// <summary>
+    /// An event about to run (a page whose conditions hold): every open paperdoll, backpack, container and stats window
+    /// closes first, so nothing covers its dialog boxes and scene - the user's rule for the Ultima 7 engine.
+    /// </summary>
+    private void CloseGumpsForEvent(BookTriggerConditionBased trigger)
+    {
+        // Not for a paperdoll's own events (its buttons, an object working through its own paperdoll), not for an event
+        // run from inside another one, not for a container's "closed" event (it is being closed), and never twice at once.
+        if (_closingForEvent || _dollContext is not null || _firingOwner is not null || trigger == BookTriggerConditionBased.ByEnter && _openContainers.Count > 0) return;
+        _closingForEvent = true;
+        try
+        {
+            foreach (var g in _openContainers.ToList()) CloseContainerGump(g);
+            foreach (var g in _openPaperdolls.ToList()) ClosePaperdollGump(g);
+            foreach (var g in _openStatsDolls.ToList()) CloseStatsDoll(g);
+            foreach (var g in _openDolls.ToList()) CloseDollGump(g);
+        }
+        finally { _closingForEvent = false; }
+    }
+
+    private bool _closingForEvent;
+
+
     private bool TryFireEventPages(object owner, List<BookEventPage> pages, BookTriggerConditionBased justOccurred, int selfBookId, string firedStatusMessage)
     {
         if (!_firedCounts.TryGetValue(owner, out var counts))
@@ -2161,6 +2184,7 @@ public partial class GameTestWindow : Window
                 {
                     Record($"event:{eventName}"); // Event executed / its page number (GameTestWindow.Conditions.cs)
                     Record($"eventpage:{eventName}:{pages.IndexOf(page) + 1}");
+                    CloseGumpsForEvent(justOccurred); // nothing open covers the scene (the user's rule, Ultima 7)
                     var previousOwner = _firingOwner;
                     _firingOwner = owner; // whose event this is (Sleep On Bed: "the bed under this")
                     try { EventCommandInterpreter.Run(page.Commands, _execContext, trace); }

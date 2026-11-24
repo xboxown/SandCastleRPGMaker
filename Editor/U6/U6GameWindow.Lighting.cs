@@ -77,7 +77,11 @@ public partial class U6GameWindow
         var (sky, nightAmount) = SkyNow();
         var lightEye = LightEye();
         bool inCave = Zones.IsInCave(_map.Zones, lightEye.X, lightEye.Y, lightEye.Floor);
-        if (inCave) (sky, nightAmount) = ((Colors.Black, 1.0), 1.0); // a Cave: complete darkness, day or night - only a light source lifts it
+        if (inCave) // a Cave: its darkness (Map Editor > Zones), day or night - only a light source lifts it
+        {
+            double caveDark = Zones.CaveDarknessAt(_map.Zones, lightEye.X, lightEye.Y, lightEye.Floor);
+            (sky, nightAmount) = ((Colors.Black, caveDark), caveDark);
+        }
 
         // Overcast: weather and clouds darken the day (and the night a little more).
         double gloom = inCave ? 0 : (_weather.Kind == WeatherKind.Clear ? 0 : _weather.Intensity / 100.0) + (_weather.Clouds ? _weather.CloudCover / 200.0 : 0);
@@ -155,7 +159,7 @@ public partial class U6GameWindow
             if (!IsOnScreen(x, y)) continue;
             Add(Strength(x, y, obj.Light.Brightness), obj);
         }
-        foreach (var member in AllLivingCharacters().Where(c => c == _player || c.IsInParty))
+        foreach (var member in AllLivingCharacters().Where(c => c == _player || c.IsInParty || c == _cameraFollow)) // and whoever the view follows (a cutscene's demon with a candle)
         {
             var (x, y) = PixelOf(member);
             foreach (var slot in new[] { EquipmentSlot.RightHand, EquipmentSlot.LeftHand })

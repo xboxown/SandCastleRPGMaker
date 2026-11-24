@@ -63,6 +63,15 @@ public static class StartingInventoryRules
             if (ammoSlot is not null && IsFree(character, ammoSlot)) { Equip(character, item, ammoSlot); return null; }
         }
 
+        // Armour and weapons: worn in their own slot (Object Editor > Armor / Weapon > Equip slot) while it's free - given to
+        // equip, not to carry. A hand slot follows the hands' rules below (two-handed, the left hand locked).
+        if (category == ReferencedItemCategory.Object && objects.Objects.FirstOrDefault(o => o.Id == itemId) is { Type: ObjectType.Armor or ObjectType.Weapon } gear)
+        {
+            var (ownSlot, customName) = gear.Type == ObjectType.Armor ? (gear.Armor.EquipSlot, gear.Armor.CustomSlotName) : (gear.Weapon.EquipSlot, gear.Weapon.CustomSlotName);
+            object? own = ownSlot is { } builtinOwn ? builtinOwn : customName is { } cn ? character.Paperdoll.CustomSlots.FirstOrDefault(s => s.Name == cn)?.Id : null;
+            if (own is not null and not EquipmentSlot.RightHand and not EquipmentSlot.LeftHand && IsFree(character, own)) { Equip(character, item, own); return null; }
+        }
+
         double volume = VolumeOf(item, containers, books, objects);
         foreach (var bagSlot in new[] { EquipmentSlot.Backpack, EquipmentSlot.Pouch })
         {

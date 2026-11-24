@@ -69,6 +69,7 @@ static Drag drag;
 
 static Gump gumps[24]; static int gumpCount;           /* in drawing order: the last is on top */
 static Target pressed, lastClick, pendingIdentify;
+static unsigned pressedDollGeneration; /* the paperdoll windows as they were when the button went down */
 static int movingDoll = -1;
 static int pressing, dragging, movingGump = -1, pressX, pressY, mouseX, mouseY, grabX, grabY, moveDX, moveDY;
 static double sinceClick = 1e9, identifyIn = -1;
@@ -290,6 +291,23 @@ static void close_gump(int i)
 }
 
 int gumps_open(void) { return gumpCount; }
+/* An event starting: every open window closes (GameTestWindow.CloseGumpsForEvent), never twice at once. */
+void gumps_close_for_event(void)
+{
+    static int closing;
+    if (closing) return;
+    closing = 1;
+    while (gumpCount > 0) close_gump(gumpCount - 1);
+    dolls_close_command("Every paperdoll", NULL, -1);
+    closing = 0;
+}
+
+int gumps_box_open(void)
+{
+    for (int i = 0; i < gumpCount; i++) if (gumps[i].kind == G_BOX) return 1;
+    return 0;
+}
+
 int gumps_close_top(void) { if (books_escape()) return 1; if (mechanisms_map_click()) return 1; if (magic_book_open()) { magic_close_book(); return 1; } if (choosing) { choosing = NULL; game_log("Never mind."); return 1; } if (dolls_close_top()) return 1; if (dolls_modal_open()) return 1; if (!gumpCount) return 0; close_gump(gumpCount - 1); return 1; }
 
 /* A map container double-clicked: its window (a never-opened one with its starting contents). */
@@ -1388,6 +1406,7 @@ int gumps_mouse_down(int x, int y)
     if (pressed.kind == T_BUTTON) { pressedButtonGump = pressed.gump; pressedButton = pressed.slotKey; }
     else pressedButton = -1; /* not a button: none shows pressed (the last one pressed - the heart - did, while the exit was held) */
     if (pressed.doll >= 0) { int top = dolls_to_front(pressed.doll); pressed.doll = top; }
+    pressedDollGeneration = dolls_generation();
     if (pressed.kind == T_DOLL_BODY) { movingDoll = pressed.doll; moveDX = x - dolls_window_x(movingDoll); moveDY = y - dolls_window_y(movingDoll); pressing = 0; return 1; }
     if (pressed.kind == T_GUMP) { movingGump = to_front(pressed.gump); moveDX = x - gumps[movingGump].x; moveDY = y - gumps[movingGump].y; pressing = 0; return 1; }
     if (pressed.gump >= 0) { int top = to_front(pressed.gump); if (pressed.kind != T_EXIT) pressed.gump = top; else pressed.gump = top; }
@@ -1404,6 +1423,8 @@ void gumps_mouse_move(int x, int y)
     if (movingGump >= 0 && movingGump < gumpCount) { gumps[movingGump].x = x - moveDX; gumps[movingGump].y = y - moveDY; return; }
     if (movingDoll >= 0 && movingDoll < dolls_window_count()) { dolls_move_window(movingDoll, x - moveDX, y - moveDY); return; }
     if (!pressing || dragging) return;
+    /* the paperdoll pressed has closed since (the title's New Game): nothing to drag (AmigaOS 4 crash, issues.odt) */
+    if (pressed.doll >= 0 && pressedDollGeneration != dolls_generation()) { pressing = 0; return; }
     if (abs(x - pressX) <= DRAG_SLOP && abs(y - pressY) <= DRAG_SLOP) return; /* Exult: wait for greater motion */
     if (start_drag(&pressed)) dragging = 1;
     else pressing = 0;

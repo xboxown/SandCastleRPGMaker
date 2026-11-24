@@ -23,6 +23,8 @@ public class MapZone
     public string Color { get; set; } = "#3FA7FF";
     /// <summary>The sound looping while the main character is in it, instead of the map's ambient sounds (-1: none). A Cave silences the world's ambient sounds always - quiet if it has none of its own. Each house's zones keep their own (one cave drips, another howls).</summary>
     public int AmbientSoundId { get; set; } = -1;
+    /// <summary>A Cave's darkness, 0 (none) to 1 (complete - only a light source lifts it), day or night alike.</summary>
+    public double Darkness { get; set; } = 1.0;
 
     public bool Contains(int x, int y) => x >= X && y >= Y && x < X + Width && y < Y + Height;
     public (int X, int Y) Center => (X + Width / 2, Y + Height / 2);
@@ -48,6 +50,10 @@ public static class Zones
         zones.Any(z => z.Floor == floor && z.Contains(x, y) && string.Equals(z.Purpose.Trim(), purpose, StringComparison.OrdinalIgnoreCase));
 
     public static bool IsInCave(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, CavePurpose, x, y, floor);
+
+    /// <summary>The darkness of the Cave there (the darkest, caves inside caves), 0-1.</summary>
+    public static double CaveDarknessAt(IEnumerable<MapZone> zones, int x, int y, int floor) =>
+        zones.Where(z => z.Floor == floor && z.Contains(x, y) && IsCave(z)).Select(z => Math.Clamp(z.Darkness, 0, 1)).DefaultIfEmpty(1.0).Max();
     public static bool IsCold(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, ColdPurpose, x, y, floor);
     public static bool IsHot(IEnumerable<MapZone> zones, int x, int y, int floor) => AnyAt(zones, HotPurpose, x, y, floor);
 

@@ -43,6 +43,7 @@ int dolls_window_x(int i);
 int dolls_window_y(int i);
 void dolls_move_window(int i, int x, int y);
 int dolls_to_front(int i);
+unsigned dolls_generation(void);   /* changes whenever a window closes or comes to the front */
 void dolls_close_window(int i);
 int dolls_close_top(void);                          /* Escape: 0 when there's none to close */
 DollState *dolls_window_state(int i);
