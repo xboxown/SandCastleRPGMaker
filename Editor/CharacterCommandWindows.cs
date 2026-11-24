@@ -16,6 +16,8 @@ internal sealed record WhoChoice(string Key, string Label)
     {
         var list = new List<WhoChoice> { new(Activator, "(Whoever set this event off - the player, or a character)") };
         if (includePlayer) list.Add(new(Player, "(Main Player)"));
+        list.Add(new(SpellRoles.Caster, "(The spell's caster - in a Common Event cast as a spell)"));
+        list.Add(new(SpellRoles.Target, "(The spell's target - in a Common Event cast as a spell)"));
         list.AddRange(ProjectSession.Characters.Characters.Where(c => !c.IsTestPlayer).Select(c => new WhoChoice(c.Id.ToString(), c.Name)));
         return list;
     }
@@ -24,6 +26,8 @@ internal sealed record WhoChoice(string Key, string Label)
     {
         "" or Activator => "whoever set it off",
         Player => "Main Player",
+        SpellRoles.Caster => "the spell's caster",
+        SpellRoles.Target => "the spell's target",
         _ => ProjectSession.Characters.Characters.FirstOrDefault(c => c.Id.ToString() == key)?.Name ?? $"character #{key}"
     };
 }

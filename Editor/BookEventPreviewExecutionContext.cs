@@ -49,6 +49,11 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     /// <summary>Whether any spellbook in the project has a spell of this name (set by the game windows).</summary>
     public Func<string, bool>? SpellExists { get; set; }
 
+    /// <summary>Cast Spell running a Common Event: its caster and target as Who keys (set by the game windows, which also fill SpellCaster / SpellTarget).</summary>
+    public Func<EventCommand, (string Caster, string Target)>? SpellRoles { get; set; }
+
+    public (string Caster, string Target)? SpellRolesFor(EventCommand castSpell) => SpellRoles?.Invoke(castSpell);
+
     public CommonEventDefinition? CommonEventAsSpell(string spellName)
     {
         if (string.IsNullOrWhiteSpace(spellName) || SpellExists?.Invoke(spellName) == true) return null;

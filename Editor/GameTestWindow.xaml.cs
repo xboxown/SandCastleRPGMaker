@@ -177,6 +177,7 @@ public partial class GameTestWindow : Window
 
         _execContext = new BookEventPreviewExecutionContext(_resources, selfBookId: -1);
         _execContext.SpellExists = name => _objects.Objects.Any(o => o.Type == ObjectType.Spellbook && o.Spellbook.Spells.Any(s => s.Name.Trim().Equals(name.Trim(), StringComparison.OrdinalIgnoreCase))); // Cast Spell: else a Common Event of that name
+        _execContext.SpellRoles = SpellRolesOf; // ... with its caster and target (.FindThing.cs)
         // Real, confirmed fix, per spec ("Make sure all the commands are LIVE world wide, including maps") - this exact same execution context is what actually runs commands during real, live gameplay (see TryFireEventPages below), not just the isolated debug preview. PlaySound/SetSwitch/SetVariable/Change*BookContent/ChangeBookSettings all execute directly and always worked; ShakeScreen/ShowText/ChangeDayNight/ApplyPaletteColor each genuinely need their own real callback wired in to do anything at all, and until now none of them ever were HERE, in the real game engine - only in the separate debug window fixed in an earlier pass. Wired to real, live, visible effects on the actual game world below.
         _execContext.OnShakeScreen = (intensity, duration, _) => PlayRealShakeEffect(intensity, duration);
         _execContext.OnShowText = text => StatusText.Text = text;

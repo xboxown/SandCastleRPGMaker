@@ -120,4 +120,15 @@ public partial class U6GameWindow
         if (c.Get("NameVariable").Length > 0) SetScriptVariable(c.Get("NameVariable"), thing is null ? "" : NameOfMapThing(thing));
         return thing is not null;
     }
+
+    /// <summary>Cast Spell running a Common Event: its caster (Who) and target (Other) as Who keys; SpellCaster / SpellTarget get their numbers.</summary>
+    private (string Caster, string Target) SpellRolesOf(EventCommand c)
+    {
+        var caster = CharacterDefinitionFor(c.Get("Who") is { Length: > 0 } w ? w : WhoChoice.Activator);
+        var target = c.Get("Other").Length > 0 ? CharacterDefinitionFor(c.Get("Other")) : null;
+        SetScriptVariable(SpellRoles.Caster, (double)(caster?.Id ?? -1));
+        SetScriptVariable(SpellRoles.Target, (double)(target?.Id ?? -1));
+        string Key(CharacterDefinition? who) => who is null ? "-1" : ReferenceEquals(who, _player) ? WhoChoice.Player : who.Id.ToString();
+        return (Key(caster), Key(target));
+    }
 }

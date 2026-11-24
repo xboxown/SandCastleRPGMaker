@@ -273,7 +273,8 @@ public static class EventCommandInterpreter
                     int next = i + 1;
                     var returnsThen = returns;
                     trace.Add($"Cast Spell: the Common Event \"{asSpell.Name}\"");
-                    Run(asSpell.Commands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1, Parent = state }, () => Run(commands, context, trace, next, returnsThen, state, finished));
+                    var spellCommands = spells.SpellRolesFor(cmd) is { } roles ? SpellRoles.Apply(asSpell.Commands, roles) : asSpell.Commands; // The spell's caster / target
+                    Run(spellCommands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1, Parent = state }, () => Run(commands, context, trace, next, returnsThen, state, finished));
                     return;
                 }
 

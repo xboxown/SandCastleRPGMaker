@@ -722,6 +722,12 @@ static int branch_true(const Cmd *c)
 static int actor_for(const Run *r, const char *who)
 {
     if (strcmp(who, "Player") == 0) return 0;
+    if (strcmp(who, "SpellCaster") == 0 || strcmp(who, "SpellTarget") == 0)
+    {
+        /* a Common Event cast as a spell: its caster / target (Cast Spell filled the variables with their character numbers) */
+        int id = (int)floor(get_var(who) + 0.5);
+        return id >= 0 ? world_actor_by_character(id) : -1;
+    }
     if (!who[0] || strcmp(who, "Activator") == 0) return r->activator >= 0 ? r->activator : 0;
     return world_actor_by_character(atoi(who));
 }
@@ -738,6 +744,12 @@ static int build_box(const Run *r, const Cmd *c, DialogBox *box, int withReplies
     if (!key[0]) { if (r->byStepping) return 0; }
     else if (strcmp(key, "Self") == 0) { speaker = r->activator >= 0 ? r->activator : 0; onMap = r->activator; }
     else if (strcmp(key, "Player") == 0 || atoi(key) == world_actor_character(0)) speaker = 0;
+    else if (strcmp(key, "SpellCaster") == 0 || strcmp(key, "SpellTarget") == 0)
+    {
+        speaker = onMap = actor_for(r, key);
+        if (speaker < 0) return 0;
+        if (speaker == 0) onMap = -1;
+    }
     else
     {
         speaker = onMap = world_actor_by_character(atoi(key));
@@ -3847,6 +3859,13 @@ static void continue_run(Run *r)
                     snprintf(t, sizeof t, "Script error in Cast Spell: \"%s\" calls Common Events more than %d deep (one calling itself?)", common->name, MAX_CALL_DEPTH);
                     game_log(t);
                     continue;
+                }
+                {
+                    /* its caster (Who) and target (Other) - Who: The spell's caster / target, and the variables SpellCaster / SpellTarget */
+                    int caster = actor_for(r, param(c, "Who"));
+                    int target = param(c, "Other")[0] ? actor_for(r, param(c, "Other")) : -1;
+                    set_var("SpellCaster", caster >= 0 ? world_actor_character(caster) : -1);
+                    set_var("SpellTarget", target >= 0 ? world_actor_character(target) : -1);
                 }
                 script_arena_reset();
                 call_common(r, common);

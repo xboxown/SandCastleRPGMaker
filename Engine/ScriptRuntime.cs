@@ -29,6 +29,32 @@ public interface IScriptLibraryHost
     CommonEventDefinition? GetCommonEvent(int id);
     /// <summary>Cast Spell with a Common Event's name: that common event when no spellbook spell in the project has the name (it runs as the spell - no mana or reagents); else null.</summary>
     CommonEventDefinition? CommonEventAsSpell(string spellName) => null;
+    /// <summary>Cast Spell running a Common Event: who casts it and at whom - each as a Who key ("Player" or a character's id, "-1": none).
+    /// The host also fills the variables SpellCaster and SpellTarget (character numbers, -1: none) for formulas.</summary>
+    (string Caster, string Target)? SpellRolesFor(EventCommand castSpell) => null;
+}
+
+/// <summary>Who keys a Common Event run as a spell can use: the spell's caster and its target (Cast Spell's Who and Other).</summary>
+public static class SpellRoles
+{
+    public const string Caster = "SpellCaster";
+    public const string Target = "SpellTarget";
+
+    /// <summary>The Common Event's commands with every "SpellCaster" / "SpellTarget" choice turned into the real one.</summary>
+    public static List<EventCommand> Apply(List<EventCommand> commands, (string Caster, string Target) roles)
+    {
+        EventCommand With(EventCommand c)
+        {
+            if (!c.Parameters.Values.Any(v => v is Caster or Target)) return c;
+            return new EventCommand
+            {
+                Type = c.Type,
+                IndentLevel = c.IndentLevel,
+                Parameters = c.Parameters.ToDictionary(p => p.Key, p => p.Value switch { Caster => roles.Caster, Target => roles.Target, _ => p.Value })
+            };
+        }
+        return commands.Select(With).ToList();
+    }
 }
 
 /// <summary>The state of one running command list: where each loop is (by its opening line), and how deep the Common Event calls go.</summary>
