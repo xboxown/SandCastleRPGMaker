@@ -12,6 +12,7 @@ public partial class AddCommandPickerWindow : Window
         InitializeComponent();
         AddScriptTabs();
         if (ProjectSession.IsAppleIIgs) Loaded += (_, _) => HideForAppleIIgs(this); // Ultima 6 Apple IIgs mode: no videos on the IIgs
+        if (ProjectSession.IsUltima6) Loaded += (_, _) => HideTags(this, ScriptCommands.NotInUltima6.Select(t => t.ToString()).ToHashSet()); // Ultima 7's own commands: not in Ultima 6
         Loaded += (_, _) => { CollectCommands(); SearchBox.Focus(); };
         SearchBox.TextChanged += (_, _) => Search();
         SearchBox.PreviewKeyDown += (_, e) =>
@@ -89,6 +90,16 @@ public partial class AddCommandPickerWindow : Window
     /// <summary>Ultima 6 Apple IIgs mode: the IIgs plays no video - Play Video isn't offered.</summary>
     private static void HideForAppleIIgs(DependencyObject root) => HideLogical(root);
 
+    /// <summary>The buttons of these commands hidden (their Tag is the command's type).</summary>
+    private static void HideTags(DependencyObject root, HashSet<string> tags)
+    {
+        foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
+        {
+            if (child is System.Windows.Controls.Button { Tag: string tag } b && tags.Contains(tag)) b.Visibility = Visibility.Collapsed;
+            HideTags(child, tags);
+        }
+    }
+
     private static void HideLogical(DependencyObject root)
     {
         foreach (var child in System.Windows.LogicalTreeHelper.GetChildren(root).OfType<DependencyObject>())
@@ -101,7 +112,8 @@ public partial class AddCommandPickerWindow : Window
     /// <summary>The script commands' tabs (Engine/ScriptCommands.cs): each tab's groups in two columns, a button per command.</summary>
     private void AddScriptTabs()
     {
-        foreach (var tab in ScriptCommands.All.Where(s => s.Tab.Length > 0 && (!ScriptCommands.IsUltima8Only(s.Tab) || ProjectSession.IsUltima8) && (!ScriptCommands.IsUltima6Only(s.Tab) || ProjectSession.IsUltima6)).GroupBy(s => s.Tab))
+        foreach (var tab in ScriptCommands.All.Where(s => s.Tab.Length > 0 && (!ScriptCommands.IsUltima8Only(s.Tab) || ProjectSession.IsUltima8) && (!ScriptCommands.IsUltima6Only(s.Tab) || ProjectSession.IsUltima6)
+                                                     && !(ProjectSession.IsUltima6 && ScriptCommands.NotInUltima6.Contains(s.Type))).GroupBy(s => s.Tab))
         {
             var grid = new System.Windows.Controls.Grid { Margin = new Thickness(0, 10, 8, 0) };
             grid.ColumnDefinitions.Add(new System.Windows.Controls.ColumnDefinition());

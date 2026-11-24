@@ -81,6 +81,19 @@ public static class ScriptCommands
     /// <summary>The tab of the commands only an Ultima 6 project has.</summary>
     public const string Ultima6Tab = "Ultima 6";
     public static bool IsUltima6Only(string tab) => tab is Ultima6Tab;
+    /// <summary>
+    /// Ultima 7 / Serpent Isle commands an Ultima 6 project doesn't offer (the user, 2026-11-24: Ultima 6 mode follows Ultima 6,
+    /// The Savage Empire and Martian Dreams, not Ultima 7) - with their Ultima 6 way: barks (none), Set Attack Mode (the Ultima 6
+    /// tab's Set Combat Mode), Train (Meditate At Shrine / Rise A Level), feign / withstand death and Changeling (none), curses and
+    /// enchantments (none). Ultima 7 and Ultima 8 projects keep them all.
+    /// </summary>
+    public static readonly HashSet<EventCommandType> NotInUltima6 = new()
+    {
+        EventCommandType.ShowBark, EventCommandType.SetAttackMode, EventCommandType.Train,
+        EventCommandType.FeignDeath, EventCommandType.WithstandDeath, EventCommandType.Changeling,
+        EventCommandType.CurseItem, EventCommandType.LiftCurse, EventCommandType.IsItemCursed,
+        EventCommandType.EnchantItem, EventCommandType.RemoveEnchantments, EventCommandType.GetMagicBonus,
+    };
     /// <summary>Magic weapons and armor: curses, enchantments, what's worn, combining items.</summary>
     public const string EquipmentTab = "Equipment";
     private static readonly string[] SlotNames = Enum.GetNames<EquipmentSlot>();

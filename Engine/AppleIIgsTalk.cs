@@ -442,6 +442,9 @@ public sealed class AppleIIgsTalk
         {
             switch (cmd.Type)
             {
+                case var ultima7 when ScriptCommands.NotInUltima6.Contains(ultima7) && ultima7 != EventCommandType.ShowBark:
+                    Unsupported.Add($"{ultima7} (an Ultima 7 command - not in Ultima 6)");
+                    break;
                 case EventCommandType.ShowText:
                 {
                     var choices = DialogChoices.HasChoices(cmd) ? DialogChoices.Read(cmd) : new List<DialogChoice>();
