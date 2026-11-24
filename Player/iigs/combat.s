@@ -212,6 +212,7 @@ ToggleCombat:
         eor #1
         sta CombatOn
         jsr CombatChanged       ; (music.s)
+        jsr NextCommander       ; combat over: the Avatar moved again (solo.s)
         lda CombatOn
         beq .off
         lda #W_BEGIN
@@ -257,7 +258,8 @@ AfterTurn:
         beq .out
         lda #Prompt             ; a fresh line: the prompt
         jsr PrintMine
-.out:   jmp RunQueue
+.out:   jsr NextCommander       ; combat mode: the next Command member is moved (solo.s)
+        jmp RunQueue
 
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:
@@ -781,6 +783,11 @@ Dies:
         rts
 .dies:  jsr DefIsAvatar
         bcc .npc
+        lda SoloCtl             ; a member moved: the Avatar back first, the member dies (solo.s)
+        beq .av
+        jsr SoloDies
+        bra .npc
+.av:
         jsr DeathMus            ; (music.s)
         lda #1
         sta AvDead

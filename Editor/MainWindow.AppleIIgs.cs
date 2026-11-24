@@ -895,6 +895,7 @@ public partial class MainWindow
             st[AppleIIgsGamePack.Stat.Armour] = armour; st[AppleIIgsGamePack.Stat.Weapon] = weapon; st[AppleIIgsGamePack.Stat.Reach] = reach;
             st[AppleIIgsGamePack.Stat.HomeX] = homeX; st[AppleIIgsGamePack.Stat.HomeY] = homeY;
             st[AppleIIgsGamePack.Stat.Food] = c.Survival.CanGetHungry ? Math.Clamp(c.Survival.StartingFood, 0, 31) : 0xFFFF;
+            st[20] = c == avatarDef ? 6 : AppleIIgsGamePack.CombatModeCode(c.U6CombatMode); // its combat mode (solo.s; the Avatar: Command)
             st[23] = 0xFFFF; // what flies when it strikes from afar (its equipped ranged weapon's)
             foreach (int eid in c.EquippedSlots.Values)
                 if (c.Inventory.FirstOrDefault(i => i.InstanceId == eid) is { Category: ReferencedItemCategory.Object } ei && _objectDatabase.Objects.FirstOrDefault(o => o.Id == ei.ItemId) is { Type: ObjectType.Weapon } ewd && ewd.Weapon.Use != WeaponUse.Melee)
@@ -1471,6 +1472,8 @@ public partial class MainWindow
         pack.TileFlags.AddRange(flags);
         pack.TileNames.AddRange(tileNames.Select(pack.NameOf));
         foreach (var px in avatar) pack.AvatarFrames.Add(SuperHiRes.Pack(px, 16, 16, pack.Palette, spriteZeroIsClear: true));
+        pack.AvatarSprite = spritePixels.Count; // the Avatar's looks as sprites too (solo mode)
+        foreach (var px in avatar.Take(4)) spritePixels.Add((px, 16, 16));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
         // Plants', tools', stations' and instruments' records (Engine/AppleIIgs.cs Specials); carried ones get their code too.
         {

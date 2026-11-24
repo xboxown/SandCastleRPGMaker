@@ -101,6 +101,7 @@ MapOff:
 
 ; Goes to map GoMap ($FFFF: this one) at GoX, GoY ($FFFF: its start). Carry set: it couldn't (its file not to be had).
 ChangeMap:
+        jsr SoloOff             ; the Avatar moved again first (solo.s)
         lda GoMap
         cmp #$FFFF
         bne .other

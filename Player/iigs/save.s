@@ -7,6 +7,7 @@ SAVE_VERSION = 7
 
 ; Ctrl+S
 SaveGame:
+        jsr SoloOff             ; the Avatar moved again first (solo.s)
         lda #SaveName
         jsr LocalPath           ; PathBuf = "9:SAVE.DAT"
         gsos $2002,DestroyParms ; the old one gone (none: no matter)

@@ -575,6 +575,13 @@ public sealed class AppleIIgsTalk
                     B(Hp); W(m); W(x); B(cmd.Get("Operation") switch { "Subtract" => 1, "Set" => 2, _ => 0 }); W(Number(cmd.Get("Amount"))); B(cmd.Get("CanKill") == "True" ? 1 : 0);
                     break;
                 }
+                case EventCommandType.U6SetCombatMode:
+                {
+                    // A member's combat mode: its word 20 (solo.s); the Avatar is always Command.
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Set Combat Mode (someone not on a map)"); break; }
+                    B(StatOp); W(m); W(x); B(20); B(2); W(AppleIIgsGamePack.CombatModeCode(cmd.Get("Mode")));
+                    break;
+                }
                 case EventCommandType.ChangeStat:
                 {
                     int word = Extra?.Stat?.Invoke(cmd.Get("StatId")) ?? -1;

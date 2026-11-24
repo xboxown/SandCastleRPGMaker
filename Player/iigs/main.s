@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 44 (b674): solo mode (1-9, 0 party mode, Option + digit the portrait view) and the members' combat modes,
+;   Command members moved in turn in combat mode - solo.s.
 ; Version 43 (b673): maps that wrap around, characters stepping aside (and the Avatar for them), sea and air
 ;   characters, the carry limit (2 x Strength) - moves.s.
 ; Version 42 (b664): spawn points - eggs (eggs.s): monsters, music, sounds, common events, missiles, teleports,
@@ -434,12 +436,12 @@ MainLoop:
         bne .notb
         jsr ToggleCombat
         brl MainLoop
-.notb:  lda Key                 ; 0-9 (as typed): whose portrait view
+.notb:  lda Key                 ; 1-9 solo mode, 0 party mode, Option + 0-9 the portrait view (solo.s)
         cmp #'0'
         bcc .notd
         cmp #'9'+1
         bcs .notd
-        jsr ViewMember
+        jsr SoloKey
         brl MainLoop
 .notd:  lda Key
         ora #$20
@@ -666,7 +668,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #43
+        cmp #44
         beq .known
 .bad:   sec
         rts
@@ -1962,7 +1964,24 @@ DrawTile:
 
 ; The Avatar in the middle of the view (cell 5, 5), colour 0 see-through.
 DrawAvatar:
-        lda AvDown              ; knocked out: its body look (bodies.s)
+        lda SoloCtl             ; a member moved (solo.s): its own sprite where it stands
+        beq .av
+        ldx PX
+        ldy PY
+        jsr CellOnScreen
+        bcc .nv
+        lda AvDown
+        beq .ms
+        lda AvRec+14             ; (its name: C_NAME)
+        jsr BodySprite
+        cmp #$FFFF
+        bne .sp
+.ms:    lda AvRec+4
+        clc
+        adc Facing
+.sp:    sta SprId
+        jmp DrawSprite
+.av:    lda AvDown              ; knocked out: its body look (bodies.s)
         beq .norm
         lda AvBody
         cmp #$FFFF
@@ -2155,6 +2174,7 @@ TryMove:
         .include "bodies.s"
         .include "eggs.s"
         .include "moves.s"
+        .include "solo.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

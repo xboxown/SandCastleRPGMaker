@@ -23,6 +23,12 @@ StartVerb:
         sta MoveIdx
         pla
         sta Verb
+        cmp #VERB_TALK          ; only the Avatar talks (solo.s)
+        bne .nt
+        jsr NotSolo
+        bcc .nt
+        rts
+.nt:    lda Verb
         cmp #VERB_LOOK          ; the others take a turn
         beq .free
         cmp #VERB_TALK

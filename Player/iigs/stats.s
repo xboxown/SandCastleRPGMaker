@@ -232,6 +232,10 @@ StartRest:
         lda #W_REST
         jsr PrintSaid
         jsr NewLine
+        jsr NotSoloRest         ; (solo.s)
+        bcc .ns
+        rts
+.ns:
         lda CombatOn
         beq .nc
         lda #W_NOTCOMBAT

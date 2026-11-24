@@ -55,3 +55,4 @@
 - [IIgs vs Windows audit](iigs-audit.md) — 2026-11-19: ~40 Windows U6 parts still missing on the IIgs, in work order; then issues.odt at once
 - [issues.odt #4](issues-odt-2026-11-23.md) — b666-b671 done (PERMISSIONS: wall kits, pickers, formulas, Find Thing, spell caster/target, AI Artist); next sprite generator A, then IIgs audit item 3
 - [AI Artist (sprite gen B)](ai-artist.md) — b671 local Stable Diffusion in SandcastleRpgMaker.AI.dll, model H:\SandcastleAI\sd15-fp16 (not in git), DirectML only; A (skeleton) still to do
+- [Platform test status](platform-test-status.md) — 2026-11-24 user: AmigaOS 4, Ubuntu, 68k, Vampire, PS3 confirmed; U7 perfect everywhere; left PS2 (ethernet adapter) + Mac; user testing U6/U8 on Ubuntu/OS4

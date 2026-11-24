@@ -92,7 +92,10 @@ OccParty:
 
 ; The Avatar stepped from OldX, OldY: each member to the cell the one before it left.
 FollowParty:
-        lda OldX
+        lda SoloCtl             ; a member moved (solo.s): no one follows
+        beq .f
+        rts
+.f:     lda OldX
         sta FX
         lda OldY
         sta FY
@@ -328,6 +331,13 @@ PartyTurn:
         lda [MP],y
         and #4+32               ; dead or knocked out: no blow
         bne .n
+        lda CombatOn            ; combat mode: a Command member is moved by the player (solo.s)
+        beq .mv
+        ldy #C_MODE
+        lda [MP],y
+        cmp #MODE_COMMAND
+        beq .n
+.mv:    jsr MemberMoves         ; its combat mode: on at its foe, holding back, running (solo.s)
         lda ChrPtr
         sta CP
         lda ChrPtr+2
@@ -374,7 +384,7 @@ PartyTurn:
         dec TurnN
         bra .c
 .n:     inc PK
-        bra .l
+        brl .l
 
 ; Members killed leave the party.
 PruneParty:

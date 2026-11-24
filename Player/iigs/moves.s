@@ -49,6 +49,10 @@ ParseMoves:
         bra .tl
 .td:    lda T4
         jsr AddPtr
+        lda [Ptr]               ; the Avatar's look as sprites (solo mode draws it as a member - solo.s)
+        sta AvRec+4
+        lda #2
+        jsr AddPtr
         jmp SetMapWrap
 
 ; ---- maps that wrap around ----
