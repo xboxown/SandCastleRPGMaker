@@ -258,6 +258,9 @@ public partial class ObjectEditorWindow : Window
         if (obj.Type != ObjectType.Wall)
             body.Children.Add(Check("Too heavy (can't be picked up or moved)", () => !obj.IsPortable, v => obj.IsPortable = !v,
                 "Ticked: it stays where it is - a wall torch, a street lamp, a heavy bed. Unticked: it can be picked up and carried."));
+        if (obj.Type is not (ObjectType.Wall or ObjectType.Roof))
+            body.Children.Add(Check("Pressure plate", () => obj.IsPressurePlate, v => obj.IsPressurePlate = v,
+                "Ticked: Advance IF > Weight on an object lists it (only pressure plates are listed there). Its weight is what lies and stands on it."));
         if (obj.Type == ObjectType.Junk)
         {
             body.Children.Add(Check("Stackable", () => obj.IsStackable, v => obj.IsStackable = v));

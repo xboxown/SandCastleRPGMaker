@@ -8,36 +8,36 @@ Today every item picker shows every book, container and object. Proposed: each o
 can do what it asks. Tabs that would be empty (Books, Containers) are hidden.
 
  1a. Magically unlocked ......... doors, and containers that can be locked
-     Answer:
+     Answer: Yes
  1b. Unlocked by key ............ doors, and containers that can be locked
-     Answer:
+     Answer: Yes
  1c. Picklocked door / container  doors, and containers that can be locked
-     Answer:
+     Answer: Yes
  1d. Door / container open ...... doors and containers
-     Answer:
+     Answer: Yes
  1e. Light burnt out ............ light sources only
-     Answer:
+     Answer: Yes
  1f. Light put out .............. light sources only
-     Answer:
+     Answer: Yes
  1g. Light lit .................. light sources only
-     Answer:
+     Answer: Yes
  1h. Ignited explosive .......... explosives only
-     Answer:
+     Answer: Yes
  1i. Switch / button / lever .... switches, buttons and levers only
      Answer:
  1j. Destroyed object ........... objects that can be broken (they have hit points) only
-     Answer:
+     Answer: Yes. Any object that have HP only. Blood, body so forth don't have HP.
  1k. Charges of a carried item .. items with charges (wands, weapons with charges) only
-     Answer:
+     Answer: Yes. Wands and weapons have charges. I could customize a junk item that uses variables for charges; that does not count.
  1l. Equipped / Unequipped / Equip / Unequip ... weapons, armour, ammo, light sources, containers that are
      worn (backpack...), spellbooks - anything else can't be put in a slot except the hands.
      (My advice: keep these as they are - anything can be held in a hand.)
-     Answer:
+     Answer: I am keeping these as they are. I am taking your advise and implement your advise.
  1m. Weight on an object ........ objects marked as pressure plates only
-     Answer:
+     Answer: YES...this is special case..pressure plates only.
  Kept as they are (anything can be had, sold, traded, stolen, used): Having an item, Not having an item,
  Used object, Stolen object, Sold item, Traded item, Objects in an area.
-     Answer (OK to keep these as they are?):
+     Answer (OK to keep these as they are?): YES, keep these as they are.
 
 =====================================================================================================
 2. "EVENT EXECUTED" PICKER (Advance IF > Event executed / Event page executed)
@@ -47,7 +47,7 @@ Today: one long drop-down mixing everything (demon, door, deer...). Proposed win
    [ Who / what: the deer, the chest, Peter... ]   (only those that HAVE event pages)
    [ Its events: a list box of that one's events / pages - you click the one, it is highlighted ]
  Only events are chosen in the end - never the deer itself.
-     Answer:
+     Answer: YES.  - DONE b667
 
 =====================================================================================================
 3. CAST SPELL - THE SPELL NAME (you asked; explained first)
@@ -61,10 +61,16 @@ Cast Spell names THAT spell. Typing a common event's own name in Cast Spell does
 
  3a. While you type a name in quotes, it turns RED if no spellbook in the project has that spell, BLACK if
      one does (a formula with variables stays black - it can only be known at play).
-     Answer:
+     Answer: Yes and blue if it is a variable. I did not put quote or thought to put a quote so it is treating it as a variable. So make 
+it blue for variable and green for array..and do that for all fields that are formula not just for spell casting. but anything that is the
+same mechanics as formula apply it to that.
  3b. Cast Spell also accepts a Common Event's name: if no spellbook spell has that name, the common event of
      that name runs as the spell (no mana or reagents - it is your own spell).
-     Answer:
+     Answer: Yes. Because I should be able to have fun with the even teditor and do if statement to check if you have enough mana, 
+then deduct tha tmany man, and check if yo uhave ingredients..pretty much I rely on the user to code the mechanics of a real
+spell and relying on if or advance if and commands to determine the ingredients needed, ho wmuch it takes and how much mana needed.
+
+Just confirm we have everything in command to do this.
 
 =====================================================================================================
 4. THINGS THAT APPEAR DURING PLAY (a body, a dropped sword) - you asked; explained first
@@ -79,7 +85,7 @@ hold numbers and texts, not things. So the answer to your question is NO, it doe
  - "Thing Info" command: where it is (X, Y, floor) and what it is, into variables.
  - CommandList.docx: a guide "Peter's body: find it, walk to it, take what he carried".
  For Ultima 6, 7 and 8, every platform.
-     Answer:
+     Answer: YES
 
 =====================================================================================================
 5. QUICK WALL PLOT (you asked for my idea before doing it)
@@ -90,16 +96,16 @@ My idea - the same, with what is missing added (like RPG Maker's auto-tiles):
  - A WALL KIT (in the Wall Designer you already have): its pieces by what they join - straight east-west,
    straight north-south, the 4 corners, the 4 T-joins (a wall meeting a wall), the cross, and the 4 ends.
    Corners alone are not enough: where a wall meets another one in the middle you need a T piece.
-   Missing pieces are filled in from the others where possible (a cross from two straights).
+   Missing pieces are filled in from the others where possible (a cross from two straights). <-- IMPLEMENT IT
  - Each piece's exact spot on the cell is set ONCE in the kit (a nudge by pixels) - so every piece drawn sits
-   perfectly against the next, never off by a pixel again.
+   perfectly against the next, never off by a pixel again. <-- YES
  - Map Editor > Draw > "Wall pencil": hold the mouse and move - cells become wall, and every cell picks its piece
    from its neighbours (a corner where you turn, a T where you meet a wall). "Wall rectangle": drag a room's
    outline in one go. "Wall eraser": removes wall and fixes the pieces round it. Doors and windows: your wall
-   sets' doors / windows dropped onto a drawn wall replace that piece.
- - Undo works on a whole stroke. Your drawing modes now stay exactly as they are.
+   sets' doors / windows dropped onto a drawn wall replace that piece. <--- YES
+ - Undo works on a whole stroke. Your drawing modes now stay exactly as they are. <-- YES
  - Ultima 6 (square walls), Ultima 7 and Ultima 8 (their own angles: the kit's pieces are drawn in the game's
-   view, the kit only says which piece goes where).
+   view, the kit only says which piece goes where). <-- YES
  A 128 x 128 cave's walls: minutes.
      Answer (GO / change this / let's talk): GO - the wall kit with T-joins (user, 2026-11-24) - DONE b666
 
@@ -112,20 +118,29 @@ What can be promised and what can't, offline, no internet, no paid AI:
       clothes, cloak, weapon; for things: trunk, branches, leaf clusters, planks, handles, blades...
     - Every pose and direction is a skeleton template (walk, attack, sit, sleep, body...) made ONCE for
       humanoids (human, gargoyle, orc, elf share them, as you said) and once per other body plan (four legs,
-      wings, tail).
+      wings, tail). <-- YES...WE GENERATE THE SKELETON AND THEN WE CAN GENERATE AS MANY NEW SPRITES WITH MESHES that cover
+the skeleton
     - Knobs and drop-downs: height, build, skin, hair, clothes, colours (palette ramps - only the game's own
-      colours, the game's shading), extra parts (wings, tail, horns).
+      colours, the game's shading), extra parts (wings, tail, horns). <-- it is a suggestion, do what yo uthink to be user friendly
+but powerful with SO LITTLE LIMITATION
     - It assembles every pose x every direction from those parts: the review window with tabs, uncheck what you
-      don't want, pick the folder, Generate - into the Sprite Editor.
-    - It never "dreams": every pixel comes from your references, recoloured and placed by rules. Consistent.
+      don't want, pick the folder, Generate - into the Sprite Editor. <- yes..give me all possible way to control this, combination
+of controllers and text
+    - It never "dreams": every pixel comes from your references, recoloured and placed by rules. Consistent. YES NO DREAM,
+BUT SKELETON is the key to modify it..I should be abl eto play with the skeleton..as well...it is combination o fskeleton and mesh
+and I use the ultima7 graphics as reference for skeleton and more of the u7 asset it reference more complex of choices
+and more fresh new look of sprites and "imagination" and the more the assets can be different from other limiting not eliminating
+needing an artist.
     - It can't invent a shape it has no parts for: "an alien with four legs and big wings" works if the library
-      has legs, wings and a body plan for four legs - add those once and it can make many.
+      has legs, wings and a body plan for four legs - add those once and it can make many. <-- yes but we should have reference of ultima 7
+skeleton bone and give the user to customize their own variation of reference bone and reference from that...I agree to not invent
  B. AN AI GENERATOR (local Stable Diffusion + a style trained on your references, run with ONNX in the editor)
     - CAN invent new shapes from typed words - but: it needs an NVIDIA graphics card with 8 GB or more, a model
       download of several GB (once, offline after), training on your references takes hours, and NO AI can
       promise zero mistakes - it makes good pictures and bad ones; the review window is where you keep the good.
     - Animation (every pose x direction, frame by frame, the same character) is where AI is weakest today: it
-      would draw ONE picture well; the parts-based generator then animates it.
+      would draw ONE picture well; the parts-based generator then animates it. <<-- DO IT AND INTEGRATE IT IN YOUR DLL and I take
+the cause.
  My recommendation: build A first (it is the reliable artist for hire), then B as an extra later if your PC can
  run it - B's pictures can be cut into parts for A's library.
  Two things I need from you:
@@ -135,4 +150,4 @@ What can be promised and what can't, offline, no internet, no paid AI:
      own or licensed references are safer.
  And the separate U6 / U7 / U8 style libraries, kept apart, with versions (new references never change sprites
  already made) - yes, as ChatGPT said; that is in my plan too.
-     Answer (GO with A / A and B / let's talk):
+     Answer (GO with A / A and B / let's talk): GO A AND B.

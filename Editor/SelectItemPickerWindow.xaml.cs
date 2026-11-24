@@ -7,6 +7,44 @@ using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
 
+/// <summary>
+/// Which things an item picker lists (Advance IF: only what can do what the condition asks - a light for Light lit,
+/// a door or lockable container for Unlocked...). A null list = that kind is left out and its tab hidden.
+/// </summary>
+public sealed class ItemPickFilter
+{
+    public Func<WorldObject, bool>? Objects { get; init; }
+    public Func<BookData, bool>? Books { get; init; }
+    public Func<ContainerData, bool>? Containers { get; init; }
+    /// <summary>Said in the picker's title: what it lists, and how to make one when there's none.</summary>
+    public string Note { get; init; } = "";
+
+    /// <summary>A door, or a container that can be locked (it starts locked, or has a key).</summary>
+    public static ItemPickFilter Lockable => new()
+    {
+        Objects = o => o.Type == ObjectType.Door,
+        Containers = c => c.IsLocked || c.RequiredKeyItemId >= 0,
+        Note = "Doors, and containers that can be locked (Container Editor: Locked, or a Required Key)."
+    };
+    public static ItemPickFilter Openable => new() { Objects = o => o.Type == ObjectType.Door || o.IsContainer, Containers = _ => true, Note = "Doors and containers." };
+    public static ItemPickFilter Lights => new() { Objects = o => o.Type == ObjectType.LightSource, Note = "Light sources (Object Editor: type Light Source)." };
+    public static ItemPickFilter Explosives => new() { Objects = o => o.Type == ObjectType.Explosive, Note = "Explosives (Object Editor: type Explosive)." };
+    /// <summary>What can be broken: hit points (blood, bodies and walls have none).</summary>
+    public static ItemPickFilter Breakable => new()
+    {
+        Objects = o => o.HitPoints > 0 && !o.CannotBeDestroyed && ObjectTypes.CanBeBroken(o.Type),
+        Books = b => b.Destructible,
+        Containers = c => c.Destructible && !c.IsBodyContainer,
+        Note = "Things that can be broken: objects with hit points (Object Editor > Durability), books and containers marked Destructible."
+    };
+    public static ItemPickFilter Charged => new()
+    {
+        Objects = o => o.Type == ObjectType.UseableObject && o.Useable.Charges > 0 || o.Type == ObjectType.Weapon && o.Weapon.Ammo == WeaponAmmo.Charges,
+        Note = "Things with charges: wands and other usable objects with Charges, and weapons that shoot by charges."
+    };
+    public static ItemPickFilter PressurePlates => new() { Objects = o => o.IsPressurePlate, Note = "Pressure plates (Object Editor > Identity > Pressure plate)." };
+}
+
 public partial class SelectItemPickerWindow : Window
 {
     private readonly BookDatabase _books;
@@ -17,9 +55,17 @@ public partial class SelectItemPickerWindow : Window
 
     public ItemReference? Result { get; private set; }
 
-    public SelectItemPickerWindow(BookDatabase books, ObjectDatabase objects, ContainerDatabase containers, SpriteDatabase sprites, ItemReference? current)
+    public SelectItemPickerWindow(BookDatabase books, ObjectDatabase objects, ContainerDatabase containers, SpriteDatabase sprites, ItemReference? current, ItemPickFilter? filter = null)
     {
         InitializeComponent();
+        if (filter is not null)
+        {
+            // Only what can do what's asked: the other kinds' tabs are hidden.
+            books = new BookDatabase { Books = filter.Books is { } fb ? books.Books.Where(fb).ToList() : new List<BookData>() };
+            objects = new ObjectDatabase { Objects = filter.Objects is { } fo ? objects.Objects.Where(fo).ToList() : new List<WorldObject>(), WallDesigns = objects.WallDesigns };
+            containers = new ContainerDatabase { Containers = filter.Containers is { } fc ? containers.Containers.Where(fc).ToList() : new List<ContainerData>() };
+            Title += " - " + filter.Note;
+        }
         _books = books;
         _objects = objects;
         _containers = containers;
@@ -57,6 +103,12 @@ public partial class SelectItemPickerWindow : Window
                 ReferencedItemCategory.Container => 2,
                 _ => 1
             };
+        }
+        if (filter is not null)
+        {
+            bool[] shown = { filter.Books is not null, filter.Objects is not null, filter.Containers is not null };
+            for (int i = 0; i < 3; i++) if (!shown[i] && CategoryTabs.Items[i] is TabItem tab) tab.Visibility = Visibility.Collapsed;
+            if (!shown[Math.Max(0, CategoryTabs.SelectedIndex)]) CategoryTabs.SelectedIndex = Array.IndexOf(shown, true);
         }
 
         Closing += (_, _) =>

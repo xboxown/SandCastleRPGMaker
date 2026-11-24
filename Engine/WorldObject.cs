@@ -119,6 +119,8 @@ public class WorldObject
     public int Defense { get; set; }
     /// <summary>A steel door, an iron grate...: blows never hurt it, whatever its hit points.</summary>
     public bool CannotBeDestroyed { get; set; }
+    /// <summary>A pressure plate: Advance IF > Weight on an object lists only these.</summary>
+    public bool IsPressurePlate { get; set; }
     public int DestroyedSoundResourceId { get; set; } = -1;
 
     /// <summary>Junk only: its frames are states, not an animation (a bed cover: frame 1 made, frame 2 turned down).</summary>

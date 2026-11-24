@@ -35,7 +35,7 @@ internal static class GameConditionFields
             panel.Children.Add(Label(label));
             panel.Children.Add(combo);
         }
-        void Item(string label, string anyText = "(any)")
+        void Item(string label, string anyText = "(any)", ItemPickFilter? filter = null)
         {
             var button = new Button { HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2, 8, 2) };
             void Show() => button.Content = c.Item is { ItemId: >= 0 } item
@@ -44,7 +44,7 @@ internal static class GameConditionFields
             button.Click += (_, _) =>
             {
                 var picker = new SelectItemPickerWindow(ProjectSession.BooksProvider?.Invoke() ?? new BookDatabase(), ProjectSession.ObjectsProvider?.Invoke() ?? new ObjectDatabase(),
-                    ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase(), ProjectSession.Sprites, c.Item) { Owner = owner };
+                    ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase(), ProjectSession.Sprites, c.Item, filter) { Owner = owner };
                 if (picker.ShowDialog() == true) c.Item = picker.Result is { ItemId: >= 0 } r ? new ItemReference { Category = r.Category, ItemId = r.ItemId, DisplayName = r.DisplayName } : null;
                 Show();
             };
@@ -95,14 +95,34 @@ internal static class GameConditionFields
             Number($"{what} at least this many times", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v));
             Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever");
         }
-        void EventName()
+        void EventName(bool withPage = false)
         {
+            // Picked in three steps (EventPickerWindow): the kind, who / what, its event (page) - or typed.
             var names = ProjectSession.EventNamesProvider?.Invoke() ?? new List<string>();
-            var combo = new ComboBox { Width = 260, IsEditable = true, ItemsSource = names, Text = c.EventName, HorizontalAlignment = HorizontalAlignment.Left };
+            var combo = new ComboBox { Width = 260, IsEditable = true, ItemsSource = names, Text = c.EventName };
             combo.LostFocus += (_, _) => c.EventName = combo.Text.Trim();
             combo.SelectionChanged += (_, _) => { if (combo.SelectedItem is string s) c.EventName = s; };
-            panel.Children.Add(Label("Event (its name: a map event, an object, a book, a container, a character...)"));
-            panel.Children.Add(combo);
+            var pageBox = new TextBox { Width = 50, Text = Math.Max(1, c.Number).ToString(), Margin = new Thickness(6, 0, 0, 0), VerticalAlignment = VerticalAlignment.Center };
+            pageBox.LostFocus += (_, _) => { if (int.TryParse(pageBox.Text.Trim(), out int n)) c.Number = Math.Max(1, n); pageBox.Text = Math.Max(1, c.Number).ToString(); };
+            var pick = new Button { Content = "Pick...", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(6, 0, 0, 0), ToolTip = "Map events, characters, objects, containers, books, paperdolls - then who / what, then its event pages" };
+            pick.Click += (_, _) =>
+            {
+                var picker = new EventPickerWindow(c.EventName, c.Number, withPage) { Owner = owner };
+                if (picker.ShowDialog() != true) return;
+                c.EventName = picker.EventName;
+                combo.Text = c.EventName;
+                if (withPage) { c.Number = picker.PageNumber; pageBox.Text = c.Number.ToString(); }
+            };
+            var row = new StackPanel { Orientation = Orientation.Horizontal };
+            row.Children.Add(combo);
+            if (withPage)
+            {
+                row.Children.Add(new TextBlock { Text = "  page", VerticalAlignment = VerticalAlignment.Center });
+                row.Children.Add(pageBox);
+            }
+            row.Children.Add(pick);
+            panel.Children.Add(Label(withPage ? "Event and its page (Pick: the kind, who / what, then the page)" : "Event (Pick: the kind - map events, characters, objects, containers, books, paperdolls - then who / what)"));
+            panel.Children.Add(row);
         }
 
         switch (c.Kind)
@@ -148,16 +168,16 @@ internal static class GameConditionFields
                 Compare("Is");
                 break;
             }
-            case GameConditionKind.Destroyed: Item("Object destroyed"); Happened("Destroyed"); break;
+            case GameConditionKind.Destroyed: Item("Object destroyed", filter: ItemPickFilter.Breakable); Happened("Destroyed"); break;
             case GameConditionKind.Stolen: Item("Object stolen (taken from its owner)"); Happened("Stolen"); break;
             case GameConditionKind.Used: Item("Object used (double-clicked)"); Happened("Used"); break;
-            case GameConditionKind.ExplosiveIgnited: Item("Explosive lit"); Happened("Lit"); break;
-            case GameConditionKind.Picklocked: Item("Door or container picklocked"); Happened("Picklocked"); break;
-            case GameConditionKind.UnlockedByKey: Item("Door or container unlocked by its key"); Happened("Unlocked"); break;
-            case GameConditionKind.MagicallyUnlocked: Item("Door or container unlocked by magic"); Happened("Unlocked"); panel.Children.Add(Note("Recorded when a spell unlocks it (magic unlocking comes with the spellbook rework).")); break;
-            case GameConditionKind.LightBurnedOut: Item("Light"); Happened("Burnt out"); break;
-            case GameConditionKind.LightPutOut: Item("Light"); Happened("Put out"); break;
-            case GameConditionKind.LightLit: Item("Light"); Happened("Lit"); break;
+            case GameConditionKind.ExplosiveIgnited: Item("Explosive lit", filter: ItemPickFilter.Explosives); Happened("Lit"); break;
+            case GameConditionKind.Picklocked: Item("Door or container picklocked", filter: ItemPickFilter.Lockable); Happened("Picklocked"); break;
+            case GameConditionKind.UnlockedByKey: Item("Door or container unlocked by its key", filter: ItemPickFilter.Lockable); Happened("Unlocked"); break;
+            case GameConditionKind.MagicallyUnlocked: Item("Door or container unlocked by magic", filter: ItemPickFilter.Lockable); Happened("Unlocked"); panel.Children.Add(Note("Recorded when a spell unlocks it (magic unlocking comes with the spellbook rework).")); break;
+            case GameConditionKind.LightBurnedOut: Item("Light", filter: ItemPickFilter.Lights); Happened("Burnt out"); break;
+            case GameConditionKind.LightPutOut: Item("Light", filter: ItemPickFilter.Lights); Happened("Put out"); break;
+            case GameConditionKind.LightLit: Item("Light", filter: ItemPickFilter.Lights); Happened("Lit"); break;
             case GameConditionKind.LastCommandSucceeded:
                 panel.Children.Add(Note("True when the last command that can fail worked: Walk To Location got there, Pickup Item picked it up, Open Door opened it, Give Item gave it, Train trained... False when it was cancelled (no way there, too heavy, locked, not enough money). Put it straight after that command."));
                 break;
@@ -202,7 +222,7 @@ internal static class GameConditionFields
             case GameConditionKind.TradedWithin: Item("Item traded"); Happened("Traded"); panel.Children.Add(Note("Nothing is traded yet - this is true once trading is in.")); break;
             case GameConditionKind.EventExecuted: EventName(); Happened("Run"); break;
             case GameConditionKind.EventPageExecuted: Number("This event's page number", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v)); Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever"); break;
-            case GameConditionKind.EventNamePageExecuted: EventName(); Number("Its page number", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v)); Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever"); break;
+            case GameConditionKind.EventNamePageExecuted: EventName(withPage: true); Number("Within the last (game hours)", () => c.Number2, v => c.Number2 = Math.Max(0, v), "0 = ever"); break;
             case GameConditionKind.InParty:
                 Who("Who (Anyone: at least this many have joined)", anyone: true);
                 Number("How many joined (for Anyone)", () => Math.Max(1, c.Number), v => c.Number = Math.Max(1, v));
@@ -236,9 +256,9 @@ internal static class GameConditionFields
                 panel.Children.Add(lit);
                 break;
             }
-            case GameConditionKind.WeightOnObject: Item("The object (any placed copy of it)"); Compare("Weight on it"); break;
-            case GameConditionKind.ItemCharges: Who("Who carries it"); Item("Item"); Compare("Charges"); break;
-            case GameConditionKind.DoorOpen: Item("Door (a placed copy of it), or container (its window open)"); OnOff("Open", "Closed"); break;
+            case GameConditionKind.WeightOnObject: Item("The pressure plate (any placed copy of it)", filter: ItemPickFilter.PressurePlates); Compare("Weight on it"); break;
+            case GameConditionKind.ItemCharges: Who("Who carries it"); Item("Item", filter: ItemPickFilter.Charged); Compare("Charges"); break;
+            case GameConditionKind.DoorOpen: Item("Door (a placed copy of it), or container (its window open)", filter: ItemPickFilter.Openable); OnOff("Open", "Closed"); break;
         }
         var not = new CheckBox { Content = "NOT - true when this isn't so", IsChecked = c.Not, Margin = new Thickness(0, 10, 0, 0) };
         not.Checked += (_, _) => c.Not = true;
