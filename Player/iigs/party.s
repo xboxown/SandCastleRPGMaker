@@ -274,13 +274,13 @@ NearestFoe:
         lda [CP]
         sec
         sbc [MP]
-        jsr Abs
+        jsr AbsX
         sta T5
         ldy #2
         lda [CP],y
         sec
         sbc [MP],y
-        jsr Abs
+        jsr AbsY
         cmp T5
         bcc .m
         sta T5
@@ -344,13 +344,13 @@ PartyTurn:
         lda [CP]                ; how far from the member
         sec
         sbc [MP]
-        jsr Abs
+        jsr AbsX
         sta T5
         ldy #2
         lda [CP],y
         sec
         sbc [MP],y
-        jsr Abs
+        jsr AbsY
         cmp T5
         bcc .m
         sta T5

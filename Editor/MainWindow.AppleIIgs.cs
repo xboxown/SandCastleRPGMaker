@@ -1183,7 +1183,8 @@ public partial class MainWindow
                 schedules.Add((list.Count, entry.Period, activity, sx, sy));
             }
             stats[AppleIIgsGamePack.Stat.Behaviour] = who.Schedules.Count > 0 ? 2 : Hostile(who) ? 1 : 0;
-            list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0), facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
+            int moves = who.Movement switch { MovementKind.Sea => 0x1000, MovementKind.Air => 0x2000, _ => 0 }; // sea / air (moves.s)
+            list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0) | moves, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
                 if (OwnEvents(who.EventPages, "c" + who.Id) is int ownCode) pack.CharEvents.Add((mapNo, list.Count - 1, ownCode));
                 if (eggCopy.TryGetValue(placed, out var ec))
                 {
@@ -1586,6 +1587,24 @@ public partial class MainWindow
         pack.Preview.Avatar.AddRange(avatar);
         pack.Preview.MapNames.AddRange(worldList.Select(m => m.MapName));
         foreach (var ((wi, f), _) in floorMap.OrderBy(kv => kv.Value)) pack.Preview.MapNames.Add($"{worldList[wi].MapName}, floor {f}");
+        // Maps that wrap around (their upper floors too) and the things' weights by name (moves.s).
+        for (int wi = 0; wi < worldList.Count; wi++)
+            if (worldList[wi].WrapsAround)
+            {
+                pack.WrapMaps.Add(wi);
+                foreach (var ((fw, _), fm) in floorMap) if (fw == wi) pack.WrapMaps.Add(fm);
+            }
+        var weighed = new HashSet<int>();
+        void Weigh(string name, ReferencedItemCategory category, int id)
+        {
+            int n = pack.Names.IndexOf(name);
+            if (n < 0 || !weighed.Add(n)) return;
+            double kg = ItemWeights.OwnWeight(category, id, _containerDatabase, _bookDatabase, _objectDatabase);
+            pack.Weights.Add((n, (int)Math.Round(kg * 10), ItemWeights.WeighsOnlyItself(category, id, _containerDatabase)));
+        }
+        foreach (var o in _objectDatabase.Objects) Weigh(o.Name, ReferencedItemCategory.Object, o.Id);
+        foreach (var c in _containerDatabase.Containers) Weigh(c.Name, ReferencedItemCategory.Container, c.Id);
+        foreach (var b in _bookDatabase.Books) Weigh(b.Name, ReferencedItemCategory.Book, b.Id);
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;
         pack.StartX = start.StartX >= 0 && start.StartX < start.Width ? start.StartX : start.Width / 2;
         pack.StartY = start.StartY >= 0 && start.StartY < start.Height ? start.StartY : start.Height / 2;

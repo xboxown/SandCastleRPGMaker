@@ -463,13 +463,13 @@ DropHere:
         lda CurX
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         cmp #6
         bcs .fr
         lda CurY
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp #6
         bcs .fr
         ldx CurX

@@ -133,7 +133,7 @@ CursorKey:
         sta T4
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         cmp HalfC
         beq .x
         bcs .y
@@ -145,7 +145,7 @@ CursorKey:
         sta T4
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp HalfR
         beq .yy
         bcs .draw
@@ -302,6 +302,7 @@ NameNumber:
 
 ; The cursor's cell picked: the verb on what is there.
 PickCell:
+        jsr WrapCur             ; a map that wraps around: the cell over the seam (moves.s)
         lda Verb
         cmp #VERB_DROP
         bne .mv
@@ -371,6 +372,13 @@ PickCell:
         bne .notgold
         jmp GetGold
 .notgold:
+        jsr IndexOf             ; too heavy for the Avatar? (moves.s)
+        ldx #$FFFF
+        jsr WeightCheck
+        bcs .light
+        jmp PromptLine
+.light: lda MvWIdx
+        jsr ObjAt
         jsr ObjFlags            ; carried now: off the map (no longer in the way), in the grid
         ora #64
         sta [ItemPtr],y
@@ -516,13 +524,13 @@ NextToCursor:
 .near:  lda CurX
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         cmp #2
         bcs .no
         lda CurY
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp #2
         bcs .no
         sec
@@ -787,14 +795,14 @@ MapTarget:
         lda [ItemPtr]
         sec
         sbc CurX
-        jsr Abs
+        jsr AbsX
         cmp #2
         bcs .far
         ldy #2
         lda [ItemPtr],y
         sec
         sbc CurY
-        jsr Abs
+        jsr AbsY
         cmp #2
         bcs .far
         bra .near
@@ -802,13 +810,13 @@ MapTarget:
         lda CurX
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         cmp #6
         bcs .far
         lda CurY
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp #6
         bcs .far
 .near:  jsr WhatIsThere
@@ -1088,7 +1096,16 @@ IntoContainer:
         sta T5
         dex
         bne .up
-.fine:  jsr LeaveMap
+.fine:  lda Into                ; into something carried: too heavy for whoever carries it? (moves.s)
+        jsr CarrierOf
+        cmp #$FFFE
+        beq .wok
+        tax
+        lda MoveIdx
+        jsr WeightCheck
+        bcs .wok
+        brl MoveDone
+.wok:   jsr LeaveMap
         lda MoveIdx
         jsr ObjAt
         ldy #6
@@ -1114,7 +1131,12 @@ ToPack:
         and #64+256
         cmp #64
         beq .np                 ; carried already
-        jsr LeaveMap
+        lda MoveIdx             ; too heavy for the Avatar? (moves.s)
+        ldx #$FFFF
+        jsr WeightCheck
+        bcs .wok
+        brl MoveDone
+.wok:   jsr LeaveMap
         lda MoveIdx
         jsr ObjAt
         ldy #6

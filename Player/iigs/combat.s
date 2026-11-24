@@ -162,12 +162,12 @@ AttackPicked:
 .who:   lda CurX
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         sta T4
         lda CurY
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp T4
         bcc .d
         sta T4
@@ -432,13 +432,13 @@ DistCP:
         lda [CP]
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         sta T5
         ldy #2
         lda [CP],y
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp T5
         bcs .d
         lda T5
@@ -453,7 +453,7 @@ NearSpot:
         adc SDX
         sec
         sbc GX
-        jsr Abs
+        jsr AbsX
         cmp Radius
         bcs .no
         ldy #2
@@ -462,7 +462,7 @@ NearSpot:
         adc SDY
         sec
         sbc GY
-        jsr Abs
+        jsr AbsY
         cmp Radius
         bcs .no
         sec
@@ -481,6 +481,7 @@ StepToGoal:
         lda GX
         sec
         sbc [CP]
+        jsr ShortX              ; the short way round a map that wraps around (moves.s)
         jsr Sign
         sta SDX
         sta TDX
@@ -488,6 +489,7 @@ StepToGoal:
         lda GY
         sec
         sbc [CP],y
+        jsr ShortY
         jsr Sign
         sta SDY
         sta TDY
@@ -555,25 +557,46 @@ TryCharStep:
         clc
         adc SDY
         sta SNY
+        ldx SNX                 ; over the seam of a map that wraps around (moves.s)
+        ldy SNY
+        jsr WrapXY
+        stx SNX
+        sty SNY
         lda SNX
         cmp PX
         bne .nav
         lda SNY
         cmp PY
-        beq .nj
+        bne .nav
+        jsr AvatarAside         ; the Avatar steps aside for it (out of combat), or they swap (moves.s)
+        bcs .nav
+        brl .no
+.nk:    brl .no
 .nav:   ldx SNX
         ldy SNY
         jsr MapTile
         cmp #$FFFF
-        beq .nj
-        tay
-        lda [FlagsPtr],y
-        and #$0001
-        beq .nj
+        beq .nk
+        jsr GroundFor           ; land: ground that can be walked; sea: water; air: anything (moves.s)
+        bcc .nk
         ldx SNX
         ldy SNY
         jsr OccAt
-        bne .nj
+        and OccMask
+        beq .free
+        and #2                  ; a character in the way: asked to step aside, or they swap
+        beq .nk
+        jsr AsideForChar
+        bcc .nk
+        cmp #2
+        bne .again
+        brl .face
+.again: ldx SNX
+        ldy SNY
+        jsr OccAt
+        and OccMask
+        bne .nk
+.free:
         lda [CP]                ; off its cell
         tax
         ldy #2
@@ -602,7 +625,7 @@ TryCharStep:
         sta [Ptr]
         rep #$20
         .a16
-        lda SDX                 ; facing the way it went: 0 south, 1 north, 2 east, 3 west
+.face:  lda SDX                 ; facing the way it went: 0 south, 1 north, 2 east, 3 west
         beq .vert
         bmi .w
         lda #2

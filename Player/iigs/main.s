@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 43 (b673): maps that wrap around, characters stepping aside (and the Avatar for them), sea and air
+;   characters, the carry limit (2 x Strength) - moves.s.
 ; Version 42 (b664): spawn points - eggs (eggs.s): monsters, music, sounds, common events, missiles, teleports,
 ; weather, buttons; map entered / party or Avatar near / far / on it / something put down.
 ; Version 41 (b662): knocked out and dead bodies (bodies.s).
@@ -664,7 +666,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #42
+        cmp #43
         beq .known
 .bad:   sec
         rts
@@ -1516,6 +1518,7 @@ NextItem:
 
 ; Ptr = the cell X, Y of OccPtr; A = what is there (0: free)
 OccAt:
+        jsr WrapXY              ; (moves.s)
         stx T2
         sty MulA
         lda MapW
@@ -1642,6 +1645,7 @@ CellOnScreen:
         txa
         sec
         sbc ViewX0
+        jsr ShortX              ; (a map that wraps around: the near copy - moves.s)
         clc
         adc #1
         sta T3
@@ -1664,6 +1668,7 @@ CellOnScreen:
         tya
         sec
         sbc ViewY0
+        jsr ShortY
         sta T3
         lda VRows
         inc a
@@ -1856,8 +1861,9 @@ BlitRows:
         bne .row
         rts
 
-; A = the tile at X, Y on the map; $FFFF off the map.
+; A = the tile at X, Y on the map; $FFFF off the map (a map that wraps around: the other side's).
 MapTile:
+        jsr WrapXY              ; (moves.s)
         cpx MapW
         bcs .off                ; (negative numbers are big: off too)
         cpy MapH
@@ -2070,8 +2076,11 @@ TryMove:
         clc
         adc T3
         sta NY
-        ldx NX
+        ldx NX                  ; over the seam of a map that wraps around (moves.s)
         ldy NY
+        jsr WrapXY
+        stx NX
+        sty NY
         jsr MapTile
         cmp #$FFFF
         beq .stay
@@ -2083,7 +2092,12 @@ TryMove:
         ldy NY
         jsr OccAt
         and #3
+        beq .free
+        and #1
         bne .stay
+        jsr AsideForAvatar      ; a character: it steps aside, or they swap places (moves.s)
+        bcc .stay
+.free:
         lda PX
         sta OldX
         lda PY
@@ -2140,6 +2154,7 @@ TryMove:
         .include "hud.s"
         .include "bodies.s"
         .include "eggs.s"
+        .include "moves.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

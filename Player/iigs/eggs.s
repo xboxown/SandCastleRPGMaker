@@ -118,14 +118,14 @@ EgWithin:
         lda EgPX
         sec
         sbc EggTab+2,x
-        jsr Abs
+        jsr AbsX
         cmp EgR
         beq .y
         bcs .no
 .y:     lda EgPY
         sec
         sbc EggTab+4,x
-        jsr Abs
+        jsr AbsY
         cmp EgR
         beq .in
         bcs .no
@@ -836,14 +836,14 @@ EggButton:
         lda EggTab+2,x
         sec
         sbc EgBX
-        jsr Abs
+        jsr AbsX
         cmp EgBD
         beq .a
         bcs .n
 .a:     lda EggTab+4,x
         sec
         sbc EgBY
-        jsr Abs
+        jsr AbsY
         cmp EgBD
         beq .b
         bcs .n

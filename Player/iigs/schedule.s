@@ -184,13 +184,13 @@ ScheduleStep:
 .dist:  lda [CP]                ; how far from its spot
         sec
         sbc GX
-        jsr Abs
+        jsr AbsX
         sta T5
         ldy #2
         lda [CP],y
         sec
         sbc GY
-        jsr Abs
+        jsr AbsY
         cmp T5
         bcs .m
         lda T5

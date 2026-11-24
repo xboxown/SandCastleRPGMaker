@@ -404,12 +404,12 @@ Lit:
         lda DX
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         sta T4
         lda DY
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp T4
         bcc .a
         sta T4
@@ -425,12 +425,12 @@ Lit:
         lda DX
         sec
         sbc LX,x
-        jsr Abs
+        jsr AbsX
         sta T4
         lda DY
         sec
         sbc LY,x
-        jsr Abs
+        jsr AbsY
         cmp T4
         bcc .b
         sta T4

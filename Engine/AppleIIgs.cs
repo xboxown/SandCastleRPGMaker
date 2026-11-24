@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 42;
+    public const ushort Version = 43;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -494,14 +494,14 @@ public sealed class AppleIIgsGamePack
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
         "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
-        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Avatar" };
+        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
         "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
-        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence" };
+        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -607,6 +607,11 @@ public sealed class AppleIIgsGamePack
     /// <summary>Bodies (Character Editor > Health > Body): by a character's name its Body pose's picture ($FFFF none),
     /// 1 leaves no body, 2 too heavy to pick up; the Avatar's picture; the bodies' name (System Settings > Body Container).</summary>
     public List<(int Name, int Sprite, int Flags)> CharBodies { get; } = new();
+    /// <summary>The maps that wrap around (Maps tab: Wraps around the edges) - their numbers (a world's upper floors too).</summary>
+    public List<int> WrapMaps { get; } = new();
+    /// <summary>Weights by a thing's name (Object / Container / Book Editor's weight) in tenths, and whether it is a bag that
+    /// weighs only itself (a bag of holding): the carry limit, 2 x Strength (U6GameWindow.Weight.cs).</summary>
+    public List<(int Name, int Tenths, bool Bag)> Weights { get; } = new();
     public int AvatarBody { get; set; } = 0xFFFF;
     public int BodyName { get; set; } = 0xFFFF;
     /// <summary>Spawn points (eggs, Map Editor > Spawn): map, x, y, kind (0 monster, 1 music, 2 sound, 3 usecode, 4 missile,
@@ -857,6 +862,11 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)AvatarBody); w.Write((ushort)BodyName);
         w.Write((ushort)Math.Min(CharBodies.Count, 128));
         foreach (var (n, sp, f) in CharBodies.Take(128)) { w.Write((ushort)n); w.Write((ushort)sp); w.Write((ushort)f); }
+        // Maps that wrap around; weights (moves.s).
+        w.Write((ushort)Math.Min(WrapMaps.Count, 32));
+        foreach (int wm in WrapMaps.Take(32)) w.Write((ushort)wm);
+        w.Write((ushort)Math.Min(Weights.Count, 256));
+        foreach (var (n, t, bag) in Weights.Take(256)) { w.Write((ushort)n); w.Write((ushort)Math.Clamp(t, 0, 65535)); w.Write((ushort)(bag ? 1 : 0)); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

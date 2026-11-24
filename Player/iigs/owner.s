@@ -175,7 +175,12 @@ GiveToMP:
         sta WhoName
         lda FmtName+2
         sta WhoName+2
-        jsr LeaveMap
+        lda MoveIdx             ; too heavy for them? (moves.s)
+        ldx PO
+        jsr WeightCheck
+        bcs .wok
+        brl MoveDone
+.wok:   jsr LeaveMap
         lda MoveIdx
         jsr ObjAt
         ldy #6

@@ -34,13 +34,13 @@ Shoot:
         lda [AtkP]              ; how far
         sec
         sbc [DefP]
-        jsr Abs
+        jsr AbsX
         sta T4
         ldy #2
         lda [AtkP],y
         sec
         sbc [DefP],y
-        jsr Abs
+        jsr AbsY
         cmp T4
         bcs .m
         lda T4

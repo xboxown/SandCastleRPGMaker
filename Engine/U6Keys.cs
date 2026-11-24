@@ -236,6 +236,7 @@ public static class U6Words
         ("Strength", "strength", "A stat's name"),
         ("Dexterity", "dexterity", "A stat's name"),
         ("Intelligence", "intelligence", "A stat's name"),
+        ("TooHeavy", "Too heavy!", "Apple IIgs: picking up or giving more than one can carry (2 x Strength)"),
     };
 
     public static string Of(Ultima6Settings settings, string id) =>

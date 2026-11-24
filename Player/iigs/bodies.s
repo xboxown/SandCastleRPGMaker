@@ -38,7 +38,8 @@ ParseBodies:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseMoves          ; wrapping maps, weights (moves.s)
 
 ; A = the body picture of a character named A ($FFFF none); X its flags (1 no body, 2 too heavy).
 BodySprite:

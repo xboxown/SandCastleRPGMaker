@@ -419,7 +419,7 @@ EDispel:
         lda [ItemPtr]
         sec
         sbc CastX
-        jsr Abs
+        jsr AbsX
         cmp SpBuf+54
         beq .y
         bcs .n
@@ -427,7 +427,7 @@ EDispel:
         lda [ItemPtr],y
         sec
         sbc CastY
-        jsr Abs
+        jsr AbsY
         cmp SpBuf+54
         beq .g
         bcs .n
@@ -532,7 +532,7 @@ Lights:
         lda [ItemPtr]
         sec
         sbc CastX
-        jsr Abs
+        jsr AbsX
         cmp FR
         beq .y
         bcs .n
@@ -540,7 +540,7 @@ Lights:
         lda [ItemPtr],y
         sec
         sbc CastY
-        jsr Abs
+        jsr AbsY
         cmp FR
         beq .g
         bcs .n

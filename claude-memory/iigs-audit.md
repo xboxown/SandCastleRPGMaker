@@ -20,7 +20,8 @@ Done since: b659 crafting/work, b660 wands/potions/charges, b661 HUD dials/date/
 Eggs (item 2) half done and PARKED: editor side saved in H:\_sandcastle_test_temp\eggs_AppleIIgs.cs / eggs_MainWindow.AppleIIgs.cs
 (and the script iigs_b663_cs.py); design: Eggs list (18 words each), EggChars absent copies, codes trigger 18; player eggs.s
 not written yet.
-EGGS DONE in b664 (eggs.s; GAME.DAT 42, SAVE 7; harness IIGS_EGGS / IIGS_MISSILE in iigspack). Next: the user's updated issues.odt (2026-11-23), then continue the list below from item 3.
+EGGS DONE in b664 (eggs.s; GAME.DAT 42, SAVE 7; harness IIGS_EGGS / IIGS_MISSILE in iigspack).
+RESUMED 2026-11-24 (user: "spend the rest of your energy 100% on apple //gs until 100% completed"). ITEM 3 DONE b673 (moves.s; GAME.DAT 43): wrap (WrapXY in MapTile/OccAt, AbsX/AbsY/ShortX/ShortY, CellOnScreen, PickCell), MoveAside (AsideForAvatar/AsideForChar/AvatarAside), sea/air (char flags $1000/$2000, GroundFor, OccMask), weight by name table (WeightCheck in Get/ToPack/GiveToMP/Into). Harness IIGS_MOVES. Sim tips: keys start "!~" (disks in, title Enter); (3,5) on map 0 is a Change Map event; simwatch.py/simprof.py in _sandcastle_test_temp. NEXT: item 4.
 Missing or partial on the IIgs (from the file summaries), rough order to do:
 1. (done b662) Bodies + Unconscious
 2. Spawns / eggs (monster, music, sound, weather, usecode, missile eggs) - Spawns.cs

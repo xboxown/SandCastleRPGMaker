@@ -80,14 +80,14 @@ FindDoors:
         lda [ItemPtr]
         sec
         sbc PX
-        jsr Abs
+        jsr AbsX
         cmp #20
         bcs .n
         ldy #2
         lda [ItemPtr],y
         sec
         sbc PY
-        jsr Abs
+        jsr AbsY
         cmp #20
         bcs .n
         lda DoorN

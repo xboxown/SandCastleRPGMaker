@@ -124,6 +124,7 @@ ChangeMap:
 .loaded:
         lda GoMap               ; that map's cells, characters, events
         sta CurMap
+        jsr SetMapWrap          ; does it wrap around (moves.s)
         jsr MapOff
         lda MapTab+MT_W,x
         sta MapW
