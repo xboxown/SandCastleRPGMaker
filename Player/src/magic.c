@@ -1243,6 +1243,15 @@ static cJSON *spell_named(cJSON *book, const char *name)
     return NULL;
 }
 
+/* Whether any spellbook in the project has a spell of this name (Cast Spell: else a Common Event of that name runs). */
+int magic_spell_exists(const char *name)
+{
+    cJSON *o;
+    cJSON_ArrayForEach(o, get(get(project(), "Objects"), "Objects"))
+        if (num(o, "Type", -1) == OT_SPELLBOOK && spell_named(o, name)) return 1;
+    return 0;
+}
+
 int magic_learn_spell(int actor, const char *name)
 {
     Item *items[16]; cJSON *defs[16];

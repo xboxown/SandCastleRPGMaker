@@ -27,6 +27,8 @@ public interface IScriptWaitHost
 public interface IScriptLibraryHost
 {
     CommonEventDefinition? GetCommonEvent(int id);
+    /// <summary>Cast Spell with a Common Event's name: that common event when no spellbook spell in the project has the name (it runs as the spell - no mana or reagents); else null.</summary>
+    CommonEventDefinition? CommonEventAsSpell(string spellName) => null;
 }
 
 /// <summary>The state of one running command list: where each loop is (by its opening line), and how deep the Common Event calls go.</summary>

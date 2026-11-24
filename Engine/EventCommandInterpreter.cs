@@ -260,6 +260,23 @@ public static class EventCommandInterpreter
                     return;
                 }
 
+                case EventCommandType.CastSpell when context is IScriptLibraryHost spells
+                                                     && spells.CommonEventAsSpell(ScriptValues.Text(SafeValue(cmd.Get("Value"), context, trace)).Trim()) is { } asSpell:
+                {
+                    // No spellbook spell has this name: the Common Event of that name runs as the spell - the game's maker codes its mana and reagents.
+                    if (state.Depth >= MaxCallDepth)
+                    {
+                        ScriptError(context, trace, "Cast Spell", new ScriptException($"\"{asSpell.Name}\" calls Common Events more than {MaxCallDepth} deep (one calling itself?)"));
+                        i++;
+                        continue;
+                    }
+                    int next = i + 1;
+                    var returnsThen = returns;
+                    trace.Add($"Cast Spell: the Common Event \"{asSpell.Name}\"");
+                    Run(asSpell.Commands, context, trace, 0, null, new ScriptRunState { Depth = state.Depth + 1, Parent = state }, () => Run(commands, context, trace, next, returnsThen, state, finished));
+                    return;
+                }
+
                 case EventCommandType.CallCommonEvent:
                 {
                     if (context is not IScriptLibraryHost library || !int.TryParse(cmd.Get("CommonEventId"), out int id) || library.GetCommonEvent(id) is not { } common)

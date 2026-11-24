@@ -3766,6 +3766,39 @@ static void continue_run(Run *r)
                 continue;
             }
 
+            case C_CastSpell:
+            {
+                /* No spellbook spell has this name: the Common Event of that name runs as the spell (no mana or reagents - the maker codes them) */
+                functionRun = r;
+                char name[96];
+                snprintf(name, sizeof name, "%s", value_text_of(formula(c, "Value")));
+                char *s = name, *e;
+                while (*s == ' ') s++;
+                for (e = s + strlen(s); e > s && e[-1] == ' '; ) *--e = 0;
+                const Common *common = NULL;
+                if (*s && !magic_spell_exists(s))
+                    for (int k = 0; k < commonCount && !common; k++)
+                    {
+                        const char *a = commons[k].name ? commons[k].name : "", *b = s;
+                        while (*a == ' ') a++;
+                        while (*a && *b && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+                        while (*a == ' ') a++;
+                        if (!*a && !*b) common = &commons[k];
+                    }
+                if (!common) goto run_command;
+                r->pc++;
+                if (r->depth >= MAX_CALL_DEPTH)
+                {
+                    char t[200];
+                    snprintf(t, sizeof t, "Script error in Cast Spell: \"%s\" calls Common Events more than %d deep (one calling itself?)", common->name, MAX_CALL_DEPTH);
+                    game_log(t);
+                    continue;
+                }
+                script_arena_reset();
+                call_common(r, common);
+                continue;
+            }
+
             case C_ConditionalBranchSwitch: case C_ConditionalBranchVariable: case C_AdvancedIf:
                 r->pc = branch_true(c) ? r->pc + 1 : find_else_or_end(l, r->pc) + 1;
                 continue;
@@ -3803,6 +3836,7 @@ static void continue_run(Run *r)
                 }
                 /* fall through */
             default:
+            run_command:
                 r->pc++;
                 functionRun = r;
                 if (script_data_command(c->type, c->params)) continue; /* variables, texts, arrays, grids, the debug log */

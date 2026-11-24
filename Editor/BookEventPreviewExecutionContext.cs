@@ -46,6 +46,16 @@ public class BookEventPreviewExecutionContext : IEventExecutionContext, IDialogC
     /// <summary>The Common Events when there's no project session (a built game sets them from its settings).</summary>
     public List<CommonEventDefinition>? CommonEvents { get; set; }
 
+    /// <summary>Whether any spellbook in the project has a spell of this name (set by the game windows).</summary>
+    public Func<string, bool>? SpellExists { get; set; }
+
+    public CommonEventDefinition? CommonEventAsSpell(string spellName)
+    {
+        if (string.IsNullOrWhiteSpace(spellName) || SpellExists?.Invoke(spellName) == true) return null;
+        bool Named(CommonEventDefinition e) => e.Name.Trim().Equals(spellName.Trim(), StringComparison.OrdinalIgnoreCase);
+        return ProjectSession.SettingsProvider?.Invoke()?.CommonEvents.FirstOrDefault(Named) ?? CommonEvents?.FirstOrDefault(Named);
+    }
+
     public bool TryCall(string name, IReadOnlyList<object> args, out object result)
     {
         result = 0.0;

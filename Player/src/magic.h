@@ -10,6 +10,7 @@ void magic_cast(int caster, cJSON *spell, int castOn);      /* castOn -1: itself
 int magic_use_map(int uid);                                  /* a potion, food, useable object or spellbook double-clicked: 1 = handled */
 int magic_use_carried(Item *it);
 int magic_learn_spell(int actor, const char *name);
+int magic_spell_exists(const char *name); /* any spellbook in the project has it */
 int magic_cast_named(int actor, const char *name, int other, void *doll, int byActivator); /* doll: the paperdoll the event runs from (a spellbook's own) */
 int magic_combat_spell(int actor, int target);               /* a mage's turn in a fight: 1 = it cast */
 int magic_frozen(int actor);                                 /* Time Stop */

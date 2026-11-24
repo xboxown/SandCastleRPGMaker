@@ -41,12 +41,30 @@ public class ScriptCommandWindow : FactionCommandWindowBase
         switch (field.Kind)
         {
             case ScriptFieldKind.Formula:
+            {
+                // Coloured as typed: variables blue, arrays green; Cast Spell's / Learn Spell's spell red when nothing has that name.
+                AddLabel(field.Label);
+                var box = new FormulaBox { KnownText = SpellNameCheck(field) };
+                box.Text = Existing(field.Key, field.Default);
+                Rows.Children.Add(box);
+                _savers.Add(c =>
+                {
+                    if (ScriptExpression.Check(box.Text) is { } error)
+                    {
+                        MessageBox.Show(this, $"{field.Label}: {error}.", Title, MessageBoxButton.OK, MessageBoxImage.Warning);
+                        return false;
+                    }
+                    c.Parameters[field.Key] = box.Text.Trim();
+                    return true;
+                });
+                break;
+            }
             case ScriptFieldKind.Text:
             {
                 AddLabel(field.Label);
                 var box = new TextBox { Text = Existing(field.Key, field.Default) };
                 Rows.Children.Add(box);
-                bool formula = field.Kind == ScriptFieldKind.Formula;
+                bool formula = false;
                 _savers.Add(c =>
                 {
                     if (formula && ScriptExpression.Check(box.Text) is { } error)
@@ -311,7 +329,10 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 var asFormula = new RadioButton { Content = "Formula (\"Gold: \" + Gold)", GroupName = "words" + field.Key, IsChecked = formula };
                 row.Children.Add(asWords);
                 row.Children.Add(asFormula);
-                var box = new TextBox { Text = Existing(field.Key, field.Default), Margin = new Thickness(0, 4, 0, 0) };
+                var box = new FormulaBox { Margin = new Thickness(0, 4, 0, 0), Colouring = formula };
+                box.Text = Existing(field.Key, field.Default);
+                asWords.Checked += (_, _) => box.Colouring = false;
+                asFormula.Checked += (_, _) => box.Colouring = true;
                 Rows.Children.Add(box);
                 _savers.Add(c =>
                 {
@@ -364,13 +385,31 @@ public class ScriptCommandWindow : FactionCommandWindowBase
         }
     }
 
+    /// <summary>
+    /// Cast Spell / Learn Spell: a spell named in quotes is checked as you type - known (black) when a spellbook in the
+    /// project has the spell (Cast Spell: or a Common Event has the name - it runs as the spell), else red.
+    /// </summary>
+    private Func<string, bool>? SpellNameCheck(ScriptField field)
+    {
+        if (field.Key != "Value" || _spec.Type is not (EventCommandType.CastSpell or EventCommandType.LearnSpell)) return null;
+        bool cast = _spec.Type == EventCommandType.CastSpell;
+        return name =>
+        {
+            if (name.Length == 0) return false;
+            var objects = ProjectSession.ObjectsProvider?.Invoke();
+            if (objects?.Objects.Any(o => o.Type == ObjectType.Spellbook && o.Spellbook.Spells.Any(s => s.Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase))) == true) return true;
+            return cast && ProjectSession.SettingsProvider?.Invoke()?.CommonEvents.Any(e => e.Name.Trim().Equals(name, StringComparison.OrdinalIgnoreCase)) == true;
+        };
+    }
+
     /// <summary>A condition: a formula, or any game condition (Advance IF's window).</summary>
     private void AddConditionField(ScriptField field, EventCommand? existing)
     {
         AddLabel(field.Label);
         bool game = existing?.Get("Mode") == "Game";
         var formulaChoice = new RadioButton { Content = "This formula is true:", IsChecked = !game, GroupName = "cond" + field.Key };
-        var formula = new TextBox { Text = existing?.Get("Formula") ?? "", Margin = new Thickness(18, 2, 0, 4) };
+        var formula = new FormulaBox { Margin = new Thickness(18, 2, 0, 4) };
+        formula.Text = existing?.Get("Formula") ?? "";
         var gameChoice = new RadioButton { Content = "This game condition is true:", IsChecked = game, GroupName = "cond" + field.Key, Margin = new Thickness(0, 4, 0, 0) };
         string condition = existing?.Get("Condition") ?? "", summary = existing?.Get("Summary") ?? "";
         var pick = new Button { Content = summary.Length > 0 ? summary : "(pick a condition...)", HorizontalAlignment = HorizontalAlignment.Left, Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(18, 2, 0, 0) };
