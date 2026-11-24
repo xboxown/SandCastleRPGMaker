@@ -180,7 +180,7 @@ public class ScriptCommandWindow : FactionCommandWindowBase
                 AddLabel(field.Label);
                 string prefix = field.Key.EndsWith("X") ? field.Key[..^1] : field.Key;
                 var spot = new MapCellField(this, Rows, existing, prefix, withFloor: true);
-                bool optional = _spec.Type is EventCommandType.MoveCamera or EventCommandType.PlaceCharacter or EventCommandType.ChangeMap;
+                bool optional = _spec.Type is EventCommandType.MoveCamera or EventCommandType.PlaceCharacter or EventCommandType.ChangeMap or EventCommandType.FindThing;
                 _savers.Add(c =>
                 {
                     if (optional && spot.Cell is null) return true;
@@ -489,7 +489,7 @@ public class ScriptCommandWindow : FactionCommandWindowBase
         ScriptFieldKind.Who => WhoChoice.Describe(command.Get(field.Key)),
         ScriptFieldKind.Vehicle => command.Get("VehicleName"),
         ScriptFieldKind.Item => command.Get("ItemId" + ItemSuffix(field.Key)) is "" or "-1" ? "(none)" : CommandFields.ItemName(command, ItemSuffix(field.Key)),
-        ScriptFieldKind.Thing => command.Get("ThingName") is { Length: > 0 } name ? $"{name} at ({command.Get("X")}, {command.Get("Y")})" : "?",
+        ScriptFieldKind.Thing => MapThingField.Describe(command),
         ScriptFieldKind.Spot => SpotText(command, field.Key.EndsWith("X") ? field.Key[..^1] : field.Key),
         ScriptFieldKind.Paperdoll => command.Get("DesignName") is { Length: > 0 } doll ? doll : "this paperdoll",
         ScriptFieldKind.Sprite => $"{command.Get("SpriteGroup")}/{command.Get("SpriteName")}",

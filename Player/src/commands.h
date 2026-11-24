@@ -238,6 +238,8 @@ enum Command
     C_IsItemCursed = 230,
     C_CombineItems = 231,
     C_GetMagicBonus = 232,
+    C_FindThing = 233,
+    C_ThingInfo = 234,
     C_COUNT
 };
 
@@ -430,6 +432,7 @@ static const char *const COMMAND_NAMES[] =
     "U6 Set Gender", "U6 Scene Distribute Points", "U6 Scene Begin", "U6 Scene Picture", "U6 Scene Text", "U6 Scene Wait Key", "U6 Scene Choice",
     "U6 Scene Remove", "U6 Scene End",
     "Curse Item", "Lift Curse", "Enchant Item", "Remove Enchantments", "Get Equipped Item", "Is Item Cursed", "Combine Items", "Get Magic Bonus",
+    "Find Thing", "Thing Info",
 };
 
 #endif

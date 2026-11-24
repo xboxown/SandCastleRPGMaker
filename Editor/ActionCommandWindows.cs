@@ -22,6 +22,8 @@ internal sealed class MapThingField
     private readonly TextBlock _cellText = new() { Width = 90, VerticalAlignment = VerticalAlignment.Center };
     private readonly string _what;
     private (int X, int Y)? _cell;
+    /// <summary>From a variable: the thing whose handle a variable holds (Find Thing) - a body, something dropped or made during play.</summary>
+    private readonly ComboBox _variable = new() { Width = 180, IsEditable = true, Margin = new Thickness(6, 0, 0, 0), ToolTip = "A variable Find Thing put a thing's handle into. Empty: the thing picked on the map above." };
 
     public MapThingField(Window owner, StackPanel rows, EventCommand? existing, string what, Func<string, bool> accepts)
     {
@@ -36,7 +38,14 @@ internal sealed class MapThingField
         row.Children.Add(pick);
         row.Children.Add(_things);
         rows.Children.Add(row);
-        Fill(existing?.Get("Thing"), existing?.Get("ThingName"));
+        var fromVariable = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 3, 0, 0) };
+        fromVariable.Children.Add(new TextBlock { Text = "or From a variable:", VerticalAlignment = VerticalAlignment.Center, Width = 120 });
+        _variable.ItemsSource = ProjectSession.VariablesProvider?.Invoke()?.Variables.Select(v => v.Name).Distinct().OrderBy(n => n).ToList() ?? new List<string>();
+        fromVariable.Children.Add(_variable);
+        rows.Children.Add(fromVariable);
+        string saved = existing?.Get("Thing") ?? "";
+        if (saved.StartsWith("Var:")) { _variable.Text = saved[4..]; saved = ""; }
+        Fill(saved, existing?.Get("ThingName"));
     }
 
     private void Pick()
@@ -67,6 +76,7 @@ internal sealed class MapThingField
 
     public bool Validate()
     {
+        if (_variable.Text.Trim().Length > 0) return true;
         if (_cell is not null && _things.SelectedItem is ThingChoice) return true;
         MessageBox.Show(_owner, $"Pick the {_what} on the map.", _owner.Title, MessageBoxButton.OK, MessageBoxImage.Information);
         return false;
@@ -74,6 +84,14 @@ internal sealed class MapThingField
 
     public void Save(EventCommand command)
     {
+        if (_variable.Text.Trim() is { Length: > 0 } variable)
+        {
+            command.Parameters["Thing"] = "Var:" + variable;
+            command.Parameters["ThingName"] = $"the thing in {variable}";
+            command.Parameters["X"] = "";
+            command.Parameters["Y"] = "";
+            return;
+        }
         if (_things.SelectedItem is not ThingChoice thing || _cell is not { } cell) return;
         command.Parameters["Thing"] = thing.Key;
         command.Parameters["ThingName"] = thing.Name;
@@ -95,7 +113,8 @@ internal sealed class MapThingField
     public static bool IsAnyThing(string key) => true;
 
     public static string Describe(EventCommand command) =>
-        $"{(command.Get("ThingName") is { Length: > 0 } n ? n : "?")} at ({command.Get("X")}, {command.Get("Y")})";
+        command.Get("Thing").StartsWith("Var:") ? $"the thing in {command.Get("Thing")[4..]}"
+            : $"{(command.Get("ThingName") is { Length: > 0 } n ? n : "?")} at ({command.Get("X")}, {command.Get("Y")})";
 }
 
 /// <summary>A map cell picked in a command window (Walk To Location, Drop Item's spot, Play Animation's spot).</summary>

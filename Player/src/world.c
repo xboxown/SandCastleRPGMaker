@@ -3590,6 +3590,60 @@ int world_find_item(int category, int itemId, int x, int y)
 
 int world_thing_there(int uid) { return thing_by_uid(uid) != NULL; }
 
+/* Find Thing (GameTestWindow.FindThing.cs): a thing's handle - an object's own number on the map, a book's or
+   container's (a body's) 1000000 + its number; one without a number yet gets one now. */
+#define ITEM_HANDLE_BASE 1000000
+int world_thing_handle(int uid)
+{
+    Thing *t = thing_by_uid(uid);
+    if (!t) return -1;
+    if (t->instanceId <= 0)
+    {
+        int top = 0;
+        for (int i = 0; i < thingCount; i++) if (things[i].instanceId > top) top = things[i].instanceId;
+        t->instanceId = top + 1;
+    }
+    return t->category == 4 ? t->instanceId : ITEM_HANDLE_BASE + t->instanceId;
+}
+
+int world_thing_by_handle(int handle)
+{
+    if (handle <= 0) return -1;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone) continue;
+        if (handle < ITEM_HANDLE_BASE ? (t->category == 4 && t->instanceId == handle) : (t->category != 4 && t->instanceId == handle - ITEM_HANDLE_BASE)) return t->uid;
+    }
+    return -1;
+}
+
+int world_find_nearest(int category, int itemId, int x, int y, int onFloor)
+{
+    int best = -1, bestScore = 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->category != category || t->itemId != itemId) continue;
+        int score = (floor_of(t->z) == onFloor ? 0 : 1000000) + cells_apart(t->x, t->y, x, y);
+        if (best < 0 || score < bestScore) { best = t->uid; bestScore = score; }
+    }
+    return best;
+}
+
+int world_thing_on_top(int x, int y, int onFloor)
+{
+    int best = -1, bestZ = 0;
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || t->x != x || t->y != y || floor_of(t->z) != onFloor) continue;
+        if (t->def && (t->def->type == 1 || t->def->type == 24)) continue; /* tiles and roofs */
+        if (best < 0 || t->z > bestZ) { best = t->uid; bestZ = t->z; }
+    }
+    return best;
+}
+
 void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x, int *y, int *instanceId)
 {
     const Thing *t = thing_by_uid(uid);

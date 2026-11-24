@@ -1720,10 +1720,18 @@ int events_game_function(const char *name, const Value *args, int count, Value *
 }
 
 /* ThingOf: the thing a command picked ("Object:<instance>:<object>" or "Item:<Category>:<id>", near X, Y); -1 if it isn't there. */
+/* A Thing field "From a variable" ("Var:<name>"): the thing whose handle the variable holds (Find Thing); -1 if it isn't on the map. */
+static int thing_from_var(const Cmd *c)
+{
+    return world_thing_by_handle((int)floor(get_var(param(c, "Thing") + 4) + 0.5));
+}
+static int thing_is_var(const Cmd *c) { return strncmp(param(c, "Thing"), "Var:", 4) == 0; }
+
 static int thing_of(const Cmd *c)
 {
     char kind[16], cat[16];
     int a1, a2, x = atoi(param(c, "X")), y = atoi(param(c, "Y"));
+    if (thing_is_var(c)) return thing_from_var(c);
     if (!sscanf_like(param(c, "Thing"), kind, cat, &a1, &a2)) return -1;
     if (!strcmp(kind, "Object")) return world_find_object(a1, a2, x, y);
     return world_find_item(category_of(cat), a2, x, y);
@@ -1857,7 +1865,8 @@ static int execute(Run *r, const Cmd *c)
             const char *thing = param(c, "Thing");
             int x = atoi(param(c, "X")), y = atoi(param(c, "Y")), uid = -1, a1 = 0, a2 = 0;
             char kind[16] = "", cat[16] = "";
-            if (sscanf_like(thing, kind, cat, &a1, &a2))
+            if (thing_is_var(c)) uid = thing_from_var(c);
+            else if (sscanf_like(thing, kind, cat, &a1, &a2))
             {
                 if (strcmp(kind, "Object") == 0) uid = world_find_object(a1, a2, x, y);
                 else uid = world_find_item(strcmp(cat, "Container") == 0 ? CAT_CONTAINER : strcmp(cat, "Book") == 0 ? CAT_BOOK : CAT_OBJECT, a2, x, y);
@@ -2742,7 +2751,7 @@ static int execute(Run *r, const Cmd *c)
         {
             int actor = actor_for(r, param(c, "Who")), x = atoi(param(c, "X")), y = atoi(param(c, "Y")), a1, a2;
             char kind[16], cat[16];
-            int uid = sscanf_like(param(c, "Thing"), kind, cat, &a1, &a2) && !strcmp(kind, "Object") ? world_find_object(a1, a2, x, y) : -1;
+            int uid = thing_is_var(c) ? thing_from_var(c) : sscanf_like(param(c, "Thing"), kind, cat, &a1, &a2) && !strcmp(kind, "Object") ? world_find_object(a1, a2, x, y) : -1;
             if (actor < 0) return 1;
             if (uid < 0 || world_thing_type(uid) != 7) { game_log("Sit: that chair isn't there."); return 1; }
             begin_action(r, actor, A_SIT);
@@ -2987,6 +2996,51 @@ static int execute(Run *r, const Cmd *c)
                     break;
                 }
             }
+            return 1;
+        }
+        case C_FindThing:
+        {
+            /* GameTestWindow.FindThing.cs: a body, the nearest of an item, the thing at a spot - its handle into the variable */
+            const char *find = param(c, "Find");
+            int found = -1, cat = category_of(param(c, "Category")), itemId = param(c, "ItemId")[0] ? atoi(param(c, "ItemId")) : -1;
+            int sx = atoi(param(c, "AtX")), sy = atoi(param(c, "AtY")), sf = param(c, "AtFloor")[0] ? atoi(param(c, "AtFloor")) : 1;
+            if (!strncmp(find, "The body", 8))
+            {
+                int actor = actor_for(r, param(c, "Who"));
+                int id = actor >= 0 ? world_actor_character(actor) : atoi(param(c, "Who"));
+                int body = id >= 0 ? world_body_of(id) : 0;
+                found = body > 0 ? body : -1;
+            }
+            else if (!strncmp(find, "The nearest of an item to someone", 33))
+            {
+                int actor = actor_for(r, param(c, "Who")), x, y, f;
+                if (actor >= 0 && cat >= 0 && itemId >= 0) { world_actor_cell(actor, &x, &y, &f); found = world_find_nearest(cat, itemId, x, y, f); }
+            }
+            else if (!strncmp(find, "The nearest of an item to a spot", 32))
+            {
+                if (cat >= 0 && itemId >= 0) found = world_find_nearest(cat, itemId, sx, sy, sf);
+            }
+            else found = world_thing_on_top(sx, sy, sf);
+            if (param(c, "Variable")[0]) set_var(param(c, "Variable"), found >= 0 ? world_thing_handle(found) : -1);
+            lastResult = found >= 0;
+            return 1;
+        }
+        case C_ThingInfo:
+        {
+            int uid = world_thing_by_handle((int)floor(formula_number(c, "Value") + 0.5));
+            int tc = -1, ti = -1, tq, tx = -1, ty = -1, tin;
+            if (uid >= 0) world_thing_info(uid, &tc, &ti, &tq, &tx, &ty, &tin);
+            if (param(c, "XVariable")[0]) set_var(param(c, "XVariable"), uid >= 0 ? tx : -1);
+            if (param(c, "YVariable")[0]) set_var(param(c, "YVariable"), uid >= 0 ? ty : -1);
+            if (param(c, "FloorVariable")[0]) set_var(param(c, "FloorVariable"), uid >= 0 ? world_floor_of_lift(world_thing_z(uid)) : -1);
+            if (param(c, "NameVariable")[0])
+            {
+                char name[96] = "";
+                if (uid >= 0 && tc == CAT_CONTAINER && ti <= -1000) snprintf(name, sizeof name, "body of %s", str(character_data(-1000 - ti), "Name"));
+                else if (uid >= 0) snprintf(name, sizeof name, "%s", items_name(tc, ti));
+                script_set(param(c, "NameVariable"), value_text(name));
+            }
+            lastResult = uid >= 0;
             return 1;
         }
         case C_GetEquippedItem:

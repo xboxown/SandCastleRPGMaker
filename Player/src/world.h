@@ -225,6 +225,11 @@ int world_can_stand(int actor, int x, int y, int onFloor);
 /* Things on the map (uid: a thing's own number while the game runs; category: Book 3, Object 4, Container 5). */
 int world_find_object(int instanceId, int objectId, int x, int y);
 int world_find_item(int category, int itemId, int x, int y);
+/* Find Thing's handles: an object's own number on the map, a book's or container's 1000000 + its number; -1 none */
+int world_thing_handle(int uid);
+int world_thing_by_handle(int handle);                                   /* -1: not on the map */
+int world_find_nearest(int category, int itemId, int x, int y, int onFloor); /* the same floor first, then the fewest cells */
+int world_thing_on_top(int x, int y, int onFloor);                       /* the highest thing there (not tiles or roofs) */
 int world_thing_there(int uid);
 void world_thing_info(int uid, int *category, int *itemId, int *quantity, int *x, int *y, int *instanceId);
 void world_thing_remove(int uid);

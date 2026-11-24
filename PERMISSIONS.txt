@@ -70,7 +70,7 @@ same mechanics as formula apply it to that.
 then deduct tha tmany man, and check if yo uhave ingredients..pretty much I rely on the user to code the mechanics of a real
 spell and relying on if or advance if and commands to determine the ingredients needed, ho wmuch it takes and how much mana needed.
 
-Just confirm we have everything in command to do this.
+Just confirm we have everything in command to do this.  - DONE b668 (confirmed: Advance IF Stat Mana + Change Stat; Having an item + Remove Item)
 
 =====================================================================================================
 4. THINGS THAT APPEAR DURING PLAY (a body, a dropped sword) - you asked; explained first
@@ -85,7 +85,7 @@ hold numbers and texts, not things. So the answer to your question is NO, it doe
  - "Thing Info" command: where it is (X, Y, floor) and what it is, into variables.
  - CommandList.docx: a guide "Peter's body: find it, walk to it, take what he carried".
  For Ultima 6, 7 and 8, every platform.
-     Answer: YES
+     Answer: YES - DONE b669
 
 =====================================================================================================
 5. QUICK WALL PLOT (you asked for my idea before doing it)

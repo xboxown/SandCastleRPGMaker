@@ -321,6 +321,7 @@ public partial class U8GameWindow
     /// <summary>The thing a command picked on the map: the very one if it's still there, else the same kind of thing within 2 cells of where it was.</summary>
     private object? ThingOf(EventCommand command)
     {
+        if (command.Get("Thing").StartsWith("Var:")) return ThingFromVariable(command); // Find Thing's handle (.FindThing.cs)
         var parts = command.Get("Thing").Split(':');
         int.TryParse(command.Get("X"), out int x);
         int.TryParse(command.Get("Y"), out int y);

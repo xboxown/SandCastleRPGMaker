@@ -138,7 +138,9 @@ public enum EventCommandType
     U6SceneTypeText, U6ScenePickPicture, U6SetGender, U6SceneDistributePoints,
     U6SceneBegin, U6ScenePicture, U6SceneText, U6SceneWaitKey, U6SceneChoice, U6SceneRemove, U6SceneEnd,
     // ---- Magic weapons and armor (Engine/MagicItems.cs) ----
-    CurseItem, LiftCurse, EnchantItem, RemoveEnchantments, GetEquippedItem, IsItemCursed, CombineItems, GetMagicBonus
+    CurseItem, LiftCurse, EnchantItem, RemoveEnchantments, GetEquippedItem, IsItemCursed, CombineItems, GetMagicBonus,
+    // ---- Things that appear during play (a body, something dropped): a handle in a variable ----
+    FindThing, ThingInfo
 }
 
 /// <summary>
