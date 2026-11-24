@@ -58,6 +58,7 @@
                 <MenuItem Header="Wall Designer..." Click="WallDesignerMenuItem_Click" ToolTip="Walls with windows and doorways: pieces glued once, placed as one wall, each its own in play"/>
                 <MenuItem Header="Wall Kits..." Click="WallKitsMenuItem_Click" ToolTip="Which wall piece goes where - straights, corners, T-joins, the cross, ends - so walls are drawn with the mouse (Mode &gt; Wall Plot)"/>
                 <MenuItem Header="AI Artist..." Click="AiArtistMenuItem_Click" ToolTip="Sprites drawn from words by an AI on this PC's graphics card (Stable Diffusion, offline): pick the style, the size and the colours, then add them to the Sprite Editor"/>
+                <MenuItem Header="Sprite Composer..." Click="SpriteComposerMenuItem_Click" ToolTip="Characters from a skeleton and parts: every pose (stand, walk, attack, sit, sleep, dead) in every direction, from knobs, colours and words - Ultima 6 / 7 / 8 libraries"/>
                 <MenuItem x:Name="PaperDollMenuItem" Header="PaperDoll Editor..." Click="PaperDollEditorMenuItem_Click"/>
                 <MenuItem Header="Common Events..." Click="CommonEventsMenuItem_Click" ToolTip="Command lists made once and run from anywhere with Call Common Event"/>
                 <MenuItem Header="Title Screen..." Click="TitleScreenMenuItem_Click" ToolTip="The Title Screen: its paperdoll (made in the PaperDoll Editor), music and intro video"/>

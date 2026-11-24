@@ -10,4 +10,11 @@ public partial class MainWindow
         new AiArtistWindow(_spriteDatabase) { Owner = this }.ShowDialog();
         RefreshTilesetCombo();
     }
+
+    /// <summary>Tools > Sprite Composer (sprite generator A).</summary>
+    private void SpriteComposerMenuItem_Click(object sender, RoutedEventArgs e)
+    {
+        new SpriteComposerWindow(_spriteDatabase) { Owner = this }.ShowDialog();
+        RefreshTilesetCombo();
+    }
 }

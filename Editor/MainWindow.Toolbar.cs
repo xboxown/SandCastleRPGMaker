@@ -30,6 +30,7 @@ public partial class MainWindow
             ("Wall Designer", "Walls with windows and doorways, glued once and placed as one.", WallDesignerMenuItem_Click),
             ("Wall Kits", "Walls drawn with the mouse: which piece goes on a straight, a corner, a T-join, a cross, an end.", WallKitsMenuItem_Click),
             ("AI Artist", "Sprites drawn from words by an AI on this PC's graphics card: the style, size and colours of your game.", AiArtistMenuItem_Click),
+            ("Sprite Composer", "Characters from a skeleton and parts: every pose in every direction, from knobs, colours and words.", SpriteComposerMenuItem_Click),
             ("PaperDoll Editor", "Paperdolls and every window of the game: inventories, the save screen, the title, prompts.", PaperDollEditorMenuItem_Click),
             ("Common Events", "Command lists made once and run from anywhere with Call Common Event.", CommonEventsMenuItem_Click),
             ("Title Screen", "The Title Screen: its paperdoll, music and intro video.", TitleScreenMenuItem_Click),
