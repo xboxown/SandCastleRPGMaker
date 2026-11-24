@@ -31,7 +31,7 @@
 ;   Set Volume, Resume Map Music - each on a DOC generator of its own (4-7), looping.
 ; Version 32 (b652): haggling in shops (haggle.s, ShopHaggle's rules).
 ; Version 31 (b651): characters' and objects' own events (ownev.s): hit, killed, an ailment, Used, an item used on
-;   them; picked up / dropped; Use with an item on something ("On what?"); Show Bark.
+;   them; picked up / dropped; Use with an item on something ("On what?"). (Show Bark: left out - Ultima 6 has no barks, b676.)
 ; Version 30 (b650): formulas (expr.s): Calculate, While, Repeat, Select Case, Wait Until, Call Common Event, Advance
 ;   IF - a formula's stack code (numbers, variables, + - * / %, comparisons, and / or / not, random, chance, min, max...).
 ; Version 29 (b649): every spell effect (spells2.s): teleport, mark / recall, summon, clone, create item / field,

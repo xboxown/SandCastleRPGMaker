@@ -1014,11 +1014,9 @@ public sealed class AppleIIgsTalk
                     else Unsupported.Add("Run Leveling Event (no leveling event of that name)");
                     break;
                 case EventCommandType.ShowBark:
-                {
-                    string who = Extra?.WhoName?.Invoke(cmd.Get("Who")) ?? "";
-                    SayLine(who.Length > 0 ? $"{who}: \"{cmd.Get("Value")}\"" : cmd.Get("Value"));
+                    // Ultima 6 / Savage Empire have no barks (an Ultima 7 thing) - the user, 2026-11-24: left out on the Apple IIgs.
+                    Unsupported.Add("Show Bark (Ultima 6 has no barks)");
                     break;
-                }
                 case EventCommandType.Comment or EventCommandType.ReturnFromCommon:
                     break;
                 case EventCommandType.StopConversation or EventCommandType.End:
