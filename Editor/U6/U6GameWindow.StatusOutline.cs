@@ -50,6 +50,8 @@ public partial class U6GameWindow
     /// <summary>Every frame: each character's outline for its condition, round its current frame, wherever it is - or none.</summary>
     private void UpdateStatusOutlines()
     {
+        return; // Ultima 6: no outlines round characters (an Ultima 7 look - the user, 2026-11-24)
+#pragma warning disable CS0162
         var seen = new HashSet<CharacterDefinition>(ReferenceEqualityComparer.Instance);
         foreach (var character in AllLivingCharacters())
         {
@@ -91,5 +93,6 @@ public partial class U6GameWindow
             GameCanvas.Children.Remove(_statusOutlines[gone].Outline);
             _statusOutlines.Remove(gone);
         }
+    #pragma warning restore CS0162
     }
 }

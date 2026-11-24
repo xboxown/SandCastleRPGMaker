@@ -6016,6 +6016,7 @@ static uint32_t status_colour(int characterId)
 
 static void draw_status_outlines(uint32_t *pixels)
 {
+    if (is_u6()) return; /* Ultima 6: no outlines round characters (an Ultima 7 look) */
     for (int i = 0; i < drawnCount; i++)
     {
         const Drawn *d = &drawn[i];

@@ -42,7 +42,8 @@ public class Ultima6Settings
     /// Off (Ultima 6): no hunger and no starving, no healing by the hour - food is eaten at Rest's mealtime, and only the fed heal
     /// when they wake. On: the Ultima 7 engine's food (hunger, starving, eating, healing by the hour; the Character Editor's Hunger).
     /// </summary>
-    public bool UseUltima7Food { get; set; }
+    /// <summary>Gone (the user, 2026-11-24): Ultima 6 has no hunger or meals - food heals the party at Rest. Always false; an old project's value is ignored.</summary>
+    public bool UseUltima7Food { get => false; set { } }
     /// <summary>
     /// The Leveling Editor's systems - the project's own leveling, each its table and its events (made of event commands).
     /// Many can be kept, one is used (ActiveLevelSystem; none: levels are only what events set). A new project starts with

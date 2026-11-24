@@ -33,11 +33,11 @@ ClockRun:
         cmp #60
         bcc .out
         stz Minute
-        jsr Starving            ; a minute: the starving lose a hit point now and then (ailments.s)
+        ; (Ultima 6 has no hunger: no starving, no food by the hour - only Rest's mealtime, stats.s)
         inc Hour
         jsr WeatherHour         ; (weather.s)
         jsr GrowPlants          ; (crafting.s)
-        jsr EatHour             ; an hour: food used (ailments.s)
+        ; (no food used by the hour - Ultima 6)
         lda Hour
         cmp #24
         bcc .h

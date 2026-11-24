@@ -66,7 +66,7 @@ public partial class SystemSettingsWindow
         panel.Children.Add(sight);
         panel.Children.Add(new TextBlock { Text = "Ultima 6 has no roofs and no upper floors: buildings are one floor, the inside of a house is hidden by this black until you walk in. Going up or down a ladder is another map (Maps tab, Change Map).", TextWrapping = TextWrapping.Wrap, Opacity = 0.7, FontSize = 11 });
         panel.Children.Add(new TextBlock { Text = "Food", FontWeight = FontWeights.Bold, Margin = new Thickness(0, 12, 0, 0) });
-        var food = new CheckBox { Content = "Inherit Ultima 7's food system (hunger, starving, eating on the hour, healing by the hour)", IsChecked = u6.UseUltima7Food, Margin = new Thickness(0, 2, 0, 2) };
+        var food = new CheckBox { Content = "Inherit Ultima 7's food system (hunger, starving, eating on the hour, healing by the hour)", IsChecked = u6.UseUltima7Food, Margin = new Thickness(0, 2, 0, 2), Visibility = Visibility.Collapsed }; // gone: Ultima 6 has no hunger (Ultima6Model)
         food.Checked += (_, _) => u6.UseUltima7Food = true;
         food.Unchecked += (_, _) => u6.UseUltima7Food = false;
         panel.Children.Add(food);

@@ -43,6 +43,7 @@ public partial class U6GameWindow
     /// <summary>Every frame for each character: hungry and free, it sets out to eat (checked every 2 seconds).</summary>
     private void CheckHunger(MapCharacter mapCharacter, double elapsedMs)
     {
+        if (U6Food) return; // Ultima 6 / Savage Empire / Martian Dreams: no one gets hungry, no meals (the user, 2026-11-24)
         var npc = mapCharacter.Npc;
         if (npc.Rule is not null) return; // following a When... rule (a "when hungry" one feeds it its own way)
         if (npc.Meal != MealStep.None || (npc.MealCheckMs -= elapsedMs) > 0) return;

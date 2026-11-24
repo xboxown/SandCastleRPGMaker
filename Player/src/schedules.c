@@ -18,6 +18,7 @@
 #include "sound.h"
 #include "work.h"
 #include "magic.h"
+#include "u6.h"
 #include "events.h"
 #include "world.h"
 #include "platform.h"
@@ -817,6 +818,7 @@ static int plan_meal(Npc *n)
 /* Every frame: hungry and free, it sets out to eat (checked every 2 seconds). */
 static void check_hunger(Npc *n, double ms)
 {
+    if (u6_food()) return; /* Ultima 6 / Savage Empire / Martian Dreams: no one gets hungry, no meals */
     if (n->rule || n->meal || (n->mealCheckMs -= ms) > 0) return;
     n->mealCheckMs = 2000;
     cJSON *me = character_of(n->characterId), *s = get(me, "Survival");
