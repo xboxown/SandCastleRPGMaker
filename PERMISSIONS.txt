@@ -101,7 +101,7 @@ My idea - the same, with what is missing added (like RPG Maker's auto-tiles):
  - Ultima 6 (square walls), Ultima 7 and Ultima 8 (their own angles: the kit's pieces are drawn in the game's
    view, the kit only says which piece goes where).
  A 128 x 128 cave's walls: minutes.
-     Answer (GO / change this / let's talk):
+     Answer (GO / change this / let's talk): GO - the wall kit with T-joins (user, 2026-11-24)
 
 =====================================================================================================
 6. THE SPRITE GENERATOR (you asked to discuss it first) - my honest view
@@ -129,7 +129,7 @@ What can be promised and what can't, offline, no internet, no paid AI:
  My recommendation: build A first (it is the reliable artist for hire), then B as an extra later if your PC can
  run it - B's pictures can be cut into parts for A's library.
  Two things I need from you:
-   - Which graphics card does your PC have (for B)?
+   - Which graphics card does your PC have (for B)?  -> NVIDIA GeForce RTX 3050 (user, 2026-11-24)
    - The references: Ultima 6 / 7 / 8 art belongs to Origin / EA. Learning from it for your own game is your
      call; just know that sprites made from cut-up Ultima parts are close copies - for a game you sell, your
      own or licensed references are safer.
