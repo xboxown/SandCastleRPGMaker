@@ -14,6 +14,8 @@ Waiting on the user: H:\SandcastleRpgMaker\PERMISSIONS.txt - read the "Answer:" 
 
 b666 (2026-11-24): Quick Wall Plot DONE (user GO) - Tools > Wall Kits (Editor/WallKitWindow.cs, Engine/WallKitModel.cs), Mode > Wall Plot (Editor/MainWindow.WallPlot.cs); editor-only, no player change. User has an NVIDIA RTX 3050 (sprite generator B); still waiting for GO A / A+B and the other PERMISSIONS answers.
 
+PERMISSIONS answered 2026-11-24: b667 item picker filters (ItemPickFilter; new Object Editor 'Pressure plate' tick) + EventPickerWindow; b668 FormulaBox colours (var blue, array green, unknown spell red) + Cast Spell runs a Common Event of that name (C too); b669 Find Thing / Thing Info / 'From a variable' in MapThingField (handles: object InstanceId, items 1000000+id; C_FindThing 233, C_ThingInfo 234). 1i (levers) unanswered = unchanged; 1l kept. NEXT: sprite generator GO A AND B (user takes copyright responsibility): A = skeleton + mesh (parts on bones), U7 art as skeleton reference, user-editable reference bones, U6/U7/U8 libraries versioned, review window, 'all possible ways to control: controllers and text'; B = local AI 'integrated in your DLL' (RTX 3050). Gap noted: a Common-Event spell doesn't get Cast Spell's caster/target passed.
+
 AmigaOS 4 black screen (QEMU pegasos2, virtio GPU): advice given - `setenv SDL_RENDER_DRIVER software` (or opengles2), 32-bit screen mode; not fixed in code.
 
 **Why:** user's rule below the ATTENTION line: explain first, change only when asked.
