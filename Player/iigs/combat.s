@@ -242,7 +242,8 @@ AfterTurn:
         lda LightLeft           ; a Light spell burns down a turn
         beq .lt
         dec LightLeft
-.lt:    jsr StayEvents          ; still on the same cell: its Stay events (events.s)
+.lt:    jsr FloorTurn           ; traps re-arm, tiles' Stand On, fires burn (floor.s)
+        jsr StayEvents          ; still on the same cell: its Stay events (events.s)
         lda Told                ; the Avatar's own blow told: the others' words follow it at once
         beq .lead
         stz WTLead
@@ -627,6 +628,7 @@ TryCharStep:
         sta [Ptr]
         rep #$20
         .a16
+        jsr CharFloorStep       ; traps and fires where it stepped (floor.s)
 .face:  lda SDX                 ; facing the way it went: 0 south, 1 north, 2 east, 3 west
         beq .vert
         bmi .w

@@ -1606,6 +1606,23 @@ public partial class MainWindow
             pack.Weights.Add((n, (int)Math.Round(kg * 10), ItemWeights.WeighsOnlyItself(category, id, _containerDatabase)));
         }
         foreach (var o in _objectDatabase.Objects) Weigh(o.Name, ReferencedItemCategory.Object, o.Id);
+        // Ground traps and lights that burn down or burn, by name (floor.s).
+        foreach (var o in _objectDatabase.Objects)
+        {
+            int n = pack.Names.IndexOf(o.Name);
+            if (n < 0) continue;
+            if (o.Type == ObjectType.Trap && o.Trap.Kind == TrapKind.Ground && pack.Traps.All(t => t.Name != n))
+            {
+                var t = o.Trap;
+                int ail = t.Ailment switch { TrapAilment.Poisoned => 1, TrapAilment.Asleep => 2, TrapAilment.Paralyzed => 4, _ => 0 };
+                int sound = t.TriggerSoundResourceId >= 0 && soundIndex.TryGetValue(t.TriggerSoundResourceId, out int sn) ? sn : 0xFFFF;
+                pack.Traps.Add((n, Math.Max(0, Math.Min(t.DamageMin, t.DamageMax)), Math.Max(0, Math.Max(t.DamageMin, t.DamageMax)), ail,
+                    (t.Hidden ? 1 : 0) | (t.OneShot ? 2 : 0), t.OneShot ? 0 : (int)Math.Ceiling(Math.Max(0, t.RearmSeconds) * 2), sound));
+            }
+            if (o.Type == ObjectType.LightSource && (o.Light.BurnMinutes > 0 || o.Light.BurnsWhenLit) && pack.Lights.All(l => l.Name != n))
+                pack.Lights.Add((n, Math.Clamp(o.Light.BurnMinutes, 0, 65535), o.Light.BurnsWhenLit ? Math.Max(0, Math.Min(o.Light.BurnDamageMin, o.Light.BurnDamageMax)) : 0,
+                    o.Light.BurnsWhenLit ? Math.Max(1, Math.Max(o.Light.BurnDamageMin, o.Light.BurnDamageMax)) : 0));
+        }
         foreach (var c in _containerDatabase.Containers) Weigh(c.Name, ReferencedItemCategory.Container, c.Id);
         foreach (var b in _bookDatabase.Books) Weigh(b.Name, ReferencedItemCategory.Book, b.Id);
         pack.MapWidth = start.Width; pack.MapHeight = start.Height; pack.Map = map;

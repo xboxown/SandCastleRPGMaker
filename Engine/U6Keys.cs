@@ -237,6 +237,8 @@ public static class U6Words
         ("Dexterity", "dexterity", "A stat's name"),
         ("Intelligence", "intelligence", "A stat's name"),
         ("TooHeavy", "Too heavy!", "Apple IIgs: picking up or giving more than one can carry (2 x Strength)"),
+        ("TrapOff", "{0} goes off!", "Apple IIgs: a trap stepped on"),
+        ("BurntOut", "{0} has burnt out.", "Apple IIgs: a carried light spent"),
     };
 
     public static string Of(Ultima6Settings settings, string id) =>

@@ -60,6 +60,7 @@ SteppedEvents:
         sta StayY
         lda #1                  ; this turn was a step: no Stay yet
         sta JustMoved
+        jsr FloorAvatarStep     ; tiles, traps, fires (floor.s)
         jmp RunQueue
 
 ; A turn passed: still on the cell it was on: its Stay events.

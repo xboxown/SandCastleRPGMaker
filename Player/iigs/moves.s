@@ -53,7 +53,8 @@ ParseMoves:
         sta AvRec+4
         lda #2
         jsr AddPtr
-        jmp SetMapWrap
+        jsr SetMapWrap
+        jmp ParseFloor          ; traps, lights (floor.s)
 
 ; ---- maps that wrap around ----
 

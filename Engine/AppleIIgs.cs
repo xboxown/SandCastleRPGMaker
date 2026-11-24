@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 44;
+    public const ushort Version = 45;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -494,14 +494,14 @@ public sealed class AppleIIgsGamePack
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
         "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
-        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "Avatar" };
+        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
         "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
-        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo" };
+        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -614,6 +614,11 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Tenths, bool Bag)> Weights { get; } = new();
     /// <summary>The Avatar's four looks as sprites (south, north, east, west): solo mode draws the Avatar as a member.</summary>
     public int AvatarSprite { get; set; }
+    /// <summary>Ground traps by name (Object Editor > Trap): damage min, max, ailment bit (1 poisoned, 2 asleep, 4 paralyzed), flags
+    /// (1 hidden, 2 one-shot), re-arm turns, sound ($FFFF none) - floor.s.</summary>
+    public List<(int Name, int Min, int Max, int Ailment, int Flags, int Rearm, int Sound)> Traps { get; } = new();
+    /// <summary>Light sources that burn down or burn (Object Editor > Light Source): name, burn minutes (0 never), fire damage min, max (max 0: not a fire).</summary>
+    public List<(int Name, int Minutes, int FireMin, int FireMax)> Lights { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -872,6 +877,10 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Min(Weights.Count, 256));
         foreach (var (n, t, bag) in Weights.Take(256)) { w.Write((ushort)n); w.Write((ushort)Math.Clamp(t, 0, 65535)); w.Write((ushort)(bag ? 1 : 0)); }
         w.Write((ushort)AvatarSprite);
+        w.Write((ushort)Math.Min(Traps.Count, 64));
+        foreach (var t in Traps.Take(64)) { w.Write((ushort)t.Name); w.Write((ushort)t.Min); w.Write((ushort)t.Max); w.Write((ushort)t.Ailment); w.Write((ushort)t.Flags); w.Write((ushort)t.Rearm); w.Write((ushort)t.Sound); w.Write((ushort)0); }
+        w.Write((ushort)Math.Min(Lights.Count, 64));
+        foreach (var l in Lights.Take(64)) { w.Write((ushort)l.Name); w.Write((ushort)l.Minutes); w.Write((ushort)l.FireMin); w.Write((ushort)l.FireMax); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

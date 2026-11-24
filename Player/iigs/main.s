@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 45 (b675): tiles' step events, ground traps, fires that burn, lights that burn down - floor.s.
 ; Version 44 (b674): solo mode (1-9, 0 party mode, Option + digit the portrait view) and the members' combat modes,
 ;   Command members moved in turn in combat mode - solo.s.
 ; Version 43 (b673): maps that wrap around, characters stepping aside (and the Avatar for them), sea and air
@@ -668,7 +669,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #44
+        cmp #45
         beq .known
 .bad:   sec
         rts
@@ -1569,6 +1570,8 @@ DrawObjects:
         lda [ItemPtr],y
         cmp #$FFFD
         beq .n
+        jsr HiddenTrap          ; a hidden trap not yet sprung: not seen (floor.s)
+        bcs .n
         lda [ItemPtr]
         tax
         ldy #2
@@ -2175,6 +2178,7 @@ TryMove:
         .include "eggs.s"
         .include "moves.s"
         .include "solo.s"
+        .include "floor.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:
