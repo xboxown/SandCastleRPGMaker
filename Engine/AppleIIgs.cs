@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 47;
+    public const ushort Version = 48;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -624,6 +624,8 @@ public sealed class AppleIIgsGamePack
     /// <summary>Levers, switches, buttons (an object's Other $FFFB): object, kind (0 lever, 1 switch, 2 button), its other look,
     /// on / off sounds, reset turns, on, the objects it is linked to (4 at most) - lever.s.</summary>
     public List<(int Obj, int Kind, int Other, int OnSnd, int OffSnd, int Reset, bool On, int[] Links)> Levers { get; } = new();
+    /// <summary>Characters' combat modes by name (CombatModeCode; Front not listed) - solo.s's ModeTab.</summary>
+    public List<(int Name, int Mode)> Modes { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -896,6 +898,8 @@ public sealed class AppleIIgsGamePack
             for (int i = 0; i < 4; i++) w.Write((ushort)(i < l.Links.Length ? Place(l.Links[i]) : 0));
             for (int i = 0; i < 4; i++) w.Write((ushort)0);
         }
+        w.Write((ushort)Math.Min(Modes.Count, 64));
+        foreach (var (mn, mm) in Modes.Take(64)) { w.Write((ushort)mn); w.Write((ushort)mm); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 48 (b680): combat modes by name (ModeTab: a schedule's key word was +56 too); sleepers in their sleeping look, sitters
+;   sitting (characters' looks +4 sleeping, +5 sitting; flags $4000).
 ; Version 47 (b679): levers, switches and buttons working what they are linked to - lever.s.
 ; Version 46 (b677): Ultima 6's death - the body in its sleeping look, blood under it (looked at, never taken, gone out of
 ;   view) - floor.s.
@@ -672,7 +674,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #47
+        cmp #48
         beq .known
 .bad:   sec
         rts
@@ -1602,18 +1604,23 @@ DrawCharacters:
         lda ChrCount
         sta Item
 .l:     lda Item
-        beq .end
+        bne .go
+        jmp DrawParty           ; the members too (party.s)
+.go:
         ldy #6                  ; dead: not there
         lda [ItemPtr],y
         and #4
-        bne .n
-        lda [ItemPtr]
+        beq .alive
+        brl .n
+.alive: lda [ItemPtr]
         tax
         ldy #2
         lda [ItemPtr],y
         tay
         jsr CellOnScreen
-        bcc .n
+        bcs .on
+        brl .n
+.on:
         ldy #6                  ; knocked out: its body look (bodies.s)
         lda [ItemPtr],y
         and #32
@@ -1623,7 +1630,34 @@ DrawCharacters:
         jsr BodySprite
         cmp #$FFFF
         bne .bs
-.up:    ldy #8
+.up:    ldy #6                  ; Ultima 6: asleep in its sleeping look, sitting in its sitting look (+4, +5)
+        lda [ItemPtr],y
+        and #$4000
+        beq .face
+        lda [ItemPtr],y
+        and #16
+        beq .sit
+        lda #4
+        bra .pose
+.sit:   ldy #50                 ; its schedule's activity: sit ($80), at its spot
+        lda [ItemPtr],y
+        and #$0080
+        beq .face
+        lda [ItemPtr]
+        ldy #52
+        cmp [ItemPtr],y
+        bne .face
+        ldy #2
+        lda [ItemPtr],y
+        ldy #54
+        cmp [ItemPtr],y
+        bne .face
+        lda #5
+.pose:  ldy #4
+        clc
+        adc [ItemPtr],y
+        bra .bs
+.face:  ldy #8
         lda [ItemPtr],y         ; its facing
         ldy #4
         clc
@@ -1633,7 +1667,7 @@ DrawCharacters:
 .n:     lda #64
         jsr NextItem
         dec Item
-        bra .l
+        brl .l
 .end:   jmp DrawParty           ; the members too (party.s)
 
 ; ViewX0, ViewY0: the map cell at the view's top left.

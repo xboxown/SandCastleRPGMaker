@@ -480,6 +480,89 @@ MemberStep:
 .no:    clc
         rts
 
+; A = a name: A = its combat mode (ModeTab; 0 FRONT when not set).
+ModeOfName:
+        sta SoNm
+        ldx #0
+.l:     txa
+        lsr a
+        lsr a
+        cmp ModeN
+        bcs .no
+        lda ModeTab,x
+        cmp SoNm
+        beq .yes
+        inx
+        inx
+        inx
+        inx
+        bra .l
+.yes:   lda ModeTab+2,x
+        rts
+.no:    lda #0
+        rts
+
+; Set Combat Mode (STAT word 20) on WP: its name's mode in ModeTab; a member's record too. GVal the mode.
+SetModeOp:
+        ldy #C_NAME
+        lda [WP],y
+        sta SoNm
+        ldx #0
+.l:     txa
+        lsr a
+        lsr a
+        cmp ModeN
+        bcs .new
+        lda ModeTab,x
+        cmp SoNm
+        beq .set
+        inx
+        inx
+        inx
+        inx
+        bra .l
+.new:   lda ModeN
+        cmp #64
+        bcs .rec
+        inc ModeN
+        lda SoNm
+        sta ModeTab,x
+.set:   lda GVal
+        sta ModeTab+2,x
+.rec:   jsr WPInParty           ; a member: its record now (the Avatar stays Command)
+        bcc .o
+        lda WP
+        cmp #AvRec
+        beq .o
+        lda GVal
+        ldy #C_MODE
+        sta [WP],y
+.o:     rts
+
+; GAME.DAT (after the levers): u16 modes, each name, mode.
+ParseModes:
+        lda [Ptr]
+        sta ModeN
+        lda #2
+        jsr AddPtr
+        lda ModeN
+        asl a
+        asl a
+        sta T4
+        ldy #0
+.l:     cpy T4
+        bcs .d
+        lda [Ptr],y
+        sta ModeTab,y
+        iny
+        iny
+        bra .l
+.d:     lda T4
+        jmp AddPtr
+
+ModeN:    .dw 0
+ModeTab:  .ds 4*64
+SoNm:     .dw 0
 SoloOn:   .dw 0                 ; solo mode (1-9) on
 SoloCtl:  .dw 0                 ; the member moved (1-9; its slot holds the Avatar), 0 the Avatar
 SoKey:    .dw 0

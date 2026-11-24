@@ -256,7 +256,12 @@ OpStat:
         sta GVal
         jsr WhoRec
         bcs .skip
-        lda GWord
+        lda GWord               ; word 20: a combat mode (by name; the record's only in the party - solo.s)
+        cmp #20
+        bne .w
+        jsr SetModeOp
+        bra .skip
+.w:     lda GWord
         asl a
         clc
         adc #16

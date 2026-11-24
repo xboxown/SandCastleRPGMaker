@@ -320,6 +320,17 @@ public partial class MainWindow
         return list;
     }
 
+    /// <summary>A character's picture in a pose, facing south, the first frame (null: it has none).</summary>
+    private string? PoseFile(CharacterDefinition who, string poseName)
+    {
+        var pose = _poseDatabase.Poses.FirstOrDefault(p => p.Name == poseName && who.PoseSprites.ContainsKey(p.Id));
+        if (pose is null) return null;
+        var link = who.PoseSprites[pose.Id].Resolve(SpriteDirection.South);
+        var sprite = link is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(x => x.Name == link.SpriteName)
+                                         ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(x => x.Name == link.SpriteName);
+        return sprite?.Frames.FirstOrDefault()?.FilePath is { } f && File.Exists(f) ? f : null;
+    }
+
     /// <summary>A character's body picture: Ultima 6's sleeping look (else its Body pose, Unconscious, Dead), facing south, the first frame.</summary>
     private string? BodyFile(CharacterDefinition who)
     {
@@ -909,7 +920,8 @@ public partial class MainWindow
             st[AppleIIgsGamePack.Stat.Armour] = armour; st[AppleIIgsGamePack.Stat.Weapon] = weapon; st[AppleIIgsGamePack.Stat.Reach] = reach;
             st[AppleIIgsGamePack.Stat.HomeX] = homeX; st[AppleIIgsGamePack.Stat.HomeY] = homeY;
             st[AppleIIgsGamePack.Stat.Food] = c.Survival.CanGetHungry ? Math.Clamp(c.Survival.StartingFood, 0, 31) : 0xFFFF;
-            st[20] = c == avatarDef ? 6 : AppleIIgsGamePack.CombatModeCode(c.U6CombatMode); // its combat mode (solo.s; the Avatar: Command)
+            st[20] = c == avatarDef ? 6 : 0xFFFF; // the Avatar: Command (solo.s); anyone else: its schedule's key (schedule.s) - a member's mode comes by name (Modes)
+            if (c != avatarDef && AppleIIgsGamePack.CombatModeCode(c.U6CombatMode) is int modeCode and > 0 && pack.Modes.All(m => m.Name != pack.NameOf(c.Name))) pack.Modes.Add((pack.NameOf(c.Name), modeCode));
             st[23] = 0xFFFF; // what flies when it strikes from afar (its equipped ranged weapon's)
             foreach (int eid in c.EquippedSlots.Values)
                 if (c.Inventory.FirstOrDefault(i => i.InstanceId == eid) is { Category: ReferencedItemCategory.Object } ei && _objectDatabase.Objects.FirstOrDefault(o => o.Id == ei.ItemId) is { Type: ObjectType.Weapon } ewd && ewd.Weapon.Use != WeaponUse.Melee)
@@ -1153,6 +1165,10 @@ public partial class MainWindow
                 if (who is null || who.IsTestPlayer) continue;
                 if (placed.X < 0 || placed.Y < 0 || placed.X >= world.Width || placed.Y >= world.Height) continue;
                 var files = LookFiles(who);
+                // Ultima 6: its sleeping and sitting looks after its four facings (+4, +5; flags $4000) - asleep in bed, sitting on a chair.
+                string? sleepFile = PoseFile(who, "Sleeping"), sitFile = PoseFile(who, "Sit");
+                bool poseLooks = sleepFile is not null || sitFile is not null;
+                if (poseLooks) { files.Add(sleepFile ?? files[0]); files.Add(sitFile ?? files[0]); }
                 int first = spritePixels.Count;
                 foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
                 int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
@@ -1185,7 +1201,8 @@ public partial class MainWindow
             {
                 int activity = entry.Type switch
                 {
-                    ScheduleType.Stand or ScheduleType.Wait or ScheduleType.Sit => 0,
+                    ScheduleType.Stand or ScheduleType.Wait => 0,
+                    ScheduleType.Sit => 0x80, // stands there, drawn sitting (main.s)
                     ScheduleType.Wander => 1,
                     ScheduleType.Sleep => 2,
                     ScheduleType.HorizPace => 3,
@@ -1199,6 +1216,7 @@ public partial class MainWindow
             }
             stats[AppleIIgsGamePack.Stat.Behaviour] = who.Schedules.Count > 0 ? 2 : Hostile(who) ? 1 : 0;
             int moves = who.Movement switch { MovementKind.Sea => 0x1000, MovementKind.Air => 0x2000, _ => 0 }; // sea / air (moves.s)
+            if (poseLooks) moves |= 0x4000;
             list.Add((placed.X, placed.Y, first, 1 | (Hostile(who) ? 2 : 0) | moves, facing, talk < 0 ? 0xFFFF : talk, portrait < 0 ? 0xFFFF : portrait, pack.NameOf(who.Name), stats));
                 if (OwnEvents(who.EventPages, "c" + who.Id) is int ownCode) pack.CharEvents.Add((mapNo, list.Count - 1, ownCode));
                 if (eggCopy.TryGetValue(placed, out var ec))

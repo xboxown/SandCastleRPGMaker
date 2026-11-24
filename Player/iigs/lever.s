@@ -27,7 +27,8 @@ ParseLevers:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseModes          ; the characters' combat modes (solo.s)
 
 ; A = an object's number: carry set, X = its place in LvTab, if it is a lever.
 LeverOf:

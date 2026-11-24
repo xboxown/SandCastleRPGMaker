@@ -168,6 +168,7 @@ ScheduleStep:
         sta GY
         ldy #S_ACT
         lda [CP],y
+        and #$007F              ; ($80: it sits there - drawn sitting, main.s)
         sta Act
         cmp #6                  ; at work, on its way or working: its work (work.s)
         bcc .nw

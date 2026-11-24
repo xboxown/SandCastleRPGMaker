@@ -557,11 +557,15 @@ JoinRec:
 ; JMap, JIdx joins (the party's most permitting).
 Join:
         jsr JoinRec
-        bcs .out
+        bcc .ok
+        rts
+.ok:
         ldy #C_FLAGS
         lda [Src],y
         and #4
-        bne .out                ; dead or gone
+        beq .alive
+        rts                     ; dead or gone
+.alive:
         lda PartyN              ; the most counts the Avatar (at most 8 members)
         inc a
         cmp PartyMax
@@ -585,6 +589,11 @@ Join:
         sta [MP],y
         ldy #50                 ; its food (its schedule's place, unused in the party)
         lda #24
+        sta [MP],y
+        ldy #C_NAME             ; its combat mode (its schedule's key word, unused in the party - solo.s)
+        lda [MP],y
+        jsr ModeOfName
+        ldy #C_MODE
         sta [MP],y
         ldy #C_FLAGS            ; its map's record: gone (in the party)
         lda [Src],y
