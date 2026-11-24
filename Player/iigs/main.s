@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 50 (b683): doors - opening animations, double doors, doors opening by themselves, not by hand (door.s).
 ; Version 49 (b682): cold and hot zones - worn warmth and cooling, hurt from 50 (temp.s).
 ; Version 48 (b680): combat modes by name (ModeTab: a schedule's key word was +56 too); sleepers in their sleeping look, sitters
 ;   sitting (characters' looks +4 sleeping, +5 sitting; flags $4000).
@@ -675,7 +676,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #49
+        cmp #50
         beq .known
 .bad:   sec
         rts
@@ -2220,6 +2221,7 @@ TryMove:
         .include "floor.s"
         .include "lever.s"
         .include "temp.s"
+        .include "door.s"
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

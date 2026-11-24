@@ -150,6 +150,7 @@ WorkLink:
         and #$FFF7
         sta [ItemPtr],y
         jsr SwapDoor
+        jsr DoorMoved           ; its sound and motion (door.s)
         bra .out
 .nd:    ldy #10                 ; a light: on <-> out
         lda [ItemPtr],y

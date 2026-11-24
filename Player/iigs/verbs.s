@@ -477,6 +477,10 @@ PickCell:
         beq .np2
         jsr NextToCursor
         bcc .rg2
+        jsr DoorNotByHand       ; a sliding or laser door: not with Use (door.s)
+        bcc .byhand
+        rts
+.byhand:
         jsr ObjFlags
         and #8
         beq .open
@@ -501,7 +505,10 @@ PickCell:
         and #1
         beq .drawn
         jsr TakeCell
-.drawn: jsr DrawView
+.drawn: lda #1                  ; its sound, its motion, its double door (door.s)
+        sta DrHand
+        jsr DoorMoved
+        jsr DrawView
         jmp PromptLine
 .talk:  lda Kind                ; Talk at no one
         cmp #1

@@ -1511,6 +1511,30 @@ public partial class MainWindow
             foreach (var frame in bloodSprite.Frames.Take(8)) if (File.Exists(frame.FilePath)) spritePixels.Add(FitSprite(frame.FilePath));
             if (spritePixels.Count > firstBlood) pack.Blood = (firstBlood, spritePixels.Count - firstBlood, pack.NameOf(U6Words.Of(_systemSettings.Ultima6, "Blood")));
         }
+        // Doors beyond the swing: their opening / closing frames as sprites, double, by itself, not by hand, sounds (door.s).
+        foreach (var dd in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Door))
+        {
+            var ds = dd.Door;
+            bool anim = ds.Opening == DoorOpening.Animation;
+            int doorSnd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int s) ? s : 0xFFFF;
+            if (!anim && !ds.OpensWithNeighbours && !ds.OpensByItself && !ds.NotByHand && ds.Opening != DoorOpening.Slide && doorSnd(ds.OpenSoundResourceId) == 0xFFFF && doorSnd(ds.CloseSoundResourceId) == 0xFFFF) continue;
+            int nameNo = pack.NameOf(dd.Name);
+            if (pack.Doors.Any(d => d[0] == nameNo)) continue;
+            (int First, int Count) Frames(SpriteLink link)
+            {
+                if (!anim || !link.IsSet || ObjectLooks.Find(_spriteDatabase, link.SpriteGroup, link.SpriteName) is not { Frames.Count: > 0 } sp) return (0, 0);
+                int first = spritePixels.Count;
+                foreach (var fr in sp.Frames.Take(8)) if (File.Exists(fr.FilePath)) spritePixels.Add(FitSprite(fr.FilePath));
+                return (first, spritePixels.Count - first);
+            }
+            var opening = Frames(ds.OpeningSprite);
+            var closing = Frames(ds.ClosingSprite);
+            int frames = Math.Max(1, Math.Max(opening.Count, closing.Count));
+            pack.Doors.Add(new[] { nameNo, opening.First, opening.Count, closing.First, closing.Count,
+                (ds.OpensWithNeighbours ? 1 : 0) | (ds.OpensByItself ? 2 : 0) | (ds.NotByHand || ds.Opening == DoorOpening.Slide ? 4 : 0),
+                Math.Clamp(ds.OpensWithinCells, 1, 8), (int)Math.Ceiling(Math.Max(0, ds.StaysOpenMs) / 500.0),
+                doorSnd(ds.OpenSoundResourceId), doorSnd(ds.CloseSoundResourceId), Math.Clamp(ds.MotionMs * 60 / 1000 / frames, 1, 60), 0 });
+        }
         pack.AvatarSprite = spritePixels.Count; // the Avatar's looks as sprites too (solo mode)
         foreach (var px in avatar.Take(4)) spritePixels.Add((px, 16, 16));
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));

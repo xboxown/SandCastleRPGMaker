@@ -73,7 +73,8 @@ ParseTemp:
         iny
         bra .i
 .id:    lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseDoors          ; (door.s)
 
 ; A game minute (ClockRun): everyone in the party feels the cold and the heat.
 TempMinute:

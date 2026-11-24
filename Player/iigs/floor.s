@@ -201,6 +201,7 @@ FloorCharStep:
 ; Each turn: traps re-arm, the Avatar's Stand On tiles, everyone standing in a lit fire is burnt.
 FloorTurn:
         jsr LeverTurn           ; pressed buttons spring back (lever.s)
+        jsr DoorTurn            ; doors that open by themselves (door.s)
         ldx #0                  ; re-arming
         ldy TrSN
 .r:     cpy #0
