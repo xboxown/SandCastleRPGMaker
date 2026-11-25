@@ -1735,29 +1735,10 @@ public partial class U6GameWindow : Window
         ["Evening"] = (Color.FromRgb(0x15, 0x57, 0x52), 0.55)
     };
 
-    private void ApplyRealDayNightPeriod(string period)
-    {
-        if (!DayNightPeriodColors.TryGetValue(period, out var setting)) return;
-        // The sky is set until the next hour; then the clock takes it back (U6GameWindow.Lighting.cs). Light sources lift the night one.
-        SetSkyUntilNextHour(period == "Evening" ? ParseColor(DayNight.NightColor, setting.Color) : period == "Afternoon" ? ParseColor(DayNight.DuskColor, setting.Color) : setting.Color,
-            period == "Evening" ? DayNight.NightStrength : period == "Afternoon" ? DayNight.DuskStrength : 0);
-    }
+    private void ApplyRealDayNightPeriod(string period) => SetLevelUntilNextHour(period); // Ultima 6's darkness (U6GameWindow.Lighting.cs)
 
-    /// <summary>Reuses the exact same LightingOverlay mechanism as day/night - an author-picked color and strength instead of one of the three fixed periods.</summary>
-    private void ApplyRealPaletteColorEffect(string hex, double opacity)
-    {
-        try
-        {
-            var color = (Color)ColorConverter.ConvertFromString("#" + hex);
-            LightingOverlay.Fill = new SolidColorBrush(color);
-            var fade = new DoubleAnimation(opacity, TimeSpan.FromSeconds(0.6));
-            LightingOverlay.BeginAnimation(UIElement.OpacityProperty, fade);
-        }
-        catch
-        {
-            // Malformed hex - leave the overlay as it was rather than crash the real game.
-        }
-    }
+    /// <summary>Apply Palette Color: Ultima 7's tint - not in Ultima 6 (ScriptCommands.NotInUltima6); an old project's does nothing.</summary>
+    private void ApplyRealPaletteColorEffect(string hex, double opacity) { }
 
     private void RecomputeViewportScale()
     {
@@ -1825,6 +1806,7 @@ public partial class U6GameWindow : Window
         // Instant, per spec - confirmed directly from Exult's own documentation: the original game's camera scrolling is "jerky" (non-interpolated) by default; smooth scrolling is only an optional, later Exult enhancement, not authentic default behavior. Since the avatar's own position is now genuinely continuous (see StepPlayerContinuous), tracking it instantly every frame already looks smooth in practice - no separate interpolation layer is needed, and none of the earlier animation-conflict bugs can recur because nothing here is animated at all.
         CameraTransform.X = -_cameraX;
         CameraTransform.Y = -_cameraY;
+        PlaceShade(); // Ultima 6's darkness follows the view (U6GameWindow.Lighting.cs)
         ShowGroundNearView(); // U6GameWindow.Tiles.cs
         ShowAcrossTheSeam(); // U6GameWindow.Wrap.cs
     }

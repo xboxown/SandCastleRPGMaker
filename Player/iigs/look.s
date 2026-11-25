@@ -239,52 +239,98 @@ ToggleLight:
 
 ; ---- darkness ----
 
-; The view's cells outside every light: black.
+; The view's darkness, Ultima 6's (Engine/U6Lighting.cs - Nuvie's original lighting; the Windows Ultima 6 engine draws
+; the same): by day none; at night and in a Cave every cell dark but for globes of light added up (at most 4): the
+; Avatar's (the hour's level: night 4, dusk and dawn stepping it; a lit light in the party, worn magic light or the Light
+; spell: 8) and each lit light on the map's (a candle-sized one 2, brighter 3). A cell's 0-4: black, three quarters, half,
+; a quarter dark, lit - Ultima 6's shading as a 2 x 2 dither (ShMask).
 DrawDark:
-        lda WCave               ; a Cave: dark, day or night - only lights lift it (weather.s keeps WCave)
-        beq .nc
+        jsr DarkLevel
+        cmp #0
+        bne .dark
+        rts
+.dark:  sta AvLvl
+        stz AvLight
+        lda LightLeft           ; the Light spell
+        beq .c
         lda #1
-        sta AvLight
-        bra .night
-.nc:    lda DNOn
-        bne .on
-        rts
-.on:    lda Hour                ; day: no darkness
-        cmp DNDay
-        bcc .notday
-        cmp DNDusk
-        bcs .notday
-        rts
-.notday:
-        lda #2                  ; night 2, dusk and dawn 6
-        sta AvLight
-        lda Hour
-        cmp DNDawn
-        bcc .night
-        cmp DNNight
-        bcs .night
-        lda #6
-        sta AvLight
-.night: lda LightLeft           ; the Light spell
-        beq .carry
-        lda #6
         jsr MoreLight
-.carry: jsr LightsCarried
-        jsr LightsOnMap
+.c:     jsr LightsCarried       ; a lit light in the party, worn magic light (AvLight > 0)
+        lda AvLight
+        beq .nl
+        lda AvLvl
+        cmp #8
+        bcs .nl
+        lda #8
+        sta AvLvl
+.nl:    jsr LightsOnMap
         jsr ViewCorner
-        stz Row
+        ldx #0                  ; no light yet
+.z:     stz Shade,x
+        inx
+        inx
+        cpx #256
+        bcc .z
+        lda PX                  ; the Avatar's globe
+        sec
+        sbc ViewX0
+        jsr ShortX
+        sta GlX
+        lda PY
+        sec
+        sbc ViewY0
+        jsr ShortY
+        sta GlY
+        lda AvLvl
+        jsr AddGlobe
+        stz ShI                 ; each light's
+.lt:    lda ShI
+        lsr a
+        cmp LCount
+        bcs .draw
+        ldx ShI
+        lda LX,x
+        sec
+        sbc ViewX0
+        jsr ShortX
+        sta GlX
+        ldx ShI
+        lda LY,x
+        sec
+        sbc ViewY0
+        jsr ShortY
+        sta GlY
+        ldx ShI
+        lda LR,x                ; reach 1-2 (a candle): 2, more: 3
+        cmp #3
+        lda #2
+        bcc .lv
+        inc a
+.lv:    jsr AddGlobe
+        inc ShI
+        inc ShI
+        bra .lt
+.draw:  stz Row
+        stz ShRow
 .row:   stz Col
-.col:   lda ViewX0
+.col:   lda ShRow
         clc
         adc Col
-        sta DX
-        lda ViewY0
-        clc
-        adc Row
-        sta DY
-        jsr Lit
-        bcs .next
-        lda Row                 ; this cell black: 16 lines of 8 bytes
+        tay
+        lda Shade,y
+        and #$00FF
+        cmp #4
+        bcc .fb4
+        brl .next
+.fb4:
+        asl a                   ; its masks: even lines, odd lines
+        asl a
+        tay
+        lda ShMask,y
+        sta ShEven
+        lda ShMask+2,y
+        sta ShOdd
+        lda Row                 ; the cell: 16 lines of 8 bytes
         xba
         asl a
         sta T0
@@ -302,27 +348,261 @@ DrawDark:
         clc
         adc T0
         tax
-        lda #16
+        lda #8
         sta T5
-.blk:   lda #0
+.blk:   lda >VIEWBUF,x
+        and ShEven
         sta >VIEWBUF,x
+        lda >VIEWBUF+2,x
+        and ShEven
         sta >VIEWBUF+2,x
+        lda >VIEWBUF+4,x
+        and ShEven
         sta >VIEWBUF+4,x
+        lda >VIEWBUF+6,x
+        and ShEven
         sta >VIEWBUF+6,x
+        lda >VIEWBUF+160,x
+        and ShOdd
+        sta >VIEWBUF+160,x
+        lda >VIEWBUF+162,x
+        and ShOdd
+        sta >VIEWBUF+162,x
+        lda >VIEWBUF+164,x
+        and ShOdd
+        sta >VIEWBUF+164,x
+        lda >VIEWBUF+166,x
+        and ShOdd
+        sta >VIEWBUF+166,x
         txa
         clc
-        adc #160
+        adc #320
         tax
         dec T5
         bne .blk
 .next:  inc Col
         lda Col
         cmp VCols
-        bcc .col
+        bcs .fb1
+        brl .col
+.fb1:
+        lda ShRow
+        clc
+        adc VCols
+        sta ShRow
         inc Row
         lda Row
         cmp VRows
-        bcc .row
+        bcs .fb2
+        brl .row
+.fb2:
+        rts
+
+; A globe of level A at the view's cell GlX, GlY (Nuvie's TileGlobe, GlobeData): added into Shade (each cell at most 4).
+AddGlobe:
+        cmp #1
+        bcs .a
+        rts
+.a:     cmp #11
+        bcc .b
+        lda #10
+.b:     sta GlL
+        dec a
+        asl a
+        tax
+        lda GlobeOff,x
+        sta GlP
+        lda GlL                 ; half-width: level - 1, at most 5
+        cmp #6
+        bcc .r
+        lda #6
+.r:     dec a
+        sta GlR
+        asl a
+        inc a
+        sta GlS
+        stz GlJ
+.j:     lda GlJ
+        cmp GlS
+        bcc .j1
+        rts
+.j1:    lda GlY                 ; its row in the view
+        clc
+        adc GlJ
+        sec
+        sbc GlR
+        bmi .nj
+        cmp VRows
+        bcs .nj
+        sta T5                  ; x VCols
+        stz GlRow
+.m:     lda T5
+        beq .md
+        lda GlRow
+        clc
+        adc VCols
+        sta GlRow
+        dec T5
+        bra .m
+.md:    stz GlI
+.i:     lda GlI
+        cmp GlS
+        bcs .nj
+        lda GlX
+        clc
+        adc GlI
+        sec
+        sbc GlR
+        bmi .ni
+        cmp VCols
+        bcs .ni
+        clc
+        adc GlRow
+        sta GlC
+        lda GlP
+        clc
+        adc GlI
+        tax
+        lda GlobeData,x
+        and #$00FF
+        beq .ni
+        clc
+        ldx GlC
+        sep #$20
+        .a8
+        adc Shade,x
+        cmp #5
+        bcc .s
+        lda #4
+.s:     sta Shade,x
+        rep #$20
+        .a16
+.ni:    inc GlI
+        bra .i
+.nj:    lda GlP
+        clc
+        adc GlS
+        sta GlP
+        inc GlJ
+        brl .j
+
+; A = the Avatar's globe for now: 0 by day (no darkness); night 4; from dusk's start to night's 10 down to 5 in six
+; steps, from dawn's start to day's 5 up to 10; a Cave always 4; Change Day/Night's for the rest of its hour.
+DarkLevel:
+        lda WCave               ; a Cave: dark, day or night (weather.s keeps WCave)
+        beq .nc
+        lda #4
+        rts
+.nc:    lda DNOvH               ; Change Day/Night (ext.s): till the hour is over
+        cmp Hour
+        bne .no
+        lda DNOvL
+        rts
+.no:    lda #$FFFF
+        sta DNOvH
+        lda DNOn
+        bne .on
+        lda #0
+        rts
+.on:    lda Hour                ; now, in minutes
+        jsr Min60
+        clc
+        adc Minute
+        sta DkNow
+        lda DNDawn
+        jsr Min60
+        sta DkDawn
+        lda DNDay
+        jsr Min60
+        cmp DkDawn
+        beq .d1
+        bcs .d2
+.d1:    lda DkDawn
+        inc a
+.d2:    sta DkDay
+        lda DNDusk
+        jsr Min60
+        sta DkDusk
+        lda DNNight
+        jsr Min60
+        cmp DkDusk
+        beq .n1
+        bcs .n2
+.n1:    lda DkDusk
+        inc a
+.n2:    sta DkNight
+        lda DkNow               ; day
+        cmp DkDay
+        bcc .ndy
+        cmp DkDusk
+        bcs .ndy
+        lda #0
+        rts
+.ndy:   cmp DkDusk              ; dusk: 10 - step
+        bcc .ndu
+        cmp DkNight
+        bcs .ndu
+        sec
+        sbc DkDusk
+        ldx DkNight
+        ldy DkDusk
+        jsr DkStep
+        eor #$FFFF
+        sec
+        adc #10
+        rts
+.ndu:   cmp DkDawn              ; dawn: 5 + step
+        bcc .night
+        cmp DkDay
+        bcs .night
+        sec
+        sbc DkDawn
+        ldx DkDay
+        ldy DkDawn
+        jsr DkStep
+        clc
+        adc #5
+        rts
+.night: lda #4
+        rts
+
+; A = minutes into a span from Y to X: the step 0-5 (A x 6 / the span's length, at most 5).
+DkStep:
+        sta T4
+        asl a                   ; x 6
+        clc
+        adc T4
+        asl a
+        sta T4
+        stx T5
+        tya
+        eor #$FFFF
+        sec
+        adc T5
+        sta T5                  ; the span's length
+        ldx #0
+.l:     lda T4
+        cmp T5
+        bcc .d
+        sbc T5
+        sta T4
+        inx
+        cpx #5
+        bcc .l
+.d:     txa
+        rts
+
+; A x 60
+Min60:
+        asl a
+        asl a
+        sta T4                  ; x 4
+        asl a
+        asl a
+        asl a
+        asl a                   ; x 64
+        sec
+        sbc T4
         rts
 
 ; AvLight = the larger of it and A
@@ -570,6 +850,52 @@ DNDay:    .dw 7
 DNDusk:   .dw 19
 DNNight:  .dw 21
 AvLight:  .dw 0
+AvLvl:    .dw 0
+DNOvH:    .dw $FFFF             ; Change Day/Night: its hour ($FFFF none) and level (ext.s)
+DNOvL:    .dw 0
+DkNow:    .dw 0
+DkDawn:   .dw 0
+DkDay:    .dw 0
+DkDusk:   .dw 0
+DkNight:  .dw 0
+Shade:    .ds 256               ; each view cell's light 0-4 (DrawDark)
+ShI:      .dw 0
+ShRow:    .dw 0
+ShEven:   .dw 0
+ShOdd:    .dw 0
+ShMask:   .dw $0000,$0000,$0000,$F0F0,$0F0F,$F0F0,$0F0F,$FFFF ; light 0-3: even lines, odd lines (a 2 x 2 dither)
+GlX:      .dw 0
+GlY:      .dw 0
+GlL:      .dw 0
+GlP:      .dw 0
+GlR:      .dw 0
+GlS:      .dw 0
+GlJ:      .dw 0
+GlI:      .dw 0
+GlRow:    .dw 0
+GlC:      .dw 0
+GlobeOff: .dw 0,1,10,35,84,165,286,407,528,649
+GlobeData:
+          .db 1,1,1,1,1,2,1,1,1,1,0,1,1,1,0,1,2,2,2,1,1,2,3,2,1,1,2,2,2,1,0,1,1,1,0,0,0,1,1,1
+          .db 0,0,0,1,2,2,2,1,0,1,2,3,3,3,2,1,1,2,3,4,3,2,1,1,2,3,3,3,2,1,0,1,2,2,2,1,0,0,0,1
+          .db 1,1,0,0,0,0,0,1,1,1,0,0,0,0,1,1,2,2,2,1,1,0,0,1,2,3,3,3,2,1,0,1,2,3,4,4,4,3,2,1
+          .db 1,2,3,4,4,4,3,2,1,1,2,3,4,4,4,3,2,1,0,1,2,3,3,3,2,1,0,0,1,1,2,2,2,1,1,0,0,0,0,1
+          .db 1,1,0,0,0,0,0,0,0,1,1,1,0,0,0,0,0,0,1,1,2,2,2,1,1,0,0,0,1,2,2,3,3,3,2,2,1,0,0,1
+          .db 2,3,4,4,4,3,2,1,0,1,2,3,4,4,4,4,4,3,2,1,1,2,3,4,4,4,4,4,3,2,1,1,2,3,4,4,4,4,4,3
+          .db 2,1,0,1,2,3,4,4,4,3,2,1,0,0,1,2,2,3,3,3,2,2,1,0,0,0,1,1,2,2,2,1,1,0,0,0,0,0,0,1
+          .db 1,1,0,0,0,0,0,0,1,1,2,2,2,1,1,0,0,0,1,2,2,3,3,3,2,2,1,0,1,2,3,3,4,4,4,3,3,2,1,1
+          .db 2,3,4,4,4,4,4,3,2,1,2,3,4,4,4,4,4,4,4,3,2,2,3,4,4,4,4,4,4,4,3,2,2,3,4,4,4,4,4,4
+          .db 4,3,2,1,2,3,4,4,4,4,4,3,2,1,1,2,3,3,4,4,4,3,3,2,1,0,1,2,2,3,3,3,2,2,1,0,0,0,1,1
+          .db 2,2,2,1,1,0,0,2,2,2,2,3,3,3,2,2,2,2,2,2,3,3,4,4,4,3,3,2,2,2,3,4,4,4,4,4,4,4,3,2
+          .db 2,3,4,4,4,4,4,4,4,3,2,3,4,4,4,4,4,4,4,4,4,3,3,4,4,4,4,4,4,4,4,4,3,3,4,4,4,4,4,4
+          .db 4,4,4,3,2,3,4,4,4,4,4,4,4,3,2,2,3,4,4,4,4,4,4,4,3,2,2,2,3,3,4,4,4,3,3,2,2,2,2,2
+          .db 2,3,3,3,2,2,2,2,3,3,3,3,4,4,4,3,3,3,3,3,3,4,4,4,4,4,4,4,3,3,3,4,4,4,4,4,4,4,4,4
+          .db 3,3,4,4,4,4,4,4,4,4,4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+          .db 4,4,4,4,4,3,4,4,4,4,4,4,4,4,4,3,3,4,4,4,4,4,4,4,4,4,3,3,3,4,4,4,4,4,4,4,3,3,3,3
+          .db 3,3,4,4,4,3,3,3,3,3,3,3,4,4,4,4,4,3,3,3,3,4,4,4,4,4,4,4,4,4,3,3,4,4,4,4,4,4,4,4
+          .db 4,3,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4
+          .db 4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,4,3,4,4,4,4,4,4,4,4,4,3,3,4,4,4,4,4,4,4,4,4,3,3
+          .db 3,3,4,4,4,4,4,3,3,3
 DX:       .dw 0
 DY:       .dw 0
 LCount:   .dw 0

@@ -1,128 +1,135 @@
 // Ultima 6 engine (U6GameWindow) - copied from the Ultima 7 engine (GameTestWindow, build 523) and changed for Ultima 6 here only.
 using System.Windows;
 using System.Windows.Media;
-using System.Windows.Media.Animation;
+using System.Windows.Media.Imaging;
 using SandcastleRpgMaker.Engine;
 
 namespace SandcastleRpgMaker.Editor;
 
 /// <summary>
-/// The sky's light, as Exult's time-of-day palettes (gameclk.cc
-/// set_time_palette, get_final_palette): day; at dawn the night lifts
-/// through the dawn colour, at dusk it falls through the dusk colour; night.
-/// Cloudy, rainy and stormy days are darker (Exult's overcast palette).
-/// The hours and colours are System Settings > Day &amp; Night. In the dark,
-/// light sources lift it as Exult's do (gamerend.cc Get_light_strength): every
-/// lit light on screen, and every lit light a party member holds, adds
-/// brightness x (75 - 2 x tiles across - 3 x tiles down) from the main
-/// character; under 224 a candle's glow, under 640 a single light, more: many
-/// lights - or, set so (Light gives), the dusk colour or full daylight.
-/// The Change Day/Night command sets the sky until the next hour.
+/// Ultima 6's darkness (the user, 2026-11-25: Ultima 6 / Savage Empire / Martian Dreams, not Ultima 7's tinted sky):
+/// Engine/U6Lighting.cs - Nuvie's original lighting. By day nothing is dark; at night, and in a Cave zone day or night,
+/// every cell is dark but for globes of light: the Avatar's (the hour's level - 4 at night, dusk and dawn stepping it;
+/// a lit light in the party, the Light spell or worn magic light: 8), each lit light on the map (a candle 2, brighter 3)
+/// and each other character holding a lit light (3). Each cell 0-4 is drawn as Ultima 6's shading: lit, a quarter, half,
+/// three quarters dark, or black (a 2 x 2 dither) - one bitmap over the view (ShadeImage), redrawn a few times a second
+/// and whenever the view crosses a cell. The Apple IIgs player draws the same (look.s DrawDark). Change Day/Night sets
+/// the light until the next hour: Morning - day, Afternoon - dusk's middle, Evening - night.
 /// </summary>
 public partial class U6GameWindow
 {
-    /// <summary>Exult's light palettes, as a share of the night's darkness left: none, candle, single light, many lights.</summary>
-    private static readonly double[] DarknessLeftAtLevel = { 1.0, 0.75, 0.55, 0.35 };
-
     private double _lightCheckMs;
-    private (Color Color, double Opacity)? _skyOverride;
-    private int _skyOverrideHour = -1;
-    private (Color Color, double Opacity) _skyShown = (Colors.Transparent, -1);
+    /// <summary>Change Day/Night's level (0 day, else the Avatar's globe) and the hour it holds for; -1: none.</summary>
+    private int _levelOverride = -1, _levelOverrideHour = -1;
+    private WriteableBitmap? _shadeBitmap;
+    private TranslateTransform? _shadeShift;
+    private System.Windows.Controls.Image? _shadeImage;
+    private (int C0, int R0) _shadeOrigin = (int.MinValue, int.MinValue);
 
     private DayNightSettings DayNight => _systemSettings.DayNight;
 
-    private static Color ParseColor(string hex, Color fallback)
+    /// <summary>The Avatar's globe for now (0 = day: no darkness).</summary>
+    private int AmbientLevelNow(bool inCave)
     {
-        try { return (Color)ColorConverter.ConvertFromString(hex.StartsWith('#') ? hex : "#" + hex); } catch { return fallback; }
+        if (_levelOverride >= 0 && _clock.Hour == _levelOverrideHour && !inCave) return _levelOverride;
+        _levelOverride = -1;
+        return U6Lighting.AmbientLevel(_clock.Hour, _clock.Minute, DayNight, inCave);
     }
 
-    private static (Color Color, double Opacity) Mix((Color Color, double Opacity) a, (Color Color, double Opacity) b, double t)
-    {
-        t = Math.Clamp(t, 0, 1);
-        Color color = a.Opacity <= 0 ? b.Color : b.Opacity <= 0 ? a.Color : Color.FromRgb(
-            (byte)(a.Color.R + (b.Color.R - a.Color.R) * t), (byte)(a.Color.G + (b.Color.G - a.Color.G) * t), (byte)(a.Color.B + (b.Color.B - a.Color.B) * t));
-        return (color, a.Opacity + (b.Opacity - a.Opacity) * t);
-    }
-
-    /// <summary>The sky for this time of day, and how much of it is night (0 = none, 1 = full night) - the part light sources lift.</summary>
-    private ((Color Color, double Opacity) Sky, double Night) SkyNow()
-    {
-        var d = DayNight;
-        var night = (ParseColor(d.NightColor, Color.FromRgb(0x15, 0x57, 0x52)), Math.Clamp(d.NightStrength, 0, 1));
-        var dusk = (ParseColor(d.DuskColor, Color.FromRgb(0x9C, 0x68, 0x0C)), Math.Clamp(d.DuskStrength, 0, 1));
-        var day = (dusk.Item1, 0.0);
-        if (_skyOverride is { } set && _clock.Hour == _skyOverrideHour) return (set, set.Opacity >= night.Item2 - 0.01 ? 1 : 0);
-        _skyOverride = null;
-        if (!d.Enabled) return (day, 0);
-        double h = _clock.Hour + _clock.Minute / 60.0;
-        double dawnStart = d.DawnStartHour, dayStart = Math.Max(d.DayStartHour, d.DawnStartHour + 0.01), duskStart = d.DuskStartHour, nightStart = Math.Max(d.NightStartHour, d.DuskStartHour + 0.01);
-        if (h >= dawnStart && h < dayStart)
-        {
-            double t = (h - dawnStart) / (dayStart - dawnStart);
-            return t < 0.5 ? (Mix(night, dusk, t * 2), 1 - t * 2) : (Mix(dusk, day, (t - 0.5) * 2), 0);
-        }
-        if (h >= duskStart && h < nightStart)
-        {
-            double t = (h - duskStart) / (nightStart - duskStart);
-            return t < 0.5 ? (Mix(day, dusk, t * 2), 0) : (Mix(dusk, night, (t - 0.5) * 2), (t - 0.5) * 2);
-        }
-        return h >= dayStart && h < duskStart ? (day, 0) : (night, 1);
-    }
-
-    /// <summary>A few times a second: the sky, the weather's gloom, and the lights.</summary>
+    /// <summary>A few times a second (and when the view crosses a cell): the darkness over the view.</summary>
     private void UpdateLighting(double elapsedMs)
     {
         if ((_lightCheckMs -= elapsedMs) > 0) return;
         _lightCheckMs = 250;
-        var (sky, nightAmount) = SkyNow();
-        var lightEye = LightEye();
-        bool inCave = Zones.IsInCave(_map.Zones, lightEye.X, lightEye.Y, lightEye.Floor);
-        if (inCave) // a Cave: its darkness (Map Editor > Zones), day or night - only a light source lifts it
-        {
-            double caveDark = Zones.CaveDarknessAt(_map.Zones, lightEye.X, lightEye.Y, lightEye.Floor);
-            (sky, nightAmount) = ((Colors.Black, caveDark), caveDark);
-        }
+        LightingOverlay.Opacity = 0; // (Ultima 7's tint: not in Ultima 6)
+        var eye = LightEye();
+        bool inCave = Zones.IsInCave(_map.Zones, eye.X, eye.Y, eye.Floor);
+        int ambient = AmbientLevelNow(inCave);
+        var image = ShadeImage();
+        if (ambient <= 0 || _player is null || _tileWidth <= 0 || _tileHeight <= 0) { image.Visibility = Visibility.Collapsed; return; }
 
-        // Overcast: weather and clouds darken the day (and the night a little more).
-        double gloom = inCave ? 0 : (_weather.Kind == WeatherKind.Clear ? 0 : _weather.Intensity / 100.0) + (_weather.Clouds ? _weather.CloudCover / 200.0 : 0);
-        gloom = Math.Clamp(gloom, 0, 1) * Math.Clamp(DayNight.OvercastStrength, 0, 1);
-        if (gloom > 0.001)
-        {
-            var grey = Color.FromRgb(0x20, 0x24, 0x2C);
-            var overcast = (Mix((sky.Color, sky.Opacity), (grey, gloom), sky.Opacity <= 0 ? 1 : 0.35).Color, 1 - (1 - sky.Opacity) * (1 - gloom));
-            sky = overcast;
-        }
+        // The cells over the view, one more each side.
+        int c0 = (int)Math.Floor(_cameraX / _tileWidth) - 1, r0 = (int)Math.Floor(_cameraY / _tileHeight) - 1;
+        int cols = (int)Math.Ceiling(ViewportWidth / _tileWidth) + 3, rows = (int)Math.Ceiling(ViewportHeight / _tileHeight) + 3;
+        var shade = new byte[cols * rows];
 
-        // Light sources, in the dark.
-        var (strength, gives) = nightAmount > 0 && _player is not null ? LightAround() : (0, LightGives.ExultLevels);
-        if (_specialLightMinutes > 0) strength = Math.Max(strength, 640); // a light spell: as many lights (add_special_light)
-        if (nightAmount > 0 && strength > 0)
+        // The Avatar's globe: the hour's, or a light in the party.
+        bool partyLight = _specialLightMinutes > 0;
+        foreach (var member in AllLivingCharacters())
         {
-            var dusk = (ParseColor(DayNight.DuskColor, Color.FromRgb(0x9C, 0x68, 0x0C)), Math.Clamp(DayNight.DuskStrength, 0, 1));
-            switch (gives)
-            {
-                case LightGives.FullDaylight:
-                    sky = (sky.Color, sky.Opacity * (1 - nightAmount));
-                    break;
-                case LightGives.DuskLook:
-                    sky = Mix(sky, dusk, nightAmount);
-                    break;
-                default:
-                    int level = strength <= 0 ? 0 : strength < 224 ? 1 : strength < 640 ? 2 : 3;
-                    sky = (sky.Color, sky.Opacity * (1 - nightAmount * (1 - DarknessLeftAtLevel[level])));
-                    break;
-            }
+            bool party = member == _player || member.IsInParty;
+            bool holds = HoldsLitLight(member) || MagicTotal(member, MagicBonusKind.Light) > 0;
+            if (!holds) continue;
+            if (party) { partyLight = true; continue; }
+            var (mx, my) = CellOf(member); // anyone else with a light: its own globe
+            U6Lighting.AddGlobe(shade, cols, rows, mx - c0, my - r0, 3);
         }
-        ShowSky(sky);
+        int avatar = partyLight ? Math.Max(ambient, U6Lighting.PartyLightLevel) : ambient;
+        U6Lighting.AddGlobe(shade, cols, rows, eye.X - c0, eye.Y - r0, avatar);
+        foreach (var light in _map.Objects)
+        {
+            if (light.IsLitRuntime != true || light.ContainerInstanceId >= 0 || DefinitionOf(light) is not { Type: ObjectType.LightSource } obj) continue;
+            if (light.X < c0 - 6 || light.Y < r0 - 6 || light.X > c0 + cols + 6 || light.Y > r0 + rows + 6) continue;
+            U6Lighting.AddGlobe(shade, cols, rows, light.X - c0, light.Y - r0, U6Lighting.ObjectLevel(obj.Light.Brightness));
+        }
+        DrawShade(shade, cols, rows);
+        _shadeOrigin = (c0, r0);
+        PlaceShade();
+        image.Visibility = Visibility.Visible;
     }
 
-    private void ShowSky((Color Color, double Opacity) sky)
+    /// <summary>Whether a character holds a lit light in a hand.</summary>
+    private bool HoldsLitLight(CharacterDefinition member)
     {
-        if (_skyShown.Color == sky.Color && Math.Abs(_skyShown.Opacity - sky.Opacity) < 0.005) return;
-        bool colorChanged = _skyShown.Color != sky.Color;
-        _skyShown = sky;
-        if (colorChanged || LightingOverlay.Fill is not SolidColorBrush) LightingOverlay.Fill = new SolidColorBrush(sky.Color);
-        LightingOverlay.BeginAnimation(UIElement.OpacityProperty, new DoubleAnimation(Math.Clamp(sky.Opacity, 0, 1), TimeSpan.FromSeconds(0.4)));
+        foreach (var slot in new[] { EquipmentSlot.RightHand, EquipmentSlot.LeftHand })
+            if (member.EquippedSlots.TryGetValue(slot, out int id) && member.Inventory.FirstOrDefault(i => i.InstanceId == id) is { IsLitRuntime: true } held
+                && DefinitionOf(held) is { Type: ObjectType.LightSource })
+                return true;
+        return false;
+    }
+
+    /// <summary>The bitmap over the view (made the first time), in the world view's grid over the weather.</summary>
+    private System.Windows.Controls.Image ShadeImage()
+    {
+        if (_shadeImage is not null) return _shadeImage;
+        _shadeShift = new TranslateTransform();
+        _shadeImage = new System.Windows.Controls.Image
+        {
+            IsHitTestVisible = false, Stretch = Stretch.None, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top,
+            RenderTransform = _shadeShift, Visibility = Visibility.Collapsed
+        };
+        RenderOptions.SetBitmapScalingMode(_shadeImage, BitmapScalingMode.NearestNeighbor);
+        System.Windows.Controls.Panel.SetZIndex(_shadeImage, 25);
+        ((System.Windows.Controls.Grid)LightingOverlay.Parent).Children.Add(_shadeImage);
+        return _shadeImage;
+    }
+
+    /// <summary>Each cell's light as Ultima 6's shading: its pixels black by the 2 x 2 dither, the rest see-through.</summary>
+    private void DrawShade(byte[] shade, int cols, int rows)
+    {
+        int w = cols * _tileWidth, h = rows * _tileHeight;
+        if (_shadeBitmap is null || _shadeBitmap.PixelWidth != w || _shadeBitmap.PixelHeight != h)
+        {
+            _shadeBitmap = new WriteableBitmap(w, h, 96, 96, PixelFormats.Bgra32, null);
+            ShadeImage().Source = _shadeBitmap;
+        }
+        var pixels = new int[w * h];
+        for (int py = 0; py < h; py++)
+        {
+            int row = py / _tileHeight * cols;
+            for (int px = 0; px < w; px++)
+                if (U6Lighting.DarkPixel(shade[row + px / _tileWidth], px, py)) pixels[py * w + px] = unchecked((int)0xFF000000);
+        }
+        _shadeBitmap.WritePixels(new Int32Rect(0, 0, w, h), pixels, w * 4, 0);
+    }
+
+    /// <summary>The bitmap where its cells are, as the view moves (UpdateCamera); a new cell crossed: drawn again now.</summary>
+    private void PlaceShade()
+    {
+        if (_shadeShift is null || _shadeOrigin.C0 == int.MinValue) return;
+        _shadeShift.X = _shadeOrigin.C0 * _tileWidth - _cameraX;
+        _shadeShift.Y = _shadeOrigin.R0 * _tileHeight - _cameraY;
+        if (_tileWidth > 0 && _tileHeight > 0 && ((int)Math.Floor(_cameraX / _tileWidth) - 1 != _shadeOrigin.C0 || (int)Math.Floor(_cameraY / _tileHeight) - 1 != _shadeOrigin.R0)) _lightCheckMs = 0;
     }
 
     /// <summary>
@@ -134,51 +141,11 @@ public partial class U6GameWindow
             ? (eye.Placement.X, eye.Placement.Y, MapFloors.FloorOfLift(eye.Lift), eye.PixelX, eye.PixelY)
             : (_playerX, _playerY, MapFloors.FloorOfLift(_playerZ), _playerPixelX, _playerPixelY);
 
-    /// <summary>Get_light_strength summed over the lights on screen and those the party holds, and the strongest kind of light among them.</summary>
-    private (int Strength, LightGives Gives) LightAround()
+    /// <summary>The Change Day/Night command: Morning - day, Afternoon - dusk's middle, Evening - night, until the next hour.</summary>
+    private void SetLevelUntilNextHour(string period)
     {
-        var (_, _, _, ax, ay) = LightEye();
-        int Strength(double x, double y, int brightness)
-        {
-            int dx = (int)Math.Abs(Math.Round((x - ax) / SpriteSizing.BaseUnit));
-            int dy = (int)Math.Abs(Math.Round((y - ay) / SpriteSizing.BaseUnit));
-            return Math.Max(0, 75 - 2 * dx - 3 * dy) * brightness;
-        }
-        int total = 0;
-        var gives = LightGives.ExultLevels;
-        void Add(int strength, WorldObject obj)
-        {
-            if (strength <= 0) return;
-            total += strength;
-            if (obj.Light.Gives > gives) gives = obj.Light.Gives; // full daylight wins over the dusk look, which wins over Exult's levels
-        }
-        foreach (var light in _map.Objects)
-        {
-            if (light.IsLitRuntime != true || light.ContainerInstanceId >= 0 || DefinitionOf(light) is not { Type: ObjectType.LightSource } obj) continue;
-            double x = light.X * _tileWidth + _tileWidth / 2.0, y = light.Y * _tileHeight + _tileHeight / 2.0;
-            if (!IsOnScreen(x, y)) continue;
-            Add(Strength(x, y, obj.Light.Brightness), obj);
-        }
-        foreach (var member in AllLivingCharacters().Where(c => c == _player || c.IsInParty || c == _cameraFollow)) // and whoever the view follows (a cutscene's demon with a candle)
-        {
-            var (x, y) = PixelOf(member);
-            foreach (var slot in new[] { EquipmentSlot.RightHand, EquipmentSlot.LeftHand })
-            {
-                if (!member.EquippedSlots.TryGetValue(slot, out int id)) continue;
-                if (member.Inventory.FirstOrDefault(i => i.InstanceId == id) is { IsLitRuntime: true } held && DefinitionOf(held) is { Type: ObjectType.LightSource } obj)
-                    Add(Strength(x, y, obj.Light.Brightness), obj);
-            }
-            int magicLight = MagicTotal(member, MagicBonusKind.Light); // Magic light while worn or held: the fire sword - it never burns out
-            if (magicLight > 0) total += Strength(x, y, magicLight);
-        }
-        return (total, gives);
-    }
-
-    /// <summary>The Change Day/Night command: this sky until the next hour, then the clock's again.</summary>
-    private void SetSkyUntilNextHour(Color color, double opacity)
-    {
-        _skyOverride = (color, opacity);
-        _skyOverrideHour = _clock.Hour;
+        _levelOverride = period switch { "Evening" => U6Lighting.NightLevel, "Afternoon" => 7, _ => 0 };
+        _levelOverrideHour = _clock.Hour;
         _lightCheckMs = 0;
     }
 }

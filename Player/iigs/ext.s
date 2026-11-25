@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash
-EXT_COUNT = 12
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
+EXT_COUNT = 13
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1163,6 +1163,19 @@ XtFlash:
         sta DsTick
         pla
 .done:  lda #5
+        jmp Next
+
+; EXT 12 DAYNIGHT level (3 bytes): Change Day/Night - the darkness this level (0 day, 7 dusk, 4 night: look.s DarkLevel)
+; till the hour is over, as U6GameWindow.Lighting.cs SetLevelUntilNextHour.
+XtDayNight:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta DNOvL
+        lda Hour
+        sta DNOvH
+        jsr DrawView
+        lda #3
         jmp Next
 
 XfOut:    .dw 0
