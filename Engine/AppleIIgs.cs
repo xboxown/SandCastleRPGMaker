@@ -672,6 +672,20 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Liquid)> LiquidGivers { get; } = new();
     /// <summary>Things that can be broken (break.s): name, hit points, defense, destroyed sound, flags (1 a container: its things fall out).</summary>
     public List<(int Name, int Hp, int Defense, int Sound, int Flags)> Breakables { get; } = new();
+
+    /// <summary>A schedule activity as the IIgs does it (schedule.s): 0 stand, $80 sit, 1 wander, 2 sleep, 3 / 4 pace, 6 / 7 work, 5 loiter (the rest).</summary>
+    public static int ActivityCode(ScheduleType type) => type switch
+    {
+        ScheduleType.Stand or ScheduleType.Wait => 0,
+        ScheduleType.Sit => 0x80, // stands there, drawn sitting (main.s)
+        ScheduleType.Wander => 1,
+        ScheduleType.Sleep => 2,
+        ScheduleType.HorizPace => 3,
+        ScheduleType.VertPace => 4,
+        ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Blacksmith or ScheduleType.Lab => 6,
+        ScheduleType.Farm or ScheduleType.Miner => 7,
+        _ => 5
+    };
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;

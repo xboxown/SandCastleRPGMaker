@@ -1339,18 +1339,7 @@ public partial class MainWindow
             // Its schedule (Exult's 3-hour periods): the activities the Apple IIgs does; work ones loiter at their spot.
             foreach (var entry in who.Schedules.Where(e => e.Period is >= 0 and <= 7))
             {
-                int activity = entry.Type switch
-                {
-                    ScheduleType.Stand or ScheduleType.Wait => 0,
-                    ScheduleType.Sit => 0x80, // stands there, drawn sitting (main.s)
-                    ScheduleType.Wander => 1,
-                    ScheduleType.Sleep => 2,
-                    ScheduleType.HorizPace => 3,
-                    ScheduleType.VertPace => 4,
-                    ScheduleType.Bake or ScheduleType.Sew or ScheduleType.Blacksmith or ScheduleType.Lab => 6,
-                    ScheduleType.Farm or ScheduleType.Miner => 7,
-                    _ => 5
-                };
+                int activity = AppleIIgsGamePack.ActivityCode(entry.Type);
                 int sx = entry.X >= 0 && entry.X < world.Width ? entry.X : placed.X, sy = entry.Y >= 0 && entry.Y < world.Height ? entry.Y : placed.Y;
                 schedules.Add((list.Count, entry.Period, activity, sx, sy));
             }

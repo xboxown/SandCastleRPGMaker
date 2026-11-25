@@ -75,10 +75,14 @@ ApplySchedules:
         sta CP+2
         ldx ChrCount
         beq .oj
-.c:     ldy #S_KEY
+.c:     ldy #C_FLAGS            ; (Change Behavior's: left as it is - ext.s)
+        lda [CP],y
+        and #$0800
+        bne .ch
+        ldy #S_KEY
         lda #$FFFF
         sta [CP],y
-        jsr NextCP
+.ch:    jsr NextCP
         dex
         bne .c
         lda SchCount
@@ -118,7 +122,12 @@ ApplySchedules:
         cmp T4
         beq .take
         bcs .n
-.take:  lda T4
+.take:  ldy #C_FLAGS            ; (Change Behavior's: left as it is - ext.s)
+        lda [CP],y
+        and #$0800
+        bne .n
+        lda T4
+        ldy #S_KEY
         sta [CP],y
         ldy #4
         lda [ItemPtr],y

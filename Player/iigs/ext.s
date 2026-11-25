@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow
-EXT_COUNT = 7
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav
+EXT_COUNT = 8
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -995,6 +995,79 @@ FlLI:     .dw 0
 FlStop:   .dw 0
 FoX:      .dw 0
 FlMv:     .dw 0
+
+; EXT 7 BEHAV who activity (7 bytes): Change Behavior, as U6GameWindow.Talk.cs ChangeBehaviorCommand: a map's character
+; (not the Avatar, not a member) now does that activity (schedule.s's: 0 stand, 1 wander, 2 sleep, 3 / 4 pace, 5 loiter,
+; 6 / 7 work, $80 sit) where it stands, its schedule left off ($0800 in its flags: ApplySchedules passes it by) - its own
+; behaviour kept in S_KEY; $FF: back to its schedule (and its own behaviour) now.
+XtBehav:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta BhAct
+        jsr WhoRec
+        bcc .fb1
+        brl .done
+.fb1:
+        jsr WPIsAvatar
+        bcc .fb2
+        brl .done
+.fb2:
+        jsr WPInParty
+        bcc .fb3
+        brl .done
+.fb3:
+        lda BhAct
+        cmp #$FF
+        beq .resume
+        ldy #C_FLAGS
+        lda [WP],y
+        and #$0800
+        bne .held
+        ldy #C_BEHAV            ; its own behaviour kept (in S_KEY: never $FFFF while held)
+        lda [WP],y
+        ldy #S_KEY
+        sta [WP],y
+        ldy #C_FLAGS
+        lda [WP],y
+        ora #$0800
+        sta [WP],y
+.held:  ldy #C_BEHAV
+        lda #2                  ; scheduled: this activity, here
+        sta [WP],y
+        lda BhAct
+        ldy #S_ACT
+        sta [WP],y
+        lda [WP]
+        ldy #S_TX
+        sta [WP],y
+        ldy #2
+        lda [WP],y
+        ldy #S_TY
+        sta [WP],y
+        ldy #C_FLAGS            ; awake
+        lda [WP],y
+        and #$FFEF
+        sta [WP],y
+        bra .done
+.resume:
+        ldy #C_FLAGS
+        lda [WP],y
+        and #$0800
+        beq .done
+        lda [WP],y
+        and #$F7FF
+        sta [WP],y
+        ldy #S_KEY
+        lda [WP],y
+        ldy #C_BEHAV
+        sta [WP],y
+        jsr ApplySchedules      ; its schedule's activity for now (schedule.s)
+.done:  jsr DrawView
+        lda #7
+        jmp Next
+
+BhAct:    .dw 0
 
 TcName:   .dw 0
 TcLeft:   .dw 0
