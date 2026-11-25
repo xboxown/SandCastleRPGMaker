@@ -2204,24 +2204,26 @@ TryMove:
         .include "spells2.s"
         .include "expr.s"
         .include "ownev.s"
+        .include "levels.s"
+        .include "texts.s"
+        .include "hud.s"
+        .include "moves.s"
+        .code2                  ; the second code segment (its own bank - asm816 makes the calls between them)
         .include "haggle.s"
         .include "music.s"
         .include "weather.s"
         .include "vehicles.s"
-        .include "levels.s"
-        .include "texts.s"
         .include "crafting.s"
         .include "work.s"
         .include "items.s"
-        .include "hud.s"
         .include "bodies.s"
         .include "eggs.s"
-        .include "moves.s"
         .include "solo.s"
         .include "floor.s"
         .include "lever.s"
         .include "temp.s"
         .include "door.s"
+        .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
 PreloadSwapSound:

@@ -16,6 +16,9 @@ Source syntax:
   .ascii "t"        text;  .cstr "t" text + 0;  .pstr "t" length byte + text;  .gsstr "t" length word + text
   .ds n             n zero bytes
   .include "file"
+  .code2 / .code1   the code that follows goes into the second code segment (its own bank) / back into the first. A jsr to
+                    a routine in the other code segment becomes a jsl to a stub there (jsr routine / rtl); a jmp to one
+                    (a tail call) becomes that jsl and an rts. Data stays in the data segment either way.
   tool $xxxx        a toolbox call: ldx #$xxxx / jsl $E10000
   gsos $xxxx,label  a GS/OS call: jsl $E100A8 / .dw $xxxx / .dl label
 Operands: #imm  <dp  !abs  >long  (dp) (dp,x) (dp),y [dp] [dp],y  n,s (n,s),y  (abs) (abs,x) [abs]  src,dst (mvn/mvp)
@@ -144,6 +147,8 @@ class Assembler:
         self.pass_no = 0
         self.changed = False
         self.code_tables = set()   # tables jmp (t,x) / jsr (t,x) read: they stay with the code
+        self.codesec = 1           # where code goes: 1 the first code segment, 3 the second (.code2)
+        self.far = set()           # routines called from the other code segment: each gets a stub (jsr it / rtl) in its own
 
     def expr(self, text, scope, line):
         out = []
@@ -201,15 +206,29 @@ class Assembler:
         lines = self.read(path)
         for self.pass_no in range(1, 10):
             self.changed = False
-            self.outs = {1: bytearray(), 2: bytearray()}
-            self.rels = {1: [], 2: []}
+            self.outs = {1: bytearray(), 2: bytearray(), 3: bytearray()}
+            self.rels = {1: [], 2: [], 3: []}
+            self.codesec = 1
             self.section(1)
             self.listing = []
             self.run(lines)
+            self.far_stubs()
             if self.pass_no > 1 and not self.changed: break
         else:
             raise AsmError('sizes never settled')
         return {k: bytes(v) for k, v in self.outs.items()}, self.rels
+
+    def far_stubs(self):
+        """Each routine called from the other code segment: its stub at the end of its own segment - jsr it, then rtl."""
+        for target in sorted(self.far):
+            v = self.symbols.get(target)
+            sec = v.reloc if v is not None and v.reloc in (1, 3) else 1
+            self.section(sec)
+            self.define('__far_' + target, Val(len(self.out), sec))
+            self.emit(0x20)
+            self.value(v if v is not None else Val(0, sec), 2)
+            self.emit(0x6B)
+        self.section(1)
 
     def section(self, sec):
         self.sec = sec
@@ -253,19 +272,23 @@ class Assembler:
                 if op in ('.a8', '.a16', '.i8', '.i16'):
                     self.statement(code.strip(), scope, n)
                     continue
+                if op in ('.code1', '.code2'):
+                    self.codesec = 1 if op == '.code1' else 3
+                    self.section(self.codesec)
+                    continue
                 if op in self.DATA:
                     if pending: table = any(p in self.code_tables for p in pending)
-                    self.section(1 if table else 2)
+                    self.section(self.codesec if table else 2)
                 else:
-                    self.section(1)
+                    self.section(self.codesec)
                     table = False
                 for name in pending: self.define(name, Val(len(self.out), self.sec))
                 pending = []
                 self.statement(code.strip(), scope, n)
             except AsmError as e:
                 raise AsmError(f'{os.path.basename(path)}:{n}: {e}\n    {code.strip()}')
-        self.section(1)
-        for name in pending: self.define(name, Val(len(self.out), 1))
+        self.section(self.codesec)
+        for name in pending: self.define(name, Val(len(self.out), self.codesec))
 
     def emit(self, *bs):
         self.out += bytes(b & 0xFF for b in bs)
@@ -335,6 +358,16 @@ class Assembler:
         if op not in OPS: raise AsmError(f'unknown instruction "{op}"')
         modes = OPS[op]
         mode, v, v2 = self.mode(op, modes, args, scope, n)
+        target = args.strip()
+        if (op in ('jsr', 'jmp') and mode == 'abs' and v.reloc in (1, 3) and v.reloc != self.sec and not v.fn
+                and re.match(r'^[A-Za-z_]\w*$', target) and target in self.symbols and self.symbols[target].reloc == v.reloc):
+            # Into the other code segment (a routine already placed): jsl its stub there (jsr routine / rtl); a jmp (a tail call) then returns.
+            if target not in self.far: self.far.add(target); self.changed = True
+            stub = self.symbols.get('__far_' + target)
+            self.emit(0x22)
+            self.value(stub if stub is not None else Val(0, v.reloc), 3)
+            if op == 'jmp': self.emit(0x60)
+            return
         code_byte = modes[mode]
         self.emit(code_byte)
         if mode in ('imp', 'acc'): return
@@ -350,6 +383,7 @@ class Assembler:
                 if v.v & 0x10: self.x16 = not on
         elif mode == 'rel':
             if v.reloc == 2: raise AsmError('a branch to data')
+            if v.reloc and v.reloc != self.sec and self.pass_no > 1: raise AsmError('a branch into the other code segment')
             if v.reloc:
                 d = v.v - (len(self.out) + 1)
                 if not -128 <= d <= 127:
@@ -501,10 +535,14 @@ def omf_body(segnum, data, relocs):
 def omf_file(outs, rels, stack_size=0x1000):
     seg1 = omf_segment(1, 0x0000, 'main', omf_body(1, outs[1], rels[1]), len(outs[1]))
     seg2 = omf_segment(2, 0x0001, 'data', omf_body(2, outs[2], rels[2]), len(outs[2]))
+    segs = seg1 + seg2
+    n = 3
+    if outs.get(3):  # the second code segment (.code2)
+        segs += omf_segment(3, 0x0000, 'main2', omf_body(3, outs[3], rels[3]), len(outs[3]))
+        n = 4
     # The direct page / stack segment (KIND $12): zeroes, a page-aligned bank-0 block the loader gives the program.
     ds = bytes([0xF1]) + struct.pack('<I', stack_size) + b'\0'
-    seg3 = omf_segment(3, 0x0012, '~Direct', ds, stack_size, banksize=0, align=0)
-    return seg1 + seg2 + seg3
+    return segs + omf_segment(n, 0x0012, '~Direct', ds, stack_size, banksize=0, align=0)
 
 def main(argv):
     src, out, lst = None, None, None
@@ -520,7 +558,7 @@ def main(argv):
         outs, rels = asm.assemble(src)
     except AsmError as e:
         print('error:', e); return 1
-    for k, what in ((1, 'code'), (2, 'data')):
+    for k, what in ((1, 'code'), (2, 'data'), (3, 'second code segment')):
         if len(outs[k]) > 0xFFFF:
             print(f'error: the program\'s {what} is {len(outs[k])} bytes - a segment holds 64 KB'); return 1
     try:
@@ -532,8 +570,8 @@ def main(argv):
     if lst:
         with open(lst, 'w') as f:
             for name, v in sorted(asm.symbols.items(), key=lambda kv: (kv[1].reloc, kv[1].v)):
-                f.write(f'{v.v:06X} {"R" if v.reloc == 1 else "D" if v.reloc == 2 else " "} {name}\n')
-    print(f'{out}: {len(outs[1])} bytes of code, {len(outs[2])} of data, {len(rels[1]) + len(rels[2])} relocations')
+                f.write(f'{v.v:06X} {"R" if v.reloc == 1 else "D" if v.reloc == 2 else "S" if v.reloc == 3 else " "} {name}\n')
+    print(f'{out}: {len(outs[1])} bytes of code, {len(outs[3])} in the second code segment, {len(outs[2])} of data, {len(rels[1]) + len(rels[2]) + len(rels[3])} relocations')
     return 0
 
 if __name__ == '__main__':

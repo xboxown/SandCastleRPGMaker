@@ -420,7 +420,9 @@ EggMonsters:
         tax
         lda EggCTab,x
         cmp CurMap
-        bne .n
+        beq .fb1
+        brl .n
+.fb1:
         lda EggCTab+4,x
         cmp EgI
         bne .n
