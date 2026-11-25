@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 52 (b687): Cinema Mode / End Cinema Mode, Forbid / Allow Controls (talk op 44, cmds.s).
 ; Version 51 (b686): explosive and shooting traps (traps 12 words: kind, radius / range, projectile, line of fire,
 ;   removed after) - floor.s.
 ; Version 50 (b683): doors - opening animations, double doors, doors opening by themselves, not by hand (door.s).
@@ -296,6 +297,12 @@ MainLoop:
         lda EvRec               ; a click: as a key, or done (mouse.s)
         cmp #1
         bne .keyev
+        lda Mode                ; Cinema Mode / Forbid Controls: no clicks on the world (cmds.s)
+        bne .click
+        jsr NoControls
+        bcc .click
+        brl MainLoop
+.click:
         jsr MouseDown
         bcs .mkey
         brl MainLoop
@@ -384,8 +391,11 @@ MainLoop:
         jsr InvKey
         jsr AfterTurn
         brl MainLoop
-.walk:  lda AvDown                ; knocked out: only quitting (bodies.s)
+.walk:  jsr NoControls          ; Cinema Mode / Forbid Controls: only quitting (cmds.s)
+        bcs .cin
+        lda AvDown                ; knocked out: only quitting (bodies.s)
         beq .wk
+.cin:
         lda Key
         cmp #$1B
         beq .wk
@@ -678,7 +688,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #51
+        cmp #52
         beq .known
 .bad:   sec
         rts

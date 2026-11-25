@@ -9,7 +9,36 @@ MoreOps:
         tax
         jmp (OpJump,x)
 
-OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick,OpInput,OpList,OpGrid
+OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick,OpInput,OpList,OpGrid,OpCtl
+
+; CTL n: 1 Cinema Mode, 0 End Cinema Mode (the player has no controls till then - or till the event's code ends), 2 Forbid
+; Controls, 3 Allow Controls (U6GameWindow.Cinema.cs).
+OpCtl:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        cmp #2
+        bcs .forbid
+        sta CinOn
+        bra .o
+.forbid:
+        eor #3                  ; 2 forbid -> 1, 3 allow -> 0
+        sta CtlOff
+.o:     lda #2
+        jmp Next
+
+; Carry set while the player has no controls (Cinema Mode, Forbid Controls).
+NoControls:
+        lda CinOn
+        ora CtlOff
+        bne .y
+        clc
+        rts
+.y:     sec
+        rts
+
+CinOn:    .dw 0
+CtlOff:   .dw 0
 
 ; TPC += A, on with the code.
 Next:

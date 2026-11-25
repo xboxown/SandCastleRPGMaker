@@ -70,7 +70,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -1015,6 +1015,16 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.U6RunLevelEvent:
                     if (depth < 4 && Extra?.LevelEvent?.Invoke(cmd.Get("Name")) is { } levelCommands) Run(levelCommands, depth + 1);
                     else Unsupported.Add("Run Leveling Event (no leveling event of that name)");
+                    break;
+                case EventCommandType.CinemaMode:
+                    B(Ctl); B(1); // the player has no controls till End Cinema Mode or the event's end (cmds.s OpCtl)
+                    break;
+                case EventCommandType.EndCinemaMode:
+                    B(Ctl); B(0);
+                    break;
+                case EventCommandType.AllowControls:
+                    if (cmd.Get("What") is "Combat mode" or "Keys") { Unsupported.Add($"Allow / Forbid Controls ({cmd.Get("What")})"); break; }
+                    B(Ctl); B(cmd.Get("Value") == "Forbidden" ? 2 : 3); // the whole player control
                     break;
                 case EventCommandType.ShowBark:
                     // Ultima 6 / Savage Empire have no barks (an Ultima 7 thing) - the user, 2026-11-24: left out on the Apple IIgs.

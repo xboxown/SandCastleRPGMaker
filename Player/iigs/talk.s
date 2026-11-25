@@ -526,6 +526,7 @@ ShowTalker:
 
 ; The talk is over: the panel as it was, the prompt.
 EndTalk:
+        stz CinOn               ; Cinema Mode ends with the code that began it (cmds.s)
         lda EvRunning           ; an event's code: its own end (events.s)
         beq .talk
         jmp EndEvent
@@ -590,7 +591,7 @@ RunTalk:
         cmp #12
         bcs .more
         jmp EventOp
-.more:  cmp #44
+.more:  cmp #45
         bcs .end
         jmp MoreOps             ; (cmds.s)             ; TRIG, ITEM, HIT (events.s)
 .play:
