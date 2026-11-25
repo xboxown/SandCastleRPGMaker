@@ -1111,6 +1111,7 @@ DrawView:
         jsr DrawSight           ; what can't be seen: black (sight.s)
         jsr DrawDark
         jsr DrawWeather         ; (weather.s)
+        jsr DrawFx              ; Play Animation's, over everything (fx.s)
         lda NoBlit              ; (a missile's flight draws over it first - missile.s)
         bne .nb
         jsr BlitView            ; the finished view onto the screen at once
@@ -2263,6 +2264,7 @@ TryMove:
         .include "travel.s"
         .include "liquid.s"
         .include "break.s"
+        .include "fx.s"
         .include "music.s"
         .include "weather.s"
         .include "vehicles.s"

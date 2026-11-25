@@ -123,6 +123,7 @@ ChangeMap:
         bcc .loaded
         rts
 .loaded:
+        jsr FxClear             ; the last map's animations end (fx.s)
         lda GoMap               ; that map's cells, characters, events
         sta CurMap
         jsr SetMapWrap          ; does it wrap around (moves.s)

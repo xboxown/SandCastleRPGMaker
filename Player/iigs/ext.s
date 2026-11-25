@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj
-EXT_COUNT = 3
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim
+EXT_COUNT = 4
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -363,6 +363,141 @@ AoFind:
         rts
 .y:     sec
         rts
+
+; EXT 3 ANIM where a b wait n ticks, then n frames (sprite word, ticks byte) - 13 + 3n bytes: Play Animation (fx.s):
+; where 0 at the cell a, b; 1 over the character a, b (map, place - following it). The event waits for it unless wait 0.
+XtAnim:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta XaWhere
+        iny
+        lda [TalkPtr],y
+        sta XaA
+        iny
+        iny
+        lda [TalkPtr],y
+        sta XaB
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta XaWait
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta XaN
+        iny
+        lda [TalkPtr],y
+        sta XaTicks
+        iny
+        iny
+        sty XaFr
+        lda XaN
+        asl a
+        clc
+        adc XaN
+        clc
+        adc #13
+        sta XaLen
+        lda XaN
+        bne .fb1
+        brl .done
+.fb1:
+        cmp #9
+        bcc .fb2
+        brl .done
+.fb2:
+        lda XaWhere             ; over a character: its record
+        beq .slot
+        lda XaA
+        sta JMap
+        lda XaB
+        sta JIdx
+        jsr WhoRec
+        bcc .fb3
+        brl .done
+.fb3:
+.slot:  jsr FxFree
+        bcs .fb4               ; four playing already
+        brl .done
+.fb4:
+        stx XaSlot
+        lda #1
+        sta FxTab,x
+        lda XaN
+        sta FxTab+2,x
+        stz FxTab+4,x
+        lda XaTicks
+        sta FxTab+8,x
+        lda XaWhere
+        sta FxTab+10,x
+        lda XaA
+        sta FxTab+12,x
+        lda XaB
+        sta FxTab+14,x
+        lda WP
+        sta FxTab+16,x
+        lda WP+2
+        sta FxTab+18,x
+        txa                     ; its frames
+        clc
+        adc #24
+        sta XaD
+        ldx XaN
+        ldy XaFr
+.f:     lda [TalkPtr],y
+        phx
+        ldx XaD
+        sta FxTab,x
+        plx
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        phx
+        ldx XaD
+        sta FxTab+2,x
+        inx
+        inx
+        inx
+        inx
+        stx XaD
+        plx
+        iny
+        dex
+        bne .f
+        ldx XaSlot
+        jsr FxFrameTicks
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        ldx XaSlot
+        sta FxTab+6,x
+        pla
+        jsr DrawView
+        lda XaWait
+        beq .done
+.w:     jsr ClockRun            ; till it is over
+        jsr FxRun
+        ldx XaSlot
+        lda FxTab,x
+        bne .w
+        jsr DrawView
+.done:  lda XaLen
+        jmp Next
+
+XaWhere:  .dw 0
+XaA:      .dw 0
+XaB:      .dw 0
+XaWait:   .dw 0
+XaN:      .dw 0
+XaTicks:  .dw 0
+XaFr:     .dw 0
+XaLen:    .dw 0
+XaSlot:   .dw 0
+XaD:      .dw 0
 
 AoName:   .dw 0
 AoX:      .dw 0

@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -82,6 +82,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? Picture;
         /// <summary>Play Pose (ext.s): (who - a character id, Player or Activator; the pose; its facing or "") -> its frames (sprite, ticks of 60); null: it has no such pose.</summary>
         public Func<string, string, string, List<(int Sprite, int Ticks)>?>? PoseFrames;
+        /// <summary>Play Animation (fx.s): (sprite group, sprite name) -> its frames (sprite, ticks of 60); null: no such sprite.</summary>
+        public Func<string, string, List<(int Sprite, int Ticks)>?>? SpriteFrames;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
         /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
@@ -594,6 +596,23 @@ public sealed class AppleIIgsTalk
                     int? thingName = thing.Length == 3 && thing[0] is "Object" or "Item" ? Extra?.Item?.Invoke(thing[0] == "Object" ? "Object" : thing[1], thing[2])?.Name : null;
                     if (!WhoCode(cmd.Get("Who"), out int m, out int x) || thingName is null) { Unsupported.Add("Attack Object (someone not on a map, or a thing from a variable)"); break; }
                     B(Ext); B((int)ExtOp.AttackObject); W(m); W(x); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(thingName.Value);
+                    break;
+                }
+                case EventCommandType.PlayAnimation:
+                {
+                    // EXT 3 ANIM where a b wait n ticks frames (ext.s, fx.s): "Done" = played Duration times through.
+                    var animFrames = Extra?.SpriteFrames?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName"));
+                    bool overWho = cmd.Get("Where") == "Character";
+                    int am = 0xFFFF, ax = 0xFFFF;
+                    if (animFrames is not { Count: > 0 } || overWho && !WhoCode(cmd.Get("Who"), out am, out ax))
+                    { Unsupported.Add("Play Animation (a sprite not in the game, or someone not on a map)"); break; }
+                    double amount = Seconds(cmd.Get("Duration")) is > 0 and var amt ? amt : 1;
+                    int once = animFrames.Take(8).Sum(f => Math.Clamp(f.Ticks, 1, 255));
+                    int ticks = cmd.Get("Unit") switch { "Seconds" => (int)(amount * 60), "Minutes" => (int)(amount * 300), "Hours" => (int)(amount * 18000), _ => once * Math.Max(1, (int)Math.Round(amount)) };
+                    B(Ext); B((int)ExtOp.Animation); B(overWho ? 1 : 0);
+                    if (overWho) { W(am); W(ax); } else { W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); }
+                    B(cmd.Get("Wait") != "False" ? 1 : 0); B(Math.Min(animFrames.Count, 8)); W(Math.Clamp(ticks, 1, 65535));
+                    foreach (var (fs, ft) in animFrames.Take(8)) { W(fs); B(Math.Clamp(ft, 1, 255)); }
                     break;
                 }
                 case EventCommandType.PlayPose:

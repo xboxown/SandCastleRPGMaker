@@ -290,6 +290,7 @@ IdleTurn:
         jsr ClockRun            ; the clock (schedule.s)
         jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
+        jsr FxRun               ; Play Animation's (fx.s)
         jsr MendRun             ; the knocked out mend (bodies.s)
         jsr MusicRun            ; the music (music.s)
         jsr WeatherRun          ; the weather (weather.s)

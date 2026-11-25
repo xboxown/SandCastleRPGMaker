@@ -1124,6 +1124,16 @@ public partial class MainWindow
                     if (SpriteOf(fr.FilePath) is int fsp and >= 0) frames.Add((fsp, Math.Clamp((int)Math.Round(Math.Max(1, fr.DurationMs) * 60 / 1000.0), 1, 255)));
                 return frames.Count > 0 ? frames : null;
             },
+            // Play Animation (fx.s): a sprite's frames, at most 8.
+            SpriteFrames = (group, name) =>
+            {
+                var sprite = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name)
+                             ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name);
+                var frames = new List<(int Sprite, int Ticks)>();
+                foreach (var fr in sprite?.Frames.Take(8) ?? Enumerable.Empty<SpriteFrame>())
+                    if (SpriteOf(fr.FilePath) is int fsp and >= 0) frames.Add((fsp, Math.Clamp((int)Math.Round(Math.Max(1, fr.DurationMs) * 60 / 1000.0), 1, 255)));
+                return frames.Count > 0 ? frames : null;
+            },
             OwnerOf = id => _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { BelongToId: >= 0 } owned ? owned.BelongToId.ToString() : null,
             Exchange = (fromId, toId) =>
             {
