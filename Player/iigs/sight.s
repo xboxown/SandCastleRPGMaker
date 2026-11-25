@@ -79,14 +79,14 @@ FindDoors:
         bne .n
         lda [ItemPtr]
         sec
-        sbc PX
+        sbc CvX
         jsr AbsX
         cmp #20
         bcs .n
         ldy #2
         lda [ItemPtr],y
         sec
-        sbc PY
+        sbc CvY
         jsr AbsY
         cmp #20
         bcs .n
@@ -127,12 +127,12 @@ DrawSight:
         bcc .h
         lda #SG_W
 .h:     sta SGH
-        lda PX                  ; its top left on the map
+        lda CvX                 ; its top left on the map (round the view - main.s ViewCenter)
         sec
         sbc HalfC
         dec a
         sta SGX
-        lda PY
+        lda CvY
         sec
         sbc HalfR
         dec a
@@ -144,13 +144,26 @@ DrawSight:
         inx
         cpx #SG_W*SG_W
         bcc .z
-        lda HalfC               ; the Avatar's square: seen, the fill's start
-        inc a
+        jsr ViewEye             ; the eye's square (the Avatar's, or the one Camera Follows): seen, the fill's start
+        lda EyeX
+        sec
+        sbc SGX
         sta GQX
-        lda HalfR
-        inc a
+        sta SgEX
+        lda EyeY
+        sec
+        sbc SGY
         sta GQY
-        jsr SgIndex
+        sta SgEY
+        lda GQX                 ; outside the grid (Move Camera far away): nothing seen but walls, as Windows
+        cmp SGW
+        bcc .in
+        brl .corners
+.in:    lda GQY
+        cmp SGH
+        bcc .in2
+        brl .corners
+.in2:   jsr SgIndex
         tax
         sep #$20
         .a8
@@ -178,11 +191,11 @@ DrawSight:
         sta GQY
         inc GHead
         inc GHead
-        lda GQX                  ; a square that stops sight (not the Avatar's): seen, not seen through
-        cmp HalfC
+        lda GQX                  ; a square that stops sight (not the eye's): seen, not seen through
+        cmp SgEX
         bne .chk
         lda GQY
-        cmp HalfR
+        cmp SgEY
         beq .spread
 .chk:   jsr SgStops
         bcs .q
@@ -320,13 +333,13 @@ DrawSight:
         lda Seen,x
         and #$00FF
         bne .next
-        lda PX                  ; a wall's, door's or window's square always shows
+        lda CvX                 ; a wall's, door's or window's square always shows
         sec
         sbc HalfC
         clc
         adc Col
         tax
-        lda PY
+        lda CvY
         sec
         sbc HalfR
         clc
@@ -431,3 +444,5 @@ SgDX:     .dw 1,$FFFF,0,0,1,1,$FFFF,$FFFF
 SgDY:     .dw 0,0,1,$FFFF,1,$FFFF,1,$FFFF
 Seen:     .ds SG_W*SG_W+2
 FQ:       .ds SG_W*SG_W*2+4
+SgEX:     .dw 0
+SgEY:     .dw 0

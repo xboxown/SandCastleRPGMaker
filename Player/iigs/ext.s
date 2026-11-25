@@ -17,7 +17,8 @@ OpExt:
         jmp EndTalk
 
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
-EXT_COUNT = 13
+          .dw XtCamera,XtCamFollow
+EXT_COUNT = 15
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1177,6 +1178,117 @@ XtDayNight:
         jsr DrawView
         lda #3
         jmp Next
+
+; EXT 13 CAMERA back x y ticks (9 bytes): Move Camera, as U6GameWindow.ScriptGame.cs MoveCameraCommand - the view glides
+; a cell at a time to x, y (back 1: to the Avatar, then follows it again) over so many ticks; the event waits.
+XtCamera:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta CmBack
+        iny
+        lda [TalkPtr],y
+        sta CmTX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta CmTY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta CmT
+        jsr ViewCenter          ; from where the view is now
+        lda CvX
+        sta CamX
+        lda CvY
+        sta CamY
+        lda #1
+        sta CamOn
+        lda CmBack
+        beq .to
+        lda PX
+        sta CmTX
+        lda PY
+        sta CmTY
+.to:    lda CmTX                ; the steps: the longer way
+        sec
+        sbc CamX
+        jsr AbsX
+        sta CmN
+        lda CmTY
+        sec
+        sbc CamY
+        jsr AbsY
+        cmp CmN
+        bcc .n
+        sta CmN
+.n:     lda CmN
+        beq .there
+        lda CmT                 ; each step's ticks
+        ldx #0
+.dv:    cmp CmN
+        bcc .dd
+        sec
+        sbc CmN
+        inx
+        bra .dv
+.dd:    stx CmPer
+.step:  lda CmTX
+        sec
+        sbc CamX
+        jsr Sign
+        clc
+        adc CamX
+        sta CamX
+        lda CmTY
+        sec
+        sbc CamY
+        jsr Sign
+        clc
+        adc CamY
+        sta CamY
+        jsr DrawView
+        lda CmPer
+        beq .nw
+        jsr XtWait
+.nw:    dec CmN
+        bne .step
+.there: lda CmBack
+        beq .hold
+        stz CamOn               ; back: the view follows the Avatar again
+        bra .done
+.hold:  lda CmTX
+        sta CamX
+        lda CmTY
+        sta CamY
+.done:  jsr DrawView
+        lda #9
+        jmp Next
+
+; EXT 14 CAMFOLLOW who (6 bytes): Camera Follows - the view follows that character (the Avatar: back to normal).
+XtCamFollow:
+        jsr ReadWho
+        jsr WhoRec
+        bcs .done
+        stz CamOn
+        jsr WPIsAvatar
+        bcs .done
+        lda WP
+        sta CamRec
+        lda WP+2
+        sta CamRec+2
+        lda #2
+        sta CamOn
+.done:  jsr DrawView
+        lda #6
+        jmp Next
+
+CmBack:   .dw 0
+CmTX:     .dw 0
+CmTY:     .dw 0
+CmT:      .dw 0
+CmN:      .dw 0
+CmPer:    .dw 0
 
 XfOut:    .dw 0
 XfCol:    .dw 0

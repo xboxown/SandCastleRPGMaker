@@ -125,6 +125,7 @@ ChangeMap:
 .loaded:
         jsr FxClear             ; the last map's animations end (fx.s)
         jsr FlClear             ; and no one follows (ext.s)
+        stz CamOn               ; the view back on the Avatar (Move Camera, Camera Follows)
         lda GoMap               ; that map's cells, characters, events
         sta CurMap
         jsr SetMapWrap          ; does it wrap around (moves.s)

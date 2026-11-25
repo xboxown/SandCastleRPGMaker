@@ -1052,16 +1052,17 @@ FindBright:
 
 ; The world around the Avatar: 10 x 10 tiles, the Avatar in the middle.
 DrawView:
+        jsr ViewCenter          ; the Avatar, or where Move Camera / Camera Follows has the view (ext.s)
         stz AnimVisible
         stz Row
 .row:   stz Col
-.col:   lda PX
+.col:   lda CvX
         clc
         adc Col
         sec
         sbc HalfC
         tax
-        lda PY
+        lda CvY
         clc
         adc Row
         sec
@@ -1711,15 +1712,67 @@ DrawCharacters:
 
 ; ViewX0, ViewY0: the map cell at the view's top left.
 ViewCorner:
-        lda PX
+        lda CvX
         sec
         sbc HalfC
         sta ViewX0
-        lda PY
+        lda CvY
         sec
         sbc HalfR
         sta ViewY0
         rts
+
+; CvX, CvY: the view's middle - the Avatar's cell, Move Camera's spot (CamOn 1), or the one Camera Follows (CamOn 2).
+ViewCenter:
+        lda CamOn
+        beq .av
+        cmp #1
+        beq .spot
+        lda CamRec              ; following someone: where it is now
+        sta Src
+        lda CamRec+2
+        sta Src+2
+        lda [Src]
+        sta CvX
+        ldy #2
+        lda [Src],y
+        sta CvY
+        rts
+.spot:  lda CamX
+        sta CvX
+        lda CamY
+        sta CvY
+        rts
+.av:    lda PX
+        sta CvX
+        lda PY
+        sta CvY
+        rts
+
+; EyeX, EyeY: where sight and light are judged from - the one Camera Follows, else the Avatar (Windows LightEye).
+ViewEye:
+        lda CamOn
+        cmp #2
+        bne .av
+        lda CvX
+        sta EyeX
+        lda CvY
+        sta EyeY
+        rts
+.av:    lda PX
+        sta EyeX
+        lda PY
+        sta EyeY
+        rts
+
+CvX:      .dw 0
+CvY:      .dw 0
+EyeX:     .dw 0
+EyeY:     .dw 0
+CamOn:    .dw 0
+CamX:     .dw 0
+CamY:     .dw 0
+CamRec:   .dw 0,0
 
 ; Cell X, Y: carry set if a sprite standing there can show (columns -1 to 10, rows 0 to 10 of the view);
 ; CellX, CellY = the cell's top left on the screen.
@@ -2071,7 +2124,20 @@ DrawAvatar:
         jsr CellOnScreen
         bcc .nv
         jmp DrawSprite
-.av2:   lda AvDown              ; knocked out: its body look (bodies.s)
+.av2:   lda CamOn               ; the view elsewhere: the Avatar drawn where it stands, as a sprite (ext.s)
+        beq .av1
+        lda AvDown
+        bne .av1
+        ldx PX
+        ldy PY
+        jsr CellOnScreen
+        bcc .nv
+        lda AvRec+4
+        clc
+        adc Facing
+        sta SprId
+        jmp DrawSprite
+.av1:   lda AvDown              ; knocked out: its body look (bodies.s)
         beq .norm
         lda AvBody
         cmp #$FFFF

@@ -271,12 +271,13 @@ DrawDark:
         inx
         cpx #256
         bcc .z
-        lda PX                  ; the Avatar's globe
+        jsr ViewEye             ; the Avatar's globe (or the one Camera Follows' - Windows LightEye)
+        lda EyeX
         sec
         sbc ViewX0
         jsr ShortX
         sta GlX
-        lda PY
+        lda EyeY
         sec
         sbc ViewY0
         jsr ShortY
