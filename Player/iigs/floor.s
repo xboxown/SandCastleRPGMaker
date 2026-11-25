@@ -205,6 +205,7 @@ FloorCharStep:
 FloorTurn:
         jsr LeverTurn           ; pressed buttons spring back (lever.s)
         jsr TrapLines           ; shooting traps at whoever stands in their line of fire
+        jsr RiseTurn            ; those who get back up (tough.s)
         jsr DoorTurn            ; doors that open by themselves (door.s)
         ldx #0                  ; re-arming
         ldy TrSN

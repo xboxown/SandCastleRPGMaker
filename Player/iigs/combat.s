@@ -714,6 +714,7 @@ Strike:
         lda #0
 .pos:   sta Dmg
 .arm:   jsr FightBack
+        jsr BlowType            ; its damage type, and the one struck's rule for it (tough.s)
         lda Dmg
         bne .hurt
         rts                     ; no damage: nothing more told (as Windows)
@@ -808,6 +809,7 @@ Dies:
         sta [DefP],y
         jsr KilledMus           ; victory? (music.s)
         jsr MakeBody            ; its body, all it carried in it (bodies.s)
+        jsr MaybeRise           ; one that gets back up: its time starts (tough.s)
         lda [DefP]
         tax
         ldy #2

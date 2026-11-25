@@ -25,7 +25,8 @@ ParseWorn:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseTough          ; (tough.s)
 
 ; GearOf (wear.s), before it: nothing magic counted yet.
 MagicClear:

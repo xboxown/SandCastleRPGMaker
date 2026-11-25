@@ -1743,6 +1743,21 @@ public partial class MainWindow
             if (reach > 0 || def != 0 || light > 0 || str != 0 || dex != 0 || intel != 0)
                 pack.WornMagic.Add(new[] { mn, reach, def & 0xFFFF, light, str & 0xFFFF, dex & 0xFFFF, intel & 0xFFFF, 0 });
         }
+        // Damage types: weapons' types, characters' responses, those who get back up (tough.s).
+        foreach (var o in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.DamageType != DamageType.Normal))
+            if (pack.WeaponTypes.All(t => t.Name != pack.NameOf(o.Name))) pack.WeaponTypes.Add((pack.NameOf(o.Name), (int)o.Weapon.DamageType));
+        foreach (var c in _characterDatabase.Characters)
+        {
+            int cn = pack.NameOf(c.Name);
+            foreach (var r in c.DamageResponses.Where(r => r.Response != DamageResponseKind.Normal))
+                if (pack.Responses.All(x => x.Name != cn || x.Type != (int)r.Type))
+                    pack.Responses.Add((cn, (int)r.Type, r.Response switch { DamageResponseKind.Immune => 1, DamageResponseKind.Half => 2, _ => 3 }, r.Amount & 0xFFFF));
+            if (c.GetsBackUp && !c.Body.NoBody && pack.Risers.All(x => x.Name != cn))
+            {
+                int least = Math.Max(1, c.BackUpMinSeconds * 2), most = Math.Max(least, c.BackUpMaxSeconds * 2);
+                pack.Risers.Add((cn, least, most, c.BackUpNotFrom.Aggregate(0, (m, t) => m | (1 << (int)t))));
+            }
+        }
         // Ground traps and lights that burn down or burn, by name (floor.s).
         foreach (var o in _objectDatabase.Objects)
         {

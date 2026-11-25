@@ -25,3 +25,7 @@ User decisions 2026-11-24 (later the same day) - Ultima 6 mode, all platforms in
   (b677), hit flash (already the Hit Spark), status outlines (b681).
 - Kite: not important (skip). Party joining exists already everywhere (the user asked; "Joining" in the audit list meant
   Exult's slimes merging - explain, don't change). Hearing = positional sound volume / panning (explained).
+- 2026-11-24 (later): the user said "Add them all!" for the IIgs too - damage types, getting back up, weapons drawn in the
+  hand, pets, liquids / pouring, travel items (keychain, sextant, map, clock), money exchange - "and make sure all
+  platforms match and are the same for ultima6 mode". (Still removed in U6: barks, hunger/meals, U7 bleeding/blood
+  looks, hit flash, status outlines; curses/enchantments, feign/withstand death, changeling commands hidden in U6.)

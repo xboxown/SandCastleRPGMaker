@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 54;
+    public const ushort Version = 55;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -642,6 +642,11 @@ public sealed class AppleIIgsGamePack
     /// <summary>Magic worn or held (Object Editor > Weapon / Armor > Magic), by name: reach cells (0 none), defense, light radius
     /// (0 none), strength, dexterity, intelligence - worn.s.</summary>
     public List<int[]> WornMagic { get; } = new();
+    /// <summary>Damage types (tough.s): weapons' types by name; characters' responses by name (type, 1 immune / 2 half / 3 adjust,
+    /// amount); those who get back up (least / most turns, the types that stop it as bits).</summary>
+    public List<(int Name, int Type)> WeaponTypes { get; } = new();
+    public List<(int Name, int Type, int Kind, int Amount)> Responses { get; } = new();
+    public List<(int Name, int Least, int Most, int NotFrom)> Risers { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -928,6 +933,12 @@ public sealed class AppleIIgsGamePack
         foreach (var (jn, jf, jl) in Joiners.Take(16)) { w.Write((ushort)jn); w.Write((ushort)jf); w.Write((ushort)jl); }
         w.Write((ushort)Math.Min(WornMagic.Count, 32));
         foreach (var wmg in WornMagic.Take(32)) for (int i = 0; i < 8; i++) w.Write((ushort)(i < wmg.Length ? wmg[i] : 0));
+        w.Write((ushort)Math.Min(WeaponTypes.Count, 32));
+        foreach (var (wn, wt) in WeaponTypes.Take(32)) { w.Write((ushort)wn); w.Write((ushort)wt); }
+        w.Write((ushort)Math.Min(Responses.Count, 48));
+        foreach (var r in Responses.Take(48)) { w.Write((ushort)r.Name); w.Write((ushort)r.Type); w.Write((ushort)r.Kind); w.Write((ushort)r.Amount); }
+        w.Write((ushort)Math.Min(Risers.Count, 16));
+        foreach (var r in Risers.Take(16)) { w.Write((ushort)r.Name); w.Write((ushort)r.Least); w.Write((ushort)r.Most); w.Write((ushort)r.NotFrom); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

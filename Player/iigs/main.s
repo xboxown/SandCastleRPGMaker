@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 55 (b691): damage types (weapons' types, characters' immune / half / adjust), getting back up (tough.s).
 ; Version 54 (b690): magic worn or held - defense, reach, light, strength / dexterity / intelligence (worn.s).
 ; Version 53 (b689): monsters that join - splitting when hit (the map's spares), the joined look (join.s).
 ; Version 52 (b687): Cinema Mode / End Cinema Mode, Forbid / Allow Controls (talk op 44, cmds.s).
@@ -690,7 +691,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #54
+        cmp #55
         beq .known
 .bad:   sec
         rts
@@ -2241,6 +2242,7 @@ TryMove:
         .include "door.s"
         .include "join.s"
         .include "worn.s"
+        .include "tough.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).
