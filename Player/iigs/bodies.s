@@ -74,6 +74,7 @@ DefState:
         beq .low
         bmi .low
         jsr TellWound           ; still standing
+        jsr MaybeSplit          ; a slime: another beside it (join.s)
         clc
         rts
 .low:   sta BHp                 ; dead below -(Strength / 3)

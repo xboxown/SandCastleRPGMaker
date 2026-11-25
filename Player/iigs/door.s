@@ -31,7 +31,8 @@ ParseDoors:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseJoin           ; (join.s)
 
 ; A = a name: carry set, X = its place in DrTab.
 DoorKind:

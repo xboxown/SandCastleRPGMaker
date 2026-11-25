@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 53 (b689): monsters that join - splitting when hit (the map's spares), the joined look (join.s).
 ; Version 52 (b687): Cinema Mode / End Cinema Mode, Forbid / Allow Controls (talk op 44, cmds.s).
 ; Version 51 (b686): explosive and shooting traps (traps 12 words: kind, radius / range, projectile, line of fire,
 ;   removed after) - floor.s.
@@ -688,7 +689,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #52
+        cmp #53
         beq .known
 .bad:   sec
         rts
@@ -1644,7 +1645,9 @@ DrawCharacters:
         jsr BodySprite
         cmp #$FFFF
         bne .bs
-.up:    ldy #6                  ; Ultima 6: asleep in its sleeping look, sitting in its sitting look (+4, +5)
+.up:    jsr JoinedLook          ; a monster joined to its kind: its look by its neighbours (join.s)
+        bcs .bs
+        ldy #6                  ; Ultima 6: asleep in its sleeping look, sitting in its sitting look (+4, +5)
         lda [ItemPtr],y
         and #$4000
         beq .face
@@ -2235,6 +2238,7 @@ TryMove:
         .include "lever.s"
         .include "temp.s"
         .include "door.s"
+        .include "join.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

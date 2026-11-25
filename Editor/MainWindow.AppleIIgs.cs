@@ -1236,6 +1236,15 @@ public partial class MainWindow
                     pack.EggChars.Add((mapNo, list.Count - 1, ec.Egg, ec.Percent));
                 }
             }
+            // Monsters that split when hit (Joining): 6 spare copies of each such kind on this map, absent till a split (join.s).
+            var splitters = list.Where(c => (c.Flags & 4) == 0).Select(c => c).GroupBy(c => c.Name)
+                .Where(g => _characterDatabase.Characters.FirstOrDefault(d => pack.NameOf(d.Name) == g.Key) is { Joining.Growth: not JoinGrowth.OurEngine }).ToList();
+            foreach (var g in splitters)
+                for (int k = 0; k < 6 && list.Count < AppleIIgsLimits.MaxCharactersPerMap; k++)
+                {
+                    var t = g.First();
+                    list.Add((t.X, t.Y, t.Sprite, t.Flags | 4 | 0x8000, t.Facing, t.Talk, t.Portrait, t.Name, (int[])t.Stats.Clone()));
+                }
             if (list.Count > AppleIIgsLimits.MaxCharactersPerMap) list.RemoveRange(AppleIIgsLimits.MaxCharactersPerMap, list.Count - AppleIIgsLimits.MaxCharactersPerMap);
             return list;
         }
@@ -1541,6 +1550,19 @@ public partial class MainWindow
                 (ds.OpensWithNeighbours ? 1 : 0) | (ds.OpensByItself ? 2 : 0) | (ds.NotByHand || ds.Opening == DoorOpening.Slide ? 4 : 0),
                 Math.Clamp(ds.OpensWithinCells, 1, 8), (int)Math.Ceiling(Math.Max(0, ds.StaysOpenMs) / 500.0),
                 doorSnd(ds.OpenSoundResourceId), doorSnd(ds.CloseSoundResourceId), Math.Clamp(ds.MotionMs * 60 / 1000 / frames, 1, 60), 0 });
+        }
+        // Monsters that join: whether they split, their joined look's 32 frames as sprites (join.s).
+        foreach (var jc in _characterDatabase.Characters.Where(c => c.Joining.IsSet))
+        {
+            int jName = pack.NameOf(jc.Name);
+            if (pack.Joiners.Any(j => j.Name == jName)) continue;
+            int look = 0xFFFF;
+            if (jc.Joining.JoinedSprite.SpriteName.Length > 0 && ObjectLooks.Find(_spriteDatabase, jc.Joining.JoinedSprite.SpriteGroup, jc.Joining.JoinedSprite.SpriteName) is { Frames.Count: > 0 } js)
+            {
+                look = spritePixels.Count;
+                for (int f = 0; f < 32; f++) { string? file = js.Frames[Math.Min(f, js.Frames.Count - 1)].FilePath; spritePixels.Add(file is not null && File.Exists(file) ? FitSprite(file) : (new uint[16 * 16], 16, 16)); }
+            }
+            pack.Joiners.Add((jName, jc.Joining.Growth != JoinGrowth.OurEngine ? 1 : 0, look));
         }
         pack.AvatarSprite = spritePixels.Count; // the Avatar's looks as sprites too (solo mode)
         foreach (var px in avatar.Take(4)) spritePixels.Add((px, 16, 16));
