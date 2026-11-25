@@ -153,6 +153,66 @@ FxClear:
         bcc .l
         rts
 
+; ---- the view shaken (Shake Screen, Earthquake: U6GameWindow PlayRealShakeEffect - up to Amp pixels each way) ----
+
+; ShLeft ticks of shaking, ShAmp pixels: a new offset every 6 ticks (BlitView copies the view from that far off).
+ShakeRun:
+        lda ShLeft
+        beq .out
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta FxNow
+        pla
+        lda FxNow
+        sec
+        sbc ShTick
+        cmp #6
+        bcc .out
+        sta FxT
+        lda FxNow
+        sta ShTick
+        lda ShLeft
+        sec
+        sbc FxT
+        bcc .end
+        beq .end
+        sta ShLeft
+        lda ShAmp               ; across: -Amp..Amp pixels, 2 a byte
+        asl a
+        inc a
+        jsr Random
+        sec
+        sbc ShAmp
+        cmp #$8000
+        ror a
+        sta ShakeSrc
+        lda ShAmp               ; down: -Amp..Amp lines, 160 bytes each
+        asl a
+        inc a
+        jsr Random
+        sec
+        sbc ShAmp
+        sta MulA
+        lda #160
+        sta MB0
+        jsr Mul16
+        lda MulR
+        clc
+        adc ShakeSrc
+        sta ShakeSrc
+        jmp BlitView
+.end:   stz ShLeft
+        stz ShakeSrc
+        jmp BlitView
+.out:   rts
+
+ShakeSrc: .dw 0
+ShLeft:   .dw 0
+ShAmp:    .dw 0
+ShTick:   .dw 0
+
 FxTab:    .ds FX_SLOTS*FX_SIZE
 FxChg:    .dw 0
 FxNow:    .dw 0

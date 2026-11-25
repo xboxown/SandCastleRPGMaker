@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed
-EXT_COUNT = 9
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake
+EXT_COUNT = 10
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1070,6 +1070,42 @@ XtBehav:
         jmp Next
 
 BhAct:    .dw 0
+
+; EXT 9 SHAKE pixels ticks wait sound (8 bytes): Shake Screen / Earthquake (fx.s ShakeRun) - the view shaken so many
+; pixels each way for so many ticks, its sound once as it starts; wait 1: the event waits till it is over.
+XtShake:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ShAmp
+        iny
+        lda [TalkPtr],y
+        sta ShLeft
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta XaWait
+        iny
+        lda [TalkPtr],y
+        cmp #$FFFF
+        beq .q
+        ldx #255
+        jsr PlaySound
+.q:     pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta ShTick
+        pla
+        lda XaWait
+        beq .done
+.w:     jsr ClockRun
+        jsr ShakeRun
+        lda ShLeft
+        bne .w
+.done:  lda #8
+        jmp Next
 
 TcName:   .dw 0
 TcLeft:   .dw 0

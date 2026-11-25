@@ -94,8 +94,10 @@ BlitView:
 .l:     lda T4
         clc
         adc #$2000
-        tax
         tay
+        clc
+        adc ShakeSrc            ; a shaking view: copied from a little way off (fx.s)
+        tax
         lda VCols               ; bytes: columns x 8
         asl a
         asl a
