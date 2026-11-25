@@ -1126,6 +1126,7 @@ public partial class MainWindow
                 return frames.Count > 0 ? frames : null;
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
+            WornIds = () => _objectDatabase.Objects.Where(o => o.Type is ObjectType.Weapon or ObjectType.Armor).Select(o => (pack.NameOf(o.Name), o.Id)).ToList(),
             // Play Animation (fx.s): a sprite's frames, at most 8.
             SpriteFrames = (group, name) =>
             {

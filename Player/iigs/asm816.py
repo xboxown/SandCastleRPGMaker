@@ -387,7 +387,8 @@ class Assembler:
             if v.reloc:
                 d = v.v - (len(self.out) + 1)
                 if not -128 <= d <= 127:
-                    if self.pass_no > 1: raise AsmError(f'branch too far ({d})')
+                    # only once the sizes have settled (nothing moved so far this pass): before that, another pass comes
+                    if self.pass_no > 1 and not self.changed: raise AsmError(f'branch too far ({d})')
                     d = 0
                 self.emit(d)
             else: raise AsmError('a branch goes to a label')

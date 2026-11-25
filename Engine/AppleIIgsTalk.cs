@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -88,6 +88,8 @@ public sealed class AppleIIgsTalk
         public Func<int, int, int, int>? Colour;
         /// <summary>Change Look: a character (its id, Player) -> its look's first sprite (four facings, then sleeping and sitting if PoseLooks); null: none.</summary>
         public Func<string, (int Sprite, bool PoseLooks)?>? LookOf;
+        /// <summary>Get Equipped Item: the wearable things' names and Object Editor ids.</summary>
+        public Func<List<(int Name, int Id)>>? WornIds;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
         /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
@@ -664,6 +666,48 @@ public sealed class AppleIIgsTalk
                         if (spr < 0) { Unsupported.Add("Change Object Look (a sprite not in the game)"); break; }
                         B(Ext); B((int)ExtOp.ObjectLook); W(tx); W(ty); W(tn.Value); B(own ? 1 : 0); W(spr);
                     }
+                    break;
+                }
+                case EventCommandType.CountItems:
+                {
+                    // EXT 23 COUNT var name mode who x y (ext.s): each object one (stacks are single things on the IIgs).
+                    string where = cmd.Get("Where");
+                    int mode = where == "The whole party" ? 1 : where == "A container on the map" ? 2 : 0;
+                    int m = 0xFFFF, x = 0xFFFF;
+                    if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } cn || mode == 0 && !WhoCode(cmd.Get("Who"), out m, out x))
+                    { Unsupported.Add("Count Items (an item not on the IIgs, or someone not on a map)"); break; }
+                    B(Ext); B((int)ExtOp.Count); W(_variable(cmd.Get("Variable"))); W(cn.Name); B(mode); W(m); W(x);
+                    W(mode == 2 ? Number(cmd.Get("X")) : 0); W(mode == 2 ? Number(cmd.Get("Y")) : 0);
+                    break;
+                }
+                case EventCommandType.ItemsInside:
+                {
+                    // EXT 24 INSIDE who bag name var remove (ext.s).
+                    string bag = cmd.Get("BagName").Trim();
+                    int name = cmd.Get("Category").Length == 0 || !int.TryParse(cmd.Get("ItemId"), out int iid) || iid < 0 ? 0xFFFF : Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId"))?.Name ?? -1;
+                    if (bag.Length == 0 || name < 0 || Extra?.NameOf is null || !WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Items Inside (no bag, an item not on the IIgs, or someone not on a map)"); break; }
+                    B(Ext); B((int)ExtOp.Inside); W(m); W(x); W(Extra.NameOf(bag)); W(name); W(_variable(cmd.Get("Variable"))); B(cmd.Get("Remove") == "True" ? 1 : 0);
+                    break;
+                }
+                case EventCommandType.ItemCharges:
+                {
+                    // EXT 25 CHARGES who name op var amountvar (ext.s): the amount's formula worked out first, into a hidden variable.
+                    if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } chi || !WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Item Charges (an item not on the IIgs, or someone not on a map)"); break; }
+                    int amountVar = Hidden("charges");
+                    B(Calc); W(amountVar); Formula(cmd.Get("Amount"), "Item Charges");
+                    string chVar = cmd.Get("Variable").Trim();
+                    B(Ext); B((int)ExtOp.Charges); W(m); W(x); W(chi.Name); B(cmd.Get("Operation") switch { "Set" => 1, "Add" => 2, _ => 0 });
+                    W(chVar.Length > 0 ? _variable(chVar) : 0xFFFF); W(amountVar);
+                    break;
+                }
+                case EventCommandType.GetEquippedItem:
+                {
+                    // EXT 26 EQUIPPED who slot var namevar n (name, id)... (ext.s): the IIgs's slot is EquipmentSlot + 1.
+                    if (!Enum.TryParse<EquipmentSlot>(cmd.Get("Slot"), out var slot) || !WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Get Equipped Item (someone not on a map)"); break; }
+                    var ids = (Extra?.WornIds?.Invoke() ?? new()).Take(60).ToList();
+                    string nameVar = cmd.Get("NameVariable").Trim();
+                    B(Ext); B((int)ExtOp.Equipped); W(m); W(x); B((int)slot + 1); W(_variable(cmd.Get("Variable"))); W(nameVar.Length > 0 ? _variable(nameVar) : 0xFFFF);
+                    B(ids.Count); foreach (var (wn, wid) in ids) { W(wn); W(wid); }
                     break;
                 }
                 case EventCommandType.DeleteObjectSelf:

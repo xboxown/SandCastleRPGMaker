@@ -19,7 +19,8 @@ OpExt:
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
-EXT_COUNT = 23
+          .dw XtCount,XtInside,XtCharges,XtEquipped
+EXT_COUNT = 27
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1795,6 +1796,437 @@ XtObjLook:
 .drawn: jsr DrawView
 .done:  lda #11
         jmp Next
+
+; ---- counting what is carried (U6GameWindow: Count Items, Items Inside, Item Charges, Get Equipped Item) ----
+
+; Object CtI (ItemPtr on it): CtOwn = who carries it at the top (through the bags holding it: their owner code; $FFFE on
+; the map), carry set if CtBox (an object's number) holds it at some level. ItemPtr is left on object CtI.
+CtHolder:
+        stz CtIn
+        lda CtI
+        sta CtJ
+        ldx #10                 ; (bags in bags: at most 10 deep)
+.up:    lda CtJ
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256
+        beq .top
+        ldy #14
+        lda [ItemPtr],y
+        sta CtJ
+        cmp CtBox
+        bne .nb
+        inc CtIn
+.nb:    dex
+        bne .up
+.top:   ldy #6
+        lda [ItemPtr],y
+        and #32+64
+        cmp #64
+        beq .car
+        lda #$FFFE
+        bra .s
+.car:   ldy #14
+        lda [ItemPtr],y
+.s:     sta CtOwn
+        lda CtI
+        jsr ObjAt
+        lda CtIn
+        cmp #1
+        rts
+
+; EXT 23 COUNT var name mode who x y (15 bytes): Count Items - how many things of that name (each object one) the one
+; (mode 0: carried, in their bags too), the whole party (1) or a container on the map at x, y (2) has: into the variable.
+XtCount:
+        iny
+        lda [TalkPtr],y
+        asl a
+        sta CtVar
+        iny
+        iny
+        lda [TalkPtr],y
+        sta CtName
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta CtMode
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoY
+        jsr JOwner
+        sta CtCode
+        lda #$FFFF
+        sta CtBox
+        lda CtMode
+        cmp #2
+        bne .go
+        jsr TcBox               ; the container (ext.s)
+        bcs .bx
+        stz CtN
+        bra .put
+.bx:    jsr IndexOf
+        sta CtBox
+.go:    stz CtN
+        stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcs .put
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp CtName
+        bne .n
+        jsr CtHolder
+        lda CtMode
+        cmp #2
+        bne .nc
+        lda CtIn                ; in the container
+        beq .n
+        bra .yes
+.nc:    lda CtOwn
+        cmp #$FFFE
+        beq .n
+        ldx CtMode
+        bne .party
+        cmp CtCode              ; the one's
+        bne .n
+        bra .yes
+.party: jsr PartyOwnsCode       ; the party's
+        bcc .n
+.yes:   inc CtN
+.n:     inc CtI
+        bra .l
+.put:   lda CtN
+        ldx CtVar
+        stz PTag
+        jsr StoreVar
+        lda #15
+        jmp Next
+
+; Carry set if owner code A is the Avatar's or a member's.
+PartyOwnsCode:
+        cmp #$FFFF
+        beq .y
+        sta CtJ
+        lda MP
+        pha
+        lda MP+2
+        pha
+        stz CtK
+.l:     lda CtK
+        cmp PartyN
+        bcs .no
+        jsr MemberAt
+        jsr MPCode
+        cmp CtJ
+        beq .y2
+        inc CtK
+        bra .l
+.no:    pla
+        sta MP+2
+        pla
+        sta MP
+        clc
+        rts
+.y2:    pla
+        sta MP+2
+        pla
+        sta MP
+.y:     sec
+        rts
+
+; EXT 24 INSIDE who bag name var remove (13 bytes): Items Inside - how many things of that name ($FFFF: anything) are in
+; a bag of that name the one carries: into the variable; remove 1: they are taken away.
+XtInside:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta InBag
+        iny
+        iny
+        lda [TalkPtr],y
+        sta CtName
+        iny
+        iny
+        lda [TalkPtr],y
+        asl a
+        sta CtVar
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta InRemove
+        jsr JOwner
+        sta CtCode
+        stz CtN
+        stz InI                 ; each bag of that name they carry
+.b:     lda InI
+        cmp ObjCount
+        bcs .put
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        bne .nb
+        ldy #8
+        lda [ItemPtr],y
+        cmp InBag
+        bne .nb
+        lda InI
+        sta CtI
+        jsr CtHolder
+        lda CtOwn
+        cmp CtCode
+        bne .nb
+        lda InI                 ; what is in it (at any level)
+        sta CtBox
+        stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcs .nb
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32+256
+        cmp #256
+        bne .n
+        lda CtName
+        cmp #$FFFF
+        beq .any
+        ldy #8
+        lda [ItemPtr],y
+        cmp CtName
+        bne .n
+.any:   jsr CtHolder
+        bcc .n
+        inc CtN
+        lda InRemove
+        beq .n
+        ldy #6
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+.n:     inc CtI
+        bra .l
+.nb:    inc InI
+        brl .b
+.put:   jsr RefreshInventory
+        lda CtN
+        ldx CtVar
+        stz PTag
+        jsr StoreVar
+        lda #13
+        jmp Next
+
+; EXT 25 CHARGES who name op var amountvar (13 bytes): Item Charges - the first thing of that name the one carries (bags
+; too): op 0 read, 1 set, 2 add (the amount from amountvar); its charges then into var ($FFFF: none). Charges are the
+; IIgs's own count (items.s ChgObj / ChgLeft), the thing's own number of them till first used.
+XtCharges:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta CtName
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ChOp
+        iny
+        lda [TalkPtr],y
+        sta CtVar
+        iny
+        iny
+        lda [TalkPtr],y
+        asl a
+        tax
+        lda VarTab,x
+        sta ChAmt
+        jsr JOwner
+        sta CtCode
+        lda #$FFFF
+        sta CtBox
+        stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcc .one
+        brl .done
+.one:   jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp CtName
+        bne .n
+        jsr CtHolder
+        lda CtOwn
+        cmp CtCode
+        beq .got
+.n:     inc CtI
+        bra .l
+.got:   stz ChDef               ; its own number of charges (a wand's: its special's)
+        jsr IsSpecial           ; (crafting.s)
+        bcc .nd
+        lda SpRec+3
+        and #$00FF
+        sta ChDef
+.nd:    lda CtI
+        ldx ChDef
+        jsr ChargeGet           ; (items.s)
+        sta ChNow
+        lda ChOp
+        beq .rd
+        cmp #1
+        beq .cset
+        lda ChNow
+        clc
+        adc ChAmt
+        bpl .cst
+        lda #0
+        bra .cst
+.cset:  lda ChAmt
+        bpl .cst
+        lda #0
+.cst:   sta ChNow
+        tax
+        lda CtI
+        jsr ChargeSet
+.rd:    lda CtVar
+        cmp #$FFFF
+        beq .done
+        asl a
+        tax
+        lda ChNow
+        stz PTag
+        jsr StoreVar
+.done:  lda #13
+        jmp Next
+
+; EXT 26 EQUIPPED who slot var namevar n (name, id) x n (12 + 4n bytes): Get Equipped Item - what the one wears in that slot
+; (the IIgs's: EquipmentSlot + 1): its Object Editor id (from the list after - the editor's ids by name; -1 nothing) into
+; var, its name into namevar ($FFFF: none).
+XtEquipped:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta EqSlot
+        iny
+        lda [TalkPtr],y
+        asl a
+        sta CtVar
+        iny
+        iny
+        lda [TalkPtr],y
+        sta EqNameVar
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta EqIdN
+        iny
+        sty EqIds
+        lda EqIdN
+        asl a
+        asl a
+        clc
+        adc #12
+        sta EqLen
+        lda #$FFFF
+        sta EqFound
+        jsr JOwner
+        sta EqOwner
+        lda CurOwner            ; what is in that slot (its owner's - wear.s)
+        pha
+        lda EqOwner
+        sta CurOwner
+        lda EqSlot
+        jsr WornIn
+        pla
+        sta CurOwner
+        bcc .none
+        ldy #8
+        lda [ItemPtr],y
+        sta EqFound
+        ldx EqIdN               ; its id by name
+        ldy EqIds
+.f:     cpx #0
+        beq .none2
+        lda [TalkPtr],y
+        cmp EqFound
+        beq .id
+        iny
+        iny
+        iny
+        iny
+        dex
+        bra .f
+.id:    iny
+        iny
+        lda [TalkPtr],y
+        bra .put
+.none:  stz EqFound
+        dec EqFound
+.none2: lda #$FFFF
+.put:   ldx CtVar
+        stz PTag
+        jsr StoreVar
+        lda EqNameVar           ; its name
+        cmp #$FFFF
+        beq .done
+        lda EqFound
+        cmp #$FFFF
+        beq .empty
+        jsr NameNumber
+        lda FmtName
+        sta GFar
+        lda FmtName+2
+        sta GFar+2
+        jsr FarToTemp           ; (texts.s: PTag 1)
+        bra .nm
+.empty: lda #0
+        ldx #1
+        stx PTag
+.nm:    pha
+        lda EqNameVar
+        asl a
+        tax
+        pla
+        jsr StoreVar
+.done:  lda EqLen
+        jmp Next
+
+CtVar:    .dw 0
+CtName:   .dw 0
+CtMode:   .dw 0
+CtCode:   .dw 0
+CtBox:    .dw 0
+CtN:      .dw 0
+CtI:      .dw 0
+CtJ:      .dw 0
+CtK:      .dw 0
+CtIn:     .dw 0
+CtOwn:    .dw 0
+InBag:    .dw 0
+InRemove: .dw 0
+InI:      .dw 0
+ChOp:     .dw 0
+ChAmt:    .dw 0
+ChDef:    .dw 0
+ChNow:    .dw 0
+EqNameVar: .dw 0
+EqIdN:    .dw 0
+EqIds:    .dw 0
+EqLen:    .dw 0
+EqFound:  .dw 0
 
 CoName:   .dw 0
 CoSpr:    .dw 0
