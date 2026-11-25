@@ -25,6 +25,12 @@ public partial class MainWindow
     private ListBox? _wallKitList;
     private ComboBox? _wallDoorCombo;
     private WallTool _wallTool = WallTool.Pencil;
+    /// <summary>The pencil's walls: which way they face - 0 worked out from the nearest closed area, 1 south / east, 2 north / west.</summary>
+    private int _wallFaces;
+    /// <summary>A stroke's new cells, to work out their faces when it ends (Auto).</summary>
+    private readonly List<(int X, int Y)> _wallNewCells = new();
+    /// <summary>The face the next cells take (the rectangle's edges, the pencil's choice): null - worked out when the stroke ends.</summary>
+    private bool? _wallReverseNow;
     private (int X, int Y)? _wallRectStart;
     private Rectangle? _wallRectPreview;
     private bool _wallStroking, _wallErasing;
@@ -78,6 +84,15 @@ public partial class MainWindow
             radio.Checked += (_, _) => { _wallTool = t; if (_editMode != EditMode.WallPlot) EnterWallPlotMode(); };
             panel.Children.Add(radio);
         }
+        panel.Children.Add(new TextBlock { Text = "Pencil walls face:", Margin = new Thickness(0, 8, 0, 2) });
+        var faces = new ComboBox
+        {
+            ItemsSource = new[] { "Auto (towards the nearest closed room)", "South / east (a room's top and left walls)", "North / west (a room's bottom and right walls)" },
+            SelectedIndex = _wallFaces,
+            ToolTip = "Which face a straight wall shows: a room's top and left walls face in (south, east), its bottom and right walls the other way (north, west). The kit's \"facing north / west\" pieces are used for those. The rectangle knows by itself."
+        };
+        faces.SelectionChanged += (_, _) => _wallFaces = Math.Max(0, faces.SelectedIndex);
+        panel.Children.Add(faces);
         panel.Children.Add(new TextBlock { Text = "Door / window to put in:", Margin = new Thickness(0, 8, 0, 2) });
         _wallDoorCombo = new ComboBox { DisplayMemberPath = nameof(WorldObject.Name), ToolTip = "Doors, windows and Wall objects built from a Wall Designer set (a wall with a window or a doorway)" };
         _wallDoorCombo.DropDownOpened += (_, _) => RefreshWallDoorCombo();
@@ -131,6 +146,7 @@ public partial class MainWindow
         }
         if (_wallTool == WallTool.Rectangle) { _wallRectStart = (x, y); ShowWallRect(x, y, x, y); return; }
         BeginWallStroke(erase: false);
+        _wallReverseNow = _wallFaces switch { 1 => false, 2 => true, _ => null }; // Auto: worked out when the stroke ends
         WallStrokeCell(x, y);
     }
 
@@ -194,8 +210,15 @@ public partial class MainWindow
         y = Math.Clamp(y, 0, _map.Height - 1);
         int left = Math.Min(start.X, x), right = Math.Max(start.X, x), top = Math.Min(start.Y, y), bottom = Math.Max(start.Y, y);
         BeginWallStroke(erase: false);
-        for (int cx = left; cx <= right; cx++) { WallStrokeCell(cx, top); WallStrokeCell(cx, bottom); }
-        for (int cy = top; cy <= bottom; cy++) { WallStrokeCell(left, cy); WallStrokeCell(right, cy); }
+        // The room's walls face in: the top and left edges south / east, the bottom and right edges north / west.
+        _wallReverseNow = false;
+        for (int cx = left; cx <= right; cx++) WallStrokeCell(cx, top);
+        for (int cy = top; cy <= bottom; cy++) WallStrokeCell(left, cy);
+        _wallReverseNow = true;
+        for (int cx = left; cx <= right; cx++) WallStrokeCell(cx, bottom);
+        for (int cy = top; cy <= bottom; cy++) WallStrokeCell(right, cy);
+        _wallReverseNow = false;
+        _wallNewCells.Clear(); // (already decided)
         EndWallStroke();
         StatusText.Text = $"Walled a room from ({left}, {top}) to ({right}, {bottom}).";
     }
@@ -204,6 +227,7 @@ public partial class MainWindow
 
     private void BeginWallStroke(bool erase)
     {
+        _wallNewCells.Clear();
         _wallStroking = true;
         _wallErasing = erase;
         _wallCells = new Dictionary<(int, int), List<ObjectInstance>>();
@@ -217,6 +241,7 @@ public partial class MainWindow
 
     private void EndWallStroke()
     {
+        if (_wallStroking && !_wallErasing && _wallCells is not null && _wallNewCells.Count > 0 && _wallReverseNow is null) AutoWallFaces();
         if (_wallStroking && _map is not null) RedrawAfterSettle(); // once a stroke: what's under and over the new walls comes to rest
         _wallStroking = false;
         _wallErasing = false;
@@ -254,7 +279,8 @@ public partial class MainWindow
         {
             if (IsWallCell(x, y) || PickedWallKit is not { } kit) return;
             _wallCells[(x, y)] = new List<ObjectInstance>();
-            StampWallCell(x, y, kit);
+            _wallNewCells.Add((x, y));
+            StampWallCell(x, y, kit, _wallReverseNow ?? false);
             StatusText.Text = $"Wall at ({x}, {y}).";
         }
         foreach (var (nx, ny) in new[] { (x, y - 1), (x + 1, y), (x, y + 1), (x - 1, y) })
@@ -264,18 +290,20 @@ public partial class MainWindow
         }
     }
 
-    /// <summary>A wall cell's pieces put down anew for its joins (its own kit; a new cell the picked one). A door or window put in stays.</summary>
-    private void StampWallCell(int x, int y, WallKit? kit)
+    /// <summary>A wall cell's pieces put down anew for its joins (its own kit; a new cell the picked one) and its face (a new cell's
+    /// given, else the one it has). A door or window put in stays.</summary>
+    private void StampWallCell(int x, int y, WallKit? kit, bool? reverse = null)
     {
         var here = _wallCells![(x, y)];
         if (here.Any(o => o.WallKitFixed)) return;
         kit ??= _objectDatabase.WallKits.FirstOrDefault(k => here.Count > 0 && k.Id == here[0].WallKitId) ?? PickedWallKit;
         if (kit is null) return;
-        var pieces = kit.Resolve(WallJoinsAt(x, y));
+        bool back = reverse ?? here.FirstOrDefault()?.WallKitReverse ?? false;
+        var pieces = kit.Resolve(WallJoinsAt(x, y), back);
         if (pieces.Count == 0) return;
         // Unchanged: leave them be (a stroke past a finished wall changes nothing in it).
         if (here.Count == pieces.Count && here.Zip(pieces).All(t => t.First.ObjectId == t.Second.ObjectId && t.First.Facing == t.Second.Facing
-                && t.First.OffsetX == t.Second.OffsetX && t.First.OffsetY == t.Second.OffsetY && t.First.WallKitId == kit.Id)) return;
+                && t.First.OffsetX == t.Second.OffsetX && t.First.OffsetY == t.Second.OffsetY && t.First.WallKitId == kit.Id && t.First.WallKitReverse == back)) return;
         foreach (var old in here.ToList()) DeleteObjectInstance(old, announce: false);
         here.Clear();
         foreach (var piece in pieces)
@@ -283,11 +311,64 @@ public partial class MainWindow
             var instance = new ObjectInstance
             {
                 ObjectId = piece.ObjectId, X = x, Y = y, Z = MapFloors.BaseLift(_currentFloor), Quantity = 1, ContainerInstanceId = -1,
-                InstanceId = _map!.GetNextInstanceId(), Facing = piece.Facing, OffsetX = piece.OffsetX, OffsetY = piece.OffsetY, WallKitId = kit.Id
+                InstanceId = _map!.GetNextInstanceId(), Facing = piece.Facing, OffsetX = piece.OffsetX, OffsetY = piece.OffsetY, WallKitId = kit.Id,
+                WallKitReverse = back
             };
             _map.Objects.Add(instance);
             here.Add(instance);
             PlaceObjectVisual(instance);
+        }
+    }
+
+    /// <summary>A wall cell's face set (it keeps it when the cells round it change): its pieces put down anew.</summary>
+    private void SetWallFace(int x, int y, bool reverse)
+    {
+        if (_wallCells is null || !IsWallCell(x, y)) return;
+        StampWallCell(x, y, null, reverse);
+    }
+
+    /// <summary>
+    /// The pencil on Auto: each new straight faces the nearest closed area - a west-east wall south if the cells below it are
+    /// closed in (a room's top wall), else north if those above are; a north-south wall east if the cells to its right are
+    /// closed in, else west. Closed in: walls all round before the map's edge (or 4000 cells) is reached.
+    /// </summary>
+    private void AutoWallFaces()
+    {
+        var closed = new Dictionary<(int, int), bool>();
+        bool Closed(int sx, int sy)
+        {
+            if (!IsInsideMap(sx, sy) || IsWallCell(sx, sy)) return false;
+            if (closed.TryGetValue((sx, sy), out bool known)) return known;
+            var seen = new HashSet<(int, int)> { (sx, sy) };
+            var queue = new Queue<(int, int)>();
+            queue.Enqueue((sx, sy));
+            bool shut = true;
+            while (queue.Count > 0 && shut)
+            {
+                var (cx, cy) = queue.Dequeue();
+                foreach (var (nx, ny) in new[] { (cx + 1, cy), (cx - 1, cy), (cx, cy + 1), (cx, cy - 1) })
+                {
+                    if (!_map!.WrapsAround && !IsInsideMap(nx, ny)) { shut = false; break; } // out to the map's edge: open
+                    int wx = WrapX(nx), wy = WrapY(ny);
+                    if (IsWallCell(wx, wy) || !seen.Add((wx, wy))) continue;
+                    if (seen.Count > 4000) { shut = false; break; } // too big to be a room
+                    queue.Enqueue((wx, wy));
+                }
+            }
+            foreach (var c in seen) closed[c] = shut;
+            return shut;
+        }
+        foreach (var (x, y) in _wallNewCells.ToList())
+        {
+            if (!IsWallCell(x, y)) continue;
+            int joins = WallJoinsAt(x, y);
+            bool we = (joins & WallKit.WestEast) != 0 && (joins & WallKit.NorthSouth) == 0;
+            bool ns = (joins & WallKit.NorthSouth) != 0 && (joins & WallKit.WestEast) == 0;
+            bool reverse;
+            if (we) reverse = !Closed(x, y + 1) && Closed(x, y - 1);       // the room above: a bottom wall, facing north
+            else if (ns) reverse = !Closed(x + 1, y) && Closed(x - 1, y);  // the room to the left: a right wall, facing west
+            else continue;
+            if (reverse) SetWallFace(x, y, true);
         }
     }
 

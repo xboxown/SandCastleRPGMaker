@@ -282,6 +282,10 @@ public class ObjectInstance : IHasDollState
     [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
     public bool WallKitFixed { get; set; }
 
+    /// <summary>A wall-kit wall cell that faces north / west (the straight's other face - a room's bottom or right wall).</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool WallKitReverse { get; set; }
+
     /// <summary>Which way it faces (chairs, beds) - set in the Map Editor.</summary>
     public SpriteDirection Facing { get; set; } = SpriteDirection.South;
     /// <summary>In play: the vehicle (VehicleState.Id) this is a piece of; 0 = none.</summary>

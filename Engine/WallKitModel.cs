@@ -11,6 +11,12 @@ public class WallKit
 {
     public const int North = 1, East = 2, South = 4, West = 8;
     public const int NorthSouth = North | South, WestEast = West | East;
+    /// <summary>
+    /// A straight's other face (added to its joins): the west-east wall facing north (a room's bottom wall, seen from
+    /// outside) and the north-south wall facing west (a room's right wall). Without it a straight faces south / east - a
+    /// room's top and left walls, whose faces show inside. A kit without the other face uses the first for both.
+    /// </summary>
+    public const int Reverse = 16;
 
     public int Id { get; set; }
     public string Name { get; set; } = "New Wall Kit";
@@ -26,16 +32,19 @@ public class WallKit
     /// straights (a cross or a corner = the north-south and the west-east straight on one cell, an end = its straight),
     /// and a lone pillar is the west-east straight. Empty only when the kit has no pieces at all.
     /// </summary>
-    public List<WallKitPiece> Resolve(int joins)
+    public List<WallKitPiece> Resolve(int joins, bool reverse = false)
     {
+        // The other face of a straight (or of an end, made from its straight): its own piece if the kit has one.
+        if (reverse && (joins == WestEast || joins == NorthSouth) && PieceFor(joins | Reverse) is { } face) return new List<WallKitPiece> { face };
         if (PieceFor(joins) is { } own) return new List<WallKitPiece> { own };
         var list = new List<WallKitPiece>();
         bool ns = (joins & NorthSouth) != 0, we = (joins & WestEast) != 0;
         if (!ns && !we) { if ((PieceFor(WestEast) ?? PieceFor(NorthSouth)) is { } lone) list.Add(lone); }
         else
         {
-            if (ns && PieceFor(NorthSouth) is { } upDown) list.Add(upDown);
-            if (we && PieceFor(WestEast) is { } across) list.Add(across);
+            bool end = joins is North or South or East or West;
+            if (ns && ((end && reverse ? PieceFor(NorthSouth | Reverse) : null) ?? PieceFor(NorthSouth)) is { } upDown) list.Add(upDown);
+            if (we && ((end && reverse ? PieceFor(WestEast | Reverse) : null) ?? PieceFor(WestEast)) is { } across) list.Add(across);
         }
         if (list.Count == 0 && Pieces.FirstOrDefault(p => p.ObjectId >= 0) is { } any) list.Add(any); // still a wall: any piece the kit has
         return list;
@@ -44,7 +53,7 @@ public class WallKit
     /// <summary>The 16 shapes in the kit window's order: straights, corners, T-joins, the cross, the ends, the pillar.</summary>
     public static readonly int[] Shapes =
     {
-        WestEast, NorthSouth,
+        WestEast, NorthSouth, WestEast | Reverse, NorthSouth | Reverse,
         East | South, West | South, North | East, North | West,
         West | East | South, West | East | North, North | South | East, North | South | West,
         North | East | South | West,
@@ -53,8 +62,10 @@ public class WallKit
 
     public static string ShapeName(int joins) => joins switch
     {
-        WestEast => "Straight west-east",
-        NorthSouth => "Straight north-south",
+        WestEast => "Straight west-east, facing south (a room's top wall - its inside face)",
+        NorthSouth => "Straight north-south, facing east (a room's left wall)",
+        WestEast | Reverse => "Straight west-east, facing north (a room's bottom wall - its outside face)",
+        NorthSouth | Reverse => "Straight north-south, facing west (a room's right wall)",
         East | South => "Corner top-left (joins east and south)",
         West | South => "Corner top-right (joins west and south)",
         North | East => "Corner bottom-left (joins north and east)",
@@ -72,8 +83,12 @@ public class WallKit
     };
 
     /// <summary>The facing a straight-run piece is placed with by default: a west-east wall faces south, a north-south one east (as the Wall Designer).</summary>
-    public static SpriteDirection DefaultFacing(int joins) =>
-        (joins & NorthSouth) != 0 && (joins & WestEast) == 0 ? SpriteDirection.East : SpriteDirection.South;
+    public static SpriteDirection DefaultFacing(int joins) => joins switch
+    {
+        WestEast | Reverse => SpriteDirection.North,
+        NorthSouth | Reverse => SpriteDirection.West,
+        _ => (joins & NorthSouth) != 0 && (joins & WestEast) == 0 ? SpriteDirection.East : SpriteDirection.South
+    };
 
     public WallKit Clone() => new() { Id = Id, Name = Name, Pieces = Pieces.Select(p => p.Clone()).ToList() };
 }
@@ -81,7 +96,7 @@ public class WallKit
 /// <summary>One piece of a wall kit: the object for one shape, how it faces and its nudge on the cell.</summary>
 public class WallKitPiece
 {
-    /// <summary>The walls it joins: WallKit.North | East | South | West.</summary>
+    /// <summary>The walls it joins: WallKit.North | East | South | West (+ WallKit.Reverse: a straight's other face).</summary>
     public int Joins { get; set; }
     /// <summary>The object (Object Editor) - a Wall, or a Wall built from a Wall Designer set; -1 = not set.</summary>
     public int ObjectId { get; set; } = -1;

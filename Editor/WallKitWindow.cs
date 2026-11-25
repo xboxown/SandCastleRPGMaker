@@ -213,11 +213,23 @@ public class WallKitWindow : Window
             if ((joins & WallKit.East) != 0) Line(32, 32, 62, 32);
             if ((joins & WallKit.West) != 0) Line(32, 32, 2, 32);
             lines.Children.Add(At(new Ellipse { Width = 8, Height = 8, Fill = Brushes.Orange }, 28, 28));
+            // A straight: an arrow the way its face looks (south / east, or - its other face - north / west).
+            int bare = joins & ~WallKit.Reverse;
+            if (bare is WallKit.WestEast or WallKit.NorthSouth)
+            {
+                bool back = (joins & WallKit.Reverse) != 0, across = bare == WallKit.WestEast;
+                var (tx, ty, dx, dy) = across ? (32.0, back ? 20.0 : 44.0, 0.0, back ? -1.0 : 1.0) : (back ? 20.0 : 44.0, 32.0, back ? -1.0 : 1.0, 0.0);
+                var arrow = new Polygon { Fill = Brushes.DeepSkyBlue, Points = new PointCollection
+                {
+                    new Point(tx + dx * 8, ty + dy * 8), new Point(tx - dy * 6, ty - dx * 6), new Point(tx + dy * 6, ty + dx * 6)
+                } };
+                lines.Children.Add(arrow);
+            }
             cell.Children.Add(lines);
             bool filledIn = piece is not { ObjectId: >= 0 };
             var button = new ToggleButton
             {
-                Content = new StackPanel { Children = { cell, new TextBlock { Text = filledIn ? "(filled in)" : NameOf(piece!.ObjectId), FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis, Width = 110, TextAlignment = TextAlignment.Center, Opacity = filledIn ? 0.6 : 1 } } },
+                Content = new StackPanel { Children = { cell, new TextBlock { Text = filledIn ? ((joins & WallKit.Reverse) != 0 ? "(as the other face)" : "(filled in)") : NameOf(piece!.ObjectId), FontSize = 10, TextTrimming = TextTrimming.CharacterEllipsis, Width = 110, TextAlignment = TextAlignment.Center, Opacity = filledIn ? 0.6 : 1 } } },
                 IsChecked = joins == _shape, Margin = new Thickness(2), Padding = new Thickness(2), ToolTip = WallKit.ShapeName(joins), IsEnabled = Kit is not null
             };
             button.Click += (_, _) => { _shape = j; RefreshAll(); };
@@ -285,7 +297,7 @@ public class WallKitWindow : Window
         }));
 
         int set = kit.Pieces.Count(p => p.ObjectId >= 0);
-        _pieceProps.Children.Add(Note($"\n{set} of 16 pieces set. " + (kit.PieceFor(WallKit.WestEast) is null || kit.PieceFor(WallKit.NorthSouth) is null
+        _pieceProps.Children.Add(Note($"\n{set} of {WallKit.Shapes.Length} pieces set. " + (kit.PieceFor(WallKit.WestEast) is null || kit.PieceFor(WallKit.NorthSouth) is null
             ? "Set both straights first: every piece you leave empty is made from them."
             : "The empty ones are made from the straights - set them for the best look (a real corner, a T, a cross).")));
         _pieceProps.Children.Add(Note("Ultima 6: square pieces seen from above. Ultima 7 and 8: each piece drawn in the game's own view - the kit only says which piece goes where."));
