@@ -512,8 +512,14 @@ StartWork:
         lda SpRec+13,x
         cmp #$FFFF
         beq .tm
-        ldx #255
-        jsr PlaySound
+        pha                     ; heard from the station (moves.s)
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        pla
+        jsr PlaySoundAt
 .tm:    ldx WkWOut                ; its time: a turn each half second
         lda SpRec+11,x
         lsr a
@@ -748,8 +754,14 @@ FieldWork:
         lda SpRec+28
         cmp #$FFFF
         beq .ns
-        ldx #255
-        jsr PlaySound
+        pha                     ; heard from where it is (moves.s)
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        pla
+        jsr PlaySoundAt
 .ns:    lda [ItemPtr]
         sta CrSpX
         ldy #2

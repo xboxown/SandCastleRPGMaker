@@ -801,6 +801,39 @@ CarrierOf:
 .map:   lda #$FFFE
         rts
 
+; ---- hearing (U6GameWindow.Hearing.cs, Exult's Audio get_2d_position_for_tile) ----
+
+; A = a sound, X, Y = the cell it comes from: played as loud as it is heard from the Avatar - quieter the further, gone
+; from 12 cells (24 of Exult's 8-pixel tiles) on.
+PlaySoundAt:
+        sta HrSnd
+        txa
+        sec
+        sbc PX
+        jsr AbsX
+        sta HrD
+        tya
+        sec
+        sbc PY
+        jsr AbsY
+        cmp HrD
+        bcc .k
+        sta HrD
+.k:     lda HrD
+        cmp #12
+        bcs .o
+        asl a
+        tax
+        lda HearVol,x
+        tax
+        lda HrSnd
+        jmp PlaySound
+.o:     rts
+
+HrSnd:    .dw 0
+HrD:      .dw 0
+HearVol:  .dw 255,253,248,239,227,211,191,168,142,112,78,41,0
+
 MapWrap:  .dw 0
 WrapN:    .dw 0
 WrapMaps: .ds 64

@@ -105,8 +105,14 @@ FlipLever:
 .off:   lda LvTab+8,x
 .snd:   cmp #$FFFF
         beq .links
-        ldx #255
-        jsr PlaySound
+        pha                     ; heard from where it is (moves.s)
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        pla
+        jsr PlaySoundAt
 .links: lda LvDepth             ; a loop of levers stops after a few
         cmp #5
         bcs .o

@@ -95,8 +95,14 @@ DoorMoved:
 .snd:   cmp #$FFFF
         beq .anim
         phx
-        ldx #255
-        jsr PlaySound
+        pha                     ; heard from where it is (moves.s)
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        pla
+        jsr PlaySoundAt
         plx
 .anim:  lda DrTab+4,x           ; frames to play
         bne .has

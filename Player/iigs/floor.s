@@ -412,11 +412,18 @@ Spring:
         sta TrSt+2,x            ; sprung (a hidden one shows itself)
         lda TrTab+10,y          ; re-arms after its turns
         sta TrSt+4,x
-        lda TrTab+12,y          ; its sound
+        lda TrTab+12,y          ; its sound, heard from where it is (moves.s)
         cmp #$FFFF
         beq .ns
-        ldx #255
-        jsr PlaySound
+        pha
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        pla
+        jsr PlaySoundAt
+        ldy FzT
 .ns:    ldy #8                  ; "Spike trap goes off!"
         lda [ItemPtr],y
         jsr NameNumber
