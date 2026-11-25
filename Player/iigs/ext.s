@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim
-EXT_COUNT = 4
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick
+EXT_COUNT = 5
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -31,18 +31,8 @@ XtEquip:
         lda [TalkPtr],y
         and #$00FF
         sta EqOn
-        lda JMap                ; the owner code: $FFFF the Avatar, $8000 + map x 64 + place (owner.s)
-        cmp #$FFFF
-        beq .own
-        asl a
-        asl a
-        asl a
-        asl a
-        asl a
-        asl a
-        ora JIdx
-        ora #$8000
-.own:   sta EqOwner
+        jsr JOwner
+        sta EqOwner
         stz EqPtr+2             ; (none found yet)
         lda ObjPtr
         sta ItemPtr
@@ -506,6 +496,203 @@ AoWho:    .dw 0,0
 AoLeft:   .dw 0
 AoTick:   .dw 0
 AoN:      .dw 0
+
+; A = the owner code of JMap, JIdx: $FFFF the Avatar, $8000 + map x 64 + place (owner.s).
+JOwner:
+        lda JMap
+        cmp #$FFFF
+        beq .o
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        ora JIdx
+        ora #$8000
+.o:     rts
+
+; EXT 4 PICK who x y (8 bytes): Picklock Door, as U6GameWindow.Actions.cs PicklockDoorCommand / PickTheLock: up to the
+; door at x, y, then its lockpicks one after another (keys.s's roll: Dexterity against the door's difficulty, 5..95%)
+; till it is unlocked ("Unlocked.") - each that fails breaks; none left, or magically locked: given up.
+XtPick:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AcA
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AcB
+        sta AoY
+        jsr JOwner
+        sta PkOwner
+        jsr WhoRec
+        bcc .fb2
+        brl .done
+.fb2:
+        jsr PkDoor
+        bcs .fb3
+        brl .done
+.fb3:
+        lda WP
+        sta AoWho
+        lda WP+2
+        sta AoWho+2
+        jsr AcBeside            ; up to it (acts.s)
+.try:   lda AoWho
+        sta WP
+        lda AoWho+2
+        sta WP+2
+        jsr PkDoor
+        bcc .done
+        ldy #6
+        lda [ItemPtr],y
+        and #8                  ; unlocked already
+        beq .done
+        lda [ItemPtr],y
+        and #2048               ; magically locked: no lockpick opens it
+        bne .done
+        jsr PkPick              ; a lockpick of theirs
+        bcc .done
+        ldy #C_DEX              ; the chance
+        lda [WP],y
+        sec
+        ldy #12
+        sbc [ItemPtr],y
+        sta T5
+        asl a
+        asl a
+        clc
+        adc T5
+        clc
+        adc #50
+        bmi .lo
+        cmp #5
+        bcs .hi
+.lo:    lda #5
+.hi:    cmp #96
+        bcc .c
+        lda #95
+.c:     sta PkChance
+        lda #100
+        jsr Random
+        cmp PkChance
+        bcs .broke
+        ldy #6
+        lda [ItemPtr],y
+        and #$FFF7
+        sta [ItemPtr],y
+        lda #W_UNLOCKED
+        jsr PrintSaid
+        bra .done
+.broke: ldy #6                  ; the pick breaks
+        lda [Src],y
+        ora #32
+        sta [Src],y
+        jsr RefreshInventory
+        lda #W_PICKBROKE
+        jsr PrintSaid
+        jsr DrawView
+        lda #90                 ; a try every 1.5 seconds
+        jsr XtWait
+        brl .try
+.done:  jsr DrawView
+        lda #8
+        jmp Next
+
+; ItemPtr = the door at AoX, AoY (on this map, not gone): carry set.
+PkDoor:
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta AoN
+        beq .no
+.l:     ldy #6
+        lda [ItemPtr],y
+        and #4+32+64+256
+        cmp #4
+        bne .n
+        lda [ItemPtr],y
+        and #$F000
+        cmp CurBits
+        bne .n
+        lda [ItemPtr]
+        cmp AoX
+        bne .n
+        ldy #2
+        lda [ItemPtr],y
+        cmp AoY
+        beq .y
+.n:     lda #16
+        jsr NextItem
+        dec AoN
+        bne .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+; Src = a lockpick PkOwner carries: carry set.
+PkPick:
+        lda ObjPtr
+        sta Src
+        lda ObjPtr+2
+        sta Src+2
+        lda ObjCount
+        sta AoN
+        beq .no
+.l:     ldy #6
+        lda [Src],y
+        and #96+256+1024
+        cmp #64+1024
+        bne .n
+        ldy #14
+        lda [Src],y
+        cmp PkOwner
+        beq .y
+.n:     lda Src
+        clc
+        adc #16
+        sta Src
+        bcc .nc
+        inc Src+2
+.nc:    dec AoN
+        bne .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+; A = ticks: waited, the clock going on.
+XtWait:
+        sta XwN
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta XwT
+        pla
+.w:     jsr ClockRun
+        pha
+        pha
+        tool $2503
+        pla
+        sec
+        sbc XwT
+        sta T4
+        pla
+        lda T4
+        cmp XwN
+        bcc .w
+        rts
+
+PkOwner:  .dw 0
+PkChance: .dw 0
+XwN:      .dw 0
+XwT:      .dw 0
 
 EqName:   .dw 0
 EqOn:     .dw 0
