@@ -17,8 +17,8 @@ OpExt:
         jmp EndTalk
 
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
-          .dw XtCamera,XtCamFollow,XtLook,XtName
-EXT_COUNT = 17
+          .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
+EXT_COUNT = 18
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1415,6 +1415,196 @@ AvNameWord:
         lda NameTab+2,y
         sta WordTab+2,x
 .o:     rts
+
+; EXT 17 RES who resurrect where x y hp (14 bytes): Resurrect / Heal Fully, as U6GameWindow.ScriptWorld.cs ResurrectCommand.
+; Heal fully (resurrect 0): all its hit points, no ailments, up again if knocked out. Resurrect (1): a dead map character
+; (not the Avatar, not a member) lives again where its body lies (where 0) or at x, y - its body gone, what the body held
+; its own again - with all its hit points ($FFFF) or hp (at most all).
+XtRes:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta RsMode
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta RsWhere
+        iny
+        lda [TalkPtr],y
+        sta RsX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta RsY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta RsHp
+        jsr JOwner
+        sta RsCode
+        jsr WhoRec
+        bcc .got
+        brl .done
+.got:   lda RsMode
+        bne .res
+        ldy #C_FLAGS            ; heal fully: not the dead
+        lda [WP],y
+        and #4
+        beq .heal
+        brl .done
+.heal:  ldy #C_MAXHP
+        lda [WP],y
+        ldy #C_HP
+        sta [WP],y
+        lda WP                  ; no ailments (ailments.s)
+        ldx WP+2
+        jsr AilFind
+        bcc .na
+        lda #0
+        sta AilTab+4,y
+.na:    jsr UpCheck             ; up again (bodies.s)
+        jsr HpChanged
+        brl .done
+.res:   jsr WPIsAvatar          ; (the Avatar's death ends the game on the IIgs; a member's leaves the party)
+        bcc .r1
+        brl .done
+.r1:    jsr WPInParty
+        bcc .r2
+        brl .done
+.r2:    ldy #C_FLAGS
+        lda [WP],y
+        and #4
+        bne .dead
+        brl .done
+.dead:  lda #$FFFF              ; its body: the body container where it fell
+        sta RsBody
+        lda [WP]
+        sta AoX
+        ldy #2
+        lda [WP],y
+        sta AoY
+        jsr RsFindBody
+        bcc .nb
+        jsr IndexOf
+        sta RsBody
+        ldy #6                  ; the body gone
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+        lda RsWhere
+        bne .nb
+        lda [ItemPtr]           ; up where it lies
+        sta RsX
+        ldy #2
+        lda [ItemPtr],y
+        sta RsY
+.nb:    lda RsWhere             ; where: its body (none: where it fell), or the spot
+        bne .at
+        lda RsBody
+        cmp #$FFFF
+        bne .at
+        lda AoX
+        sta RsX
+        lda AoY
+        sta RsY
+.at:    lda RsX
+        sta [WP]
+        ldy #2
+        lda RsY
+        sta [WP],y
+        ldy #C_FLAGS            ; alive, awake
+        lda [WP],y
+        and #$FFFF-4-32-16
+        sta [WP],y
+        ldy #C_MAXHP            ; its hit points
+        lda [WP],y
+        sta T4
+        lda RsHp
+        cmp T4
+        bcs .fb1
+        brl .hp
+.fb1:
+        lda T4
+.hp:    cmp #1
+        bcs .hp1
+        lda #1
+.hp1:   ldy #C_HP
+        sta [WP],y
+        lda RsBody              ; what the body held: its own again
+        cmp #$FFFF
+        beq .nt
+        stz TcI
+.l:     lda TcI
+        cmp ObjCount
+        bcs .nt
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #256+32
+        cmp #256
+        bne .n
+        ldy #14
+        lda [ItemPtr],y
+        cmp RsBody
+        bne .n
+        ldy #6
+        lda [ItemPtr],y
+        and #$0FFF-256
+        ora #64
+        sta [ItemPtr],y
+        ldy #14
+        lda RsCode
+        sta [ItemPtr],y
+.n:     inc TcI
+        bra .l
+.nt:    jsr MakeOccAgain        ; (spells2.s)
+.done:  jsr DrawView
+        lda #14
+        jmp Next
+
+; ItemPtr = a body (BodyNm's container) at AoX, AoY on this map, not gone: carry set.
+RsFindBody:
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta AoN
+        beq .no
+.l:     ldy #6
+        lda [ItemPtr],y
+        and #$F000+32+64+256+128
+        sec
+        sbc CurBits
+        cmp #128
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp BodyNm
+        bne .n
+        lda [ItemPtr]
+        cmp AoX
+        bne .n
+        ldy #2
+        lda [ItemPtr],y
+        cmp AoY
+        beq .y
+.n:     lda #16
+        jsr NextItem
+        dec AoN
+        bne .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+RsMode:   .dw 0
+RsWhere:  .dw 0
+RsX:      .dw 0
+RsY:      .dw 0
+RsHp:     .dw 0
+RsCode:   .dw 0
+RsBody:   .dw 0
 
 LkOwn:    .dw 0
 LkSpr:    .dw 0

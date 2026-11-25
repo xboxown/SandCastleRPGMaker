@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -626,6 +626,16 @@ public sealed class AppleIIgsTalk
                     var look = own ? (0, false) : Extra?.LookOf?.Invoke(cmd.Get("Other"));
                     if (!WhoCode(cmd.Get("Who"), out int m, out int x) || look is null) { Unsupported.Add("Change Look (someone not on a map, or a look not in the game)"); break; }
                     B(Ext); B((int)ExtOp.Look); W(m); W(x); B(own ? 1 : 0); W(look.Value.Item1); B(look.Value.Item2 ? 1 : 0);
+                    break;
+                }
+                case EventCommandType.Resurrect:
+                {
+                    // EXT 17 RES who resurrect where x y hp (ext.s): the Avatar can't be raised on the IIgs (its death ends the game there).
+                    bool raise = cmd.Get("Value") == "Resurrect";
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || raise && m == 0xFFFF) { Unsupported.Add("Resurrect (the Avatar, or someone not on a map)"); break; }
+                    bool spot = cmd.Get("Where") == "At a spot";
+                    int hp = cmd.Get("Health") == "This many hit points" ? Math.Clamp(Number(cmd.Get("HP")), 1, 32767) : 0xFFFF;
+                    B(Ext); B((int)ExtOp.Resurrect); W(m); W(x); B(raise ? 1 : 0); B(spot ? 1 : 0); W(spot ? Number(cmd.Get("X")) : 0); W(spot ? Number(cmd.Get("Y")) : 0); W(hp);
                     break;
                 }
                 case EventCommandType.ChangeName:
