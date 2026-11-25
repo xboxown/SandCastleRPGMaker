@@ -124,6 +124,7 @@ ChangeMap:
         rts
 .loaded:
         jsr FxClear             ; the last map's animations end (fx.s)
+        jsr FlClear             ; and no one follows (ext.s)
         lda GoMap               ; that map's cells, characters, events
         sta CurMap
         jsr SetMapWrap          ; does it wrap around (moves.s)

@@ -394,7 +394,9 @@ WorldTurn:
         sta AtkP+2
         jsr Strike
         lda AvDead
-        beq .n
+        bne .fb1
+        brl .n
+.fb1:
         brl .done
 .chase: lda T4
         cmp #9
@@ -403,7 +405,13 @@ WorldTurn:
         bcc .n
         inc Moved
         bra .n
-.calm:  ldy #C_BEHAV
+.calm:  jsr FlStep              ; following someone (Follow Character - ext.s)
+        bcc .nfl
+        lda FlMv
+        beq .n
+        inc Moved
+        bra .n
+.nfl:   ldy #C_BEHAV
         lda [CP],y
         cmp #2
         bne .nsch

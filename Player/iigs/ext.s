@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC
-EXT_COUNT = 6
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow
+EXT_COUNT = 7
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -812,6 +812,189 @@ TcBox:
         rts
 .y:     sec
         rts
+
+; EXT 6 FOLLOW who leader stop (11 bytes): Follow Character, as U6GameWindow.ScriptWorld.cs FollowCommand /
+; UpdateFollowers: a map's character (not the Avatar, not a member) walks after its leader (anyone - the Avatar too),
+; keeping within 2 cells (combat.s's calm turn: FlStep); stop 1: it stops following. Up to 8 at once; a new map: none.
+XtFollow:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta FlLM
+        iny
+        iny
+        lda [TalkPtr],y
+        sta FlLI
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta FlStop
+        jsr WhoRec              ; the follower
+        bcs .done
+        jsr WPIsAvatar
+        bcs .done
+        jsr WPInParty
+        bcs .done
+        lda WP
+        sta FlF
+        lda WP+2
+        sta FlF+2
+        jsr FlFind              ; X = its place (or a free one)
+        lda FlStop
+        beq .lead
+        cpx #$FFFF
+        beq .done
+        lda FlTab,x
+        cmp FlF
+        bne .done
+        lda FlTab+2,x
+        cmp FlF+2
+        bne .done
+        stz FlTab+2,x           ; it stops following
+        bra .done
+.lead:  cpx #$FFFF
+        beq .done               ; eight following already
+        stx FoX
+        lda FlLM
+        sta JMap
+        lda FlLI
+        sta JIdx
+        jsr WhoRec              ; the leader
+        bcs .done
+        lda WP
+        cmp FlF
+        bne .ok
+        lda WP+2
+        cmp FlF+2
+        beq .done               ; (not itself)
+.ok:    ldx FoX
+        lda FlF
+        sta FlTab,x
+        lda FlF+2
+        sta FlTab+2,x
+        lda WP
+        sta FlTab+4,x
+        lda WP+2
+        sta FlTab+6,x
+.done:  lda #11
+        jmp Next
+
+; X = FlF's place in FlTab, else a free place, else $FFFF.
+FlFind:
+        ldx #0
+.l:     lda FlTab+2,x
+        beq .n
+        lda FlTab,x
+        cmp FlF
+        bne .n
+        lda FlTab+2,x
+        cmp FlF+2
+        beq .y
+.n:     txa
+        clc
+        adc #8
+        tax
+        cpx #64
+        bcc .l
+        ldx #0
+.f:     lda FlTab+2,x
+        beq .y
+        txa
+        clc
+        adc #8
+        tax
+        cpx #64
+        bcc .f
+        ldx #$FFFF
+.y:     rts
+
+; CP's turn (combat.s, calm): carry set if it is following someone (FlMv 1: it stepped).
+FlStep:
+        stz FlMv
+        ldx #0
+.l:     lda FlTab+2,x
+        beq .n
+        cmp CP+2
+        bne .n
+        lda FlTab,x
+        cmp CP
+        beq .y
+.n:     txa
+        clc
+        adc #8
+        tax
+        cpx #64
+        bcc .l
+        clc
+        rts
+.y:     lda FlTab+4,x           ; the leader: where it is (the Avatar: PX, PY)
+        sta Src
+        lda FlTab+6,x
+        sta Src+2
+        cmp MyBank
+        bne .ch
+        lda Src
+        cmp #AvRec
+        bne .ch
+        lda PX
+        sta GX
+        lda PY
+        sta GY
+        bra .go
+.ch:    ldy #C_FLAGS            ; a dead leader: no more following
+        lda [Src],y
+        and #4
+        beq .alive
+        stz FlTab+2,x
+        clc
+        rts
+.alive: lda [Src]
+        sta GX
+        ldy #2
+        lda [Src],y
+        sta GY
+.go:    lda GX                  ; within 2 cells: no step
+        sec
+        sbc [CP]
+        jsr ShortX
+        jsr AbsX
+        sta T5
+        ldy #2
+        lda GY
+        sec
+        sbc [CP],y
+        jsr ShortY
+        jsr AbsY
+        cmp T5
+        bcs .m
+        lda T5
+.m:     cmp #3
+        bcc .stay
+        jsr StepToGoal          ; (combat.s)
+        bcc .stay
+        inc FlMv
+.stay:  sec
+        rts
+
+; A new map: no one follows.
+FlClear:
+        ldx #0
+.l:     stz FlTab+2,x
+        txa
+        clc
+        adc #8
+        tax
+        cpx #64
+        bcc .l
+        rts
+
+FlTab:    .ds 64
+FlF:      .dw 0,0
+FlLM:     .dw 0
+FlLI:     .dw 0
+FlStop:   .dw 0
+FoX:      .dw 0
+FlMv:     .dw 0
 
 TcName:   .dw 0
 TcLeft:   .dw 0
