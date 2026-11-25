@@ -19,11 +19,14 @@ ParseFloor:
         sta TrN
         lda #2
         jsr AddPtr
-        lda TrN                 ; 16 bytes each
+        lda TrN                 ; 24 bytes each
         asl a
         asl a
         asl a
+        sta T4
         asl a
+        clc
+        adc T4
         sta T4
         ldy #0
 .t:     cpy T4
@@ -70,7 +73,7 @@ TrapNamed:
         beq .yes
         txa
         clc
-        adc #16
+        adc #24
         tax
         dey
         bra .l
@@ -201,6 +204,7 @@ FloorCharStep:
 ; Each turn: traps re-arm, the Avatar's Stand On tiles, everyone standing in a lit fire is burnt.
 FloorTurn:
         jsr LeverTurn           ; pressed buttons spring back (lever.s)
+        jsr TrapLines           ; shooting traps at whoever stands in their line of fire
         jsr DoorTurn            ; doors that open by themselves (door.s)
         ldx #0                  ; re-arming
         ldy TrSN
@@ -425,7 +429,14 @@ Spring:
         ldx #T_ENTER
         jsr ObjEvQueue
         ldy FzT
-        lda TrTab+2,y
+        lda TrTab+14,y          ; explosive: its blast; shooting: its shot (below)
+        cmp #1
+        bne .nx
+        jmp TrapBlast
+.nx:    cmp #2
+        bne .gr
+        jmp TrapShoot
+.gr:    lda TrTab+2,y
         sta FzMin
         lda TrTab+4,y
         sta FzMax
@@ -446,6 +457,382 @@ Spring:
         jsr AilOn               ; (ailments.s)
 .o:     jsr DrawView
         rts
+
+; ---- explosive and shooting traps (U6GameWindow.Projectiles.cs) ----
+
+; The explosive trap at ItemPtr (TrTab + FzT) blows up: everyone within its radius is hurt; then it is gone if set so.
+TrapBlast:
+        ldy FzT
+        lda TrTab+2,y
+        sta FzMin
+        lda TrTab+4,y
+        sta FzMax
+        lda TrTab+16,y
+        sta FzRad
+        lda [ItemPtr]
+        sta FzTX
+        ldy #2
+        lda [ItemPtr],y
+        sta FzTY
+        lda ItemPtr
+        sta FzSvT
+        lda ItemPtr+2
+        sta FzSvT+2
+        lda #AvRec              ; the one moved
+        sta FzWho
+        lda MyBank
+        sta FzWho+2
+        ldx PX
+        ldy PY
+        jsr .hit
+        stz FzK                 ; the members
+.m:     lda FzK
+        cmp PartyN
+        bcs .c
+        jsr MemberAt
+        lda MP
+        sta FzWho
+        lda MP+2
+        sta FzWho+2
+        lda [MP]
+        tax
+        ldy #2
+        lda [MP],y
+        tay
+        jsr .hit
+        inc FzK
+        bra .m
+.c:     lda ChrPtr              ; everyone else on the map
+        sta FzWho
+        lda ChrPtr+2
+        sta FzWho+2
+        lda ChrCount
+        sta FzK
+.cl:    lda FzK
+        beq .done
+        lda FzWho
+        sta WP
+        lda FzWho+2
+        sta WP+2
+        ldy #C_FLAGS
+        lda [WP],y
+        and #4+8
+        bne .cn
+        lda [WP]
+        tax
+        ldy #2
+        lda [WP],y
+        tay
+        jsr .hit
+.cn:    clc
+        lda FzWho
+        adc #64
+        sta FzWho
+        lda FzWho+2
+        adc #0
+        sta FzWho+2
+        dec FzK
+        bra .cl
+.done:  lda FzSvT
+        sta ItemPtr
+        lda FzSvT+2
+        sta ItemPtr+2
+        ldy FzT                 ; removed after it goes off
+        lda TrTab+22,y
+        beq .stay
+        ldy #6
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+        jsr FreeTrapCell
+.stay:  jmp DrawView
+.hit:   txa                     ; X, Y within the radius of the blast: FzWho hurt
+        sec
+        sbc FzTX
+        jsr AbsX
+        cmp FzRad
+        beq .y
+        bcs .far
+.y:     tya
+        sec
+        sbc FzTY
+        jsr AbsY
+        cmp FzRad
+        beq .h
+        bcs .far
+.h:     lda FzWho
+        pha
+        lda FzWho+2
+        pha
+        jsr HarmWho
+        pla
+        sta FzWho+2
+        pla
+        sta FzWho
+.far:   rts
+
+; A trap object gone from the map: its cell no longer blocked by it.
+FreeTrapCell:
+        lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr OccAt
+        sep #$20
+        .a8
+        lda [Ptr]
+        and #$FE
+        sta [Ptr]
+        rep #$20
+        .a16
+        rts
+
+; The shooting trap at ItemPtr (TrTab + FzT) fires its projectile the way it faces (its +12: 0 south, 1 north, 2 east,
+; 3 west) over its range: the first one in the way is hurt; anything solid stops it.
+TrapShoot:
+        jsr TrapLine            ; FzWho = whom it hits (carry set), FzEX, FzEY where the shot ends
+        lda #0
+        rol a
+        sta FzGot
+        ldy FzT                 ; its flight
+        lda TrTab+18,y
+        cmp #$FFFF
+        beq .nofly
+        sta MSprite
+        lda [ItemPtr]
+        sta ShootFrom
+        ldy #2
+        lda [ItemPtr],y
+        sta ShootFrom+2
+        lda FzEX
+        sta ShootTo
+        lda FzEY
+        sta ShootTo+2
+        lda AtkP
+        pha
+        lda AtkP+2
+        pha
+        lda DefP
+        pha
+        lda DefP+2
+        pha
+        lda #ShootFrom
+        sta AtkP
+        lda #ShootTo
+        sta DefP
+        lda MyBank
+        sta AtkP+2
+        sta DefP+2
+        lda ItemPtr
+        sta FzSvT
+        lda ItemPtr+2
+        sta FzSvT+2
+        jsr Fly                 ; (missile.s)
+        lda FzSvT
+        sta ItemPtr
+        lda FzSvT+2
+        sta ItemPtr+2
+        pla
+        sta DefP+2
+        pla
+        sta DefP
+        pla
+        sta AtkP+2
+        pla
+        sta AtkP
+.nofly: lda FzGot
+        beq .o
+        ldy FzT
+        lda TrTab+2,y
+        sta FzMin
+        lda TrTab+4,y
+        sta FzMax
+        jmp HarmWho
+.o:     jmp DrawView
+
+; Along the trap's line (ItemPtr, TrTab + FzT; ItemPtr kept): carry set and FzWho = the first one (the Avatar, a member,
+; anyone) within its range; FzEX, FzEY where the shot ends (them, or the last open cell before something solid).
+TrapLine:
+        lda ItemPtr
+        sta FzSvL
+        lda ItemPtr+2
+        sta FzSvL+2
+        ldy #12                 ; its facing: the step
+        lda [ItemPtr],y
+        and #3
+        asl a
+        tax
+        lda TrDX,x
+        sta FzDX
+        lda TrDY,x
+        sta FzDY
+        lda [ItemPtr]
+        sta FzEX
+        ldy #2
+        lda [ItemPtr],y
+        sta FzEY
+        ldy FzT
+        lda TrTab+16,y
+        sta FzK
+.l:     lda FzK
+        bne .step
+        brl .stop
+.step:  dec FzK
+        lda FzEX
+        clc
+        adc FzDX
+        tax
+        lda FzEY
+        clc
+        adc FzDY
+        tay
+        jsr WrapXY
+        stx FzNX
+        sty FzNY
+        cpx PX                  ; the one moved
+        bne .nav
+        cpy PY
+        bne .nav
+        lda #AvRec
+        sta FzWho
+        lda MyBank
+        sta FzWho+2
+        brl .got
+.nav:   jsr OccAt
+        sta FzOcc
+        and #4                  ; a member
+        beq .nm
+        ldx FzNX
+        ldy FzNY
+        jsr PartyAt             ; (party.s: ItemPtr = it)
+        bcc .nm
+        lda ItemPtr
+        sta FzWho
+        lda ItemPtr+2
+        sta FzWho+2
+        brl .got
+.nm:    lda FzOcc
+        and #2                  ; anyone else
+        beq .nc
+        lda WP
+        pha
+        lda WP+2
+        pha
+        ldx FzNX
+        ldy FzNY
+        jsr FindChrAt           ; (moves.s: WP = it)
+        bcc .nf
+        lda WP
+        sta FzWho
+        lda WP+2
+        sta FzWho+2
+        pla
+        sta WP+2
+        pla
+        sta WP
+        bra .got
+.nf:    pla
+        sta WP+2
+        pla
+        sta WP
+.nc:    lda FzOcc               ; something solid: it stops before it
+        and #1
+        bne .stop
+        ldx FzNX
+        ldy FzNY
+        jsr MapTile
+        cmp #$FFFF
+        beq .stop
+        tay
+        lda [FlagsPtr],y
+        and #3                  ; ground or water: on it goes
+        beq .stop
+        lda FzNX
+        sta FzEX
+        lda FzNY
+        sta FzEY
+        brl .l
+.stop:  jsr .back
+        clc
+        rts
+.got:   lda FzNX
+        sta FzEX
+        lda FzNY
+        sta FzEY
+        jsr .back
+        sec
+        rts
+.back:  lda FzSvL
+        sta ItemPtr
+        lda FzSvL+2
+        sta ItemPtr+2
+        rts
+
+; Each turn: shooting traps that fire at whoever stands in their line of fire (Trap > Triggered by: line of fire).
+TrapLines:
+        lda TrN
+        bne .go
+        rts
+.go:    jsr FloorFirst
+.l:     jsr FloorNextAll
+        bcc .o
+        ldy #8
+        lda [ItemPtr],y
+        jsr TrapNamed
+        bcc .l
+        lda TrTab+14,x
+        cmp #2
+        bne .l
+        lda TrTab+20,x
+        beq .l
+        stx FzT
+        lda ItemPtr
+        sta FzSv3
+        lda ItemPtr+2
+        sta FzSv3+2
+        jsr TrapLine
+        bcc .back
+        ldx FzT
+        jsr Spring              ; its state, sound, then its shot
+.back:  lda FzSv3
+        sta ItemPtr
+        lda FzSv3+2
+        sta ItemPtr+2
+        bra .l
+.o:     rts
+
+; After FloorFirst: every object on this map (not carried, gone or inside) - carry set, ItemPtr, FzIdx.
+FloorNextAll:
+.l:     lda FzLeft
+        bne .go
+        clc
+        rts
+.go:    dec FzLeft
+        inc FzIdx
+        lda FzP
+        sta ItemPtr
+        lda FzP+2
+        sta ItemPtr+2
+        clc
+        lda FzP
+        adc #16
+        sta FzP
+        lda FzP+2
+        adc #0
+        sta FzP+2
+        ldy #6
+        lda [ItemPtr],y
+        and #$F000+96+256
+        cmp CurBits
+        bne .l
+        sec
+        rts
+
+TrDX:     .dw 0, 0, 1, $FFFF
+TrDY:     .dw 1, $FFFF, 0, 0
+ShootFrom: .dw 0, 0
+ShootTo:  .dw 0, 0
 
 ; FzWho takes FzMin..FzMax damage (Hurt: told as a wound, it can kill).
 HarmWho:
@@ -576,7 +963,7 @@ BurnLeft:
         rts
 
 TrN:      .dw 0
-TrTab:    .ds 16*64
+TrTab:    .ds 24*32
 LtN:      .dw 0
 LtTab:    .ds 8*64
 TrSN:     .dw 0
@@ -600,6 +987,21 @@ FzMin:    .dw 0
 FzMax:    .dw 0
 FzAil:    .dw 0
 FzSvI:    .dd 0
+FzSvT:    .dd 0
+FzSvL:    .dd 0
+FzSv3:    .dd 0
+FzRad:    .dw 0
+FzTX:     .dw 0
+FzTY:     .dw 0
+FzK:      .dw 0
+FzGot:    .dw 0
+FzEX:     .dw 0
+FzEY:     .dw 0
+FzNX:     .dw 0
+FzNY:     .dw 0
+FzDX:     .dw 0
+FzDY:     .dw 0
+FzOcc:    .dw 0
 FzSvW:    .dd 0
 
 ; ---- a death's blood (Ultima 6 / Savage Empire / Martian Dreams) ----

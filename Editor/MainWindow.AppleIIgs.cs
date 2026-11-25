@@ -806,6 +806,13 @@ public partial class MainWindow
                     objects.Add((instance.X, instance.Y, on ? onLook : offLook, objFlags | bits, pack.NameOf(def.Name), 0xFFFB, IconOf(file), -1));
                     continue;
                 }
+                if (def.Type == ObjectType.Trap)
+                {
+                    // A trap: its facing in the icon's place (a shooting trap fires that way - floor.s).
+                    int facingCode = instance.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
+                    objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, facingCode, -1));
+                    continue;
+                }
                 objects.Add((instance.X, instance.Y, n, objFlags | bits, pack.NameOf(def.Name), other, IconOf(file), -1));
               }
               finally
@@ -1696,13 +1703,20 @@ public partial class MainWindow
         {
             int n = pack.Names.IndexOf(o.Name);
             if (n < 0) continue;
-            if (o.Type == ObjectType.Trap && o.Trap.Kind == TrapKind.Ground && pack.Traps.All(t => t.Name != n))
+            if (o.Type == ObjectType.Trap && pack.Traps.All(t => t[0] != n))
             {
                 var t = o.Trap;
                 int ail = t.Ailment switch { TrapAilment.Poisoned => 1, TrapAilment.Asleep => 2, TrapAilment.Paralyzed => 4, _ => 0 };
-                int sound = t.TriggerSoundResourceId >= 0 && soundIndex.TryGetValue(t.TriggerSoundResourceId, out int sn) ? sn : 0xFFFF;
-                pack.Traps.Add((n, Math.Max(0, Math.Min(t.DamageMin, t.DamageMax)), Math.Max(0, Math.Max(t.DamageMin, t.DamageMax)), ail,
-                    (t.Hidden ? 1 : 0) | (t.OneShot ? 2 : 0), t.OneShot ? 0 : (int)Math.Ceiling(Math.Max(0, t.RearmSeconds) * 2), sound));
+                int soundId = t.Kind == TrapKind.Explosive && t.ExplosionSoundResourceId >= 0 ? t.ExplosionSoundResourceId : t.TriggerSoundResourceId;
+                int sound = soundId >= 0 && soundIndex.TryGetValue(soundId, out int sn) ? sn : 0xFFFF;
+                int kind = t.Kind switch { TrapKind.Explosive => 1, TrapKind.Shooting => 2, _ => 0 };
+                int reach = Math.Max(1, (int)Math.Round((t.Kind == TrapKind.Explosive ? t.RadiusTiles : t.RangeTiles) / 2.0)); // 8px tiles -> 16px cells
+                int missile = 0xFFFF;
+                if (t.Kind == TrapKind.Shooting && t.ProjectileObjectId >= 0 && _objectDatabase.Objects.FirstOrDefault(p => p.Id == t.ProjectileObjectId) is { } projectile)
+                    missile = SpriteOf(ObjectLooks.SpriteFor(projectile, new ObjectState(false, false, false, false, 1, SpriteDirection.South), _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? projectile.IconPath) is int ms and >= 0 ? ms : 0xFFFF;
+                pack.Traps.Add(new[] { n, Math.Max(0, Math.Min(t.DamageMin, t.DamageMax)), Math.Max(0, Math.Max(t.DamageMin, t.DamageMax)), ail,
+                    (t.Hidden ? 1 : 0) | (t.OneShot ? 2 : 0), t.OneShot ? 0 : (int)Math.Ceiling(Math.Max(0, t.RearmSeconds) * 2), sound,
+                    kind, reach, missile, t.Kind == TrapKind.Shooting && t.TriggeredBy != TrapTrigger.StepOn ? 1 : 0, t.Kind == TrapKind.Explosive && t.RemovedAfterExplosion ? 1 : 0 });
             }
             if (o.Type == ObjectType.LightSource && (o.Light.BurnMinutes > 0 || o.Light.BurnsWhenLit) && pack.Lights.All(l => l.Name != n))
                 pack.Lights.Add((n, Math.Clamp(o.Light.BurnMinutes, 0, 65535), o.Light.BurnsWhenLit ? Math.Max(0, Math.Min(o.Light.BurnDamageMin, o.Light.BurnDamageMax)) : 0,

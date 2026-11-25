@@ -15,3 +15,7 @@ series. The user is now testing Ultima 8 and Ultima 6 on Ubuntu and AmigaOS 4.x 
 **Why:** tells which ports are trusted and which still need the user's hardware.
 **How to apply:** don't re-verify the confirmed ports; treat U6/U8 reports from Ubuntu/AmigaOS 4 as the next port work.
 Meanwhile keep working on the Apple IIgs audit ([[iigs-audit]]). See [[platform-ports]].
+
+2026-11-24 evening: the user confirmed b6xx on AmigaOS 4.x and Ubuntu "perfect"; U6 and U8 on both get tested tomorrow
+(2026-11-25) - keep them marked done in the per-platform table. MorphOS, PS2 (Ethernet adapter), Mac Intel/PPC: no U6/U8
+report yet; Mac Apple silicon passes GitHub CI.

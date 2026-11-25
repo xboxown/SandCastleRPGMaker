@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 50;
+    public const ushort Version = 51;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -614,9 +614,11 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Tenths, bool Bag)> Weights { get; } = new();
     /// <summary>The Avatar's four looks as sprites (south, north, east, west): solo mode draws the Avatar as a member.</summary>
     public int AvatarSprite { get; set; }
-    /// <summary>Ground traps by name (Object Editor > Trap): damage min, max, ailment bit (1 poisoned, 2 asleep, 4 paralyzed), flags
-    /// (1 hidden, 2 one-shot), re-arm turns, sound ($FFFF none) - floor.s.</summary>
-    public List<(int Name, int Min, int Max, int Ailment, int Flags, int Rearm, int Sound)> Traps { get; } = new();
+    /// <summary>Traps by name (Object Editor > Trap), 12 words each - floor.s: name, damage min, max, ailment bit (1 poisoned,
+    /// 2 asleep, 4 paralyzed), flags (1 hidden, 2 one-shot), re-arm turns, sound ($FFFF none), kind (0 ground, 1 explosive,
+    /// 2 shooting), radius / range in cells, the projectile's sprite ($FFFF none), 1 fires at whoever is in its line of fire,
+    /// 1 gone after it explodes. A placed shooting trap's facing: its object's Icon (0 south, 1 north, 2 east, 3 west).</summary>
+    public List<int[]> Traps { get; } = new();
     /// <summary>Light sources that burn down or burn (Object Editor > Light Source): name, burn minutes (0 never), fire damage min, max (max 0: not a fire).</summary>
     public List<(int Name, int Minutes, int FireMin, int FireMax)> Lights { get; } = new();
     /// <summary>Ultima 6's blood under a body: the Blood sprite's frames as sprites (first, how many; $FFFF none) and its name ("blood").</summary>
@@ -892,8 +894,8 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Min(Weights.Count, 256));
         foreach (var (n, t, bag) in Weights.Take(256)) { w.Write((ushort)n); w.Write((ushort)Math.Clamp(t, 0, 65535)); w.Write((ushort)(bag ? 1 : 0)); }
         w.Write((ushort)AvatarSprite);
-        w.Write((ushort)Math.Min(Traps.Count, 64));
-        foreach (var t in Traps.Take(64)) { w.Write((ushort)t.Name); w.Write((ushort)t.Min); w.Write((ushort)t.Max); w.Write((ushort)t.Ailment); w.Write((ushort)t.Flags); w.Write((ushort)t.Rearm); w.Write((ushort)t.Sound); w.Write((ushort)0); }
+        w.Write((ushort)Math.Min(Traps.Count, 32));
+        foreach (var t in Traps.Take(32)) for (int i = 0; i < 12; i++) w.Write((ushort)(i < t.Length ? t[i] : 0));
         w.Write((ushort)Math.Min(Lights.Count, 64));
         foreach (var l in Lights.Take(64)) { w.Write((ushort)l.Name); w.Write((ushort)l.Minutes); w.Write((ushort)l.FireMin); w.Write((ushort)l.FireMax); }
         w.Write((ushort)Blood.First); w.Write((ushort)Blood.Frames); w.Write((ushort)Blood.Name);

@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 51 (b686): explosive and shooting traps (traps 12 words: kind, radius / range, projectile, line of fire,
+;   removed after) - floor.s.
 ; Version 50 (b683): doors - opening animations, double doors, doors opening by themselves, not by hand (door.s).
 ; Version 49 (b682): cold and hot zones - worn warmth and cooling, hurt from 50 (temp.s).
 ; Version 48 (b680): combat modes by name (ModeTab: a schedule's key word was +56 too); sleepers in their sleeping look, sitters
@@ -676,7 +678,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #50
+        cmp #51
         beq .known
 .bad:   sec
         rts
