@@ -70,7 +70,7 @@ namespace SandcastleRpgMaker.Engine;
 public sealed class AppleIIgsTalk
 {
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
-        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44;
+        Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45;
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -1016,6 +1016,39 @@ public sealed class AppleIIgsTalk
                     if (depth < 4 && Extra?.LevelEvent?.Invoke(cmd.Get("Name")) is { } levelCommands) Run(levelCommands, depth + 1);
                     else Unsupported.Add("Run Leveling Event (no leveling event of that name)");
                     break;
+                // What an event has a character do (acts.s): ACT who, what, a, b, c.
+                case EventCommandType.WalkToLocation or EventCommandType.WalkToFloorLocation:
+                    ActCmd(cmd, "Who", 0, Number(cmd.Get("X")), Number(cmd.Get("Y")));
+                    break;
+                case EventCommandType.TurnToFace:
+                    ActCmd(cmd, "Who", 1, cmd.Get("Towards") switch { "North" => 1, "East" => 2, "West" => 3, "South" => 0, _ => 0xFFFF }, 0);
+                    break;
+                case EventCommandType.PickupItem:
+                    ActCmd(cmd, "Who", 2, Number(cmd.Get("X")), Number(cmd.Get("Y")));
+                    break;
+                case EventCommandType.DropItem:
+                {
+                    var dropped = Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId"));
+                    if (dropped is null) { Unsupported.Add("Drop Item (a thing not in the game)"); break; }
+                    ActCmd(cmd, "Who", 3, dropped.Value.Name, 0);
+                    break;
+                }
+                case EventCommandType.OpenDoor:
+                    ActCmd(cmd, "Who", 4, Number(cmd.Get("X")), Number(cmd.Get("Y")));
+                    break;
+                case EventCommandType.Sit:
+                    ActCmd(cmd, "Who", 5, cmd.Get("X").Length > 0 ? Number(cmd.Get("X")) : 0xFFFF, Number(cmd.Get("Y")));
+                    break;
+                case EventCommandType.Stand:
+                    ActCmd(cmd, "Who", 6, 0, 0);
+                    break;
+                case EventCommandType.Attack:
+                    if (cmd.Get("Target") is not ("Player" or "Activator" or "")) { Unsupported.Add("Attack (a target but the Avatar)"); break; }
+                    ActCmd(cmd, "Attacker", 7, 0, 0);
+                    break;
+                case EventCommandType.ChangePose:
+                    ActCmd(cmd, "Who", 8, cmd.Get("Pose") == "Sleeping" ? 1 : 0, 0);
+                    break;
                 case EventCommandType.CinemaMode:
                     B(Ctl); B(1); // the player has no controls till End Cinema Mode or the event's end (cmds.s OpCtl)
                     break;
@@ -1053,6 +1086,13 @@ public sealed class AppleIIgsTalk
 
     /// <summary>The end of a reply's branch: back to its question (a pinned reply), or on after the replies.</summary>
     /// <summary>A Who as the IIgs player finds it: the Avatar ($FFFF $FFFF) or a character by map and place.</summary>
+    /// <summary>ACT (acts.s): who, what, a, b, c - 12 bytes.</summary>
+    private void ActCmd(EventCommand cmd, string whoKey, int what, int a, int b, int c = 0)
+    {
+        if (!WhoCode(cmd.Get(whoKey), out int m, out int x)) { Unsupported.Add($"{cmd.Type} (someone not on a map)"); return; }
+        B(Act); W(m); W(x); B(what); W(a & 0xFFFF); W(b & 0xFFFF); W(c & 0xFFFF);
+    }
+
     private bool WhoCode(string who, out int map, out int index)
     {
         map = index = 0xFFFF;

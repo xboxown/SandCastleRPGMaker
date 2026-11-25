@@ -1,6 +1,8 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 57 (b694): what events have characters do - walk, face, pick up, drop, open a door, sit, stand, attack,
+;   sleep (talk op 45, acts.s).
 ; Version 56 (b693): weapons drawn in the hand - the held look at the hand point (inhand.s).
 ; Version 55 (b691): damage types (weapons' types, characters' immune / half / adjust), getting back up (tough.s).
 ; Version 54 (b690): magic worn or held - defense, reach, light, strength / dexterity / intelligence (worn.s).
@@ -692,7 +694,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #56
+        cmp #57
         beq .known
 .bad:   sec
         rts
@@ -2230,6 +2232,7 @@ TryMove:
         .include "texts.s"
         .include "hud.s"
         .include "moves.s"
+        .include "acts.s"       ; (op 45 - in the first segment: OpJump's addresses are its own)
         .code2                  ; the second code segment (its own bank - asm816 makes the calls between them)
         .include "haggle.s"
         .include "music.s"
