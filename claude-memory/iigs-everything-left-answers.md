@@ -48,3 +48,5 @@ NotInUltima6. Open question to user: Move Camera away from the Avatar with Line 
 IIgs matches) - fix Windows? Next: item 14 Change Name / Change Look.
 
 2026-11-25: user said GO on question 9 (remove PaperDoll Editor windows/commands from U6 mode, keep HUD Body Slots, move prompts/save/errors to text area, HUD Editor gets more power) - do it at item 34. Also: Move Camera / Camera Follows = cutscene = full light, no darkness, no line of sight (done b715, Windows + IIgs + C).
+
+2026-11-25: the user allowed the Ubuntu build - run it EXACTLY as: PowerShell tool `wsl -u root bash /mnt/h/SandcastleRpgMaker/Player/build_linux.sh` (that string is the permission rule). Other ports: wsl -d Ubuntu (no root) via /mnt/h/_sandcastle_test_temp/build_all_c.sh from PowerShell.
