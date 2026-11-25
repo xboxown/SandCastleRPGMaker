@@ -46,7 +46,8 @@ ParseHands:
         iny
         bra .w
 .wd:    lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseFac            ; (fac.s)
 
 ; Before / after a character is drawn: A = the look drawn (its sprite), X = its owner code, CellX, CellY its place on the
 ; screen (DrawSprite's). HandFind: carry set if it holds a weapon with a held look - HwSpr, HwDX, HwDY ready, HwBack 1 if

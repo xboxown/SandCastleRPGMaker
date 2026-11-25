@@ -1065,6 +1065,7 @@ public partial class MainWindow
         };
         var talkEnv = new AppleIIgsTalk.Env
         {
+            AvatarFaction = avatarDef?.FactionId ?? -1,
             Names = formulaNames,
             StatByName = StatNamed,
             Item = (category, itemId) =>
@@ -1813,6 +1814,16 @@ public partial class MainWindow
                 }
             if (reach > 0 || def != 0 || light > 0 || str != 0 || dex != 0 || intel != 0)
                 pack.WornMagic.Add(new[] { mn, reach, def & 0xFFFF, light, str & 0xFFFF, dex & 0xFFFF, intel & 0xFFFF, 0 });
+        }
+        // Factions: the Avatar's, the bands, each faction's relationship to the Avatar's, each character's faction (fac.s).
+        if (avatarDef is not null && avatarDef.FactionId >= 0)
+        {
+            pack.AvatarFaction = avatarDef.FactionId;
+            int end = 0;
+            foreach (var band in _factionDatabase.Bands) { end += band.WidthPercent; pack.FactionBands.Add((end, band.Behavior == FactionBehavior.Attack)); }
+            foreach (var f in _factionDatabase.Factions) pack.Factions.Add((f.Id, Math.Clamp(_factionDatabase.GetRelation(f.Id, avatarDef.FactionId), 0, 100)));
+            foreach (var c in _characterDatabase.Characters.Where(c => c.FactionId >= 0 && c != avatarDef))
+                if (pack.CharFactions.All(x => x.Name != pack.NameOf(c.Name))) pack.CharFactions.Add((pack.NameOf(c.Name), c.FactionId));
         }
         // Damage types: weapons' types, characters' responses, those who get back up (tough.s).
         foreach (var o in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.DamageType != DamageType.Normal))
