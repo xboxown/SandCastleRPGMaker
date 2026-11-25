@@ -1,0 +1,130 @@
+------------------ ATTENTION EVERYTHING HERE IS DONE FOR ULTIMA 6 MODE ONLY ....DO NOT TOUCH ULTIMA 7 OR ULTIMA 8 ------------------------------------
+
+
+ULTIMA 6 APPLE IIgs MODE - EVERYTHING LEFT TO DO
+================================================
+Made 2026-11-25, after build b700. This is the whole list - nothing else is missing.
+
+It was made from four places:
+  - every Windows Ultima 6 command checked against the IIgs (85 commands are not on the IIgs yet);
+  - every trigger and condition the IIgs can't read yet;
+  - every "not on the IIgs" note written into BUILD-HISTORY.md (b618-b700);
+  - my own checklist of the Windows Ultima 6 engine (claude-memory/iigs-audit.md).
+
+HOW TO ANSWER: write DO or SKIP after each number, like  [ DO ]  or  [ SKIP ].
+"My advice" is only my advice - your choice is what counts. Anything left blank I will ask you about.
+Size: S = an hour or so, M = a build or two, L = several builds, XL = a big job (many builds).
+
+
+PART A - EVENT COMMANDS NOT ON THE IIgs YET
+-------------------------------------------
+(Today the Build report says "left out" for these and the game skips them.)
+
+ 1. [  DO   ]  Equip Item / Unequip Item - an event readies or removes a weapon / armour on someone.  M.  My advice: DO
+ 2. [  DO  ]  Play Pose - a character shows a pose (on the IIgs: its look changes for a while).  M.  My advice: DO
+ 3. [  DO    ]  Attack Object - someone breaks a thing (a door, a barrel).  M.  My advice: DO
+ 4. [  DO    ]  Play Animation - a sprite's frames played at a spot or on someone.  M.  My advice: DO
+ 5. [  DO   ]  Picklock Door - a character picks a lock (Dexterity roll).  S.  My advice: DO
+ 6. [  DO    ]  Take From Container - a character takes something out of a chest.  S.  My advice: DO
+ 7. [  DO    ]  Follow Character / stop following.  M.  My advice: DO
+ 8. [  DO    ]  Change Behavior - hostile / friendly / wander / stay for a character.  S.  My advice: DO
+ 9. [  DO    ]  Sleep On Bed - the party sleeps in a bed (hours pass, health back), and bedrolls too.  M.  My advice: DO
+10. [ DO     ]  Shake Screen and Earthquake.  S.  My advice: DO
+11. [ DO     ]  Fade Screen and Flash Screen.  M.  My advice: DO
+12. [  DO - BUT MIMIC HOW ULTIMA 6/MARTIAN DREAM/SAVAGE EMPIRE AND EVEN ULTIMA 5 DO IT NOT ULTIMA 7 STYLE BY CHANGING PALETTE COLOR. USE THE ULTIMA 6 EXULT VERSION TO KNOW HOW TO DO IT. THE LIGHT SOURCE DETERMINES HOW MANY BLACK SPACE AROUND THE CHARACTER IS REMOVED AS TERM OF STRENGTH   ]  Change Day/Night and Apply Palette Color (tint the screen).  M.  My advice: DO
+13. [   DO   ]  Move Camera and Camera Follow (the view moves without the Avatar).  M.  My advice: DO
+14. [    DO  ]  Change Name and Change Look of a character.  M.  My advice: DO
+15. [   DO   ]  Resurrect (bring a dead character back).  S.  My advice: DO
+16. [   DO   ]  Create Object, Delete Object, Delete Object Self, Move Object, Change Object Look.  M.  My advice: DO
+17. [    DO  ]  Count Items, Items Inside, Item Charges, Get Equipped Item (put a count / thing into a variable).  M.  My advice: DO
+18. [   DO   ]  Set Container Contents.  S.  My advice: DO
+19. [     DO ]  Find Objects In Area, Delete Objects In Area, Hurt In Area.  M.  My advice: DO
+20. [      DO]  Find Thing and Thing Info (the editor's "Find Thing" commands).  M.  My advice: DO
+21. [   DO - WITH SAVAGE EMPIRE WE MADE BOMB BY COMBINING CHEMICALS, GUN POWDER AND HEATED THE CLAY IN FIRE.. ]  Combine Items (two things make a third) and its trigger "By Combine".  M.  My advice: DO
+22. [   DO - BUT SPELLS IS NOT LIKE ULTIMA 7..YOU CAN OR CANNOT HAVE A SPELL BOOK...YOU SHOULD GIVE CHOICE TO TYPE WORDS TO CAST SPELL OR LIKE SAVAGE EMPIRE USE A FOKE AND THE FOKE REQUIRES INCREDIENTS TO CAST THE SPELL, ETC ETC...SO THE CONCEPT OF SPELL BOOK AND SPELL LIST LIKE ULTIMA 7 DOES NOT APPLY HERE. IT IS AN ENTIRE MECHANIC. IN THIS CASE, THE INTERFACE FOR ULTIMA 6 ONLY PLEASE DO NOT TOUCH ULTIMA 7 OR ULTIMA 8 HERE..MUST BE DIFFERENT. IT EITHER COULD BE ALL EXCLUSIVE IN COMMAND LISTS, THERE IS ENOUGH VARIATION OF COMMAND LIST AND POWERFUL ADVANCE IF STATEMENT ALLOWS PERSON TO MAKE THEIR OWN SPELL SYSTEM WITH NO LIMITATION..ONLY LIMITATION IS THE IMAGINATION OF PERSON...OR WE DO SOMETHING EVEN MORE POWER FOR ULTIMA 6 >>>AND<<< ULTIMA 5 EXCLUSIVE ONLY. REMEMBER HOW YOU HAD THE HUD EDITOR, OR LEVELING EDITOR AND YOU PREDFINED COUPLE OF TEMPLATES A PERSON CAN USE. WE SHOULD HAVE A SPELL EDITOR THAT USES EVENT COMMANDS TO MAKE THEIR OWN SPELL SYSTEM AND ONLY ONE CAN BE USED. YOU CAN HAVE ALREADY COUPLE OF DEFAULT SPELL SYSTEMS MADE FOR LEARNING PURPOSE, WE WILL USE ULTIMA 6 SPELL SYSTEM AND ADD SAVAGE EMPIRE SPELL SYSTEM HOW YO USED THREE OR FOUR DIFFERENT FOKE OR SKULLS AND YOU USE THE INGREIDENT TO CAST A CERTAIN SPELL. THAT INGREDIENT CAST THIS SPELL, THIS INGREDIENT CAST THAT SPELL WHEN YO USE THE INGRIDENT ON THE FOKE ETC...   ]  Learn Spell and Cast Spell (an event teaches or casts a spell).  M.  My advice: DO
+23. [   SKIP - REMOVE THE LANGUAGE MECHANICS ON ULTIMA 6 EXCLUSIVE ONLY PLEASE DO NOT TOUCH ULTIMA 7 OR ULTIMA 8 - IF SOMEONE WANTS A LANGUAGE SYSTEM THEN Y CAN USE COMMAND EVENTS TO DO SO. IF YOU THINK WE ARE MISSING CERTAIN COMMANDS TO DO SO OR NEED TO UPDATE IF OR ADVANCE IF STATEMENT, THEN GO AHEAD DO THESE CHANGES TO ALLOW SOMEONE TO CUSTOMIZE THEIR OWN LANGUAGES...WHERE LIMITATIONS IS IMAGINATIONS. ]  Learn Language (words in another language become readable).  M.  My advice: DO (or SKIP if you don't use languages)
+24. [    DO  ]  Reset Stat.  S.  My advice: DO
+25. [    DO  ]  Stop Sound.  S.  My advice: DO
+26. [   DO - BUT IT MIMICS SAVAGE EMPIRE/ULTIMA 5/ULTIMA 6/MARTIAN DREAM NOT LIKE ULTIMA 7. SO UNDER SETTINGS AND OR MECHANCS IF IT IS MIMICING ULTIMA 7 REMOVE IT. AND THE DARKEST IS YO UCAN ONLY SEE ONE BLOCK AHEAD OF YOU ON SIDES AND EVERYTHING IS DARK..AND THE LIGHT SOURCE JUST CIRCLES HOW MUCH OF THE DARK IS REMOVED AND THE MORE POWERFUL THE LIGHT THE MORE BIGGER THE CIRCLE IS   ]  Light Source command (light / put out a light by event).  S.  My advice: DO
+27. [    DO - ANY ERROR MESSAGE ANY ISSUE OR PROMPTING SAVE COMPLETE ETC..NEED TO BE DISPLAYED IN THE GAME TEXT AREA  ]  Allow Saving, Open Save/Load Screen, Return To Title.  M.  My advice: DO
+28. [  DO - BUT THE BOOK SYSTEM IS NOTHING MORE THAN TEXT APPEARING THE TEXT AREA WHERE A PERSON PRESS A KEY TO CONTINUE READING. ADD ALSO ABILITY IN THE TEXT A CODE [COLOR=RED][/COLOR] AS AN EXAMPLE IF SOMEONE WANT TO CHANGE TEXT COLOR OF THE CONTENT IN THE BOOK    ]  Book commands - Change Self Book Content, Change External Book Content, Change Book Settings.  M.  My advice: DO
+29. [   ANY DEBUG NEEDED TO BE PROMOTED WILL MAKE (IF NOT EXISTING) LOG.TXT DOCUMENT INSIDE APPLE //GS (SYSTEM 6.O.X) ITSELF. IT WILL DISPLAY AN ERROR (LOG ERROR GENERATED) AND I CLOSE THE GAME AND READ WHATEVER THE ERROR IS.  ]  Debug Log, Pause Here, Show Error (testing helpers - on the IIgs they would show a line of text).  S.  My advice: SKIP (Windows only is enough)
+30. [   DO   ]  U6 Ask Key / Set Key / Get Key Name / Reset Keys (changing the game's keys in play).  M.  My advice: DO
+31. [    DO  ]  U6 Change HUD Frame and U6 Change Portrait.  M.  My advice: DO
+32. [  DO    ]  U6 Conversation Style (how talk shows: portrait, colours, the box).  M.  My advice: DO
+33. [    DO  ]  U6 scene commands = character creation and story pictures: Scene Begin, Scene Picture, Type Text,
+               Pick Picture, Set Gender, Distribute Points, Wait Key, Remove, Scene End.  L.  My advice: DO
+34. [   SKIP - ULTIMA 6 MDOE DOES NOT HAVE ANY PAPERDOLL AT ALL. FOR ULTIMA 6 MODE ONLY...PLEASE DO NOT TOUCH ULTIMA 7 OR ULTIMA 8 AGAIN...PLEASE DOOOO NOT TOUCH ULTIMA 7 AND ULTIMA 8 LEAVE THEM ALONE...THIS MODIFICATION IS DONE ON ULTIMA 6 MODE ONLY REMOVE PAPERDOLL ANY LINK TO PAPERDOLL IN CHARACTER EDITOR..O RANY RELATION TO PAPERDOLL IN COMMANDS OR EVENTS OR ANY INDICATION OF PAPERDOLL EXISTANCE....REPLACE PAPERDOLL FOR SOMETHING THAT IS ULTIMA 6/MARTIAN DREAM/SAVAGE EMPIRE RELATED OR NEEDED...AND SO FAR THERE IS NOTHING TO REPLACE BECAUSE WE HAVE EVERYTHING WE NEED.   ]  Paperdoll commands - Open / Close Paperdoll, Show/Hide Part, Set Part Look / Text / Value, Get Part Value,
+               Fill List From Array, Get Picked Choice, Enable Part, Move Part, Put / Take Item Slot, Move Paperdoll,
+               Focus Text Box, Paperdoll. (Paperdolls were left out of the IIgs at the start as too big for it.)  XL.
+               My advice: SKIP (or ask me for a small IIgs version later)
+35. [  SKIP - THERE IS NO VIDEO MODE BUT THERE IS PLAY ANIMATION MODE AS VIDEO MODE...CAN SOMETHING LIKE THIS HAPPEN..REPLACE PAPERDOLL MODE AND REPLACE WITH IT VIDEO EDITING MODE FOR APPLE//GS WHERE YOU CAN ADD BY FRAME OR DELETE FRAME BY FRAME TO CUSTOMIZE YOUR OWN VIDEO AND IT PLAYS IT AS ANIMATION..APPLE //GS IS GOOD AT PLAYING ANIMATIONS ..I HAVE SEEN DEMOS OF VIDEO EDITING LIKE PROGRAMS FOR APPL E//GS MADE IN 1980'S THAT PLAYED AN ENTIRE CARTOON. CAN SOMEONE THING LIKE THAT HAPPEN? IF SO, YOU CAN LIMIT THE NUMBER OF FRAMES YOU THINK CAN FIT IN THE HARD DRIVE OR HOW MUCH THE HARDWARE CAN TAKE WE CAN HAVE SOMETHING LIKE THAT. WE CAN USE IT PLAY CUTSCENE, INTRODUCTION CUTSCENE OR ENDING CUTSCENE ETC. IN TERMS OF AUDIO IT IS LIMITED TO THAT 64 KB....AND WE CAN HAVE IT 64KB LIMIT PER FRAME AND ONLY SOUND FORMAT IT ACCEPTS IS SND)   ]  Play Video (the IIgs plays no videos).  XL.  My advice: SKIP
+
+
+PART B - COMMANDS THAT ARE ON THE IIgs BUT DO LESS THAN ON WINDOWS
+------------------------------------------------------------------
+36. [   DO   ]  Real path finding for walking (Walk To Location, pets, schedules): today they go straight, or round one
+               side, and stop if blocked three times.  L.  My advice: DO
+37. [   DO   ]  Attack: a character attacks someone other than the Avatar (character against character).  L.  My advice: DO
+38. [    DO  ]  Give Item to someone other than the Avatar, and Teleport someone other than the Avatar.  M.  My advice: DO
+39. [  DO    ]  Faction relationships between two factions that aren't the Avatar's (their people fight each other) -
+               needs 37 first.  M.  My advice: DO
+40. [   DO   ]  Pets: the call's sound and words over the pet, a pet attacking an object, the sniffing pose.  S.  My advice: DO
+41. [    DO  ]  Liquids: pouring from one container into another, the milking words, dousing a lit fuse.  S.  My advice: DO
+42. [    DO  ]  Characters' Always pages run again whenever their conditions turn true (today: only when the map is
+               entered).  M.  My advice: DO
+43. [   SKIP - THERE IS NO PAPERDOLL, THERE IS NO WINDOW TO POPUP -- ANYTHING RELATED TO PAPERDOLLS ARE REMOVED IN ULTIMA 6 MODE ONLLY AND ONLY ULTIMA 6 MODES   ]  Map picture: its paperdoll frame around it and its open sound.  S.  My advice: DO (sound) - frame: your choice
+44. [   DO - BUT WE ARE INSIDE THE WORLD OF ULTIMA 6/MARTIAN DREAM/SAVAGE EMPIRE MECHANICS NOT ULTIMA 7 OR ULTIMA 8...REMEMBER ULTIMA 6 IS CLOSE TO ULTIMA 5..IT IS A BRIDGE BETWEEN ULTIMA 5 AND ULTIMA 7   ]  Money: show the other currencies somewhere (Look / inventory), and shops that take another currency.  M.  My advice: DO
+45. [   DO - DON'T FORGET THE COLORS I TOLD YOU EARLIER WHEN USING FORMULA   ]  Words with a {text formula}, Case with texts, Set Variable to a formula with texts.  M.  My advice: DO
+46. [    USUALLY THERE IS NO WEATHER IN ULTIMA 6 BUT THIS IS THE ONLY ONE THAT I ALLOWED IT TO MOVE HERE...I FIND IT COOL AND ADD RICHNESS...YES DO IT.   ]  Change Weather with a formula for its strength (today: a plain number only).  S.  My advice: DO
+47. [    SKIP FOR LEVITATE ...and as fo rlanguage users can customize this and add it themselves..only ADD CUSTOM but skip levitate and translate  ]  Spell effects Levitate, Translate and Custom (today they do nothing on the IIgs).  M.  My advice: DO
+48. [  DO    ]  Get Game Data: any field the IIgs doesn't give yet (I will check every one against Windows).  S.  My advice: DO
+
+
+PART C - TRIGGERS AND CONDITIONS THE IIgs CAN'T READ YET
+--------------------------------------------------------
+49. [ DO     ]  Map event triggers not on the IIgs: By Equip, By Unequip (= On Equip / On Unequip), By Trade Item,
+               By After Read Item, By Destroy Item, By Combine Item, By Combine Part, By Hit Target, and
+               "By Use Item" with a certain item used on it.  M.  My advice: DO
+50. [   DO   ]  Page conditions not on the IIgs: stat conditions, "event trigger completed", complex conditions,
+               distance, "joined party", and text-variable conditions.  M.  My advice: DO
+51. [   DO   ]  Game conditions not on the IIgs (29): Equipped, Unequipped, Equip / Unequip action, Gender, Age,
+               Destroyed, Stolen, Used, Explosive ignited, Sees character, Character killed, Sound played / stopped,
+               Picklocked, Lever on/off, Door open, Unlocked by key, Magically unlocked, Light burned out / put out /
+               lit, Sold to, Traded to, Traded within, Event executed, Event page executed, Event-name page executed,
+               Last command succeeded.  L.  My advice: DO
+
+
+PART D - GAME FEATURES STILL MISSING
+------------------------------------
+52. [     DO ]  Joining rules: slimes that multiply or fuse by your rules, and slime trails.  M.  My advice: DO
+53. [    DO  ]  Allow / Forbid Controls for "Combat mode" and "Keys" (the rest already work).  S.  My advice: DO
+54. [     SKIP - THERE IS NO ANIMATION FOR COMBAT. THERE IS ONLY THAT FLASHING SPARK APPEAR WHEN GETTING HIT ]  Swing frames: the weapon / arm swing drawn during a blow.  M.  My advice: DO
+55. [   DO   ]  Windows, shutters and breakable glass.  M.  My advice: DO
+56. [   IN ULTIMA 6 THERE IS NO SUCH THING AS PUT WINDOWS ON TOP OF WALL...ONE SPRITE IS WALL, ONE SPRITE HAVE WINDOW LOOK INSIDE A WALL AND THAT IS DOOR..SIMILIAR TO ULTIMA 5 STYLE...I THINK FOR ULTIMA 6 ONLY AND ONLY FOR ULTIMA 6 PLEASE DO NOT TOUCH ULTIMA 7 OR ULTIMA 8 MODE AT ALL LEAVE THEM ALONE, JUST ULTIMA 6 MODE FOR BOTH WINDOWS VERSION THE ULTIMA 6 MODE AND APPLE //GS...REMOVE WALL DESIGNER AND KEEP WALL KIT THAT WE DID EARLIER. WALL KIT IS ALL WE NEED FOR ULTIMA 6 MODE.  ]  Wall Designer sets (a window or door set into a wall as one piece).  M.  My advice: DO
+57. [   SKIP   ]  Map overlay (the overview map of the area).  M.  My advice: DO
+58. [   DO - THERE IS ONLY ONE FONT STYLE YOU CANNOT SELECT MULTIPLE FONTS AND THIS IS USED FOR EVERYTHING IN THE GAME.....THIS APPLIES ONLY FOR ULTIMA 6 ONLY PLEASE DO NOT TOUCH ULTIMA 7 AND ULTIMA 8 AT ALL....LEAVE ULTIMA 7 AND ULTIMA 8 AND FOR ULTIMA 6 IN WINDOWS AND APPLE //GS...HAVE ONE FONT SPRITE ADDED..CANNOT ADD MORE, RENAME OR DELETE AND THIS IS THE FONT USED FOR THE ENTIRE SYSTEM. ]  Fonts (the project's own font for the game's words).  M.  My advice: DO
+59. [    DO - PLEASE FIX THIS FOR ULTIMA 6 IN WINDOWS MODE AND APPLE //GS THERE IS NO SUCH THING AS SPRITE UP, DOWN, LEFT, UP RIGHT, DOWN RIGHT, DOWN LEFT AND DOWN RIGHT LIKE ULTIMA 8 FOR ULTIMA 6 MODE. JUST THE CROSS AND THE PLUS ONLY..SO UPDATE THIS FIX FOR ULTIMA 6 ENGINE PERIOD. AGAIN, JUST LIKE ULTIMA 5 IT DOES NOT ACT LIKE ULTIMA 8. I ALWAYS USED KEYBOARD TO PLAY AND NAVIGATE. AND IF THEY DID PUT SUCH FEATURE I WANT IT REMOVED HERE. ]  The mouse pointer's own sprite.  S.  My advice: DO
+60. [    DO - YOU CAN EAT FOOD MANUALLY IF YOU LIKE BUT FOOD IS CONSUMED WHEN PARTY IS HURT AND RESTING HEALS AND DEPENDING ON THE DAMAGE THE CHARACTER HAVE, HOW MUCH TIME IT NEEDS TO SLEEP AND WHAT FOOD LEVELS THEY NEED TO EAT TO FULLY HEAL UP..IT DEDUCTS FOODS FROM THE ENTIRE PARTY. IF YOU ARE ALONE, OR HAVE OTHER JOINS YOU ARE IN A PARTY MODE NOW..AND WHO HAVE FOOD IN THE PARTY GETS TO USE IT TO HEAL PARTY WHEN SLEEPING  ]  Food: choosing who eats (today the Avatar eats).  S.  My advice: DO
+61. [    DO  ]  Things handed between party members' packs (check it is fully done - b634 said "not yet").  S.  My advice: DO (check)
+62. [      SKIP - THERE IS NO STEREOE WE ARE SEAKING LOWEST QUALITY AUDIO NOT HIGHEST QUAILTY. LOWER BETTER.]  Stereo: sounds left / right by where they are (the IIgs plays them in one channel today).  M.  My advice: SKIP
+63. [   SKIP - ULTIMA 6 HAVE NO STAIR CASE AT ALL.   ]  Upper floors and stairs tried with a real project (made by the editor, never tried with yours).  S.  My advice: DO
+
+----------------------------------------------------------------------------------------------
+SOMETHING NOT ADDED HERE.
+IN UTLIMA 6 ENGINE OR SAVAGE EMPIRE OR MARTIAN DREAM...WHEN ENTERING CAVE OR GETTING INTO CAVE ENTRANCE IT IS PSUEDO ULTIMA 5/ULTIMA 7 MODE...IT ACTS LIKE ULTIMA 7 BUT NOT REALLY LIKE ULTIMA 7...IT PUSHES LIKE ULTIMA 5 WITH ULTIMA 7 TOUCH...SO IT IS IMPOSSIBLE TO EXPLAIN IT..BEST THING TO DO ....
+
+PLEASE LOOK AT Nuvie AND DIG INTO THE HEART OF THIS ENGINE AND SEE HOW IT IS DONE...AS IT DOES IT FOR MARTIAN DREAM AS WELL, AND INVESTIGATE HOW MARTIAN DREAM, SAVAGE EMPIRE OR ULTIMA 6 DOES IT WHEN ENTERING CAVE AND IMPLEMENT THIS AS EITHER A COMMAND OR ZONE OR MODE OR HOW YOU WANT TO DO IT..IN THE END I WANT THAT MECHANICS BUILD FOR BOTH WINDOWS VERSION AND APPLE //GS OF ULTIMA 6 MODE ONLY
+
+
+PART E - TESTING AND FINISHING
+------------------------------
+64. [      ]  KEGS: run the IIgs game for real - booting under GS/OS, the accelerator check, the 3.5 floppies and the
+               hard disk image, sound, music, mouse, keyboard, speed - and fix what turns up.  L.  My advice: DO
+65. [      ]  Build your own Ultima 6 demo project for the IIgs and play it through in KEGS.  M.  My advice: DO
+66. [      ]  Memory: the data area is 55 KB of 64. Make more room if the items above need it (as b692 did).  M.  My advice: DO (when needed)
+67. [      ]  Apple IIgs Check: make sure its report lists everything still left out, in plain words.  S.  My advice: DO
+68. [      ]  CommandList.docx: an Apple IIgs page saying which commands work there and which don't.  S.  My advice: DO
+
+
+When you have marked them, tell me "done" and I will do only the DO ones, in this order, and skip the SKIP ones.
