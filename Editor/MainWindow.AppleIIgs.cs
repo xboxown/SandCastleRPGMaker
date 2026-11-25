@@ -1082,6 +1082,8 @@ public partial class MainWindow
         var talkEnv = new AppleIIgsTalk.Env
         {
             AvatarFaction = avatarDef?.FactionId ?? -1,
+            NameOf = n => pack.NameOf(n),
+            OwnerOf = id => _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { BelongToId: >= 0 } owned ? owned.BelongToId.ToString() : null,
             Exchange = (fromId, toId) =>
             {
                 if (!purseOf.TryGetValue(fromId, out int pf) || !purseOf.TryGetValue(toId, out int pt)) return null;

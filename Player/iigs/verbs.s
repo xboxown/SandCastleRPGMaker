@@ -325,7 +325,10 @@ PickCell:
 .mv1:   cmp #VERB_CAST
         bne .mv2
         jmp CastAt              ; (magic.s)
-.mv2:   cmp #VERB_MOVE
+.mv2:   cmp #VERB_ORDER
+        bne .mv3
+        jmp OrderPicked         ; Order On A Target (pets.s)
+.mv3:   cmp #VERB_MOVE
         bne .what
         lda MoveIdx
         cmp #$FFFF

@@ -80,6 +80,10 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? Picture;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
+        /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
+        public Func<string, int>? NameOf;
+        /// <summary>The character an object belongs to (its Belongs To), as a Who; null: no one.</summary>
+        public Func<int, string?>? OwnerOf;
         /// <summary>Exchange Currency (money.s): (from currency id, to currency id) -> the purses and the rate (8.8, the cut taken off); null: no such money.</summary>
         public Func<int, int, (int From, int To, int Rate)?>? Exchange;
         /// <summary>The Avatar's faction (Change Faction Relationship towards it; -1 none).</summary>
@@ -1053,6 +1057,31 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.ChangePose:
                     ActCmd(cmd, "Who", 8, cmd.Get("Pose") == "Sleeping" ? 1 : 0, 0);
                     break;
+                // Pets (pets.s).
+                case EventCommandType.CallCharacter:
+                    ActCmd(cmd, "Who", 9, cmd.Get("Follows") != "False" ? 1 : 0, 0);
+                    break;
+                case EventCommandType.OrderOnTarget:
+                {
+                    string prompt = cmd.Get("Prompt").Trim();
+                    if (prompt.Length == 0) prompt = $"{cmd.Get("Order")}: which one?";
+                    ActCmd(cmd, "Who", 10, cmd.Get("Order") switch { "Fetch" => 1, "Go to" => 2, _ => 0 }, 0, Extra?.NameOf?.Invoke(prompt) ?? 0xFFFF);
+                    break;
+                }
+                case EventCommandType.SniffAndLead:
+                {
+                    string find = cmd.Get("Find");
+                    string? scentWho = find == "A character (below)" ? cmd.Get("Other") : find == "The owner of the object (below)" ? Extra?.OwnerOf?.Invoke(Number(cmd.Get("ItemId"))) : null;
+                    if (scentWho is not null)
+                    {
+                        if (!WhoCode(scentWho, out int sm, out int sx) || sm == 0xFFFF) { Unsupported.Add("Sniff And Lead (someone not on a map)"); break; }
+                        ActCmd(cmd, "Who", 11, sm, sx);
+                    }
+                    else if (find is "A character (below)" or "The owner of the object (below)") Unsupported.Add("Sniff And Lead (no one to find)");
+                    else if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is { } scent) ActCmd(cmd, "Who", 12, scent.Name, 0);
+                    else Unsupported.Add("Sniff And Lead (a thing not in the game)");
+                    break;
+                }
                 // Exchange Currency (money.s): XCHG from, to, how many ($FFFF all), rate.
                 case EventCommandType.ExchangeCurrency:
                 {

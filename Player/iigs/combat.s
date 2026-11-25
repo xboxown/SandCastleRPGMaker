@@ -387,7 +387,13 @@ WorldTurn:
         bcc .n
         inc Moved
         bra .n
-.nsch:  cmp #1
+.nsch:  cmp #PET_FOLLOW
+        bne .nfo
+        jsr PetFollow           ; a pet: after the Avatar (pets.s)
+        bcc .n
+        inc Moved
+        bra .n
+.nfo:   cmp #1
         bne .n
         ldy #C_HOMEX
         lda [CP],y

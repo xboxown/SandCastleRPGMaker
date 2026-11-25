@@ -15,6 +15,7 @@ OpAct:
         iny
         lda [TalkPtr],y
         sta AcA
+        sta AcA0                ; (kept: AcBeside changes AcA - pets.s)
         iny
         iny
         lda [TalkPtr],y
@@ -33,7 +34,7 @@ OpAct:
         lda #12
         jmp Next
 
-AcJump:   .dw AcWalk,AcFace,AcPickup,AcDrop,AcDoor,AcSit,AcStand,AcAttack,AcSleep
+AcJump:   .dw AcWalk,AcFace,AcPickup,AcDrop,AcDoor,AcSit,AcStand,AcAttack,AcSleep,AcCall,AcOrder,AcSniffChr,AcSniffObj
 
 ; ---- walking ----
 
