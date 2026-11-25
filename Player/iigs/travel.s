@@ -37,7 +37,11 @@ TravelUse:
         bne .k
         jmp UseMap
 .k:     cmp #SP_KEYRING
+        beq .kr
+        cmp #SP_LIQUID          ; a bucket, a bottle (liquid.s)
         bne .no
+        jmp LiquidPicked
+.kr:
         lda ItemPtr             ; as a key: "On what?" (keys.s)
         sta GridRec
         lda ItemPtr+2

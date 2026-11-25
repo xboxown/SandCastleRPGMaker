@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 62 (b700): liquid containers - special 11, liquids / sources / givers (liquid.s); words 104-112.
 ; Version 61 (b699): travel things - sextant, clock, map, keychain (specials 7-10, travel.s); words 95-103.
 ; Version 60 (b698): pets - Call Character, Order On A Target, Sniff And Lead (ACT 9-12, pets.s); behaviour 3 follows.
 ; Version 59 (b697): currencies - a purse for each, Exchange Currency (talk op 47, money.s).
@@ -699,7 +700,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #61
+        cmp #62
         beq .known
 .bad:   sec
         rts
@@ -2244,6 +2245,7 @@ TryMove:
         .code2                  ; the second code segment (its own bank - asm816 makes the calls between them)
         .include "haggle.s"
         .include "travel.s"
+        .include "liquid.s"
         .include "music.s"
         .include "weather.s"
         .include "vehicles.s"

@@ -32,7 +32,8 @@ ParseMoney:
         cpy #14
         bcc .p
         lda #14
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseLiquids        ; (liquid.s)
 
 ; A = a money thing's name: X = its purse x 2 (0: the main currency, the Avatar's gold).
 PurseOf:

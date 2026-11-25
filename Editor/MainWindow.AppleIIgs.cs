@@ -659,7 +659,7 @@ public partial class MainWindow
         int? SpecialOf(WorldObject def)
         {
             if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
-                or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain)) return null;
+                or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer)) return null;
             if (!specialOf.TryGetValue(def.Id, out int i)) { if (specialDefs.Count >= 256) return null; specialOf[def.Id] = i = specialDefs.Count; specialDefs.Add(def); }
             if (def.Type == ObjectType.UseableObject) ItemSpell(def, def.Useable.Effects, def.Useable.AsksForTarget);
             if (def.Type == ObjectType.Potion) ItemSpell(def, def.Potion.Effects, true);
@@ -686,6 +686,21 @@ public partial class MainWindow
             pack.Spells.Add(spell);
             return pack.Spells.Count - 1;
         }
+        // Liquids (liquid.s): the Food objects set to Liquid that containers hold, sources give or characters give - their spells made now too.
+        var liquidOf = new Dictionary<int, int>();
+        int LiquidIndex(int foodId)
+        {
+            if (liquidOf.TryGetValue(foodId, out int li)) return li;
+            if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == foodId && o.Type == ObjectType.Food) is not { } food || pack.Liquids.Count >= 16) return -1;
+            int spell = food.Food.Effects.Any(e => IIgsEffect(e.Kind)) ? ItemSpell(food, food.Food.Effects, false) : 0xFFFF;
+            pack.Liquids.Add((pack.NameOf(food.Name), (food.Food.PutsOutFires ? 1 : 0) | (food.Food.Undrinkable ? 2 : 0), spell));
+            return liquidOf[foodId] = pack.Liquids.Count - 1;
+        }
+        foreach (var lc in _objectDatabase.Objects.Where(o => o.Type == ObjectType.LiquidContainer)) foreach (var l in lc.Liquid.Liquids) LiquidIndex(l.FoodId);
+        foreach (var so in _objectDatabase.Objects.Where(o => o.LiquidSourceId >= 0))
+            if (LiquidIndex(so.LiquidSourceId) is int sl and >= 0 && pack.LiquidSources.All(x => x.Name != pack.NameOf(so.Name))) pack.LiquidSources.Add((pack.NameOf(so.Name), sl));
+        foreach (var gc in _characterDatabase.Characters.Where(c => c.GivesLiquidFoodId >= 0))
+            if (LiquidIndex(gc.GivesLiquidFoodId) is int gl and >= 0 && pack.LiquidGivers.All(x => x.Name != pack.NameOf(gc.Name))) pack.LiquidGivers.Add((pack.NameOf(gc.Name), gl));
         // Wands, scrolls and potions: known (their spells made) before the spells are finished.
         foreach (var od in _objectDatabase.Objects.Where(o => o.Type is ObjectType.UseableObject or ObjectType.Potion)) SpecialOf(od);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).
@@ -1663,6 +1678,27 @@ public partial class MainWindow
             var grip = held.GripX >= 0 && held.GripY >= 0 ? FitPoint(held.FilePath, held.GripX, held.GripY) : (0, -gh / 2);
             pack.HeldWeapons.Add((wn, heldSprite, heldSprite + 1, grip.Item1, grip.Item2));
         }
+        // Liquid containers' looks, empty and full of each liquid (liquid.s tells what one holds by its look: one that would be
+        // the same as another gets a copy of its own).
+        var liquidLooks = new Dictionary<int, (int Sprite, int Icon, List<(int Liquid, int Sprite, int Icon)> Full)>();
+        foreach (var lc in _objectDatabase.Objects.Where(o => o.Type == ObjectType.LiquidContainer))
+        {
+            string? Look(int liquidId) => ObjectLooks.SpriteFor(lc, ObjectLooks.DefaultState(lc) with { LiquidId = liquidId }, _spriteDatabase)?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(lc.IconPath) ? null : lc.IconPath);
+            string? emptyFile = Look(-1);
+            int es = SpriteOf(emptyFile), ei = IconOf(emptyFile);
+            if (es < 0) continue;
+            var used = new HashSet<int> { es };
+            var full = new List<(int, int, int)>();
+            foreach (var l in lc.Liquid.Liquids.Take(8))
+            {
+                if (!liquidOf.TryGetValue(l.FoodId, out int li)) continue;
+                string? ff = Look(l.FoodId);
+                int fs = SpriteOf(ff), fi = IconOf(ff);
+                if (fs < 0 || !used.Add(fs)) { spritePixels.Add(spritePixels[fs < 0 ? es : fs]); fs = spritePixels.Count - 1; used.Add(fs); }
+                full.Add((li, fs, fi == 0xFFFF ? ei : fi));
+            }
+            liquidLooks[lc.Id] = (es, ei, full);
+        }
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
         // Plants', tools', stations' and instruments' records (Engine/AppleIIgs.cs Specials); carried ones get their code too.
         {
@@ -1756,6 +1792,17 @@ public partial class MainWindow
                     case ObjectType.Keychain:
                         b.Add(10);
                         break;
+                    case ObjectType.LiquidContainer:
+                    {
+                        // liquid.s: empty sprite, icon, pour and fill sounds, used up, the spill, the liquids it holds (liquid, sprite, icon).
+                        var looks = liquidLooks.TryGetValue(d.Id, out var lk) ? lk : (0, 0xFFFF, new List<(int Liquid, int Sprite, int Icon)>());
+                        b.Add(11); W(b, looks.Item1); W(b, looks.Item2);
+                        W(b, Snd(d.Liquid.PourSoundResourceId)); W(b, Snd(d.Liquid.FillSoundResourceId)); b.Add((byte)(d.Liquid.UsedUpWhenPouredOut ? 1 : 0));
+                        ItemDef(b, d.Liquid.SpillObjectId);
+                        b.Add((byte)looks.Item3.Count);
+                        foreach (var (fl, fs, fi) in looks.Item3) { b.Add((byte)fl); W(b, fs); W(b, fi); }
+                        break;
+                    }
                     case ObjectType.MusicalInstrument:
                     {
                         b.Add(4);
@@ -1770,9 +1817,18 @@ public partial class MainWindow
             // Carried (or in things) tools and instruments: their code by their name.
             var byName = new Dictionary<int, int>();
             foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
-                         or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
+                         or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
             for (int oi = 0; oi < objects.Count; oi++)
                 if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
+            // Liquid containers start empty, or full of what they start full of (their look says which).
+            foreach (var lcd in specialDefs.Where(d => d.Type == ObjectType.LiquidContainer && liquidLooks.ContainsKey(d.Id)))
+            {
+                var lk = liquidLooks[lcd.Id];
+                int code = 0xD000 | specialOf[lcd.Id];
+                var startLook = liquidOf.TryGetValue(lcd.Liquid.StartsFullOfId, out int sli) ? lk.Full.FirstOrDefault(f => f.Liquid == sli) : default;
+                for (int oi = 0; oi < objects.Count; oi++)
+                    if (objects[oi].Other == code) objects[oi] = objects[oi] with { Sprite = startLook.Sprite > 0 ? startLook.Sprite : lk.Sprite, Icon = startLook.Sprite > 0 ? startLook.Icon : lk.Icon };
+            }
         }
         foreach (var (lw, li, ld, lat, lother, lon) in pendingLevers)
         {

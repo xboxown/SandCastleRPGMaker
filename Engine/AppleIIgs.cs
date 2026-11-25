@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 61;
+    public const ushort Version = 62;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -495,7 +495,8 @@ public sealed class AppleIIgsGamePack
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
         "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
         "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "{1} is cold.", "{1} is freezing!", "{1} is hot.", "{1} is burning up!",
-        "{0} can't see the sky from in here.", "{0} casts no shadow.", "{0} North,", "{0} South,", "{0} West.", "{0} East.", "{0} keys added to the keyring.", "No keys to add.", "It's not on the keyring.", "Avatar" };
+        "{0} can't see the sky from in here.", "{0} casts no shadow.", "{0} North,", "{0} South,", "{0} West.", "{0} East.", "{0} keys added to the keyring.", "No keys to add.", "It's not on the keyring.",
+        "The {0} is empty.", "The {0} is full.", "Ahhh, how refreshing.", "No, thank thee.", "Hey, stop that!", "You fill {0}.", "You douse {0}.", "You empty {0}.", "{0} can't hold that.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
@@ -503,7 +504,8 @@ public sealed class AppleIIgsGamePack
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
         "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
         "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut", "TempCold", "TempFreezing", "TempHot", "TempBurning",
-        "SkyHidden", "NoShadow", "North", "South", "West", "East", "KeysAdded", "NoKeys", "NotOnRing" };
+        "SkyHidden", "NoShadow", "North", "South", "West", "East", "KeysAdded", "NoKeys", "NotOnRing",
+        "LiquidEmpty", "LiquidFull", "Refreshing", "NoThanks", "StopThat", "YouFill", "YouDouse", "YouEmpty", "CantHold" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -662,6 +664,10 @@ public sealed class AppleIIgsGamePack
     /// <summary>Currencies (money.s): each Money object's name and its purse (0 the main currency - the Avatar's gold), purses 1-7 at the start.</summary>
     public List<(int Name, int Purse)> MoneyKinds { get; } = new();
     public int[] StartPurses { get; } = new int[8];
+    /// <summary>Liquids (liquid.s): each liquid's name, flags (1 puts out fires, 2 can't be drunk), spell; sources (object name, liquid); givers (character name, liquid).</summary>
+    public List<(int Name, int Flags, int Spell)> Liquids { get; } = new();
+    public List<(int Name, int Liquid)> LiquidSources { get; } = new();
+    public List<(int Name, int Liquid)> LiquidGivers { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -968,6 +974,12 @@ public sealed class AppleIIgsGamePack
         w.Write((ushort)Math.Min(MoneyKinds.Count, 16));
         foreach (var (mn, mp) in MoneyKinds.Take(16)) { w.Write((ushort)mn); w.Write((ushort)mp); }
         for (int p = 1; p < 8; p++) w.Write((ushort)Math.Clamp(StartPurses[p], 0, 65535));
+        w.Write((ushort)Math.Min(Liquids.Count, 16));
+        foreach (var (ln, lf, ls) in Liquids.Take(16)) { w.Write((ushort)ln); w.Write((ushort)lf); w.Write((ushort)ls); }
+        w.Write((ushort)Math.Min(LiquidSources.Count, 16));
+        foreach (var (sn, sl) in LiquidSources.Take(16)) { w.Write((ushort)sn); w.Write((ushort)sl); }
+        w.Write((ushort)Math.Min(LiquidGivers.Count, 8));
+        foreach (var (gn, gl) in LiquidGivers.Take(8)) { w.Write((ushort)gn); w.Write((ushort)gl); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);
