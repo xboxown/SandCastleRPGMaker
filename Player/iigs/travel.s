@@ -39,8 +39,11 @@ TravelUse:
 .k:     cmp #SP_KEYRING
         beq .kr
         cmp #SP_LIQUID          ; a bucket, a bottle (liquid.s)
-        bne .no
+        bne .bd
         jmp LiquidPicked
+.bd:    cmp #SP_BED             ; a bed, a bedroll (bed.s)
+        bne .no
+        jmp BedUse
 .kr:
         lda ItemPtr             ; as a key: "On what?" (keys.s)
         sta GridRec

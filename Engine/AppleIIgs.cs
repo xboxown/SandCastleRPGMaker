@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 63;
+    public const ushort Version = 64;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -497,7 +497,8 @@ public sealed class AppleIIgsGamePack
         "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "{1} is cold.", "{1} is freezing!", "{1} is hot.", "{1} is burning up!",
         "{0} can't see the sky from in here.", "{0} casts no shadow.", "{0} North,", "{0} South,", "{0} West.", "{0} East.", "{0} keys added to the keyring.", "No keys to add.", "It's not on the keyring.",
         "The {0} is empty.", "The {0} is full.", "Ahhh, how refreshing.", "No, thank thee.", "Hey, stop that!", "You fill {0}.", "You douse {0}.", "You empty {0}.", "{0} can't hold that.",
-        "No effect.", "No damage.", "{0} breaks apart.", "Avatar" };
+        "No effect.", "No damage.", "{0} breaks apart.",
+        "I should put it down first.", "We cannot rest with foes about!", "{0}", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
@@ -507,7 +508,8 @@ public sealed class AppleIIgsGamePack
         "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut", "TempCold", "TempFreezing", "TempHot", "TempBurning",
         "SkyHidden", "NoShadow", "North", "South", "West", "East", "KeysAdded", "NoKeys", "NotOnRing",
         "LiquidEmpty", "LiquidFull", "Refreshing", "NoThanks", "StopThat", "YouFill", "YouDouse", "YouEmpty", "CantHold",
-        "NoEffect", "NoDamage", "BreaksApart" };
+        "NoEffect", "NoDamage", "BreaksApart",
+        "PutItDown", "FoesAbout", "Echo" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon

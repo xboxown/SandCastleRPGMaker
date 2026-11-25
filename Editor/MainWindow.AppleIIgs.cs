@@ -659,7 +659,7 @@ public partial class MainWindow
         int? SpecialOf(WorldObject def)
         {
             if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
-                or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer)) return null;
+                or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer or ObjectType.Bed or ObjectType.Bedroll)) return null;
             if (!specialOf.TryGetValue(def.Id, out int i)) { if (specialDefs.Count >= 256) return null; specialOf[def.Id] = i = specialDefs.Count; specialDefs.Add(def); }
             if (def.Type == ObjectType.UseableObject) ItemSpell(def, def.Useable.Effects, def.Useable.AsksForTarget);
             if (def.Type == ObjectType.Potion) ItemSpell(def, def.Potion.Effects, true);
@@ -1816,6 +1816,19 @@ public partial class MainWindow
                     case ObjectType.Keychain:
                         b.Add(10);
                         break;
+                    // Beds and bedrolls (bed.s): flags (1 asks the hours, 2 a bedroll, 4 till dawn), the question, fewest / most hours
+                    // (typed 0-9 on the IIgs), a bedroll's own hours, the cancel line.
+                    case ObjectType.Bed or ObjectType.Bedroll:
+                    {
+                        var fu = d.Furniture;
+                        bool asks = d.Type == ObjectType.Bed || fu.AsksSleepHours;
+                        b.Add(12); b.Add((byte)((asks ? 1 : 0) | (d.Type == ObjectType.Bedroll ? 2 : 0) | (d.Type == ObjectType.Bedroll && d.Bedroll.WakeAtDawn ? 4 : 0)));
+                        W(b, fu.SleepQuestion.Trim().Length > 0 ? pack.NameOf(fu.SleepQuestion.Trim()) : 0xFFFF);
+                        b.Add((byte)Math.Clamp(fu.SleepMinHours, 1, 9)); b.Add((byte)Math.Clamp(fu.SleepMaxHours, 1, 9));
+                        b.Add((byte)Math.Clamp(d.Type == ObjectType.Bedroll ? d.Bedroll.SleepHours : 8, 1, 24));
+                        W(b, fu.CancelSleepLine.Trim().Length > 0 ? pack.NameOf(fu.CancelSleepLine.Trim()) : 0xFFFF);
+                        break;
+                    }
                     case ObjectType.LiquidContainer:
                     {
                         // liquid.s: empty sprite, icon, pour and fill sounds, used up, the spill, the liquids it holds (liquid, sprite, icon).
@@ -1841,7 +1854,7 @@ public partial class MainWindow
             // Carried (or in things) tools and instruments: their code by their name.
             var byName = new Dictionary<int, int>();
             foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
-                         or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
+                         or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain or ObjectType.LiquidContainer or ObjectType.Bed or ObjectType.Bedroll)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
             for (int oi = 0; oi < objects.Count; oi++)
                 if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
             // Liquid containers start empty, or full of what they start full of (their look says which).

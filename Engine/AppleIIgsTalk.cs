@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -615,6 +615,9 @@ public sealed class AppleIIgsTalk
                     foreach (var (fs, ft) in animFrames.Take(8)) { W(fs); B(Math.Clamp(ft, 1, 255)); }
                     break;
                 }
+                case EventCommandType.SleepOnBed:
+                    B(Ext); B((int)ExtOp.SleepOnBed); // EXT 8 BED (bed.s): the bed nearest the Avatar
+                    break;
                 case EventCommandType.ChangeBehavior:
                 {
                     // EXT 7 BEHAV who activity (ext.s): Resume ($FF) - back to its schedule.

@@ -16,8 +16,10 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav
-EXT_COUNT = 8
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed
+EXT_COUNT = 9
+
+XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes

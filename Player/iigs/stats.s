@@ -533,8 +533,11 @@ DoRest:
 .done:  jsr RestLevelEvents      ; the leveling system's rest events (levels.s)
         jsr HpChanged
         jsr DrawView
+        lda BdEvent             ; (Sleep On Bed in an event: the event goes on - bed.s)
+        bne .ev
         jsr PromptLine
         jmp RunQueue
+.ev:    rts
 
 ; Carry set if member RSlot ate one food: theirs first, then anyone's in the party (in their bags too).
 EatOne:
