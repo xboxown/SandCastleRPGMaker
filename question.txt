@@ -1,0 +1,137 @@
+QUESTIONS ABOUT "Apple IIgs - everything left.txt"
+=================================================
+Written 2026-11-25. Take your time. Write your answer under each question, after "ANSWER:".
+When you are finished, tell me "done" and I will read it.
+Nothing is being changed until you answer.
+
+
+QUESTION 1 - Part E (items 64 to 68) has no DO or SKIP
+------------------------------------------------------
+These five boxes are empty. Please write DO or SKIP for each:
+
+  64. KEGS: run the IIgs game for real (GS/OS boot, accelerator check, floppies, hard disk, sound, music,
+      mouse, keyboard, speed) and fix what turns up.
+      ANSWER: DO
+
+  65. Build your own Ultima 6 demo project for the IIgs and play it through in KEGS.
+      ANSWER: do
+
+  66. Memory: make more room in the IIgs data area (55 KB of 64 used) when the other items need it.
+      ANSWER: do
+
+  67. Apple IIgs Check: make sure its report lists everything still left out, in plain words.
+      ANSWER: do
+
+  68. CommandList.docx: an Apple IIgs page saying which commands work there and which don't.
+      ANSWER: do
+
+
+QUESTION 2 - Item 29 (Debug Log, Pause Here, Show Error) has notes but no DO or SKIP
+------------------------------------------------------------------------------------
+I read your note as DO, meaning:
+  - on the IIgs, these commands write their message into a LOG.TXT file on the GS/OS disk
+    (the file is made if it isn't there);
+  - the game shows "Log error generated" in the text area;
+  - you close the game and read LOG.TXT.
+Is that right?
+
+ANSWER: yes
+
+
+QUESTION 3 - Item 35: an animation player for cutscenes on the IIgs
+-------------------------------------------------------------------
+You asked if something like the 1980s IIgs cartoon programs can be done. Yes, it can:
+  - Programs like Paintworks Animation kept only the parts of the picture that change from frame to frame,
+    so most frames are small (one full IIgs screen is 32 KB).
+  - From the hard disk image it could play a whole intro or ending cutscene; short ones could fit on
+    3.5 floppies too.
+  - Sound: each clip up to 64 KB, SND format only.
+  - In the Windows editor: an animation editor where you add or delete frames one by one and attach sounds,
+    and an event command (for example "Play Animation Scene") that plays it. It would work in the Windows
+    Ultima 6 mode too, so both play the same.
+
+It is NOT on the list yet. Do you want it added as a new DO item at the end of the list?
+
+ANSWER: YES
+
+
+QUESTION 4 - The cave note (Nuvie)
+----------------------------------
+My plan: first I research in Nuvie how Ultima 6, Savage Empire and Martian Dreams handle going into a cave,
+then I explain to you in plain words what I found - BEFORE I build anything. You then say go or change it.
+(My guess: it is Ultima 6's "blacking" - what is behind walls is hidden in black - and caves are always dark.
+Nuvie will tell for sure.)
+Is that plan OK?
+
+ANSWER: YES
+
+
+QUESTION 5 - Item 63: ladders
+-----------------------------
+You wrote Ultima 6 has no staircases. True - but Ultima 6 does have ladders and holes that take you down
+into the dungeons (and up out of them). I plan to leave ladders working as they are.
+Is that OK, or should anything change about ladders?
+
+ANSWER: YES ADD LADDER..YES KEEP LADDER FOR BOTH WINDOWS AND APPLE //GS MODE YES..DO NOT REMOVE LADDER PLEASE.
+
+
+QUESTION 6 - Changes that touch the WINDOWS Ultima 6 mode too (Ultima 7 and 8 untouched)
+--------------------------------------------------------------------------------------
+From your answers, these DO items also change the Windows Ultima 6 mode, not only the IIgs.
+Please check this is what you meant:
+
+  a) Remove every paperdoll link from Ultima 6 mode (character editor, commands, events) - items 34 / 43. YES
+  b) Remove the Wall Designer from Ultima 6 mode; the wall kit stays - item 56. YES
+  c) Remove the language mechanics from Ultima 6 mode; users make their own with commands - item 23. YES (it is up to the player to make their own language mechanics, just make sure that we have all the commands, and proper conditions and everything needed to make your own language mechanics.  IN FACT...AFTER YOU REMOVE IT FOR ULTIMA 6 WRITE A FULL FLEDGE TUTORIAL IN DETAILS HOW TO MAKE YOUR OWN LANGUAGE mechanics...and if you find something missing in command list etc add it and make the tutorial.
+  d) Remove the 8-direction arrow pointers from Ultima 6 mode; only the cross and the plus - item 59. YES
+  e) Lighting becomes the Ultima 6 circle of light (darkest: you see one cell around you; a stronger light
+     makes a bigger circle) instead of the Ultima 7 colour tint - items 12 / 26. YES
+  f) Only one font, used for everything; it can't be added to, renamed or deleted - item 58. YES
+  g) Food is eaten when the party rests and heals, taken from whoever in the party has food - item 60. YES
+  h) Books and all messages (save done, errors, prompts) show in the game's text area - items 27 / 28,
+     with [COLOR=RED]...[/COLOR] codes in book text. yes
+
+ANSWER (OK, or tell me which letter to change):
+
+
+QUESTION 7 - Item 22: the Spell Editor (the biggest item on the list)
+---------------------------------------------------------------------
+What I understood:
+  - Ultima 6 mode only (later Ultima 5 too), on Windows and the IIgs.
+  - A Spell Editor where you build your spell system from event commands; only one spell system can be
+    used in a game.
+  - It comes with ready-made templates to learn from:
+      * Ultima 6: spells cast with words / reagents;
+      * Savage Empire: fetishes (skulls) - using a certain ingredient on a fetish casts a certain spell.
+  - No Ultima 7 spellbook or spell list in Ultima 6 mode.
+  - This is several builds of work by itself.
+Is that right? Anything to add?
+
+ANSWER:
+
+
+QUESTION 8 - Item 47: Levitate and Translate
+--------------------------------------------
+You said: IIgs gets only the Custom spell effect, skip Levitate and Translate.
+Should Levitate and Translate also be REMOVED from the Windows Ultima 6 mode (like the languages in item 23),
+or stay on Windows as they are?
+
+ANSWER:
+
+
+QUESTION 9 (NEW) - Which "paperdoll" to remove (item 34 / question 6a)
+---------------------------------------------------------------------
+In Sandcastle the word "paperdoll" means the PaperDoll Editor's custom windows (forms with parts, buttons,
+text boxes, item slots - the Ultima 7 style gumps), and the commands that open and change them.
+But the original Ultima 6 inventory screen also shows a small figure of the character with its equipment
+places (head, neck, hands, body, legs, feet) - some people call that a "paperdoll" too.
+My plan: REMOVE the PaperDoll Editor windows and their commands from Ultima 6 mode, but KEEP the Ultima 6
+inventory screen with the character figure and its equipment places (that is how Ultima 6 readies weapons
+and armour).
+Is that right?
+
+ANSWER:
+
+
+NOTE: questions 7, 8 and 9 only matter for items 22, 23, 34 and 47. Meanwhile I start on item 1 and go down
+the list; I will stop before item 22 if they are still unanswered.

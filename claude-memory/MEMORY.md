@@ -56,4 +56,5 @@
 - [issues.odt #4](issues-odt-2026-11-23.md) — b666-b671 done (PERMISSIONS: wall kits, pickers, formulas, Find Thing, spell caster/target, AI Artist); next sprite generator A, then IIgs audit item 3
 - [AI Artist (sprite gen B)](ai-artist.md) — b671 local Stable Diffusion in SandcastleRpgMaker.AI.dll, model H:\SandcastleAI\sd15-fp16 (not in git), DirectML only; A (skeleton) still to do
 - [Platform test status](platform-test-status.md) — 2026-11-24 user: AmigaOS 4, Ubuntu, 68k, Vampire, PS3 confirmed; U7 perfect everywhere; left PS2 (ethernet adapter) + Mac; user testing U6/U8 on Ubuntu/OS4
+- [IIgs list answers](iigs-everything-left-answers.md) — 2026-11-25 DO/SKIP answers + U6-only rulings (no paperdolls, one font, spell editor, Nuvie light, caves)
 - [IIgs = U6 mechanics, not U7](iigs-u6-mechanics-not-u7.md) — user 2026-11-24: IIgs matches Windows U6 AND original U6/Savage Empire; no barks or other U7-only things

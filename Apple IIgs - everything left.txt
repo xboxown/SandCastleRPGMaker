@@ -119,12 +119,18 @@ PLEASE LOOK AT Nuvie AND DIG INTO THE HEART OF THIS ENGINE AND SEE HOW IT IS DON
 
 PART E - TESTING AND FINISHING
 ------------------------------
-64. [      ]  KEGS: run the IIgs game for real - booting under GS/OS, the accelerator check, the 3.5 floppies and the
+64. [  DO  ]  KEGS: run the IIgs game for real - booting under GS/OS, the accelerator check, the 3.5 floppies and the
                hard disk image, sound, music, mouse, keyboard, speed - and fix what turns up.  L.  My advice: DO
-65. [      ]  Build your own Ultima 6 demo project for the IIgs and play it through in KEGS.  M.  My advice: DO
-66. [      ]  Memory: the data area is 55 KB of 64. Make more room if the items above need it (as b692 did).  M.  My advice: DO (when needed)
-67. [      ]  Apple IIgs Check: make sure its report lists everything still left out, in plain words.  S.  My advice: DO
-68. [      ]  CommandList.docx: an Apple IIgs page saying which commands work there and which don't.  S.  My advice: DO
+65. [  DO  ]  Build your own Ultima 6 demo project for the IIgs and play it through in KEGS.  M.  My advice: DO
+66. [  DO  ]  Memory: the data area is 55 KB of 64. Make more room if the items above need it (as b692 did).  M.  My advice: DO (when needed)
+67. [  DO  ]  Apple IIgs Check: make sure its report lists everything still left out, in plain words.  S.  My advice: DO
+68. [  DO  ]  CommandList.docx: an Apple IIgs page saying which commands work there and which don't.  S.  My advice: DO
 
+
+69. [ DO ]  (added from question.txt, question 3) Animation scenes for cutscenes: an editor on Windows where you add / delete
+               frames one by one and attach SND sounds (64 KB each), and a command that plays it - Ultima 6 mode on
+               Windows and the IIgs (frames keep only what changes, played from the hard disk or floppies).  XL.
+
+NEW (from your note above): cave entrances as in Nuvie - research first, explain, then build after your go.
 
 When you have marked them, tell me "done" and I will do only the DO ones, in this order, and skip the SKIP ones.
