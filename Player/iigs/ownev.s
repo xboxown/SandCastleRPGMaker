@@ -183,6 +183,63 @@ FireWP:
 .no:    clc
         rts
 
+; Arriving on a map (ArriveEvents): each living character of it with its own events gets its "Always" pages run
+; (U6GameWindow.AlwaysPages.cs - when play starts, and here each time the map is come to).
+CharsArrive:
+        lda CEvPtr
+        sta Src
+        lda CEvPtr+2
+        sta Src+2
+        ldx CEvCount
+        beq .o
+        ldy #0
+.l:     lda [Src],y
+        cmp CurMap
+        bne .n
+        phx
+        phy
+        iny
+        iny
+        lda [Src],y             ; its place: alive?
+        cmp ChrCount
+        bcs .skip
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        asl a
+        clc
+        adc #C_FLAGS
+        tay
+        lda [ChrPtr],y
+        and #4
+        bne .skip
+        ply
+        phy
+        iny
+        iny
+        iny
+        iny
+        lda [Src],y
+        tay
+        lda #T_ARRIVE
+        ldx #$FFFE
+        jsr QueueEvent
+        lda CEvPtr              ; (Src again)
+        sta Src
+        lda CEvPtr+2
+        sta Src+2
+.skip:  ply
+        plx
+.n:     tya
+        clc
+        adc #6
+        tay
+        dex
+        bne .l
+.o:     rts
+
 ; A = a thing's name, X = a trigger: its own event queued. Carry set if it has one.
 ObjEvQueue:
         sta FName

@@ -91,6 +91,7 @@ NewMapEvents:
         stz QN
         stz EvScan
 ArriveEvents:
+        jsr CharsArrive         ; characters' Always pages (ownev.s)
         ldx #ALL
         lda #T_ARRIVE
         jsr QueueEvent
