@@ -208,6 +208,134 @@ ShakeRun:
         jmp BlitView
 .out:   rts
 
+; ---- the view faded / flashed (Fade Screen, Flash Screen: U6GameWindow.ScriptGame.cs) - Ultima 6's pixelated fade (Nuvie
+; FadeEffect FADE_PIXELATED): the view's bytes dissolve into the colour, or back, in 16 steps of a 4 x 4 pattern ----
+
+; DsMode 1: into DsCol; 2: back to the view. A step every DsPer ticks. While the view is covered (DsHold) BlitView waits.
+DsRun:
+        lda DsMode
+        beq .out
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta FxNow
+        pla
+        lda FxNow
+        sec
+        sbc DsTick
+        cmp DsPer
+        bcc .out
+        lda FxNow
+        sta DsTick
+        jsr DsStep
+        inc DsK
+        lda DsK
+        cmp #16
+        bcc .out
+        lda DsMode              ; done
+        stz DsMode
+        cmp #2
+        bne .out
+        stz DsHold              ; the view shown again as it is now
+        jmp BlitView
+.out:   rts
+
+; Every step at once.
+DsAll:
+        stz DsK
+.l:     jsr DsStep
+        inc DsK
+        lda DsK
+        cmp #16
+        bcc .l
+        rts
+
+; Step DsK of DsMode: the bytes at that place of every 4 x 4 block - the colour, or the view's own (from bank $01).
+DsStep:
+        lda DsK
+        asl a
+        tax
+        lda DsPos,x             ; its line (0-3) x 160 + its byte (0-3)
+        clc
+        adc ViewOff
+        sta DsRow
+        lda VRows               ; lines
+        asl a
+        asl a
+        asl a
+        asl a
+        sta DsLines
+        lda DsPos,x             ; its line within the block
+        stz DsLine
+.cnt:   cmp #160
+        bcc .c
+        sbc #160
+        inc DsLine
+        bra .cnt
+.c:     sta DsByte
+        lda VCols               ; bytes a line
+        asl a
+        asl a
+        asl a
+        sta DsW
+.ln:    lda DsLine
+        cmp DsLines
+        bcs .done
+        lda DsRow
+        tax
+        lda DsByte
+        sta DsB
+        sep #$20
+        .a8
+.b:     lda DsMode
+        cmp #1
+        bne .in
+        lda DsCol
+        bra .put
+.in:    lda $012000,x
+.put:   sta $E12000,x
+        inx
+        inx
+        inx
+        inx
+        rep #$20
+        .a16
+        lda DsB
+        clc
+        adc #4
+        sta DsB
+        cmp DsW
+        sep #$20
+        .a8
+        bcc .b
+        rep #$20
+        .a16
+        lda DsRow
+        clc
+        adc #640
+        sta DsRow
+        lda DsLine
+        clc
+        adc #4
+        sta DsLine
+        bra .ln
+.done:  rts
+
+DsPos:    .dw 0,322,2,320,161,483,163,481,1,323,3,321,160,482,162,480   ; (a 4 x 4 Bayer order: line x 160 + byte)
+DsMode:   .dw 0
+DsHold:   .dw 0
+DsCol:    .dw 0
+DsK:      .dw 0
+DsPer:    .dw 1
+DsTick:   .dw 0
+DsRow:    .dw 0
+DsLines:  .dw 0
+DsLine:   .dw 0
+DsByte:   .dw 0
+DsB:      .dw 0
+DsW:      .dw 0
+
 ShakeSrc: .dw 0
 ShLeft:   .dw 0
 ShAmp:    .dw 0

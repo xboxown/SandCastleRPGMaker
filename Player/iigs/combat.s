@@ -292,6 +292,7 @@ IdleTurn:
         jsr AnimRun             ; animated tiles (look.s)
         jsr FxRun               ; Play Animation's (fx.s)
         jsr ShakeRun            ; a shaking view (fx.s)
+        jsr DsRun               ; a fade or flash (fx.s)
         jsr MendRun             ; the knocked out mend (bodies.s)
         jsr MusicRun            ; the music (music.s)
         jsr WeatherRun          ; the weather (weather.s)

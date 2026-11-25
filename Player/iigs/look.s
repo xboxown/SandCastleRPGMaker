@@ -82,7 +82,10 @@ NoteAnim:
 
 ; The view (VIEWBUF, bank $01) copied onto the screen, a row at a time; the pointer hidden meanwhile.
 BlitView:
-        jsr CurOff
+        lda DsHold              ; the view covered by a fade (fx.s): not now
+        beq .go
+        rts
+.go:    jsr CurOff
         lda VRows               ; lines: rows x 16
         asl a
         asl a

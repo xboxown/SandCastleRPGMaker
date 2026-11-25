@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -84,6 +84,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, string, List<(int Sprite, int Ticks)>?>? PoseFrames;
         /// <summary>Play Animation (fx.s): (sprite group, sprite name) -> its frames (sprite, ticks of 60); null: no such sprite.</summary>
         public Func<string, string, List<(int Sprite, int Ticks)>?>? SpriteFrames;
+        /// <summary>A colour (#RRGGBB) -> the game palette's nearest (0-15).</summary>
+        public Func<int, int, int, int>? Colour;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
         /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
@@ -613,6 +615,19 @@ public sealed class AppleIIgsTalk
                     if (overWho) { W(am); W(ax); } else { W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); }
                     B(cmd.Get("Wait") != "False" ? 1 : 0); B(Math.Min(animFrames.Count, 8)); W(Math.Clamp(ticks, 1, 65535));
                     foreach (var (fs, ft) in animFrames.Take(8)) { W(fs); B(Math.Clamp(ft, 1, 255)); }
+                    break;
+                }
+                case EventCommandType.FadeScreen:
+                case EventCommandType.FlashScreen:
+                {
+                    // EXT 10 FADE / 11 FLASH (ext.s, fx.s): the view dissolved into the colour (Ultima 6's pixelated fade).
+                    bool flash = cmd.Type == EventCommandType.FlashScreen;
+                    string hex = cmd.Get("Color").Trim().TrimStart('#');
+                    int rgb = hex.Length == 6 && int.TryParse(hex, System.Globalization.NumberStyles.HexNumber, null, out int hv) ? hv : flash ? 0xFFFFFF : 0;
+                    int colour = Extra?.Colour?.Invoke(rgb >> 16 & 255, rgb >> 8 & 255, rgb & 255) ?? 0;
+                    int ticks = Math.Clamp((int)(Seconds(cmd.Get("Seconds")) * 60), 0, 65535);
+                    if (flash) { B(Ext); B((int)ExtOp.Flash); B(colour); W(Math.Max(3, ticks)); }
+                    else { B(Ext); B((int)ExtOp.Fade); B(cmd.Get("Value") != "In" ? 1 : 0); B(colour); W(ticks); }
                     break;
                 }
                 case EventCommandType.ShakeScreen:

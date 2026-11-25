@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake
-EXT_COUNT = 10
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash
+EXT_COUNT = 12
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1070,6 +1070,104 @@ XtBehav:
         jmp Next
 
 BhAct:    .dw 0
+
+; EXT 10 FADE out colour ticks (6 bytes): Fade Screen - out (1): the view dissolves into the colour over so many ticks and
+; stays covered; in (0): a covered view dissolves back (not covered: nothing). The event waits (fx.s DsRun).
+XtFade:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta XfOut
+        iny
+        lda [TalkPtr],y
+        and #$000F
+        sta DsCol
+        asl a
+        asl a
+        asl a
+        asl a
+        tsb DsCol
+        iny
+        lda [TalkPtr],y
+        lsr a                   ; a step: a sixteenth
+        lsr a
+        lsr a
+        lsr a
+        bne .p
+        inc a
+.p:     sta DsPer
+        lda XfOut
+        beq .in
+        lda #1
+        sta DsMode
+        sta DsHold
+        bra .go
+.in:    lda DsHold
+        beq .done
+        lda #2
+        sta DsMode
+.go:    stz DsK
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta DsTick
+        pla
+.w:     jsr ClockRun
+        jsr DsRun
+        lda DsMode
+        bne .w
+.done:  lda #6
+        jmp Next
+
+; EXT 11 FLASH colour ticks (5 bytes): Flash Screen - the view all the colour at once, then back to itself over so many
+; ticks while the game goes on (a covered view: no flash).
+XtFlash:
+        iny
+        lda [TalkPtr],y
+        and #$000F
+        sta XfCol
+        iny
+        lda [TalkPtr],y
+        sta XfT
+        lda DsHold
+        bne .done
+        lda XfCol
+        sta DsCol
+        asl a
+        asl a
+        asl a
+        asl a
+        tsb DsCol
+        lda #1
+        sta DsMode
+        sta DsHold
+        jsr DsAll
+        lda #2
+        sta DsMode
+        stz DsK
+        lda XfT
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        beq .fb1
+        brl .p
+.fb1:
+        inc a
+.p:     sta DsPer
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta DsTick
+        pla
+.done:  lda #5
+        jmp Next
+
+XfOut:    .dw 0
+XfCol:    .dw 0
+XfT:      .dw 0
 
 ; EXT 9 SHAKE pixels ticks wait sound (8 bytes): Shake Screen / Earthquake (fx.s ShakeRun) - the view shaken so many
 ; pixels each way for so many ticks, its sound once as it starts; wait 1: the event waits till it is over.

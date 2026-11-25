@@ -1124,6 +1124,7 @@ public partial class MainWindow
                     if (SpriteOf(fr.FilePath) is int fsp and >= 0) frames.Add((fsp, Math.Clamp((int)Math.Round(Math.Max(1, fr.DurationMs) * 60 / 1000.0), 1, 255)));
                 return frames.Count > 0 ? frames : null;
             },
+            Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
             // Play Animation (fx.s): a sprite's frames, at most 8.
             SpriteFrames = (group, name) =>
             {
