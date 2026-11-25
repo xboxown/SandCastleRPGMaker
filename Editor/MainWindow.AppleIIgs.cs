@@ -1105,6 +1105,7 @@ public partial class MainWindow
             Item = n => pack.NameOf(n.Trim()),
             Who = n => _characterDatabase.Characters.FirstOrDefault(c => string.Equals(c.Name, n.Trim(), StringComparison.OrdinalIgnoreCase)) is { } wc ? WhereIs(wc.Id.ToString()) : null
         };
+        var lookOf = new Dictionary<int, (int Sprite, bool PoseLooks)>();
         var talkEnv = new AppleIIgsTalk.Env
         {
             AvatarFaction = avatarDef?.FactionId ?? -1,
@@ -1134,6 +1135,20 @@ public partial class MainWindow
                 foreach (var fr in sprite?.Frames.Take(8) ?? Enumerable.Empty<SpriteFrame>())
                     if (SpriteOf(fr.FilePath) is int fsp and >= 0) frames.Add((fsp, Math.Clamp((int)Math.Round(Math.Max(1, fr.DurationMs) * 60 / 1000.0), 1, 255)));
                 return frames.Count > 0 ? frames : null;
+            },
+            // Change Look (ext.s): a character's four facings (and its sleeping / sitting looks) added once, one after another.
+            LookOf = whoId =>
+            {
+                var lw = whoId is "" or WhoChoice.Player or WhoChoice.Activator ? PlayerCharacter() : _characterDatabase.Characters.FirstOrDefault(c => c.Id.ToString() == whoId);
+                if (lw is null) return null;
+                if (lookOf.TryGetValue(lw.Id, out var known)) return known;
+                var files = LookFiles(lw);
+                string? sleepF = PoseFile(lw, "Sleeping"), sitF = PoseFile(lw, "Sit");
+                bool poses = sleepF is not null || sitF is not null;
+                if (poses) { files.Add(sleepF ?? files[0]); files.Add(sitF ?? files[0]); }
+                int firstLook = spritePixels.Count;
+                foreach (var f in files) spritePixels.Add(f is not null && File.Exists(f) ? FitSprite(f) : (new uint[16 * 16], 16, 16));
+                return lookOf[lw.Id] = (firstLook, poses);
             },
             OwnerOf = id => _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { BelongToId: >= 0 } owned ? owned.BelongToId.ToString() : null,
             Exchange = (fromId, toId) =>

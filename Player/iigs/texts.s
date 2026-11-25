@@ -2957,6 +2957,6 @@ EggWM:    .ds 128
 Purse:    .ds 16                ; (money.s: the other currencies' purses - saved)
 RingN:    .dw 0                 ; (travel.s: the keychain's keys - saved)
 RingKeys: .ds 64
-BrHp:     .dw $FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0 ; (break.s: things struck - saved)
-          .dw $FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0
+LkTab:    .ds 16*6              ; (ext.s Change Look: owner code (0 free), own sprite, own $4000 - saved)
+BrHp:     .ds 64                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

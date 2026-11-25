@@ -17,8 +17,8 @@ OpExt:
         jmp EndTalk
 
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
-          .dw XtCamera,XtCamFollow
-EXT_COUNT = 15
+          .dw XtCamera,XtCamFollow,XtLook,XtName
+EXT_COUNT = 17
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1282,6 +1282,145 @@ XtCamFollow:
 .done:  jsr DrawView
         lda #6
         jmp Next
+
+; EXT 15 LOOK who own sprite poselooks (10 bytes): Change Look, as U6GameWindow.ScriptWorld.cs ChangeLookCommand - the
+; character looks like another (that one's four facings, the editor's - and its sleeping / sitting looks if poselooks 1);
+; own 1: its own look again. Its own look is kept in LkTab (saved: by its owner code) the first time it changes.
+XtLook:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta LkOwn
+        iny
+        lda [TalkPtr],y
+        sta LkSpr
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta LkPose
+        jsr JOwner
+        sta LkCode
+        jsr WhoRec
+        bcs .done
+        jsr LkFind              ; X = its entry (carry set), else a free one / $FFFF
+        lda LkOwn
+        beq .new
+        bcc .done               ; never changed
+        lda LkTab+2,x           ; its own look back
+        ldy #4
+        sta [WP],y
+        lda LkTab+4,x
+        sta LkPose
+        stz LkTab,x
+        lda LkSpr
+        bra .flag
+.new:   bcs .set                ; changed already: its own is kept
+        cpx #$FFFF
+        beq .done               ; (sixteen changed already)
+        lda LkCode
+        sta LkTab,x
+        ldy #4
+        lda [WP],y
+        sta LkTab+2,x
+        ldy #C_FLAGS
+        lda [WP],y
+        and #$4000
+        sta LkTab+4,x
+.set:   lda LkSpr
+        ldy #4
+        sta [WP],y
+        lda LkPose
+        beq .flag
+        lda #$4000
+        sta LkPose
+.flag:  jsr WPIsAvatar          ; (the Avatar: drawn as a sprite while changed - main.s DrawAvatar)
+        bcs .av
+        ldy #C_FLAGS
+        lda [WP],y
+        and #$BFFF
+        ora LkPose
+        sta [WP],y
+        bra .done
+.av:    jsr LkAvatar
+.done:  jsr DrawView
+        lda #10
+        jmp Next
+
+; LkAv 1 if the Avatar's look is changed (in LkTab).
+LkAvatar:
+        lda #$FFFF
+        sta LkCode
+        stz LkAv
+        jsr LkFind
+        bcc .o
+        inc LkAv
+.o:     rts
+
+; X = LkCode's entry in LkTab (carry set); else carry clear and X a free entry ($FFFF none).
+LkFind:
+        ldx #0
+.l:     lda LkTab,x
+        cmp LkCode
+        beq .y
+        txa
+        clc
+        adc #6
+        tax
+        cpx #16*6
+        bcc .l
+        ldx #0
+.f:     lda LkTab,x             ; (0: free - the saved area starts empty)
+        beq .fr
+        txa
+        clc
+        adc #6
+        tax
+        cpx #16*6
+        bcc .f
+        ldx #$FFFF
+.fr:    clc
+        rts
+.y:     sec
+        rts
+
+; EXT 16 NAME who name (8 bytes): Change Name - its name (the Avatar's: {1} in words too).
+XtName:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta LkSpr
+        jsr WhoRec
+        bcs .done
+        lda LkSpr
+        ldy #C_NAME
+        sta [WP],y
+        jsr WPIsAvatar
+        bcc .done
+        jsr AvNameWord
+.done:  jsr HpChanged
+        lda #8
+        jmp Next
+
+; The Avatar's word ({1}, AvatarW) = its name now (AvRec's C_NAME): after Change Name, after a load.
+AvNameWord:
+        lda AvRec+C_NAME
+        cmp #$FFFF
+        beq .o
+        asl a
+        asl a
+        tay
+        ldx AvatarW
+        lda NameTab,y
+        sta WordTab,x
+        lda NameTab+2,y
+        sta WordTab+2,x
+.o:     rts
+
+LkOwn:    .dw 0
+LkSpr:    .dw 0
+LkPose:   .dw 0
+LkCode:   .dw 0
+LkAv:     .dw 0
 
 CmBack:   .dw 0
 CmTX:     .dw 0

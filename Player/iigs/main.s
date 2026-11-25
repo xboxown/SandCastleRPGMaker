@@ -2124,7 +2124,8 @@ DrawAvatar:
         jsr CellOnScreen
         bcc .nv
         jmp DrawSprite
-.av2:   lda CamOn               ; the view elsewhere: the Avatar drawn where it stands, as a sprite (ext.s)
+.av2:   lda CamOn               ; the view elsewhere, or a changed look: the Avatar drawn where it stands, as a sprite (ext.s)
+        ora LkAv
         beq .av1
         lda AvDown
         bne .av1

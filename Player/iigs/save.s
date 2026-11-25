@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 11               ; (b703: things struck, break.s)
+SAVE_VERSION = 12               ; (b717: Change Look's own looks, ext.s)
 
 ; Ctrl+S
 SaveGame:
@@ -328,6 +328,8 @@ LoadGame:
         sta WMap                ; (its weather again too - weather.s)
         lda GoMap
         jsr ChangeMap
+        jsr AvNameWord          ; the Avatar's name and look as they were (ext.s)
+        jsr LkAvatar
         jsr Redraw
         jsr NewLine
         lda #23                 ; Game loaded.

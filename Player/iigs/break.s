@@ -129,8 +129,7 @@ BreakHit:
         sta BrHp+2,x
         clc
         rts
-.broke: lda #$FFFF              ; its place free again
-        sta BrHp,x
+.broke: stz BrHp,x              ; its place free again
         ldx BrK
         lda BrKinds+6,x         ; the destroyed sound
         cmp #$FFFF
@@ -180,11 +179,14 @@ BrName:
         lda [ItemPtr],y
         jmp NameNumber
 
-; X = BrIdx's place in BrHp (a new one, full hit points, if it has none).
+; X = BrIdx's place in BrHp (a new one, full hit points, if it has none). Kept as the number + 1: 0 is free.
 BrSlot:
+        lda BrIdx
+        inc a
+        sta BrT
         ldx #0
 .l:     lda BrHp,x
-        cmp BrIdx
+        cmp BrT
         beq .y
         inx
         inx
@@ -194,7 +196,6 @@ BrSlot:
         bcc .l
         ldx #0                  ; none: a free place (else the first)
 .f:     lda BrHp,x
-        cmp #$FFFF
         beq .new
         inx
         inx
@@ -203,7 +204,7 @@ BrSlot:
         cpx #64
         bcc .f
         ldx #0
-.new:   lda BrIdx
+.new:   lda BrT
         sta BrHp,x
         phx
         ldx BrK
