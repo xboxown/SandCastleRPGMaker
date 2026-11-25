@@ -1649,6 +1649,10 @@ DrawCharacters:
         bcs .on
         brl .n
 .on:
+        lda ItemPtr             ; Play Pose showing it (ext.s)
+        ldx ItemPtr+2
+        jsr PosedLook
+        bcs .bs
         ldy #6                  ; knocked out: its body look (bodies.s)
         lda [ItemPtr],y
         and #32
@@ -2054,7 +2058,17 @@ DrawAvatar:
         adc Facing
 .sp:    sta SprId
         jmp DrawSprite
-.av:    lda AvDown              ; knocked out: its body look (bodies.s)
+.av:    lda #AvRec              ; Play Pose showing the Avatar (ext.s)
+        ldx MyBank
+        jsr PosedLook
+        bcc .av2
+        sta SprId
+        ldx PX
+        ldy PY
+        jsr CellOnScreen
+        bcc .nv
+        jmp DrawSprite
+.av2:   lda AvDown              ; knocked out: its body look (bodies.s)
         beq .norm
         lda AvBody
         cmp #$FFFF

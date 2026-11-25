@@ -1099,6 +1099,21 @@ public partial class MainWindow
         {
             AvatarFaction = avatarDef?.FactionId ?? -1,
             NameOf = n => pack.NameOf(n),
+            // Play Pose (ext.s): the pose's frames for that character, facing as the command says (else south), at most 8.
+            PoseFrames = (whoId, poseName, facingName) =>
+            {
+                var who = whoId is "" or WhoChoice.Player or WhoChoice.Activator ? PlayerCharacter() : _characterDatabase.Characters.FirstOrDefault(c => c.Id.ToString() == whoId);
+                var pose = who is null ? null : _poseDatabase.Poses.FirstOrDefault(p => p.Name == poseName && who.PoseSprites.ContainsKey(p.Id));
+                if (who is null || pose is null) return null;
+                var dir = Enum.TryParse<SpriteDirection>(facingName, out var fd) ? fd : SpriteDirection.South;
+                var link = who.PoseSprites[pose.Id].Resolve(dir);
+                var sprite = link is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName)
+                                                 ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
+                var frames = new List<(int Sprite, int Ticks)>();
+                foreach (var fr in sprite?.Frames.Take(8) ?? Enumerable.Empty<SpriteFrame>())
+                    if (SpriteOf(fr.FilePath) is int fsp and >= 0) frames.Add((fsp, Math.Clamp((int)Math.Round(Math.Max(1, fr.DurationMs) * 60 / 1000.0), 1, 255)));
+                return frames.Count > 0 ? frames : null;
+            },
             OwnerOf = id => _objectDatabase.Objects.FirstOrDefault(o => o.Id == id) is { BelongToId: >= 0 } owned ? owned.BelongToId.ToString() : null,
             Exchange = (fromId, toId) =>
             {

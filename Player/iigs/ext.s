@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip
-EXT_COUNT = 1
+XtJump:   .dw XtEquip,XtPose
+EXT_COUNT = 2
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -134,6 +134,130 @@ XtEquip:
         jsr HpChanged
 .done:  lda #9
         jmp Next
+
+; EXT 1 POSE who n ticks, then n frames (sprite word, ticks byte) - 10 + 3n bytes: Play Pose, as U6GameWindow.Actions.cs
+; PlayPoseCommand: the pose's frames (the editor's, fitted) shown in place of its look, frame after frame, for so many
+; ticks (0: once through), the game clock going on; then its own look again. The event waits for it, as on Windows.
+XtPose:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta PoN
+        iny
+        lda [TalkPtr],y
+        sta PoLeft
+        iny
+        iny
+        sty PoFr                ; the frames' place
+        lda PoN
+        asl a
+        clc
+        adc PoN
+        clc
+        adc #10
+        sta PoLen
+        jsr WhoRec
+        bcc .fb1
+        brl .done
+.fb1:
+        lda PoN
+        bne .fb2
+        brl .done
+.fb2:
+        lda PoLeft              ; once through: all the frames' ticks
+        bne .go
+        ldx PoN
+        ldy PoFr
+.sum:   iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        clc
+        adc PoLeft
+        sta PoLeft
+        iny
+        dex
+        bne .sum
+.go:    lda WP
+        sta PoseRec
+        lda WP+2
+        sta PoseRec+2
+        stz PoK
+.f:     lda PoK                 ; this frame
+        asl a
+        clc
+        adc PoK
+        clc
+        adc PoFr
+        tay
+        lda [TalkPtr],y
+        sta PoseSpr
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta PoT
+        jsr DrawView
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta PoTick
+        pla
+.w:     jsr ClockRun            ; (schedule.s)
+        pha
+        pha
+        tool $2503
+        pla
+        sta T4
+        pla
+        lda T4
+        sec
+        sbc PoTick
+        cmp PoT
+        bcs .next
+        cmp PoLeft
+        bcc .w
+.next:  cmp PoLeft              ; time used
+        bcs .end
+        lda PoLeft
+        sec
+        sbc T4
+        clc
+        adc PoTick
+        sta PoLeft
+        inc PoK
+        lda PoK
+        cmp PoN
+        bcc .f
+        stz PoK
+        bra .f
+.end:   stz PoseRec+2           ; its own look again
+        jsr DrawView
+.done:  lda PoLen
+        jmp Next
+
+; A = a record's address, X = its bank: carry set and A = the pose's sprite while Play Pose shows it.
+PosedLook:
+        cpx PoseRec+2
+        bne .no
+        cmp PoseRec
+        bne .no
+        lda PoseSpr
+        sec
+        rts
+.no:    clc
+        rts
+
+PoseRec:  .dw 0,0
+PoseSpr:  .dw 0
+PoN:      .dw 0
+PoK:      .dw 0
+PoT:      .dw 0
+PoLeft:   .dw 0
+PoTick:   .dw 0
+PoFr:     .dw 0
+PoLen:    .dw 0
 
 EqName:   .dw 0
 EqOn:     .dw 0

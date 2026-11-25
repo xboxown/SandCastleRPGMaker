@@ -230,6 +230,10 @@ DrawParty:
         tay
         jsr CellOnScreen
         bcc .n
+        lda MP                  ; Play Pose showing it (ext.s)
+        ldx MP+2
+        jsr PosedLook
+        bcs .bs
         ldy #C_FLAGS            ; knocked out: its body look (bodies.s)
         lda [MP],y
         and #32
