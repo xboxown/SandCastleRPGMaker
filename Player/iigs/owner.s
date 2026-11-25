@@ -104,6 +104,21 @@ MembersGear:
         ldy #C_ARMOUR
         lda GArmour
         sta [MP],y
+        lda WP                  ; its worn magic's stats (worn.s)
+        pha
+        lda WP+2
+        pha
+        lda MP
+        sta WP
+        lda MP+2
+        sta WP+2
+        lda POK
+        inc a
+        jsr MagicApply
+        pla
+        sta WP+2
+        pla
+        sta WP
         inc POK
         bra .l
 .d:     lda #$FFFF

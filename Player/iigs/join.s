@@ -26,7 +26,8 @@ ParseJoin:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseWorn           ; (worn.s)
 
 ; A = a name: carry set, X = its place in JnTab.
 JoinKind:

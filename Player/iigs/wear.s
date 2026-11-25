@@ -206,10 +206,25 @@ RecalcGear:
         sta AvRec+C_REACH
         lda GArmour
         sta AvRec+C_ARMOUR
+        lda WP                  ; its worn magic's stats (worn.s)
+        pha
+        lda WP+2
+        pha
+        lda #AvRec
+        sta WP
+        lda MyBank
+        sta WP+2
+        lda #0
+        jsr MagicApply
+        pla
+        sta WP+2
+        pla
+        sta WP
         jmp MembersGear         ; (owner.s)
 
 ; GWeapon, GReach, GArmour: what GearOwner wears.
 GearOf:
+        jsr MagicClear          ; worn magic (worn.s)
         stz GWeapon
         lda #1
         sta GReach
@@ -233,6 +248,7 @@ GearOf:
         lda [ItemPtr],y
         cmp GearOwner
         bne .n
+        jsr WornMagic           ; its magic counted (worn.s)
         ldy #10
         lda [ItemPtr],y
         cmp #$FFFF
@@ -262,7 +278,7 @@ GearOf:
         jsr NextItem
         dec WN
         bne .l
-.d:     rts
+.d:     jmp MagicGear           ; the magic's defense and reach (worn.s)
 
 SlotCount: .dw 0
 SlotTab:  .ds 96

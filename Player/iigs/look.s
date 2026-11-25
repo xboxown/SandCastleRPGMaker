@@ -355,7 +355,7 @@ LightsCarried:
         jsr NextItem
         dec T4
         bne .l
-.d:     rts
+.d:     jmp MagicLights         ; worn magic that lights (worn.s)
 
 ; The lit lights on this map (16 at most): their cells and reach.
 LightsOnMap:

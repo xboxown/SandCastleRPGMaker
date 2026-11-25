@@ -1720,6 +1720,29 @@ public partial class MainWindow
             if (pack.Names.IndexOf(o.Name) is int gn and >= 0 && pack.Gear.All(g => g.Name != gn)) pack.Gear.Add((gn, o.Armor.Warmth, o.Armor.Cooling));
         foreach (var c in _characterDatabase.Characters.Where(c => c.Survival.ColdImmune || c.Survival.HeatImmune))
             if (pack.Names.IndexOf(c.Name) is int cn and >= 0) pack.TempImmune.Add((cn, (c.Survival.ColdImmune ? 1 : 0) | (c.Survival.HeatImmune ? 2 : 0)));
+        // Magic worn or held: reach, defense, light, strength / dexterity / intelligence by name (worn.s).
+        foreach (var o in _objectDatabase.Objects.Where(o => o.Type is ObjectType.Weapon or ObjectType.Armor && !o.Magic.IsEmpty))
+        {
+            int mn = pack.NameOf(o.Name);
+            if (pack.WornMagic.Any(m => m[0] == mn)) continue;
+            var mg = o.Magic;
+            int reach = mg.ReachCells > 1 ? mg.ReachCells : 0, def = mg.DefenseBonus, light = mg.LightBrightness > 0 ? Math.Clamp(1 + mg.LightBrightness / 2, 1, 7) : 0, str = 0, dex = 0, intel = 0;
+            foreach (var b in mg.StatBonuses)
+                switch (b.Kind)
+                {
+                    case MagicBonusKind.Defense: def += b.Amount; break;
+                    case MagicBonusKind.Reach: reach = Math.Max(reach, b.Amount); break;
+                    case MagicBonusKind.Light: light = Math.Max(light, Math.Clamp(1 + b.Amount / 2, 1, 7)); break;
+                    case MagicBonusKind.Stat:
+                        var kind = _statDatabase.Stats.FirstOrDefault(s => s.Id == b.StatId)?.Kind;
+                        if (kind == BuiltInStatKind.Strength) str += b.Amount;
+                        else if (kind == BuiltInStatKind.Dexterity) dex += b.Amount;
+                        else if (kind == BuiltInStatKind.Intelligence) intel += b.Amount;
+                        break;
+                }
+            if (reach > 0 || def != 0 || light > 0 || str != 0 || dex != 0 || intel != 0)
+                pack.WornMagic.Add(new[] { mn, reach, def & 0xFFFF, light, str & 0xFFFF, dex & 0xFFFF, intel & 0xFFFF, 0 });
+        }
         // Ground traps and lights that burn down or burn, by name (floor.s).
         foreach (var o in _objectDatabase.Objects)
         {

@@ -175,7 +175,18 @@ SoloSwap:
         jsr NextItem
         dec SoI
         bra .o
-.od:    jmp RefreshInventory
+.od:    lda MP                  ; what their magic added changes round too (worn.s)
+        sec
+        sbc #PartyTab
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        lsr a
+        inc a
+        jsr MagicSwap
+        jmp RefreshInventory
 
 ; Carry set (and "Not in solo mode." told) if a member is being moved - talking is the Avatar's.
 NotSolo:

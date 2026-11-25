@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 53;
+    public const ushort Version = 54;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -639,6 +639,9 @@ public sealed class AppleIIgsGamePack
     /// <summary>Monsters that join (Character Editor > Health > Joining), by name: flags (1 splits when hit), their joined look's
     /// first sprite of 32 ($FFFF none) - join.s. Each map gets spare copies of the ones that split (flags 4 + $8000).</summary>
     public List<(int Name, int Flags, int Look)> Joiners { get; } = new();
+    /// <summary>Magic worn or held (Object Editor > Weapon / Armor > Magic), by name: reach cells (0 none), defense, light radius
+    /// (0 none), strength, dexterity, intelligence - worn.s.</summary>
+    public List<int[]> WornMagic { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -923,6 +926,8 @@ public sealed class AppleIIgsGamePack
         foreach (var d in Doors.Take(24)) for (int i = 0; i < 12; i++) w.Write((ushort)(i < d.Length ? d[i] : 0));
         w.Write((ushort)Math.Min(Joiners.Count, 16));
         foreach (var (jn, jf, jl) in Joiners.Take(16)) { w.Write((ushort)jn); w.Write((ushort)jf); w.Write((ushort)jl); }
+        w.Write((ushort)Math.Min(WornMagic.Count, 32));
+        foreach (var wmg in WornMagic.Take(32)) for (int i = 0; i < 8; i++) w.Write((ushort)(i < wmg.Length ? wmg[i] : 0));
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);
