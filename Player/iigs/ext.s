@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose
-EXT_COUNT = 2
+XtJump:   .dw XtEquip,XtPose,XtAtkObj
+EXT_COUNT = 3
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -258,6 +258,119 @@ PoLeft:   .dw 0
 PoTick:   .dw 0
 PoFr:     .dw 0
 PoLen:    .dw 0
+
+; EXT 2 ATKOBJ who x y name (11 bytes): Attack Object, as U6GameWindow.Actions.cs AttackObjectCommand: up to the thing
+; (the object of that name at x, y), then blows (half a second apart, the clock going on) till it breaks (break.s) - a
+; minute of blows and it still stands: given up. One that can't be broken: "No effect.".
+XtAtkObj:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AcA
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AcB
+        sta AoY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoName
+        jsr WhoRec
+        bcs .done
+        jsr AoFind
+        bcc .done               ; not there
+        jsr BrKindOf
+        bcs .walk
+        jsr BreakHit            ; (writes "No effect.")
+        bra .done
+.walk:  lda WP                  ; (AcBeside may move WP's things about: kept)
+        sta AoWho
+        lda WP+2
+        sta AoWho+2
+        jsr AcBeside            ; up to it (acts.s)
+        lda #120
+        sta AoLeft
+.blow:  lda AoWho
+        sta WP
+        lda AoWho+2
+        sta WP+2
+        jsr AoFind
+        bcc .done               ; broken
+        ldy #C_STR
+        lda [WP],y
+        jsr BlowOf
+        jsr BreakHit
+        bcs .done
+        jsr DrawView
+        pha
+        pha
+        tool $2503              ; GetTick
+        pla
+        sta AoTick
+        pla
+.w:     jsr ClockRun
+        pha
+        pha
+        tool $2503
+        pla
+        sec
+        sbc AoTick
+        sta T4
+        pla
+        lda T4
+        cmp #30
+        bcc .w
+        dec AoLeft
+        bne .blow
+.done:  jsr DrawView
+        lda #11
+        jmp Next
+
+; ItemPtr = the object named AoName at AoX, AoY (on this map, not gone, not carried): carry set.
+AoFind:
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta AoN
+        beq .no
+.l:     ldy #6
+        lda [ItemPtr],y
+        and #32+64+256
+        bne .n
+        lda [ItemPtr],y
+        and #$F000
+        cmp CurBits
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp AoName
+        bne .n
+        lda [ItemPtr]
+        cmp AoX
+        bne .n
+        ldy #2
+        lda [ItemPtr],y
+        cmp AoY
+        beq .y
+.n:     lda #16
+        jsr NextItem
+        dec AoN
+        bne .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+AoName:   .dw 0
+AoX:      .dw 0
+AoY:      .dw 0
+AoWho:    .dw 0,0
+AoLeft:   .dw 0
+AoTick:   .dw 0
+AoN:      .dw 0
 
 EqName:   .dw 0
 EqOn:     .dw 0

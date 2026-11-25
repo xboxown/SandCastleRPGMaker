@@ -82,7 +82,8 @@ ParseLiquids:
         iny
         bra .c
 .cd:    lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseBreak          ; (break.s)
 
 ; Use on a liquid container at ItemPtr: "On what?" and the cursor.
 LiquidPicked:

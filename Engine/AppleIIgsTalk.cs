@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -585,6 +585,15 @@ public sealed class AppleIIgsTalk
                     if (!WhoCode(cmd.Get("Who"), out int m, out int x) || Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it)
                     { Unsupported.Add($"{(cmd.Type == EventCommandType.EquipItem ? "Equip" : "Unequip")} Item (someone not on a map, or an item not on the IIgs)"); break; }
                     B(Ext); B((int)ExtOp.Equip); W(m); W(x); W(it.Name); B(cmd.Type == EventCommandType.EquipItem ? 1 : 0);
+                    break;
+                }
+                case EventCommandType.AttackObject:
+                {
+                    // EXT 2 ATKOBJ who x y name (ext.s, break.s): the thing - the object (or container) of that name nearest x, y.
+                    var thing = cmd.Get("Thing").Split(':');
+                    int? thingName = thing.Length == 3 && thing[0] is "Object" or "Item" ? Extra?.Item?.Invoke(thing[0] == "Object" ? "Object" : thing[1], thing[2])?.Name : null;
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || thingName is null) { Unsupported.Add("Attack Object (someone not on a map, or a thing from a variable)"); break; }
+                    B(Ext); B((int)ExtOp.AttackObject); W(m); W(x); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(thingName.Value);
                     break;
                 }
                 case EventCommandType.PlayPose:

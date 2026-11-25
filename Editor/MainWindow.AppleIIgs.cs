@@ -701,6 +701,16 @@ public partial class MainWindow
             if (LiquidIndex(so.LiquidSourceId) is int sl and >= 0 && pack.LiquidSources.All(x => x.Name != pack.NameOf(so.Name))) pack.LiquidSources.Add((pack.NameOf(so.Name), sl));
         foreach (var gc in _characterDatabase.Characters.Where(c => c.GivesLiquidFoodId >= 0))
             if (LiquidIndex(gc.GivesLiquidFoodId) is int gl and >= 0 && pack.LiquidGivers.All(x => x.Name != pack.NameOf(gc.Name))) pack.LiquidGivers.Add((pack.NameOf(gc.Name), gl));
+        // Things that can be broken (break.s), as U6GameWindow IsBreakable / CanBeBroken: objects with hit points (not "Cannot be
+        // destroyed", not a locked or magically locked door; windows: item 55) and destructible containers.
+        {
+            int BrSnd(int id) => id >= 0 && soundIndex.TryGetValue(id, out int sn) ? sn : 0xFFFF;
+            foreach (var bo in _objectDatabase.Objects.Where(o => o.HitPoints > 0 && !o.CannotBeDestroyed && ObjectTypes.CanBeBroken(o.Type) && o.Type is not (ObjectType.Window or ObjectType.Explosive)
+                         && !(o.Type == ObjectType.Door && (o.Door.RequiredKeyItemId >= 0 || o.Door.MagicallyLocked))))
+                if (pack.Breakables.All(b => b.Name != pack.NameOf(bo.Name))) pack.Breakables.Add((pack.NameOf(bo.Name), bo.HitPoints, bo.Defense, BrSnd(bo.DestroyedSoundResourceId), 0));
+            foreach (var bc in _containerDatabase.Containers.Where(c => c.Destructible && !c.IsBodyContainer && c.RequiredKeyItemId < 0))
+                if (pack.Breakables.All(b => b.Name != pack.NameOf(bc.Name))) pack.Breakables.Add((pack.NameOf(bc.Name), Math.Max(1, bc.HitPoints), bc.Defense, BrSnd(bc.DestructibleSoundResourceId), 1));
+        }
         // Wands, scrolls and potions: known (their spells made) before the spells are finished.
         foreach (var od in _objectDatabase.Objects.Where(o => o.Type is ObjectType.UseableObject or ObjectType.Potion)) SpecialOf(od);
         // Spellbooks: each book's spells into the game's spell list (Engine/AppleIIgs.cs Spells / Books).

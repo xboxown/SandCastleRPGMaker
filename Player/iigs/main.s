@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 63 (b703): breakable things - their hit points, defense, sound (break.s); words 113-115.
 ; Version 62 (b700): liquid containers - special 11, liquids / sources / givers (liquid.s); words 104-112.
 ; Version 61 (b699): travel things - sextant, clock, map, keychain (specials 7-10, travel.s); words 95-103.
 ; Version 60 (b698): pets - Call Character, Order On A Target, Sniff And Lead (ACT 9-12, pets.s); behaviour 3 follows.
@@ -700,7 +701,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #62
+        cmp #63
         beq .known
 .bad:   sec
         rts
@@ -2261,6 +2262,7 @@ TryMove:
         .include "haggle.s"
         .include "travel.s"
         .include "liquid.s"
+        .include "break.s"
         .include "music.s"
         .include "weather.s"
         .include "vehicles.s"

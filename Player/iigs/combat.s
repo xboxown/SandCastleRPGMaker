@@ -156,7 +156,30 @@ AttackPicked:
         lda Kind
         cmp #2
         beq .who
-        lda #9                  ; Not possible.
+        cmp #1
+        bne .np
+        lda CurX                ; an object within reach: a blow at it (break.s)
+        sec
+        sbc PX
+        jsr AbsX
+        sta T4
+        lda CurY
+        sec
+        sbc PY
+        jsr AbsY
+        cmp T4
+        bcc .od
+        sta T4
+.od:    lda T4
+        cmp AvRec+C_REACH
+        beq .on1
+        bcs .far
+.on1:   jsr ObjFlags            ; ItemPtr = it
+        jmp AttackThing
+.far:   lda #10                 ; Out of range!
+        jsr Format
+        jmp PromptLine
+.np:    lda #9                  ; Not possible.
         jsr Format
         jmp PromptLine
 .who:   lda CurX

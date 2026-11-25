@@ -2957,4 +2957,6 @@ EggWM:    .ds 128
 Purse:    .ds 16                ; (money.s: the other currencies' purses - saved)
 RingN:    .dw 0                 ; (travel.s: the keychain's keys - saved)
 RingKeys: .ds 64
+BrHp:     .dw $FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0 ; (break.s: things struck - saved)
+          .dw $FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0,$FFFF,0
 SCRIPTEND: .dw 0
