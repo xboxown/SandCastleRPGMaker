@@ -16,8 +16,8 @@ OpExt:
 .bad:   lda #2                  ; (an older player's unknown sub: its length isn't known - the code ends here)
         jmp EndTalk
 
-XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick
-EXT_COUNT = 5
+XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC
+EXT_COUNT = 6
 
 ; EXT 0 EQUIP who name on (9 bytes): Equip Item (on 1) / Unequip Item (on 0) - as the Windows Ultima 6 engine's
 ; EquipItemCommand / UnequipItemCommand: one of the thing not worn yet is readied in its own slot (what is there goes
@@ -688,6 +688,135 @@ XtWait:
         cmp XwN
         bcc .w
         rts
+
+; EXT 5 TAKEC who x y name count (12 bytes): Take From Container, as U6GameWindow.Actions.cs TakeFromContainerCommand:
+; up to the container at x, y; locked: given up; then that many of the things of that name in it ($FFFF: everything)
+; are carried by whoever took them - each one too heavy for them stays inside (moves.s WeightCheck).
+XtTakeC:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AcA
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AcB
+        sta AoY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta TcName
+        iny
+        iny
+        lda [TalkPtr],y
+        sta TcLeft
+        jsr JOwner
+        sta PkOwner
+        jsr WhoRec
+        bcc .fb1
+        brl .done
+.fb1:
+        jsr TcBox
+        bcs .fb2
+        brl .done
+.fb2:
+        jsr AcBeside            ; up to it (acts.s)
+        jsr TcBox
+        bcs .fb3
+        brl .done
+.fb3:
+        ldy #6
+        lda [ItemPtr],y
+        and #8                  ; locked
+        bne .done
+        jsr IndexOf
+        sta TcBoxI
+        stz TcI
+.l:     lda TcI
+        cmp ObjCount
+        bcs .end
+        jsr ObjAt               ; ItemPtr = object TcI
+        ldy #6
+        lda [ItemPtr],y
+        and #256+32
+        cmp #256
+        bne .n
+        ldy #14
+        lda [ItemPtr],y
+        cmp TcBoxI
+        bne .n
+        lda TcName
+        cmp #$FFFF
+        beq .take
+        ldy #8
+        lda [ItemPtr],y
+        cmp TcName
+        bne .n
+.take:  lda TcI                 ; too heavy for them: it stays
+        ldx PkOwner
+        jsr WeightCheck
+        bcc .n
+        lda TcI
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$0EFF              ; carried (not worn, not in a bag), theirs
+        ora #64
+        sta [ItemPtr],y
+        ldy #14
+        lda PkOwner
+        sta [ItemPtr],y
+        lda TcName
+        cmp #$FFFF
+        beq .n
+        dec TcLeft
+        beq .end
+.n:     inc TcI
+        bra .l
+.end:   jsr RefreshInventory
+        jsr Having
+.done:  jsr DrawView
+        lda #12
+        jmp Next
+
+; ItemPtr = the container at AoX, AoY (on this map, not gone): carry set.
+TcBox:
+        lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta AoN
+        beq .no
+.l:     ldy #6
+        lda [ItemPtr],y
+        and #128+32+64+256
+        cmp #128
+        bne .n
+        lda [ItemPtr],y
+        and #$F000
+        cmp CurBits
+        bne .n
+        lda [ItemPtr]
+        cmp AoX
+        bne .n
+        ldy #2
+        lda [ItemPtr],y
+        cmp AoY
+        beq .y
+.n:     lda #16
+        jsr NextItem
+        dec AoN
+        bne .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+TcName:   .dw 0
+TcLeft:   .dw 0
+TcBoxI:   .dw 0
+TcI:      .dw 0
 
 PkOwner:  .dw 0
 PkChance: .dw 0
