@@ -262,7 +262,11 @@ ObjEvQueue:
         bne .l
 .no:    clc
         rts
-.got:   iny
+.got:   lda ItemPtr             ; the thing whose event this is (Delete Object Self - ext.s)
+        sta SelfRec
+        lda ItemPtr+2
+        sta SelfRec+2
+        iny
         iny
         lda [Src],y
         tay
@@ -416,4 +420,5 @@ FMap:     .dw 0
 FIdx:     .dw 0
 FName:    .dw 0
 UseRec:   .dd 0
+SelfRec:  .dd 0
 UseHit:   .dw 0

@@ -2958,5 +2958,6 @@ Purse:    .ds 16                ; (money.s: the other currencies' purses - saved
 RingN:    .dw 0                 ; (travel.s: the keychain's keys - saved)
 RingKeys: .ds 64
 LkTab:    .ds 16*6              ; (ext.s Change Look: owner code (0 free), own sprite, own $4000 - saved)
+OlTab:    .ds 64                ; (ext.s Change Object Look: object number + 1 (0 free), its own sprite - saved)
 BrHp:     .ds 64                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

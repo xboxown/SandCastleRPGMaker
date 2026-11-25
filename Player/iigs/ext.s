@@ -18,7 +18,8 @@ OpExt:
 
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
-EXT_COUNT = 18
+          .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
+EXT_COUNT = 23
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -1597,6 +1598,213 @@ RsFindBody:
         rts
 .y:     sec
         rts
+
+; ---- objects (U6GameWindow.ScriptWorld.cs: Create Object, Delete Object, Delete Object Self, Move Object, Change Object Look) ----
+
+; EXT 18 CREATE name sprite icon flags other x y count (17 bytes): that many of the thing on this map at x, y (spare slots:
+; gone with no name, as Give Item's).
+XtCreate:
+        iny
+        ldx #0
+.r:     lda [TalkPtr],y         ; name, sprite, icon, flags, other, x, y
+        sta CoName,x
+        iny
+        iny
+        inx
+        inx
+        cpx #14
+        bcc .r
+        lda [TalkPtr],y
+        and #$00FF
+        sta CoN
+        beq .done
+.one:   lda ObjPtr
+        sta ItemPtr
+        lda ObjPtr+2
+        sta ItemPtr+2
+        lda ObjCount
+        sta AoN
+        beq .done
+.l:     ldy #6
+        lda [ItemPtr],y
+        and #32
+        beq .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp #$FFFF
+        bne .n
+        lda CoX                 ; this slot: the thing, on this map
+        sta [ItemPtr]
+        ldy #2
+        lda CoY
+        sta [ItemPtr],y
+        ldy #4
+        lda CoSpr
+        sta [ItemPtr],y
+        ldy #6
+        lda CoFlags
+        and #$0FFF-32-64-256
+        ora CurBits
+        sta [ItemPtr],y
+        ldy #8
+        lda CoName
+        sta [ItemPtr],y
+        ldy #10
+        lda CoOther
+        sta [ItemPtr],y
+        ldy #12
+        lda CoIcon
+        sta [ItemPtr],y
+        ldy #14
+        lda #$FFFF
+        sta [ItemPtr],y
+        dec CoN
+        bne .one
+        bra .done
+.n:     lda #16
+        jsr NextItem
+        dec AoN
+        bne .l
+.done:  jsr MakeOccAgain        ; (spells2.s)
+        jsr DrawView
+        lda #17
+        jmp Next
+
+; EXT 19 DELOBJ x y name (8 bytes): the thing of that name at x, y gone for good.
+XtDelObj:
+        jsr XtThing
+        bcc .done
+        jsr XtGone
+.done:  lda #8
+        jmp Next
+
+; EXT 20 DELSELF (2 bytes): the object whose own event this is (the last to queue one - ownev.s SelfRec) gone, unless carried.
+XtDelSelf:
+        lda SelfRec+2
+        beq .done
+        lda SelfRec
+        sta ItemPtr
+        lda SelfRec+2
+        sta ItemPtr+2
+        ldy #6
+        lda [ItemPtr],y
+        and #64+256
+        bne .done
+        jsr XtGone
+.done:  lda #2
+        jmp Next
+
+; The thing at ItemPtr gone: off its cell, the view again.
+XtGone:
+        ldy #6
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+        jsr MakeOccAgain
+        jmp DrawView
+
+; Y on the sub byte: AoX, AoY, AoName from x y name; ItemPtr = that thing on this map (carry set).
+XtThing:
+        iny
+        lda [TalkPtr],y
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoName
+        iny
+        iny
+        sty XtY
+        jmp AoFind
+
+; EXT 21 MOVEOBJ x y name tox toy (12 bytes): the thing moved to another cell.
+XtMoveObj:
+        jsr XtThing
+        bcc .done
+        ldy XtY
+        lda [TalkPtr],y
+        sta [ItemPtr]
+        iny
+        iny
+        lda [TalkPtr],y
+        ldy #2
+        sta [ItemPtr],y
+        jsr MakeOccAgain
+        jsr DrawView
+.done:  lda #12
+        jmp Next
+
+; EXT 22 OBJLOOK x y name own sprite (11 bytes): Change Object Look - the thing shown with that sprite; own 1: its own again
+; (kept in OlTab, saved: its number + 1 (0 free), its own sprite).
+XtObjLook:
+        jsr XtThing
+        bcs .got
+        brl .done
+.got:   ldy XtY
+        lda [TalkPtr],y
+        and #$00FF
+        sta LkOwn
+        iny
+        lda [TalkPtr],y
+        sta LkSpr
+        jsr IndexOf
+        inc a
+        sta LkCode
+        ldx #0                  ; its entry
+.f:     lda OlTab,x
+        cmp LkCode
+        beq .has
+        inx
+        inx
+        inx
+        inx
+        cpx #64
+        bcc .f
+        lda LkOwn               ; none: back to its own - nothing to do
+        bne .done
+        ldx #0
+.fr:    lda OlTab,x
+        beq .new
+        inx
+        inx
+        inx
+        inx
+        cpx #64
+        bcc .fr
+        bra .done
+.new:   lda LkCode
+        sta OlTab,x
+        ldy #4
+        lda [ItemPtr],y
+        sta OlTab+2,x
+        bra .set
+.has:   lda LkOwn
+        beq .set
+        lda OlTab+2,x
+        ldy #4
+        sta [ItemPtr],y
+        stz OlTab,x
+        bra .drawn
+.set:   lda LkSpr
+        ldy #4
+        sta [ItemPtr],y
+.drawn: jsr DrawView
+.done:  lda #11
+        jmp Next
+
+CoName:   .dw 0
+CoSpr:    .dw 0
+CoIcon:   .dw 0
+CoFlags:  .dw 0
+CoOther:  .dw 0
+CoX:      .dw 0
+CoY:      .dw 0
+CoN:      .dw 0
+XtY:      .dw 0
 
 RsMode:   .dw 0
 RsWhere:  .dw 0

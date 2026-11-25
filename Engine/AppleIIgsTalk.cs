@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -638,6 +638,37 @@ public sealed class AppleIIgsTalk
                     B(Ext); B((int)ExtOp.Resurrect); W(m); W(x); B(raise ? 1 : 0); B(spot ? 1 : 0); W(spot ? Number(cmd.Get("X")) : 0); W(spot ? Number(cmd.Get("Y")) : 0); W(hp);
                     break;
                 }
+                case EventCommandType.CreateObject:
+                {
+                    // EXT 18 CREATE (ext.s): at most 8 at once.
+                    if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } ci) { Unsupported.Add("Create Object (a thing not on the IIgs)"); break; }
+                    B(Ext); B((int)ExtOp.CreateObject); W(ci.Name); W(ci.Sprite); W(ci.Icon); W(ci.Flags); W(ci.Other); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y")));
+                    B(Math.Clamp(Number(cmd.Get("Quantity")), 1, 8));
+                    break;
+                }
+                case EventCommandType.DeleteObject:
+                case EventCommandType.MoveObject:
+                case EventCommandType.ChangeObjectLook:
+                {
+                    // EXT 19 / 21 / 22 (ext.s): the thing - the one of that name at its spot (a thing from a variable: Find Thing, item 20).
+                    var tp = cmd.Get("Thing").Split(':');
+                    int? tn = tp.Length == 3 && tp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(tp[0] == "Object" ? "Object" : tp[1], tp[2])?.Name : null;
+                    if (tn is null) { Unsupported.Add($"{ScriptCommands.Of(cmd.Type)?.Name ?? cmd.Type.ToString()} (a thing from a variable, or not on the IIgs)"); break; }
+                    int tx = Number(cmd.Get("X")), ty = Number(cmd.Get("Y"));
+                    if (cmd.Type == EventCommandType.DeleteObject) { B(Ext); B((int)ExtOp.DeleteObject); W(tx); W(ty); W(tn.Value); }
+                    else if (cmd.Type == EventCommandType.MoveObject) { B(Ext); B((int)ExtOp.MoveObject); W(tx); W(ty); W(tn.Value); W(Number(cmd.Get("ToX"))); W(Number(cmd.Get("ToY"))); }
+                    else
+                    {
+                        bool own = cmd.Get("Own") == "True";
+                        int spr = own ? 0 : Extra?.SpriteFrames?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName")) is { Count: > 0 } fr ? fr[0].Sprite : -1;
+                        if (spr < 0) { Unsupported.Add("Change Object Look (a sprite not in the game)"); break; }
+                        B(Ext); B((int)ExtOp.ObjectLook); W(tx); W(ty); W(tn.Value); B(own ? 1 : 0); W(spr);
+                    }
+                    break;
+                }
+                case EventCommandType.DeleteObjectSelf:
+                    B(Ext); B((int)ExtOp.DeleteSelf);
+                    break;
                 case EventCommandType.ChangeName:
                 {
                     // EXT 16 NAME who name (ext.s): a name as typed (a {formula} in it: item 45, texts).
