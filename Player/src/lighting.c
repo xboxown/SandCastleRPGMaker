@@ -14,6 +14,7 @@
 #include "events.h"
 #include "world.h"
 #include "platform.h"
+#include "u6.h"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -32,6 +33,78 @@ static uint32_t drawnColor; static double drawnOpacity, fromOpacity, targetOpaci
 static double checkMs, fadeLength = 400;
 static double specialLight; /* game minutes of a light spell's glow left */
 static int weatherKind, weatherIntensity, weatherClouds, weatherCover; /* the overcast */
+
+/* ---------------- Ultima 6's darkness (Engine/U6Lighting.cs - Nuvie's original lighting; the Windows Ultima 6 engine's
+   U6GameWindow.Lighting.cs): no tinted sky but every cell dark at night and in a Cave, save globes of light added up (each
+   cell at most 4) - the avatar's for the hour (night 4; dusk and dawn stepping 10..5..10; a light in the party 8), every lit
+   light's (a candle-sized one 2, brighter 3) and every other character's holding one (3); drawn by world.c as Ultima 6's
+   shading - black, three quarters, half, a quarter dark, lit (a 2 x 2 dither). ---------------- */
+static const unsigned char U6_GLOBES[10][121] = {
+    { 1 },
+    { 1, 1, 1, 1, 2, 1, 1, 1, 1 },
+    { 0, 1, 1, 1, 0, 1, 2, 2, 2, 1, 1, 2, 3, 2, 1, 1, 2, 2, 2, 1, 0, 1, 1, 1, 0 },
+    { 0, 0, 1, 1, 1, 0, 0, 0, 1, 2, 2, 2, 1, 0, 1, 2, 3, 3, 3, 2, 1, 1, 2, 3, 4, 3, 2, 1, 1, 2, 3, 3, 3, 2, 1, 0, 1, 2, 2, 2, 1, 0, 0, 0, 1, 1, 1, 0, 0 },
+    { 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, 1, 2, 3, 3, 3, 2, 1, 0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 1, 2, 3, 4, 4, 4, 3, 2, 1, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 1, 2, 3, 3, 3, 2, 1, 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0 },
+    { 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, 0, 1, 2, 2, 3, 3, 3, 2, 2, 1, 0, 0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 0, 1, 2, 3, 4, 4, 4, 3, 2, 1, 0, 0, 1, 2, 2, 3, 3, 3, 2, 2, 1, 0, 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0 },
+    { 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0, 0, 1, 2, 2, 3, 3, 3, 2, 2, 1, 0, 1, 2, 3, 3, 4, 4, 4, 3, 3, 2, 1, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 1, 2, 3, 4, 4, 4, 4, 4, 3, 2, 1, 1, 2, 3, 3, 4, 4, 4, 3, 3, 2, 1, 0, 1, 2, 2, 3, 3, 3, 2, 2, 1, 0, 0, 0, 1, 1, 2, 2, 2, 1, 1, 0, 0 },
+    { 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 4, 4, 4, 3, 3, 2, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 2, 3, 4, 4, 4, 4, 4, 4, 4, 3, 2, 2, 2, 3, 3, 4, 4, 4, 3, 3, 2, 2, 2, 2, 2, 2, 3, 3, 3, 2, 2, 2, 2 },
+    { 3, 3, 3, 3, 4, 4, 4, 3, 3, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 3, 3, 4, 4, 4, 3, 3, 3, 3 },
+    { 3, 3, 3, 4, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 4, 4, 4, 4, 4, 4, 4, 4, 4, 3, 3, 3, 3, 4, 4, 4, 4, 4, 3, 3, 3 }
+};
+static int u6Override = -1, u6OverrideHour = -1;
+
+static int min60(double hour) { return (int)hour * 60; }
+
+/* The avatar's globe for now: 0 by day (no darkness), else its level. */
+int lighting_u6_level(void)
+{
+    if (events_eye_in_cave()) return 4;
+    if (u6Override >= 0 && events_hour() == u6OverrideHour) return u6Override;
+    u6Override = -1;
+    if (!enabled) return 0;
+    int now = events_hour() * 60 + events_minute();
+    int dawn = min60(dawnStart), day = min60(dayStart), dusk = min60(duskStart), night = min60(nightStart);
+    if (day <= dawn) day = dawn + 1;
+    if (night <= dusk) night = dusk + 1;
+    if (now >= day && now < dusk) return 0;
+    if (now >= dusk && now < night) { int s = (now - dusk) * 6 / (night - dusk); return 10 - (s > 5 ? 5 : s); }
+    if (now >= dawn && now < day) { int s = (now - dawn) * 6 / (day - dawn); return 5 + (s > 5 ? 5 : s); }
+    return 4;
+}
+
+/* A light spell's glow left (the avatar's globe then 8). */
+int lighting_u6_spell(void) { return specialLight > 0; }
+
+/* A globe of that level at cell cx, cy of a w x h grid. */
+void lighting_u6_globe(unsigned char *shade, int w, int h, int cx, int cy, int level)
+{
+    if (level < 1) return;
+    if (level > 10) level = 10;
+    const unsigned char *g = U6_GLOBES[level - 1];
+    int r = level < 6 ? level - 1 : 5, side = r * 2 + 1;
+    for (int j = 0; j < side; j++)
+    {
+        int y = cy - r + j;
+        if (y < 0 || y >= h) continue;
+        for (int i = 0; i < side; i++)
+        {
+            int x = cx - r + i;
+            if (x < 0 || x >= w || !g[j * side + i]) continue;
+            int v = shade[y * w + x] + g[j * side + i];
+            shade[y * w + x] = (unsigned char)(v > 4 ? 4 : v);
+        }
+    }
+}
+
+int lighting_u6_object_level(int brightness) { return brightness <= 3 ? 2 : 3; }
+
+/* Whether a world pixel of a cell with light 0-4 is dark (Ultima 6's shading as a 2 x 2 dither). */
+int lighting_u6_dark(int light, int px, int py)
+{
+    if (light >= 4) return 0;
+    int b = (py & 1) == 0 ? ((px & 1) == 0 ? 0 : 2) : ((px & 1) == 0 ? 3 : 1);
+    return b < 4 - light;
+}
 
 static const double DARKNESS_LEFT[4] = { 1.0, 0.75, 0.55, 0.35 }; /* none, candle, single light, many lights */
 
@@ -130,6 +203,7 @@ void lighting_update(double ms)
     }
     if ((checkMs -= ms) > 0) return;
     checkMs = 250;
+    if (u6_on()) { drawnOpacity = targetOpacity = 0; fadeMs = -1; return; } /* Ultima 6: no tint - its darkness (world.c u6_dark_draw) */
     double nightAmount;
     Sky sky = sky_now(&nightAmount);
     int inCave = events_eye_in_cave();
@@ -180,6 +254,12 @@ int lighting_shade(uint32_t *keep, uint32_t *rbAdd, uint32_t *gAdd)
 /* Change Day/Night: Morning (clear), Afternoon (the dusk colour), Evening (the night) - until the next hour. */
 void lighting_period(const char *period)
 {
+    if (u6_on()) /* Ultima 6: Morning day, Afternoon dusk's middle, Evening night - till the next hour */
+    {
+        u6Override = !strcmp(period, "Evening") ? 4 : !strcmp(period, "Afternoon") ? 7 : 0;
+        u6OverrideHour = events_hour();
+        return;
+    }
     if (!strcmp(period, "Morning")) overrideSky = (Sky){ 0, 0 };
     else if (!strcmp(period, "Afternoon")) overrideSky = dusk;
     else if (!strcmp(period, "Evening")) overrideSky = night;
@@ -191,7 +271,7 @@ void lighting_period(const char *period)
 /* Apply Palette Color: a colour over the world at once (kept till the sky next changes). */
 void lighting_palette(const char *hex, double opacity)
 {
-    if (!hex || !hex[0]) return;
+    if (!hex || !hex[0] || u6_on()) return; /* (Ultima 7's tint: not in Ultima 6) */
     drawnColor = parse_colour(hex, drawnColor);
     fromOpacity = drawnOpacity; targetOpacity = clamp01(opacity); fadeMs = 0; fadeLength = 600; /* faded in over 0.6 s */
 }

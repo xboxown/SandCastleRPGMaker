@@ -1933,7 +1933,58 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms);
 /* The world - and on a map that wraps around, the land beyond an edge drawn in the gap, one map-width (or height) along. */
 static void world_draw_inner(uint32_t *pixels, uint32_t ms);
 static void sight_draw(uint32_t *pixels, uint32_t ms);
-void world_draw(uint32_t *pixels, uint32_t ms) { viewClip = u6View; world_draw_inner(pixels, ms); viewClip = 0; if (u6View) sight_draw(pixels, ms); }
+static void u6_dark_draw(uint32_t *pixels);
+static const Actor *light_eye(void);
+void world_draw(uint32_t *pixels, uint32_t ms) { viewClip = u6View; world_draw_inner(pixels, ms); viewClip = 0; if (u6View) { u6_dark_draw(pixels); sight_draw(pixels, ms); } }
+
+/* Ultima 6's darkness over the Game View (lighting.c, Engine/U6Lighting.cs - the Windows Ultima 6 engine's): the cells round
+   the view, each 0-4 light from the globes added up, their pixels darkened by the 2 x 2 dither (world pixels, each
+   frame_scale x frame_scale on the screen). */
+#define U6DARK_MAX 48
+static void u6_dark_draw(uint32_t *pixels)
+{
+    int level = lighting_u6_level();
+    if (level <= 0 || tileW <= 0 || tileH <= 0) return;
+    int c0 = (int)floor((cameraX + viewX) / tileW) - 1, r0 = (int)floor((cameraY + viewY) / tileH) - 1;
+    int cols = (int)ceil(viewW / (double)tileW) + 3, rows = (int)ceil(viewH / (double)tileH) + 3;
+    if (cols > U6DARK_MAX) cols = U6DARK_MAX;
+    if (rows > U6DARK_MAX) rows = U6DARK_MAX;
+    static unsigned char shade[U6DARK_MAX * U6DARK_MAX];
+    memset(shade, 0, sizeof shade);
+    int partyLight = lighting_u6_spell();
+    for (int a = 0; a <= npcCount; a++)
+    {
+        Actor *who = a == 0 ? &player : actor_of(a);
+        if (!who) continue;
+        int brightness[3], gives[3];
+        if (items_hand_lights(a == 0 ? player.characterId : who->characterId, brightness, gives) <= 0) continue;
+        if (a == 0 || items_in_party(who->characterId)) { partyLight = 1; continue; }
+        lighting_u6_globe(shade, cols, rows, (int)floor(who->px / tileW) - c0, (int)floor(who->py / tileH) - r0, 3); /* anyone else with a light */
+    }
+    if (partyLight && level < 8) level = 8;
+    const Actor *eye = light_eye();
+    lighting_u6_globe(shade, cols, rows, (int)floor(eye->px / tileW) - c0, (int)floor(eye->py / tileH) - r0, level);
+    for (int i = 0; i < thingCount; i++)
+    {
+        const Thing *t = &things[i];
+        if (t->gone || !t->lit || !t->def || t->def->type != T_LIGHT) continue;
+        if (t->x < c0 - 6 || t->y < r0 - 6 || t->x > c0 + cols + 6 || t->y > r0 + rows + 6) continue;
+        lighting_u6_globe(shade, cols, rows, t->x - c0, t->y - r0, lighting_u6_object_level(t->def->brightness));
+    }
+    int x0 = viewX * frame_scale, y0 = viewY * frame_scale, x1 = (viewX + viewW) * frame_scale, y1 = (viewY + viewH) * frame_scale;
+    int camX = (int)floor(cameraX), camY = (int)floor(cameraY);
+    for (int j = y0; j < y1; j++)
+    {
+        int wy = camY + j / frame_scale, cy = (int)floor(wy / (double)tileH) - r0;
+        if (cy < 0 || cy >= rows) continue;
+        for (int i = x0; i < x1; i++)
+        {
+            int wx = camX + i / frame_scale, cx = (int)floor(wx / (double)tileW) - c0;
+            if (cx < 0 || cx >= cols) continue;
+            if (lighting_u6_dark(shade[cy * cols + cx], wx, wy)) pixels[j * FRAME_W + i] = 0xFF000000u;
+        }
+    }
+}
 
 /* ---------------- Ultima 6: what the avatar can't see is black (U6GameWindow.U6Sight; Nuvie's boundaryFill) ----------------
    From the avatar's square sight spreads to every square it can pass through; those, and the walls bordering them, are drawn -
