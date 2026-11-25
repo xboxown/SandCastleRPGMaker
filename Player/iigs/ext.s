@@ -19,8 +19,8 @@ OpExt:
 XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtBed,XtShake,XtFade,XtFlash,XtDayNight
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
-          .dw XtCount,XtInside,XtCharges,XtEquipped
-EXT_COUNT = 27
+          .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
+EXT_COUNT = 28
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -2203,6 +2203,103 @@ XtEquipped:
         jsr StoreVar
 .done:  lda EqLen
         jmp Next
+
+; EXT 27 SETBOX x y boxname empty name sprite icon flags other count (20 bytes): Set Container Contents, as
+; U6GameWindow.ScriptWorld.cs SetContainerContentsCommand - the container of that name at x, y: emptied first if asked
+; (everything in it, at any depth, gone); then that many of the thing ($FFFF name: none) put in it (spare slots).
+XtSetBox:
+        jsr XtThing             ; (x, y, the container's name: ItemPtr on it)
+        bcs .got
+        brl .done
+.got:   jsr IndexOf
+        sta CtBox
+        ldy XtY
+        lda [TalkPtr],y
+        and #$00FF
+        sta SbEmpty
+        iny
+        ldx #0
+.r:     lda [TalkPtr],y         ; name, sprite, icon, flags, other
+        sta CoName,x
+        iny
+        iny
+        inx
+        inx
+        cpx #10
+        bcc .r
+        lda [TalkPtr],y
+        and #$00FF
+        sta CoN
+        lda SbEmpty
+        beq .put
+        stz CtI                 ; empty it: all in it gone
+.e:     lda CtI
+        cmp ObjCount
+        bcs .put
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32+256
+        cmp #256
+        bne .en
+        jsr CtHolder
+        bcc .en
+        ldy #6
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+.en:    inc CtI
+        bra .e
+.put:   lda CoName
+        cmp #$FFFF
+        beq .done
+.one:   lda CoN
+        beq .done
+        stz CtI                 ; a spare slot
+.s:     lda CtI
+        cmp ObjCount
+        bcs .done
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        beq .sn
+        ldy #8
+        lda [ItemPtr],y
+        cmp #$FFFF
+        bne .sn
+        lda #$FFFF              ; in the container
+        sta [ItemPtr]
+        ldy #2
+        sta [ItemPtr],y
+        ldy #4
+        lda CoSpr
+        sta [ItemPtr],y
+        ldy #6
+        lda CoFlags
+        and #$0FFF-32-64
+        ora #256
+        sta [ItemPtr],y
+        ldy #8
+        lda CoName
+        sta [ItemPtr],y
+        ldy #10
+        lda CoOther
+        sta [ItemPtr],y
+        ldy #12
+        lda CoIcon
+        sta [ItemPtr],y
+        ldy #14
+        lda CtBox
+        sta [ItemPtr],y
+        dec CoN
+        bra .one
+.sn:    inc CtI
+        bra .s
+.done:  lda #20
+        jmp Next
+
+SbEmpty:  .dw 0
 
 CtVar:    .dw 0
 CtName:   .dw 0

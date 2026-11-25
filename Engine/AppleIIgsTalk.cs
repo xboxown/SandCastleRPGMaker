@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -708,6 +708,19 @@ public sealed class AppleIIgsTalk
                     string nameVar = cmd.Get("NameVariable").Trim();
                     B(Ext); B((int)ExtOp.Equipped); W(m); W(x); B((int)slot + 1); W(_variable(cmd.Get("Variable"))); W(nameVar.Length > 0 ? _variable(nameVar) : 0xFFFF);
                     B(ids.Count); foreach (var (wn, wid) in ids) { W(wn); W(wid); }
+                    break;
+                }
+                case EventCommandType.SetContainerContents:
+                {
+                    // EXT 27 SETBOX x y boxname empty name sprite icon flags other count (ext.s): at most 8 put in.
+                    var bp = cmd.Get("Thing").Split(':');
+                    int? boxName = bp.Length == 3 && bp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(bp[0] == "Object" ? "Object" : bp[1], bp[2])?.Name : null;
+                    bool put = cmd.Get("Category").Length > 0 && int.TryParse(cmd.Get("ItemId"), out int pid) && pid >= 0;
+                    var pi = put ? Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) : null;
+                    if (boxName is null || put && pi is null) { Unsupported.Add("Set Container Contents (a container from a variable, or a thing not on the IIgs)"); break; }
+                    B(Ext); B((int)ExtOp.SetBox); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(boxName.Value); B(cmd.Get("Empty") == "True" ? 1 : 0);
+                    if (pi is { } it) { W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); } else { W(0xFFFF); W(0); W(0); W(0); W(0xFFFF); }
+                    B(Math.Clamp(Number(cmd.Get("Quantity")), 1, 8));
                     break;
                 }
                 case EventCommandType.DeleteObjectSelf:
