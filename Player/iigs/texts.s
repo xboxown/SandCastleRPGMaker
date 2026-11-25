@@ -1,16 +1,16 @@
 ; Sandcastle RPG Maker - Apple IIgs player: texts, arrays and grids (Windows' ScriptRuntime): the variables hold a number
 ; or a text (VarTag 1: VarTab is the text's slot); a text lives in a slot of 47 letters (slot 0 is always "", 1-16 are
-; for the moment a formula is worked out, 17-127 are kept - a variable's, an array element's, a grid cell's own).
-; Arrays: 16 of up to 64 values; grids: 8, their cells from a pool of 2048 (packed together again when it is full).
+; for the moment a formula is worked out, 17-95 are kept - a variable's, an array element's, a grid cell's own).
+; Arrays: 16 of up to 64 values; grids: 8, their cells from a pool of 1024 (packed together again when it is full).
 ; All of it is saved with the game (SCRIPTDATA..SCRIPTEND).
 
 SLOT    = 48
 TEMPS   = 16
 FIRSTKEEP = 17
-SLOTS   = 128
+SLOTS   = 96                    ; (b692: 128 -> 96 - room in the data bank)
 LISTMAX = 64
 GRIDCELL0 = 1024                ; a grid's cells come after the arrays' (16 x 64)
-CELLS   = 3072
+CELLS   = 2048                  ; (b692: grids 1024 cells, not 2048 - room in the data bank)
 
 ; From GAME.DAT (after the leveling): the variables that start as texts, the maps' names.
 ParseScript:

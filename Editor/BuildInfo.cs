@@ -12,5 +12,5 @@ namespace SandcastleRpgMaker.Editor;
 /// </summary>
 public static class BuildInfo
 {
-    public const string CurrentBuild = "DEBUG-BUILD-691";
+    public const string CurrentBuild = "DEBUG-BUILD-692";
 }
