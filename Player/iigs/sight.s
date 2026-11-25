@@ -110,8 +110,10 @@ FindDoors:
 ; The fill and the black (after everything is drawn, before the darkness).
 DrawSight:
         lda SightOn
-        bne .on
-        rts
+        beq .off
+        lda CamOn               ; the camera elsewhere (ext.s): a cutscene - all seen (the user, 2026-11-25)
+        beq .on
+.off:   rts
 .on:    jsr FindDoors
         lda VCols               ; the grid: the view and a square round it
         clc

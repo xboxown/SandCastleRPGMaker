@@ -1934,8 +1934,16 @@ static void draw_world_once(uint32_t *pixels, uint32_t ms);
 static void world_draw_inner(uint32_t *pixels, uint32_t ms);
 static void sight_draw(uint32_t *pixels, uint32_t ms);
 static void u6_dark_draw(uint32_t *pixels);
+static int sightOn;
 static const Actor *light_eye(void);
-void world_draw(uint32_t *pixels, uint32_t ms) { viewClip = u6View; world_draw_inner(pixels, ms); viewClip = 0; if (u6View) { u6_dark_draw(pixels); sight_draw(pixels, ms); } }
+/* The camera elsewhere (Move Camera, Camera Follows): a cutscene - full light, all seen (the user, 2026-11-25). */
+void world_draw(uint32_t *pixels, uint32_t ms)
+{
+    viewClip = u6View; world_draw_inner(pixels, ms); viewClip = 0;
+    if (!u6View) return;
+    if (cameraHeld || cameraFollow > 0) { sightOn = 0; return; }
+    u6_dark_draw(pixels); sight_draw(pixels, ms);
+}
 
 /* Ultima 6's darkness over the Game View (lighting.c, Engine/U6Lighting.cs - the Windows Ultima 6 engine's): the cells round
    the view, each 0-4 light from the globes added up, their pixels darkened by the 2 x 2 dither (world pixels, each
@@ -1993,7 +2001,7 @@ static void u6_dark_draw(uint32_t *pixels)
    avatar's square or the view moves (and four times a second, for doors) - a few hundred squares: nothing for a 68k. */
 #define SIGHT_MAX 40
 static unsigned char sightSeen[SIGHT_MAX][SIGHT_MAX], sightBlock[SIGHT_MAX][SIGHT_MAX], sightWall[SIGHT_MAX][SIGHT_MAX];
-static int sightL, sightT, sightR, sightB, sightPx = -99999, sightPy, sightOn;
+static int sightL, sightT, sightR, sightB, sightPx = -99999, sightPy;
 static uint32_t sightAt;
 
 static int sight_wanted(void)

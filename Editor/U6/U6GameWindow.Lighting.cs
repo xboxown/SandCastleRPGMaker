@@ -46,7 +46,8 @@ public partial class U6GameWindow
         bool inCave = Zones.IsInCave(_map.Zones, eye.X, eye.Y, eye.Floor);
         int ambient = AmbientLevelNow(inCave);
         var image = ShadeImage();
-        if (ambient <= 0 || _player is null || _tileWidth <= 0 || _tileHeight <= 0) { image.Visibility = Visibility.Collapsed; return; }
+        bool cutscene = _cameraHold is not null || _cameraFollow is not null; // the camera elsewhere: a cutscene - full light (the user, 2026-11-25)
+        if (ambient <= 0 || cutscene || _player is null || _tileWidth <= 0 || _tileHeight <= 0) { image.Visibility = Visibility.Collapsed; return; }
 
         // The cells over the view, one more each side.
         int c0 = (int)Math.Floor(_cameraX / _tileWidth) - 1, r0 = (int)Math.Floor(_cameraY / _tileHeight) - 1;

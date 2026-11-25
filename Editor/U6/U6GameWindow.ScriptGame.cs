@@ -182,6 +182,7 @@ public partial class U6GameWindow
         else if (int.TryParse(command.Get("X"), out int x) && int.TryParse(command.Get("Y"), out int y)) to = (x * _tileWidth + _tileWidth / 2.0, y * _tileHeight + _tileHeight / 2.0);
         else return false;
         _cameraFollow = null;
+        _lightCheckMs = 0; // (the darkness off or back at once)
         double total = Math.Max(0, FormulaNumber(command, "Seconds")) * 1000, ms = 0;
         void Finish()
         {

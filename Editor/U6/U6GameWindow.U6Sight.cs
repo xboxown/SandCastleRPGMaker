@@ -67,7 +67,8 @@ public partial class U6GameWindow
     /// <summary>Each frame: the black drawn again when the avatar's square, the world or the view moved.</summary>
     private void UpdateSight()
     {
-        bool on = _systemSettings.Ultima6.LineOfSight && Hud.First(HudPieceKind.GameView) is not null && _player is not null && !_gameOver;
+        bool on = _systemSettings.Ultima6.LineOfSight && Hud.First(HudPieceKind.GameView) is not null && _player is not null && !_gameOver
+                  && _cameraHold is null && _cameraFollow is null; // the camera elsewhere (Move Camera, Camera Follows): a cutscene - all seen (the user, 2026-11-25)
         if (!on) { if (_sightShade is not null) _sightShade.Visibility = Visibility.Collapsed; return; }
         int left = (int)Math.Floor(_cameraX / _tileWidth) - 1, top = (int)Math.Floor(_cameraY / _tileHeight) - 1;
         int right = (int)Math.Ceiling((_cameraX + ViewportWidth) / _tileWidth) + 1, bottom = (int)Math.Ceiling((_cameraY + ViewportHeight) / _tileHeight) + 1;

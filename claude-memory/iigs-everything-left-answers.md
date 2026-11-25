@@ -38,3 +38,13 @@ cave research: research Nuvie, explain, wait for go; ladders KEEP (Windows + IIg
 "make your own language" tutorial in CommandList (+ add any missing commands/conditions). Q7 (spell editor), Q8
 (Levitate/Translate on Windows) and new Q9 (keep U6 inventory figure, remove PaperDoll Editor windows) still unanswered -
 stop before item 22 if so.
+
+PROGRESS (2026-11-25): items 1-13 done, b701-b714 (b713 = C player Ultima 6 darkness, all ports rebuilt except Ubuntu -
+needs WSL root, user must run `wsl -u root bash Player/build_linux.sh`; Mac CI for 372c4ed then tools/fetch_mac_player.sh).
+IIgs new talk op 48 EXT + sub byte (ext.s): 0 equip,1 pose,2 atkobj,3 anim,4 pick,5 takec,6 follow,7 behav,8 bed,9 shake,
+10 fade,11 flash,12 daynight,13 camera,14 camfollow. Engine/U6Lighting.cs = Nuvie original lighting shared by Windows U6
+(U6GameWindow.Lighting.cs), IIgs (look.s DrawDark) and C (lighting.c + world.c u6_dark_draw). Apply Palette Color is in
+NotInUltima6. Open question to user: Move Camera away from the Avatar with Line Of Sight on shows black on Windows (and the
+IIgs matches) - fix Windows? Next: item 14 Change Name / Change Look.
+
+2026-11-25: user said GO on question 9 (remove PaperDoll Editor windows/commands from U6 mode, keep HUD Body Slots, move prompts/save/errors to text area, HUD Editor gets more power) - do it at item 34. Also: Move Camera / Camera Follows = cutscene = full light, no darkness, no line of sight (done b715, Windows + IIgs + C).

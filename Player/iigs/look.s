@@ -245,7 +245,10 @@ ToggleLight:
 ; spell: 8) and each lit light on the map's (a candle-sized one 2, brighter 3). A cell's 0-4: black, three quarters, half,
 ; a quarter dark, lit - Ultima 6's shading as a 2 x 2 dither (ShMask).
 DrawDark:
-        jsr DarkLevel
+        lda CamOn               ; the camera elsewhere (ext.s): a cutscene - full light (the user, 2026-11-25)
+        beq .dl
+        rts
+.dl:    jsr DarkLevel
         cmp #0
         bne .dark
         rts
