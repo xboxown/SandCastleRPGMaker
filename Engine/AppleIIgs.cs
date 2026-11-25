@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 58;
+    public const ushort Version = 59;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -657,6 +657,9 @@ public sealed class AppleIIgsGamePack
     public List<(int End, bool Attacks)> FactionBands { get; } = new();
     public List<(int Id, int Relation)> Factions { get; } = new();
     public List<(int Name, int Faction)> CharFactions { get; } = new();
+    /// <summary>Currencies (money.s): each Money object's name and its purse (0 the main currency - the Avatar's gold), purses 1-7 at the start.</summary>
+    public List<(int Name, int Purse)> MoneyKinds { get; } = new();
+    public int[] StartPurses { get; } = new int[8];
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -960,6 +963,9 @@ public sealed class AppleIIgsGamePack
         foreach (var (fi, fr) in Factions.Take(32)) { w.Write((ushort)fi); w.Write((ushort)fr); }
         w.Write((ushort)Math.Min(CharFactions.Count, 64));
         foreach (var (cn, cf) in CharFactions.Take(64)) { w.Write((ushort)cn); w.Write((ushort)cf); }
+        w.Write((ushort)Math.Min(MoneyKinds.Count, 16));
+        foreach (var (mn, mp) in MoneyKinds.Take(16)) { w.Write((ushort)mn); w.Write((ushort)mp); }
+        for (int p = 1; p < 8; p++) w.Write((ushort)Math.Clamp(StartPurses[p], 0, 65535));
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

@@ -1432,8 +1432,7 @@ TxGY:     jsr WPIsAvatar
         rts
 GGold:  jsr WPIsAvatar
         bcc .z
-        lda AvRec+GOLD
-        rts
+        jmp AllMoney            ; every currency (money.s)
 .z:     lda #0
         rts
 GFood:  ldy #FOOD
@@ -2955,4 +2954,5 @@ ChgObj:   .ds 128
 ChgLeft:  .ds 128
 EggSt:    .ds 128               ; (eggs.s: each egg's state and weather minutes left - saved)
 EggWM:    .ds 128
+Purse:    .ds 16                ; (money.s: the other currencies' purses - saved)
 SCRIPTEND: .dw 0

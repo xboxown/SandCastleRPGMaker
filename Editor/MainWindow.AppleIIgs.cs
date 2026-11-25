@@ -885,6 +885,14 @@ public partial class MainWindow
         AddMapObjects(start, 0);
         // What the Avatar carries (not what it wears - that is in the body slots): objects carried, off the map.
         int avatarGold = 0;
+        // Currencies (money.s): the main one (the first Money object's) is the Avatar's gold, the others purses 1-7.
+        var moneyDefs = _objectDatabase.Objects.Where(o => o.Type == ObjectType.Money).ToList();
+        int mainCurrency = moneyDefs.FirstOrDefault()?.Money.CurrencyId ?? -1;
+        var purseOf = new Dictionary<int, int> { [mainCurrency] = 0 };
+        foreach (var cur in ProjectSession.Currencies.Currencies)
+            if (!purseOf.ContainsKey(cur.Id) && purseOf.Count < 8 && moneyDefs.Any(o => o.Money.CurrencyId == cur.Id)) purseOf[cur.Id] = purseOf.Count;
+        foreach (var md in moneyDefs)
+            if (purseOf.TryGetValue(md.Money.CurrencyId, out int pi) && pack.MoneyKinds.All(k => k.Name != pack.NameOf(md.Name))) pack.MoneyKinds.Add((pack.NameOf(md.Name), pi));
         // What someone carries and wears (owner: -1 the Avatar, else $8000 + map x 64 + place - a character who may join the party).
         void AddCarried(CharacterDefinition avatarWho, int owner)
         {
@@ -903,7 +911,15 @@ public partial class MainWindow
                 }
                 var def = _objectDatabase.Objects.FirstOrDefault(o => o.Id == item.ItemId);
                 if (def is null) continue;
-                if (def.Type == ObjectType.Money) { if (owner < 0) avatarGold += Math.Max(1, item.Quantity); continue; }
+                if (def.Type == ObjectType.Money)
+                {
+                    if (owner < 0)
+                    {
+                        if (purseOf.TryGetValue(def.Money.CurrencyId, out int pp) && pp > 0) pack.StartPurses[pp] += Math.Max(1, item.Quantity);
+                        else avatarGold += Math.Max(1, item.Quantity);
+                    }
+                    continue;
+                }
                 var look = ObjectLooks.SpriteFor(def, new ObjectState(false, false, false, false, Math.Max(1, item.Quantity), SpriteDirection.South), _spriteDatabase);
                 string? file = look?.Frames.FirstOrDefault()?.FilePath ?? (string.IsNullOrEmpty(def.IconPath) ? null : def.IconPath);
                 int n = SpriteOf(file);
@@ -1066,6 +1082,12 @@ public partial class MainWindow
         var talkEnv = new AppleIIgsTalk.Env
         {
             AvatarFaction = avatarDef?.FactionId ?? -1,
+            Exchange = (fromId, toId) =>
+            {
+                if (!purseOf.TryGetValue(fromId, out int pf) || !purseOf.TryGetValue(toId, out int pt)) return null;
+                var (rate, cut) = ProjectSession.Currencies.RateOf(fromId, toId);
+                return (pf, pt, (int)Math.Clamp(Math.Round(rate * (1 - cut / 100.0) * 256), 0, 65535));
+            },
             Names = formulaNames,
             StatByName = StatNamed,
             Item = (category, itemId) =>

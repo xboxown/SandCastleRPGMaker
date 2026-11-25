@@ -93,11 +93,7 @@ ReadText:
 GetGold:
         ldy #12
         lda [ItemPtr],y
-        clc
-        adc AvRec+GOLD
-        bcc .g
-        lda #$FFFF
-.g:     sta AvRec+GOLD
+        jsr AddMoney            ; into its currency's purse (money.s)
         ldy #6
         lda [ItemPtr],y
         ora #32

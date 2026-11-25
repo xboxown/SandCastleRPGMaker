@@ -66,7 +66,8 @@ ParseFac:
         iny
         bra .c
 .cd:    lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseMoney          ; (money.s)
 
 OpFac:
         jsr ReadWho
