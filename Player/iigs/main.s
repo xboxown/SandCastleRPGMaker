@@ -2242,6 +2242,7 @@ TryMove:
         .include "fac.s"        ; (op 46)
         .include "money.s"      ; (op 47)
         .include "pets.s"       ; (ACT 9-12)
+        .include "ext.s"        ; (op 48: EXT and its subs)
         .code2                  ; the second code segment (its own bank - asm816 makes the calls between them)
         .include "haggle.s"
         .include "travel.s"

@@ -107,7 +107,7 @@ What I understood:
   - This is several builds of work by itself.
 Is that right? Anything to add?
 
-ANSWER:
+ANSWER: YES
 
 
 QUESTION 8 - Item 47: Levitate and Translate
@@ -116,7 +116,7 @@ You said: IIgs gets only the Custom spell effect, skip Levitate and Translate.
 Should Levitate and Translate also be REMOVED from the Windows Ultima 6 mode (like the languages in item 23),
 or stay on Windows as they are?
 
-ANSWER:
+ANSWER: YES REMOVE IT. Now we can add our own levitate by playing animation, triggerings, flagging variables in command event...so yes,.
 
 
 QUESTION 9 (NEW) - Which "paperdoll" to remove (item 34 / question 6a)
@@ -129,6 +129,56 @@ My plan: REMOVE the PaperDoll Editor windows and their commands from Ultima 6 mo
 inventory screen with the character figure and its equipment places (that is how Ultima 6 readies weapons
 and armour).
 Is that right?
+
+ANSWER: NOT to get confused..read issue.odt..and then tell me here what you understood, what you will do and what hwill happen if you did it before doing it and if everything is how I think will coe out I will say go and yo uread here again to go and do it.
+
+
+MY ANSWER TO QUESTION 9 - after reading issues.odt (its text and its 4 pictures)
+------------------------------------------------------------------------------
+WHAT I UNDERSTOOD
+  Picture 1 (Character Editor > "Inventory / Paperdoll" tab: the Avatar's body with Back, Neck, Head, Backpack,
+  Belt, Rings... slots, "Add Custom Slot", "Stats paperdoll..."), picture 2 (a container's open-chest view with its
+  item frame) and picture 3 (the PaperDoll Editor window: Data Controller, PromptMessage, Confirmed, ErrorPrompt,
+  Title Screen, Progress, Stats controls) are Ultima 7 things that crept into Ultima 6 mode. They go.
+  Picture 4 is Ultima 6: the HUD Editor. In Ultima 6 the HUD Editor IS the paperdoll - its Panel with Body Slots
+  (Head, Neck, Body, hands, rings, Feet) and Carried Items is where things are readied and carried. It stays and
+  becomes MORE powerful. So the "small figure with equipment places" I asked about = the HUD's Body Slots: KEPT.
+
+WHAT I WILL DO (Ultima 6 mode only, Windows Ultima 6 engine + Apple IIgs; Ultima 7 and Ultima 8 not touched)
+  1. Character Editor: the "Inventory / Paperdoll" tab loses its paperdoll body sprite, exit button, open sound,
+     the body picture with slots, "Add Custom Slot", "Expand... (slots on/off, weight, buttons)" and
+     "Stats paperdoll...". What a character carries and wears stays (the list of items). The slots a character
+     has come from the HUD Editor's Body Slot pieces.
+  2. Object Editor: containers lose their open-view picture, item frame (Rectangle / Ellipse / Pencil) and
+     paperdoll settings. A container opened in play shows its things in the HUD panel's Carried Items area, as
+     Ultima 6 does (and as the IIgs already does). Books and scrolls lose their paperdoll too: their text shows
+     in the text area, a key to go on (item 28).
+  3. The PaperDoll Editor button / menu is gone in Ultima 6 mode, and every paperdoll event command
+     (Open / Close Paperdoll, Show / Hide Part, Set Part..., Item Slot..., etc.) is gone from the Ultima 6 command
+     list and from "Event" pickers ("By Use", "Opens paperdoll", etc.).
+  4. What the paperdolls did that Ultima 6 still needs moves:
+       - prompts, "Game saved", errors, "Are you sure?"  -> the text area (item 27), as Ultima 6 does;
+       - save / load  -> asked in the text area (Ultima 6: "Save game? (Y/N)"), with the slots listed there;
+       - title screen  -> the HUD Editor's title menu scenes (already there);
+       - stats  -> the HUD's Portrait and Stats pieces (already there).
+  5. HUD Editor gets more power (from your note): pieces for custom Text, custom Sprite, Custom Button (already
+     there) whose click runs an event, and NEW event commands to show / hide / move a HUD piece, change its
+     text or sprite, and add a new button during play. Anything else important from the PaperDoll Editor goes
+     into the HUD Editor, not lost.
+
+WHAT WILL HAPPEN IF I DO IT
+  - Ultima 6 projects (yours too) no longer show or use paperdolls anywhere: character editor, containers,
+    books, commands, events, in play.
+  - Your project's paperdolls are NOT deleted from the file - they are only hidden in Ultima 6 mode (so nothing
+    is lost if a project is ever switched to Ultima 7 mode). Events in your project that use paperdoll commands
+    would show as "not in Ultima 6 mode" and be skipped; I will list every one that your demo project has so
+    you can replace them.
+  - Containers open into the HUD panel instead of a picture window. Custom body slots you added in the
+    character editor (if any) disappear - only the HUD's Body Slots count.
+  - Ultima 7 and Ultima 8 projects: exactly as now.
+  - It is several builds of work (item 34 in the list, done in list order).
+
+Is this how you see it? If yes, write GO. If something is different, tell me which number.
 
 ANSWER:
 

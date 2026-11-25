@@ -9,7 +9,7 @@ MoreOps:
         tax
         jmp (OpJump,x)
 
-OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick,OpInput,OpList,OpGrid,OpCtl,OpAct,OpFac,OpXchg
+OpJump:   .dw OpGive,OpTake,OpHp,OpStat,OpWait,OpPlace,OpKill,OpSched,OpTime,OpDoor,OpPic,OpErase,OpGame,OpPay,OpSell,OpMore,OpAil,OpCalc,OpIfx,OpHaggle,OpPayV,OpMusic,OpVolume,OpResume,OpWeather,OpVeh,OpSayF,OpRise,OpPick,OpInput,OpList,OpGrid,OpCtl,OpAct,OpFac,OpXchg,OpExt
 
 ; CTL n: 1 Cinema Mode, 0 End Cinema Mode (the player has no controls till then - or till the event's code ends), 2 Forbid
 ; Controls, 3 Allow Controls (U6GameWindow.Cinema.cs).
