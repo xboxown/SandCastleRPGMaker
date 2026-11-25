@@ -44,7 +44,13 @@ KeyOn:
         jsr SetColor
         jsr PrintWord
         jsr NewLine
-        lda Kind
+        lda Kind                ; a keychain on the Avatar: the party's keys onto it (travel.s)
+        cmp #1
+        bne .nav
+        jsr IsRing
+        bcc .nav
+        jmp RingAdd
+.nav:   lda Kind
         cmp #3
         bne .np
         jsr ObjFlags
@@ -61,6 +67,12 @@ KeyOn:
 .near:  jsr ObjFlags
         and #2048               ; magically locked
         bne .np
+        jsr IsRing              ; a keychain: whichever key on it fits (travel.s)
+        bcc .nring
+        jsr RingFits
+        bcs .fits
+        jmp PromptLine
+.nring:
         lda KeyRec
         sta Src
         lda KeyRec+2
@@ -99,7 +111,9 @@ KeyOn:
         jmp PromptLine
 .pick:  jsr ObjFlags            ; a lockpick: only on a locked one
         and #8
-        beq .np
+        bne .fb1
+        brl .np
+.fb1:
         jsr ObjFlags
         and #4
         beq .cdiff

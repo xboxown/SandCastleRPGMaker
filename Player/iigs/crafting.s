@@ -140,8 +140,9 @@ SpecUse:
 .w:     cmp #SP_USEABLE         ; a wand, a scroll, a potion (items.s)
         beq .it
         cmp #SP_POTION
-        bne .no
+        bne .tr
 .it:    jmp UseItem
+.tr:    jmp TravelUse           ; a sextant, clock, map, keychain (travel.s)
 .no:    clc
         rts
 
@@ -159,8 +160,9 @@ InvSpecial:
 .w:     cmp #SP_USEABLE
         beq .it
         cmp #SP_POTION
-        bne .no
+        bne .tr
 .it:    jmp UseItem
+.tr:    jmp TravelUse           ; (travel.s)
 .no:    clc
         rts
 

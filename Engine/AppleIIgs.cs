@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 60;
+    public const ushort Version = 61;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -494,14 +494,16 @@ public sealed class AppleIIgsGamePack
         "Introduction", "Create New Character", "Acknowledgments", "Journey Onward",
         "To whom? ", "{1} gets {0}.", "{1} eats {0}.", "You are at {0}.",
         "-Not while others are near!", "Who will guard? ", "none", "Mealtime!", "{1} has food.", "{1} has no food.", "{1} stands guard while the party rests.",
-        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "{1} is cold.", "{1} is freezing!", "{1} is hot.", "{1} is burning up!", "Avatar" };
+        "{1} gains {0}.", "{1} is not ready.", "strength", "dexterity", "intelligence", "Too heavy!", "Solo mode: {1}.", "Party mode.", "Not in solo mode.", "-Not in solo mode!", "{0} goes off!", "{0} has burnt out.", "{1} is cold.", "{1} is freezing!", "{1} is hot.", "{1} is burning up!",
+        "{0} can't see the sky from in here.", "{0} casts no shadow.", "{0} North,", "{0} South,", "{0} West.", "{0} East.", "{0} keys added to the keyring.", "No keys to add.", "It's not on the keyring.", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
         "NewLevel", "Rest", "NotWhileCombat", "FoesNear", "HowManyHours", "PartyFull", "OnWhat", "Unlocked", "KeyNoFit", "PickBroke", "Locked", "Readies", "Unreadies",
         "Cast", "NoSpellbook", "NoSpells", "NotInBook", "LevelTooLow", "NoMagicPoints", "NoReagents", "OnWhom", "Healed", "More", "NothingWritten", "TitleIntro", "TitleCreate", "TitleAcks", "TitleJourney", "ToWhom", "Gives", "Eats", "Locate",
         "OthersNear", "WhoGuards", "NoOne", "Mealtime", "HasFood", "NoFood", "StandsGuard",
-        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut", "TempCold", "TempFreezing", "TempHot", "TempBurning" };
+        "Gains", "NotReady", "Strength", "Dexterity", "Intelligence", "TooHeavy", "Solo", "PartyMode", "NotInSolo", "RestNotSolo", "TrapOff", "BurntOut", "TempCold", "TempFreezing", "TempHot", "TempBurning",
+        "SkyHidden", "NoShadow", "North", "South", "West", "East", "KeysAdded", "NoKeys", "NotOnRing" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon

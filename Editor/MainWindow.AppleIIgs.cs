@@ -658,7 +658,8 @@ public partial class MainWindow
         var specialDefs = new List<WorldObject>();
         int? SpecialOf(WorldObject def)
         {
-            if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion)) return null;
+            if (def.Type is not (ObjectType.Plant or ObjectType.Tool or ObjectType.CraftingStation or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
+                or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain)) return null;
             if (!specialOf.TryGetValue(def.Id, out int i)) { if (specialDefs.Count >= 256) return null; specialOf[def.Id] = i = specialDefs.Count; specialDefs.Add(def); }
             if (def.Type == ObjectType.UseableObject) ItemSpell(def, def.Useable.Effects, def.Useable.AsksForTarget);
             if (def.Type == ObjectType.Potion) ItemSpell(def, def.Potion.Effects, true);
@@ -1733,6 +1734,28 @@ public partial class MainWindow
                     case ObjectType.Potion:
                         b.Add(6); W(b, itemSpell[d.Id]); W(b, Snd(d.Potion.DrinkSoundResourceId)); ItemDef(b, d.Potion.EmptyObjectId);
                         break;
+                    // Travel things (travel.s): the sextant's origin ($FFFF the map's middle), 2 units a cell (16-pixel cells, 8-pixel units), units a degree;
+                    // the clock's sundial; the map's picture, what it shows, its area and the reddest colour; the keychain.
+                    case ObjectType.Sextant:
+                        b.Add(7); W(b, d.Sextant.OriginCellX >= 0 ? d.Sextant.OriginCellX : 0xFFFF); W(b, d.Sextant.OriginCellY >= 0 ? d.Sextant.OriginCellY : 0xFFFF);
+                        b.Add(2); b.Add((byte)Math.Clamp(d.Sextant.TilesPerDegree, 1, 255));
+                        break;
+                    case ObjectType.Clock:
+                        b.Add(8); b.Add((byte)(d.Clock.Sundial ? 1 : 0));
+                        break;
+                    case ObjectType.Map:
+                    {
+                        b.Add(9); W(b, LinkSprite(d.MapPicture.Picture));
+                        b.Add((byte)(d.MapPicture.ShowLocation ? 1 : 0)); b.Add((byte)(d.MapPicture.OutdoorsOnly ? 1 : 0)); b.Add((byte)(d.MapPicture.LocationNeedsSextant ? 1 : 0));
+                        bool whole = d.MapPicture.AreaLeft < 0;
+                        W(b, whole ? 0xFFFF : d.MapPicture.AreaLeft); W(b, whole ? 0 : d.MapPicture.AreaTop);
+                        W(b, whole ? 0 : Math.Max(d.MapPicture.AreaLeft, d.MapPicture.AreaRight)); W(b, whole ? 0 : Math.Max(d.MapPicture.AreaTop, d.MapPicture.AreaBottom));
+                        W(b, SuperHiRes.NearestColour(pack.Palette, 255, 0, 0));
+                        break;
+                    }
+                    case ObjectType.Keychain:
+                        b.Add(10);
+                        break;
                     case ObjectType.MusicalInstrument:
                     {
                         b.Add(4);
@@ -1746,7 +1769,8 @@ public partial class MainWindow
             }
             // Carried (or in things) tools and instruments: their code by their name.
             var byName = new Dictionary<int, int>();
-            foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
+            foreach (var d in specialDefs.Where(d => d.Type is ObjectType.Tool or ObjectType.MusicalInstrument or ObjectType.UseableObject or ObjectType.Potion
+                         or ObjectType.Sextant or ObjectType.Clock or ObjectType.Map or ObjectType.Keychain)) byName.TryAdd(pack.NameOf(d.Name), 0xD000 | specialOf[d.Id]);
             for (int oi = 0; oi < objects.Count; oi++)
                 if (objects[oi].Other == 0xFFFF && byName.TryGetValue(objects[oi].Name, out int nsc)) objects[oi] = objects[oi] with { Other = nsc };
         }

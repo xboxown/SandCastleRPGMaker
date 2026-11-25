@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 9                ; (b697: the currencies' purses)
+SAVE_VERSION = 10               ; (b699: the keychain's keys)
 
 ; Ctrl+S
 SaveGame:
