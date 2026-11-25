@@ -64,7 +64,7 @@ ParseTough:
 .bd:    lda T4
         jsr AddPtr
         stz RsN
-        rts
+        jmp ParseHands          ; (inhand.s)
 
 ; Strike, before the damage lands: HitType = the striker's (AtkP) weapon's type; Dmg as the one struck (DefP) takes it.
 BlowType:

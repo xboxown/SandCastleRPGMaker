@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 56 (b693): weapons drawn in the hand - the held look at the hand point (inhand.s).
 ; Version 55 (b691): damage types (weapons' types, characters' immune / half / adjust), getting back up (tough.s).
 ; Version 54 (b690): magic worn or held - defense, reach, light, strength / dexterity / intelligence (worn.s).
 ; Version 53 (b689): monsters that join - splitting when hit (the map's spares), the joined look (join.s).
@@ -691,7 +692,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #55
+        cmp #56
         beq .known
 .bad:   sec
         rts
@@ -1094,7 +1095,9 @@ DrawView:
         jsr DrawBlood           ; a death's blood, under everything (floor.s)
         jsr DrawObjects
         jsr DrawCharacters
+        jsr AvatarHand          ; the one moved's weapon (inhand.s)
         jsr DrawAvatar
+        jsr HandAfter
         jsr DrawRoofs           ; (look.s)
         jsr DrawSight           ; what can't be seen: black (sight.s)
         jsr DrawDark
@@ -1682,7 +1685,9 @@ DrawCharacters:
         clc
         adc [ItemPtr],y         ; + its first (south) sprite
 .bs:    sta SprId
+        jsr CharHand            ; its weapon, behind it (inhand.s)
         jsr DrawSprite
+        jsr HandAfter           ; or over it
 .n:     lda #64
         jsr NextItem
         dec Item
@@ -2243,6 +2248,7 @@ TryMove:
         .include "join.s"
         .include "worn.s"
         .include "tough.s"
+        .include "inhand.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

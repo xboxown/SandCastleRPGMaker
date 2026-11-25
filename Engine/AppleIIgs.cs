@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 55;
+    public const ushort Version = 56;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -647,6 +647,10 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Type)> WeaponTypes { get; } = new();
     public List<(int Name, int Type, int Kind, int Amount)> Responses { get; } = new();
     public List<(int Name, int Least, int Most, int NotFrom)> Risers { get; } = new();
+    /// <summary>Weapons drawn in the hand (inhand.s): character looks' hand points (sprite, x, y from its standing point,
+    /// behind) and weapons' held looks (name, held sprite, mirrored sprite, grip x, y from its standing point).</summary>
+    public List<(int Sprite, int X, int Y, bool Behind)> Hands { get; } = new();
+    public List<(int Name, int Held, int Mirrored, int GripX, int GripY)> HeldWeapons { get; } = new();
     /// <summary>A character's combat mode in its word 20: 0 Front, 1 Rear, 2 Flank, 3 Berserk, 4 Retreat, 5 Assault, 6 Command.</summary>
     public static int CombatModeCode(string mode) => mode switch { "Rear" => 1, "Flank" => 2, "Berserk" => 3, "Retreat" => 4, "Assault" => 5, "Command" => 6, _ => 0 };
     public int AvatarBody { get; set; } = 0xFFFF;
@@ -939,6 +943,10 @@ public sealed class AppleIIgsGamePack
         foreach (var r in Responses.Take(48)) { w.Write((ushort)r.Name); w.Write((ushort)r.Type); w.Write((ushort)r.Kind); w.Write((ushort)r.Amount); }
         w.Write((ushort)Math.Min(Risers.Count, 16));
         foreach (var r in Risers.Take(16)) { w.Write((ushort)r.Name); w.Write((ushort)r.Least); w.Write((ushort)r.Most); w.Write((ushort)r.NotFrom); }
+        w.Write((ushort)Math.Min(Hands.Count, 128));
+        foreach (var hp in Hands.Take(128)) { w.Write((ushort)hp.Sprite); w.Write((short)hp.X); w.Write((short)hp.Y); w.Write((ushort)(hp.Behind ? 1 : 0)); }
+        w.Write((ushort)Math.Min(HeldWeapons.Count, 32));
+        foreach (var hw in HeldWeapons.Take(32)) { w.Write((ushort)hw.Name); w.Write((ushort)hw.Held); w.Write((ushort)hw.Mirrored); w.Write((short)hw.GripX); w.Write((short)hw.GripY); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

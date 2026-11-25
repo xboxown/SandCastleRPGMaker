@@ -362,6 +362,43 @@ public partial class MainWindow
     }
 
     /// <summary>A sprite as the IIgs player draws it: at most 32 x 32 (shrunk, keeping its shape), its width a multiple of 4 (padded each side).</summary>
+    /// <summary>A point of a picture (a hand, a grip) as it lands in its fitted sprite, from the sprite's standing point (its bottom middle).</summary>
+    private static (int X, int Y) FitPoint(string file, int px, int py)
+    {
+        var img = new BitmapImage();
+        img.BeginInit(); img.CacheOption = BitmapCacheOption.OnLoad; img.UriSource = new Uri(Path.GetFullPath(file)); img.EndInit();
+        int w = img.PixelWidth, h = img.PixelHeight;
+        double scale = Math.Min(1.0, Math.Min((double)AppleIIgsLimits.MaxSpriteWidth / w, (double)AppleIIgsLimits.MaxSpriteHeight / h));
+        int dw = Math.Max(1, (int)(w * scale)), dh = Math.Max(1, (int)(h * scale)), pw = (dw + 3) / 4 * 4, left = (pw - dw) / 2;
+        return ((int)Math.Round(left + px * scale) - pw / 2, (int)Math.Round(py * scale) - dh);
+    }
+
+    /// <summary>A sprite fitted and mirrored left to right (a held weapon facing east / west).</summary>
+    private static (uint[] Px, int W, int H) FitSpriteMirrored(string file)
+    {
+        var (px, w, h) = FitSprite(file);
+        var m = new uint[px.Length];
+        for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) m[y * w + x] = px[y * w + (w - 1 - x)];
+        return (m, w, h);
+    }
+
+    /// <summary>A character's first frames for south, north, east and west (as LookFiles), for their hand points.</summary>
+    private List<SpriteFrame?> LookFrames(CharacterDefinition who)
+    {
+        var list = new List<SpriteFrame?>();
+        var pose = _poseDatabase.Poses.FirstOrDefault(p => p.Name == "Idle" && who.PoseSprites.ContainsKey(p.Id))
+                   ?? _poseDatabase.Poses.FirstOrDefault(p => p.Name == "Walking" && who.PoseSprites.ContainsKey(p.Id));
+        PoseAssignment? assignment = pose is not null ? who.PoseSprites[pose.Id] : who.PoseSprites.Values.FirstOrDefault();
+        foreach (var facing in new[] { SpriteDirection.South, SpriteDirection.North, SpriteDirection.East, SpriteDirection.West })
+        {
+            var link = assignment?.Resolve(facing);
+            var sprite = link is null ? null : _spriteDatabase.Groups.FirstOrDefault(g => g.Name == link.SpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == link.SpriteName)
+                                             ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == link.SpriteName);
+            list.Add(sprite?.Frames.FirstOrDefault());
+        }
+        return list;
+    }
+
     private static (uint[] Px, int W, int H) FitSprite(string file)
     {
         var img = new BitmapImage();
@@ -1163,6 +1200,25 @@ public partial class MainWindow
                     }
             }
         }
+        // A character's four looks' hand points (from each facing's first frame), for the weapon drawn in its hand (inhand.s).
+        // sixteen: the Avatar's looks are fitted into 16 x 16 (FitInto16), not FitSprite.
+        var handsDone = new HashSet<int>();
+        void HandPoints(CharacterDefinition who, int firstSprite, bool sixteen = false)
+        {
+            var frames = LookFrames(who);
+            for (int k = 0; k < 4 && k < frames.Count; k++)
+            {
+                if (frames[k] is not { HasHand: true } fr || !File.Exists(fr.FilePath) || !handsDone.Add(firstSprite + k)) continue;
+                (int X, int Y) hp;
+                if (sixteen)
+                {
+                    var bi = new BitmapImage(); bi.BeginInit(); bi.CacheOption = BitmapCacheOption.OnLoad; bi.UriSource = new Uri(Path.GetFullPath(fr.FilePath)); bi.EndInit();
+                    hp = ((int)Math.Round(fr.HandX * 16.0 / Math.Max(1, bi.PixelWidth)) - 8, (int)Math.Round(fr.HandY * 16.0 / Math.Max(1, bi.PixelHeight)) - 16);
+                }
+                else hp = FitPoint(fr.FilePath, fr.HandX, fr.HandY);
+                pack.Hands.Add((firstSprite + k, hp.X, hp.Y, fr.WeaponBehind));
+            }
+        }
         List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)> MapCharacters(MapData world, List<(int Character, int Period, int Activity, int X, int Y)> schedules, int floor = 1, int mapNo = 0)
         {
             var list = new List<(int X, int Y, int Sprite, int Flags, int Facing, int Talk, int Portrait, int Name, int[] Stats)>();
@@ -1178,6 +1234,7 @@ public partial class MainWindow
                 if (poseLooks) { files.Add(sleepFile ?? files[0]); files.Add(sitFile ?? files[0]); }
                 int first = spritePixels.Count;
                 foreach (var f in files) { if (f is not null && File.Exists(f)) spritePixels.Add(FitSprite(f)); else spritePixels.Add((new uint[16 * 16], 16, 16)); }
+                HandPoints(who, first); // where its weapon is held, each facing (inhand.s)
                 int facing = placed.Facing switch { SpriteDirection.North => 1, SpriteDirection.East => 2, SpriteDirection.West => 3, _ => 0 };
                 if (!talkOf.TryGetValue(who.Id, out int talk))
                 {
@@ -1566,6 +1623,20 @@ public partial class MainWindow
         }
         pack.AvatarSprite = spritePixels.Count; // the Avatar's looks as sprites too (solo mode)
         foreach (var px in avatar.Take(4)) spritePixels.Add((px, 16, 16));
+        if (PlayerCharacter() is { } handAvatar) HandPoints(handAvatar, pack.AvatarSprite, sixteen: true);
+        // Weapons' held looks (Sprite Editor > Weapon in hand: frame 1), as is and mirrored, their grips (inhand.s).
+        foreach (var wd in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.InHandSprite.SpriteName.Length > 0))
+        {
+            int wn = pack.NameOf(wd.Name);
+            if (pack.HeldWeapons.Any(h => h.Name == wn)) continue;
+            if (ObjectLooks.Find(_spriteDatabase, wd.Weapon.InHandSprite.SpriteGroup, wd.Weapon.InHandSprite.SpriteName)?.Frames.FirstOrDefault() is not { } held || !File.Exists(held.FilePath)) continue;
+            int heldSprite = spritePixels.Count;
+            spritePixels.Add(FitSprite(held.FilePath));
+            spritePixels.Add(FitSpriteMirrored(held.FilePath));
+            var (gw, gh) = (spritePixels[heldSprite].W, spritePixels[heldSprite].H);
+            var grip = held.GripX >= 0 && held.GripY >= 0 ? FitPoint(held.FilePath, held.GripX, held.GripY) : (0, -gh / 2);
+            pack.HeldWeapons.Add((wn, heldSprite, heldSprite + 1, grip.Item1, grip.Item2));
+        }
         foreach (var (px, w, h) in spritePixels) pack.Sprites.Add((w, h, SuperHiRes.Pack(px, w, h, pack.Palette, spriteZeroIsClear: true)));
         // Plants', tools', stations' and instruments' records (Engine/AppleIIgs.cs Specials); carried ones get their code too.
         {

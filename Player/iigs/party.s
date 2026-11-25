@@ -245,7 +245,9 @@ DrawParty:
         clc
         adc [MP],y
 .bs:    sta SprId
+        jsr MemberHand          ; its weapon (inhand.s)
         jsr DrawSprite
+        jsr HandAfter
 .n:     inc PK
         bra .l
 .d:     rts
