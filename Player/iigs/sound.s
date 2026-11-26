@@ -483,6 +483,11 @@ PlaySound:
         pea #bank(SndBlock)
         pea #SndBlock
         tool $0E08              ; FFStartSound
+        lda Gen                 ; which sound it plays (Stop Sound - ext.s)
+        asl a
+        tax
+        lda SndNow
+        sta GenSnd,x
         lda Gen                 ; the next sound on the next generator (four in turn)
         inc a
         and #3

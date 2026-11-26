@@ -20,8 +20,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
-          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat
-EXT_COUNT = 37
+          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
+EXT_COUNT = 38
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)
@@ -3189,6 +3189,44 @@ XtResetStat:
 .d:     jsr HpChanged
 .done:  lda #7
         jmp Next
+
+; EXT 37 STOPSND sound (4 bytes): Stop Sound - the sound effects' generators playing that sound ($FFFF: every one) stopped
+; (sound.s plays them on four in turn; the music's own generator plays on).
+XtStopSnd:
+        iny
+        lda [TalkPtr],y
+        sta StBy
+        stz T4                  ; the generators' bits
+        ldx #0
+.l:     lda StBy
+        cmp #$FFFF
+        beq .hit
+        cmp GenSnd,x
+        bne .n
+.hit:   lda #$FFFF
+        sta GenSnd,x
+        txa
+        lsr a
+        tay
+        lda #1
+.sh:    cpy #0
+        beq .set
+        asl a
+        dey
+        bra .sh
+.set:   tsb T4
+.n:     inx
+        inx
+        cpx #8
+        bcc .l
+        lda T4
+        beq .done
+        pha
+        tool $0F08              ; FFStopSound
+.done:  lda #4
+        jmp Next
+
+GenSnd:   .dw $FFFF,$FFFF,$FFFF,$FFFF
 
 StOld:    .dw 0
 StBy:     .dw 0
