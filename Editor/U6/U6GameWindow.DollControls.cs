@@ -46,6 +46,7 @@ public partial class U6GameWindow
     /// </summary>
     private OpenDollGump? OpenForm(DollDesign design, bool modal, Action<bool>? answered, bool fresh, bool title = false)
     {
+        if (NoPaperdolls) return null; // Ultima 6: no paperdolls (U6GameWindow.xaml.cs)
         if (!_formOwners.TryGetValue(design.Id, out var owner)) _formOwners[design.Id] = owner = new FormOwner();
         if (fresh)
         {

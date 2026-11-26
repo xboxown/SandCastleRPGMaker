@@ -157,11 +157,15 @@ public partial class SystemSettingsWindow : Window
         doll.SelectionChanged += (_, _) => errors.DollDesignId = (doll.SelectedItem as DollChoice)?.Id ?? -1;
         var top = LabeledRow("Error paperdoll:", doll);
         DockPanel.SetDock(top, Dock.Top);
-        panel.Children.Add(top);
+        if (!ProjectSession.IsUltima6) panel.Children.Add(top); // Ultima 6: no paperdolls - errors are said in the text area
 
         var note = new TextBlock
         {
-            Text = "Every error the game can show has a number and its words. Make the error paperdoll in the PaperDoll Editor like any paperdoll: a Text part with your words, and a No / Cancel button captioned OK to close it. " +
+            Text = ProjectSession.IsUltima6
+                ? "Every error the game can show has a number and its words. In Ultima 6 mode an error is said in the HUD's text area (its line: System Settings > Ultima 6 > Words, ErrorLine). " +
+                  "In the words, %errdetail is what the engine knows of it (what's going on, the file, Windows' own reason). An error whose number isn't listed shows %errdetail as its words. " +
+                  "Add numbers of your own (1000 and up, say) and show them with the Show Error event command."
+                : "Every error the game can show has a number and its words. Make the error paperdoll in the PaperDoll Editor like any paperdoll: a Text part with your words, and a No / Cancel button captioned OK to close it. " +
                    "In its text and captions, %errnum is the error's number and %errdescrp its words below - or write your own message around them (\"Oops! Error %errnum - %errdescrp\"). " +
                    "It opens modal, over everything, with the paperdoll opening sound.\n\n" +
                    "In the words, %errdetail is what the engine knows of it (what's going on, the file, Windows' own reason). An error whose number isn't listed shows %errdetail as its words. " +
@@ -572,7 +576,7 @@ public partial class SystemSettingsWindow : Window
         panel.Children.Add(new TextBlock
         {
             Text = "The game clock works as Exult's: a game minute passes every 5 real seconds (25 ticks of 200 ms), so an hour takes 5 minutes " +
-                   "and a whole day 2 hours. Time stands still while a paperdoll, container or book is open. Characters change what they're doing " +
+                   "and a whole day 2 hours. Time stands still while " + (ProjectSession.IsUltima6 ? "a container or book is open" : "a paperdoll, container or book is open") + ". Characters change what they're doing " +
                    "at the start of each 3-hour period (Character Editor > Schedule).",
             TextWrapping = TextWrapping.Wrap, Margin = new Thickness(0, 0, 0, 12)
         });

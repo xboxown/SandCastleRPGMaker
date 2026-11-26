@@ -1137,6 +1137,7 @@ int dolls_to_front(int i)
 
 static DollWin *open_window(DollState *state, cJSON *design, int modal, int title)
 {
+    if (u6_on()) return NULL; /* Ultima 6 mode has no paperdolls (U6GameWindow NoPaperdolls, list item 34) */
     for (int i = 0; i < winCount; i++) if (wins[i]->state == state) { int top = dolls_to_front(i); return wins[top]; }
     if (winCount >= 16) return NULL;
     if (!title)

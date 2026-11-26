@@ -189,6 +189,7 @@ public partial class U6GameWindow
     private void OpenStatsDoll(CharacterDefinition? character)
     {
         if (character is null) return;
+        if (NoPaperdolls) { ShowInHud(character); return; } // Ultima 6: no paperdolls (U6GameWindow.xaml.cs)
         if (_openStatsDolls.FirstOrDefault(g => g.Character == character) is { } open) { CloseStatsDoll(open); return; }
         var doll = character.Paperdoll.StatsDoll;
         if (FrameOf(doll.Background, 0) is null && doll.Elements.Count == 0)

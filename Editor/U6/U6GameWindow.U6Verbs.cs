@@ -640,6 +640,13 @@ public partial class U6GameWindow
 
     // ---------- Members, the views, solo ----------
 
+    /// <summary>A character's inventory / stats asked for (double-clicking the avatar, a party member): them in the HUD's panel, if in the party.</summary>
+    private void ShowInHud(CharacterDefinition character)
+    {
+        int at = GetPartyList().IndexOf(character);
+        if (at >= 0) ShowHudMember(at);
+    }
+
     private void ShowHudMember(int index)
     {
         _hudLooked = null;

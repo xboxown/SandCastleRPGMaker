@@ -198,7 +198,7 @@ public partial class ObjectEditorWindow : Window
             BuildDurability(obj);
         BuildOwnership(obj);
         BuildLiquidSource(obj);
-        BuildPaperdoll(obj);
+        if (!ProjectSession.IsUltima6) BuildPaperdoll(obj); // Ultima 6 mode has no paperdolls (list item 34)
         BuildBody(obj);
         BuildVehiclePart(obj); // ObjectEditorWindow.Vehicle.cs
     }

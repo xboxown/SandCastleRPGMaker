@@ -58,3 +58,9 @@ PROGRESS: items 1-22 done through b725 (Spell Editor: Engine/SpellSystem.cs, Ult
 PROGRESS: items 1-26 done through b729 (23: U6 languages removed + CommandList tutorial; 24 Reset Stat EXT36; 25 Stop Sound EXT37; 26 Light Source EXT38 + U6 Day&Night tab hours only, no LightGives). Mac fetched for b728. Next: item 27 Allow Saving / Open Save-Load Screen / Return To Title, messages in the text area.
 
 PROGRESS: items 1-27 done through b730 (27: IIgs OpGame 4 title,5 title-in-play,6/7 forbid/allow saving; U6 save msgs in text area W/C). Next: item 28 books in text area + [COLOR=RED] codes + Change Self/External Book Content, Change Book Settings (IIgs).
+
+PROGRESS 2026-11-26: items 23-34 done (b726-b737). b733 keys (actkeys.s, KEYS.DAT), b734 HUD frame/portrait, b735 Conversation
+Style (talkstyle.s), b736 scenes (scene.s) + colour slots fix (AppleIIgsTalk.Colours -> GAME.DAT ColTab), b737 item 34: no
+paperdolls in Ultima 6 mode (NotInUltima6 commands, editors hidden behind IsUltima6, U6GameWindow NoPaperdolls guard, C open_window
+u6 guard; U7/U8 untouched - user insisted). 35 = nothing (Play Video stays not-on-IIgs; idea is item 69). Next: item 36 (path
+finding). IIgs data segment ~61 KB of 64 KB - keep new IIgs data small. sim816 heap now starts after the segments.

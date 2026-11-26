@@ -121,7 +121,7 @@ public class EventPickerWindow : Window
         _byKind["Objects"] = objects.Objects.Where(o => HasPages(o.EventPages)).Select(o => new Owner(o.Name, $"{o.Name}   ({ObjectTypes.Name(o.Type)})", o.EventPages)).OrderBy(o => o.Label).ToList();
         _byKind["Containers"] = (ProjectSession.ContainersProvider?.Invoke() ?? new ContainerDatabase()).Containers.Where(c => HasPages(c.EventPages)).Select(c => new Owner(c.Name, c.Name, c.EventPages)).OrderBy(o => o.Label).ToList();
         _byKind["Books"] = (ProjectSession.BooksProvider?.Invoke() ?? new BookDatabase()).Books.Where(b => HasPages(b.EventPages)).Select(b => new Owner(b.Name, b.Name, b.EventPages)).OrderBy(o => o.Label).ToList();
-        _byKind["Paperdolls"] = objects.DollDesigns.SelectMany(d => d.Parts.Where(p => HasPages(p.EventPages) && !string.IsNullOrWhiteSpace(p.Name))
+        if (!ProjectSession.IsUltima6) _byKind["Paperdolls"] = objects.DollDesigns.SelectMany(d => d.Parts.Where(p => HasPages(p.EventPages) && !string.IsNullOrWhiteSpace(p.Name))
             .Select(p => new Owner(p.Name, $"{p.Name}   ({d.Name})", p.EventPages))).OrderBy(o => o.Label).ToList();
     }
 

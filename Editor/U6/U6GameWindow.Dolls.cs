@@ -114,6 +114,7 @@ public partial class U6GameWindow
     /// <summary>Double-clicking an object that opens a paperdoll: its own By Use event first (as a container's), else the paperdoll opens. True = it has one.</summary>
     private bool TryUseDoll(IHasDollState owner, WorldObject obj, Func<bool> fireUseEvent)
     {
+        if (NoPaperdolls) return false; // Ultima 6: no paperdolls - the object is used as any other
         if (DollLook.DesignOf(obj, _objects) is not { } design) return false;
         // The object's own events can act on its paperdoll (Paperdoll command) - a radio's By Use could start it playing.
         if (WithDoll(new DollContext { State = DollStateOf(owner, design), Design = design, Owner = owner, Obj = obj }, fireUseEvent)) return true;
@@ -131,6 +132,7 @@ public partial class U6GameWindow
     /// <param name="title">The Title Screen: a paperdoll of its own kind - it opens without the paperdoll-open sound and can't be dragged.</param>
     private void OpenDoll(IHasDollState owner, WorldObject obj, DollDesign design, bool title = false)
     {
+        if (NoPaperdolls) return; // Ultima 6: no paperdolls (U6GameWindow.xaml.cs)
         var state = DollStateOf(owner, design);
         var existing = _openDolls.FirstOrDefault(g => ReferenceEquals(g.State, state));
         if (existing is not null) { BringDollToFront(existing); return; }

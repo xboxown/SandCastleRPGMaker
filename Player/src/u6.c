@@ -1486,6 +1486,13 @@ static void show_member(int index)
     partyView = 0;
 }
 
+/* A character's inventory or stats asked for (gumps.c - Ultima 6 has no paperdolls): a party member shown in the HUD's panel. */
+void u6_show_character(int characterId)
+{
+    int ids[16]; int n = party_list(ids, 16);
+    for (int i = 0; i < n; i++) if (ids[i] == characterId) { show_member(i); return; }
+}
+
 static void toggle_view(void)
 {
     panelView = panelView == VIEW_INVENTORY ? VIEW_PORTRAIT : VIEW_INVENTORY;

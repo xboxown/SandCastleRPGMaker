@@ -655,9 +655,14 @@ public partial class U6GameWindow : Window
         return image;
     }
 
+    /// <summary>Ultima 6 mode has no paperdolls (the user, 2026-11-26, list item 34): nothing opens one - a character's inventory
+    /// or stats is the HUD's panel (a party member shown there, as F1-F9), an object's or a form's paperdoll stays shut.</summary>
+    private static readonly bool NoPaperdolls = true;
+
     private void OpenPaperdoll(CharacterDefinition? character)
     {
         if (character is null) return;
+        if (NoPaperdolls) { ShowInHud(character); return; }
         if (!character.IsHuman) { Refuse(MousePointerKind.RedX, $"{character.Name} has no inventory."); return; } // not human: no paperdoll
         var existing = _openPaperdolls.FirstOrDefault(g => g.Character == character);
         if (existing is not null)

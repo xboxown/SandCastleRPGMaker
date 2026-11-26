@@ -189,7 +189,7 @@ public partial class ObjectEditorWindow
         var m = obj.MapPicture;
         var body = Group("Map");
         body.Children.Add(SpritePicker("Map picture (shown when it's used)", () => (m.Picture.SpriteGroup, m.Picture.SpriteName), (g, n) => { m.Picture.SpriteGroup = g; m.Picture.SpriteName = n; }));
-        body.Children.Add(SpritePicker("Paperdoll (optional - the parchment or frame the map is shown in)", () => (m.PaperdollSprite.SpriteGroup, m.PaperdollSprite.SpriteName), (g, n) => { m.PaperdollSprite.SpriteGroup = g; m.PaperdollSprite.SpriteName = n; }));
+        body.Children.Add(SpritePicker(ProjectSession.IsUltima6 ? "Frame (optional - the parchment the map is shown in)" : "Paperdoll (optional - the parchment or frame the map is shown in)", () => (m.PaperdollSprite.SpriteGroup, m.PaperdollSprite.SpriteName), (g, n) => { m.PaperdollSprite.SpriteGroup = g; m.PaperdollSprite.SpriteName = n; }));
         var inset = new WrapPanel();
         inset.Children.Add(NumberField("Map inside it: left (px)", () => m.PictureLeft, v => m.PictureLeft = (int)Math.Max(0, v)));
         inset.Children.Add(NumberField("top", () => m.PictureTop, v => m.PictureTop = (int)Math.Max(0, v)));
@@ -303,7 +303,7 @@ public partial class ObjectEditorWindow
         looks.Children.Add(SoundPicker("Page turn sound", () => book.PageTurnSoundResourceId, v => book.PageTurnSoundResourceId = v));
         body.Children.Add(looks);
         body.Children.Add(Note("In play it opens as Exult's spellbook: two pages, a circle a page, each spell's icon with how many times it can be cast now. Click a spell to mark it (the bookmark), double-click to cast; the corners turn the pages. " +
-                               "Or design your own: pick a paperdoll for it below (Paperdoll) - it opens that instead, and its buttons can run Cast Spell (Who: whoever set it off = the one reading the book)."));
+                               (ProjectSession.IsUltima6 ? "In Ultima 6 mode the Spell Editor (Tools) makes how spells are cast." : "Or design your own: pick a paperdoll for it below (Paperdoll) - it opens that instead, and its buttons can run Cast Spell (Who: whoever set it off = the one reading the book).")));
         var list = new StackPanel();
         body.Children.Add(CirclesEditor(() => ShowCurrent()));
         void Show()

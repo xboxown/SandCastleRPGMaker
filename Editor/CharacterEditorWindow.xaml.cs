@@ -1203,7 +1203,7 @@ public partial class CharacterEditorWindow : Window
     {
         if (CharacterListBox.SelectedItem is not CharacterDefinition character) return;
         if (FormatPainterWindow.Paint(this, character, _database.Characters, c => c.Name, "Characters",
-                skip: new[] { "Name" },
+                skip: ProjectSession.IsUltima6 ? new[] { "Name", "Paperdoll" } : new[] { "Name" }, // Ultima 6: no paperdolls
                 unticked: new[] { "FaceSpriteGroup", "FaceSpriteName", "EventPages", "TalkCommands", "Inventory", "EquippedSlots", "CustomEquippedSlots", "IsTestPlayer", "IsInParty", "Schedules", "ScheduleRules" }))
             CharacterListBox_SelectionChanged(CharacterListBox, null!);
     }

@@ -232,6 +232,7 @@ static void open_link(const Gump *g, cJSON *link)
 
 void gumps_open_paperdoll(int characterId)
 {
+    if (u6_on()) { u6_show_character(characterId); return; } /* Ultima 6: no paperdolls - the member in the HUD's panel */
     cJSON *who = character_json(characterId);
     if (cJSON_IsFalse(get(who, "IsHuman"))) { char line[96]; snprintf(line, sizeof line, "%s has no inventory.", str(who, "Name")); gumps_refuse(P_RED_X, line); return; } /* not human: no paperdoll */
     int i = find_gump(G_DOLL, characterId, NULL, 0);
@@ -1731,6 +1732,7 @@ static const Picture *stats_close(const Gump *g, int *x, int *y, int *w, int *h)
 /* Z (the player's) or the heart (anyone's): opens it - or closes it when it's open. */
 static void open_stats(int characterId)
 {
+    if (u6_on()) { u6_show_character(characterId); return; } /* Ultima 6: no paperdolls */
     int i = find_gump(G_STATS, characterId, NULL, 0);
     if (i >= 0) { close_gump(i); return; }
     cJSON *doll = stats_doll(characterId), *c = character_of(characterId);

@@ -95,6 +95,11 @@ public static class ScriptCommands
         EventCommandType.EnchantItem, EventCommandType.RemoveEnchantments, EventCommandType.GetMagicBonus,
         EventCommandType.ApplyPaletteColor, // Ultima 7's tinted sky: Ultima 6's darkness is Engine/U6Lighting.cs (the user, 2026-11-25)
         EventCommandType.LearnLanguage, // Ultima 6 has no languages built in: you make your own with event commands (CommandList: Make your own language)
+        // Ultima 6 mode has no paperdolls at all (the user, 2026-11-26, list item 34): the HUD (HUD Editor) is the game's screen.
+        EventCommandType.OpenPaperdoll, EventCommandType.Paperdoll, EventCommandType.ClosePaperdoll, EventCommandType.ShowHidePart,
+        EventCommandType.SetPartLook, EventCommandType.SetPartText, EventCommandType.SetPartValue, EventCommandType.GetPartValue,
+        EventCommandType.FillListFromArray, EventCommandType.GetPickedChoice, EventCommandType.EnablePart, EventCommandType.MovePart,
+        EventCommandType.PutItemInSlot, EventCommandType.TakeItemFromSlot, EventCommandType.MovePaperdoll, EventCommandType.FocusTextBox,
     };
     /// <summary>Magic weapons and armor: curses, enchantments, what's worn, combining items.</summary>
     public const string EquipmentTab = "Equipment";
