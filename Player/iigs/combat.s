@@ -522,9 +522,12 @@ StepToward:
         sta GX
         lda PY
         sta GY
-; ... toward GX, GY
+; ... toward GX, GY - along a way kept (path.s), else straight at it, else a way round searched for (path.s).
 StepToGoal:
-        lda GX
+        jsr PathFollow
+        bcc .st
+        rts
+.st:    lda GX
         sec
         sbc [CP]
         jsr ShortX              ; the short way round a map that wraps around (moves.s)
@@ -553,8 +556,12 @@ StepToGoal:
         stz SDX
         lda TDY
         sta SDY
-        jmp TryCharStep
-.no:    lda TDY                 ; in line with it and blocked: round, one diagonal or the other
+        jsr TryCharStep
+        bcs .out
+        jmp PathStep            ; blocked: a way round (path.s)
+.no:    jsr PathStep            ; in line with it and blocked: a way round (path.s), else one diagonal or the other
+        bcs .out
+        lda TDY
         bne .vert
         lda TDX
         sta SDX
