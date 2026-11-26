@@ -745,6 +745,8 @@ public sealed class AppleIIgsGamePack
     public List<(string Name, byte[] Code)> Talks { get; } = new();
     /// <summary>The HUD's background (320 x 200, 4 bits a pixel, 32000 bytes); null: no HUD.</summary>
     public byte[]? HudBackground { get; set; }
+    /// <summary>Change HUD Frame: the HUD drawn with another frame (32000 bytes each, at most 4; actkeys.s).</summary>
+    public List<byte[]> HudAlts { get; } = new();
     public (int X, int Y, int Columns, int Rows) View { get; set; } = (80, 20, 10, 10);
     /// <summary>Where the words go; without a HUD two lines under the world.</summary>
     public (int X, int Y, int Width, int Height) TextArea { get; set; } = (8, 182, 304, 18);
@@ -1038,6 +1040,8 @@ public sealed class AppleIIgsGamePack
         foreach (var frames in AnimTiles.Take(128)) { w.Write((ushort)Math.Min(frames.Count, 4)); foreach (int f in frames.Take(4)) w.Write((ushort)f); for (int i = frames.Count; i < 4; i++) w.Write((ushort)frames[0]); }
         w.Write((ushort)ActKeys.Length);
         foreach (int k in ActKeys) w.Write((ushort)k);
+        w.Write((ushort)Math.Min(HudAlts.Count, 4));
+        foreach (var alt in HudAlts.Take(4)) w.Write(alt);
         return ms.ToArray();
     }
 

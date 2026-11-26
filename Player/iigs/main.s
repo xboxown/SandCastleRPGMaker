@@ -1373,6 +1373,7 @@ ViewSetup:
 
 ; The HUD's background over the whole screen, then its words.
 DrawHud:
+        jsr SetHudPtr           ; Change HUD Frame's picture, if one (actkeys.s)
         lda HudPtr
         sta Src
         lda HudPtr+2

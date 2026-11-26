@@ -2962,5 +2962,6 @@ StLogN:   .dw 0                 ; (ext.s Reset Stat: Change Stat's changes - sav
 StLog:    .ds 16*6
 LearnTab: .ds 64                ; (spellsys.s Learn Spell: spells learned, each its place + 1 (0 free) - saved)
 OlTab:    .ds 64                ; (ext.s Change Object Look: object number + 1 (0 free), its own sprite - saved)
-BrHp:     .ds 64                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
+BrHp:     .ds 64
+HudNow:   .dw 0                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

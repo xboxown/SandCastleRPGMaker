@@ -737,7 +737,25 @@ ViewPtr:
 MemberOver:
         lda ViewIdx
         bne .m
-        rts
+        lda AvRec+12            ; the Avatar: a portrait from Change Portrait (+1; 0 the panel's own)
+        beq .o
+        dec a
+        sta SprId
+        lda PortW
+        beq .o
+        lda PortX
+        sta RX
+        sta CellX
+        lda PortY
+        sta RY
+        sta CellY
+        lda PortW
+        sta RW
+        lda PortH
+        sta RH
+        jsr RestoreRect
+        jsr DrawPic
+.o:     rts
 .m:     dec a
         jsr MemberAt
         lda PortW

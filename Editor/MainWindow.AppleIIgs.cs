@@ -1031,6 +1031,16 @@ public partial class MainWindow
         var portraitRect = portraitPiece is null ? (X: 0, Y: 0, Width: 0, Height: 0)
             : (X: portraitPiece.X & ~1, Y: portraitPiece.Y, Width: Math.Clamp(portraitPiece.Width / 4 * 4, 4, 320), Height: Math.Clamp(portraitPiece.Height, 1, 200));
         var portraitOf = new Dictionary<int, int>();
+        // Change HUD Frame's frames (the HUD drawn again with each - ComposeHud) and Change Portrait's pictures, by file.
+        var hudFrames = new List<SpriteLink>();
+        var portraitPics = new Dictionary<string, int>();
+        int PortraitPicture(SpriteEntry? sprite)
+        {
+            if (portraitRect.Width <= 0 || sprite?.Frames.FirstOrDefault()?.FilePath is not { } file || !File.Exists(file)) return -1;
+            if (portraitPics.TryGetValue(file, out int known)) return known;
+            spritePixels.Add((FitPicture(file, portraitRect.Width, portraitRect.Height), portraitRect.Width, portraitRect.Height));
+            return portraitPics[file] = spritePixels.Count - 1;
+        }
         // Where each character stands in the game (its map, its place in that map's list) - for Join / Leave Party.
         var whereIs = new Dictionary<string, (int Map, int Index)>();
         for (int wi = 0; wi < worldList.Count; wi++)
@@ -1134,6 +1144,20 @@ public partial class MainWindow
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
             VariableNames = _variableDatabase.Variables.Select(v => v.Name).ToList(),
+            HudFrame = (group, name) =>
+            {
+                int at = hudFrames.FindIndex(f => f.SpriteGroup == group && f.SpriteName == name);
+                if (at < 0) { if (hudFrames.Count >= 4) return -1; hudFrames.Add(new SpriteLink { SpriteGroup = group, SpriteName = name }); at = hudFrames.Count - 1; }
+                return at + 1;
+            },
+            PortraitPic = (group, name) => PortraitPicture(_spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name)
+                ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name)),
+            OwnPortrait = whoName =>
+            {
+                var who = _characterDatabase.Characters.FirstOrDefault(c => c.Name == whoName);
+                return who is null || who.FaceSpriteName.Length == 0 ? -1 : PortraitPicture(_spriteDatabase.Groups.FirstOrDefault(g => g.Name == who.FaceSpriteGroup)?.Sprites.FirstOrDefault(s => s.Name == who.FaceSpriteName)
+                    ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == who.FaceSpriteName));
+            },
             ErrorWords = n => GameErrors.Describe(_systemSettings.Errors, n, ""),
             BookText = bookId => _bookDatabase.Books.Any(b => b.Id == bookId) ? TextOf(bookId) : -1,
             NewText = words =>
@@ -1690,18 +1714,20 @@ public partial class MainWindow
             }
         }
         foreach (var (spell, index, effect) in pendingThings) spell.Effects[index] = spell.Effects[index] with { Item4 = SpellThing(effect) };
-        var hud = ComposeHud(pack, out var portraitPanel);
+        var hudAlts = new List<uint[]>();
+        var hud = ComposeHud(pack, out var portraitPanel, hudFrames, hudAlts);
         foreach (var (dk, dx, dy, dw, dh, dframes) in pack.PendingDials)
         {
             int dfirst = spritePixels.Count;
             foreach (var f in dframes) spritePixels.Add((f, dw, dh));
             pack.Dials.Add((dk, dx, dy, dw, dh, dfirst, dframes.Count));
         }
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(hudAlts.SelectMany(p => p)).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
         if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (titlePicture is not null) pack.TitlePicture = SuperHiRes.Pack(titlePicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         pack.SwapText = (swap.TextX, swap.TextY, swap.TextColor.Length > 0 && ColorConverter.ConvertFromString(swap.TextColor) is Color sc ? SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(sc.R << 16 | sc.G << 8 | sc.B), false) : 0xFFFF);
         if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
+        if (hud is not null) foreach (var alt in hudAlts) pack.HudAlts.Add(SuperHiRes.Pack(alt, 320, 200, pack.Palette, spriteZeroIsClear: false));
         if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);
         for (int i = 0; i < pack.PortraitLabels.Count; i++)
             if (pack.PortraitLabels[i].Color < 0) pack.PortraitLabels[i] = pack.PortraitLabels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.PortraitLabels[i].Color - 1) | 0xFF000000u, false) };
@@ -2090,10 +2116,12 @@ public partial class MainWindow
     /// words. Null: no HUD (no Game View) - the world shows in the middle of the screen. Label colours are -1 - RGB
     /// until the palette is made (then 0-15), or $FFFF for the brightest.
     /// </summary>
-    private uint[]? ComposeHud(AppleIIgsGamePack pack, out uint[]? portraitPanel)
+    private uint[]? ComposeHud(AppleIIgsGamePack pack, out uint[]? portraitPanel, List<SpriteLink>? altFrames = null, List<uint[]>? altOut = null)
     {
         portraitPanel = null;
         var design = _systemSettings.Ultima6.Hud;
+        var frameNow = design.Frame;
+        bool quiet = false; // (the other frames' HUDs: drawn only - the pieces' places are the HUD's own)
         if (design.First(HudPieceKind.GameView) is not { } view) return null;
         var canvas = new uint[320 * 200];
         SpriteEntry? Of(SpriteLink link) => !link.IsSet ? null :
@@ -2141,11 +2169,21 @@ public partial class MainWindow
         int columns = Math.Clamp(view.Width / AppleIIgsLimits.TileSize, 1, 20), rows = Math.Clamp(view.Height / AppleIIgsLimits.TileSize, 1, 12);
         pack.View = (Math.Clamp(view.X & ~1, 0, 320 - columns * 16), Math.Clamp(view.Y, 0, 200 - rows * 16), columns, rows);
         if (design.First(HudPieceKind.TextArea) is { } text) pack.TextArea = (text.X, text.Y, text.Width, text.Height);
-        return canvas;
+        // Change HUD Frame: the same HUD (the inventory view) with each other frame.
+        var own = canvas;
+        foreach (var alt in altFrames ?? new List<SpriteLink>())
+        {
+            canvas = new uint[320 * 200];
+            frameNow = alt;
+            quiet = true;
+            Paint(portraitView: false);
+            altOut?.Add(canvas);
+        }
+        return own;
 
         void Paint(bool portraitView)
         {
-        Draw(Of(design.Frame), 0, 0, 320, 200, fit: false);
+        Draw(Of(frameNow), 0, 0, 320, 200, fit: false);
         var front = new List<HudPiece>();
         foreach (var piece in design.Pieces)
         {
@@ -2164,16 +2202,16 @@ public partial class MainWindow
                         // Its frames, turned by the player: the compass by the wind, the sun and moons by the hour.
                         int dx = piece.X & ~1, dw = Math.Min(320 - dx, (piece.Width + 3) / 4 * 4), dh = Math.Min(200 - piece.Y, piece.Height);
                         var frames = dial.Frames.Take(24).Where(f => File.Exists(f.FilePath)).Select(f => FitPicture(f.FilePath, dw, dh)).ToList();
-                        if (frames.Count > 1) pack.PendingDials.Add((piece.Kind == HudPieceKind.Compass ? 0 : 1, dx, piece.Y, dw, dh, frames));
+                        if (frames.Count > 1 && !quiet) pack.PendingDials.Add((piece.Kind == HudPieceKind.Compass ? 0 : 1, dx, piece.Y, dw, dh, frames));
                     }
                     break;
                 case HudPieceKind.DateText:
-                    pack.DateTexts.Add((piece.X, piece.Y, LabelColor(piece.TextColor)));
+                    if (!quiet) pack.DateTexts.Add((piece.X, piece.Y, LabelColor(piece.TextColor)));
                     break;
                 case HudPieceKind.BodySlot: // the inventory view: what the Avatar wears there, or the slot's own picture
                 {
                     Draw(Of(piece.Sprite), piece.X, piece.Y, piece.Width, piece.Height, fit: true); // empty: the player draws what is worn there
-                    pack.BodySlots.Add(((int)piece.Slot + 1, piece.X, piece.Y));
+                    if (!quiet) pack.BodySlots.Add(((int)piece.Slot + 1, piece.X, piece.Y));
                     break;
                 }
                 case HudPieceKind.CarriedItems: // its empty cells (the things carried are drawn by the player)
@@ -2185,7 +2223,7 @@ public partial class MainWindow
                     break;
                 }
                 case HudPieceKind.MemberName when player is not null && !portraitView:
-                    pack.Labels.Add((piece.X, piece.Y, LabelColor(piece.TextColor), player.Name));
+                    if (!quiet) pack.Labels.Add((piece.X, piece.Y, LabelColor(piece.TextColor), player.Name));
                     break;
                 case HudPieceKind.Portrait when player is not null: // the portrait view: the member's face
                 {
@@ -2211,7 +2249,7 @@ public partial class MainWindow
                             BuiltInStatKind.Exp => AppleIIgsGamePack.Stat.Exp, BuiltInStatKind.NextExp => 25, _ => null
                         };
                         if (live is int code) value = "~" + (char)('A' + code);
-                        pack.PortraitLabels.Add((piece.X, piece.Y + line * 10, LabelColor(piece.TextColor), $"{stat.Name} {value}"));
+                        if (!quiet) pack.PortraitLabels.Add((piece.X, piece.Y + line * 10, LabelColor(piece.TextColor), $"{stat.Name} {value}"));
                         line++;
                     }
                     break;

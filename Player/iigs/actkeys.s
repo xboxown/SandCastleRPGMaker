@@ -35,7 +35,101 @@ ParseKeys:
         inx
         inx
         bra .l
-.d:     jmp KeysEff
+.d:     jsr KeysEff
+        lda [Ptr]               ; past them: the HUD's other frames (Change HUD Frame)
+        asl a
+        clc
+        adc #2
+        jsr AddPtr
+        lda [Ptr]
+        cmp #HUD_ALTS+1
+        bcc .a
+        lda #HUD_ALTS
+.a:     sta HudAltN
+        lda #2
+        jsr AddPtr
+        ldx #0
+.al:    cpx HudAltN
+        bcs .ad
+        txa
+        asl a
+        asl a
+        tay
+        lda Ptr
+        sta HudAltTab,y
+        lda Ptr+2
+        sta HudAltTab+2,y
+        lda #32000
+        jsr AddPtr
+        inx
+        bra .al
+.ad:    rts
+
+; EXT 42 HUDFRAME n (3 bytes): Change HUD Frame - the HUD as GAME.DAT's other picture n (1-4: the same HUD with that
+; frame, made by the editor; 0 the HUD Editor's own) from now on; the screen drawn again. Kept in saves (HudNow).
+XtHudFrameCmd:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        cmp HudAltN
+        beq .ok
+        bcs .done
+.ok:    sta HudNow
+        lda HasHud
+        beq .done
+        jsr Redraw              ; (DrawHud takes HudNow's picture: SetHudPtr)
+.done:  lda #3
+        jmp Next
+
+; HudPtr = the HUD's picture now (HudNow: 0 its own, n GAME.DAT's other n).
+SetHudPtr:
+        lda HudOwn+2            ; its own, kept the first time
+        bne .k
+        lda HudPtr
+        sta HudOwn
+        lda HudPtr+2
+        sta HudOwn+2
+.k:     lda HudNow
+        beq .own
+        cmp HudAltN
+        beq .alt
+        bcs .own
+.alt:   dec a
+        asl a
+        asl a
+        tay
+        lda HudAltTab,y
+        sta HudPtr
+        lda HudAltTab+2,y
+        sta HudPtr+2
+        rts
+.own:   lda HudOwn
+        sta HudPtr
+        lda HudOwn+2
+        sta HudPtr+2
+        rts
+
+; EXT 43 PORTRAIT who pic (8 bytes): Change Portrait - their portrait (+12) is picture pic from now on (the HUD's Portrait,
+; talking); the Avatar's +12: 0 its own (the panel's), else the picture + 1. Kept in saves (the records are).
+XtPortraitCmd:
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AkArg
+        jsr WhoRec
+        bcs .done
+        lda AkArg
+        ldy #12
+        sta [WP],y
+        lda PanelView           ; the portrait view up: drawn again
+        beq .done
+        jsr DrawPanel
+.done:  lda #8
+        jmp Next
+
+HUD_ALTS = 4
+HudAltN:  .dw 0
+HudAltTab: .ds HUD_ALTS*4
+HudOwn:   .dd 0
 
 ; At the start: what the player changed (KEYS.DAT), if anything.
 KeysLoad:
