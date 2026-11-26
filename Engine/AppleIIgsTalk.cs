@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -599,9 +599,10 @@ public sealed class AppleIIgsTalk
                 {
                     // EXT 2 ATKOBJ who x y name (ext.s, break.s): the thing - the object (or container) of that name nearest x, y.
                     var thing = cmd.Get("Thing").Split(':');
-                    int? thingName = thing.Length == 3 && thing[0] is "Object" or "Item" ? Extra?.Item?.Invoke(thing[0] == "Object" ? "Object" : thing[1], thing[2])?.Name : null;
-                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || thingName is null) { Unsupported.Add("Attack Object (someone not on a map, or a thing from a variable)"); break; }
-                    B(Ext); B((int)ExtOp.AttackObject); W(m); W(x); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(thingName.Value);
+                    bool thingVar = cmd.Get("Thing").StartsWith("Var:");
+                    int? thingName = thingVar ? 0xFFFE : thing.Length == 3 && thing[0] is "Object" or "Item" ? Extra?.Item?.Invoke(thing[0] == "Object" ? "Object" : thing[1], thing[2])?.Name : null;
+                    if (!WhoCode(cmd.Get("Who"), out int m, out int x) || thingName is null) { Unsupported.Add("Attack Object (someone not on a map, or a thing not on the IIgs)"); break; }
+                    B(Ext); B((int)ExtOp.AttackObject); W(m); W(x); W(thingVar ? _variable(cmd.Get("Thing")[4..]) : Number(cmd.Get("X"))); W(thingVar ? 0 : Number(cmd.Get("Y"))); W(thingName.Value);
                     break;
                 }
                 case EventCommandType.PlayAnimation:
@@ -654,9 +655,10 @@ public sealed class AppleIIgsTalk
                 {
                     // EXT 19 / 21 / 22 (ext.s): the thing - the one of that name at its spot (a thing from a variable: Find Thing, item 20).
                     var tp = cmd.Get("Thing").Split(':');
-                    int? tn = tp.Length == 3 && tp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(tp[0] == "Object" ? "Object" : tp[1], tp[2])?.Name : null;
-                    if (tn is null) { Unsupported.Add($"{ScriptCommands.Of(cmd.Type)?.Name ?? cmd.Type.ToString()} (a thing from a variable, or not on the IIgs)"); break; }
-                    int tx = Number(cmd.Get("X")), ty = Number(cmd.Get("Y"));
+                    bool fromVar = cmd.Get("Thing").StartsWith("Var:");
+                    int? tn = fromVar ? 0xFFFE : tp.Length == 3 && tp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(tp[0] == "Object" ? "Object" : tp[1], tp[2])?.Name : null;
+                    if (tn is null) { Unsupported.Add($"{ScriptCommands.Of(cmd.Type)?.Name ?? cmd.Type.ToString()} (a thing not on the IIgs)"); break; }
+                    int tx = fromVar ? _variable(cmd.Get("Thing")[4..]) : Number(cmd.Get("X")), ty = fromVar ? 0 : Number(cmd.Get("Y"));
                     if (cmd.Type == EventCommandType.DeleteObject) { B(Ext); B((int)ExtOp.DeleteObject); W(tx); W(ty); W(tn.Value); }
                     else if (cmd.Type == EventCommandType.MoveObject) { B(Ext); B((int)ExtOp.MoveObject); W(tx); W(ty); W(tn.Value); W(Number(cmd.Get("ToX"))); W(Number(cmd.Get("ToY"))); }
                     else
@@ -714,11 +716,12 @@ public sealed class AppleIIgsTalk
                 {
                     // EXT 27 SETBOX x y boxname empty name sprite icon flags other count (ext.s): at most 8 put in.
                     var bp = cmd.Get("Thing").Split(':');
-                    int? boxName = bp.Length == 3 && bp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(bp[0] == "Object" ? "Object" : bp[1], bp[2])?.Name : null;
+                    bool boxVar = cmd.Get("Thing").StartsWith("Var:");
+                    int? boxName = boxVar ? 0xFFFE : bp.Length == 3 && bp[0] is "Object" or "Item" ? Extra?.Item?.Invoke(bp[0] == "Object" ? "Object" : bp[1], bp[2])?.Name : null;
                     bool put = cmd.Get("Category").Length > 0 && int.TryParse(cmd.Get("ItemId"), out int pid) && pid >= 0;
                     var pi = put ? Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) : null;
                     if (boxName is null || put && pi is null) { Unsupported.Add("Set Container Contents (a container from a variable, or a thing not on the IIgs)"); break; }
-                    B(Ext); B((int)ExtOp.SetBox); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(boxName.Value); B(cmd.Get("Empty") == "True" ? 1 : 0);
+                    B(Ext); B((int)ExtOp.SetBox); W(boxVar ? _variable(cmd.Get("Thing")[4..]) : Number(cmd.Get("X"))); W(boxVar ? 0 : Number(cmd.Get("Y"))); W(boxName.Value); B(cmd.Get("Empty") == "True" ? 1 : 0);
                     if (pi is { } it) { W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); } else { W(0xFFFF); W(0); W(0); W(0); W(0xFFFF); }
                     B(Math.Clamp(Number(cmd.Get("Quantity")), 1, 8));
                     break;
@@ -758,6 +761,30 @@ public sealed class AppleIIgsTalk
                         int aff = cmd.Get("Affects") switch { "Enemies of Who" => 1, "Only those with a rule for this type" => 2, _ => 0 };
                         B(Ext); B((int)ExtOp.AreaHurt); W(amountVar); B(dtype); B(aff); Centre();
                     }
+                    break;
+                }
+                case EventCommandType.FindThing:
+                {
+                    // EXT 31 FINDTHING mode who x y name var (ext.s).
+                    string find = cmd.Get("Find");
+                    int mode = find.StartsWith("The body") ? 0 : find.StartsWith("The nearest of an item to someone") ? 1 : find.StartsWith("The nearest of an item to a spot") ? 2 : 3;
+                    int m = 0xFFFF, x = 0xFFFF, fname = 0xFFFF;
+                    if (mode < 2 && !WhoCode(cmd.Get("Who"), out m, out x)) { Unsupported.Add("Find Thing (someone not on a map)"); break; }
+                    if (mode is 1 or 2)
+                    {
+                        if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } fi) { Unsupported.Add("Find Thing (a thing not on the IIgs)"); break; }
+                        fname = fi.Name;
+                    }
+                    B(Ext); B((int)ExtOp.FindThing); B(mode); W(m); W(x); W(Number(cmd.Get("AtX"))); W(Number(cmd.Get("AtY"))); W(fname); W(_variable(cmd.Get("Variable")));
+                    break;
+                }
+                case EventCommandType.ThingInfo:
+                {
+                    // EXT 32 THINGINFO handlevar xvar yvar floorvar namevar (ext.s): the handle's formula worked out first.
+                    int handleVar = Hidden("thing");
+                    B(Calc); W(handleVar); Formula(cmd.Get("Value"), "Thing Info");
+                    int V(string key) => cmd.Get(key).Trim() is { Length: > 0 } n ? _variable(n) : 0xFFFF;
+                    B(Ext); B((int)ExtOp.ThingInfo); W(handleVar); W(V("XVariable")); W(V("YVariable")); W(V("FloorVariable")); W(V("NameVariable"));
                     break;
                 }
                 case EventCommandType.DeleteObjectSelf:

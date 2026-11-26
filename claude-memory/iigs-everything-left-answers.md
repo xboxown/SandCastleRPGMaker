@@ -50,3 +50,5 @@ IIgs matches) - fix Windows? Next: item 14 Change Name / Change Look.
 2026-11-25: user said GO on question 9 (remove PaperDoll Editor windows/commands from U6 mode, keep HUD Body Slots, move prompts/save/errors to text area, HUD Editor gets more power) - do it at item 34. Also: Move Camera / Camera Follows = cutscene = full light, no darkness, no line of sight (done b715, Windows + IIgs + C).
 
 2026-11-25: the user allowed the Ubuntu build - run it EXACTLY as: PowerShell tool `wsl -u root bash /mnt/h/SandcastleRpgMaker/Player/build_linux.sh` (that string is the permission rule). Other ports: wsl -d Ubuntu (no root) via /mnt/h/_sandcastle_test_temp/build_all_c.sh from PowerShell.
+
+PROGRESS 2026-11-25 (later): items 1-19 done through b722. EXT subs now 0-30 (15 look,16 name,17 res,18-22 objects,23 count,24 inside,25 charges,26 equipped,27 setbox,28-30 area). asm816 fixed: 'branch too far' only once sizes settle (fixbranches used to loop). SCRIPTDATA starts zeroed: tables use 0 = free. Next: item 20 Find Thing / Thing Info.

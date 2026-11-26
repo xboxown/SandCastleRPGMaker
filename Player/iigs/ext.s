@@ -20,8 +20,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
-          .dw XtAreaFind,XtAreaDel,XtAreaHurt
-EXT_COUNT = 31
+          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo
+EXT_COUNT = 33
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -273,8 +273,19 @@ XtAtkObj:
         lda [TalkPtr],y
         sta AoName
         jsr WhoRec
-        bcs .done
-        jsr AoFind
+        bcc .fb1
+        brl .done
+.fb1:
+        lda AoName              ; from a variable (Find Thing): its own spot and name
+        cmp #$FFFE
+        bne .fd
+        jsr ThingOfVar
+        bcc .done
+        lda AoX
+        sta AcA
+        lda AoY
+        sta AcB
+.fd:    jsr AoFind
         bcc .done               ; not there
         jsr BrKindOf
         bcs .walk
@@ -1721,7 +1732,39 @@ XtThing:
         iny
         iny
         sty XtY
+        lda AoName
+        cmp #$FFFE
+        beq ThingOfVar
         jmp AoFind
+
+; A thing from a variable (Find Thing's handle: its object number, in variable AoX): ItemPtr on it, carry set if it is on
+; this map (not gone, carried or inside); AoX, AoY, AoName then its own.
+ThingOfVar:
+        lda AoX
+        asl a
+        tax
+        lda VarTab,x
+        bmi .no
+        cmp ObjCount
+        bcs .no
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$F000+32+64+256
+        cmp CurBits
+        bne .no
+        lda [ItemPtr]
+        sta AoX
+        ldy #2
+        lda [ItemPtr],y
+        sta AoY
+        ldy #8
+        lda [ItemPtr],y
+        sta AoName
+        sec
+        rts
+.no:    clc
+        rts
 
 ; EXT 21 MOVEOBJ x y name tox toy (12 bytes): the thing moved to another cell.
 XtMoveObj:
@@ -2666,6 +2709,215 @@ HasRule:
         rts
 .y:     sec
         rts
+
+; EXT 31 FINDTHING mode who x y name var (15 bytes): Find Thing, as U6GameWindow.FindThing.cs - its handle (the object's
+; number; -1 none) into the variable. Mode 0: the body of a dead character (bodies.s BodyNm where it fell); 1: the nearest
+; of the thing to someone; 2: the nearest to the spot; 3: the thing at the spot (the one on top: the last there).
+XtFindThing:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta FtMode
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta FtName
+        iny
+        iny
+        lda [TalkPtr],y
+        asl a
+        sta CtVar
+        lda #$FFFF
+        sta FtFound
+        lda FtMode
+        cmp #2
+        bcs .spot
+        jsr WhoRec              ; someone: where they are
+        bcc .fb2
+        brl .put
+.fb2:
+        jsr WPIsAvatar
+        bcc .w
+        lda PX
+        sta AoX
+        lda PY
+        sta AoY
+        bra .wd
+.w:     lda [WP]
+        sta AoX
+        ldy #2
+        lda [WP],y
+        sta AoY
+.wd:    lda FtMode
+        bne .near
+        ldy #C_FLAGS            ; the body: only of the dead
+        lda [WP],y
+        and #4
+        bne .fb3
+        brl .put
+.fb3:
+        jsr RsFindBody
+        bcs .fb4
+        brl .put
+.fb4:
+        jsr IndexOf
+        sta FtFound
+        brl .put
+.spot:  cmp #3
+        beq .top
+.near:  lda #$FFFF              ; the nearest of that name on this map
+        sta FtBest
+        stz CtI
+.nl:    lda CtI
+        cmp ObjCount
+        bcc .fb6
+        brl .put
+.fb6:
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$F000+32+64+256
+        cmp CurBits
+        bne .nn
+        ldy #8
+        lda [ItemPtr],y
+        cmp FtName
+        bne .nn
+        lda [ItemPtr]
+        sec
+        sbc AoX
+        jsr AbsX
+        sta T5
+        ldy #2
+        lda [ItemPtr],y
+        sec
+        sbc AoY
+        jsr AbsY
+        cmp T5
+        bcs .mx
+        lda T5
+.mx:    cmp FtBest
+        bcs .nn
+        sta FtBest
+        lda CtI
+        sta FtFound
+.nn:    inc CtI
+        bra .nl
+.top:   stz CtI                 ; the last thing at the spot
+.tl:    lda CtI
+        cmp ObjCount
+        bcs .put
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$F000+32+64+256
+        cmp CurBits
+        bne .tn
+        lda [ItemPtr]
+        cmp AoX
+        bne .tn
+        ldy #2
+        lda [ItemPtr],y
+        cmp AoY
+        bne .tn
+        lda CtI
+        sta FtFound
+.tn:    inc CtI
+        bra .tl
+.put:   lda FtFound
+        ldx CtVar
+        stz PTag
+        jsr StoreVar
+        lda #15
+        jmp Next
+
+; EXT 32 THINGINFO handlevar xvar yvar floorvar namevar (12 bytes): Thing Info - where the thing is and its name ($FFFF:
+; not wanted); -1 and an empty name when it isn't on the map any more.
+XtThingInfo:
+        iny
+        lda [TalkPtr],y
+        sta AoX                 ; (the handle's variable)
+        iny
+        iny
+        sty FtY
+        jsr ThingOfVar
+        bcs .on
+        lda #$FFFF
+        sta AoX
+        sta AoY
+        sta FtFloor
+        stz FtFound             ; (no name)
+        bra .w
+.on:    lda #1
+        sta FtFloor
+        lda #1
+        sta FtFound
+.w:     ldy FtY                 ; x, y, floor
+        lda [TalkPtr],y
+        ldx AoX
+        jsr FtStore
+        iny
+        iny
+        lda [TalkPtr],y
+        ldx AoY
+        jsr FtStore
+        iny
+        iny
+        lda [TalkPtr],y
+        ldx FtFloor
+        jsr FtStore
+        iny
+        iny
+        lda [TalkPtr],y         ; its name
+        cmp #$FFFF
+        beq .done
+        asl a
+        sta CtVar
+        lda FtFound
+        beq .empty
+        lda AoName
+        jsr NameNumber
+        lda FmtName
+        sta GFar
+        lda FmtName+2
+        sta GFar+2
+        jsr FarToTemp           ; (texts.s: PTag 1)
+        bra .nm
+.empty: lda #0
+        ldx #1
+        stx PTag
+.nm:    ldx CtVar
+        jsr StoreVar
+.done:  lda #12
+        jmp Next
+
+; Variable A ($FFFF: none) = the number X (Y kept).
+FtStore:
+        cmp #$FFFF
+        beq .o
+        phy
+        asl a
+        sta CtVar
+        txa
+        ldx CtVar
+        stz PTag
+        jsr StoreVar
+        ply
+.o:     rts
+
+FtMode:   .dw 0
+FtName:   .dw 0
+FtFound:  .dw 0
+FtBest:   .dw 0
+FtY:      .dw 0
+FtFloor:  .dw 0
 
 ArMode:   .dw 0
 ArX:      .dw 0
