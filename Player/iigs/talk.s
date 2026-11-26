@@ -34,7 +34,10 @@ SetColor:
 
 ; The next line; at the bottom the text area scrolls up a line.
 NewLine:
-        lda TextX
+        lda LogOn               ; (a line being logged: nothing on the screen)
+        beq .nl
+        rts
+.nl:    lda TextX
         clc
         adc #2
         sta PenX
@@ -269,7 +272,10 @@ PromptLine:
 
 ; Writes words: the text at SayP + Y (a C string; \1 word \2 a keyword, \n a new line), word by word.
 SayText:
-        sty TxtAt
+        lda LogOn               ; a line being logged (ext.s XtLog): into LogBuf
+        beq .show
+        jmp LogText
+.show:  sty TxtAt
         lda #$FFFF              ; no colour of its own yet ([COLOR=...]: \x03 n ... \x04)
         sta SayCol
 .word:  ldx #0

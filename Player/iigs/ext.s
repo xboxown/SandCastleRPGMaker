@@ -21,8 +21,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText
-EXT_COUNT = 40
+          .dw XtLight,XtBookText,XtLog
+EXT_COUNT = 41
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)
@@ -3436,6 +3436,102 @@ XtBookText:
         ora LsOther
         sta [ItemPtr],y
 .o:     rts
+
+; EXT 40 LOG mode (3 bytes) - list item 29 (the user, 2026-11-25): Debug Log, Pause Here and Show Error on the IIgs.
+; mode 0: a line begins - what SAYF prints next goes into LogBuf (talk.s SayText, NewLine), not on the screen;
+; mode 1: the line into LOG.TXT in the game's folder (made if it isn't there - a text file - and added at its end);
+; mode 2: "Log error generated." in the text area.
+XtLog:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        beq .begin
+        cmp #1
+        beq .write
+        jsr NewLine
+        lda #W_LOGERR
+        jsr PrintSaid
+        bra .done
+.begin: lda #1
+        sta LogOn
+        stz LogLen
+        bra .done
+.write: stz LogOn
+        jsr LogWrite
+.done:  lda #3
+        jmp Next
+
+; LogBuf (LogLen bytes) and a return into LOG.TXT. Any trouble (no disk room, locked): nothing more.
+LogWrite:
+        ldx LogLen
+        sep #$20
+        .a8
+        lda #$0D
+        sta LogBuf,x
+        rep #$20
+        .a16
+        inc LogLen
+        lda #LogName
+        jsr LocalPath           ; PathBuf = "9:LOG.TXT"
+        gsos $2001,LogCreate    ; made if it isn't there (there already: no matter)
+        gsos $2010,OpenWParms
+        bcs .x
+        lda OpenWRef
+        sta LogMarkRef
+        sta WriteRef
+        sta CloseRef
+        gsos $2016,LogMark      ; at its end
+        lda #LogBuf
+        ldx MyBank
+        ldy LogLen
+        jsr WriteBlock
+        gsos $2014,CloseParms
+.x:     rts
+
+; talk.s SayText while a line is being logged: the words added to LogBuf (marks left out, a new line a space).
+LogText:
+.l:     lda [SayP],y
+        and #$00FF
+        beq .e
+        iny
+        cmp #3                  ; a colour and its number
+        bne .n3
+        iny
+        bra .l
+.n3:    cmp #6
+        bcc .l                  ; (keyword and colour marks)
+        cmp #$0A
+        bne .add
+        lda #' '
+.add:   ldx LogLen
+        cpx #250
+        bcs .l
+        sep #$20
+        .a8
+        sta LogBuf,x
+        rep #$20
+        .a16
+        inc LogLen
+        bra .l
+.e:     rts
+
+W_LOGERR = 120
+LogOn:    .dw 0
+LogLen:   .dw 0
+LogBuf:   .ds 256
+LogName:  .cstr "LOG.TXT"
+LogCreate:
+        .dw 4
+        .dd PathBuf
+        .dw $00C3
+        .dw $0004               ; a text file
+        .dd 0
+LogMark:
+        .dw 3
+LogMarkRef:
+        .dw 0
+        .dw 1                   ; from the end
+        .dd 0
 
 LsWhich:  .dw 0
 LsDo:     .dw 0

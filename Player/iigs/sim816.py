@@ -30,6 +30,7 @@ class Machine:
                 i += 1
         self.accelerated = accelerated
         self.trace = trace
+        import collections; self.ring = collections.deque(maxlen=60) if os.environ.get('SIM_RING') else None  # the last steps (a crash's way there)
         self.a = self.x = self.y = 0
         self.s = 0x01FF
         self.d = 0
@@ -273,7 +274,8 @@ class Machine:
                 full = os.path.join(self.folder, vol, name) if self.inserted else ''
             self.opened.append((path, os.path.exists(full)))
             if os.path.exists(full) and self.rd16(parm) >= 3 and self.rd16(parm + 8) & 2:  # opened to write
-                self.wfiles[self.next_ref] = (full, bytearray())
+                self.wfiles[self.next_ref] = (full, bytearray(open(full, 'rb').read()))  # (GS/OS keeps what is there; written from the mark)
+                self.marks = getattr(self, 'marks', {}); self.marks[self.next_ref] = 0
                 self.wr16(parm + 2, self.next_ref)
                 self.next_ref += 1
             elif os.path.exists(full):
@@ -283,9 +285,13 @@ class Machine:
                 self.next_ref += 1
             else:
                 err = 0x46  # file not found
+        elif call == 0x2016:  # SetMark: base 0 the displacement, 1 the end minus it
+            ref = self.rd16(parm + 2); frm = self.rd16(parm + 4); disp = self.rd16(parm + 6) | self.rd16(parm + 8) << 16
+            n = len(self.wfiles[ref][1]) if ref in self.wfiles else len(self.files.get(ref, b''))
+            self.marks = getattr(self, 'marks', {}); self.marks[ref] = disp if frm == 0 else n - disp
         elif call == 0x2019:  # GetEOF
             ref = self.rd16(parm + 2)
-            n = len(self.files.get(ref, b''))
+            n = len(self.wfiles[ref][1]) if ref in self.wfiles else len(self.files.get(ref, b''))
             self.wr16(parm + 4, n); self.wr16(parm + 6, n >> 16)
         elif call == 0x2012:  # Read
             ref = self.rd16(parm + 2)
@@ -304,7 +310,9 @@ class Machine:
             ref = self.rd16(parm + 2)
             buf = self.rd24(parm + 4)
             req = self.rd16(parm + 8) | self.rd16(parm + 10) << 16
-            if ref in self.wfiles: self.wfiles[ref][1].extend(self.mem[buf: buf + req])
+            if ref in self.wfiles:
+                at = self.marks.get(ref, 0); d = self.wfiles[ref][1]
+                d[at: at + req] = self.mem[buf: buf + req]; self.marks[ref] = at + req
             self.wr16(parm + 12, req); self.wr16(parm + 14, req >> 16)
         elif call == 0x2006:  # GetFileInfo: there or not
             pathp = self.rd24(parm + 2)
@@ -386,6 +394,7 @@ class Machine:
             if op not in table: raise Stop(f'unknown opcode ${op:02X} at {addr:06X}')
             mn, mode = table[op]
             if self.trace: print(f'{addr:06X} {mn} {mode} A={self.a:04X} X={self.x:04X} Y={self.y:04X} S={self.s:04X} P={self.p:02X}')
+            if self.ring is not None: self.ring.append((addr, mn))
             self.execute(mn, mode)
         raise Stop('too many steps (a loop that never ends?)')
 

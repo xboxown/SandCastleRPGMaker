@@ -1133,6 +1133,8 @@ public partial class MainWindow
                 return frames.Count > 0 ? frames : null;
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
+            VariableNames = _variableDatabase.Variables.Select(v => v.Name).ToList(),
+            ErrorWords = n => GameErrors.Describe(_systemSettings.Errors, n, ""),
             BookText = bookId => _bookDatabase.Books.Any(b => b.Id == bookId) ? TextOf(bookId) : -1,
             NewText = words =>
             {

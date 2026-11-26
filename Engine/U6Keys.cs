@@ -186,6 +186,7 @@ public static class U6Words
         ("Loaded", "Game loaded.", "Ctrl+R: a saved game back (Apple IIgs)"),
         ("NoSaving", "Saving isn't allowed here.", "Saving while an event has forbidden it (Allow / Forbid Saving)"),
         ("NoSavedGame", "There is no saved game.", "Ctrl+R with nothing saved"),
+        ("LogError", "Log error generated.", "Apple IIgs: Debug Log, Pause Here or Show Error wrote a line in LOG.TXT"),
         ("NoSave", "No saved game.", "Ctrl+R with nothing saved, or a save that can't be written (Apple IIgs)"),
         ("TalkSelf", "Talking to yourself?", "Talking to the avatar"),
         ("NoResponse", "No response.", "Talking to someone asleep, hostile, fighting or dead"),

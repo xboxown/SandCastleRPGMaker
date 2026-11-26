@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -95,6 +95,9 @@ public sealed class AppleIIgsTalk
         /// <summary>Change Book Content (Ultima 6): a book's text by its id (its place in Texts; -1 none), and new words compiled as a text of their own.</summary>
         public Func<int, int>? BookText;
         public Func<string, int>? NewText;
+        /// <summary>The project's variables (Pause Here writes each into LOG.TXT) and an error's words by its number (Show Error).</summary>
+        public List<string>? VariableNames;
+        public Func<int, string>? ErrorWords;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
         /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
@@ -231,6 +234,31 @@ public sealed class AppleIIgsTalk
         if (bytes.Length == 0) return;
         B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
     }
+
+    /// <summary>A line into LOG.TXT (EXT 40 LOG, ext.s): each part's words, then its formula's value (a text or a number);
+    /// a formula the IIgs can't work out is written as it is.</summary>
+    private void LogLine(List<(string Words, string Formula)> parts)
+    {
+        B(Ext); B((int)ExtOp.Log); B(0);
+        B(SayF);
+        foreach (var (words, formula) in parts)
+        {
+            if (words.Length > 0) LogPart(words);
+            if (formula.Trim().Length == 0) continue;
+            if (ScriptExpression.CompileIIgs(formula, _variable, out _, Extra?.Names) is { } code) { B(2); _code.AddRange(code); }
+            else LogPart(formula);
+        }
+        B(0);
+        B(Ext); B((int)ExtOp.Log); B(1);
+    }
+    private void LogPart(string part)
+    {
+        var bytes = Encoding.ASCII.GetBytes(new string(part.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(200).ToArray()));
+        if (bytes.Length == 0) return;
+        B(1); _code.AddRange(bytes); B(0);
+    }
+    /// <summary>"Log error generated." in the text area.</summary>
+    private void LogShown() { B(Ext); B((int)ExtOp.Log); B(2); }
 
     /// <summary>SAY words already marked (CompileText's).</summary>
     private void SayLineMarked(string text)
@@ -1549,6 +1577,29 @@ public sealed class AppleIIgsTalk
                     // Ultima 6 / Savage Empire have no barks (an Ultima 7 thing) - the user, 2026-11-24: left out on the Apple IIgs.
                     Unsupported.Add("Show Bark (Ultima 6 has no barks)");
                     break;
+                case EventCommandType.DebugLog:
+                    // The user, 2026-11-25 (list item 29): on the Apple IIgs every testing line goes into LOG.TXT on the disk (made if
+                    // it isn't there) and the text area says "Log error generated." - quit the game and read it.
+                    LogLine(new() { ("", cmd.Get("Value")) });
+                    LogShown();
+                    break;
+                case EventCommandType.PauseHere:
+                    LogLine(new() { ("Pause Here", "") });
+                    foreach (var name in Extra?.VariableNames ?? new List<string>())
+                        LogLine(new() { ("  " + name + " = ", name) });
+                    LogShown();
+                    break;
+                case EventCommandType.ShowError:
+                {
+                    string number = cmd.Get("Number").Trim(), detail = cmd.Get("Detail").Trim();
+                    var parts = new List<(string, string)>();
+                    if (int.TryParse(number, out int en)) parts.Add(($"Error {en}: {Extra?.ErrorWords?.Invoke(en) ?? ""}", ""));
+                    else parts.Add(("Error ", number));
+                    if (detail.Length > 0) parts.Add((" - ", detail));
+                    LogLine(parts);
+                    LogShown();
+                    break;
+                }
                 case EventCommandType.Comment or EventCommandType.ReturnFromCommon:
                     break;
                 case EventCommandType.StopConversation or EventCommandType.End:
