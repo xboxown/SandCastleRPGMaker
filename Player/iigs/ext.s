@@ -20,8 +20,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
-          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast
-EXT_COUNT = 36
+          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat
+EXT_COUNT = 37
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)
@@ -3101,6 +3101,100 @@ CbN3:     .dw 0
 CbMiss:   .dw 0
 CbHave1:  .dw 0
 CbHave2:  .dw 0
+
+; ---- Reset Stat (U6GameWindow.EventCommands.cs ResetStatCommand): Change Stat's changes taken back, newest first ----
+
+; Change Stat moved stat word GWord of JMap, JIdx by A: logged (StLog, saved: owner code, word, by how much - 16 at most,
+; the oldest dropped).
+StLogAdd:
+        sta StBy
+        cmp #0
+        beq .o
+        lda StLogN
+        cmp #16
+        bcc .room
+        ldx #0                  ; full: the oldest out
+.sh:    lda StLog+6,x
+        sta StLog,x
+        inx
+        inx
+        cpx #15*6
+        bcc .sh
+        dec StLogN
+.room:  lda StLogN
+        asl a
+        sta T4
+        asl a
+        clc
+        adc T4
+        tax
+        jsr JOwner
+        sta StLog,x
+        lda GWord
+        sta StLog+2,x
+        lda StBy
+        sta StLog+4,x
+        inc StLogN
+.o:     rts
+
+; EXT 36 RESETSTAT who word (7 bytes): every logged change of that stat ($FF: all) of the one taken back, newest first.
+XtResetStat:
+        jsr ReadWho
+        lda [TalkPtr],y
+        and #$00FF
+        sta StWord
+        jsr WhoRec
+        bcs .done
+        jsr JOwner
+        sta StCode
+        lda StLogN
+        sta StI
+.l:     lda StI
+        beq .d
+        dec StI
+        lda StI
+        asl a
+        sta T4
+        asl a
+        clc
+        adc T4
+        tax
+        lda StLog,x
+        cmp StCode
+        bne .l
+        lda StWord
+        cmp #$FF
+        beq .m
+        cmp StLog+2,x
+        bne .l
+.m:     lda StLog+2,x           ; its stat back by what it moved
+        asl a
+        clc
+        adc #16
+        tay
+        lda [WP],y
+        sec
+        sbc StLog+4,x
+        bpl .p
+        lda #0
+.p:     sta [WP],y
+.sh:    lda StLog+6,x           ; off the log
+        sta StLog,x
+        inx
+        inx
+        cpx #15*6
+        bcc .sh
+        dec StLogN
+        bra .l
+.d:     jsr HpChanged
+.done:  lda #7
+        jmp Next
+
+StOld:    .dw 0
+StBy:     .dw 0
+StWord:   .dw 0
+StCode:   .dw 0
+StI:      .dw 0
 
 FtMode:   .dw 0
 FtName:   .dw 0

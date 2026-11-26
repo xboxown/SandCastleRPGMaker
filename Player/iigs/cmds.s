@@ -295,11 +295,16 @@ OpStat:
         clc
         adc #16
         tay
+        lda [WP],y              ; (as it was: Reset Stat takes the change back - ext.s)
+        sta StOld
         lda GOp
         jsr Apply
         bpl .ok
         lda #0
 .ok:    sta [WP],y
+        sec
+        sbc StOld
+        jsr StLogAdd
         lda GWord
         cmp #10                 ; experience: a level?
         bne .h
