@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -92,6 +92,9 @@ public sealed class AppleIIgsTalk
         public Func<List<(int Name, int Id)>>? WornIds;
         /// <summary>Learn / Cast Spell: a spell's place in the game's spells by its name; -1 none.</summary>
         public Func<string, int>? SpellIndex;
+        /// <summary>Change Book Content (Ultima 6): a book's text by its id (its place in Texts; -1 none), and new words compiled as a text of their own.</summary>
+        public Func<int, int>? BookText;
+        public Func<string, int>? NewText;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
         /// <summary>A word's place in the names (Order On A Target's prompt).</summary>
@@ -188,29 +191,51 @@ public sealed class AppleIIgsTalk
     {
         var talk = new AppleIIgsTalk(_ => 0, null, null, null);
         var all = new List<string>();
-        foreach (var paragraph in text.Replace("\r", "").TrimEnd().Split('\n'))
+        static int Shown(string s) => s.Count(ch => ch is not ('\u0003' or '\u0004')) - s.Count(ch => ch == '\u0003'); // (a colour's number takes no room either)
+        foreach (var paragraph in ColourMarks(text.Replace("\r", "").TrimEnd()).Split('\n'))
         {
             var line = "";
             foreach (var word in paragraph.Split(' '))
             {
-                if (line.Length > 0 && line.Length + 1 + word.Length > chars) { all.Add(line); line = ""; }
+                if (line.Length > 0 && Shown(line) + 1 + Shown(word) > chars) { all.Add(line); line = ""; }
                 line = line.Length == 0 ? word : line + " " + word;
             }
             all.Add(line);
         }
+        string? open = null;
         for (int i = 0; i < all.Count; i += Math.Max(1, lines))
         {
             if (i > 0) talk.B(More);
-            talk.SayLine(string.Join("\n", all.Skip(i).Take(Math.Max(1, lines))));
+            string chunk = (open is null ? "" : "\u0003" + open) + string.Join("\n", all.Skip(i).Take(Math.Max(1, lines)));
+            for (int k = 0; k < chunk.Length; k++) if (chunk[k] == '\u0003' && k + 1 < chunk.Length) open = chunk[k + 1].ToString(); else if (chunk[k] == '\u0004') open = null;
+            talk.SayLineMarked(chunk);
         }
         talk.B(End);
         return talk._code.ToArray();
     }
 
+    /// <summary>[COLOR=name or #RRGGBB] / [/COLOR]: the game palette's nearest colour of a name (the editor sets it; null: the codes dropped).</summary>
+    public static Func<string, int>? ColourIndex;
+    private static readonly System.Text.RegularExpressions.Regex ColourCode = new(@"\[COLOR=([^\]]+)\]|\[/COLOR\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+
+    /// <summary>[COLOR=...] codes as the IIgs's: \x03 and the colour ('0' + 0-15), \x04 at its end (talk.s SayText).</summary>
+    public static string ColourMarks(string text) => text.IndexOf('[') < 0 ? text : ColourCode.Replace(text, m =>
+        !m.Groups[1].Success ? (ColourIndex is null ? "" : "\u0004")
+        : ColourIndex?.Invoke(m.Groups[1].Value.Trim()) is int c and >= 0 ? "\u0003" + (char)('0' + Math.Min(c, 15)) : "");
+
     /// <summary>SAY the words (printable letters only).</summary>
     private void SayLine(string text)
     {
-        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(1000).ToArray()));
+        text = ColourMarks(text);
+        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' or '\u0003' or '\u0004' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(1000).ToArray()));
+        if (bytes.Length == 0) return;
+        B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
+    }
+
+    /// <summary>SAY words already marked (CompileText's).</summary>
+    private void SayLineMarked(string text)
+    {
+        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' or '\u0003' or '\u0004' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(1000).ToArray()));
         if (bytes.Length == 0) return;
         B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
     }
@@ -437,7 +462,8 @@ public sealed class AppleIIgsTalk
     }
     private void SayPart(string part)
     {
-        var bytes = Encoding.Latin1.GetBytes(new string(part.Select(ch => ch == '\n' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(400).ToArray()));
+        part = ColourMarks(part); // [COLOR=...]
+        var bytes = Encoding.Latin1.GetBytes(new string(part.Select(ch => ch is '\n' or '\u0003' or '\u0004' || ch is >= ' ' and <= '~' ? ch : ch == '\u2019' ? '\'' : '?').Take(400).ToArray()));
         if (bytes.Length == 0) return;
         B(1); _code.AddRange(bytes); B(0);
     }
@@ -473,7 +499,8 @@ public sealed class AppleIIgsTalk
                     string text = Marked(cmd.Get("Text").Replace("\r", "").Trim(), choices.Select(c => c.Text).Where(t => t.Trim().Length > 0).ToList());
                     if (text.Length > 0)
                     {
-                        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' || ch is >= ' ' and <= '~' ? ch : ch == '’' ? '\'' : '?').Take(1000).ToArray()));
+                        text = ColourMarks(text); // [COLOR=...] (talk.s SayText)
+                        var bytes = Encoding.Latin1.GetBytes(new string(text.Select(ch => ch is '\n' or '\u0001' or '\u0002' or '\u0003' or '\u0004' || ch is >= ' ' and <= '~' ? ch : ch == '’' ? '\'' : '?').Take(1000).ToArray()));
                         B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
                     }
                     if (choices.Count > 0)
@@ -801,6 +828,16 @@ public sealed class AppleIIgsTalk
                     W(a1.Value.Name); W(Math.Clamp(Number(cmd.Get("Quantity")), 1, 99)); W(a2.Value.Name); W(Math.Clamp(Number(cmd.Get("Quantity2")), 1, 99));
                     W(a3.Value.Name); W(a3.Value.Sprite); W(a3.Value.Icon); W(a3.Value.Flags); W(a3.Value.Other); W(Math.Clamp(Number(cmd.Get("Quantity3")), 1, 8));
                     W(missing.Length > 0 && Extra?.NameOf is not null ? Extra.NameOf(missing) : 0xFFFF);
+                    break;
+                }
+                case EventCommandType.ChangeSelfBookContent:
+                case EventCommandType.ChangeExternalBookContent:
+                {
+                    // EXT 39 BOOKTEXT self old new (ext.s): an Ultima 6 book's notepad (page -1); a page frame's words: not on the IIgs.
+                    bool selfBook = cmd.Type == EventCommandType.ChangeSelfBookContent;
+                    int old = selfBook ? 0 : int.TryParse(cmd.Get("TargetBookId"), out int tb) ? Extra?.BookText?.Invoke(tb) ?? -1 : -1;
+                    if (cmd.Get("PageIndex") != "-1" || old < 0 || Extra?.NewText is null) { Unsupported.Add("Change Book Content (a page's frame - Ultima 6 books are their notepad)"); break; }
+                    B(Ext); B((int)ExtOp.BookText); B(selfBook ? 1 : 0); W(old); W(Extra.NewText(cmd.Get("ReplacementXaml")));
                     break;
                 }
                 case EventCommandType.LightSource:

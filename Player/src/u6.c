@@ -372,11 +372,71 @@ static void add_line(const char *text, int length)
     snprintf(lines[lineCount++], sizeof lines[0], "%.*s", length, text);
 }
 
-/* The width words take on the screen - a keyword's marks (\1 \2) take none. */
+/* Case-blind comparisons (C99 has none). */
+static int lower_c(int c) { return c >= 'A' && c <= 'Z' ? c + 32 : c; }
+static int same_n(const char *a, const char *b, size_t n) { for (size_t i = 0; i < n; i++) { if (lower_c((unsigned char)a[i]) != lower_c((unsigned char)b[i])) return 1; if (!a[i]) return 0; } return 0; }
+static int same_word(const char *a, const char *b) { while (*a && *b && lower_c((unsigned char)*a) == lower_c((unsigned char)*b)) { a++; b++; } return *a || *b; }
+
+/* ---- Colours in the text area (U6GameWindow.TextColours.cs): [COLOR=name]...[/COLOR] or [COLOR=#RRGGBB] - marks \3 colour \5 ...
+   \4 that take no room; a line wrapped inside a colour carries it on to the next. ---- */
+static void colour_marks(const char *in, char *out, size_t size)
+{
+    size_t k = 0;
+    while (*in && k + 1 < size)
+    {
+        if (*in == '[' && (in[1] == 'C' || in[1] == 'c') && !same_n(in, "[COLOR=", 7) && strchr(in + 7, ']'))
+        {
+            const char *end = strchr(in + 7, ']');
+            if (k + (size_t)(end - in) + 2 >= size) break;
+            out[k++] = '\3';
+            for (const char *c = in + 7; c < end; c++) out[k++] = *c;
+            out[k++] = '\5';
+            in = end + 1;
+            continue;
+        }
+        if (*in == '[' && !same_n(in, "[/COLOR]", 8)) { out[k++] = '\4'; in += 8; continue; }
+        out[k++] = *in++;
+    }
+    out[k] = 0;
+}
+
+static char colourOpen[40]; /* the colour a wrapped line ended in ("": none) */
+/* A wrapped line: the colour still open from the last opened again, closed at its end if still open. */
+static void colour_line(const char *in, char *out, size_t size)
+{
+    char open[40]; snprintf(open, sizeof open, "%s", colourOpen);
+    if (open[0]) snprintf(out, size, "\3%s\5%s", open, in); else snprintf(out, size, "%s", in);
+    for (const char *p = in; *p; p++)
+    {
+        if (*p == '\3') { const char *e = strchr(p, '\5'); size_t n = e ? (size_t)(e - p - 1) : 0; if (n >= sizeof colourOpen) n = sizeof colourOpen - 1; memcpy(colourOpen, p + 1, n); colourOpen[n] = 0; }
+        else if (*p == '\4') colourOpen[0] = 0;
+    }
+    if (colourOpen[0]) { size_t l = strlen(out); if (l + 1 < size) { out[l] = '\4'; out[l + 1] = 0; } }
+}
+
+/* A colour's name (or #RRGGBB) as a colour; 0: not one. */
+static uint32_t named_colour(const char *name)
+{
+    static const struct { const char *n; uint32_t c; } NAMES[] = {
+        { "red", 0xFF0000 }, { "green", 0x008000 }, { "lime", 0x00FF00 }, { "blue", 0x0000FF }, { "yellow", 0xFFFF00 }, { "white", 0xFFFFFF },
+        { "black", 0x000000 }, { "gold", 0xFFD700 }, { "orange", 0xFFA500 }, { "purple", 0x800080 }, { "gray", 0x808080 }, { "grey", 0x808080 },
+        { "cyan", 0x00FFFF }, { "aqua", 0x00FFFF }, { "magenta", 0xFF00FF }, { "fuchsia", 0xFF00FF }, { "brown", 0xA52A2A }, { "pink", 0xFFC0CB },
+        { "silver", 0xC0C0C0 }, { "maroon", 0x800000 }, { "navy", 0x000080 }, { "olive", 0x808000 }, { "teal", 0x008080 }, { "violet", 0xEE82EE } };
+    while (*name == ' ') name++;
+    if (*name == '#') return colour_of(name);
+    for (size_t i = 0; i < sizeof NAMES / sizeof NAMES[0]; i++) if (!same_word(name, NAMES[i].n)) return 0xFF000000u | NAMES[i].c;
+    return 0;
+}
+
+/* The width words take on the screen - a keyword's marks (\1 \2) and colour marks take none. */
 static int words_width(Font *f, const char *text)
 {
     char plain[400]; size_t n = 0;
-    for (const char *p = text; *p && n < sizeof plain - 1; p++) if (*p != '\1' && *p != '\2') plain[n++] = *p;
+    for (const char *p = text; *p && n < sizeof plain - 1; p++)
+    {
+        if (*p == '\3') { const char *e = strchr(p, '\5'); if (e) { p = e; continue; } }
+        if (*p != '\1' && *p != '\2' && *p != '\4' && *p != '\5') plain[n++] = *p;
+    }
     plain[n] = 0;
     return n ? font_text_width(f, plain) : 0;
 }
@@ -404,6 +464,7 @@ static int wrap(Font *f, const char *text, int width, void (*add)(const char *li
 }
 
 static void add_whole(const char *line) { add_line(line, (int)strlen(line)); }
+static void add_coloured(const char *line) { char c[400]; colour_line(line, c, sizeof c); add_line(c, (int)strlen(c)); }
 
 /* The conversation's own box (Conversation Style: the words in a box): where its words go, its font - the face beside them when it goes there. */
 static int face_room(void);
@@ -447,7 +508,9 @@ int u6_say(const char *text)
         snprintf(para, sizeof para, "%.*s", (int)n, start);
         size_t k = 0; for (size_t i = 0; para[i]; i++) if (para[i] != '\r') para[k++] = para[i];
         para[k] = 0;
-        wrap(f, para, width, add_whole);
+        char marked[600]; colour_marks(para, marked, sizeof marked); /* [COLOR=...] */
+        colourOpen[0] = 0;
+        wrap(f, marked, width, add_coloured);
         start += n; if (*start == '\n') start++;
     }
     int keep = num(textPiece, "Height", 16) / line_height(f) * 4; /* a few screens of history */
@@ -466,26 +529,36 @@ static uint32_t keyword_colour(void)
     return c ? c : 0xFFFFD800u;
 }
 
-/* A line with keywords (between \1 and \2) drawn in the keyword colour, the rest in the piece's. */
+/* A line with keywords (between \1 and \2) drawn in the keyword colour, words in a colour of their own (\3 colour \5 ... \4)
+   in theirs, the rest in the piece's. */
 static void draw_marked(Font *f, int x, int y, const char *line, uint32_t colour)
 {
-    if (!strchr(line, '\1')) { font_draw(f, screen, x, y, line, colour); return; }
-    uint32_t key = keyword_colour();
+    if (!strchr(line, '\1') && !strchr(line, '\3')) { font_draw(f, screen, x, y, line, colour); return; }
+    uint32_t key = keyword_colour(), own = 0;
     int inKey = 0;
     char part[300];
     const char *p = line;
     while (*p)
     {
-        size_t n = strcspn(p, "\1\2");
+        size_t n = strcspn(p, "\1\2\3\4");
         if (n)
         {
             snprintf(part, sizeof part, "%.*s", (int)n, p);
-            font_draw(f, screen, x, y, part, inKey ? key : colour);
+            font_draw(f, screen, x, y, part, inKey ? key : own ? own : colour);
             x += font_text_width(f, part);
         }
         p += n;
         if (*p == '\1') { inKey = 1; p++; }
         else if (*p == '\2') { inKey = 0; p++; }
+        else if (*p == '\3')
+        {
+            const char *e = strchr(p, '\5');
+            char name[40]; size_t m = e ? (size_t)(e - p - 1) : 0; if (m >= sizeof name) m = sizeof name - 1;
+            memcpy(name, p + 1, m); name[m] = 0;
+            own = named_colour(name);
+            p = e ? e + 1 : p + 1;
+        }
+        else if (*p == '\4') { own = 0; p++; }
     }
 }
 
@@ -2744,7 +2817,13 @@ static void book_line(const char *line)
     if (bookLineCount == bookLineCap) { bookLineCap = bookLineCap ? bookLineCap * 2 : 64; bookLines = (char (*)[192])realloc(bookLines, sizeof *bookLines * (size_t)bookLineCap); }
     if (bookLines) snprintf(bookLines[bookLineCount++], sizeof bookLines[0], "%s", line);
 }
-static void book_paragraph(const char *text) { wrap(font_of(textPiece), text, num(textPiece, "Width", 16), book_line); }
+static void book_line_coloured(const char *line) { char c[400]; colour_line(line, c, sizeof c); book_line(c); }
+static void book_paragraph(const char *text)
+{
+    char marked[1200]; colour_marks(text, marked, sizeof marked); /* [COLOR=...] kept across its lines */
+    colourOpen[0] = 0;
+    wrap(font_of(textPiece), marked, num(textPiece, "Width", 16), book_line_coloured);
+}
 
 static void book_more(char key);
 static void book_show(void)

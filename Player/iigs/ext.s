@@ -21,8 +21,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight
-EXT_COUNT = 39
+          .dw XtLight,XtBookText
+EXT_COUNT = 40
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)
@@ -3385,6 +3385,57 @@ XtLight:
         jsr DrawView
 .done:  lda #14
         jmp Next
+
+; EXT 39 BOOKTEXT self old new (7 bytes): Change Self / External Book Content in an Ultima 6 project - the book's words from
+; now on are text new (compiled by the editor): self 1 - the book whose event runs (ownev.s SelfRec), else every book that
+; reads text old. A book's Other: $C000 + its text (read.s IsText); saved with the objects.
+XtBookText:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta LsWhich
+        iny
+        lda [TalkPtr],y
+        sta LsMin               ; (old)
+        iny
+        iny
+        lda [TalkPtr],y
+        sta LsOther             ; (new)
+        lda LsWhich
+        beq .all
+        lda SelfRec+2
+        beq .done
+        lda SelfRec
+        sta ItemPtr
+        lda SelfRec+2
+        sta ItemPtr+2
+        jsr .set
+        bra .done
+.all:   stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcs .done
+        jsr ObjAt
+        ldy #10
+        lda [ItemPtr],y
+        jsr IsText
+        bcc .n
+        and #$03FF
+        cmp LsMin
+        bne .n
+        jsr .set
+.n:     inc CtI
+        bra .l
+.done:  lda #7
+        jmp Next
+.set:   ldy #10                 ; a book to read: its new words
+        lda [ItemPtr],y
+        jsr IsText
+        bcc .o
+        and #$FC00
+        ora LsOther
+        sta [ItemPtr],y
+.o:     rts
 
 LsWhich:  .dw 0
 LsDo:     .dw 0

@@ -266,7 +266,7 @@ public partial class U6GameWindow
         var box = TalkBoxPiece; // a conversation in a box of its own (Conversation Style)
         if ((box ?? Hud.First(HudPieceKind.TextArea)) is not { } area) return;
         var into = box is not null ? _boxLines : _hudLines;
-        foreach (var paragraph in text.Replace("\r", "").Split('\n')) into.AddRange(HudWrap(paragraph, area.Width, area.FontName));
+        foreach (var paragraph in text.Replace("\r", "").Split('\n')) into.AddRange(ColourLines(HudWrap(ColourMarks(paragraph), area.Width, area.FontName)));
         int keep = Math.Max(1, area.Height / Math.Max(1, HudLineHeight(area.FontName)) * 4); // a few screens of history
         if (into.Count > keep) into.RemoveRange(0, into.Count - keep);
         RefreshHudText();
@@ -430,6 +430,7 @@ public partial class U6GameWindow
     private FrameworkElement HudWords(string text, HudPiece? piece)
     {
         Brush? tint = piece is { TextColor.Length: > 0 } && ColorConverter.ConvertFromString(piece.TextColor) is Color c ? new SolidColorBrush(c) : null;
+        if (text.Contains('\u0003')) return ColouredWords(text, piece); // [COLOR=...] words (U6GameWindow.TextColours.cs)
         if (text.Contains('\u0001'))
         {
             // Keywords (U6GameWindow.U6Talk.cs) in the keyword colour, the rest as the piece's.
@@ -484,7 +485,7 @@ public partial class U6GameWindow
 
     private double HudTextWidth(string text, string fontName)
     {
-        text = text.Replace("\u0001", "").Replace("\u0002", "");
+        text = StripColourMarks(text.Replace("\u0001", "").Replace("\u0002", ""));
         if (text.Length == 0) return 0;
         if (HudFont(fontName)?.RenderText(text, 1, null) is { } bitmap) return bitmap.PixelWidth;
         return text.Length * 4.2; // the plain 7-point stand-in

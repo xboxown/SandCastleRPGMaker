@@ -110,7 +110,8 @@ public static class PlayerPack
             && (t == (int)EventCommandType.ChangeSelfBookContent || t == (int)EventCommandType.ChangeExternalBookContent)
             && obj["Parameters"] is System.Text.Json.Nodes.JsonObject parameters && parameters["ReplacementXaml"] is { } replacement)
         {
-            parameters["ReplacementText"] = richText(replacement.GetValue<string>());
+            // An Ultima 6 book's notepad (page -1, frame -1 - U6BookTextCommandWindow): plain words as they are.
+            parameters["ReplacementText"] = parameters["PageIndex"]?.GetValue<string>() == "-1" ? replacement.GetValue<string>() : richText(replacement.GetValue<string>());
             parameters.Remove("ReplacementXaml");
         }
         foreach (var child in obj.Select(kv => kv.Value).ToList()) if (child is not null) PlainBookText(child, richText);

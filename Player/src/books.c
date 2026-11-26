@@ -329,7 +329,9 @@ void books_paragraphs(int bookId, void (*paragraph)(const char *text))
 {
     cJSON *book = book_json(bookId);
     if (!book) return;
-    const char *notepad = str(book, "U6Text");
+    char overrideKey[48]; snprintf(overrideKey, sizeof overrideKey, "%d:-1:-1", bookId);
+    const char *notepad = cJSON_GetStringValue(get(overrides, overrideKey)); /* Change Book Content in an Ultima 6 project: its new words */
+    if (!notepad) notepad = str(book, "U6Text");
     int any = 0;
     for (const char *p = notepad; *p; p++) if (*p != ' ' && *p != '\n' && *p != '\r' && *p != '\t') any = 1;
     char buf[1200];

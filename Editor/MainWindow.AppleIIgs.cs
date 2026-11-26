@@ -1107,6 +1107,12 @@ public partial class MainWindow
             Who = n => _characterDatabase.Characters.FirstOrDefault(c => string.Equals(c.Name, n.Trim(), StringComparison.OrdinalIgnoreCase)) is { } wc ? WhereIs(wc.Id.ToString()) : null
         };
         var lookOf = new Dictionary<int, (int Sprite, bool PoseLooks)>();
+        // [COLOR=...] in the game's words: the palette's nearest colour (AppleIIgsTalk.ColourMarks).
+        AppleIIgsTalk.ColourIndex = name =>
+        {
+            try { return ColorConverter.ConvertFromString(name) is Color cc ? SuperHiRes.NearestColour(pack.Palette, cc.R, cc.G, cc.B) : -1; }
+            catch { return -1; }
+        };
         var talkEnv = new AppleIIgsTalk.Env
         {
             AvatarFaction = avatarDef?.FactionId ?? -1,
@@ -1127,6 +1133,13 @@ public partial class MainWindow
                 return frames.Count > 0 ? frames : null;
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
+            BookText = bookId => _bookDatabase.Books.Any(b => b.Id == bookId) ? TextOf(bookId) : -1,
+            NewText = words =>
+            {
+                int chars = Math.Max(10, (textArea?.Width ?? 300) / 6), lines = Math.Max(2, (textArea?.Height ?? 70) / 10 - 1);
+                pack.Texts.Add(AppleIIgsTalk.CompileText(words, chars, lines));
+                return pack.Texts.Count - 1;
+            },
             SpellIndex = spellName =>
             {
                 foreach (var sb in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Spellbook)) BookOf(sb);

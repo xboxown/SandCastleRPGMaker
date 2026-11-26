@@ -100,9 +100,10 @@ public partial class U6GameWindow
     {
         var lines = new List<string>();
         var area = Hud.First(HudPieceKind.TextArea);
-        if (book.U6Text.Trim().Length > 0) // the Book Editor's notepad (Ultima 6)
-            foreach (var paragraph in book.U6Text.Replace("\r", "").TrimEnd().Split('\n'))
-                lines.AddRange(area is null ? new List<string> { paragraph } : HudWrap(paragraph, area.Width, area.FontName));
+        string notepad = _execContext.GetContentOverride(book.Id, -1, -1) ?? book.U6Text; // Change Book Content in an Ultima 6 project: its new words (U6BookTextCommandWindow)
+        if (notepad.Trim().Length > 0) // the Book Editor's notepad (Ultima 6)
+            foreach (var paragraph in notepad.Replace("\r", "").TrimEnd().Split('\n'))
+                lines.AddRange(area is null ? new List<string> { paragraph } : ColourLines(HudWrap(ColourMarks(paragraph), area.Width, area.FontName))); // [COLOR=...] kept across the lines
         else
         for (int page = 0; page < book.Pages.Count; page++)
             foreach (var frame in book.Frames)

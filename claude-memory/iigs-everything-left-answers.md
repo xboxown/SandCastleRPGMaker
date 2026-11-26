@@ -56,3 +56,5 @@ PROGRESS 2026-11-25 (later): items 1-19 done through b722. EXT subs now 0-30 (15
 PROGRESS: items 1-22 done through b725 (Spell Editor: Engine/SpellSystem.cs, Ultima6Settings.SpellSystems, SpellEditorWindow, U6GameWindow.SpellSystems.cs, C magic.c, IIgs spellsys.s + EXT 34 learn / 35 cast). Mac CI for b725 pending -> bash tools/fetch_mac_player.sh. Ubuntu build allowed: PowerShell 'wsl -u root bash /mnt/h/SandcastleRpgMaker/Player/build_linux.sh'. Next: item 23 - remove language mechanics from U6 mode + a full tutorial on making your own languages (CommandList), add missing commands if needed.
 
 PROGRESS: items 1-26 done through b729 (23: U6 languages removed + CommandList tutorial; 24 Reset Stat EXT36; 25 Stop Sound EXT37; 26 Light Source EXT38 + U6 Day&Night tab hours only, no LightGives). Mac fetched for b728. Next: item 27 Allow Saving / Open Save-Load Screen / Return To Title, messages in the text area.
+
+PROGRESS: items 1-27 done through b730 (27: IIgs OpGame 4 title,5 title-in-play,6/7 forbid/allow saving; U6 save msgs in text area W/C). Next: item 28 books in text area + [COLOR=RED] codes + Change Self/External Book Content, Change Book Settings (IIgs).

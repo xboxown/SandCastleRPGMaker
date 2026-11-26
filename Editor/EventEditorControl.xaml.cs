@@ -556,6 +556,18 @@ public partial class EventEditorControl : UserControl
                 ContentChanged?.Invoke();
             }
         }
+        else if (type is EventCommandType.ChangeSelfBookContent or EventCommandType.ChangeExternalBookContent && ProjectSession.IsUltima6 && Books is not null)
+        {
+            // Ultima 6: a book is its notepad's words (U6BookTextCommandWindow.cs)
+            var u6Book = new U6BookTextCommandWindow(type == EventCommandType.ChangeExternalBookContent, Books) { Owner = Window.GetWindow(this) };
+            if (u6Book.ShowDialog() == true)
+            {
+                u6Book.Result.IndentLevel = indentLevel;
+                CurrentPage.Commands.Insert(insertAt, u6Book.Result);
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
         else if (type is EventCommandType.ChangeSelfBookContent or EventCommandType.ChangeExternalBookContent)
         {
             if (CurrentBook is null || Books is null || Objects is null || Sprites is null || ResourceDatabase is null)
@@ -862,6 +874,17 @@ public partial class EventEditorControl : UserControl
             {
                 dialog.Result.IndentLevel = command.IndentLevel;
                 CurrentPage.Commands[index] = dialog.Result;
+                RenderContentsList();
+                ContentChanged?.Invoke();
+            }
+        }
+        else if (command.Type is EventCommandType.ChangeSelfBookContent or EventCommandType.ChangeExternalBookContent && ProjectSession.IsUltima6 && Books is not null)
+        {
+            var u6Book = new U6BookTextCommandWindow(command.Type == EventCommandType.ChangeExternalBookContent, Books, command) { Owner = Window.GetWindow(this) };
+            if (u6Book.ShowDialog() == true)
+            {
+                u6Book.Result.IndentLevel = command.IndentLevel;
+                CurrentPage.Commands[index] = u6Book.Result;
                 RenderContentsList();
                 ContentChanged?.Invoke();
             }

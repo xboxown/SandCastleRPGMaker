@@ -270,8 +270,12 @@ PromptLine:
 ; Writes words: the text at SayP + Y (a C string; \1 word \2 a keyword, \n a new line), word by word.
 SayText:
         sty TxtAt
+        lda #$FFFF              ; no colour of its own yet ([COLOR=...]: \x03 n ... \x04)
+        sta SayCol
 .word:  ldx #0
         stz WordKey
+        lda #$FFFF
+        sta WordCol
 .ch:    ldy TxtAt
         lda [SayP],y
         and #$00FF
@@ -282,7 +286,28 @@ SayText:
         beq .last
         iny
         sty TxtAt
-        cmp #1
+        cmp #3                  ; a colour: its palette number next
+        bne .n3
+        lda [SayP],y
+        and #$00FF
+        sec
+        sbc #'0'
+        sta SayCol
+        iny
+        sty TxtAt
+        bra .ch
+.n3:    cmp #4                  ; the colour's end
+        bne .n4
+        lda #$FFFF
+        sta SayCol
+        bra .ch
+.n4:    cpx #0                  ; a word's first letter: the colour it is in
+        bne .n5
+        pha
+        lda SayCol
+        sta WordCol
+        pla
+.n5:    cmp #1
         bne .n1
         lda #1
         sta WordKey
@@ -310,7 +335,11 @@ SayText:
         cpx #0
         beq .sep
         lda TxtColor
-        ldy WordKey
+        ldy WordCol             ; its own colour
+        cpy #$FFFF
+        beq .kc
+        tya
+.kc:    ldy WordKey
         beq .col
         lda KeyColor
 .col:   jsr SetColor
@@ -337,6 +366,9 @@ SayText:
         sta PenX
         brl .word
 .done:  rts
+
+SayCol:   .dw $FFFF
+WordCol:  .dw $FFFF
 
 ; ---- talking ----
 ; T: "Talk-", then a direction.
