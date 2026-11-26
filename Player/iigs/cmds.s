@@ -704,10 +704,31 @@ OpGame:
         jsr SaveGame
         lda #2
         jmp Next
-.g3:    stz EvRunning           ; load: the talk or event is over
+.g3:    cmp #3
+        bne .g4
+        stz EvRunning           ; load: the talk or event is over
         stz QN
         stz Mode
         jmp LoadGame
+.g4:    cmp #6                  ; 6 forbid / 7 allow saving
+        bcc .g45
+        sbc #7
+        eor #$FFFF
+        inc a                   ; 6 -> 1 (forbidden), 7 -> 0
+        sta SaveOff
+        lda #2
+        jmp Next
+.g45:   stz EvRunning           ; 4 Return To Title, 5 the title menu in play (Open Save/Load Screen - Escape: back)
+        stz QN
+        ldx #0
+        cmp #5
+        bne .t
+        inx
+.t:     stx TitleInPlay
+        jmp ShowTitle
+
+SaveOff:  .dw 0
+W_NOSAVING = 119
 
 GName:    .dw 0
 GSprite:  .dw 0

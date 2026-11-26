@@ -1976,7 +1976,7 @@ static int execute(Run *r, const Cmd *c)
         }
         case C_SaveGame: /* GameTestWindow.SaveGameCommand: into its slot (the save there written over), named, with the view as it is */
         {
-            if (savingForbidden) { lastResult = 0; game_log("Saving isn't allowed here."); return 1; } /* status bar text in Windows: not shown in a built game */
+            if (savingForbidden) { lastResult = 0; if (u6_on()) u6_say(u6_word("NoSaving")); else game_log("Saving isn't allowed here."); return 1; } /* Ultima 6: in the text area */
             int slot = (int)formula_number(c, "Slot");
             if (slot < 1) slot = 1;
             char name[64], error[300], line[120];
@@ -1992,7 +1992,7 @@ static int execute(Run *r, const Cmd *c)
             main_take_screenshot();
             if (!save_write(name, slot, over, error, sizeof error)) { lastResult = 0; game_error(106, error); return 1; }
             snprintf(line, sizeof line, "Game saved: \"%s\".", name);
-            game_log(line);
+            if (u6_on()) u6_say(u6_word("Saved")); else game_log(line); /* Ultima 6: in the text area */
             lastResult = 1;
             return 1;
         }
@@ -2005,7 +2005,7 @@ static int execute(Run *r, const Cmd *c)
             for (int i = 0; i < count; i++)
                 if (saves[i].slot == slot) { dolls_request_load(saves[i].folder, saves[i].name); lastResult = 1; return 0; } /* this game ends here */
             snprintf(text, sizeof text, "Slot %d is empty.", slot);
-            game_log(text);
+            if (u6_on()) u6_say(u6_word("NoSavedGame")); else game_log(text); /* Ultima 6: in the text area */
             lastResult = 0;
             return 1;
         }

@@ -650,6 +650,7 @@ static const char *WORDS[][2] = {
     { "TalkSelf", "Talking to yourself?" }, { "NoResponse", "No response." }, { "FunnyNoResponse", "Funny, no response." },
     { "CombatBegin", "Begin combat!" }, { "CombatBreakOff", "Break off combat!" }, { "SaysLine", "{1}: \"{0}\"" },
     { "ErrorLine", "Error {1}: {0}" }, { "QuitAsk", "Quit the game? (Y/N) " },
+    { "Saved", "Game saved." }, { "Loaded", "Game loaded." }, { "NoSaving", "Saving isn't allowed here." }, { "NoSavedGame", "There is no saved game." },
     { "YouSay", "you say: " }, { "Bye", "bye" }, { "NoHelp", "\"I cannot help thee with that.\"" }, { "PickReply", "Choose: " },
     { "Searching", "Searching here, you find {0}." }, { "SearchNothing", "Searching here, you find nothing." }, { "Locked", "Locked." },
     { "NothingWritten", "There is nothing written." }, { "More", "<more>" },

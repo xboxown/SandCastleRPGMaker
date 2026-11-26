@@ -184,6 +184,8 @@ public static class U6Words
         ("QuitAsk", "Quit the game? (Y/N) ", "Ctrl+Q / Quit: the question"),
         ("Saved", "Game saved.", "Ctrl+S: the game saved (Apple IIgs)"),
         ("Loaded", "Game loaded.", "Ctrl+R: a saved game back (Apple IIgs)"),
+        ("NoSaving", "Saving isn't allowed here.", "Saving while an event has forbidden it (Allow / Forbid Saving)"),
+        ("NoSavedGame", "There is no saved game.", "Ctrl+R with nothing saved"),
         ("NoSave", "No saved game.", "Ctrl+R with nothing saved, or a save that can't be written (Apple IIgs)"),
         ("TalkSelf", "Talking to yourself?", "Talking to the avatar"),
         ("NoResponse", "No response.", "Talking to someone asleep, hostile, fighting or dead"),

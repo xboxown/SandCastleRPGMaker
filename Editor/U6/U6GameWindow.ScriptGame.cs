@@ -336,7 +336,8 @@ public partial class U6GameWindow
     private bool SaveGameCommand(EventCommand command)
     {
         if (ProjectSession.ProjectIdProvider?.Invoke() is not { } projectId) return false;
-        if (_savingForbidden) { StatusText.Text = "Saving isn't allowed here."; return false; }
+        bool textArea = Hud.First(HudPieceKind.TextArea) is not null; // Ultima 6: every message in the text area (the user, 2026-11-25)
+        if (_savingForbidden) { if (textArea) U6Say(W("NoSaving")); else StatusText.Text = "Saving isn't allowed here."; return false; }
         int slot = Math.Max(1, (int)FormulaNumber(command, "Slot"));
         string name = ScriptValues.Text(Formula(command, "Name")).Trim();
         if (name.Length == 0) name = $"Slot {slot}";
@@ -350,7 +351,8 @@ public partial class U6GameWindow
             ReportDiskProgress(0.15);
             GameSaveStore.Write(projectId, data, info, shot, existing, f => ReportDiskProgress(0.15 + 0.85 * f));
             EndDiskProgress();
-            StatusText.Text = $"Game saved: \"{name}\".";
+            if (textArea) U6Say(W("Saved"));
+            else StatusText.Text = $"Game saved: \"{name}\".";
             return true;
         }
         catch (Exception ex)
@@ -365,7 +367,11 @@ public partial class U6GameWindow
     {
         if (ProjectSession.ProjectIdProvider?.Invoke() is not { } projectId) return false;
         int slot = Math.Max(1, (int)FormulaNumber(command, "Slot"));
-        if (GameSaveStore.List(projectId).FirstOrDefault(s => s.Slot == slot) is not { } save) { StatusText.Text = $"Slot {slot} is empty."; return false; }
+        if (GameSaveStore.List(projectId).FirstOrDefault(s => s.Slot == slot) is not { } save)
+        {
+            if (Hud.First(HudPieceKind.TextArea) is not null) U6Say(W("NoSavedGame")); else StatusText.Text = $"Slot {slot} is empty."; // Ultima 6: in the text area
+            return false;
+        }
         GameSaveData data;
         BeginDiskProgress(); // DiskProgress.cs
         try { data = GameSaveStore.Read(projectId, save, ReportDiskProgress); }

@@ -1086,6 +1086,9 @@ public sealed class AppleIIgsTalk
                 case EventCommandType.QuitGame: B(GameOp); B(1); break;
                 case EventCommandType.SaveGame: B(GameOp); B(2); break;
                 case EventCommandType.LoadGame: B(GameOp); B(3); break;
+                case EventCommandType.ReturnToTitle: B(GameOp); B(4); break;
+                case EventCommandType.OpenSaveLoadScreen: B(GameOp); B(5); break; // Ultima 6: the title menu in play (Journey Onward loads, Escape goes back)
+                case EventCommandType.AllowSaving: B(GameOp); B(cmd.Get("Value") == "Forbidden" ? 6 : 7); break;
                 case EventCommandType.Calculate:
                     B(Calc); W(_variable(cmd.Get("Variable"))); Formula(cmd.Get("Formula"), "Calculate");
                     break;

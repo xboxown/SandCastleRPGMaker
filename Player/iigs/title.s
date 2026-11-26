@@ -4,6 +4,7 @@
 ; Journey Onward (the saved game; only if there is one). Up / Down and Enter. The game starts here; the Avatar's death
 ; comes back here.
 
+TitleInPlay: .dw 0
 W_TINTRO   = 64
 W_TCREATE  = 65
 W_TACKS    = 66
@@ -162,7 +163,16 @@ TitleKey:
         cpx #13
         bne .menu
         jmp ShowTitle           ; the Acknowledgments: any key back
-.menu:  cmp #$1B                ; Escape, q, Ctrl+Q: quit?
+.menu:  cmp #$1B                ; Escape, q, Ctrl+Q: quit? (brought up in play by an event: Escape - back to the game)
+        bne .nesc
+        lda TitleInPlay
+        beq .q
+        stz TitleInPlay
+        lda #$FFFE              ; the map's music chosen again (music.s MusicRun)
+        sta AmbNow
+        jsr GameScreen
+        jmp PromptLine
+.nesc:  cmp #$1B
         beq .q
         cmp #$11
         beq .q

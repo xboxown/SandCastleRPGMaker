@@ -7,7 +7,13 @@ SAVE_VERSION = 15               ; (b727: Change Stat's log, ext.s Reset Stat)
 
 ; Ctrl+S
 SaveGame:
-        jsr SoloOff             ; the Avatar moved again first (solo.s)
+        lda SaveOff             ; Allow / Forbid Saving (cmds.s OpGame)
+        beq .may
+        jsr NewLine
+        lda #W_NOSAVING
+        jsr PrintSaid
+        jmp PromptLine
+.may:   jsr SoloOff             ; the Avatar moved again first (solo.s)
         lda #SaveName
         jsr LocalPath           ; PathBuf = "9:SAVE.DAT"
         gsos $2002,DestroyParms ; the old one gone (none: no matter)
