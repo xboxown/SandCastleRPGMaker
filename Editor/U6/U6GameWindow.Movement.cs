@@ -56,9 +56,8 @@ public partial class U6GameWindow
         || _mapCharacters.Any(mc => mc.Character.IsInParty && mc.Character.KnownLanguages.Contains(languageId));
 
     /// <summary>The font words in a language show in while not understood; null: read plainly (or it has no font).</summary>
-    private string? LanguageFont(int languageId) =>
-        Understands(languageId) ? null
-        : _systemSettings.Languages.FirstOrDefault(l => l.Id == languageId) is { FontSpriteName.Length: > 0 } language ? language.FontSpriteName : null;
+    /// <remarks>Ultima 6 mode has no languages built in (the user, 2026-11-25): everything reads plainly - a language is made with event commands.</remarks>
+    private string? LanguageFont(int languageId) => null;
 
     // ---------- Levitate (a spell): up to 3 floors, walking in the air, then falling ----------
 

@@ -63,7 +63,7 @@ public partial class SystemSettingsWindow : Window
         tabs.Items.Add(new TabItem { Header = "Title Screen", Content = BuildTitleTab() });
         tabs.Items.Add(new TabItem { Header = "Game Window", Content = BuildGameWindowTab() });
         tabs.Items.Add(new TabItem { Header = "Autosave", Content = BuildAutoSaveTab() });
-        tabs.Items.Add(new TabItem { Header = "Languages", Content = BuildLanguagesTab() });
+        if (!u6) tabs.Items.Add(new TabItem { Header = "Languages", Content = BuildLanguagesTab() }); // Ultima 6: no languages built in - made with event commands
         _sliderTabHost = new ContentControl { Content = BuildSliderStyleChooser() }; // Classic (Ultima VII) or Custom
         if (!u6) tabs.Items.Add(new TabItem { Header = "Slider", Content = _sliderTabHost });
         if (!u6) tabs.Items.Add(new TabItem { Header = "Weapon in hand", Content = BuildWeaponInHandTab() }); // SystemSettingsWindow.WeaponInHand.cs

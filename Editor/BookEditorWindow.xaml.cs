@@ -276,6 +276,11 @@ public partial class BookEditorWindow : Window
         languageChoices.AddRange(ProjectSession.SettingsProvider?.Invoke()?.Languages ?? new List<LanguageDefinition>());
         LanguageCombo.ItemsSource = languageChoices;
         LanguageCombo.SelectedItem = languageChoices.FirstOrDefault(l => l.Id == _current.LanguageId) ?? languageChoices[0];
+        if (ProjectSession.IsUltima6) // Ultima 6: no languages built in (the label before the box too)
+        {
+            LanguageCombo.Visibility = Visibility.Collapsed;
+            if (LanguageCombo.Parent is Panel holder && holder.Children.IndexOf(LanguageCombo) is int li and > 0) holder.Children[li - 1].Visibility = Visibility.Collapsed;
+        }
 
         var soundChoices = new List<ResourceEntry> { NoneSound };
         soundChoices.AddRange(_resources.Entries.Where(r => r.Kind == ResourceKind.Sound));

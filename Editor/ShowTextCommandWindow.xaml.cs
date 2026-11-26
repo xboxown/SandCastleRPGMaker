@@ -61,6 +61,7 @@ public partial class ShowTextCommandWindow : Window
         languages.AddRange(ProjectSession.SettingsProvider?.Invoke()?.Languages ?? new List<LanguageDefinition>());
         LanguageCombo.ItemsSource = languages;
         LanguageCombo.SelectedItem = languages.FirstOrDefault(l => l.Id.ToString() == (existing?.Get("LanguageId") ?? "")) ?? languages[0];
+        if (ProjectSession.IsUltima6 && LanguageCombo.Parent is FrameworkElement languageRow) { languageRow.Visibility = Visibility.Collapsed; LanguageCombo.SelectedItem = languages[0]; } // Ultima 6: no languages built in
 
         _replies = existing is null ? new List<DialogChoice>() : DialogChoices.Read(existing);
         if (existing is not null)

@@ -179,6 +179,7 @@ int magic_understands(int languageId)
 
 const char *magic_language_font(int languageId)
 {
+    if (u6_on()) return NULL; /* Ultima 6 has no languages built in (the user, 2026-11-25): made with event commands */
     if (magic_understands(languageId)) return NULL;
     cJSON *l;
     cJSON_ArrayForEach(l, get(get(project(), "Settings"), "Languages"))

@@ -94,6 +94,7 @@ public static class ScriptCommands
         EventCommandType.CurseItem, EventCommandType.LiftCurse, EventCommandType.IsItemCursed,
         EventCommandType.EnchantItem, EventCommandType.RemoveEnchantments, EventCommandType.GetMagicBonus,
         EventCommandType.ApplyPaletteColor, // Ultima 7's tinted sky: Ultima 6's darkness is Engine/U6Lighting.cs (the user, 2026-11-25)
+        EventCommandType.LearnLanguage, // Ultima 6 has no languages built in: you make your own with event commands (CommandList: Make your own language)
     };
     /// <summary>Magic weapons and armor: curses, enchantments, what's worn, combining items.</summary>
     public const string EquipmentTab = "Equipment";
