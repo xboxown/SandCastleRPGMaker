@@ -1435,6 +1435,7 @@ public partial class MainWindow
                     BookTriggerConditionBased.ByExit => (3, 2),
                     BookTriggerConditionBased.ByUseItem when item < 0 => owner ? (12, 2) : (4, 2),
                     BookTriggerConditionBased.ByUseItem => (13, 2),
+                    BookTriggerConditionBased.ByCombineItem when owner => (13, 2), // an item combined onto a thing: on the IIgs, used on it
                     BookTriggerConditionBased.ByHit when owner => (9, 2),
                     BookTriggerConditionBased.ByTradeItem when owner => (15, 2),
                     BookTriggerConditionBased.ByAfterReadItem when owner => (16, 2),

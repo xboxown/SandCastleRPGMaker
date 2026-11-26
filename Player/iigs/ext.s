@@ -20,8 +20,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
-          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo
-EXT_COUNT = 33
+          .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine
+EXT_COUNT = 34
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -2911,6 +2911,193 @@ FtStore:
         jsr StoreVar
         ply
 .o:     rts
+
+; EXT 33 COMBINE who name1 n1 name2 n2 made(name sprite icon flags other) n3 missing (28 bytes): Combine Items, as
+; U6GameWindow.MagicItems.cs CombineItemsCommand - the one has n1 of the first and n2 of the second (anywhere they carry
+; them; the same thing: n1 + n2): they are used up and n3 (at most 8) of the made thing are theirs; else the missing
+; line ($FFFF none) is said and nothing happens.
+XtCombine:
+        jsr ReadWho
+        ldx #0
+.r:     lda [TalkPtr],y         ; name1, n1, name2, n2, then the made thing (name sprite icon flags other), n3, missing
+        sta CbName1,x
+        iny
+        iny
+        inx
+        inx
+        cpx #22
+        bcc .r
+        jsr JOwner
+        sta CtCode
+        lda CbName1             ; enough of each?
+        sta CtName
+        jsr CbCount
+        sta CbHave1
+        lda CbName2
+        sta CtName
+        jsr CbCount
+        sta CbHave2
+        lda CbName1
+        cmp CbName2
+        bne .two
+        lda CbN1
+        clc
+        adc CbN2
+        cmp CbHave1
+        beq .ok
+        bcc .ok
+        brl .miss
+.two:   lda CbHave1
+        cmp CbN1
+        bcs .fb2
+        brl .miss
+.fb2:
+        lda CbHave2
+        cmp CbN2
+        bcs .fb3
+        brl .miss
+.fb3:
+.ok:    lda CbName1             ; used up
+        sta CtName
+        lda CbN1
+        jsr CbTake
+        lda CbName2
+        sta CtName
+        lda CbN2
+        jsr CbTake
+        lda CbN3                ; the made thing: theirs
+        cmp #9
+        bcc .g
+        lda #8
+.g:     sta CoN
+        beq .done
+        stz CtI
+.s:     lda CtI
+        cmp ObjCount
+        bcs .done
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        beq .sn
+        ldy #8
+        lda [ItemPtr],y
+        cmp #$FFFF
+        bne .sn
+        lda #$FFFF
+        sta [ItemPtr]
+        ldy #2
+        sta [ItemPtr],y
+        ldy #4
+        lda CbMSpr
+        sta [ItemPtr],y
+        ldy #6
+        lda CbMFlags
+        and #$0FFF-32-256
+        ora #64
+        sta [ItemPtr],y
+        ldy #8
+        lda CbMName
+        sta [ItemPtr],y
+        ldy #10
+        lda CbMOther
+        sta [ItemPtr],y
+        ldy #12
+        lda CbMIcon
+        sta [ItemPtr],y
+        ldy #14
+        lda CtCode
+        sta [ItemPtr],y
+        dec CoN
+        beq .done
+.sn:    inc CtI
+        bra .s
+.miss:  lda CbMiss              ; what is missing: said
+        cmp #$FFFF
+        beq .end
+        jsr NameNumber
+        lda #W_ECHO
+        jsr Format
+        bra .end
+.done:  jsr RecalcGear
+        jsr RefreshInventory
+        jsr Having              ; (By Not Having An Item: events.s)
+.end:   lda #28
+        jmp Next
+
+; A = how many things named CtName CtCode carries (in their bags too).
+CbCount:
+        stz CtN
+        lda #$FFFF
+        sta CtBox
+        stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcs .d
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp CtName
+        bne .n
+        jsr CtHolder
+        lda CtOwn
+        cmp CtCode
+        bne .n
+        inc CtN
+.n:     inc CtI
+        bra .l
+.d:     lda CtN
+        rts
+
+; A things named CtName that CtCode carries: gone.
+CbTake:
+        sta CtN
+        stz CtI
+.l:     lda CtN
+        beq .d
+        lda CtI
+        cmp ObjCount
+        bcs .d
+        jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #32
+        bne .n
+        ldy #8
+        lda [ItemPtr],y
+        cmp CtName
+        bne .n
+        jsr CtHolder
+        lda CtOwn
+        cmp CtCode
+        bne .n
+        ldy #6
+        lda [ItemPtr],y
+        and #$0FFF              ; (not worn any more)
+        ora #32
+        sta [ItemPtr],y
+        dec CtN
+.n:     inc CtI
+        bra .l
+.d:     rts
+
+CbName1:  .dw 0
+CbN1:     .dw 0
+CbName2:  .dw 0
+CbN2:     .dw 0
+CbMName:  .dw 0
+CbMSpr:   .dw 0
+CbMIcon:  .dw 0
+CbMFlags: .dw 0
+CbMOther: .dw 0
+CbN3:     .dw 0
+CbMiss:   .dw 0
+CbHave1:  .dw 0
+CbHave2:  .dw 0
 
 FtMode:   .dw 0
 FtName:   .dw 0

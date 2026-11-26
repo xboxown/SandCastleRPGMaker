@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -785,6 +785,20 @@ public sealed class AppleIIgsTalk
                     B(Calc); W(handleVar); Formula(cmd.Get("Value"), "Thing Info");
                     int V(string key) => cmd.Get(key).Trim() is { Length: > 0 } n ? _variable(n) : 0xFFFF;
                     B(Ext); B((int)ExtOp.ThingInfo); W(handleVar); W(V("XVariable")); W(V("YVariable")); W(V("FloorVariable")); W(V("NameVariable"));
+                    break;
+                }
+                case EventCommandType.CombineItems:
+                {
+                    // EXT 33 COMBINE who name1 n1 name2 n2 made n3 missing (ext.s): how many - plain numbers.
+                    var a1 = Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId"));
+                    var a2 = Extra?.Item?.Invoke(cmd.Get("Category2"), cmd.Get("ItemId2"));
+                    var a3 = Extra?.Item?.Invoke(cmd.Get("Category3"), cmd.Get("ItemId3"));
+                    if (a1 is null || a2 is null || a3 is null || !WhoCode(cmd.Get("Who"), out int m, out int x)) { Unsupported.Add("Combine Items (a thing not on the IIgs, or someone not on a map)"); break; }
+                    string missing = cmd.Get("Missing").Trim();
+                    B(Ext); B((int)ExtOp.Combine); W(m); W(x);
+                    W(a1.Value.Name); W(Math.Clamp(Number(cmd.Get("Quantity")), 1, 99)); W(a2.Value.Name); W(Math.Clamp(Number(cmd.Get("Quantity2")), 1, 99));
+                    W(a3.Value.Name); W(a3.Value.Sprite); W(a3.Value.Icon); W(a3.Value.Flags); W(a3.Value.Other); W(Math.Clamp(Number(cmd.Get("Quantity3")), 1, 8));
+                    W(missing.Length > 0 && Extra?.NameOf is not null ? Extra.NameOf(missing) : 0xFFFF);
                     break;
                 }
                 case EventCommandType.DeleteObjectSelf:
