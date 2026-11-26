@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 66 (b733): the keys - each action's (System Settings > Ultima 6) after the animated tiles (actkeys.s).
 ; Version 65 (b725): the spell system in use (spellsys.s); a spellbook's count bit 15: it knows only what is learned.
 ; Version 64 (b709): beds and bedrolls - special 12 (bed.s); words 116-118.
 ; Version 63 (b703): breakable things - their hit points, defense, sound (break.s); words 113-115.
@@ -284,6 +285,7 @@ start:
         jsr Alert
         jmp Quit
 .parsed:
+        jsr KeysLoad            ; what the player changed of the keys (actkeys.s)
         jsr MakeOcc
         bcc .occ
         lda #AlertNoMemory
@@ -329,6 +331,11 @@ MainLoop:
         bra .disp
 .keyev: lda EvMsg
         and #$007F
+        sta Key
+        lda Mode                ; walking: a key pressed as the action it is now (actkeys.s: the keys can change;
+        bne .disp               ; a click on a HUD button is its action's own)
+        lda Key
+        jsr MapKey
         sta Key
 .disp:
         lda Mode
@@ -703,7 +710,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #65
+        cmp #66
         beq .known
 .bad:   sec
         rts
@@ -2353,6 +2360,7 @@ TryMove:
         .include "worn.s"
         .include "tough.s"
         .include "inhand.s"
+        .include "actkeys.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

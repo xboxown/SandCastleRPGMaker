@@ -21,8 +21,10 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog
-EXT_COUNT = 41
+          .dw XtLight,XtBookText,XtLog,XtKeys
+EXT_COUNT = 42
+
+XtKeys:   jmp XtKeysCmd         ; EXT 41 KEYS: Set Key, Ask For Key, Get Key Name, Reset Keys (actkeys.s)
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)

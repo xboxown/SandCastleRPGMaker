@@ -1,6 +1,6 @@
 ---
 name: platform-test-status
-description: "User's real-hardware test results per platform (2026-11-24) - which ports are confirmed working, what's left (PS2 needs ethernet adapter, Mac series)"
+description: "User's real-hardware test results per platform - U6 confirmed on AmigaOS 4 (2026-11-26); PS2 ethernet adapter now in hand; Mac series left"
 metadata:
   node_type: memory
   type: project
@@ -19,3 +19,6 @@ Meanwhile keep working on the Apple IIgs audit ([[iigs-audit]]). See [[platform-
 2026-11-24 evening: the user confirmed b6xx on AmigaOS 4.x and Ubuntu "perfect"; U6 and U8 on both get tested tomorrow
 (2026-11-25) - keep them marked done in the per-platform table. MorphOS, PS2 (Ethernet adapter), Mac Intel/PPC: no U6/U8
 report yet; Mac Apple silicon passes GitHub CI.
+
+2026-11-26: the user confirmed Ultima 6 works on AmigaOS 4. The user now HAS the PS2 ethernet adapter - PS2 testing
+can start (the user drives it; PS2 port fixes come from their reports).

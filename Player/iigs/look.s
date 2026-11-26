@@ -65,7 +65,11 @@ ParseLook:
         sta Src
         dex
         bne .mk
-.md:    rts
+.md:    lda Src                 ; the keys after them (actkeys.s)
+        sta Ptr
+        lda Src+2
+        sta Ptr+2
+        jmp ParseKeys
 
 ; A = a tile from MapTile (kept): an animated one notes AnimVisible.
 NoteAnim:

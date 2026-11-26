@@ -1231,6 +1231,10 @@ public partial class MainWindow
                 pack.Codes.Add(cc);
                 return pack.Codes.Count - 1;
             }
+            // The keys (System Settings > Ultima 6) - actkeys.s.
+            var makerKeys = U6Keys.MakerKeys(_systemSettings.Ultima6);
+            for (int ak = 0; ak < AppleIIgsTalk.IIgsKeyActions.Length; ak++)
+                pack.ActKeys[ak] = makerKeys.TryGetValue(AppleIIgsTalk.IIgsKeyActions[ak], out var keyName) ? AppleIIgsTalk.IIgsKeyCode(keyName) : 0;
             pack.SpellSys[0] = (int)sys.Style;
             pack.SpellSys[1] = sys.Style == SpellCastStyle.EventsOnly ? CommonCode(sys.OnCastEvent) : 0xFFFF;
             pack.SpellSys[2] = CommonCode(sys.AfterCastEvent);

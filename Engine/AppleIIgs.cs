@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 65;
+    public const ushort Version = 66;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -676,6 +676,8 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Hp, int Defense, int Sound, int Flags)> Breakables { get; } = new();
     /// <summary>The spell system in use (spellsys.s; Engine/SpellSystem.cs): style, on-cast code, after-cast code, the Cast line, the
     /// no-fetish line, uses mana (1), SpellCast's variable ($FFFF none); the fetishes (names); the recipes (ingredient name, spell, used up).</summary>
+    /// <summary>Each action's key (AppleIIgsTalk.IIgsKeyActions; actkeys.s): the IIgs's key code, 0 Ultima 6's own.</summary>
+    public int[] ActKeys { get; } = new int[AppleIIgsTalk.IIgsKeyActions.Length];
     public int[] SpellSys { get; } = { 0, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF };
     public List<int> Fetishes { get; } = new();
     public List<(int Ingredient, int Spell, bool UsedUp)> Recipes { get; } = new();
@@ -1034,6 +1036,8 @@ public sealed class AppleIIgsGamePack
         foreach (var (key, x, y, bw, bh) in Buttons.Take(16)) { w.Write((ushort)key); w.Write((ushort)x); w.Write((ushort)y); w.Write((ushort)bw); w.Write((ushort)bh); }
         w.Write((ushort)Math.Min(AnimTiles.Count, 128));
         foreach (var frames in AnimTiles.Take(128)) { w.Write((ushort)Math.Min(frames.Count, 4)); foreach (int f in frames.Take(4)) w.Write((ushort)f); for (int i = frames.Count; i < 4; i++) w.Write((ushort)frames[0]); }
+        w.Write((ushort)ActKeys.Length);
+        foreach (int k in ActKeys) w.Write((ushort)k);
         return ms.ToArray();
     }
 

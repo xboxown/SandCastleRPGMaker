@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -215,6 +215,30 @@ public sealed class AppleIIgsTalk
         }
         talk.B(End);
         return talk._code.ToArray();
+    }
+
+    /// <summary>The Ultima 6 actions the Apple IIgs's keys can change, in actkeys.s's order (U6Keys ids). The IIgs has no
+    /// diagonal, F or Tab keys: those actions aren't on it.</summary>
+    public static readonly string[] IIgsKeyActions = { "Up", "Down", "Left", "Right", "Attack", "Cast", "Talk", "Look", "Get", "Drop", "Move", "Use", "Rest", "Combat", "TogglePortrait",
+        "Solo1", "Solo2", "Solo3", "Solo4", "Solo5", "Solo6", "Solo7", "Solo8", "Solo9", "PartyMode", "Save", "Load", "Quit", "Cancel" };
+
+    /// <summary>A key's name (U8Keys: "T", "Ctrl+S", "Up", "D1", "NumPad4") as the IIgs's key code - a letter in lower case,
+    /// Ctrl and a letter its control code; Shift and Alt (Option) not told apart. 0: the IIgs's keyboard has no such key.</summary>
+    public static int IIgsKeyCode(string name)
+    {
+        var (held, key) = U8Keys.Split(name);
+        if (key.Length == 1 && key[0] is >= 'A' and <= 'Z') return held.Contains("Ctrl") ? key[0] & 0x1F : char.ToLowerInvariant(key[0]);
+        if (held.Contains("Ctrl")) return 0;
+        if (key.Length == 2 && key[0] == 'D' && char.IsDigit(key[1])) return key[1];
+        if (key.Length == 7 && key.StartsWith("NumPad")) return key[6];
+        return key switch
+        {
+            "Up" => 0x0B, "Down" => 0x0A, "Left" => 0x08, "Right" => 0x15, "Escape" => 0x1B, "Enter" or "Return" => 0x0D, "Space" => 0x20, "Tab" => 0x09, "Back" => 0x7F,
+            "Multiply" => '*', "Add" => '+', "Subtract" => '-', "Divide" => '/', "Decimal" => '.',
+            "OemTilde" => '`', "OemMinus" => '-', "OemPlus" => '=', "OemOpenBrackets" => '[', "OemCloseBrackets" => ']', "OemSemicolon" => ';', "OemQuotes" => '\'',
+            "OemComma" => ',', "OemPeriod" => '.', "OemQuestion" => '/', "OemPipe" => '\\',
+            _ => 0
+        };
     }
 
     /// <summary>[COLOR=name or #RRGGBB] / [/COLOR]: the game palette's nearest colour of a name (the editor sets it; null: the codes dropped).</summary>
@@ -1577,6 +1601,27 @@ public sealed class AppleIIgsTalk
                     // Ultima 6 / Savage Empire have no barks (an Ultima 7 thing) - the user, 2026-11-24: left out on the Apple IIgs.
                     Unsupported.Add("Show Bark (Ultima 6 has no barks)");
                     break;
+                case EventCommandType.U6SetKey:
+                case EventCommandType.U6AskKey:
+                case EventCommandType.U6GetKeyName:
+                case EventCommandType.U6ResetKeys:
+                {
+                    // EXT 41 KEYS mode action arg swap (actkeys.s) - as U6GameWindow.U6Keys.cs.
+                    bool every = cmd.Type == EventCommandType.U6ResetKeys && cmd.Get("Action") == "Every key";
+                    int act = every ? 255 : Array.IndexOf(IIgsKeyActions, U6Keys.ByName(cmd.Get("Action"))?.Id ?? "");
+                    if (act < 0) { Unsupported.Add($"{cmd.Type} ({cmd.Get("Action")}: no such key on the Apple IIgs)"); break; }
+                    int mode = cmd.Type switch { EventCommandType.U6SetKey => 0, EventCommandType.U6AskKey => 1, EventCommandType.U6GetKeyName => 2, _ => 3 };
+                    int arg = 0;
+                    if (mode == 0)
+                    {
+                        string? key = U8Keys.FromWords(cmd.Get("Key"));
+                        arg = key is null ? 0 : IIgsKeyCode(U8Keys.HeldWith.Contains(cmd.Get("With")) ? cmd.Get("With") + "+" + key : key);
+                        if (arg == 0) { Unsupported.Add($"Set Key ({cmd.Get("Key")}: no such key on the Apple IIgs)"); break; }
+                    }
+                    else if (mode == 2) arg = _variable(cmd.Get("Variable"));
+                    B(Ext); B((int)ExtOp.Keys); B(mode); B(act); W(arg); B(cmd.Get("IfUsed") == "Fail" ? 0 : 1);
+                    break;
+                }
                 case EventCommandType.DebugLog:
                     // The user, 2026-11-25 (list item 29): on the Apple IIgs every testing line goes into LOG.TXT on the disk (made if
                     // it isn't there) and the text area says "Log error generated." - quit the game and read it.
