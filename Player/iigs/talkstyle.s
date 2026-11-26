@@ -24,6 +24,20 @@ XtStyleCmd:
         inx
         cpx #26
         bcc .w
+        ldx #0                  ; the colours: slots (bit 15) as the palette's
+.c:     lda TsKey,x
+        cmp #$FFFF
+        beq .cn
+        bit #$8000
+        beq .cn
+        phx
+        jsr ColSlot
+        plx
+        sta TsKey,x
+.cn:    inx
+        inx
+        cpx #14
+        bcc .c
         lda #23
         jmp Next
 

@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44, Scene = 45 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -104,6 +104,9 @@ public sealed class AppleIIgsTalk
         public Func<string, int>? OwnPortrait;
         /// <summary>Conversation Style's box picture: a sprite fitted to w x h (-1 none).</summary>
         public Func<string, string, int, int, int>? BoxPicture;
+        /// <summary>Scenes: the Game View's size; a sprite group's sprites (their names).</summary>
+        public (int W, int H) ViewSize = (320, 192);
+        public Func<string, List<string>>? GroupSprites;
         public Func<int, string>? ErrorWords;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
@@ -249,13 +252,26 @@ public sealed class AppleIIgsTalk
     }
 
     /// <summary>[COLOR=name or #RRGGBB] / [/COLOR]: the game palette's nearest colour of a name (the editor sets it; null: the codes dropped).</summary>
-    public static Func<string, int>? ColourIndex;
+    public static Func<string, uint?>? ColourArgb;
+    /// <summary>The colours the game's words ask for ([COLOR=...], Conversation Style), each a slot: GAME.DAT turns the slots into the
+    /// palette's nearest once the palette is made (AppleIIgsGamePack.Write; talk.s / talkstyle.s ColTab). The editor empties it first.</summary>
+    public static readonly List<uint> Colours = new();
+    /// <summary>A colour's name or #RRGGBB as a slot (at most 64); -1 not a colour.</summary>
+    public static int ColourIndex(string name)
+    {
+        if (ColourArgb?.Invoke(name) is not uint c) return -1;
+        int i = Colours.IndexOf(c);
+        if (i >= 0) return i;
+        if (Colours.Count >= 64) return -1;
+        Colours.Add(c);
+        return Colours.Count - 1;
+    }
     private static readonly System.Text.RegularExpressions.Regex ColourCode = new(@"\[COLOR=([^\]]+)\]|\[/COLOR\]", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
 
     /// <summary>[COLOR=...] codes as the IIgs's: \x03 and the colour ('0' + 0-15), \x04 at its end (talk.s SayText).</summary>
     public static string ColourMarks(string text) => text.IndexOf('[') < 0 ? text : ColourCode.Replace(text, m =>
-        !m.Groups[1].Success ? (ColourIndex is null ? "" : "\u0004")
-        : ColourIndex?.Invoke(m.Groups[1].Value.Trim()) is int c and >= 0 ? "\u0003" + (char)('0' + Math.Min(c, 15)) : "");
+        !m.Groups[1].Success ? (ColourArgb is null ? "" : "\u0004")
+        : ColourIndex(m.Groups[1].Value.Trim()) is int c and >= 0 ? "\u0003" + (char)('0' + c) : "");
 
     /// <summary>SAY the words (printable letters only).</summary>
     private void SayLine(string text)
@@ -265,6 +281,17 @@ public sealed class AppleIIgsTalk
         if (bytes.Length == 0) return;
         B(Say); W(bytes.Length); _code.AddRange(bytes); B(0);
     }
+
+    /// <summary>A scene's words caught (EXT 40 LOG 0, then SAY / SAYF): the scene op after takes them from LogBuf.</summary>
+    private void SceneWords(string text)
+    {
+        B(Ext); B((int)ExtOp.Log); B(0);
+        if (text.Trim().Length > 0) SayWords(text);
+    }
+    private int SceneName(string name) => name.Trim().Length == 0 ? 0xFFFF : Extra?.NameOf?.Invoke("scene:" + name.Trim()) ?? 0xFFFF;
+    private static int SceneColour(string colour, int otherwise) =>
+        colour.Trim() is { Length: > 0 } c && ColourIndex(c.StartsWith('#') || !System.Text.RegularExpressions.Regex.IsMatch(c, "^[0-9A-Fa-f]{6}$") ? c : "#" + c) is int i and >= 0 ? 0x8000 | i : otherwise;
+    private bool _sceneView;
 
     /// <summary>A line into LOG.TXT (EXT 40 LOG, ext.s): each part's words, then its formula's value (a text or a number);
     /// a formula the IIgs can't work out is written as it is.</summary>
@@ -1480,17 +1507,98 @@ public sealed class AppleIIgsTalk
                     break;
                 }
                 case EventCommandType.U6SceneText:
-                    // On the Apple IIgs there is no scene: in the text area (as Windows with no scene up), {formulas} filled in.
-                    SayWords(cmd.Get("Text"));
+                    // EXT 45 SCENE 2 (scene.s): the words caught (EXT 40 LOG 0: {formulas} worked out), then on the scene - or in the text area.
+                    if (cmd.Get("Where") == "In the text area") { SayWords(cmd.Get("Text")); break; }
+                    SceneWords(cmd.Get("Text"));
+                    B(Ext); B((int)ExtOp.Scene); B(2); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); W(Math.Max(0, Number(cmd.Get("Width"))));
+                    W(SceneColour(cmd.Get("Colour"), 0xFFFF)); W(SceneName(cmd.Get("Name"))); B(0);
                     break;
                 case EventCommandType.U6SceneChoice:
                 {
+                    // On the scene at X, Y (a line each; no scene: the text area), then the answer's letter or number (op PICK).
                     var answers = cmd.Get("Choices").Replace("\r", "").Split('\n').Select(a => a.Trim()).Where(a => a.Length > 0).Take(9).ToList();
                     if (answers.Count == 0) break;
-                    if (cmd.Get("Question").Trim().Length > 0) SayWords(cmd.Get("Question"));
-                    for (int i = 0; i < answers.Count; i++) SayWords($"{i + 1}. {answers[i]}");
+                    int cx = Number(cmd.Get("X")), cy = Number(cmd.Get("Y")), line = 0;
+                    var lines = cmd.Get("Question").Replace("\r", "").Split('\n').Where(q => q.Trim().Length > 0).ToList();
+                    lines.AddRange(answers.Select((a, i) => $"{i + 1}. {a}"));
+                    int choiceName = SceneName("__choice");
+                    foreach (var l in lines)
+                    {
+                        SceneWords(l);
+                        B(Ext); B((int)ExtOp.Scene); B(2); W(cx); W(cy + 10 * line++); W(0); W(0xFFFF); W(SceneName("__choice" + line)); B(0);
+                    }
                     B(Pick); W(_variable(cmd.Get("Variable"))); B(answers.Count);
                     foreach (var a in answers) B(char.ToUpperInvariant(a[0]) is char ch and >= ' ' and <= '~' ? ch : '?');
+                    for (int l = 1; l <= line; l++) { B(Ext); B((int)ExtOp.Scene); B(4); W(SceneName("__choice" + l)); }
+                    break;
+                }
+                case EventCommandType.U6SceneBegin:
+                    _sceneView = cmd.Get("Area") == "The Game View";
+                    B(Ext); B((int)ExtOp.Scene); B(0); B(_sceneView ? 1 : 0); W(SceneColour(cmd.Get("Colour"), SceneColour("#000000", 0)));
+                    break;
+                case EventCommandType.U6ScenePicture:
+                {
+                    int pw = Number(cmd.Get("Width")), ph = Number(cmd.Get("Height")), px = Number(cmd.Get("X")), py = Number(cmd.Get("Y"));
+                    if (cmd.Get("Fill") == "True") { (pw, ph) = _sceneView ? (Extra?.ViewSize.W ?? 320, Extra?.ViewSize.H ?? 192) : (320, 200); px = py = 0; }
+                    int pic = Extra?.BoxPicture?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName"), pw <= 0 ? 0 : (pw + 3) / 4 * 4, ph) ?? -1;
+                    if (pic < 0) { Unsupported.Add("Scene Picture (a sprite with no picture)"); break; }
+                    B(Ext); B((int)ExtOp.Scene); B(1); W(pic); W(px); W(py); W(SceneName(cmd.Get("Name")));
+                    break;
+                }
+                case EventCommandType.U6SceneWaitKey:
+                    if (cmd.Get("Prompt").Trim().Length > 0) SayWords(cmd.Get("Prompt"));
+                    B(Ext); B((int)ExtOp.Scene); B(3);
+                    break;
+                case EventCommandType.U6SceneRemove:
+                    B(Ext); B((int)ExtOp.Scene); B(4); W(cmd.Get("Name").Trim().Length == 0 ? 0xFFFF : SceneName(cmd.Get("Name")));
+                    break;
+                case EventCommandType.U6SceneEnd:
+                    _sceneView = false;
+                    B(Ext); B((int)ExtOp.Scene); B(5);
+                    break;
+                case EventCommandType.U6SceneTypeText:
+                    SceneWords(cmd.Get("Prompt"));
+                    B(Ext); B((int)ExtOp.Scene); B(6); W(_variable(cmd.Get("Variable"))); B(Math.Clamp(Number(cmd.Get("Letters")), 1, 60)); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y")));
+                    Formula(cmd.Get("Start").Trim().Length == 0 ? "\"\"" : cmd.Get("Start"), "Scene Type Text");
+                    break;
+                case EventCommandType.U6ScenePickPicture:
+                {
+                    var names = Extra?.GroupSprites?.Invoke(cmd.Get("Group").Trim()) ?? new List<string>();
+                    int pw = Number(cmd.Get("Width")), ph = Number(cmd.Get("Height"));
+                    var pics = names.Select(n => (Pic: Extra?.BoxPicture?.Invoke(cmd.Get("Group").Trim(), n, pw <= 0 ? 0 : (pw + 3) / 4 * 4, ph) ?? -1,
+                        Por: cmd.Get("Portrait") == "True" ? Extra?.PortraitPic?.Invoke(cmd.Get("Group").Trim(), n) ?? -1 : -1)).Where(p => p.Pic >= 0).Take(40).ToList();
+                    bool portrait = cmd.Get("Portrait") == "True" && WhoCode(cmd.Get("Who"), out _, out _);
+                    WhoCode(cmd.Get("Who"), out int wm, out int wx);
+                    if (pics.Count == 0) { Unsupported.Add("Scene Pick Picture (a sprite group with no pictures)"); break; }
+                    SceneWords(cmd.Get("Prompt"));
+                    B(Ext); B((int)ExtOp.Scene); B(7); W(_variable(cmd.Get("Variable"))); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y"))); B(pics.Count); B(Math.Clamp(Number(cmd.Get("Start")), 1, pics.Count));
+                    W(wm); W(wx); B(portrait ? 1 : 0);
+                    foreach (var (pic, por) in pics) { W(pic); W(por < 0 ? 0xFFFF : por); }
+                    break;
+                }
+                case EventCommandType.U6SetGender:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int gm, out int gx)) { Unsupported.Add("Set Gender (someone not on a map)"); break; }
+                    int how = cmd.Get("Gender") == "Male" ? 1 : cmd.Get("Gender") == "Female" ? 2 : 0;
+                    B(Ext); B((int)ExtOp.Scene); B(8); W(gm); W(gx); B(how); W(how == 0 ? _variable(cmd.Get("Variable")) : 0);
+                    break;
+                }
+                case EventCommandType.U6SceneDistributePoints:
+                {
+                    if (!WhoCode(cmd.Get("Who"), out int pm, out int pxw)) { Unsupported.Add("Scene Distribute Points (someone not on a map)"); break; }
+                    int StatOf(string n) => Extra?.StatByName?.Invoke(n) is int s and >= 0 ? s : n.Trim().ToLowerInvariant() switch
+                    {
+                        "strength" or "str" => AppleIIgsGamePack.Stat.Str, "dexterity" or "dex" => AppleIIgsGamePack.Stat.Dex, "intelligence" or "int" => AppleIIgsGamePack.Stat.Int,
+                        "combat" => AppleIIgsGamePack.Stat.Combat, "magic" => AppleIIgsGamePack.Stat.Magic, _ => -1
+                    };
+                    var stats = cmd.Get("Stats").Replace("\r", "").Split('\n').Select(s => s.Trim()).Where(s => s.Length > 0).Select(s => (Name: s, Code: StatOf(s))).Where(s => s.Code >= 0).Take(8).ToList();
+                    if (stats.Count == 0) { Unsupported.Add("Scene Distribute Points (no stat the Apple IIgs has)"); break; }
+                    SceneWords(cmd.Get("Prompt"));
+                    B(Ext); B((int)ExtOp.Scene); B(9); W(pm); W(pxw); W(Number(cmd.Get("Least"))); W(Math.Max(0, Number(cmd.Get("Most"))));
+                    B(cmd.Get("SpendAll") == "False" ? 0 : 1); W(Number(cmd.Get("X"))); W(Number(cmd.Get("Y")));
+                    W(cmd.Get("LeftVariable").Trim().Length == 0 ? 0xFFFF : _variable(cmd.Get("LeftVariable"))); B(stats.Count);
+                    foreach (var (n, code) in stats) { B(code); _code.AddRange(Encoding.ASCII.GetBytes(new string(n.Select(ch => ch is >= ' ' and <= '~' ? ch : '?').Take(20).ToArray()))); B(0); }
+                    Formula(cmd.Get("Points"), "Scene Distribute Points");
                     break;
                 }
                 case EventCommandType.U6RiseLevel or EventCommandType.U6Meditate:
@@ -1612,7 +1720,7 @@ public sealed class AppleIIgsTalk
                 {
                     // EXT 44 STYLE (talkstyle.s): as U6GameWindow.U6TalkStyle.cs; numbers as written (formulas: their default); one font.
                     int N(string key, int otherwise, int lo, int hi) => int.TryParse(cmd.Get(key).Trim(), out int v) ? Math.Clamp(v, lo, hi) : otherwise;
-                    int Col(string key, int otherwise) => cmd.Get(key).Trim() is { Length: > 0 } c && ColourIndex?.Invoke(c.StartsWith('#') || !System.Text.RegularExpressions.Regex.IsMatch(c, "^[0-9A-Fa-f]{6}$") ? c : "#" + c) is int i and >= 0 ? i : otherwise;
+                    int Col(string key, int otherwise) => cmd.Get(key).Trim() is { Length: > 0 } c && ColourIndex(c.StartsWith('#') || !System.Text.RegularExpressions.Regex.IsMatch(c, "^[0-9A-Fa-f]{6}$") ? c : "#" + c) is int i and >= 0 ? 0x8000 | i : otherwise; // (a slot: talkstyle.s)
                     bool on = cmd.Get("Set") != "Back to Ultima 6's";
                     int answers = cmd.Get("Answers") == U6TalkStyle.List ? 1 : cmd.Get("Answers") == U6TalkStyle.Both ? 2 : 0;
                     int portrait = cmd.Get("Portrait") == U6TalkStyle.PortraitBox ? 1 : cmd.Get("Portrait") == U6TalkStyle.PortraitNone ? 2 : 0;
@@ -1620,7 +1728,7 @@ public sealed class AppleIIgsTalk
                     int bx = N("BoxX", 8, 0, 300), by = N("BoxY", 120, 0, 190), bw = N("BoxWidth", 304, 16, 320 - bx), bh = N("BoxHeight", 72, 12, 200 - by);
                     int pic = cmd.Get("SpriteName").Length > 0 ? Extra?.BoxPicture?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName"), bw & ~1, bh) ?? -1 : -1;
                     B(Ext); B((int)ExtOp.Style); B(on ? 1 : 0); B(answers); B(cmd.Get("MarkKeywords") == "False" ? 0 : 1); B(portrait); B(words);
-                    W(Col("KeywordColour", 0xFFFF)); W(bx); W(by); W(bw); W(bh); W(Col("BoxColour", ColourIndex?.Invoke("#000000") is int k and >= 0 ? k : 0));
+                    W(Col("KeywordColour", 0xFFFF)); W(bx); W(by); W(bw); W(bh); W(Col("BoxColour", ColourIndex("#000000") is int k and >= 0 ? 0x8000 | k : 0));
                     W(pic < 0 ? 0xFFFF : pic); W(Col("TextColour", 0xFFFF));
                     break;
                 }

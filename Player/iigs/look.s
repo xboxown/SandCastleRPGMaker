@@ -86,7 +86,8 @@ NoteAnim:
 
 ; The view (VIEWBUF, bank $01) copied onto the screen, a row at a time; the pointer hidden meanwhile.
 BlitView:
-        lda DsHold              ; the view covered by a fade (fx.s): not now
+        lda DsHold              ; the view covered by a fade (fx.s) or a scene (scene.s): not now
+        ora SceneOn
         beq .go
         rts
 .go:    jsr CurOff

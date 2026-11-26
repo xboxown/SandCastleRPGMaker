@@ -287,7 +287,10 @@ AfterTurn:
 
 ; Nothing pressed: out of combat mode, a turn every half second.
 IdleTurn:
-        jsr ClockRun            ; the clock (schedule.s)
+        lda SceneOn             ; a scene up: the world waits (scene.s) - only the music goes on
+        beq .w
+        jmp MusicRun
+.w:     jsr ClockRun            ; the clock (schedule.s)
         jsr AilRun              ; ailments' times, poison (ailments.s)
         jsr AnimRun             ; animated tiles (look.s)
         jsr FxRun               ; Play Animation's (fx.s)

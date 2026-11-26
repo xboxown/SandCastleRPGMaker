@@ -63,7 +63,34 @@ ParseKeys:
         jsr AddPtr
         inx
         bra .al
-.ad:    rts
+.ad:    lda [Ptr]               ; the colours the words ask for: each slot's palette colour
+        cmp #65
+        bcc .cn
+        lda #64
+.cn:    asl a
+        sta AkT
+        ldy #2
+        ldx #0
+.cl:    cpx AkT
+        bcs .cd
+        lda [Ptr],y
+        sta ColTab,x
+        iny
+        iny
+        inx
+        inx
+        bra .cl
+.cd:    rts
+
+; A = a colour slot ([COLOR=...], Conversation Style): its palette colour (0-15).
+ColSlot:
+        and #$003F
+        asl a
+        tax
+        lda ColTab,x
+        rts
+
+ColTab:   .ds 128
 
 ; EXT 42 HUDFRAME n (3 bytes): Change HUD Frame - the HUD as GAME.DAT's other picture n (1-4: the same HUD with that
 ; frame, made by the editor; 0 the HUD Editor's own) from now on; the screen drawn again. Kept in saves (HudNow).

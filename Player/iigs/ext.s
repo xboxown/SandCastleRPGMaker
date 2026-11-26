@@ -21,8 +21,10 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle
-EXT_COUNT = 45
+          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene
+EXT_COUNT = 46
+
+XtScene:  jmp XtSceneCmd        ; EXT 45 SCENE: the Ultima 6 tab's scenes (scene.s)
 
 XtStyle:  jmp XtStyleCmd        ; EXT 44 STYLE: Conversation Style (talkstyle.s)
 

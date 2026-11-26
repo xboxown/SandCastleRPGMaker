@@ -61,10 +61,12 @@ HudForce:
 
 ; Each game minute: the dials' frames, the date words - drawn when they change.
 HudClock:
+        lda SceneOn             ; (a scene up: not over it - scene.s)
+        bne .no
         lda Mode
         cmp #12
         bcc .go
-        rts
+.no:    rts
 .go:    jsr Wind                ; WindI: 0-7, 8 calm
         ldx #0
 .l:     txa

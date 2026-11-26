@@ -31,6 +31,7 @@ OpCtl:
 NoControls:
         lda CinOn
         ora CtlOff
+        ora SceneOn             ; (a scene up: the world waits - scene.s)
         bne .y
         clc
         rts

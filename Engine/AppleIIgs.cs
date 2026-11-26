@@ -498,7 +498,7 @@ public sealed class AppleIIgsGamePack
         "{0} can't see the sky from in here.", "{0} casts no shadow.", "{0} North,", "{0} South,", "{0} West.", "{0} East.", "{0} keys added to the keyring.", "No keys to add.", "It's not on the keyring.",
         "The {0} is empty.", "The {0} is full.", "Ahhh, how refreshing.", "No, thank thee.", "Hey, stop that!", "You fill {0}.", "You douse {0}.", "You empty {0}.", "{0} can't hold that.",
         "No effect.", "No damage.", "{0} breaks apart.",
-        "I should put it down first.", "We cannot rest with foes about!", "{0}", "Saving isn't allowed here.", "Log error generated.", "Avatar" };
+        "I should put it down first.", "We cannot rest with foes about!", "{0}", "Saving isn't allowed here.", "Log error generated.", "Points left:", "Avatar" };
     public static readonly string[] WordIds = { "YouSay", "Bye", "NoHelp", "FunnyNoResponse", "Talk", "Nothing", "TalkSelf", "YouSee", "Gets", "NotPossible", "OutOfRange", "Look", "Get", "Use", "Locked", "Drop", "WhatPlace", "Drops",
         "Move", "Searching", "SearchNothing", "QuitAsk", "Saved", "Loaded", "NoSave",
         "Attack", "Attacks", "Missed", "Barely", "Lightly", "Heavily", "Critical", "Killed", "CombatBegin", "CombatBreakOff", "Pass", "Combat", "PressAKey", "KnockedOut", "NoResponse",
@@ -509,7 +509,7 @@ public sealed class AppleIIgsGamePack
         "SkyHidden", "NoShadow", "North", "South", "West", "East", "KeysAdded", "NoKeys", "NotOnRing",
         "LiquidEmpty", "LiquidFull", "Refreshing", "NoThanks", "StopThat", "YouFill", "YouDouse", "YouEmpty", "CantHold",
         "NoEffect", "NoDamage", "BreaksApart",
-        "PutItDown", "FoesAbout", "Echo", "NoSaving", "LogError" };
+        "PutItDown", "FoesAbout", "Echo", "NoSaving", "LogError", "PointsLeft" };
     public List<short> Variables { get; } = new();
     /// <summary>A character's 24 numbers after its first 16 bytes (64 bytes a character): hit points, most hit points,
     /// strength, dexterity, intelligence, combat, magic, mana, most mana, level, experience, armour, weapon damage, weapon
@@ -1042,6 +1042,9 @@ public sealed class AppleIIgsGamePack
         foreach (int k in ActKeys) w.Write((ushort)k);
         w.Write((ushort)Math.Min(HudAlts.Count, 4));
         foreach (var alt in HudAlts.Take(4)) w.Write(alt);
+        // The colours the words ask for, as the palette's nearest (AppleIIgsTalk.Colours; talk.s ColTab).
+        w.Write((ushort)Math.Min(AppleIIgsTalk.Colours.Count, 64));
+        foreach (uint c in AppleIIgsTalk.Colours.Take(64)) w.Write((ushort)Math.Max(0, SuperHiRes.Nearest(Palette, c, false)));
         return ms.ToArray();
     }
 

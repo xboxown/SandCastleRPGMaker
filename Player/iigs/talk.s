@@ -298,6 +298,7 @@ SayText:
         and #$00FF
         sec
         sbc #'0'
+        jsr ColSlot             ; the slot's palette colour (actkeys.s)
         sta SayCol
         iny
         sty TxtAt

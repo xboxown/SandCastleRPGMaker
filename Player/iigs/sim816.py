@@ -153,6 +153,7 @@ class Machine:
             self.s = dp[0][1] + dp[0][2] - 1
         self.a = 0x1001  # the user ID the loader passes
         self.code_base = code[1]
+        self.heap = max(self.heap, place)  # (the heap after the segments: the second code segment is in bank 4)
 
     # ---- the toolbox and GS/OS stand-ins ----
     def tool(self):

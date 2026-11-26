@@ -1118,10 +1118,11 @@ public partial class MainWindow
         };
         var lookOf = new Dictionary<int, (int Sprite, bool PoseLooks)>();
         // [COLOR=...] in the game's words: the palette's nearest colour (AppleIIgsTalk.ColourMarks).
-        AppleIIgsTalk.ColourIndex = name =>
+        AppleIIgsTalk.Colours.Clear(); // (slots: GAME.DAT makes them the palette's nearest - AppleIIgsGamePack.Write)
+        AppleIIgsTalk.ColourArgb = name =>
         {
-            try { return ColorConverter.ConvertFromString(name) is Color cc ? SuperHiRes.NearestColour(pack.Palette, cc.R, cc.G, cc.B) : -1; }
-            catch { return -1; }
+            try { return ColorConverter.ConvertFromString(name) is Color cc ? 0xFF000000u | (uint)(cc.R << 16 | cc.G << 8 | cc.B) : null; }
+            catch { return null; }
         };
         var talkEnv = new AppleIIgsTalk.Env
         {
@@ -1156,9 +1157,12 @@ public partial class MainWindow
             {
                 var sp = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name) ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name);
                 if (sp?.Frames.FirstOrDefault()?.FilePath is not { } file || !File.Exists(file)) return -1;
+                if (bw <= 0 || bh <= 0) { using var fs = File.OpenRead(file); var bf = BitmapDecoder.Create(fs, BitmapCreateOptions.DelayCreation, BitmapCacheOption.None).Frames[0]; bw = Math.Clamp((bf.PixelWidth + 3) / 4 * 4, 4, 320); bh = Math.Clamp(bf.PixelHeight, 1, 200); } // (0: its own size)
                 spritePixels.Add((FitPicture(file, bw, bh), bw, bh));
                 return spritePixels.Count - 1;
             },
+            ViewSize = _systemSettings.Ultima6.Hud.First(HudPieceKind.GameView) is { } gvp ? (Math.Clamp(gvp.Width / 16, 1, 20) * 16, Math.Clamp(gvp.Height / 16, 1, 12) * 16) : (320, 192),
+            GroupSprites = g => _spriteDatabase.Groups.FirstOrDefault(x => string.Equals(x.Name, g, StringComparison.OrdinalIgnoreCase))?.Sprites.Where(s => s.Frames.Count > 0).Select(s => s.Name).ToList() ?? new List<string>(),
             OwnPortrait = whoName =>
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Name == whoName);

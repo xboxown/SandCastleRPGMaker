@@ -2976,5 +2976,6 @@ TsBW:     .dw 0
 TsBH:     .dw 0
 TsBCol:   .dw 0
 TsBPic:   .dw 0
-TsTCol:   .dw 0                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
+TsTCol:   .dw 0
+GenTab:   .ds 64                ; (scene.s Set Gender: owner code (0 free), 1 male / 2 female - saved)                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0
