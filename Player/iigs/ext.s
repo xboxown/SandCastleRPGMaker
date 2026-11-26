@@ -20,7 +20,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCamera,XtCamFollow,XtLook,XtName,XtRes
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
-EXT_COUNT = 28
+          .dw XtAreaFind,XtAreaDel,XtAreaHurt
+EXT_COUNT = 31
 
 XtBed:    jmp XtBedCmd          ; EXT 8 BED: Sleep On Bed (bed.s)
 
@@ -2300,6 +2301,389 @@ XtSetBox:
         jmp Next
 
 SbEmpty:  .dw 0
+
+; ---- areas (U6GameWindow.Toughness.cs: Find Objects In Area, Delete Objects In Area, Hurt In Area) ----
+
+; Y on: mode (1: 0 who, 1 a spot, 2 this object), who (4), x, y, cells var: ArX, ArY the centre, ArR the cells (carry
+; set: there is one). Y after.
+ArCentre:
+        lda [TalkPtr],y
+        and #$00FF
+        sta ArMode
+        jsr ReadWho
+        lda [TalkPtr],y
+        sta ArX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta ArY
+        iny
+        iny
+        lda [TalkPtr],y
+        asl a
+        tax
+        lda VarTab,x
+        bpl .r
+        lda #0
+.r:     sta ArR
+        iny
+        iny
+        sty ArYs
+        lda ArMode
+        cmp #1
+        beq .yes
+        cmp #2
+        bne .who
+        lda SelfRec+2           ; this object: where it lies (ownev.s SelfRec)
+        beq .no
+        lda SelfRec
+        sta Src
+        lda SelfRec+2
+        sta Src+2
+        lda [Src]
+        sta ArX
+        ldy #2
+        lda [Src],y
+        sta ArY
+        bra .yes
+.who:   jsr WhoRec
+        bcs .no
+        jsr WPIsAvatar
+        bcc .w
+        lda PX
+        sta ArX
+        lda PY
+        sta ArY
+        bra .yes
+.w:     lda [WP]
+        sta ArX
+        ldy #2
+        lda [WP],y
+        sta ArY
+.yes:   ldy ArYs
+        sec
+        rts
+.no:    ldy ArYs
+        clc
+        rts
+
+; Carry set if cell X, Y is within ArR of the centre.
+ArNear:
+        txa
+        sec
+        sbc ArX
+        jsr AbsX
+        cmp ArR
+        beq .x
+        bcs .no
+.x:     tya
+        sec
+        sbc ArY
+        jsr AbsY
+        cmp ArR
+        beq .y
+        bcs .no
+.y:     sec
+        rts
+.no:    clc
+        rts
+
+; Each thing on this map in the area, of the name ArName ($FFFF any), lit only if ArLit: ArDo (0 count, 1 gone - at most
+; ArMost, 0 all) - ArN how many.
+ArThings:
+        stz ArN
+        stz CtI
+.l:     lda CtI
+        cmp ObjCount
+        bcc .one
+        rts
+.one:   jsr ObjAt
+        ldy #6
+        lda [ItemPtr],y
+        and #$F000+32+64+256
+        cmp CurBits
+        bne .n
+        lda ArName
+        cmp #$FFFF
+        beq .nm
+        ldy #8
+        cmp [ItemPtr],y
+        bne .n
+.nm:    lda ArLit
+        beq .lt
+        ldy #10
+        lda [ItemPtr],y
+        jsr IsLight             ; (look.s)
+        bcc .n
+        and #$0100
+        beq .n
+.lt:    lda [ItemPtr]
+        tax
+        ldy #2
+        lda [ItemPtr],y
+        tay
+        jsr ArNear
+        bcc .n
+        inc ArN
+        lda ArDo
+        beq .n
+        ldy #6
+        lda [ItemPtr],y
+        ora #32
+        sta [ItemPtr],y
+        lda ArMost
+        beq .n
+        cmp ArN
+        bne .n
+        rts
+.n:     inc CtI
+        bra .l
+
+; EXT 28 AREAFIND var name lit mode who x y cellsvar (18 bytes): Find Objects In Area - how many things around into the variable.
+XtAreaFind:
+        iny
+        lda [TalkPtr],y
+        asl a
+        sta CtVar
+        iny
+        iny
+        lda [TalkPtr],y
+        sta ArName
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ArLit
+        iny
+        jsr ArCentre
+        stz ArN
+        bcc .put
+        stz ArDo
+        jsr ArThings
+.put:   lda ArN
+        ldx CtVar
+        stz PTag
+        jsr StoreVar
+        lda #18
+        jmp Next
+
+; EXT 29 AREADEL name lit mostvar mode who x y cellsvar (18 bytes): Delete Objects In Area - those things gone for good.
+XtAreaDel:
+        iny
+        lda [TalkPtr],y
+        sta ArName
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ArLit
+        iny
+        lda [TalkPtr],y
+        asl a
+        tax
+        lda VarTab,x
+        bpl .m
+        lda #0
+.m:     sta ArMost
+        iny
+        iny
+        jsr ArCentre
+        bcc .done
+        lda #1
+        sta ArDo
+        jsr ArThings
+        jsr MakeOccAgain
+        jsr DrawView
+.done:  lda #18
+        jmp Next
+
+; EXT 30 AREAHURT amountvar type affects mode who x y cellsvar (17 bytes): Hurt In Area - everyone around but Who takes the
+; damage (its type's rule - tough.s Respond), as poison's wound (ailments.s Hurt); affects 1: Who's enemies (hostile ones
+; if Who is the Avatar or a member, else the rest), 2: only those with a rule for the type.
+XtAreaHurt:
+        iny
+        lda [TalkPtr],y
+        asl a
+        tax
+        lda VarTab,x
+        sta ArAmt
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ArType
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta ArAff
+        iny
+        jsr ArCentre
+        bcs .go
+        brl .done
+.go:    lda WP                  ; Who (never hurt)
+        sta ArBy
+        lda WP+2
+        sta ArBy+2
+        lda ArMode
+        beq .bk
+        stz ArBy+2              ; (a spot, this object: no Who)
+.bk:    stz ArByParty
+        lda ArBy+2
+        beq .p0
+        jsr WPIsAvatar
+        bcs .p1
+        jsr WPInParty
+        bcc .p0
+.p1:    inc ArByParty
+.p0:    lda ArX                 ; the Avatar
+        sta T4
+        lda #AvRec
+        sta WP
+        lda MyBank
+        sta WP+2
+        lda PX
+        sta AvRec
+        lda PY
+        sta AvRec+2
+        jsr ArOne
+        stz ArK                 ; the members
+.m:     lda ArK
+        cmp PartyN
+        bcs .c
+        jsr MemberAt
+        lda MP
+        sta WP
+        lda MP+2
+        sta WP+2
+        jsr ArOne
+        inc ArK
+        bra .m
+.c:     lda ChrPtr              ; the map's characters
+        sta ArCP
+        lda ChrPtr+2
+        sta ArCP+2
+        lda ChrCount
+        sta ArK
+.cl:    lda ArK
+        beq .d
+        lda ArCP
+        sta WP
+        lda ArCP+2
+        sta WP+2
+        jsr ArOne
+        lda ArCP
+        clc
+        adc #64
+        sta ArCP
+        bcc .cn
+        inc ArCP+2
+.cn:    dec ArK
+        bra .cl
+.d:     jsr DrawView
+.done:  lda #17
+        jmp Next
+
+; WP: struck if in the area, alive, not Who, and as Affects says.
+ArOne:
+        lda WP
+        cmp ArBy
+        bne .nb
+        lda WP+2
+        cmp ArBy+2
+        bne .nb
+        rts
+.nb:    ldy #C_FLAGS
+        lda [WP],y
+        and #4
+        beq .alive
+        rts
+.alive: lda [WP]
+        tax
+        ldy #2
+        lda [WP],y
+        tay
+        jsr ArNear
+        bcs .in
+        rts
+.in:    lda ArAff
+        beq .hit
+        cmp #2
+        beq .rule
+        jsr WPIsAvatar          ; Who's enemies
+        bcs .party
+        jsr WPInParty
+        bcs .party
+        ldy #C_FLAGS
+        lda [WP],y
+        and #2
+        beq .friend
+        lda ArByParty           ; a hostile one: an enemy of the party's side
+        bne .hit
+        rts
+.friend: lda ArByParty          ; a friendly one: an enemy of a hostile Who
+        beq .hit
+        rts
+.party: lda ArByParty
+        beq .hit
+        rts
+.rule:  ldy #C_NAME             ; only those with a rule for this type
+        lda [WP],y
+        jsr HasRule
+        bcs .hit
+        rts
+.hit:   lda ArType
+        sta HitType
+        lda ArAmt
+        sta Dmg
+        ldy #C_NAME
+        lda [WP],y
+        jsr Respond             ; (tough.s)
+        lda Dmg
+        beq .o
+        jsr Hurt                ; (ailments.s)
+.o:     rts
+
+; Carry set if the name A has a rule for HitType (tough.s TrsTab).
+HasRule:
+        sta TwNm
+        ldx #0
+        ldy TrsN
+.l:     cpy #0
+        beq .no
+        lda TrsTab,x
+        cmp TwNm
+        bne .n
+        lda TrsTab+2,x
+        cmp ArType
+        beq .y
+.n:     txa
+        clc
+        adc #8
+        tax
+        dey
+        bra .l
+.no:    clc
+        rts
+.y:     sec
+        rts
+
+ArMode:   .dw 0
+ArX:      .dw 0
+ArY:      .dw 0
+ArR:      .dw 0
+ArYs:     .dw 0
+ArName:   .dw 0
+ArLit:    .dw 0
+ArDo:     .dw 0
+ArMost:   .dw 0
+ArN:      .dw 0
+ArAmt:    .dw 0
+ArType:   .dw 0
+ArAff:    .dw 0
+ArBy:     .dw 0,0
+ArByParty: .dw 0
+ArK:      .dw 0
+ArCP:     .dw 0,0
 
 CtVar:    .dw 0
 CtName:   .dw 0
