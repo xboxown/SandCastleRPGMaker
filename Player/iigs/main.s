@@ -2371,6 +2371,7 @@ TryMove:
         .include "scene.s"
         .include "hudlive.s"
         .include "path.s"
+        .include "fight.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

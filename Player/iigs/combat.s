@@ -382,7 +382,10 @@ WorldTurn:
         bcc .afn
         inc Moved
 .afn:   brl .n
-.naf:   ldy #C_FLAGS
+.naf:   jsr FightTurn           ; fighting someone (Attack - fight.s)
+        bcc .nft
+        brl .n
+.nft:   ldy #C_FLAGS
         lda [CP],y
         and #2
         beq .calm
@@ -788,8 +791,10 @@ FightBack:
         ldy #C_FLAGS            ; awake now, and hostile
         lda [DefP],y
         and #$FFEF
+        ldx FtStriking          ; (struck by a character fighting it - fight.s: it fights that one back, not the Avatar)
+        bne .nh
         ora #2
-        sta [DefP],y
+.nh:    sta [DefP],y
 .out:   rts
 
 ; How badly DefP is hurt, by what is left: killed, critically, heavily, lightly, barely.
