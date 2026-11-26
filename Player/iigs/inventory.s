@@ -253,7 +253,8 @@ DrawPanel:
         jsr CurOff              ; the pointer hidden while drawing (mouse.s)
         lda PanW
         bne .some
-        jmp RefreshInventory
+        jsr RefreshInventory
+        jmp LiveAll             ; the live pieces and open panels over it (hudlive.s)
 .some:  lda PanelView
         bne .portrait
         lda PanX
@@ -266,7 +267,8 @@ DrawPanel:
         sta RH
         jsr RestoreRect
         jsr DrawLabels
-        jmp RefreshInventory
+        jsr RefreshInventory
+        jmp LiveAll
 .portrait:
         lda PanY                ; its pixels, row by row
         sta RY
@@ -324,7 +326,8 @@ DrawPanel:
         jsr DrawLabels
         jsr MemberOver          ; a member shown: its portrait and name (party.s)
         jsr DrawStats
-        jmp RefreshInventory
+        jsr RefreshInventory
+        jmp LiveAll
 
 ; D: "Drop-" and the grid's cursor on the first thing carried.
 StartDrop:

@@ -233,7 +233,10 @@ GridClick:
 
 ; Walking: a command button; the map - Look (a double click on the same square: Talk / Attack / Use); the grid: Look.
 WalkClick:
-        ldx #0                  ; the HUD's command buttons
+        jsr LiveClick           ; a live button (in a custom panel, or a HUD command's - hudlive.s)
+        bcc .lc
+        rts
+.lc:    ldx #0                  ; the HUD's command buttons
 .b:     txa
         cmp BtnCount
         bcs .nb

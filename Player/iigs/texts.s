@@ -2977,5 +2977,13 @@ TsBH:     .dw 0
 TsBCol:   .dw 0
 TsBPic:   .dw 0
 TsTCol:   .dw 0
-GenTab:   .ds 64                ; (scene.s Set Gender: owner code (0 free), 1 male / 2 female - saved)                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
+GenTab:   .ds 64
+HlLvHide:   .ds 48                ; (hudlive.s: each live piece hidden 1, moved x+1 y+1, its picture + 1 - 0: as made - saved)
+HlLvX:      .ds 48
+HlLvY:      .ds 48
+HlLvSpr:    .ds 48
+HlLvTxtOwn: .ds 16                ; (8 slots of words: the live piece + 1, 0 free)
+HlLvTxt:    .ds 256
+HlPnSt:     .ds 16                ; (each custom panel: 0 as ticked, 1 open, 2 closed)
+HlPnKeyOff: .ds 16                ; (scene.s Set Gender: owner code (0 free), 1 male / 2 female - saved)                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

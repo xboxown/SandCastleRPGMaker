@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44, Scene = 45 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44, Scene = 45, Hud = 46 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -107,6 +107,11 @@ public sealed class AppleIIgsTalk
         /// <summary>Scenes: the Game View's size; a sprite group's sprites (their names).</summary>
         public (int W, int H) ViewSize = (320, 192);
         public Func<string, List<string>>? GroupSprites;
+        /// <summary>The HUD commands: a piece by its name as a live piece (hudlive.s; -1 not one the IIgs can change), a custom panel's
+        /// number (-1 none), a sprite fitted to a live piece's size.</summary>
+        public Func<string, int>? LivePiece;
+        public Func<string, int>? HudPanel;
+        public Func<string, string, string, int>? PiecePicture;
         public Func<int, string>? ErrorWords;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
@@ -1530,6 +1535,51 @@ public sealed class AppleIIgsTalk
                     B(Pick); W(_variable(cmd.Get("Variable"))); B(answers.Count);
                     foreach (var a in answers) B(char.ToUpperInvariant(a[0]) is char ch and >= ' ' and <= '~' ? ch : '?');
                     for (int l = 1; l <= line; l++) { B(Ext); B((int)ExtOp.Scene); B(4); W(SceneName("__choice" + l)); }
+                    break;
+                }
+                case EventCommandType.U6ShowHidePiece:
+                case EventCommandType.U6ShowHidePanel:
+                {
+                    // EXT 46 HUD (hudlive.s): a custom panel - 4 PANEL p v; any other piece - 0 SHOW i v (0 shown / open, 1 hidden / closed, 2 toggled).
+                    int v = cmd.Get("Value") is "Hidden" or "Closed" ? 1 : cmd.Get("Value") == "Toggled" ? 2 : 0;
+                    int p = Extra?.HudPanel?.Invoke(cmd.Get("Piece")) ?? -1;
+                    if (p >= 0) { B(Ext); B((int)ExtOp.Hud); B(4); B(p); B(v); break; }
+                    int i = cmd.Type == EventCommandType.U6ShowHidePiece ? Extra?.LivePiece?.Invoke(cmd.Get("Piece")) ?? -1 : -1;
+                    if (i < 0) { Unsupported.Add($"{cmd.Type} ({cmd.Get("Piece")}: no such piece the Apple IIgs can change)"); break; }
+                    B(Ext); B((int)ExtOp.Hud); B(0); B(i); B(v);
+                    break;
+                }
+                case EventCommandType.U6SetPiecePicture:
+                {
+                    int i = Extra?.LivePiece?.Invoke(cmd.Get("Piece")) ?? -1;
+                    if (i < 0) { Unsupported.Add($"Set HUD Piece Picture ({cmd.Get("Piece")}: no such piece the Apple IIgs can change)"); break; }
+                    int pic = cmd.Get("Own") == "True" || cmd.Get("SpriteName").Length == 0 ? 0xFFFF : Extra?.PiecePicture?.Invoke(cmd.Get("Piece"), cmd.Get("SpriteGroup"), cmd.Get("SpriteName")) ?? -1;
+                    if (pic < 0) { Unsupported.Add("Set HUD Piece Picture (a sprite with no picture)"); break; }
+                    B(Ext); B((int)ExtOp.Hud); B(1); B(i); W(pic);
+                    break;
+                }
+                case EventCommandType.U6SetPieceText:
+                {
+                    int i = Extra?.LivePiece?.Invoke(cmd.Get("Piece")) ?? -1;
+                    if (i < 0) { Unsupported.Add($"Set HUD Piece Text ({cmd.Get("Piece")}: no such label)"); break; }
+                    SceneWords(cmd.Get("Text")); // (caught in LogBuf, {formulas} worked out)
+                    B(Ext); B((int)ExtOp.Hud); B(2); B(i);
+                    break;
+                }
+                case EventCommandType.U6MovePiece:
+                {
+                    int i = Extra?.LivePiece?.Invoke(cmd.Get("Piece")) ?? -1;
+                    if (i < 0) { Unsupported.Add($"Move HUD Piece ({cmd.Get("Piece")}: no such piece the Apple IIgs can change)"); break; }
+                    B(Ext); B((int)ExtOp.Hud); B(3); B(i); B(cmd.Get("Back") == "True" ? 1 : 0);
+                    Formula(cmd.Get("X"), "Move HUD Piece"); Formula(cmd.Get("Y"), "Move HUD Piece");
+                    break;
+                }
+                case EventCommandType.U6EnablePanelKey:
+                case EventCommandType.U6DisablePanelKey:
+                {
+                    int p = Extra?.HudPanel?.Invoke(cmd.Get("Piece")) ?? -1;
+                    if (p < 0) { Unsupported.Add($"{cmd.Type} ({cmd.Get("Piece")}: no such custom panel)"); break; }
+                    B(Ext); B((int)ExtOp.Hud); B(5); B(p); B(cmd.Type == EventCommandType.U6EnablePanelKey ? 1 : 0);
                     break;
                 }
                 case EventCommandType.U6SceneBegin:

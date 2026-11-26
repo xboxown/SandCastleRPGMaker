@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 66;
+    public const ushort Version = 67;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -747,6 +747,12 @@ public sealed class AppleIIgsGamePack
     public byte[]? HudBackground { get; set; }
     /// <summary>Change HUD Frame: the HUD drawn with another frame (32000 bytes each, at most 4; actkeys.s).</summary>
     public List<byte[]> HudAlts { get; } = new();
+    /// <summary>Custom panels (hudlive.s): their place, key (the IIgs's key code; 0 none), open at the start - and their pictures (HUDP.n).</summary>
+    public List<(int X, int Y, int W, int H, int Key, bool Open)> HudPanels { get; } = new();
+    public List<byte[]> PanelPictures { get; } = new();
+    /// <summary>Live HUD pieces (hudlive.s): kind (1 picture, 2 label, 3 button), its panel + 1 (0 none), place, size, sprite ($FFFF none),
+    /// a button's key, a label's colour (ARGB; 0 the text's) and words.</summary>
+    public List<(int Kind, int Panel, int X, int Y, int W, int H, int Sprite, int Key, uint Argb, string Text)> LivePieces { get; } = new();
     public (int X, int Y, int Columns, int Rows) View { get; set; } = (80, 20, 10, 10);
     /// <summary>Where the words go; without a HUD two lines under the world.</summary>
     public (int X, int Y, int Width, int Height) TextArea { get; set; } = (8, 182, 304, 18);
@@ -1045,6 +1051,15 @@ public sealed class AppleIIgsGamePack
         // The colours the words ask for, as the palette's nearest (AppleIIgsTalk.Colours; talk.s ColTab).
         w.Write((ushort)Math.Min(AppleIIgsTalk.Colours.Count, 64));
         foreach (uint c in AppleIIgsTalk.Colours.Take(64)) w.Write((ushort)Math.Max(0, SuperHiRes.Nearest(Palette, c, false)));
+        w.Write((ushort)Math.Min(HudPanels.Count, 8));
+        foreach (var (px, py, pw, ph, pk, po) in HudPanels.Take(8)) { w.Write((ushort)px); w.Write((ushort)py); w.Write((ushort)pw); w.Write((ushort)ph); w.Write((ushort)pk); w.Write((ushort)(po ? 1 : 0)); }
+        w.Write((ushort)Math.Min(LivePieces.Count, 24));
+        foreach (var lp in LivePieces.Take(24))
+        {
+            w.Write((ushort)lp.Kind); w.Write((ushort)lp.Panel); w.Write((ushort)lp.X); w.Write((ushort)lp.Y); w.Write((ushort)lp.W); w.Write((ushort)lp.H);
+            w.Write((ushort)lp.Sprite); w.Write((ushort)lp.Key); w.Write((ushort)(lp.Argb == 0 ? 0xFFFF : Math.Max(0, SuperHiRes.Nearest(Palette, lp.Argb, false))));
+            var words = new byte[32]; var t = Ascii(lp.Text, 31); Array.Copy(t, words, t.Length); w.Write(words);
+        }
         return ms.ToArray();
     }
 
@@ -1056,6 +1071,7 @@ public sealed class AppleIIgsGamePack
         var files = new List<(string, byte, ushort, byte[])> { ("GAME.DAT", 0x06, 0x0000, Write()) };
         for (int i = 0; i < Sounds.Count; i++) files.Add(($"SND.{i + 1}", 0xD8, 0x0000, Sounds[i].Data));
         for (int i = 0; i < OtherMaps.Count; i++) files.Add(($"MAP.{i + 1}", 0x06, 0x0000, OtherMaps[i].Write()));
+        for (int i = 0; i < PanelPictures.Count && i < 8; i++) files.Add(($"HUDP.{i + 1}", 0x06, 0x0000, PanelPictures[i])); // a custom panel's picture (hudlive.s)
         return files;
     }
 

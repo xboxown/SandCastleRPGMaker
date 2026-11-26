@@ -1033,6 +1033,22 @@ public partial class MainWindow
         var portraitOf = new Dictionary<int, int>();
         // Change HUD Frame's frames (the HUD drawn again with each - ComposeHud) and Change Portrait's pictures, by file.
         var hudFrames = new List<SpriteLink>();
+        // The HUD's live pieces and custom panels (hudlive.s): pieces the HUD commands name, every Label, every button in a custom panel.
+        var hudDesign = _systemSettings.Ultima6.Hud;
+        var customPanels = hudDesign.CustomPanels.Take(8).ToList();
+        var livePieces = new List<HudPiece>();
+        int LivePieceOf(HudPiece? piece)
+        {
+            if (piece is null || piece.Kind is not (HudPieceKind.Picture or HudPieceKind.CustomButton or HudPieceKind.CommandButton or HudPieceKind.Label)) return -1;
+            if (piece.PanelId > 0 && !customPanels.Any(c => c.Id == piece.PanelId)) return -1;
+            int at = livePieces.IndexOf(piece);
+            if (at >= 0) return at;
+            if (livePieces.Count >= 24) return -1;
+            livePieces.Add(piece);
+            return livePieces.Count - 1;
+        }
+        foreach (var hp in hudDesign.Pieces.Where(p => p.Kind == HudPieceKind.Label || (p.PanelId > 0 && p.Kind is HudPieceKind.CustomButton or HudPieceKind.CommandButton)))
+            LivePieceOf(hp);
         var portraitPics = new Dictionary<string, int>();
         int PortraitPicture(SpriteEntry? sprite)
         {
@@ -1145,6 +1161,17 @@ public partial class MainWindow
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
             VariableNames = _variableDatabase.Variables.Select(v => v.Name).ToList(),
+            LivePiece = name => LivePieceOf(hudDesign.Named(name)),
+            HudPanel = name => hudDesign.Named(name) is { } hp && customPanels.IndexOf(hp) is int pi and >= 0 ? pi : -1,
+            PiecePicture = (pieceName, group, name) =>
+            {
+                if (hudDesign.Named(pieceName) is not { } hp) return -1;
+                var sp = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name) ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name);
+                if (sp?.Frames.FirstOrDefault()?.FilePath is not { } file || !File.Exists(file)) return -1;
+                int lw = Math.Clamp((hp.Width + 3) / 4 * 4, 4, 320), lh = Math.Clamp(hp.Height, 1, 200);
+                spritePixels.Add((FitPicture(file, lw, lh), lw, lh));
+                return spritePixels.Count - 1;
+            },
             HudFrame = (group, name) =>
             {
                 int at = hudFrames.FindIndex(f => f.SpriteGroup == group && f.SpriteName == name);
@@ -1664,17 +1691,26 @@ public partial class MainWindow
         pack.Acknowledgments = u6.Acknowledgments;
         pack.LineOfSight = u6.LineOfSight;
         // The HUD's command buttons: a click is its verb's key (Ultima 6's: A C T L G D M U R B).
-        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CommandButton))
-            pack.Buttons.Add((button.Verb switch
+        var buttonKeyOf = new Dictionary<int, int>(); // a button piece's key (a verb's letter, or $100 + its code) - for the live ones too
+        var buttonAt = new Dictionary<int, int>(); // a fixed button's place in pack.Buttons
+        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CommandButton && (p.PanelId == 0 || customPanels.Any(c => c.Id == p.PanelId))))
+        {
+            int bk = button.Verb switch
             {
                 HudVerb.Attack => 'a', HudVerb.Cast => 'c', HudVerb.Talk => 't', HudVerb.Look => 'l', HudVerb.Get => 'g', HudVerb.Drop => 'd',
                 HudVerb.Move => 'm', HudVerb.Use => 'u', HudVerb.Rest => 'r', _ => 'b'
-            }, button.X, button.Y, button.Width, button.Height));
-        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CustomButton && p.EventPages.Count > 0 && p.EventPages[0].Commands.Count > 0))
+            };
+            buttonKeyOf[button.Id] = bk;
+            if (livePieces.Contains(button)) continue;
+            buttonAt[button.Id] = pack.Buttons.Count;
+            pack.Buttons.Add(((char)bk, button.X, button.Y, button.Width, button.Height));
+        }
+        foreach (var button in u6.Hud.Pieces.Where(p => p.Kind == HudPieceKind.CustomButton && p.EventPages.Count > 0 && p.EventPages[0].Commands.Count > 0 && (p.PanelId == 0 || customPanels.Any(c => c.Id == p.PanelId))))
         {
             AppleIIgsTalk.CompileEvent(new() { new AppleIIgsTalk.EventPage(17, -1, 2, new(), button.EventPages[0].Commands) }, VariableOf, out var bcode, out _,
                 id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
-            pack.Buttons.Add(((char)(0x100 + pack.Codes.Count), button.X, button.Y, button.Width, button.Height));
+            buttonKeyOf[button.Id] = 0x100 + pack.Codes.Count;
+            if (!livePieces.Contains(button)) { buttonAt[button.Id] = pack.Buttons.Count; pack.Buttons.Add(((char)(0x100 + pack.Codes.Count), button.X, button.Y, button.Width, button.Height)); }
             pack.Codes.Add(bcode);
         }
         if (u6.Hud.IntroCommands.Count > 0)
@@ -1726,19 +1762,42 @@ public partial class MainWindow
         }
         foreach (var (spell, index, effect) in pendingThings) spell.Effects[index] = spell.Effects[index] with { Item4 = SpellThing(effect) };
         var hudAlts = new List<uint[]>();
-        var hud = ComposeHud(pack, out var portraitPanel, hudFrames, hudAlts);
+        // Buttons a HUD command named after they were placed: live now, not fixed.
+        foreach (var at in livePieces.Where(lp => buttonAt.ContainsKey(lp.Id)).Select(lp => buttonAt[lp.Id]).OrderByDescending(a => a)) pack.Buttons.RemoveAt(at);
+        var liveIds = livePieces.Select(p => p.Id).ToHashSet();
+        var panelPics = new List<(uint[] Px, int X, int Y, int W, int H)>();
+        var hud = ComposeHud(pack, out var portraitPanel, hudFrames, hudAlts, liveIds, customPanels, panelPics);
+        // The live pieces: their pictures (fitted to their size), labels' colours and words.
+        foreach (var lp in livePieces)
+        {
+            int sprite = 0xFFFF;
+            if (lp.Kind != HudPieceKind.Label && ObjectLooks.Find(_spriteDatabase, lp.Sprite.SpriteGroup, lp.Sprite.SpriteName)?.Frames.FirstOrDefault()?.FilePath is { } lf && File.Exists(lf))
+            {
+                int lw = Math.Clamp((lp.Width + 3) / 4 * 4, 4, 320), lh = Math.Clamp(lp.Height, 1, 200);
+                spritePixels.Add((FitPicture(lf, lw, lh), lw, lh));
+                sprite = spritePixels.Count - 1;
+            }
+            uint argb = 0;
+            try { if (lp.TextColor.Length > 0 && ColorConverter.ConvertFromString(lp.TextColor) is Color lc) argb = 0xFF000000u | (uint)(lc.R << 16 | lc.G << 8 | lc.B); } catch { }
+            int panelNo = lp.PanelId > 0 ? customPanels.FindIndex(c => c.Id == lp.PanelId) + 1 : 0;
+            int kind = lp.Kind == HudPieceKind.Label ? 2 : lp.Kind is HudPieceKind.CustomButton or HudPieceKind.CommandButton ? 3 : 1;
+            pack.LivePieces.Add((kind, panelNo, lp.X, lp.Y, lp.Width, lp.Height, sprite, buttonKeyOf.TryGetValue(lp.Id, out int lk) ? lk : 0, argb, lp.Text));
+        }
+        foreach (var (cp, pp) in customPanels.Zip(panelPics))
+            pack.HudPanels.Add((pp.X, pp.Y, pp.W, pp.H, cp.Key.Length > 0 ? AppleIIgsTalk.IIgsKeyCode(cp.Key) : 0, cp.StartsOpen));
         foreach (var (dk, dx, dy, dw, dh, dframes) in pack.PendingDials)
         {
             int dfirst = spritePixels.Count;
             foreach (var f in dframes) spritePixels.Add((f, dw, dh));
             pack.Dials.Add((dk, dx, dy, dw, dh, dfirst, dframes.Count));
         }
-        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(hudAlts.SelectMany(p => p)).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
+        pack.Palette = SuperHiRes.MakePalette(tilePixels.SelectMany(p => p).Concat(avatar.SelectMany(p => p)).Concat(spritePixels.SelectMany(p => p.Px)).Concat(hud ?? Array.Empty<uint>()).Concat(hudAlts.SelectMany(p => p)).Concat(panelPics.SelectMany(p => p.Px)).Concat(portraitPanel ?? Array.Empty<uint>()).Concat(swapPicture ?? Array.Empty<uint>()).Concat(titlePicture ?? Array.Empty<uint>()));
         if (swapPicture is not null) pack.SwapPicture = SuperHiRes.Pack(swapPicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (titlePicture is not null) pack.TitlePicture = SuperHiRes.Pack(titlePicture, 320, 200, pack.Palette, spriteZeroIsClear: false);
         pack.SwapText = (swap.TextX, swap.TextY, swap.TextColor.Length > 0 && ColorConverter.ConvertFromString(swap.TextColor) is Color sc ? SuperHiRes.Nearest(pack.Palette, 0xFF000000u | (uint)(sc.R << 16 | sc.G << 8 | sc.B), false) : 0xFFFF);
         if (hud is not null) pack.HudBackground = SuperHiRes.Pack(hud, 320, 200, pack.Palette, spriteZeroIsClear: false);
         if (hud is not null) foreach (var alt in hudAlts) pack.HudAlts.Add(SuperHiRes.Pack(alt, 320, 200, pack.Palette, spriteZeroIsClear: false));
+        foreach (var pp in panelPics) pack.PanelPictures.Add(SuperHiRes.Pack(pp.Px, pp.W, pp.H, pack.Palette, spriteZeroIsClear: false)); // HUDP.n
         if (portraitPanel is not null) pack.PortraitPanel = SuperHiRes.Pack(portraitPanel, pack.PanelRect.Width, pack.PanelRect.Height, pack.Palette, spriteZeroIsClear: false);
         for (int i = 0; i < pack.PortraitLabels.Count; i++)
             if (pack.PortraitLabels[i].Color < 0) pack.PortraitLabels[i] = pack.PortraitLabels[i] with { Color = SuperHiRes.Nearest(pack.Palette, (uint)(-pack.PortraitLabels[i].Color - 1) | 0xFF000000u, false) };
@@ -2127,8 +2186,10 @@ public partial class MainWindow
     /// words. Null: no HUD (no Game View) - the world shows in the middle of the screen. Label colours are -1 - RGB
     /// until the palette is made (then 0-15), or $FFFF for the brightest.
     /// </summary>
-    private uint[]? ComposeHud(AppleIIgsGamePack pack, out uint[]? portraitPanel, List<SpriteLink>? altFrames = null, List<uint[]>? altOut = null)
+    private uint[]? ComposeHud(AppleIIgsGamePack pack, out uint[]? portraitPanel, List<SpriteLink>? altFrames = null, List<uint[]>? altOut = null,
+        HashSet<int>? liveIds = null, List<HudPiece>? customPanels = null, List<(uint[] Px, int X, int Y, int W, int H)>? panelOut = null)
     {
+        liveIds ??= new HashSet<int>();
         portraitPanel = null;
         var design = _systemSettings.Ultima6.Hud;
         var frameNow = design.Frame;
@@ -2180,6 +2241,21 @@ public partial class MainWindow
         int columns = Math.Clamp(view.Width / AppleIIgsLimits.TileSize, 1, 20), rows = Math.Clamp(view.Height / AppleIIgsLimits.TileSize, 1, 12);
         pack.View = (Math.Clamp(view.X & ~1, 0, 320 - columns * 16), Math.Clamp(view.Y, 0, 200 - rows * 16), columns, rows);
         if (design.First(HudPieceKind.TextArea) is { } text) pack.TextArea = (text.X, text.Y, text.Width, text.Height);
+        // Custom panels (hudlive.s): the HUD under them, their sprite, the pictures in them (not the live pieces) - each a picture of its own (HUDP.n).
+        foreach (var cp in customPanels ?? new List<HudPiece>())
+        {
+            int px = Math.Clamp(cp.X & ~1, 0, 316), py = Math.Clamp(cp.Y, 0, 199);
+            int pw = Math.Clamp((cp.Width + 3) / 4 * 4, 4, 320 - px), ph = Math.Clamp(cp.Height, 1, 200 - py);
+            var under = canvas;
+            canvas = (uint[])under.Clone();
+            Draw(Of(cp.Sprite), cp.X, cp.Y, cp.Width, cp.Height, fit: false);
+            foreach (var inside in design.Pieces.Where(p => p.PanelId == cp.Id && !liveIds.Contains(p.Id) && p.Kind is HudPieceKind.Picture or HudPieceKind.CustomButton or HudPieceKind.CommandButton or HudPieceKind.Compass or HudPieceKind.SunMoon))
+                Draw(Of(inside.Sprite), inside.X, inside.Y, inside.Width, inside.Height, fit: false);
+            var px2 = new uint[pw * ph];
+            for (int yy = 0; yy < ph; yy++) for (int xx = 0; xx < pw; xx++) px2[yy * pw + xx] = canvas[(py + yy) * 320 + px + xx];
+            panelOut?.Add((px2, px, py, pw, ph));
+            canvas = under;
+        }
         // Change HUD Frame: the same HUD (the inventory view) with each other frame.
         var own = canvas;
         foreach (var alt in altFrames ?? new List<SpriteLink>())
@@ -2196,7 +2272,7 @@ public partial class MainWindow
         {
         Draw(Of(frameNow), 0, 0, 320, 200, fit: false);
         var front = new List<HudPiece>();
-        foreach (var piece in design.Pieces.Where(p => !design.IsCustomPanel(p) && p.PanelId == 0)) // (custom panels: not on the IIgs yet)
+        foreach (var piece in design.Pieces.Where(p => !design.IsCustomPanel(p) && p.PanelId == 0 && !liveIds.Contains(p.Id))) // (custom panels: their own pictures; live pieces: drawn by the player - hudlive.s)
         {
             var only = HudPiece.ViewOf(piece.Kind);
             if (only != HudPanelView.Always && only != (portraitView ? HudPanelView.Portrait : HudPanelView.Inventory)) continue;

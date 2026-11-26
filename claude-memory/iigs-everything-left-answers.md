@@ -64,3 +64,7 @@ Style (talkstyle.s), b736 scenes (scene.s) + colour slots fix (AppleIIgsTalk.Col
 paperdolls in Ultima 6 mode (NotInUltima6 commands, editors hidden behind IsUltima6, U6GameWindow NoPaperdolls guard, C open_window
 u6 guard; U7/U8 untouched - user insisted). 35 = nothing (Play Video stays not-on-IIgs; idea is item 69). Next: item 36 (path
 finding). IIgs data segment ~61 KB of 64 KB - keep new IIgs data small. sim816 heap now starts after the segments.
+b738-b739 (2026-11-26, user: "serious power", "more in disk the better"): HUD power - many panels (min 1; first = main), custom
+panels with keys (HUD Editor), Label piece, 7 commands (EventCommandType 235-241: Show/Hide Piece, Set Piece Picture/Text, Move
+Piece, Show/Hide Panel, Enable/Disable Panel Key). Windows U6GameWindow.HudPanels.cs, C u6.c HudState, IIgs hudlive.s (custom
+panels = HUDP.n files loaded on open; live pieces drawn by the player; GAME.DAT v67, SAVE 19). User is fine with disk loading.

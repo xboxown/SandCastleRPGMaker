@@ -80,7 +80,12 @@ ParseKeys:
         inx
         inx
         bra .cl
-.cd:    rts
+.cd:    lda [Ptr]               ; past them: the custom panels and the live pieces (hudlive.s)
+        asl a
+        clc
+        adc #2
+        jsr AddPtr
+        jmp ParseLive
 
 ; A = a colour slot ([COLOR=...], Conversation Style): its palette colour (0-15).
 ColSlot:

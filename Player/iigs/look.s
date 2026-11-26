@@ -120,7 +120,7 @@ BlitView:
         sta T4
         dec T5
         bne .l
-        rts
+        jmp LiveOverView        ; what lies over the view drawn again (hudlive.s)
 
 ; Bank $01's screen-sized memory ($012000) asked of the Memory Manager (QuickDraw may hold it as its shadow - then it is
 ; free for this too), and Super Hi-Res shadowing off, so drawing there doesn't show until it is copied.

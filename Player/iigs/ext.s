@@ -21,8 +21,10 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene
-EXT_COUNT = 46
+          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene,XtHud
+EXT_COUNT = 47
+
+XtHud:    jmp XtHudCmd          ; EXT 46 HUD: the HUD's pieces and panels (hudlive.s)
 
 XtScene:  jmp XtSceneCmd        ; EXT 45 SCENE: the Ultima 6 tab's scenes (scene.s)
 

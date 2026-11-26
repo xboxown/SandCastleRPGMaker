@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 18               ; (b736: Set Gender's genders, scene.s GenTab)
+SAVE_VERSION = 19               ; (b739: the HUD's live pieces and panels, hudlive.s)
 
 ; Ctrl+S
 SaveGame:
