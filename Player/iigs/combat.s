@@ -273,7 +273,7 @@ AfterTurn:
         bra .go
 .lead:  lda #1
         sta WTLead
-.go:    jsr WorldTurn
+.go:    jsr TurnWorld           ; (in a fight by points, as Nuvie - turns.s)
         lda Told
         beq .out
         stz Told
@@ -304,8 +304,8 @@ IdleTurn:
         jsr EggRun              ; spawn points (eggs.s)
         lda Mode
         bne .out
-        lda CombatOn            ; (the Avatar knocked out: the world goes on, in combat too - bodies.s)
-        beq .live
+        jsr FightOn             ; a fight on: the world waits for the Avatar's turn (turns.s; knocked out: it goes on - bodies.s)
+        bcc .live
         lda AvDown
         beq .out
 .live:  pha
@@ -361,7 +361,10 @@ WorldTurn:
 .l:     lda TurnN
         bne .one
         brl .done
-.one:   lda TimeStop            ; time stopped (spells2.s): they stand
+.one:   jsr TuMay               ; in a fight: its turn by its points (turns.s)
+        bcs .tm
+        brl .n
+.tm:    lda TimeStop            ; time stopped (spells2.s): they stand
         beq .ts
         brl .n
 .ts:    ldy #C_FLAGS
@@ -468,6 +471,8 @@ WorldTurn:
         dec TurnN
         brl .l
 .done:  lda AvDead
+        bne .dd
+        lda TuPass              ; (in a fight, once a turn - turns.s)
         bne .dd
         jsr PartyTurn           ; the members strike foes in reach (party.s)
 .dd:    jsr PruneParty

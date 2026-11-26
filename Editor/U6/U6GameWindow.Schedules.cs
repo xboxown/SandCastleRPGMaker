@@ -68,6 +68,8 @@ public partial class U6GameWindow
         public bool Dormant;
         public CharacterDefinition? Target, FleeFrom, Oppressor;
         public int DexPoints, Failures, FleeCount;
+        /// <summary>Ultima 6's turns in a fight (Nuvie's movement points): its Dexterity's worth each round, and the cells it may step into this round.</summary>
+        public int TurnPoints, TurnSteps;
         /// <summary>Approach_actor_action: chasing the target, and the cell it stood on when the chase began (moved more than 2 tiles = think again).</summary>
         public bool Chasing;
         public (int X, int Y) ChaseFrom;
@@ -488,6 +490,12 @@ public partial class U6GameWindow
         double newX = mapCharacter.PixelX + (alongX ? Math.Sign(remaining) * distance : 0);
         double newY = mapCharacter.PixelY + (alongX ? 0 : Math.Sign(remaining) * distance);
 
+        // Ultima 6, turn by turn (a fight on): into another cell only with a step left this round (Nuvie's points - U6GameWindow.U6Combat.cs).
+        if (TurnByTurn && ((int)Math.Floor(newX / _tileWidth), (int)Math.Floor(newY / _tileHeight)) != (mapCharacter.Placement.X, mapCharacter.Placement.Y) && npc.TurnSteps <= 0)
+        {
+            SetCharacterPose(mapCharacter, "Idle", mapCharacter.Facing);
+            return;
+        }
         var newFoot = ActorFootprintAt(newX, newY, mapCharacter.Size);
         if (newFoot != CharacterFootprint(mapCharacter))
         {
@@ -524,6 +532,7 @@ public partial class U6GameWindow
         PositionCharacterVisual(mapCharacter);
         if (oldCell != (mapCharacter.Placement.X, mapCharacter.Placement.Y))
         {
+            if (TurnByTurn && npc.TurnSteps > 0) npc.TurnSteps--; // a step of its turn (U6GameWindow.U6Combat.cs)
             CharacterChangedCell(mapCharacter); // map events set off by characters, like the player
             if (npc.Path is null) return; // an event moved it (teleporter) or changed what it's doing
         }

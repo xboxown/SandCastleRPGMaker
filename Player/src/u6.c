@@ -2278,7 +2278,46 @@ static int combat_mode_clicked(int x, int y)
 #define ATTACK_ROUND_MS 1100
 #define STEP_ROUND_MS 600
 
-static int turn_by_turn(void) { return hasHud && combat_mode(); }
+/* Turn by turn whenever a fight is on (U6GameWindow.U6Combat.cs - the user, 2026-11-26, as Nuvie): combat mode, or someone
+   fighting or fleeing within 8 cells of the avatar (worked out once a frame, in u6_turn_frozen). */
+static int fightOnNow;
+static int turn_by_turn(void) { return hasHud && (combat_mode() || fightOnNow); }
+static int fight_on(void)
+{
+    int px, py, pf; world_player_cell(&px, &py, &pf);
+    int n = world_actor_count();
+    for (int a = 1; a < n; a++)
+    {
+        if (world_actor_gone(a) || !combat_busy(a)) continue;
+        int x, y, f; world_actor_cell(a, &x, &y, &f);
+        if (abs(x - px) <= 8 && abs(y - py) <= 8) return 1;
+    }
+    return 0;
+}
+
+/* Nuvie's movement points in a turn: each round every character its Dexterity's worth, a step for each of the avatar's
+   Dexterity in it (the rest kept, none hoarded) - the same Dexterity one cell a round. */
+#define TURN_ACTORS 512
+static int turnPoints[TURN_ACTORS], turnSteps[TURN_ACTORS];
+static int stat(int characterId, int kind, int fallback);
+static void deal_turn_steps(void)
+{
+    int avatarDex = stat(player_char(), 2, 10); /* (2: BK_DEXTERITY) */
+    if (avatarDex < 1) avatarDex = 1;
+    int n = world_actor_count();
+    for (int a = 1; a < n && a < TURN_ACTORS; a++)
+    {
+        int dex = stat(world_actor_character(a), 2, 10);
+        if (dex < 1) dex = 1;
+        turnPoints[a] += dex;
+        if (turnPoints[a] > dex + avatarDex) turnPoints[a] = dex + avatarDex;
+        turnSteps[a] = turnPoints[a] / avatarDex;
+        turnPoints[a] -= turnSteps[a] * avatarDex;
+    }
+}
+/* world.c step_walk: may this character step into another cell now (a step left this turn)? And: it did. */
+int u6_turn_may_step(int actor) { return !on || !turn_by_turn() || actor <= 0 || actor >= TURN_ACTORS || turnSteps[actor] > 0; }
+void u6_turn_stepped(int actor) { if (on && turn_by_turn() && actor > 0 && actor < TURN_ACTORS && turnSteps[actor] > 0) turnSteps[actor]--; }
 
 static void ask_turn(void)
 {
@@ -2289,6 +2328,7 @@ static void ask_turn(void)
 static void start_round(double ms, int attack)
 {
     if (!turn_by_turn()) return;
+    deal_turn_steps(); /* each its steps for this round (Nuvie) */
     turnRunMs = ms; turnIsAttack = attack;
     prompt[0] = 0;
 }
@@ -2338,6 +2378,7 @@ static void combat_over_take_avatar(void)
 /* Each frame: 1 while the world waits for the avatar's turn (nothing in it moves). */
 int u6_turn_frozen(double ms)
 {
+    fightOnNow = on && hasHud && fight_on();
     if (!turn_by_turn()) { turnRunMs = 0; turnStepFromX = -99999; return 0; }
     if (turnRunMs <= 0) { if (!prompt[0] && verb < 0 && !askAnswer && !dialog_showing()) ask_turn(); return 1; }
     if (turnStepFromX != -99999)

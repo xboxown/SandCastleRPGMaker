@@ -14,6 +14,8 @@ void u6_load(void);
 /* 1 for an Ultima 6 project. */
 int u6_on(void);
 void u6_show_character(int characterId);
+int u6_turn_may_step(int actor);
+void u6_turn_stepped(int actor);
 /* 1 when it has a HUD with a Game View (the world inside it); 0: the world fills the screen, as before. */
 int u6_hud(void);
 /* Whether a point of the screen is inside the Game View (the world's part of the screen). */

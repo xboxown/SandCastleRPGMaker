@@ -5,8 +5,10 @@ using System.Windows.Input;
 namespace SandcastleRpgMaker.Editor;
 
 /// <summary>
-/// Ultima 6 combat, the way the user asked: outside combat mode the world is live and characters fight each other live; the
-/// combat key (Ultima 6: B, begin / break off combat) makes it turn by turn. Then the world waits for the avatar: a step, a
+/// Ultima 6 combat: turn by turn whenever a fight is on (the user, 2026-11-26: "it is a turn based system" - as Nuvie): combat
+/// mode (B), or someone fighting or fleeing within 8 cells; otherwise the world is live. In a turn every character steps by
+/// Nuvie's movement points (actor.lua advance_time / actor_update_all): its Dexterity each round against the avatar's - the
+/// same Dexterity one cell a round, twice it two, half of it one round in two; a runner steps and waits like anyone. Then the world waits for the avatar: a step, a
 /// verb (Attack, Use...), or Pass (Space) plays one round - the party and the foes act in it - and the world waits again,
 /// "Andrew:" in the text area. Every blow in sight is told there, as Ultima 6: "Rat attacks Peter.", "Missed!", "Peter lightly
 /// wounded." The words are in System Settings > Ultima 6 > Words.
@@ -22,12 +24,28 @@ public partial class U6GameWindow
     private bool _turnIsAttack;
 
     /// <summary>Turn by turn: in combat mode with the HUD's screen (an Ultima 6 game).</summary>
-    private bool TurnByTurn => _combatMode && Hud.First(HudPieceKind.GameView) is not null;
+    private bool TurnByTurn => (_combatMode || FightOn) && Hud.First(HudPieceKind.GameView) is not null;
+
+    /// <summary>A fight on within 8 cells of the avatar: someone fighting (hostile, or two at each other) or fleeing - worked out once a frame.</summary>
+    private bool FightOn
+    {
+        get
+        {
+            if (_fightOnFrame == _frameNumber) return _fightOn;
+            _fightOnFrame = _frameNumber;
+            return _fightOn = _mapCharacters.Any(mc => mc.Npc.InCombat && !IsDead(mc.Character) && mc.Character != _player && TileDistance(mc, (_playerX, _playerY)) <= 8);
+        }
+    }
+    private bool _fightOn;
+    private long _fightOnFrame = -1, _frameNumber;
+    private bool _wasTurnByTurn;
 
     /// <summary>The game loop's question each frame: true while the world waits for the avatar's turn (nothing in it moves).</summary>
     private bool TurnFrozenFrame(double elapsedMs)
     {
-        if (!TurnByTurn) { _turnRunMs = 0; _turnStepFrom = null; return false; }
+        _frameNumber++;
+        if (!TurnByTurn) { _turnRunMs = 0; _turnStepFrom = null; _wasTurnByTurn = false; return false; }
+        if (!_wasTurnByTurn) { _wasTurnByTurn = true; if (_turnRunMs <= 0) AskTurn(); } // a fight began: the world waits for the avatar's turn
         if (_turnRunMs <= 0) return true;
         if (_turnStepFrom is { } from && (_playerX, _playerY) != from) { _heldDirectionKeys.Clear(); _turnStepFrom = null; } // one cell a step
         _turnRunMs -= elapsedMs;
@@ -38,6 +56,15 @@ public partial class U6GameWindow
     private void StartRound(double ms, bool attack = false)
     {
         if (!TurnByTurn) return;
+        // Nuvie's movement points: each its Dexterity's worth, a step for each of the avatar's Dexterity in it (the rest kept, none hoarded).
+        int avatarDex = Math.Max(1, _player is null ? 10 : Stat(_player, BuiltInStatKind.Dexterity, 10));
+        foreach (var mc in _mapCharacters)
+        {
+            int dex = Math.Max(1, Stat(mc.Character, BuiltInStatKind.Dexterity, 10));
+            mc.Npc.TurnPoints = Math.Min(mc.Npc.TurnPoints + dex, dex + avatarDex);
+            mc.Npc.TurnSteps = mc.Npc.TurnPoints / avatarDex;
+            mc.Npc.TurnPoints -= mc.Npc.TurnSteps * avatarDex;
+        }
         _turnRunMs = ms;
         _turnIsAttack = attack;
         SoakLog($"turn: a round of {ms} ms from {_playerX},{_playerY}");

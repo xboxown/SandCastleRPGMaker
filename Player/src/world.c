@@ -21,6 +21,7 @@
 #include "vitals.h"
 #include "magic.h"
 #include "combat.h"
+#include "u6.h"
 #include "mechanisms.h"
 #include "pictures.h"
 #include "font.h"
@@ -3568,6 +3569,8 @@ static void step_walk(int actor, double seconds)
         double remaining = alongX ? rx : ry, move = fmin(fmin(fabs(remaining), budget), UNIT / 2.0); /* half a unit at a time, as at Windows' 60 frames a second: a slow frame never takes a stair's two lifts at once */
         a->facing = alongX ? (remaining > 0 ? DIR_E : DIR_W) : (remaining > 0 ? DIR_S : DIR_N);
         double nx = a->px + (alongX ? (remaining > 0 ? move : -move) : 0), ny = a->py + (alongX ? 0 : (remaining > 0 ? move : -move));
+        int intoCell = (int)floor(nx / tileW) != (int)floor(a->px / tileW) || (int)floor(ny / tileH) != (int)floor(a->py / tileH);
+        if (intoCell && !u6_turn_may_step(actor)) { a->walkingNow = 0; return; } /* Ultima 6 turn by turn: no step left this round (u6.c, Nuvie) */
         int l0, t0, l1, t1;
         foot_at(a, a->px, a->py, &l0, &t0);
         foot_at(a, nx, ny, &l1, &t1);
@@ -3594,6 +3597,7 @@ static void step_walk(int actor, double seconds)
             if (a->body >= 0) { bodies[a->body].left = l1; bodies[a->body].top = t1; bodies[a->body].z = lift; }
         }
         a->px = nx; a->py = ny;
+        if (intoCell) u6_turn_stepped(actor);
         wrap_actor(a, actor == 0);
         a->walkingNow = 1;
         budget -= move;
