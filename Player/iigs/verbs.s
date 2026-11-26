@@ -983,6 +983,13 @@ GridVerb:
         sta ItemPtr
         lda GridRec+2
         sta ItemPtr+2
+        jsr FetishUse           ; an ingredient with a fetish (spellsys.s)
+        bcc .nfet
+        rts
+.nfet:  lda GridRec
+        sta ItemPtr
+        lda GridRec+2
+        sta ItemPtr+2
         ldy #6
         lda [ItemPtr],y
         and #512+1024           ; a key or a lockpick: "On what?" (keys.s)

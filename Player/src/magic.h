@@ -11,7 +11,13 @@ int magic_use_map(int uid);                                  /* a potion, food, 
 int magic_use_carried(Item *it);
 int magic_learn_spell(int actor, const char *name);
 int magic_spell_exists(const char *name); /* any spellbook in the project has it */
-int magic_cast_named(int actor, const char *name, int other, void *doll, int byActivator); /* doll: the paperdoll the event runs from (a spellbook's own) */
+int magic_cast_named(int actor, const char *name, int other, void *doll, int byActivator);
+/* The spell system in use (Tools > Spell Editor): its style (0 spellbook, 1 fetish, 2 events only), the Cast key's Common
+   Event, a Common Event run by name, an ingredient Used (1: it was one - fetish style). */
+int magic_system_style(void);
+const char *magic_system_on_cast(void);
+int magic_run_common_named(const char *name, int actor);
+int magic_fetish_use(int characterId, int objectId); /* doll: the paperdoll the event runs from (a spellbook's own) */
 int magic_combat_spell(int actor, int target);               /* a mage's turn in a fight: 1 = it cast */
 int magic_frozen(int actor);                                 /* Time Stop */
 int magic_understands(int languageId);                       /* no language, Translate on, or someone in the party knows it */

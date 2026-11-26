@@ -23,6 +23,7 @@ void u6_draw(uint32_t *pixels, uint32_t ms);
 
 /* Ultima 6: what happens, told in the text area ("You see a wall."); 0 if this game has no text area (say it another way). */
 int u6_say(const char *text);
+const char *u6_word(const char *id);    /* an Ultima 6 word (System Settings > Ultima 6 > Words) */
 /* The line being typed under the text ("Move-"); "" none. */
 void u6_prompt(const char *text);
 

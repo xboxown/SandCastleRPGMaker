@@ -62,6 +62,7 @@ public partial class U6GameWindow
     /// <summary>The spell goes to its target: as a missile flying from the caster, or straight there.</summary>
     private void DeliverSpell(CharacterDefinition caster, SpellDefinition spell, CharacterDefinition? who, object? thing, (int X, int Y) cell)
     {
+        AfterSpellCast(caster, spell); // the spell system's After Cast event (U6GameWindow.SpellSystems.cs)
         bool atSomeoneElse = who != caster || thing is not null || cell != CellOf(caster);
         if (spell.NeedsTarget && atSomeoneElse && ObjectDef(spell.MissileObjectId) is { Type: ObjectType.Projectile } missile && !double.IsNaN(PixelOf(caster).X))
         {

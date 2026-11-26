@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 13               ; (b719: Change Object Look's own looks, ext.s)
+SAVE_VERSION = 14               ; (b725: the spells learned, spellsys.s)
 
 ; Ctrl+S
 SaveGame:

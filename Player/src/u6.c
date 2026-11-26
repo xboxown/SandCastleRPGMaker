@@ -92,6 +92,9 @@ static int turn_pass(void);
 static void rest(void);
 /* casting (below) */
 static int casting, aimCaster = -1; static cJSON *aimSpell;
+static const char *word(const char *id);
+const char *u6_word(const char *id) { return word(id); }
+
 static void start_cast(void);
 static int cast_key(const PlatformEvent *e);
 static int draw_cast_panel(cJSON *panel);
@@ -1337,6 +1340,7 @@ static void pick_panel_cell(const Cell *cell)
             if (!it) { finish(name, word("NotPossible"), NULL); break; }
             { char line[200]; snprintf(line, sizeof line, "%s%s", prompt, name); u6_say(line); }
             end_verb(); set_focus(FOCUS_MAP);
+            if (items_category(it) == CAT_OBJECT && magic_fetish_use(member, items_item_id(it))) break; /* an ingredient with a fetish (magic.c) */
             gumps_u6_use_item(it);
             break;
         case 5:
@@ -2499,6 +2503,9 @@ static void start_cast(void)
 {
     int member = member_shown(), actor = world_actor_by_character(member);
     char verbLine[64]; snprintf(verbLine, sizeof verbLine, "%s-", word("Cast"));
+    int style = magic_system_style(); /* another spell system (Tools > Spell Editor - magic.c) */
+    if (style == 1) { u6_say(verbLine); u6_say("Use an ingredient with thy fetish."); return; }
+    if (style == 2) { u6_say(verbLine); if (!magic_run_common_named(magic_system_on_cast(), actor)) u6_say(word("NoSpells")); return; }
     int n = actor >= 0 ? magic_u6_spells(actor, castSpells, 128) : -1;
     if (n < 0) { u6_say(verbLine); u6_say(word("NoSpellbook")); return; }
     if (n == 0) { u6_say(verbLine); u6_say(word("NoSpells")); return; }

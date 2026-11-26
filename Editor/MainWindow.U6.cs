@@ -17,6 +17,8 @@ public partial class MainWindow
 
     /// <summary>Ultima 6 projects: the HUD Editor takes the PaperDoll Editor's place, in the Tools menu and on the toolbar.</summary>
     private System.Windows.Controls.MenuItem? _levelingMenuItem;
+    /// <summary>Ultima 6 projects: the Spell Editor - the magic as spell systems (SpellEditorWindow.cs).</summary>
+    private System.Windows.Controls.MenuItem? _spellMenuItem;
 
     private void ApplyStyleToTools()
     {
@@ -29,6 +31,13 @@ public partial class MainWindow
             ToolsMenu.Items.Insert(0, _levelingMenuItem);
         }
         _levelingMenuItem.Visibility = IsUltima6 ? Visibility.Visible : Visibility.Collapsed;
+        if (_spellMenuItem is null)
+        {
+            _spellMenuItem = new System.Windows.Controls.MenuItem { Header = "Spell Editor..." };
+            _spellMenuItem.Click += (_, _) => new SpellEditorWindow(_systemSettings.Ultima6.SpellSystems, _objectDatabase, _systemSettings.CommonEvents) { Owner = this }.ShowDialog();
+            ToolsMenu.Items.Insert(0, _spellMenuItem);
+        }
+        _spellMenuItem.Visibility = IsUltima6 ? Visibility.Visible : Visibility.Collapsed;
         // Ultima 6: no upper floors - one floor; going up or down is another map (Maps tab, Change Map).
         FloorCombo.Visibility = IsUltima6 ? Visibility.Collapsed : Visibility.Visible;
         if (MainToolBar.Items.IndexOf(FloorCombo) is int fi && fi > 0 && MainToolBar.Items[fi - 1] is UIElement floorLabel) floorLabel.Visibility = FloorCombo.Visibility;

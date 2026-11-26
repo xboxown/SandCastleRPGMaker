@@ -15,6 +15,9 @@ public class Ultima6Settings
     /// <summary>The game's screen: its frame and every piece on it (HUD Editor). One per project; Change HUD Frame swaps its frame in play.</summary>
     public HudDesign Hud { get; set; } = new();
 
+    /// <summary>The magic: the spell systems (Tools > Spell Editor) and the one in use (Engine/SpellSystem.cs).</summary>
+    public SpellSystemSettings SpellSystems { get; set; } = new();
+
     // ---------- Conversations (typed keywords, as Ultima 6) ----------
 
     /// <summary>The colour of the keywords in what a character says ("#RRGGBB") - the words the player can type to ask about.</summary>

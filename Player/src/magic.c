@@ -40,6 +40,9 @@
 #include "platform.h"
 #include "pictures.h"
 #include "dolls.h"
+#include "u6.h"
+#include "script.h"
+#define SPELL_CAST_VARIABLE "SpellCast"
 #include "../third_party/cJSON.h"
 #include <math.h>
 #include <stdio.h>
@@ -604,8 +607,10 @@ static void missile_landed(void *context, int victim, double x, double y)
 }
 
 /* DeliverSpell: as a missile flying from the caster (a Projectile object), or straight there. */
+static void after_cast(int caster, cJSON *spell);
 static void deliver(int caster, cJSON *spell, int who, int thing, int cx, int cy)
 {
+    after_cast(caster, spell); /* the spell system's After Cast event (below) */
     int ox, oy, of;
     cell_of(caster, &ox, &oy, &of);
     int elsewhere = who != caster || thing > 0 || cx != ox || cy != oy;
@@ -736,6 +741,121 @@ void magic_cast(int caster, cJSON *spell, int castOn)
     char prompt[96];
     snprintf(prompt, sizeof prompt, "Cast %s on whom?", str(spell, "Name"));
     gumps_choose_target(prompt, target_chosen, &pending);
+}
+
+/* ---------------- The spell system in use (Engine/SpellSystem.cs; U6GameWindow.SpellSystems.cs) ----------------
+   Ultima 6 projects: Ultima 6's spellbook and words (0, as before), The Savage Empire's fetish and ingredients (1: an
+   ingredient Used while a fetish is carried or next to the caster casts its spell), or events only (2: the Cast key runs a
+   Common Event); in every style a Common Event after any spell, the variable SpellCast holding its name. */
+static cJSON *spell_system(void)
+{
+    cJSON *ss = get(get(get(project(), "Settings"), "Ultima6"), "SpellSystems"), *s;
+    int active = num(ss, "ActiveId", -1);
+    cJSON_ArrayForEach(s, get(ss, "Systems")) if (num(s, "Id", -2) == active) return s;
+    return NULL;
+}
+
+int magic_system_style(void) { cJSON *s = spell_system(); return s ? num(s, "Style", 0) : 0; }
+
+static int same_name(const char *a, const char *b)
+{
+    while (*a && *b && tolower((unsigned char)*a) == tolower((unsigned char)*b)) { a++; b++; }
+    return !*a && !*b;
+}
+
+/* A spell of any spellbook object, by its name. */
+static cJSON *any_spell_named(const char *name)
+{
+    cJSON *o, *s;
+    cJSON_ArrayForEach(o, get(get(project(), "Objects"), "Objects"))
+        if (num(o, "Type", -1) == OT_SPELLBOOK) cJSON_ArrayForEach(s, get(get(o, "Spellbook"), "Spells")) if (same_name(str(s, "Name"), name)) return s;
+    return NULL;
+}
+
+/* A Common Event by its name, run for actor: 0 if there's none with commands. */
+int magic_run_common_named(const char *name, int actor)
+{
+    cJSON *c;
+    if (!name || !*name) return 0;
+    cJSON_ArrayForEach(c, get(get(project(), "Settings"), "CommonEvents"))
+        if (same_name(str(c, "Name"), name) && cJSON_GetArraySize(get(c, "Commands")) > 0) { events_run_commands(get(c, "Commands"), actor); return 1; }
+    return 0;
+}
+
+/* The Cast key's Common Event (events only). */
+const char *magic_system_on_cast(void) { cJSON *s = spell_system(); return s ? str(s, "OnCastEvent") : ""; }
+
+static void after_cast(int caster, cJSON *spell)
+{
+    cJSON *s = spell_system();
+    const char *ev = s ? str(s, "AfterCastEvent") : "";
+    if (!*ev) return;
+    script_set(SPELL_CAST_VARIABLE, value_text(str(spell, "Name")));
+    magic_run_common_named(ev, caster);
+}
+
+
+/* Fetish style: a carried ingredient (its object id) Used by characterId - its spell cast if a fetish is carried or next to
+   them. 1 if it was an ingredient of the system (said what happened); 0: not one - use it as usual. */
+int magic_fetish_use(int characterId, int objectId)
+{
+    cJSON *s = spell_system(), *r, *recipe = NULL, *f;
+    if (!s || num(s, "Style", 0) != 1) return 0;
+    cJSON_ArrayForEach(r, get(s, "Recipes")) if (num(r, "IngredientObjectId", -2) == objectId) { recipe = r; break; }
+    if (!recipe) return 0;
+    int actor = world_actor_by_character(characterId);
+    if (actor < 0) return 0;
+    int fetish = 0;
+    Item *all[256];
+    int n = items_carried_objects(characterId, all, 256);
+    cJSON_ArrayForEach(f, get(s, "FetishObjectIds")) for (int i = 0; i < n && !fetish; i++) if (items_item_id(all[i]) == f->valueint) fetish = 1;
+    if (!fetish)
+    {
+        double px, py; world_actor_pixel(actor, &px, &py);
+        int near[64], m = world_things_near(px, py, 1.5 * world_tile_w(), near, 64);
+        cJSON_ArrayForEach(f, get(s, "FetishObjectIds")) for (int i = 0; i < m && !fetish; i++) if (world_thing_object_id(near[i]) == f->valueint) fetish = 1;
+    }
+    if (!fetish) { u6_say(str(s, "NoFetishLine")); return 1; }
+    cJSON *spell = any_spell_named(str(recipe, "SpellName"));
+    if (!spell) { u6_say(u6_word("NotPossible")); return 1; }
+    if (!cJSON_IsFalse(get(s, "UsesMana")) && cJSON_IsTrue(get(s, "UsesMana")))
+    {
+        if (stat_of(actor, K_MANA, 0) < mana_cost(spell)) { u6_say(u6_word("NoMagicPoints")); return 1; }
+        set_stat_of(actor, K_MANA, stat_of(actor, K_MANA, 0) - mana_cost(spell));
+    }
+    if (!cJSON_IsFalse(get(recipe, "UsesUpIngredient")))
+    {
+        Item *used[4]; int got = 0;
+        if (items_take(characterId, CAT_OBJECT, objectId, 1, used, 4, &got)) for (int k = 0; k < got; k++) items_free(used[k]);
+    }
+    char line[160]; snprintf(line, sizeof line, "%s-%s", u6_word("Cast"), str(spell, "Name")); u6_say(line);
+    world_sound_from_actor(num(spell, "CastSoundResourceId", -1), actor);
+    int x, y, fl;
+    cell_of(actor, &x, &y, &fl);
+    if (!flag(spell, "NeedsTarget")) { deliver(actor, spell, actor, 0, x, y); return 1; }
+    pending = (Pending){ actor, spell };
+    snprintf(line, sizeof line, "Cast %s on whom?", str(spell, "Name"));
+    gumps_choose_target(line, target_chosen, &pending);
+    return 1;
+}
+
+/* Cast Spell (the command) in a system with no spellbook: the spell by its name (its mana if the system uses it). */
+static int cast_by_system(int caster, const char *name, int other)
+{
+    cJSON *s = spell_system();
+    if (!s || num(s, "Style", 0) == 0) return 0;
+    cJSON *spell = any_spell_named(name);
+    if (!spell) return 0;
+    if (cJSON_IsTrue(get(s, "UsesMana")))
+    {
+        if (stat_of(caster, K_MANA, 0) < mana_cost(spell)) return 0;
+        set_stat_of(caster, K_MANA, stat_of(caster, K_MANA, 0) - mana_cost(spell));
+    }
+    world_sound_from_actor(num(spell, "CastSoundResourceId", -1), caster);
+    int on = other >= 0 ? other : caster, x, y, fl;
+    world_actor_cell(on, &x, &y, &fl);
+    deliver(caster, spell, on, 0, x, y);
+    return 1;
 }
 
 /* ---------------- Spellbooks ---------------- */
@@ -1298,6 +1418,7 @@ int magic_cast_named(int actor, const char *name, int other, void *doll, int byA
         magic_cast(actor, spell, other);
         return 1;
     }
+    if (cast_by_system(actor, name, other)) return 1; /* a system with no spellbook (Tools > Spell Editor) */
     snprintf(line, sizeof line, "Cast Spell: %s has no spellbook that knows \"%s\".", name_of(actor), name);
     game_log(line);
     return 0;

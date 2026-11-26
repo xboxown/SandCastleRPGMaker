@@ -36,7 +36,8 @@ ParseBreak:
         iny
         bra .l
 .d:     lda T4
-        jmp AddPtr
+        jsr AddPtr
+        jmp ParseSpellSys       ; (spellsys.s)
 
 ; ItemPtr = an object: carry set, BrK = its kind's place (x 10) if it can be broken.
 BrKindOf:

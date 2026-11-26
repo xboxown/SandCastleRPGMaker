@@ -743,6 +743,7 @@ public partial class MainWindow
                 list.Add(si);
             }
             bookIndex[book.Id] = pack.Books.Count;
+            if (!book.Spellbook.StartsWithAllSpells) pack.LearnOnlyBooks.Add(pack.Books.Count); // knows only what Learn Spell teaches (spellsys.s)
             pack.Books.Add(list);
             return pack.Books.Count - 1;
         }
@@ -1126,6 +1127,11 @@ public partial class MainWindow
                 return frames.Count > 0 ? frames : null;
             },
             Colour = (r, g, b) => SuperHiRes.NearestColour(pack.Palette, r, g, b),
+            SpellIndex = spellName =>
+            {
+                foreach (var sb in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Spellbook)) BookOf(sb);
+                return spellIndex.FirstOrDefault(kv => kv.Key.Name.Equals(spellName, StringComparison.OrdinalIgnoreCase)) is { Key: not null } hit ? hit.Value : -1;
+            },
             WornIds = () => _objectDatabase.Objects.Where(o => o.Type is ObjectType.Weapon or ObjectType.Armor).Select(o => (pack.NameOf(o.Name), o.Id)).ToList(),
             // Play Animation (fx.s): a sprite's frames, at most 8.
             SpriteFrames = (group, name) =>
@@ -1199,6 +1205,34 @@ public partial class MainWindow
         };
 
         pack.PartySize = Math.Max(1, _systemSettings.Ultima6.PartySize);
+        // The spell system in use (spellsys.s; Tools > Spell Editor): its style, its Common Events as code, the fetishes and recipes.
+        {
+            var sys = _systemSettings.Ultima6.SpellSystems.Active;
+            int CommonCode(string name)
+            {
+                if (name.Trim().Length == 0 || _systemSettings.CommonEvents.FirstOrDefault(c => c.Name.Equals(name.Trim(), StringComparison.OrdinalIgnoreCase)) is not { Commands.Count: > 0 } ce) return 0xFFFF;
+                AppleIIgsTalk.CompileEvent(new() { new AppleIIgsTalk.EventPage(18, -1, 2, new(), ce.Commands.ToList()) }, VariableOf, out var cc, out _,
+                    id => soundIndex.TryGetValue(id, out int sn) ? sn : -1, WorldIndex, WhereIs, talkEnv);
+                pack.Codes.Add(cc);
+                return pack.Codes.Count - 1;
+            }
+            pack.SpellSys[0] = (int)sys.Style;
+            pack.SpellSys[1] = sys.Style == SpellCastStyle.EventsOnly ? CommonCode(sys.OnCastEvent) : 0xFFFF;
+            pack.SpellSys[2] = CommonCode(sys.AfterCastEvent);
+            pack.SpellSys[3] = pack.NameOf("Use an ingredient with thy fetish.");
+            pack.SpellSys[4] = pack.NameOf(sys.NoFetishLine.Trim().Length > 0 ? sys.NoFetishLine.Trim() : "Thou needest a fetish.");
+            pack.SpellSys[5] = sys.UsesMana ? 1 : 0;
+            if (pack.SpellSys[2] != 0xFFFF)
+            {
+                pack.SpellSys[6] = VariableOf(SpellSystemSettings.SpellCastVariable);
+                if (!pack.TextVariables.Contains(pack.SpellSys[6])) pack.TextVariables.Add(pack.SpellSys[6]);
+            }
+            foreach (int fid in sys.FetishObjectIds)
+                if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == fid) is { } fo) pack.Fetishes.Add(pack.NameOf(fo.Name));
+            foreach (var rc in sys.Recipes)
+                if (_objectDatabase.Objects.FirstOrDefault(o => o.Id == rc.IngredientObjectId) is { } ing && talkEnv.SpellIndex?.Invoke(rc.SpellName) is int rsi and >= 0)
+                    pack.Recipes.Add((pack.NameOf(ing.Name), rsi, rc.UsesUpIngredient));
+        }
         // Bodies: each placed character's (and the Avatar's) Body pose picture, whether it leaves one, whether it can be lifted.
         {
             var seenBody = new HashSet<int>();

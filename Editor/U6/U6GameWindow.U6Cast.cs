@@ -51,6 +51,7 @@ public partial class U6GameWindow
 
     private void U6StartCast()
     {
+        if (CastBySystem()) return; // another spell system (Tools > Spell Editor - U6GameWindow.SpellSystems.cs)
         var caster = Actor;
         string verb = W("Cast") + "-";
         if (ReadiedBookSpells(caster) is not { } spells) { U6Say(verb); U6Say(W("NoSpellbook")); return; }

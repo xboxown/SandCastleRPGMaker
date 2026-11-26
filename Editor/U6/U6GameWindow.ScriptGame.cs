@@ -448,6 +448,7 @@ public partial class U6GameWindow
             CastSpell(caster, fromDoll, target);
             return true;
         }
+        if (CastSpellBySystem(caster, name, command.Get("Other").Length > 0 ? CharacterDefinitionFor(command.Get("Other")) : null)) return true; // a system with no spellbook (U6GameWindow.SpellSystems.cs)
         StatusText.Text = $"Cast Spell: {caster.Name} has no spellbook that knows \"{name}\".";
         return false;
     }

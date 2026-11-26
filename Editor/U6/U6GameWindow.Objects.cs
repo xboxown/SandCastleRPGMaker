@@ -241,6 +241,7 @@ public partial class U6GameWindow
         if (DefinitionOf(item) is not { } obj) return false;
         RecordItem("used", ReferencedItemCategory.Object, obj.Id); // Used object (U6GameWindow.Conditions.cs)
         if (TryUseLockTool(obj, source)) return true;
+        if (TryFetishCast(item, obj, source switch { SlotOrigin s => s.Character, BackpackOrigin b => b.Character, _ => _player })) return true; // an ingredient with a fetish (U6GameWindow.SpellSystems.cs)
         if (obj.Type == ObjectType.Spellbook)
         {
             var reader = source switch { SlotOrigin s => s.Character, BackpackOrigin b => b.Character, _ => _player };

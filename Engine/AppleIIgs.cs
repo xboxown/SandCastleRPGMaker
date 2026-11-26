@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 64;
+    public const ushort Version = 65;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -674,6 +674,13 @@ public sealed class AppleIIgsGamePack
     public List<(int Name, int Liquid)> LiquidGivers { get; } = new();
     /// <summary>Things that can be broken (break.s): name, hit points, defense, destroyed sound, flags (1 a container: its things fall out).</summary>
     public List<(int Name, int Hp, int Defense, int Sound, int Flags)> Breakables { get; } = new();
+    /// <summary>The spell system in use (spellsys.s; Engine/SpellSystem.cs): style, on-cast code, after-cast code, the Cast line, the
+    /// no-fetish line, uses mana (1), SpellCast's variable ($FFFF none); the fetishes (names); the recipes (ingredient name, spell, used up).</summary>
+    public int[] SpellSys { get; } = { 0, 0xFFFF, 0xFFFF, 0xFFFF, 0xFFFF, 0, 0xFFFF };
+    public List<int> Fetishes { get; } = new();
+    public List<(int Ingredient, int Spell, bool UsedUp)> Recipes { get; } = new();
+    /// <summary>Spellbooks (their places in Books) that know only the spells learned (Learn Spell).</summary>
+    public HashSet<int> LearnOnlyBooks { get; } = new();
 
     /// <summary>A schedule activity as the IIgs does it (schedule.s): 0 stand, $80 sit, 1 wander, 2 sleep, 3 / 4 pace, 6 / 7 work, 5 loiter (the rest).</summary>
     public static int ActivityCode(ScheduleType type) => type switch
@@ -860,7 +867,12 @@ public sealed class AppleIIgsGamePack
             for (int i = 0; i < 4; i++) w.Write((ushort)0); // 64 bytes
         }
         w.Write((ushort)Math.Min(Books.Count, 64));
-        foreach (var book in Books.Take(64)) { w.Write((ushort)Math.Min(book.Count, 64)); foreach (int i in book.Take(64)) w.Write((ushort)i); }
+        for (int bi = 0; bi < Math.Min(Books.Count, 64); bi++)
+        {
+            var book = Books[bi];
+            w.Write((ushort)(Math.Min(book.Count, 64) | (LearnOnlyBooks.Contains(bi) ? 0x8000 : 0)));
+            foreach (int i in book.Take(64)) w.Write((ushort)i);
+        }
         w.Write((ushort)Math.Min(Items.Count, 64));
         foreach (var it in Items.Take(64)) { w.Write((ushort)it.Name); w.Write((ushort)it.Sprite); w.Write((ushort)it.Icon); w.Write((ushort)it.Flags); w.Write((ushort)it.Other); }
         w.Write((ushort)Math.Min(Summons.Count, 32));
@@ -1002,6 +1014,11 @@ public sealed class AppleIIgsGamePack
         foreach (var (gn, gl) in LiquidGivers.Take(8)) { w.Write((ushort)gn); w.Write((ushort)gl); }
         w.Write((ushort)Math.Min(Breakables.Count, 32));
         foreach (var (bn, bh, bd, bs, bf) in Breakables.Take(32)) { w.Write((ushort)bn); w.Write((ushort)Math.Clamp(bh, 1, 32767)); w.Write((ushort)Math.Clamp(bd, 0, 255)); w.Write((ushort)bs); w.Write((ushort)bf); }
+        foreach (int v in SpellSys) w.Write((ushort)v);
+        w.Write((ushort)Math.Min(Fetishes.Count, 8));
+        foreach (int f in Fetishes.Take(8)) w.Write((ushort)f);
+        w.Write((ushort)Math.Min(Recipes.Count, 16));
+        foreach (var (ri, rs, ru) in Recipes.Take(16)) { w.Write((ushort)ri); w.Write((ushort)rs); w.Write((ushort)(ru ? 1 : 0)); }
         w.Write((ushort)Math.Min(Texts.Count, 1000));
         foreach (var text in Texts.Take(1000)) { w.Write((ushort)text.Length); w.Write(text); }
         w.Write((ushort)(DayNight.On ? 1 : 0)); w.Write((ushort)DayNight.Dawn); w.Write((ushort)DayNight.Day); w.Write((ushort)DayNight.Dusk); w.Write((ushort)DayNight.Night);

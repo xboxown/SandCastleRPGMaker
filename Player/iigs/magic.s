@@ -70,6 +70,10 @@ StartCast:
         jsr PrintSaid
         lda #Dash
         jsr PrintMine
+        jsr SsStartCast         ; another spell system (spellsys.s)
+        bcc .bk
+        rts
+.bk:
         lda ObjPtr              ; a spellbook worn (in a hand)
         sta ItemPtr
         lda ObjPtr+2
@@ -184,6 +188,7 @@ CastIt:
         sta TurnUsed
         jsr BookList            ; in the book?
         lda [Src]
+        and #$7FFF              ; (bit 15: it knows only what is learned)
         sta T5
         ldy #2
 .f:     lda T5
@@ -200,7 +205,14 @@ CastIt:
         iny
         dec T5
         bra .f
-.found: ldy #0                  ; the spell into SpBuf
+.found: lda [Src]                ; a book that knows only what is learned (spellsys.s)
+        bpl .known
+        lda [Src],y
+        jsr SsLearned
+        bcs .known
+        lda #W_NOTINBOOK
+        brl .refuse
+.known: ldy #0                  ; the spell into SpBuf
 .cp:    lda [ItemPtr],y
         sta SpBuf,y
         iny
@@ -255,6 +267,7 @@ CastIt:
         cpx #16
         bcc .tk
         jsr RefreshInventory
+        jsr SsAfterCast         ; the spell system's After Cast event (spellsys.s)
         lda SpBuf+2             ; its words said
         jsr NameNumber
         lda FmtName
