@@ -21,7 +21,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-EXT_COUNT = 38
+          .dw XtLight
+EXT_COUNT = 39
 
 XtLearn:  jmp XtLearnCmd        ; EXT 34 LEARN (spellsys.s)
 XtCast:   jmp XtCastCmd         ; EXT 35 CAST (spellsys.s)
@@ -3227,6 +3228,169 @@ XtStopSnd:
         jmp Next
 
 GenSnd:   .dw $FFFF,$FFFF,$FFFF,$FFFF
+
+; EXT 38 LIGHT which x y name do var minutesvar (14 bytes): Light Source, as U6GameWindow.LightCommand.cs - this object
+; (which 0: ownev.s SelfRec) or the thing at x, y (name; $FFFE: from a variable) - do 0 light it, 1 put it out, 2 switch,
+; 3 burn it out (spent), 4 make it fresh, 5 set its minutes left (minutesvar), 6 read its minutes left, 7 read lit (1 / 0),
+; 8 read burnt out (1 / 0) - into var. A light's Other: $0100 lit, $0200 spent (look.s IsLight); minutes left: floor.s BnTab.
+XtLight:
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta LsWhich
+        iny
+        lda [TalkPtr],y
+        sta AoX
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoY
+        iny
+        iny
+        lda [TalkPtr],y
+        sta AoName
+        iny
+        iny
+        lda [TalkPtr],y
+        and #$00FF
+        sta LsDo
+        iny
+        lda [TalkPtr],y
+        sta LsVar
+        iny
+        iny
+        lda [TalkPtr],y
+        asl a
+        tax
+        lda VarTab,x
+        sta LsMin
+        lda LsWhich             ; which light
+        bne .thing
+        lda SelfRec+2
+        bne .self
+        brl .done
+.self:  lda SelfRec
+        sta ItemPtr
+        lda SelfRec+2
+        sta ItemPtr+2
+        bra .got
+.thing: lda AoName
+        cmp #$FFFE
+        bne .find
+        jsr ThingOfVar
+        bra .chk
+.find:  jsr AoFind
+.chk:   bcs .got
+        brl .done
+.got:   ldy #10                 ; a light?
+        lda [ItemPtr],y
+        jsr IsLight
+        bcs .lt
+        brl .done
+.lt:    jsr IndexOf
+        sta FzIdx
+        ldy #8                  ; its full time (floor.s LtTab: 0 never burns out)
+        lda [ItemPtr],y
+        jsr LightNamed
+        stz FzMin
+        bcc .nf
+        lda LtTab+2,x
+        sta FzMin
+.nf:    ldy #10
+        lda [ItemPtr],y
+        sta LsOther
+        lda LsDo
+        cmp #2                  ; switch: lit -> out, else lit
+        bne .d0
+        lda LsOther
+        and #$0100
+        beq .on
+        bra .off
+.d0:    cmp #0
+        bne .d1
+.on:    lda LsOther             ; light it (not a spent one)
+        and #$0200
+        beq .fb1
+        brl .put
+.fb1:
+        lda LsOther
+        ora #$0100
+        sta LsOther
+        brl .put
+.d1:    cmp #1
+        bne .d3
+.off:   lda LsOther
+        and #$FEFF
+        sta LsOther
+        brl .put
+.d3:    cmp #3
+        bne .d4
+        lda LsOther             ; burnt out
+        and #$FEFF
+        ora #$0200
+        sta LsOther
+        bra .put
+.d4:    cmp #4
+        bne .d5
+        lda LsOther             ; fresh: can be lit, its full time
+        and #$FDFF
+        sta LsOther
+        jsr BurnLeft
+        bcc .put
+        lda FzMin
+        sta BnTab+2,x
+        bra .put
+.d5:    cmp #5
+        bne .rd
+        jsr BurnLeft            ; its minutes left
+        bcc .put
+        lda LsMin
+        bpl .m
+        lda #0
+.m:     sta BnTab+2,x
+        bra .put
+.rd:    cmp #6                  ; reads
+        bne .r7
+        jsr BurnLeft
+        lda FzMin
+        bcc .rv
+        lda BnTab+2,x
+        bra .rv
+.r7:    cmp #7
+        bne .r8
+        lda LsOther
+        and #$0100
+        beq .rv
+        lda #1
+        bra .rv
+.r8:    lda LsOther
+        and #$0200
+        beq .rv
+        lda #1
+.rv:    ldx LsVar
+        cpx #$FFFF
+        beq .done
+        pha
+        txa
+        asl a
+        tax
+        pla
+        stz PTag
+        jsr StoreVar
+        bra .done
+.put:   lda LsOther
+        ldy #10
+        sta [ItemPtr],y
+        jsr RefreshInventory
+        jsr DrawView
+.done:  lda #14
+        jmp Next
+
+LsWhich:  .dw 0
+LsDo:     .dw 0
+LsVar:    .dw 0
+LsMin:    .dw 0
+LsOther:  .dw 0
 
 StOld:    .dw 0
 StBy:     .dw 0

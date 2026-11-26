@@ -73,6 +73,19 @@ public partial class SystemSettingsWindow
             Show();
             return row;
         }
+        if (ProjectSession.IsUltima6)
+        {
+            // Ultima 6: no tinted sky (Ultima 7's) - darkness a cell at a time, circles of light (Engine/U6Lighting.cs; the user, 2026-11-25).
+            panel.Children.Add(new TextBlock
+            {
+                Text = "Ultima 6's darkness: by day nothing is dark. At night (and always in a Cave zone) everything is black but for circles of light - " +
+                       "around the Avatar a small one (only its own cell clear, the next ones a little darker), a big one with a lit light in the party or the Light spell, " +
+                       "and one around every lit light on the map (a candle small, brighter lights bigger). From Dusk to Full night the Avatar's circle shrinks in six steps, " +
+                       "from Dawn to Full day it grows. The edges are dithered as Ultima 6 draws them. Change Day/Night sets it till the next hour.",
+                TextWrapping = TextWrapping.Wrap, Opacity = 0.8, Margin = new Thickness(0, 10, 0, 0), MaxWidth = 640, HorizontalAlignment = HorizontalAlignment.Left
+            });
+            return new ScrollViewer { Content = panel, VerticalScrollBarVisibility = ScrollBarVisibility.Auto };
+        }
         panel.Children.Add(Colour("Night colour", () => d.NightColor, v => d.NightColor = v, () => d.NightStrength, v => d.NightStrength = v));
         panel.Children.Add(Colour("Dawn / dusk colour", () => d.DuskColor, v => d.DuskColor = v, () => d.DuskStrength, v => d.DuskStrength = v));
         var overcast = new TextBox { Width = 50, Text = d.OvercastStrength.ToString("0.##") };

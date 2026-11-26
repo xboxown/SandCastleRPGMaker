@@ -350,11 +350,12 @@ public partial class ObjectEditorWindow : Window
         body.Children.Add(SpritePicker("Spent sprite (burnt out; optional)", () => (l.SpentSprite.SpriteGroup, l.SpentSprite.SpriteName), (g, n) => { l.SpentSprite.SpriteGroup = g; l.SpentSprite.SpriteName = n; }));
         var row = new WrapPanel();
         row.Children.Add(Check("Starts lit", () => l.StartsLit, v => l.StartsLit = v));
-        row.Children.Add(NumberField("Brightness", () => l.Brightness, v => l.Brightness = (int)Math.Max(0, v), "Exult light_data: a candle is 1, a sconce 5, a lamp 7."));
+        row.Children.Add(NumberField("Brightness", () => l.Brightness, v => l.Brightness = (int)Math.Max(0, v),
+            ProjectSession.IsUltima6 ? "Ultima 6: 1-3 a candle-sized circle of light (3 x 3), 4 and up a torch-sized one (5 x 5)." : "Exult light_data: a candle is 1, a sconce 5, a lamp 7."));
         var givesChoices = new[] { ("Exult's light levels (candle, single, many)", LightGives.ExultLevels), ("The dusk look (sunrise / sunset colour)", LightGives.DuskLook), ("Full daylight", LightGives.FullDaylight) };
         var gives = new ComboBox { Width = 260, ItemsSource = givesChoices.Select(g => g.Item1).ToList(), SelectedIndex = Math.Max(0, Array.FindIndex(givesChoices, g => g.Item2 == l.Gives)) };
         gives.SelectionChanged += (_, _) => l.Gives = givesChoices[Math.Max(0, gives.SelectedIndex)].Item2;
-        row.Children.Add(Labeled("In the dark it gives", gives));
+        if (!ProjectSession.IsUltima6) row.Children.Add(Labeled("In the dark it gives", gives)); // Ultima 6: circles of light, nothing else (Engine/U6Lighting.cs)
         row.Children.Add(NumberField("Burns (game minutes, 0 = forever)", () => l.BurnMinutes, v => l.BurnMinutes = (int)Math.Max(0, v)));
         body.Children.Add(row);
         var sounds = new WrapPanel();
@@ -371,7 +372,9 @@ public partial class ObjectEditorWindow : Window
         body.Children.Add(Note("A fire: tick Burns - whoever walks into it while it's lit is burnt, and again every second they stay; put out, it's harmless. A bucket of a liquid that puts out fires (Food > Liquid > Puts out fires) used on it douses it. By After Put Out runs however it went out (a double-click, a bucket, a lever, a spell): Delete Object Self there makes it vanish. " +
                                "To keep players from putting it out by hand, give it a By Use event (\"It's far too hot to touch!\"): its event runs instead of the double-click. Solid only while lit needs Solid ticked too."));
         body.Children.Add(Note($"Double-click to light it or put it out. Once it has burnt for its minutes it's spent: it shows the spent sprite, is called \"{obj.DisplayName(spent: true)}\", and can't be lit again. " +
-                               "At night, lit lights on screen and those the party carries brighten the darkness as Exult's do: each adds Brightness x (75 - 2 x tiles across - 3 x tiles down) from the main character."));
+                               (ProjectSession.IsUltima6
+                                   ? "At night it clears a circle of the darkness around it, as Ultima 6; carried by the party (in a hand) it gives the Avatar the big circle."
+                                   : "At night, lit lights on screen and those the party carries brighten the darkness as Exult's do: each adds Brightness x (75 - 2 x tiles across - 3 x tiles down) from the main character.")));
     }
 
     private void BuildBundles(WorldObject obj, string group)
