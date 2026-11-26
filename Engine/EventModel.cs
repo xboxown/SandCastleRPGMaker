@@ -140,7 +140,9 @@ public enum EventCommandType
     // ---- Magic weapons and armor (Engine/MagicItems.cs) ----
     CurseItem, LiftCurse, EnchantItem, RemoveEnchantments, GetEquippedItem, IsItemCursed, CombineItems, GetMagicBonus,
     // ---- Things that appear during play (a body, something dropped): a handle in a variable ----
-    FindThing, ThingInfo
+    FindThing, ThingInfo,
+    // ---- Ultima 6: the HUD's pieces and panels in play (HUD Editor) ----
+    U6ShowHidePiece, U6SetPiecePicture, U6SetPieceText, U6MovePiece, U6ShowHidePanel, U6EnablePanelKey, U6DisablePanelKey
 }
 
 /// <summary>

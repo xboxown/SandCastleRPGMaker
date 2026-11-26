@@ -104,6 +104,7 @@ public partial class U6GameWindow
             return true;
         }
         if (e.IsRepeat && arrows.Length == 0) return true;
+        if (HudPanelKeyTook(key)) return true; // a custom panel's key (U6GameWindow.HudPanels.cs)
         if (VerbKey(key) is { } verb) { StartU6Verb(verb); return true; }
         if (KeyIs(key, "ToggleCursor")) { if (FirstFilledCell() is int f) _panelCursor = f; SetHudFocus(HudFocus.Panel); return true; }
         if (KeyIs(key, "TogglePortrait") || IsStarKey(key)) { ToggleHudView(); return true; }

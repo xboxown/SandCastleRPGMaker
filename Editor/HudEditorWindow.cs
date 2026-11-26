@@ -88,7 +88,7 @@ public sealed class HudEditorWindow : Window
             ("Screen:", new[] { HudPieceKind.GameView, HudPieceKind.TextArea, HudPieceKind.Panel, HudPieceKind.Picture }),
             ("Panel:", new[] { HudPieceKind.BodySlot, HudPieceKind.CarriedItems, HudPieceKind.Portrait, HudPieceKind.Stats, HudPieceKind.MemberName, HudPieceKind.CombatMode }),
             ("Buttons:", new[] { HudPieceKind.CommandButton, HudPieceKind.CustomButton }),
-            ("Extras:", new[] { HudPieceKind.Compass, HudPieceKind.SunMoon, HudPieceKind.DateText })
+            ("Extras:", new[] { HudPieceKind.Compass, HudPieceKind.SunMoon, HudPieceKind.DateText, HudPieceKind.Label })
         })
         {
             var toolbox = new WrapPanel { Margin = new Thickness(0, 0, 0, 2) };
@@ -166,7 +166,9 @@ public sealed class HudEditorWindow : Window
     {
         HudPieceKind.GameView => "Where the world shows, and how big (Ultima 6: 160 x 160 at 8,8). Only one.",
         HudPieceKind.TextArea => "The messages, scrolling, and what the player types: Move-, Talk to-, the conversation, everything that happens in a fight. Only one.",
-        HudPieceKind.Panel => "The panel's place (Ultima 6: 176,8, 136 x 96): a member's inventory or portrait and stats show here, one member at a time. Its sprite, if any, is drawn behind them. Only one.",
+        HudPieceKind.Panel => "The first panel is the main one (Ultima 6: 176,8, 136 x 96): a member's inventory or portrait and stats show there, one member at a time. " +
+                              "Add more panels for your own: each opens and closes with its key (below) or Show / Hide HUD Panel, and the pieces you put In it show only while it is open. Its sprite, if any, is drawn behind. At least one panel.",
+        HudPieceKind.Label => "Words of your own, in a font and colour. Set HUD Piece Text changes them in play.",
         HudPieceKind.Picture => "A picture (still or animated) laid on the frame.",
         HudPieceKind.BodySlot => "Inventory view: one body slot - head, neck, body, a hand, a ring, feet... What the member wears there shows in it. Its sprite, if any, is the empty slot.",
         HudPieceKind.CarriedItems => "Inventory view: what the member carries, a grid of cells; a container opens into it.",
@@ -265,7 +267,7 @@ public sealed class HudEditorWindow : Window
             HudPieceKind.CarriedItems => (64, 48),
             HudPieceKind.Portrait => (56, 64),
             HudPieceKind.Stats => (72, 80),
-            HudPieceKind.MemberName or HudPieceKind.DateText or HudPieceKind.CombatMode => (100, 8),
+            HudPieceKind.MemberName or HudPieceKind.DateText or HudPieceKind.CombatMode or HudPieceKind.Label => (100, 8),
             HudPieceKind.SunMoon => (136, 16),
             _ => (16, 16)
         };
@@ -277,6 +279,7 @@ public sealed class HudEditorWindow : Window
         };
         if (kind == HudPieceKind.CustomButton) piece.EventPages.Add(NewButtonPage());
         if (kind == HudPieceKind.CarriedItems) { piece.Columns = 4; piece.Rows = 3; }
+        if (kind == HudPieceKind.Label) piece.Text = "Words";
         // A piece of the panel's view shows it in the editor.
         if (HudPiece.ViewOf(kind) == HudPanelView.Portrait) _viewBox.SelectedIndex = 1;
         else if (HudPiece.ViewOf(kind) == HudPanelView.Inventory) _viewBox.SelectedIndex = 0;
@@ -302,9 +305,15 @@ public sealed class HudEditorWindow : Window
     private void DeletePiece()
     {
         if (Piece is not { } piece) return;
+        if (piece.Kind == HudPieceKind.Panel && _hud.Pieces.Count(p => p.Kind == HudPieceKind.Panel) <= 1)
+        {
+            MessageBox.Show(this, "A HUD has at least one panel - it can't be deleted. Add another panel first.", "HUD Editor", MessageBoxButton.OK, MessageBoxImage.Information);
+            return;
+        }
         if (MessageBox.Show(this, $"Delete \"{piece.Name}\"?", "HUD Editor", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
         int index = _hud.Pieces.IndexOf(piece);
         _hud.Pieces.Remove(piece);
+        foreach (var inside in _hud.Pieces.Where(p => p.PanelId == piece.Id)) inside.PanelId = 0; // (its pieces: back on the HUD itself)
         _selectedId = _hud.Pieces.Count == 0 ? -1 : _hud.Pieces[Math.Min(index, _hud.Pieces.Count - 1)].Id;
         RefreshList();
         ShowProps();
@@ -359,9 +368,22 @@ public sealed class HudEditorWindow : Window
             place.Children.Add(IntField("Height", () => piece.Height, v => piece.Height = Math.Max(1, v)));
         }
         _props.Children.Add(place);
+        if (HudPiece.CanBeInPanel(piece.Kind) && _hud.CustomPanels.Any()) _props.Children.Add(InPanelPicker(piece));
 
         switch (piece.Kind)
         {
+            case HudPieceKind.Panel:
+                _props.Children.Add(SpritePicker("Sprite behind it (optional)", piece.Sprite, link => { piece.Sprite = link; Redraw(); }));
+                if (!_hud.IsCustomPanel(piece)) { _props.Children.Add(Note("The main panel: the member's inventory or portrait and stats. Add another Panel for your own.")); break; }
+                _props.Children.Add(PanelKeyPicker(piece));
+                _props.Children.Add(Check("Open at the start", () => piece.StartsOpen, on => piece.StartsOpen = on));
+                _props.Children.Add(Note("A custom panel: closed as the game starts (unless ticked), opened and closed by its key and by Show / Hide HUD Panel; Enable / Disable Panel Key switch its key. " +
+                                        "Put pieces in it with their In panel (Pictures, buttons, Labels, the date, the compass, the sun and moons)."));
+                break;
+            case HudPieceKind.Label:
+                _props.Children.Add(Field("Words", piece.Text, s => { piece.Text = s; Redraw(); }, 220));
+                _props.Children.Add(FontRow(piece));
+                break;
             case HudPieceKind.CommandButton:
             {
                 var verbs = Enum.GetValues<HudVerb>();
@@ -423,6 +445,39 @@ public sealed class HudEditorWindow : Window
                     piece.Sprite, link => { piece.Sprite = link; Redraw(); }));
                 break;
         }
+    }
+
+    /// <summary>Which custom panel a piece is in (none: on the HUD itself).</summary>
+    private UIElement InPanelPicker(HudPiece piece)
+    {
+        var choices = new List<HudPiece> { new() { Id = 0, Name = "(none - on the HUD itself)" } };
+        choices.AddRange(_hud.CustomPanels);
+        var combo = new ComboBox { Width = 220, ItemsSource = choices, DisplayMemberPath = nameof(HudPiece.Name) };
+        combo.SelectedItem = choices.FirstOrDefault(p => p.Id == piece.PanelId) ?? choices[0];
+        combo.SelectionChanged += (_, _) => { piece.PanelId = (combo.SelectedItem as HudPiece)?.Id ?? 0; Redraw(); };
+        return Labeled("In panel (shown only while it is open)", combo);
+    }
+
+    /// <summary>A custom panel's key: a key, held with nothing, Ctrl, Shift or Alt (U8Keys' names, as Set Key's).</summary>
+    private UIElement PanelKeyPicker(HudPiece piece)
+    {
+        var (held, keyName) = piece.Key.Length > 0 ? U8Keys.Split(piece.Key) : (Array.Empty<string>(), "");
+        var keys = new List<string> { "(no key)" };
+        keys.AddRange(U8Keys.BindableWords);
+        var key = new ComboBox { Width = 140, ItemsSource = keys, SelectedItem = keyName.Length > 0 ? U8Keys.Display(keyName) : keys[0] };
+        var withs = new[] { "Nothing" }.Concat(U8Keys.HeldWith).ToArray();
+        var with = new ComboBox { Width = 90, ItemsSource = withs, SelectedItem = held.Length > 0 ? held[0] : "Nothing", Margin = new Thickness(6, 0, 0, 0) };
+        void Store()
+        {
+            string? k = key.SelectedIndex <= 0 ? null : U8Keys.FromWords((string)key.SelectedItem);
+            piece.Key = k is null ? string.Empty : with.SelectedItem is string w && w != "Nothing" ? w + "+" + k : k;
+        }
+        key.SelectionChanged += (_, _) => Store();
+        with.SelectionChanged += (_, _) => Store();
+        var row = new StackPanel { Orientation = Orientation.Horizontal };
+        row.Children.Add(key);
+        row.Children.Add(with);
+        return Labeled("Its key (opens and closes it) - held with", row);
     }
 
     private UIElement StatsPicker(HudPiece piece)
@@ -584,7 +639,12 @@ public sealed class HudEditorWindow : Window
                 return holder;
             case HudPieceKind.Panel:
                 if (DollLook.Frame(DollLook.SpriteOf(piece.Sprite, _sprites)) is { } back) holder.Children.Add(Pixel(back, back.PixelWidth, back.PixelHeight, z));
-                holder.Children.Add(Dashed(new Size(w, h), z, Brushes.SteelBlue, name ?? "panel"));
+                holder.Children.Add(Dashed(new Size(w, h), z, _hud.IsCustomPanel(piece) ? Brushes.MediumSeaGreen : Brushes.SteelBlue,
+                    _hud.IsCustomPanel(piece) ? $"{piece.Name}{(piece.Key.Length > 0 ? " [" + U8Keys.Display(piece.Key) + "]" : "")}" : name ?? "panel"));
+                return holder;
+            case HudPieceKind.Label:
+                holder.Children.Add(Words(piece.Text, piece, w, z));
+                holder.Children.Add(Dashed(new Size(w, h), z, Brushes.Orange, null));
                 return holder;
             case HudPieceKind.CarriedItems:
             {

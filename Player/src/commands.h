@@ -240,6 +240,13 @@ enum Command
     C_GetMagicBonus = 232,
     C_FindThing = 233,
     C_ThingInfo = 234,
+    C_U6ShowHidePiece = 235,
+    C_U6SetPiecePicture = 236,
+    C_U6SetPieceText = 237,
+    C_U6MovePiece = 238,
+    C_U6ShowHidePanel = 239,
+    C_U6EnablePanelKey = 240,
+    C_U6DisablePanelKey = 241,
     C_COUNT
 };
 
@@ -433,6 +440,7 @@ static const char *const COMMAND_NAMES[] =
     "U6 Scene Remove", "U6 Scene End",
     "Curse Item", "Lift Curse", "Enchant Item", "Remove Enchantments", "Get Equipped Item", "Is Item Cursed", "Combine Items", "Get Magic Bonus",
     "Find Thing", "Thing Info",
+    "U6 Show Hide Piece", "U6 Set Piece Picture", "U6 Set Piece Text", "U6 Move Piece", "U6 Show Hide Panel", "U6 Enable Panel Key", "U6 Disable Panel Key",
 };
 
 #endif

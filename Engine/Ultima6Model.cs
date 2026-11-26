@@ -272,7 +272,9 @@ public enum HudPieceKind
     /// <summary>The date and the wind, as words.</summary>
     DateText,
     /// <summary>The shown member's combat mode, as words.</summary>
-    CombatMode
+    CombatMode,
+    /// <summary>Words of your own (Set HUD Piece Text changes them in play).</summary>
+    Label
 }
 
 /// <summary>The verbs of the command bar (Ultima 6's reference card: the first letter of each).</summary>
@@ -311,6 +313,21 @@ public class HudPiece
     public List<int> StatIds { get; set; } = new();
     /// <summary>A custom button's event (one page: Always, Only Once - fixed).</summary>
     public List<BookEventPage> EventPages { get; set; } = new();
+    /// <summary>The panel it belongs to (a custom panel's Id): shown only while that panel is open. 0: none - on the HUD itself.</summary>
+    public int PanelId { get; set; }
+    /// <summary>A custom panel (any Panel after the first): the key that opens and closes it in play ("P", "Ctrl+P"; empty: none) -
+    /// Enable / Disable Panel Key switch it in play.</summary>
+    public string Key { get; set; } = string.Empty;
+    /// <summary>A custom panel: open as the game starts (else closed till its key or Show / Hide HUD Panel).</summary>
+    public bool StartsOpen { get; set; }
+    /// <summary>A Label's words.</summary>
+    public string Text { get; set; } = string.Empty;
+
+    /// <summary>A copy to change in play (Move / Set Picture / Set Text) - the HUD Editor's stays as made.</summary>
+    public HudPiece Copy() => (HudPiece)MemberwiseClone();
+    /// <summary>Pieces that can go in a custom panel.</summary>
+    public static bool CanBeInPanel(HudPieceKind kind) => kind is HudPieceKind.Picture or HudPieceKind.CustomButton or HudPieceKind.CommandButton
+        or HudPieceKind.Label or HudPieceKind.DateText or HudPieceKind.Compass or HudPieceKind.SunMoon;
 
     /// <summary>Which view of the panel shows it: inventory pieces, portrait pieces, or always.</summary>
     public static HudPanelView ViewOf(HudPieceKind kind) => kind switch
@@ -332,16 +349,30 @@ public class HudPiece
         HudPieceKind.SunMoon => "Sun And Moons",
         HudPieceKind.DateText => "Date And Wind",
         HudPieceKind.CombatMode => "Combat Mode",
+        HudPieceKind.Label => "Label",
         _ => kind.ToString()
     };
 
     /// <summary>Only one of these on a HUD.</summary>
-    public static bool IsSingle(HudPieceKind kind) => kind is HudPieceKind.GameView or HudPieceKind.TextArea or HudPieceKind.Panel;
+    public static bool IsSingle(HudPieceKind kind) => kind is HudPieceKind.GameView or HudPieceKind.TextArea; // (panels: as many as wanted, at least one)
 
     public override string ToString() => $"{Name}  ({KindName(Kind)})";
 }
 
 public enum HudPanelView { Always, Inventory, Portrait }
+
+/// <summary>A HUD piece as the HUD commands left it in play (null: as the HUD Editor made it) - kept in saves.</summary>
+public class U6HudPieceState
+{
+    public int Id { get; set; }
+    public bool? Shown { get; set; }
+    public int? X { get; set; }
+    public int? Y { get; set; }
+    public SpriteLink? Sprite { get; set; }
+    public string? Text { get; set; }
+    /// <summary>A custom panel's key switched off (Disable Panel Key).</summary>
+    public bool KeyOff { get; set; }
+}
 
 /// <summary>The HUD: a frame picture (Sprite Editor) the size of the game's screen, and its pieces, drawn in list order.</summary>
 public class HudDesign
@@ -360,6 +391,11 @@ public class HudDesign
 
     public HudPiece? Piece(int id) => Pieces.FirstOrDefault(p => p.Id == id);
     public HudPiece? First(HudPieceKind kind) => Pieces.FirstOrDefault(p => p.Kind == kind);
+    /// <summary>The main panel (the first Panel: one member's inventory or portrait); every other Panel is a custom panel.</summary>
+    public bool IsCustomPanel(HudPiece piece) => piece.Kind == HudPieceKind.Panel && !ReferenceEquals(First(HudPieceKind.Panel), piece);
+    public IEnumerable<HudPiece> CustomPanels => Pieces.Where(IsCustomPanel);
+    /// <summary>A piece by its name (the event commands name them).</summary>
+    public HudPiece? Named(string name) => Pieces.FirstOrDefault(p => string.Equals(p.Name.Trim(), name.Trim(), StringComparison.OrdinalIgnoreCase));
     public int NextId() => Pieces.Count == 0 ? 1 : Pieces.Max(p => p.Id) + 1;
 }
 

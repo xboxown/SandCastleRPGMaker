@@ -101,7 +101,7 @@ static int draw_cast_panel(cJSON *panel);
 static void cast_on_cell(int cx, int cy, int actor, int uid, const char *name);
 
 enum { P_PICTURE, P_GAMEVIEW, P_TEXTAREA, P_PANEL, P_BODYSLOT, P_CARRIED, P_PORTRAIT, P_STATS, P_MEMBERNAME, P_COMMAND, P_CUSTOM,
-       P_COMPASS, P_SUNMOON, P_DATE, P_COMBATMODE }; /* HudPieceKind, in its order (numbers in game.json) */
+       P_COMPASS, P_SUNMOON, P_DATE, P_COMBATMODE, P_LABEL }; /* HudPieceKind, in its order (numbers in game.json) */
 enum { VIEW_ALWAYS, VIEW_INVENTORY, VIEW_PORTRAIT }; /* HudPanelView */
 enum { TR_USE = 2 };                                  /* BookTriggerConditionBased.ByUseItem */
 static const char *VERBS[] = { "Attack", "Cast", "Talk", "Look", "Get", "Drop", "Move", "Use", "Rest", "Combat" }; /* HudVerb */
@@ -134,12 +134,76 @@ static cJSON *first(int kind)
     return NULL;
 }
 
+/* ---- The HUD in play (U6GameWindow.HudPanels.cs): pieces shown / hidden, moved, another picture, a Label's words; custom panels
+   (every Panel after the first) closed unless StartsOpen, opened and closed by their key or Show / Hide HUD Panel, their key
+   switched off and on; a piece In a custom panel only while it is open. Kept in saves (U6HudPieces). ---- */
+typedef struct HudState { int id, shown, keyOff, hasX, x, hasY, y; char group[64], name[64]; char *text; cJSON *now; } HudState;
+#define HUD_STATES 64
+static HudState hudStates[HUD_STATES]; static int hudStateCount, hudVersion;
+
+static HudState *hud_state(int id, int make)
+{
+    for (int i = 0; i < hudStateCount; i++) if (hudStates[i].id == id) return &hudStates[i];
+    if (!make || hudStateCount == HUD_STATES) return NULL;
+    HudState *s = &hudStates[hudStateCount++];
+    memset(s, 0, sizeof *s); s->id = id; s->shown = -1;
+    return s;
+}
+static void hud_states_clear(void)
+{
+    for (int i = 0; i < hudStateCount; i++) { free(hudStates[i].text); cJSON_Delete(hudStates[i].now); }
+    hudStateCount = 0; hudVersion++;
+}
+static cJSON *piece_by_id(int id) { cJSON *p; cJSON_ArrayForEach(p, get(hud, "Pieces")) if (num(p, "Id", -1) == id) return p; return NULL; }
+static int is_custom_panel(cJSON *p) { return num(p, "Kind", -1) == P_PANEL && p != first(P_PANEL); }
+static int own_shown(cJSON *p) { HudState *s = hud_state(num(p, "Id", -1), 0); return s && s->shown >= 0 ? s->shown : !is_custom_panel(p) || flag(p, "StartsOpen"); }
+static int piece_shown(cJSON *p)
+{
+    if (!own_shown(p)) return 0;
+    int pid = num(p, "PanelId", 0);
+    if (pid > 0 && num(p, "Kind", -1) != P_PANEL) { cJSON *panel = piece_by_id(pid); return panel && is_custom_panel(panel) && own_shown(panel); }
+    return 1;
+}
+static cJSON *piece_now(cJSON *p) { HudState *s = hud_state(num(p, "Id", -1), 0); return s && s->now ? s->now : p; }
+/* The changed copy made again (the HUD Editor's piece stays as made). */
+static void hud_state_rebuild(HudState *s)
+{
+    cJSON_Delete(s->now); s->now = NULL; hudVersion++;
+    cJSON *p = piece_by_id(s->id);
+    if (!p || !(s->hasX || s->hasY || s->name[0] || s->text)) return;
+    s->now = cJSON_Duplicate(p, 1);
+    if (s->hasX) { cJSON_DeleteItemFromObject(s->now, "X"); cJSON_AddNumberToObject(s->now, "X", s->x); }
+    if (s->hasY) { cJSON_DeleteItemFromObject(s->now, "Y"); cJSON_AddNumberToObject(s->now, "Y", s->y); }
+    if (s->name[0]) { cJSON_DeleteItemFromObject(s->now, "Sprite"); cJSON *l = cJSON_AddObjectToObject(s->now, "Sprite"); cJSON_AddStringToObject(l, "SpriteGroup", s->group); cJSON_AddStringToObject(l, "SpriteName", s->name); }
+    if (s->text) { cJSON_DeleteItemFromObject(s->now, "Text"); cJSON_AddStringToObject(s->now, "Text", s->text); }
+}
+static cJSON *piece_named(const char *name)
+{
+    char want[96]; size_t k = 0;
+    while (*name == ' ') name++;
+    for (; *name && k < sizeof want - 1; name++) want[k++] = (char)tolower((unsigned char)*name);
+    while (k && want[k - 1] == ' ') k--;
+    want[k] = 0;
+    cJSON *p;
+    cJSON_ArrayForEach(p, get(hud, "Pieces"))
+    {
+        const char *n = str(p, "Name"); char have[96]; size_t j = 0;
+        while (*n == ' ') n++;
+        for (; *n && j < sizeof have - 1; n++) have[j++] = (char)tolower((unsigned char)*n);
+        while (j && have[j - 1] == ' ') j--;
+        have[j] = 0;
+        if (!strcmp(have, want)) return p;
+    }
+    return NULL;
+}
+
 void u6_load(void)
 {
     cJSON *p = project();
     on = !strcmp(str(get(p, "Manifest"), "Style"), "Ultima6");
     if (!on) return;
     hud = get(get(get(p, "Settings"), "Ultima6"), "Hud");
+    hud_states_clear();
     viewPiece = first(P_GAMEVIEW);
     textPiece = first(P_TEXTAREA);
     hasHud = viewPiece != NULL;
@@ -625,10 +689,12 @@ static void hud_compose(uint32_t ms)
     fill_rect(0, vy, vx, vh, 0xFF000000); fill_rect(vx + vw, vy, SCREEN_W - vx - vw, vh, 0xFF000000);
     const Sprite *frameSprite = frameOverride ? frameOverride : sprite_of(get(hud, "Frame")); /* Change HUD Frame's, else the HUD Editor's */
     if (frameSprite) blit_fill(sprite_picture_at(frameSprite, ms), 0, 0, screenW, screenH, 1);
-    cJSON *piece;
-    /* the pieces in the HUD's order (the In front pictures later, over the panel) */
-    cJSON_ArrayForEach(piece, get(hud, "Pieces"))
+    cJSON *piece, *raw;
+    /* the pieces in the HUD's order (the In front pictures later, over the panel) - shown, as the HUD commands left them */
+    cJSON_ArrayForEach(raw, get(hud, "Pieces"))
     {
+        if (!piece_shown(raw)) continue;
+        piece = piece_now(raw);
         int kind = num(piece, "Kind", -1), x = num(piece, "X", 0), y = num(piece, "Y", 0), w = num(piece, "Width", 16), h = num(piece, "Height", 16);
         switch (kind)
         {
@@ -650,6 +716,7 @@ static void hud_compose(uint32_t ms)
             case P_COMPASS: case P_SUNMOON: draw_dial(piece, kind); break;
             case P_TEXTAREA: draw_text_area(piece, ms); break;
             case P_DATE: draw_date(piece); break;
+            case P_LABEL: words_at(piece, str(piece, "Text")); break;
         }
     }
     /* the panel (RefreshHudPanel): someone looked at - their portrait and name; F10 - the party; else the shown member in the shown view */
@@ -696,17 +763,18 @@ static void hud_compose(uint32_t ms)
         cJSON_ArrayForEach(piece, get(hud, "Pieces"))
         {
             int kind = num(piece, "Kind", -1);
-            if (!is_panel_content(kind)) continue;
+            if (!is_panel_content(kind) || !piece_shown(piece)) continue;
             int v = view_of(kind);
             if (v != VIEW_ALWAYS && v != panelView) continue;
-            draw_panel_piece(piece, kind, member, mj, ms);
+            draw_panel_piece(piece_now(piece), kind, member, mj, ms);
         }
     /* In front pictures, over the panel's pieces */
     cJSON_ArrayForEach(piece, get(hud, "Pieces"))
-        if (num(piece, "Kind", -1) == P_PICTURE && flag(piece, "InFront"))
+        if (num(piece, "Kind", -1) == P_PICTURE && flag(piece, "InFront") && piece_shown(piece))
         {
-            const Sprite *s = sprite_of(get(piece, "Sprite"));
-            if (s) blit_fill(sprite_picture_at(s, ms), num(piece, "X", 0), num(piece, "Y", 0), num(piece, "Width", 16), num(piece, "Height", 16), 0);
+            cJSON *pn = piece_now(piece);
+            const Sprite *s = sprite_of(get(pn, "Sprite"));
+            if (s) blit_fill(sprite_picture_at(s, ms), num(pn, "X", 0), num(pn, "Y", 0), num(pn, "Width", 16), num(pn, "Height", 16), 0);
         }
     draw_cursors(1, ms); /* the inventory cursor, over the panel */
 }
@@ -1023,6 +1091,38 @@ static int key_command(int type, cJSON *params, int token)
             { char m[24]; maker_key(id, m, sizeof m); return assign_key(id, m, 1) ? 1 : -1; }
     }
     return 1;
+}
+
+/* Is this event the key named ("Ctrl+P": Ctrl held; a key alone: neither Ctrl nor Alt held)? */
+static int key_name_is(const PlatformEvent *e, const char *k)
+{
+    if (!e->keyName[0] || !k[0]) return 0;
+    const char *plus; int mods = 0;
+    while ((plus = strchr(k, '+')) != NULL)
+    {
+        if (!strncmp(k, "Ctrl", 4)) mods |= KEYMOD_CTRL; else if (!strncmp(k, "Shift", 5)) mods |= KEYMOD_SHIFT; else if (!strncmp(k, "Alt", 3)) mods |= KEYMOD_ALT;
+        k = plus + 1;
+    }
+    if (strcmp(k, e->keyName)) return 0;
+    return (e->keyMods & (KEYMOD_CTRL | KEYMOD_ALT)) == (mods & (KEYMOD_CTRL | KEYMOD_ALT)) && (!(mods & KEYMOD_SHIFT) || (e->keyMods & KEYMOD_SHIFT));
+}
+
+/* A custom panel's key (HUD Editor; not switched off): it opens or closes. 1 taken. */
+static int panel_key(const PlatformEvent *e)
+{
+    cJSON *p;
+    cJSON_ArrayForEach(p, get(hud, "Pieces"))
+    {
+        if (!is_custom_panel(p) || !str(p, "Key")[0]) continue;
+        HudState *s = hud_state(num(p, "Id", -1), 0);
+        if (s && s->keyOff) continue;
+        if (!key_name_is(e, str(p, "Key"))) continue;
+        int open = own_shown(p);
+        s = hud_state(num(p, "Id", -1), 1);
+        if (s) { s->shown = !open; hudVersion++; }
+        return 1;
+    }
+    return 0;
 }
 
 /* Is this event the action's key ("Ctrl+S": Ctrl held; a key alone: neither Ctrl nor Alt held)? */
@@ -1567,6 +1667,7 @@ int u6_key(const PlatformEvent *e)
         return 1;
     }
     if (e->keyRepeat && !arrow) return 1;
+    if (panel_key(e)) return 1; /* a custom panel's key */
     int v = verb_key(e);
     if (v >= 0) { start_verb(v); return 1; }
     if (key_is(e, "ToggleCursor")) { int f = first_filled_cell(); if (f >= 0) panelCursor = f; set_focus(FOCUS_PANEL); return 1; }
@@ -1593,6 +1694,8 @@ int u6_key(const PlatformEvent *e)
 
 /* ---- Clicks ---- */
 
+static int buttonRunning;
+static void button_finished(void) { buttonRunning = 0; }
 static int inside(cJSON *p, int x, int y) { int px = num(p, "X", 0), py = num(p, "Y", 0); return x >= px && y >= py && x < px + num(p, "Width", 16) && y < py + num(p, "Height", 16); }
 
 int u6_mouse_down(int x, int y)
@@ -1605,7 +1708,15 @@ int u6_mouse_down(int x, int y)
     cJSON *p;
     /* the command buttons */
     cJSON_ArrayForEach(p, get(hud, "Pieces"))
-        if (num(p, "Kind", -1) == P_COMMAND && inside(p, x, y)) { start_verb(num(p, "Verb", 0)); return 1; }
+    {
+        int kind = num(p, "Kind", -1);
+        if ((kind != P_COMMAND && kind != P_CUSTOM) || !piece_shown(p) || !inside(piece_now(p), x, y)) continue;
+        if (kind == P_COMMAND) { start_verb(num(p, "Verb", 0)); return 1; }
+        /* a custom button (U6GameWindow HudButtonClicked): its event once - again once it has finished */
+        cJSON *commands = get(cJSON_GetArrayItem(get(p, "EventPages"), 0), "Commands");
+        if (!buttonRunning && cJSON_GetArraySize(commands) > 0) { buttonRunning = 1; events_run_commands_then(commands, 0, button_finished); }
+        return 1;
+    }
     if (verb < 0 && combat_mode_clicked(x, y)) return 1; /* a member's combat mode, round the list */
     /* the member's name or portrait: portrait / inventory */
     if (verb < 0)
@@ -2323,6 +2434,22 @@ void u6_save(cJSON *runtime)
         cJSON_AddStringToObject(f, "SpriteName", frameOverride->name);
     }
     if (talkStyle) cJSON_AddItemToObject(runtime, "U6TalkStyle", cJSON_Duplicate(talkStyle, 1));
+    if (hudStateCount)
+    {
+        cJSON *list = cJSON_AddArrayToObject(runtime, "U6HudPieces");
+        for (int i = 0; i < hudStateCount; i++)
+        {
+            HudState *s = &hudStates[i]; cJSON *o = cJSON_CreateObject();
+            cJSON_AddNumberToObject(o, "Id", s->id);
+            if (s->shown >= 0) cJSON_AddBoolToObject(o, "Shown", s->shown);
+            if (s->hasX) cJSON_AddNumberToObject(o, "X", s->x);
+            if (s->hasY) cJSON_AddNumberToObject(o, "Y", s->y);
+            if (s->name[0]) { cJSON *l = cJSON_AddObjectToObject(o, "Sprite"); cJSON_AddStringToObject(l, "SpriteGroup", s->group); cJSON_AddStringToObject(l, "SpriteName", s->name); }
+            if (s->text) cJSON_AddStringToObject(o, "Text", s->text);
+            cJSON_AddBoolToObject(o, "KeyOff", s->keyOff);
+            cJSON_AddItemToArray(list, o);
+        }
+    }
 }
 
 void u6_restore(cJSON *runtime)
@@ -2332,6 +2459,21 @@ void u6_restore(cJSON *runtime)
     frameOverride = f && str(f, "SpriteName")[0] ? sprite_find(str(f, "SpriteGroup"), str(f, "SpriteName")) : NULL;
     if (talkStyle) { cJSON_Delete(talkStyle); talkStyle = NULL; }
     if (cJSON_IsObject(get(runtime, "U6TalkStyle"))) talkStyle = cJSON_Duplicate(get(runtime, "U6TalkStyle"), 1);
+    hud_states_clear(); /* the HUD's pieces as they were (GameSave.U6HudPieces) */
+    cJSON *o;
+    cJSON_ArrayForEach(o, get(runtime, "U6HudPieces"))
+    {
+        HudState *s = hud_state(num(o, "Id", -1), 1);
+        if (!s) break;
+        cJSON *v = get(o, "Shown"); if (cJSON_IsBool(v)) s->shown = cJSON_IsTrue(v);
+        if (cJSON_IsNumber(get(o, "X"))) { s->hasX = 1; s->x = num(o, "X", 0); }
+        if (cJSON_IsNumber(get(o, "Y"))) { s->hasY = 1; s->y = num(o, "Y", 0); }
+        cJSON *l = get(o, "Sprite");
+        if (cJSON_IsObject(l) && str(l, "SpriteName")[0]) { snprintf(s->group, sizeof s->group, "%s", str(l, "SpriteGroup")); snprintf(s->name, sizeof s->name, "%s", str(l, "SpriteName")); }
+        if (cJSON_IsString(get(o, "Text"))) s->text = strdup(str(o, "Text"));
+        s->keyOff = cJSON_IsTrue(get(o, "KeyOff"));
+        hud_state_rebuild(s);
+    }
 }
 
 /* ======================= Levels (Engine U6Leveling, U6GameWindow.U6Levels) ======================= */
@@ -3570,6 +3712,53 @@ int u6_command(int type, cJSON *params, int whoCharacter, int activator, int tok
             cJSON_DeleteItemFromObject(who, "FaceSpriteName"); cJSON_AddStringToObject(who, "FaceSpriteName", str(params, "SpriteName"));
             return 1;
         }
+        case C_U6ShowHidePiece: case C_U6ShowHidePanel:
+        {
+            cJSON *p = piece_named(str(params, "Piece"));
+            if (!p || (type == C_U6ShowHidePanel && !is_custom_panel(p))) return -1;
+            int now = own_shown(p); const char *v = str(params, "Value");
+            HudState *s = hud_state(num(p, "Id", -1), 1);
+            if (!s) return -1;
+            s->shown = !strcmp(v, "Hidden") || !strcmp(v, "Closed") ? 0 : !strcmp(v, "Toggled") ? !now : 1;
+            hudVersion++;
+            return 1;
+        }
+        case C_U6SetPiecePicture:
+        {
+            cJSON *p = piece_named(str(params, "Piece")); HudState *s = p ? hud_state(num(p, "Id", -1), 1) : NULL;
+            if (!s) return -1;
+            if (!strcmp(str(params, "Own"), "True") || !str(params, "SpriteName")[0]) s->group[0] = s->name[0] = 0;
+            else { snprintf(s->group, sizeof s->group, "%s", str(params, "SpriteGroup")); snprintf(s->name, sizeof s->name, "%s", str(params, "SpriteName")); }
+            hud_state_rebuild(s);
+            return 1;
+        }
+        case C_U6SetPieceText:
+        {
+            cJSON *p = piece_named(str(params, "Piece")); HudState *s = p ? hud_state(num(p, "Id", -1), 1) : NULL;
+            if (!s) return -1;
+            char words[600]; scene_words(str(params, "Text"), words, sizeof words); /* {formulas} worked out now */
+            free(s->text); s->text = strdup(words);
+            hud_state_rebuild(s);
+            return 1;
+        }
+        case C_U6MovePiece:
+        {
+            cJSON *p = piece_named(str(params, "Piece")); HudState *s = p ? hud_state(num(p, "Id", -1), 1) : NULL;
+            if (!s) return -1;
+            if (!strcmp(str(params, "Back"), "True")) s->hasX = s->hasY = 0;
+            else { s->hasX = s->hasY = 1; s->x = (int)floor(formula("X") + 0.5); s->y = (int)floor(formula("Y") + 0.5); }
+            hud_state_rebuild(s);
+            return 1;
+        }
+        case C_U6EnablePanelKey: case C_U6DisablePanelKey:
+        {
+            cJSON *p = piece_named(str(params, "Piece"));
+            if (!p || !is_custom_panel(p)) return -1;
+            HudState *s = hud_state(num(p, "Id", -1), 1);
+            if (!s) return -1;
+            s->keyOff = type == C_U6DisablePanelKey;
+            return 1;
+        }
         case C_U6ChangeHudFrame:
             frameOverride = str(params, "SpriteName")[0] ? sprite_find(str(params, "SpriteGroup"), str(params, "SpriteName")) : NULL;
             return 1;
@@ -3695,6 +3884,7 @@ static uint32_t hud_signature(uint32_t ms)
     int state[] = { verb, focus, panelCursor, hudMember, panelView, partyView, looked, talking, casting, castPage, castPicked, events_day(), events_hour(), events_minute(),
                     (int)(ms / 500 % 2), moreAt, moreCount, replyPick, combat_mode(), openBag != NULL };
     h = fnv(h, state, sizeof state);
+    h = fnv_int(h, hudVersion); /* the HUD commands' changes */
     h = fnv_str(h, talkerName); h = fnv(h, &talkerFace, sizeof talkerFace); h = fnv(h, &frameOverride, sizeof frameOverride); h = fnv_str(h, castTyped);
     /* the shown member's things and stats */
     int member = member_shown();

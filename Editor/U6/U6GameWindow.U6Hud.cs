@@ -71,6 +71,7 @@ public partial class U6GameWindow
         }
         BuildHud();
         InitializeU6Keys(); // Ultima 6's keys (U6GameWindow.U6Keys.cs)
+        InitHudPanels(); // the HUD commands, custom panels (U6GameWindow.HudPanels.cs)
     }
 
     private void BuildHud()
@@ -89,11 +90,14 @@ public partial class U6GameWindow
         if (hud.First(HudPieceKind.GameView) is null) return;
         if (SpriteOfLink(_hudFrameOverride ?? hud.Frame) is { } frameSprite) HudBackLayer.Children.Add(HudImage(frameSprite, 0, 0, _screenW, _screenH, _hudAnimators));
 
-        foreach (var piece in hud.Pieces)
+        foreach (var piece in HudPiecesNow) // (shown, as the HUD commands left them - U6GameWindow.HudPanels.cs)
         {
             switch (piece.Kind)
             {
                 case HudPieceKind.GameView:
+                    break;
+                case HudPieceKind.Label:
+                    HudLayer.Children.Add(HudWordsAt(piece, piece.Text));
                     break;
                 case HudPieceKind.Picture or HudPieceKind.Panel:
                     if (SpriteOfLink(piece.Sprite) is { } picture)
@@ -192,7 +196,7 @@ public partial class U6GameWindow
             HudLayer.Children.Add(spellbook);
             return;
         }
-        foreach (var piece in Hud.Pieces)
+        foreach (var piece in HudPiecesNow)
         {
             var view = HudPiece.ViewOf(piece.Kind);
             if (view != HudPanelView.Always && view != _hudView) continue;

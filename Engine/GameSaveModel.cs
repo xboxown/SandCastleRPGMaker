@@ -39,6 +39,8 @@ public class GameSaveData
     public bool ControlLocked { get; set; }
     /// <summary>Ultima 6: the HUD's frame changed by Change HUD Frame (null: the HUD Editor's own).</summary>
     public SpriteLink? U6HudFrame { get; set; }
+    /// <summary>Ultima 6: the HUD's pieces as the HUD commands left them (shown, place, picture, words, a panel's key).</summary>
+    public List<U6HudPieceState>? U6HudPieces { get; set; }
     /// <summary>Ultima 6: the Conversation Style in use (null: Ultima 6's).</summary>
     public U6TalkStyle? U6TalkStyle { get; set; }
 

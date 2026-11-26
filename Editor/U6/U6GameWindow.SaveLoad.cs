@@ -572,6 +572,7 @@ public partial class U6GameWindow
             PlayerPixelX = _playerPixelX, PlayerPixelY = _playerPixelY, PlayerLift = _playerZ, PlayerFacing = _playerFacing,
             CombatMode = _combatMode,
             U6HudFrame = _hudFrameOverride, // Change HUD Frame (U6GameWindow.U6Hud.cs)
+            U6HudPieces = SavedHudPieces(), // the HUD commands' changes (U6GameWindow.HudPanels.cs)
             U6TalkStyle = _talkStyle, // Conversation Style (U6GameWindow.U6TalkStyle.cs)
             ReadBooks = _hasBeenReadBooks.ToList(),
             Weather = JsonCopy(_weather),
@@ -667,6 +668,7 @@ public partial class U6GameWindow
     private void ApplySave(GameSaveData data)
     {
         _hudFrameOverride = data.U6HudFrame; // Ultima 6: the frame as it was (U6GameWindow.U6Hud.cs)
+        RestoreHudPieces(data.U6HudPieces); // the HUD's pieces and panels as they were (U6GameWindow.HudPanels.cs)
         _talkStyle = data.U6TalkStyle; // the conversations as they were (U6GameWindow.U6TalkStyle.cs)
         BuildHud();
         _clock.Restore(data.Day, data.Hour, data.Minute, data.Ticks);

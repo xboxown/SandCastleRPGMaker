@@ -2160,7 +2160,7 @@ public partial class MainWindow
         // The inventory view (as the game starts), then the portrait view - only its panel is kept.
         Paint(portraitView: false);
         var main = canvas;
-        var panelPieces = design.Pieces.Where(p => p.Kind == HudPieceKind.Panel).ToList();
+        var panelPieces = design.Pieces.Where(p => p.Kind == HudPieceKind.Panel && !design.IsCustomPanel(p)).ToList();
         if (panelPieces.Count == 0) panelPieces = design.Pieces.Where(p => HudPiece.IsPanelContent(p.Kind) || p.Kind == HudPieceKind.MemberName).ToList();
         if (panelPieces.Count > 0)
         {
@@ -2196,7 +2196,7 @@ public partial class MainWindow
         {
         Draw(Of(frameNow), 0, 0, 320, 200, fit: false);
         var front = new List<HudPiece>();
-        foreach (var piece in design.Pieces)
+        foreach (var piece in design.Pieces.Where(p => !design.IsCustomPanel(p) && p.PanelId == 0)) // (custom panels: not on the IIgs yet)
         {
             var only = HudPiece.ViewOf(piece.Kind);
             if (only != HudPanelView.Always && only != (portraitView ? HudPanelView.Portrait : HudPanelView.Inventory)) continue;

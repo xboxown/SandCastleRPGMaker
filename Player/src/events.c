@@ -3170,7 +3170,7 @@ static int execute(Run *r, const Cmd *c)
                 }
                 if (token) answers[token - 1].used = 0;
             }
-            if (c->type >= C_U6AskKey && c->type <= C_U6SceneEnd && c->type != C_LightSource && u6_on())
+            if (((c->type >= C_U6AskKey && c->type <= C_U6SceneEnd && c->type != C_LightSource) || (c->type >= C_U6ShowHidePiece && c->type <= C_U6DisablePanelKey)) && u6_on())
             {
                 /* Ultima 6's own commands (u6.c): done (1), failed (-1), or waiting for its token's answer (0) - a key, a choice */
                 int who = actor_for(r, param(c, "Who")), token = new_answer(r, "");
