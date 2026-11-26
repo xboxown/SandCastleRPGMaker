@@ -21,8 +21,10 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait
-EXT_COUNT = 44
+          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle
+EXT_COUNT = 45
+
+XtStyle:  jmp XtStyleCmd        ; EXT 44 STYLE: Conversation Style (talkstyle.s)
 
 XtHudFrame: jmp XtHudFrameCmd   ; EXT 42 HUDFRAME: Change HUD Frame (actkeys.s)
 XtPortrait: jmp XtPortraitCmd   ; EXT 43 PORTRAIT: Change Portrait (actkeys.s)

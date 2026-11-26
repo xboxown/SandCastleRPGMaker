@@ -2362,6 +2362,7 @@ TryMove:
         .include "tough.s"
         .include "inhand.s"
         .include "actkeys.s"
+        .include "talkstyle.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

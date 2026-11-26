@@ -2963,5 +2963,18 @@ StLog:    .ds 16*6
 LearnTab: .ds 64                ; (spellsys.s Learn Spell: spells learned, each its place + 1 (0 free) - saved)
 OlTab:    .ds 64                ; (ext.s Change Object Look: object number + 1 (0 free), its own sprite - saved)
 BrHp:     .ds 64
-HudNow:   .dw 0                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
+HudNow:   .dw 0
+TsOn:     .dw 0                 ; (talkstyle.s Conversation Style - saved; 0: Ultima 6's) on, answers, mark, portrait, words,
+TsAns:    .dw 0                 ; keyword colour, box x y w h, box colour, box picture, words' colour
+TsMark:   .dw 0
+TsPort:   .dw 0
+TsWords:  .dw 0
+TsKey:    .dw 0
+TsBX:     .dw 0
+TsBY:     .dw 0
+TsBW:     .dw 0
+TsBH:     .dw 0
+TsBCol:   .dw 0
+TsBPic:   .dw 0
+TsTCol:   .dw 0                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

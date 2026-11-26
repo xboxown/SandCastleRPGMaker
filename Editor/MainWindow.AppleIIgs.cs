@@ -1152,6 +1152,13 @@ public partial class MainWindow
             },
             PortraitPic = (group, name) => PortraitPicture(_spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name)
                 ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name)),
+            BoxPicture = (group, name, bw, bh) =>
+            {
+                var sp = _spriteDatabase.Groups.FirstOrDefault(g => g.Name == group)?.Sprites.FirstOrDefault(s => s.Name == name) ?? _spriteDatabase.Groups.SelectMany(g => g.Sprites).FirstOrDefault(s => s.Name == name);
+                if (sp?.Frames.FirstOrDefault()?.FilePath is not { } file || !File.Exists(file)) return -1;
+                spritePixels.Add((FitPicture(file, bw, bh), bw, bh));
+                return spritePixels.Count - 1;
+            },
             OwnPortrait = whoName =>
             {
                 var who = _characterDatabase.Characters.FirstOrDefault(c => c.Name == whoName);

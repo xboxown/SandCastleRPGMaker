@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -102,6 +102,8 @@ public sealed class AppleIIgsTalk
         public Func<string, string, int>? HudFrame;
         public Func<string, string, int>? PortraitPic;
         public Func<string, int>? OwnPortrait;
+        /// <summary>Conversation Style's box picture: a sprite fitted to w x h (-1 none).</summary>
+        public Func<string, string, int, int, int>? BoxPicture;
         public Func<int, string>? ErrorWords;
         /// <summary>A stat's id -> its word in a character's numbers (0 hit points ... 10 experience), -1 not on the IIgs.</summary>
         public Func<string, int>? Stat;
@@ -1606,6 +1608,22 @@ public sealed class AppleIIgsTalk
                     // Ultima 6 / Savage Empire have no barks (an Ultima 7 thing) - the user, 2026-11-24: left out on the Apple IIgs.
                     Unsupported.Add("Show Bark (Ultima 6 has no barks)");
                     break;
+                case EventCommandType.U6ConversationStyle:
+                {
+                    // EXT 44 STYLE (talkstyle.s): as U6GameWindow.U6TalkStyle.cs; numbers as written (formulas: their default); one font.
+                    int N(string key, int otherwise, int lo, int hi) => int.TryParse(cmd.Get(key).Trim(), out int v) ? Math.Clamp(v, lo, hi) : otherwise;
+                    int Col(string key, int otherwise) => cmd.Get(key).Trim() is { Length: > 0 } c && ColourIndex?.Invoke(c.StartsWith('#') || !System.Text.RegularExpressions.Regex.IsMatch(c, "^[0-9A-Fa-f]{6}$") ? c : "#" + c) is int i and >= 0 ? i : otherwise;
+                    bool on = cmd.Get("Set") != "Back to Ultima 6's";
+                    int answers = cmd.Get("Answers") == U6TalkStyle.List ? 1 : cmd.Get("Answers") == U6TalkStyle.Both ? 2 : 0;
+                    int portrait = cmd.Get("Portrait") == U6TalkStyle.PortraitBox ? 1 : cmd.Get("Portrait") == U6TalkStyle.PortraitNone ? 2 : 0;
+                    int words = cmd.Get("Words") == U6TalkStyle.WordsBox ? 1 : 0;
+                    int bx = N("BoxX", 8, 0, 300), by = N("BoxY", 120, 0, 190), bw = N("BoxWidth", 304, 16, 320 - bx), bh = N("BoxHeight", 72, 12, 200 - by);
+                    int pic = cmd.Get("SpriteName").Length > 0 ? Extra?.BoxPicture?.Invoke(cmd.Get("SpriteGroup"), cmd.Get("SpriteName"), bw & ~1, bh) ?? -1 : -1;
+                    B(Ext); B((int)ExtOp.Style); B(on ? 1 : 0); B(answers); B(cmd.Get("MarkKeywords") == "False" ? 0 : 1); B(portrait); B(words);
+                    W(Col("KeywordColour", 0xFFFF)); W(bx); W(by); W(bw); W(bh); W(Col("BoxColour", ColourIndex?.Invoke("#000000") is int k and >= 0 ? k : 0));
+                    W(pic < 0 ? 0xFFFF : pic); W(Col("TextColour", 0xFFFF));
+                    break;
+                }
                 case EventCommandType.U6ChangeHudFrame:
                 {
                     // EXT 42 HUDFRAME n (actkeys.s): the HUD's picture with that frame, made by the editor.

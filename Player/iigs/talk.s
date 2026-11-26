@@ -100,7 +100,7 @@ ScrollText:
         sta RW
         lda #LINE_H
         sta RH
-        jmp RestoreRect
+        jmp ClearText           ; (a box: its colour - talkstyle.s)
 
 ; A = a screen row -> A = $2000 + row * 160 + TextX / 2
 RowOffset:
@@ -347,7 +347,7 @@ SayText:
         tya
 .kc:    ldy WordKey
         beq .col
-        lda KeyColor
+        jsr KeyColNow           ; (Conversation Style's, talkstyle.s)
 .col:   jsr SetColor
         lda #WBuf
         sta TP
@@ -515,6 +515,10 @@ TalkAt:
 
 ; The talker's portrait and name in the panel.
 ShowTalker:
+        lda #1                  ; a talk is on (talkstyle.s: its box opens at its first words)
+        sta TsTalk
+        jsr PortNotHud          ; Conversation Style: the portrait in the box or nowhere
+        bcs .name
         lda PortW
         beq .name
         lda PortX
@@ -568,7 +572,8 @@ EndTalk:
         lda EvRunning           ; an event's code: its own end (events.s)
         beq .talk
         jmp EndEvent
-.talk:  jsr TalkMusicOff        ; (music.s)
+.talk:  jsr CloseBox            ; Conversation Style's box gone (talkstyle.s)
+        jsr TalkMusicOff        ; (music.s)
         lda PortW
         beq .n
         lda PortX
@@ -649,7 +654,8 @@ RunTalk:
         sta TPC
         brl RunTalk
 .end:   jmp EndTalk
-.say:   iny
+.say:   jsr BoxCheck            ; (talkstyle.s)
+        iny
         lda [TalkPtr],y
         sta SayLen              ; its length
         iny
@@ -668,6 +674,8 @@ RunTalk:
         sta TPC
         brl RunTalk
 .ask:   sty AskPC
+        jsr BoxCheck
+        jsr ListReplies         ; Conversation Style: the replies listed (talkstyle.s)
         lda #0
         jsr PrintSaid           ; you say:
         stz InLen
@@ -815,6 +823,16 @@ Compare:
 
 ; A key while the player types the word to say.
 TalkKey:
+        pha
+        jsr ListKey             ; Conversation Style's list (talkstyle.s)
+        bcc .k0
+        tax
+        pla
+        cpx #0
+        beq .out0
+        jmp Submit
+.out0:  rts
+.k0:    pla
         cmp #$1B
         bne .k1
         jsr NewLine
@@ -879,7 +897,7 @@ TalkKey:
         sta RW
         lda #LINE_H
         sta RH
-        jsr RestoreRect
+        jsr ClearText           ; (a box: its colour - talkstyle.s)
         lda TextX
         clc
         adc #2

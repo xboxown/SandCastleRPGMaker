@@ -3,7 +3,7 @@
 ; and faces, the open bag, how many objects, maps, then every object (16 bytes each: where it is, carried, open...),
 ; the variables (VarTab), and for each map whether it was visited and its characters.
 
-SAVE_VERSION = 16               ; (b734: Change HUD Frame's frame, actkeys.s HudNow)
+SAVE_VERSION = 17               ; (b735: Conversation Style, talkstyle.s)
 
 ; Ctrl+S
 SaveGame:
