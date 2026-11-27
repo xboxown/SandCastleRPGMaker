@@ -1,6 +1,7 @@
 ; Sandcastle RPG Maker - the Apple IIgs player (Ultima 6 Apple IIgs mode).
 ; A GS/OS S16 application in 65816 assembly (assembled by asm816.py). GS/OS and an accelerator required.
 ;
+; Version 68 (b744): the factions' relationships to each other after the live pieces (facwar.s).
 ; Version 67 (b739): custom panels (HUDP.n files) and live HUD pieces after the colours (hudlive.s).
 ; Version 66 (b733): the keys - each action's (System Settings > Ultima 6) after the animated tiles (actkeys.s).
 ; Version 65 (b725): the spell system in use (spellsys.s); a spellbook's count bit 15: it knows only what is learned.
@@ -715,7 +716,7 @@ ParseData:
         bne .bad
         ldy #4
         lda [DataPtr],y
-        cmp #67
+        cmp #68
         beq .known
 .bad:   sec
         rts
@@ -2373,6 +2374,7 @@ TryMove:
         .include "path.s"
         .include "fight.s"
         .include "turns.s"
+        .include "facwar.s"
         .code1
 
 ; The Disk Swap screen's sound, loaded now if it is here (it can't come from a disk that isn't in).

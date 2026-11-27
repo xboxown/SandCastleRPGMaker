@@ -347,7 +347,8 @@ WorldTurn:
         lda AvDead
         beq .alive
         rts
-.alive: lda PX
+.alive: inc FwTick              ; (facwar.s: who looks round this turn)
+        lda PX
         sta AvRec
         lda PY
         sta AvRec+2
@@ -388,7 +389,8 @@ WorldTurn:
 .naf:   jsr FightTurn           ; fighting someone (Attack - fight.s)
         bcc .nft
         brl .n
-.nft:   ldy #C_FLAGS
+.nft:   jsr FwScan              ; an enemy faction's member in sight: a fight (facwar.s)
+        ldy #C_FLAGS
         lda [CP],y
         and #2
         beq .calm

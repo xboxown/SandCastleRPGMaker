@@ -431,7 +431,7 @@ public static class SuperHiRes
 /// </summary>
 public sealed class AppleIIgsGamePack
 {
-    public const ushort Version = 67;
+    public const ushort Version = 68;
     public ushort[] Palette { get; set; } = new ushort[16];
     /// <summary>The 24-bit pictures reduced into it (the editor's Colour Preview and the check; not written).</summary>
     public AppleIIgsPreviewData? Preview { get; set; }
@@ -753,6 +753,9 @@ public sealed class AppleIIgsGamePack
     /// <summary>Live HUD pieces (hudlive.s): kind (1 picture, 2 label, 3 button), its panel + 1 (0 none), place, size, sprite ($FFFF none),
     /// a button's key, a label's colour (ARGB; 0 the text's) and words.</summary>
     public List<(int Kind, int Panel, int X, int Y, int W, int H, int Sprite, int Key, uint Argb, string Text)> LivePieces { get; } = new();
+    /// <summary>How factions think of each other (facwar.s): the default, and each pair set in the Faction Editor (not the Avatar's).</summary>
+    public int FacDefault { get; set; } = 50;
+    public List<(int Viewer, int Target, int Value)> FacPairs { get; } = new();
     public (int X, int Y, int Columns, int Rows) View { get; set; } = (80, 20, 10, 10);
     /// <summary>Where the words go; without a HUD two lines under the world.</summary>
     public (int X, int Y, int Width, int Height) TextArea { get; set; } = (8, 182, 304, 18);
@@ -1060,6 +1063,9 @@ public sealed class AppleIIgsGamePack
             w.Write((ushort)lp.Sprite); w.Write((ushort)lp.Key); w.Write((ushort)(lp.Argb == 0 ? 0xFFFF : Math.Max(0, SuperHiRes.Nearest(Palette, lp.Argb, false))));
             var words = new byte[32]; var t = Ascii(lp.Text, 31); Array.Copy(t, words, t.Length); w.Write(words);
         }
+        w.Write((ushort)Math.Clamp(FacDefault, 0, 100));
+        w.Write((ushort)Math.Min(FacPairs.Count, 64));
+        foreach (var (fv, ft, fval) in FacPairs.Take(64)) { w.Write((ushort)fv); w.Write((ushort)ft); w.Write((ushort)Math.Clamp(fval, 0, 100)); }
         return ms.ToArray();
     }
 

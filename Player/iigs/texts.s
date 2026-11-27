@@ -2986,5 +2986,6 @@ HlLvTxtOwn: .ds 16                ; (8 slots of words: the live piece + 1, 0 fre
 HlLvTxt:    .ds 256
 HlPnSt:     .ds 16                ; (each custom panel: 0 as ticked, 1 open, 2 closed)
 HlPnKeyOff: .ds 16
-FightTab: .ds 32                ; (fight.s: who fights whom - 8 x attacker, target owner codes - saved)                ; (scene.s Set Gender: owner code (0 free), 1 male / 2 female - saved)                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
+FightTab: .ds 32
+FwOv:     .ds 96                ; (facwar.s: relationships changed in play - 16 x viewer, target, value - saved)                ; (fight.s: who fights whom - 8 x attacker, target owner codes - saved)                ; (scene.s Set Gender: owner code (0 free), 1 male / 2 female - saved)                 ; (actkeys.s Change HUD Frame: 0 the HUD's own frame, n GAME.DAT's other n - saved)                ; (break.s: things struck - object number + 1 (0 free), hit points left - saved)
 SCRIPTEND: .dw 0

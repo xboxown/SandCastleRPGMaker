@@ -21,8 +21,10 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene,XtHud,XtFight,XtGiveTo
-EXT_COUNT = 49
+          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene,XtHud,XtFight,XtGiveTo,XtFacRel
+EXT_COUNT = 50
+
+XtFacRel: jmp XtFacRelCmd       ; EXT 49 FACREL: a relationship between two factions (facwar.s)
 
 XtFight:  jmp XtFightCmd        ; EXT 47 FIGHT: a character attacks another (fight.s)
 

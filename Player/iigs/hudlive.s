@@ -44,7 +44,14 @@ ParseLive:
         sta HlLvPtr
         lda Ptr+2
         sta HlLvPtr+2
-        rts
+        lda HlLvN               ; past them: the factions' relationships (facwar.s)
+        sta MulA
+        lda #LV_SIZE
+        sta MB0
+        jsr Mul16
+        lda MulR
+        jsr AddPtr
+        jmp ParseFacWar
 
 ; HlLvE = live piece A's record (from GAME.DAT); HlLvI2 = A.
 HlLvLoad:

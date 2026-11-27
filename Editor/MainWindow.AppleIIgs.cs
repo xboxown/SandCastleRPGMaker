@@ -2132,6 +2132,11 @@ public partial class MainWindow
             foreach (var f in _factionDatabase.Factions) pack.Factions.Add((f.Id, Math.Clamp(_factionDatabase.GetRelation(f.Id, avatarDef.FactionId), 0, 100)));
             foreach (var c in _characterDatabase.Characters.Where(c => c.FactionId >= 0 && c != avatarDef))
                 if (pack.CharFactions.All(x => x.Name != pack.NameOf(c.Name))) pack.CharFactions.Add((pack.NameOf(c.Name), c.FactionId));
+            // How the other factions think of each other (facwar.s): their people fight when it attacks.
+            pack.FacDefault = _factionDatabase.DefaultRelation;
+            foreach (var f in _factionDatabase.Factions.Where(f => f.Id != avatarDef.FactionId))
+                foreach (var (target, value) in f.Relations.Where(r => r.Key != avatarDef.FactionId && r.Key != f.Id))
+                    pack.FacPairs.Add((f.Id, target, value));
         }
         // Damage types: weapons' types, characters' responses, those who get back up (tough.s).
         foreach (var o in _objectDatabase.Objects.Where(o => o.Type == ObjectType.Weapon && o.Weapon.DamageType != DamageType.Normal))
