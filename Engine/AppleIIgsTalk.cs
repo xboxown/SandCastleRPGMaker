@@ -72,7 +72,7 @@ public sealed class AppleIIgsTalk
     public const byte End = 0, Say = 1, Ask = 2, Jump = 3, SetV = 4, IfV = 5, Play = 6, Map = 7, Party = 8, Trig = 9, ItemOp = 10, Hit = 11,
         Give = 12, Take = 13, Hp = 14, StatOp = 15, WaitOp = 16, Place = 17, Kill = 18, Sched = 19, Time = 20, Door = 21, Pic = 22, Erase = 23, GameOp = 24, Pay = 25, Sell = 26, More = 27, Ail = 28, Calc = 29, IfX = 30, Haggle = 31, PayV = 32, Music = 33, Volume = 34, Resume = 35, Weather = 36, Vehicle = 37, SayF = 38, Rise = 39, Pick = 40, Input = 41, ListOp = 42, GridOp = 43, Ctl = 44, Act = 45, Fac = 46, Xchg = 47, Ext = 48;
     /// <summary>Op 48 EXT's sub-commands (Player/iigs/ext.s).</summary>
-    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44, Scene = 45, Hud = 46, Fight = 47 }
+    private enum ExtOp : byte { Equip = 0, Pose = 1, AttackObject = 2, Animation = 3, Picklock = 4, TakeFromContainer = 5, Follow = 6, Behavior = 7, SleepOnBed = 8, Shake = 9, Fade = 10, Flash = 11, DayNight = 12, Camera = 13, CameraFollow = 14, Look = 15, Name = 16, Resurrect = 17, CreateObject = 18, DeleteObject = 19, DeleteSelf = 20, MoveObject = 21, ObjectLook = 22, Count = 23, Inside = 24, Charges = 25, Equipped = 26, SetBox = 27, AreaFind = 28, AreaDelete = 29, AreaHurt = 30, FindThing = 31, ThingInfo = 32, Combine = 33, Learn = 34, Cast = 35, ResetStat = 36, StopSound = 37, Light = 38, BookText = 39, Log = 40, Keys = 41, HudFrame = 42, Portrait = 43, Style = 44, Scene = 45, Hud = 46, Fight = 47, GiveTo = 48 }
     /// <summary>What the commands need from the game being built (all optional).</summary>
     public sealed class Env
     {
@@ -700,10 +700,16 @@ public sealed class AppleIIgsTalk
                 }
                 case EventCommandType.GiveItem:
                 {
-                    if (cmd.Get("Receiver") is not ("" or "Player" or "Activator") || Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it)
-                    { Unsupported.Add("Give Item (to someone but the Avatar, or an item not on the IIgs)"); break; }
+                    if (Extra?.Item?.Invoke(cmd.Get("Category"), cmd.Get("ItemId")) is not { } it) { Unsupported.Add("Give Item (an item not on the IIgs)"); break; }
                     int count = Math.Clamp(Number(cmd.Get("Quantity")), 1, 8);
-                    for (int i = 0; i < count; i++) { B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); }
+                    if (cmd.Get("Receiver") is "" or "Player" or "Activator")
+                    {
+                        for (int i = 0; i < count; i++) { B(Give); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); }
+                        break;
+                    }
+                    // EXT 48 GIVETO (ext.s): someone else carries it.
+                    if (!WhoCode(cmd.Get("Receiver"), out int gm, out int gx)) { Unsupported.Add("Give Item (to someone not on a map)"); break; }
+                    for (int i = 0; i < count; i++) { B(Ext); B((int)ExtOp.GiveTo); W(gm); W(gx); W(it.Name); W(it.Sprite); W(it.Icon); W(it.Flags); W(it.Other); }
                     break;
                 }
                 case EventCommandType.EquipItem:
@@ -1128,7 +1134,15 @@ public sealed class AppleIIgsTalk
                 }
                 case EventCommandType.Teleport:
                 {
-                    if (cmd.Get("Who") is not ("" or "Activator" or "Player")) { Unsupported.Add("Teleport (someone but the Avatar)"); break; }
+                    if (cmd.Get("Who") is not ("" or "Activator" or "Player"))
+                    {
+                        // Someone else (list item 38): put at x, y on their own map (op PLACE) - another map's list can't take them on the IIgs.
+                        if (!WhoCode(cmd.Get("Who"), out int pm, out int px) || pm == 0xFFFF) { Unsupported.Add("Teleport (someone not on a map)"); break; }
+                        if (int.TryParse(cmd.Get("World"), out int ow) && ow > 0 && (_world?.Invoke(ow) ?? -1) != pm) { Unsupported.Add("Teleport (someone to another map: on the IIgs a character stays on its own map)"); break; }
+                        if (!int.TryParse(cmd.Get("X"), out int ptx) || !int.TryParse(cmd.Get("Y"), out int pty)) break;
+                        B(Place); W(pm); W(px); B(1); W(ptx); W(pty);
+                        break;
+                    }
                     int map = 0xFFFF;
                     if (int.TryParse(cmd.Get("World"), out int worldId) && worldId > 0)
                     {

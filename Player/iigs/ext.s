@@ -21,8 +21,8 @@ XtJump:   .dw XtEquip,XtPose,XtAtkObj,XtAnim,XtPick,XtTakeC,XtFollow,XtBehav,XtB
           .dw XtCreate,XtDelObj,XtDelSelf,XtMoveObj,XtObjLook
           .dw XtCount,XtInside,XtCharges,XtEquipped,XtSetBox
           .dw XtAreaFind,XtAreaDel,XtAreaHurt,XtFindThing,XtThingInfo,XtCombine,XtLearn,XtCast,XtResetStat,XtStopSnd
-          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene,XtHud,XtFight
-EXT_COUNT = 48
+          .dw XtLight,XtBookText,XtLog,XtKeys,XtHudFrame,XtPortrait,XtStyle,XtScene,XtHud,XtFight,XtGiveTo
+EXT_COUNT = 49
 
 XtFight:  jmp XtFightCmd        ; EXT 47 FIGHT: a character attacks another (fight.s)
 
@@ -3545,6 +3545,19 @@ LogMarkRef:
         .dw 0
         .dw 1                   ; from the end
         .dd 0
+
+; EXT 48 GIVETO who name sprite icon flags other (16 bytes): Give Item to someone other than the Avatar (list item 38) -
+; the thing is carried by them (its owner: their owner code, JOwner), as op GIVE does for the Avatar.
+XtGiveTo:
+        jsr ReadWho
+        jsr JOwner
+        sta GOwner
+        lda TPC                 ; on as GIVE: its "op" the who's last byte, its fields after
+        clc
+        adc #5
+        sta TPC
+        tay
+        jmp OpGive
 
 LsWhich:  .dw 0
 LsDo:     .dw 0

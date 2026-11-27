@@ -163,7 +163,7 @@ OpGive:
         lda GIcon
         sta [ItemPtr],y
         ldy #14
-        lda #$FFFF
+        lda GOwner              ; whose: the Avatar's, or (EXT 48 GIVETO) someone else's
         sta [ItemPtr],y
         jsr RefreshInventory
         jsr Having
@@ -172,8 +172,12 @@ OpGive:
         jsr NextItem
         dec T4
         bne .l
-.done:  lda #11
+.done:  lda #$FFFF              ; (the next Give: the Avatar's again)
+        sta GOwner
+        lda #11
         jmp Next
+
+GOwner:   .dw $FFFF
 
 ; TAKE name count: that many of the Avatar's things of that name are gone.
 OpTake:

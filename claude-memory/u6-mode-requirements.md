@@ -36,3 +36,8 @@ User's answers 2026-11-05 (after b525):
 
 b539-541 (2026-11-06): b539 Text area notes (rules rewrite/remove any engine note). b540 no floors/roofs in U6, line-of-sight black (U6Sight.cs), bags in panel / books in text area / bodies searched, scenes (U6Scene.cs: Begin Scene ... End Scene; HUD Editor > Introduction / Create New Character scenes). b541 user's rule: NOTHING WIRED - Tools > Leveling Editor (LevelingEditorWindow.cs): leveling systems (table + events of commands; triggers earned / after rest / after rest each / called), one in use, templates U6 shrines + SE/MD dreams (deletable); Rise A Level, Run Leveling Event. Talk stays U6 (any distance on screen) - user confirmed.
 Still not done: CommandList guide for b539-542 (Guide 35); Amiga U6 player 0%.
+
+2026-11-26 (user, b742): Ultima 6 fights are TURN BASED as Nuvie - whenever a fight is on (combat mode B, or anyone
+fighting/hostile/fleeing within 8 of the avatar), the world waits for the avatar's turn; everyone moves by Nuvie's movement
+points (Dexterity vs the avatar's: same dex = one step/blow a turn; a fleeing "Aiiieee" NPC steps once and waits). No fight:
+the world is live. Windows U6Combat.cs FightOn/StartRound, C u6.c fight_on, IIgs turns.s.
